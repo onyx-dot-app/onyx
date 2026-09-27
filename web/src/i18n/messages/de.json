@@ -909,6 +909,9 @@
         "sharepoint": {
           "description": "Microsoft-Intranet"
         },
+        "onedrive": {
+          "description": "Microsoft-Cloudspeicher"
+        },
         "teams": {
           "description": "Microsoft-Team-Chats"
         },
@@ -2559,6 +2562,36 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "OneDrive-Connector konfigurieren",
+        "indexingScope": {
+          "label": "Wessen OneDrive-Dateien soll Onyx indizieren?",
+          "general": {
+            "label": "Allgemein",
+            "description": "Alle berechtigten Benutzer indizieren, auf die die Microsoft-Anwendung zugreifen kann."
+          },
+          "specific": {
+            "label": "Bestimmte",
+            "users": {
+              "label": "Benutzer",
+              "description": "Fügen Sie für jeden zu indizierenden Benutzer den Benutzerprinzipalnamen oder die primäre E-Mail-Adresse hinzu.",
+              "required": "Fügen Sie mindestens einen Benutzer für den bestimmten Bereich hinzu"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "Ausgeschlossene Pfade",
+          "description": "Glob-Muster für Dateipfade und Dateinamen, zum Beispiel '*.tmp' oder 'Archive/*'."
+        },
+        "authorityHost": {
+          "label": "Autoritätshost",
+          "description": "Microsoft-Identitätsautoritätshost. Verwenden Sie für GCC High oder DoD https://login.microsoftonline.us."
+        },
+        "graphApiHost": {
+          "label": "Graph-API-Host",
+          "description": "Microsoft Graph-Host. Verwenden Sie für GCC High oder DoD https://graph.microsoft.us."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "Mit {source} autorisieren",

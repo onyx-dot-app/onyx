@@ -909,6 +909,9 @@
         "sharepoint": {
           "description": "Microsoft のイントラネット"
         },
+        "onedrive": {
+          "description": "Microsoft クラウド ストレージ"
+        },
         "teams": {
           "description": "Microsoft のチームチャット"
         },
@@ -2559,6 +2562,36 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "OneDrive コネクタを設定",
+        "indexingScope": {
+          "label": "Onyx でインデックスを作成する OneDrive ファイルの所有者",
+          "general": {
+            "label": "一般",
+            "description": "Microsoft アプリケーションがアクセスできるすべての対象ユーザーをインデックス化します。"
+          },
+          "specific": {
+            "label": "指定",
+            "users": {
+              "label": "ユーザー",
+              "description": "インデックスを作成する各ユーザーのユーザープリンシパル名またはプライマリメールアドレスを追加します。",
+              "required": "指定範囲には少なくとも 1 人のユーザーを追加してください"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "除外するパス",
+          "description": "各ファイルパスとファイル名に照合する glob パターン（例: '*.tmp'、'Archive/*'）。"
+        },
+        "authorityHost": {
+          "label": "機関ホスト",
+          "description": "Microsoft ID 機関ホスト。GCC High または DoD では https://login.microsoftonline.us を使用してください。"
+        },
+        "graphApiHost": {
+          "label": "Graph API ホスト",
+          "description": "Microsoft Graph ホスト。GCC High または DoD では https://graph.microsoft.us を使用してください。"
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "{source} で認可",

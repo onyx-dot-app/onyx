@@ -1,6 +1,141 @@
 import { ConfigurableSources } from "../types";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { useTranslations } from "next-intl";
 import type { BooleanOption, ConnectionConfiguration } from "./types";
+import { OneDriveScope } from "./types";
+
+const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
+const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
+
+interface OneDriveConfigurationText {
+  description: string;
+  indexingScopeLabel: string;
+  generalLabel: string;
+  generalDescription: string;
+  specificLabel: string;
+  usersLabel: string;
+  usersDescription: string;
+  excludedPathsLabel: string;
+  excludedPathsDescription: string;
+  authorityHostLabel: string;
+  authorityHostDescription: string;
+  graphApiHostLabel: string;
+  graphApiHostDescription: string;
+}
+
+const ONE_DRIVE_TRANSLATION_KEYS: OneDriveConfigurationText = {
+  description: "description",
+  indexingScopeLabel: "indexingScope.label",
+  generalLabel: "indexingScope.general.label",
+  generalDescription: "indexingScope.general.description",
+  specificLabel: "indexingScope.specific.label",
+  usersLabel: "indexingScope.specific.users.label",
+  usersDescription: "indexingScope.specific.users.description",
+  excludedPathsLabel: "excludedPaths.label",
+  excludedPathsDescription: "excludedPaths.description",
+  authorityHostLabel: "authorityHost.label",
+  authorityHostDescription: "authorityHost.description",
+  graphApiHostLabel: "graphApiHost.label",
+  graphApiHostDescription: "graphApiHost.description",
+};
+
+function buildOneDriveConfiguration(
+  text: OneDriveConfigurationText
+): ConnectionConfiguration {
+  return {
+    description: text.description,
+    values: [
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: text.indexingScopeLabel,
+        optional: true,
+        tabs: [
+          {
+            value: OneDriveScope.General,
+            label: text.generalLabel,
+            fields: [
+              {
+                type: "string_tab",
+                label: text.generalLabel,
+                name: "all_users_description",
+                optional: true,
+                description: text.generalDescription,
+              },
+            ],
+          },
+          {
+            value: OneDriveScope.Specific,
+            label: text.specificLabel,
+            fields: [
+              {
+                type: "list",
+                label: text.usersLabel,
+                name: "users",
+                optional: true,
+                default: [],
+                description: text.usersDescription,
+              },
+            ],
+          },
+        ],
+        defaultTab: OneDriveScope.General,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: text.excludedPathsLabel,
+        name: "excluded_paths",
+        optional: true,
+        default: [],
+        description: text.excludedPathsDescription,
+      },
+      {
+        type: "text",
+        label: text.authorityHostLabel,
+        name: "authority_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_AUTHORITY_HOST,
+        description: text.authorityHostDescription,
+      },
+      {
+        type: "text",
+        label: text.graphApiHostLabel,
+        name: "graph_api_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_GRAPH_API_HOST,
+        description: text.graphApiHostDescription,
+      },
+    ],
+  };
+}
+
+export function useConnectorConfiguration(
+  connector: ConfigurableSources
+): ConnectionConfiguration {
+  const t = useTranslations("admin.connectorsList.oneDrive");
+
+  if (connector !== "onedrive") {
+    return connectorConfigs[connector];
+  }
+
+  return buildOneDriveConfiguration({
+    description: t("description"),
+    indexingScopeLabel: t("indexingScope.label"),
+    generalLabel: t("indexingScope.general.label"),
+    generalDescription: t("indexingScope.general.description"),
+    specificLabel: t("indexingScope.specific.label"),
+    usersLabel: t("indexingScope.specific.users.label"),
+    usersDescription: t("indexingScope.specific.users.description"),
+    excludedPathsLabel: t("excludedPaths.label"),
+    excludedPathsDescription: t("excludedPaths.description"),
+    authorityHostLabel: t("authorityHost.label"),
+    authorityHostDescription: t("authorityHost.description"),
+    graphApiHostLabel: t("graphApiHost.label"),
+    graphApiHostDescription: t("graphApiHost.description"),
+  });
+}
 
 // Shared "Include Attachments" checkbox. Pair with an `include_attachments`
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
@@ -375,7 +510,7 @@ export const connectorConfigs: Record<
         optional: true,
         tabs: [
           {
-            value: "general",
+            value: OneDriveScope.General,
             label: "General",
             fields: [
               {
@@ -417,7 +552,7 @@ export const connectorConfigs: Record<
             ],
           },
           {
-            value: "specific",
+            value: OneDriveScope.Specific,
             label: "Specific",
             fields: [
               {
@@ -455,7 +590,7 @@ export const connectorConfigs: Record<
             ],
           },
         ],
-        defaultTab: "general",
+        defaultTab: OneDriveScope.General,
       },
     ],
     advanced_values: [
@@ -482,6 +617,7 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  onedrive: buildOneDriveConfiguration(ONE_DRIVE_TRANSLATION_KEYS),
   gmail: {
     description: "Configure Gmail connector",
     values: [],
