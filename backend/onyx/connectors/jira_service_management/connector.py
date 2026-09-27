@@ -3,6 +3,7 @@
 from typing import Any, ClassVar
 from urllib.parse import quote
 
+from jira.exceptions import JIRAError
 from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
@@ -46,28 +47,27 @@ class JiraServiceManagementConnector(JiraConnector):
 
     def _get_public_comment_texts(self, issue: Issue) -> list[str]:
         """Read public comments from the JSM API, with strict fallback parsing."""
-        try:
-            return self._fetch_public_comment_texts(issue)
-        except Exception:
-            logger.exception(
-                "Could not read JSM comments for %s; using only comments marked public.",
-                issue.key,
-            )
-            return self._get_flagged_public_comment_texts(issue)
-
-    def _fetch_public_comment_texts(self, issue: Issue) -> list[str]:
         comments: list[str] = []
         start = 0
         while True:
-            page = self.jira_client._get_json(
-                path=f"request/{quote(issue.key, safe='')}/comment",
-                params={
-                    "public": True,
-                    "start": start,
-                    "limit": _JSM_COMMENT_PAGE_SIZE,
-                },
-                base=_JSM_COMMENT_API_BASE,
-            )
+            try:
+                page = self.jira_client._get_json(
+                    path=f"request/{quote(issue.key, safe='')}/comment",
+                    params={
+                        "public": True,
+                        "start": start,
+                        "limit": _JSM_COMMENT_PAGE_SIZE,
+                    },
+                    base=_JSM_COMMENT_API_BASE,
+                )
+            except JIRAError as error:
+                if start != 0 or error.status_code != 404:
+                    raise
+                logger.warning(
+                    "JSM comments are unavailable for %s; using only comments marked public.",
+                    issue.key,
+                )
+                return self._get_flagged_public_comment_texts(issue)
             if not isinstance(page, dict):
                 raise ValueError("JSM comment response must be an object")
 
@@ -120,12 +120,12 @@ class JiraServiceManagementConnector(JiraConnector):
                 ):
                     continue
 
-                author = comment.author
-                email = author.emailAddress if author is not None else None
+                author = raw_comment.get("author")
+                email = author.get("emailAddress") if isinstance(author, dict) else None
                 if email in self.comment_email_blacklist:
                     continue
 
-                body = comment.body
+                body = raw_comment.get("body")
                 if isinstance(body, str) and body.strip():
                     result.append(body)
                 elif isinstance(body, dict):

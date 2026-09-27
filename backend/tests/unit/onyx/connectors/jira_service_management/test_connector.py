@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from jira import JIRA
+from jira.exceptions import JIRAError
 from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
@@ -99,13 +100,13 @@ def test_fallback_only_accepts_comments_explicitly_marked_public(
 ) -> None:
     assert jsm_connector._jira_client is not None
     jira_client: Any = jsm_connector._jira_client
-    jira_client._get_json.return_value = {"unexpected": []}
+    jira_client._get_json.side_effect = JIRAError(status_code=404)
 
     issue = MagicMock(spec=Issue)
     issue.key = "SUP-2"
     issue.fields = MagicMock()
     public_comment = MagicMock()
-    public_comment.raw = {"jsdPublic": True}
+    public_comment.raw = {"jsdPublic": True, "body": "Public fallback"}
     public_comment.body = "Public fallback"
     public_comment.author.emailAddress = "customer@example.com"
     internal_comment = MagicMock()
@@ -123,6 +124,145 @@ def test_fallback_only_accepts_comments_explicitly_marked_public(
     ]
 
     assert jsm_connector._get_public_comment_texts(issue) == ["Public fallback"]
+
+
+def test_public_fallback_handles_hidden_author_email_and_adf(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    assert jsm_connector._jira_client is not None
+    jira_client: Any = jsm_connector._jira_client
+    jira_client._get_json.side_effect = JIRAError(status_code=404)
+    issue = Issue(
+        options={"server": "https://jira.example.com", "rest_api_version": "2"},
+        session=MagicMock(),
+        raw={
+            "key": "SUP-4",
+            "fields": {
+                "comment": {
+                    "comments": [
+                        {
+                            "self": "https://jira.example.com/rest/api/2/issue/SUP-4/comment/1",
+                            "jsdPublic": True,
+                            "body": "Public reply with hidden email",
+                            "author": {
+                                "accountId": "customer",
+                                "displayName": "Customer",
+                            },
+                        },
+                        {
+                            "self": "https://jira.example.com/rest/api/2/issue/SUP-4/comment/2",
+                            "jsdPublic": True,
+                            "body": "Public reply without author",
+                        },
+                        {
+                            "self": "https://jira.example.com/rest/api/2/issue/SUP-4/comment/3",
+                            "jsdPublic": True,
+                            "body": "Blocked author",
+                            "author": {"emailAddress": "skip@example.com"},
+                        },
+                        {
+                            "self": "https://jira.example.com/rest/api/2/issue/SUP-4/comment/4",
+                            "jsdPublic": False,
+                            "body": "Internal note",
+                        },
+                        {
+                            "self": "https://jira.example.com/rest/api/2/issue/SUP-4/comment/5",
+                            "body": "Unknown visibility",
+                        },
+                        {
+                            "self": "https://jira.example.com/rest/api/2/issue/SUP-4/comment/6",
+                            "jsdPublic": "true",
+                            "body": "Invalid visibility",
+                        },
+                        {
+                            "self": "https://jira.example.com/rest/api/2/issue/SUP-4/comment/7",
+                            "jsdPublic": True,
+                            "body": {
+                                "type": "doc",
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [
+                                            {"type": "text", "text": "Public ADF reply"}
+                                        ],
+                                    }
+                                ],
+                            },
+                        },
+                    ]
+                }
+            },
+        },
+    )
+
+    assert jsm_connector._get_public_comment_texts(issue) == [
+        "Public reply with hidden email",
+        "Public reply without author",
+        "Public ADF reply",
+    ]
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 429, 500, 503])
+@pytest.mark.parametrize("after_first_page", [False, True])
+def test_comment_api_failure_does_not_return_incomplete_comments(
+    jsm_connector: JiraServiceManagementConnector,
+    status_code: int,
+    after_first_page: bool,
+) -> None:
+    assert jsm_connector._jira_client is not None
+    jira_client: Any = jsm_connector._jira_client
+    error = JIRAError(status_code=status_code)
+    responses: list[Any] = []
+    if after_first_page:
+        responses.append(
+            {
+                "values": [{"public": True, "body": "First page reply"}],
+                "isLastPage": False,
+            }
+        )
+    responses.append(error)
+    jira_client._get_json.side_effect = responses
+    issue = MagicMock(spec=Issue)
+    issue.key = "SUP-5"
+
+    with pytest.raises(JIRAError) as raised:
+        jsm_connector._get_public_comment_texts(issue)
+    assert raised.value is error
+
+
+def test_later_page_not_found_does_not_use_fallback(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    assert jsm_connector._jira_client is not None
+    jira_client: Any = jsm_connector._jira_client
+    error = JIRAError(status_code=404)
+    jira_client._get_json.side_effect = [
+        {
+            "values": [{"public": True, "body": "First page reply"}],
+            "isLastPage": False,
+        },
+        error,
+    ]
+    issue = MagicMock(spec=Issue)
+    issue.key = "SUP-6"
+
+    with pytest.raises(JIRAError) as raised:
+        jsm_connector._get_public_comment_texts(issue)
+    assert raised.value is error
+
+
+@pytest.mark.parametrize("response", [None, {"unexpected": []}])
+def test_malformed_comment_response_is_not_an_empty_success(
+    jsm_connector: JiraServiceManagementConnector, response: Any
+) -> None:
+    assert jsm_connector._jira_client is not None
+    jira_client: Any = jsm_connector._jira_client
+    jira_client._get_json.return_value = response
+    issue = MagicMock(spec=Issue)
+    issue.key = "SUP-7"
+
+    with pytest.raises(ValueError, match="JSM comment response"):
+        jsm_connector._get_public_comment_texts(issue)
 
 
 def test_process_issue_uses_jira_service_management_source_and_public_comments(
