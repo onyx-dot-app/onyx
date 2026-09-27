@@ -269,7 +269,7 @@ def test_onedrive_trusts_timestamp_delta_for_lower_bound() -> None:
     connector, gateway = _connector(users=["owner@example.com"])
     gateway.get_user.return_value = _user()
     gateway.get_default_drive.return_value = _drive()
-    gateway.get_delta_page.return_value = OneDriveDeltaResult(
+    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage(items=[_file_item()])
     )
     gateway.download_item.return_value = DriveItemContent(
