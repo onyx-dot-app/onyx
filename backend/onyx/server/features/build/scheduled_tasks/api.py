@@ -14,7 +14,7 @@ The router is mounted under the existing ``/build`` prefix (see
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import AbstractSet, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -32,6 +32,7 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
 )
 from onyx.db.external_app import get_external_apps
+from onyx.db.mcp import get_craft_enabled_mcp_servers
 from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
 from onyx.db.scheduled_task import (
     create_scheduled_task,
@@ -122,6 +123,7 @@ class ScheduledTaskCreate(_Forbid):
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
     pre_approved_app_ids: list[int] = Field(default_factory=list)
+    pre_approved_mcp_server_ids: list[int] = Field(default_factory=list)
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -139,6 +141,7 @@ class ScheduledTaskPatch(_Forbid):
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
     pre_approved_app_ids: list[int] | None = None
+    pre_approved_mcp_server_ids: list[int] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -210,6 +213,7 @@ class ScheduledTaskDetail(BaseModel):
     next_runs: list[datetime]
     last_run: RunSummary | None
     pre_approved_app_ids: list[int]
+    pre_approved_mcp_server_ids: list[int]
     created_at: datetime
     updated_at: datetime
 
@@ -298,28 +302,53 @@ def _detail(
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
         pre_approved_app_ids=task.pre_approved_external_app_ids,
+        pre_approved_mcp_server_ids=task.pre_approved_mcp_server_ids,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
 
 
-def _validated_app_ids(db_session: Session, app_ids: list[int]) -> list[int]:
-    """Dedupe (order-preserving) and verify each id is a configured app.
+def _validate_app_ids(db_session: Session, app_ids: list[int]) -> None:
+    """Reject unknown external app ids.
 
     Existence-only: a grant on an app that never produces an ASK match is
     inert, so credential / has-ASK-action filtering stays editor-side.
     """
-    deduped = list(dict.fromkeys(app_ids))
-    if not deduped:
-        return []
+    if not app_ids:
+        return
     known_ids = {app.id for app in get_external_apps(db_session)}
-    unknown = [app_id for app_id in deduped if app_id not in known_ids]
-    if unknown:
+    unknown_ids = sorted(set(app_ids) - known_ids)
+    if unknown_ids:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Unknown external app id(s): {unknown}",
+            f"Unknown external app id(s): {unknown_ids}",
         )
-    return deduped
+
+
+def _validate_mcp_server_ids(
+    db_session: Session,
+    user: User,
+    server_ids: list[int],
+    already_approved_server_ids: AbstractSet[int] = frozenset(),
+) -> None:
+    """Reject new MCP server ids unavailable to this user in Craft.
+
+    Existing grants can remain after access changes. The MCP resolver still
+    blocks use, and users can remove the stale grant from the task editor.
+    """
+    if not server_ids:
+        return
+    available_ids = {
+        server.id for server in get_craft_enabled_mcp_servers(db_session, user)
+    }
+    unavailable_ids = sorted(
+        set(server_ids) - available_ids - already_approved_server_ids
+    )
+    if unavailable_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Unknown or unavailable Craft MCP server id(s): {unavailable_ids}",
+        )
 
 
 def _enqueue_executor(run_id: UUID) -> None:
@@ -392,6 +421,8 @@ def create_task(
          and enqueue the executor. Does NOT touch ``next_run_at``.
     """
     cron_expression = compile_to_cron(request.editor_payload)
+    _validate_app_ids(db_session, request.pre_approved_app_ids)
+    _validate_mcp_server_ids(db_session, user, request.pre_approved_mcp_server_ids)
 
     task = create_scheduled_task(
         db_session=db_session,
@@ -401,9 +432,8 @@ def create_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        pre_approved_external_app_ids=_validated_app_ids(
-            db_session, request.pre_approved_app_ids
-        ),
+        pre_approved_external_app_ids=request.pre_approved_app_ids,
+        pre_approved_mcp_server_ids=request.pre_approved_mcp_server_ids,
     )
 
     if request.run_immediately:
@@ -455,6 +485,22 @@ def patch_task(
         # whenever editor_payload is — no runtime check needed here.
         cron_expression = compile_to_cron(request.editor_payload)
 
+    if request.pre_approved_app_ids is not None:
+        _validate_app_ids(db_session, request.pre_approved_app_ids)
+
+    if request.pre_approved_mcp_server_ids is not None:
+        existing_task = get_scheduled_task(
+            db_session=db_session,
+            task_id=task_id,
+            user_id=user.id,
+        )
+        _validate_mcp_server_ids(
+            db_session,
+            user,
+            request.pre_approved_mcp_server_ids,
+            already_approved_server_ids=set(existing_task.pre_approved_mcp_server_ids),
+        )
+
     task = update_scheduled_task(
         db_session=db_session,
         task_id=task_id,
@@ -464,11 +510,8 @@ def patch_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        pre_approved_external_app_ids=(
-            _validated_app_ids(db_session, request.pre_approved_app_ids)
-            if request.pre_approved_app_ids is not None
-            else None
-        ),
+        pre_approved_external_app_ids=request.pre_approved_app_ids,
+        pre_approved_mcp_server_ids=request.pre_approved_mcp_server_ids,
     )
     db_session.commit()
     db_session.refresh(task)

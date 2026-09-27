@@ -160,7 +160,11 @@ def is_undefined_table(exc: BaseException) -> bool:
     no table means nothing is mapped, whereas any other error means unknown.
     """
     if isinstance(exc, ProgrammingError):
-        pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
+        pgcode = getattr(  # ods: ignore[getattr]
+            getattr(exc, "orig", None),  # ods: ignore[getattr]
+            "pgcode",
+            None,
+        )
         # 42P01 = undefined_table
         return pgcode == "42P01"
     return False

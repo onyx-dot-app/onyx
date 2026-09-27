@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { isAuthPath } from "@/lib/auth/paths";
-import { useCurrentAgent } from "@/lib/agents/hooks";
+import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   LLMProviderDescriptor,
   LLMProviderName,
@@ -14,6 +14,11 @@ import {
   LLMProviderView,
   ModelConfiguration,
   WellKnownLLMProviderDescriptor,
+} from "@/lib/languageModels/types";
+import type {
+  CustomProviderOption,
+  DefaultLlmReference,
+  LlmDefaults,
 } from "@/lib/languageModels/types";
 
 // ---------------------------------------------------------------------------
@@ -72,48 +77,30 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetches configured LLM providers accessible to the current user.
+ * The user-scoped provider request behind the public list hooks. Private:
+ * callers pick a named hook below so the list they get is in the name.
  *
  * Hits the **non-admin** endpoints which return `LLMProviderDescriptor`
- * (no `id` or sensitive fields like `api_key`). Use this hook in
- * user-facing UI (chat, popovers, onboarding) where you need the list
- * of providers and their visible models but don't need admin-level details.
+ * (no `id` or sensitive fields like `api_key`):
+ * - No `agentId` → `GET /api/llm/provider`, all public providers plus
+ *   restricted providers the user can access via group membership.
+ * - With `agentId` → `GET /api/llm/persona/{agentId}/providers`, providers
+ *   scoped to that agent, respecting RBAC restrictions.
  *
  * The backend wraps the provider list in an `LLMProviderResponse` envelope
- * that also carries the global default text and vision models. This hook
- * unwraps `.providers` for convenience while still exposing the defaults.
- *
- * **Endpoints:**
- * - No `agentId` → `GET /api/llm/provider`
- *   Returns all public providers plus restricted providers the user can
- *   access via group membership.
- * - With `agentId` → `GET /api/llm/persona/{agentId}/providers`
- *   Returns providers scoped to a specific agent, respecting RBAC
- *   restrictions. Use this when displaying model options for a particular
- *   assistant.
- *
- * @param agentId - Optional agent ID for RBAC-scoped providers.
- *
- * @returns
- * - `llmProviders` — The array of provider descriptors, or `undefined`
- *    while loading.
- * - `defaultText` — The global (or agent-overridden) default text model.
- * - `defaultVision` — The global (or agent-overridden) default vision model.
- * - `isLoading` — `true` until the first successful response or error.
- * - `error` — The SWR error object, if any.
- * - `refetch` — SWR `mutate` function to trigger a revalidation.
+ * that also carries the global defaults; those are exposed as returned.
  */
-export function useLLMProviders(agentId?: number) {
+function useLanguageModelsRequest(agentId?: number) {
   // No chat on /auth/* routes, where an unauthenticated caller would 403.
   const onAuthPath = isAuthPath(usePathname());
   const url = onAuthPath
     ? null
     : agentId !== undefined
-      ? SWR_KEYS.llmProvidersForPersona(agentId)
+      ? SWR_KEYS.llmProvidersForAgent(agentId)
       : SWR_KEYS.llmProviders;
 
   // `revalidateIfStale` is intentionally left at its default (true), unlike
-  // `useAdminLLMProviders` below. Admin edits call `refreshLlmProviderCaches`,
+  // `useAdminLanguageModels` below. Admin edits call `refreshLlmProviderCaches`,
   // but agent-scoped keys are orphaned when that runs, so `mutate` on them
   // is a no-op. Mount-time revalidation picks up the edits on next nav.
   // `dedupingInterval: 60000` keeps this off the hot path.
@@ -140,23 +127,64 @@ export function useLLMProviders(agentId?: number) {
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
     defaultChatNaming: data?.default_chat_naming ?? null,
+    defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
     error,
-    refetch: mutate as unknown as () => Promise<
-      LLMProviderResponse<LLMProviderDescriptor> | undefined
-    >,
+    // `mutate` resolves to the raw (unenriched) response, so callers must not
+    // read its result. Wrapping it keeps the revalidation without the lie.
+    refetch: async (): Promise<void> => {
+      await mutate();
+    },
   };
 }
 
+/** Every provider the current user may use, with all of their models. */
+export function useLanguageModels() {
+  return useLanguageModelsRequest();
+}
+
 /**
- * Resolves the active agent via `useCurrentAgent` and fetches that agent's
- * LLM providers via `useLLMProviders`. User-facing model UIs (chat model
- * selectors, popovers) consistently need exactly this pairing, so this hook
- * keeps the resolution in one place instead of repeating it at each call site.
+ * The providers this agent may use. A new agent has no id yet, so
+ * `undefined` falls back to the unscoped list.
  */
-export function useCurrentAgentLLMProviders() {
-  const currentAgent = useCurrentAgent();
-  return useLLMProviders(currentAgent?.id);
+export function useLanguageModelsForAgent(agentId: number | undefined) {
+  return useLanguageModelsRequest(agentId);
+}
+
+/**
+ * The user's providers trimmed to visible models that accept image input,
+ * for captioning and other vision-only pickers. Providers left with no
+ * such model are dropped.
+ */
+export function useVisionLanguageModels() {
+  const result = useLanguageModelsRequest();
+  const llmProviders = useMemo(
+    () =>
+      result.llmProviders
+        ?.map((provider) => ({
+          ...provider,
+          model_configurations: provider.model_configurations.filter(
+            (mc) => mc.is_visible && mc.supports_image_input
+          ),
+        }))
+        .filter((provider) => provider.model_configurations.length > 0),
+    [result.llmProviders]
+  );
+  return { ...result, llmProviders };
+}
+
+/**
+ * Resolves the active agent via `useActiveAgent` and fetches that agent's
+ * providers. User-facing model UIs (chat model selectors, popovers)
+ * consistently need exactly this pairing, so this hook keeps the resolution
+ * in one place instead of repeating it at each call site.
+ */
+export function useLanguageModelsForCurrentAgent() {
+  const activeAgent = useActiveAgent();
+  // Scoped to the Assistant too. The endpoint answers "which providers may this
+  // user use with this agent", and the Assistant can carry restrictions like
+  // any other, so the unscoped list would over-report them.
+  return useLanguageModelsRequest(activeAgent?.id);
 }
 
 /**
@@ -169,18 +197,20 @@ export function useCurrentAgentLLMProviders() {
  * Use this hook on admin pages (e.g. the LLM Configuration page) where
  * you need provider IDs for mutations (setting defaults, editing, deleting)
  * or need to display admin-only metadata. **Do not use in user-facing UI**
- * — use `useLLMProviders` instead.
+ * — use `useLanguageModels` instead.
  *
  * @returns
  * - `llmProviders` — The array of full provider views, or `undefined`
  *    while loading.
  * - `defaultText` — The global default text model.
  * - `defaultVision` — The global default vision model.
+ * - `defaultCraft`: the admin-configured default Craft model, or `null` if
+ *    unset. Craft then falls back to `defaultText`.
  * - `isLoading` — `true` until the first successful response or error.
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
-export function useAdminLLMProviders() {
+export function useAdminLanguageModels() {
   const {
     data: raw,
     error,
@@ -205,6 +235,7 @@ export function useAdminLLMProviders() {
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
     defaultChatNaming: data?.default_chat_naming ?? null,
+    defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
     error,
     refetch: mutate,
@@ -259,11 +290,6 @@ export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   };
 }
 
-export interface CustomProviderOption {
-  value: string;
-  label: string;
-}
-
 /**
  * Fetches the list of LiteLLM provider names available for custom provider
  * configuration (i.e. providers that don't have a dedicated well-known modal).
@@ -288,46 +314,15 @@ export function useCustomProviderNames() {
   };
 }
 
-export interface DefaultLlmReference {
-  providerName: string;
-  modelName: string;
-}
-
-export interface LlmDefaults {
-  /** Raw provider list, passed through from `useLLMProviders`. */
-  llmProviders: LLMProviderDescriptor[] | undefined;
-  /** True iff any provider exposes at least one visible model. */
-  hasAnyLlm: boolean;
-  /** True iff any provider exposes a visible model with `supports_image_input`. */
-  hasAnyVisionLlm: boolean;
-  /**
-   * The admin-configured default text model, resolved to the form-friendly
-   * `{ providerName, modelName }` shape. The backend stores
-   * `default_text` as `{ provider_id, model_name }`; this hook joins
-   * `provider_id` against the providers list to recover the human-facing
-   * provider `name`, which is what `validate_contextual_rag_model` looks
-   * up via `fetch_existing_llm_provider(name=...)`.
-   */
-  defaultLlm: DefaultLlmReference | null;
-  /**
-   * The admin-configured default *vision* model, resolved to the same
-   * `{ providerName, modelName }` shape as `defaultLlm`. Mirrors the
-   * resolution path of `defaultLlm` but for `default_vision`. Used by
-   * indexing-time captioning and any other vision-only feature.
-   */
-  defaultVision: DefaultLlmReference | null;
-  isLoading: boolean;
-}
-
 /**
- * Derived view over `useLLMProviders` for forms that need to:
+ * Derived view over `useLanguageModels` for forms that need to:
  *   - Disable LLM-dependent controls when no models are configured.
  *   - Default to the global default text model when the user has not yet
  *     made an explicit choice.
  */
 export function useLlmDefaults(): LlmDefaults {
   const { llmProviders, defaultText, defaultVision, isLoading } =
-    useLLMProviders();
+    useLanguageModels();
 
   const hasAnyLlm = useMemo(
     () =>
@@ -352,8 +347,13 @@ export function useLlmDefaults(): LlmDefaults {
       if (!llmProviders || !raw) return null;
       const provider = llmProviders.find((p) => p.id === raw.provider_id);
       if (!provider) return null;
-      if (!provider.name) return null;
-      return { providerName: provider.name, modelName: raw.model_name };
+      // No name check: well-known providers are routinely saved with a null
+      // name, and dropping those defaults left the admin pickers showing
+      // nothing for a model that was in fact configured.
+      return {
+        providerId: provider.id,
+        modelName: raw.model_name,
+      };
     },
     [llmProviders]
   );

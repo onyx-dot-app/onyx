@@ -20,6 +20,7 @@ from onyx.db.sso_provider import (
     SAMLProviderConfig,
     fetch_sso_provider_by_name,
     fetch_sso_providers,
+    sso_provider_type_supported,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -34,7 +35,21 @@ from onyx.server.saml import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-router = APIRouter(prefix="/auth/saml")
+
+
+def _reject_if_unsupported() -> None:
+    """SAML resolves a login by scanning provider rows for the assertion's
+    issuer, and an IdP-initiated assertion carries no state Onyx signed. Neither
+    can name a workspace on a deployment that has more than one, so the whole
+    router is closed there rather than failing deeper in."""
+    if not sso_provider_type_supported(SSOProviderType.SAML):
+        raise OnyxError(
+            OnyxErrorCode.SINGLE_TENANT_ONLY,
+            "SAML sign-in is not available on this deployment.",
+        )
+
+
+router = APIRouter(prefix="/auth/saml", dependencies=[Depends(_reject_if_unsupported)])
 
 
 # The OneLogin settings schema (its own key names, camelCase). We build and hand

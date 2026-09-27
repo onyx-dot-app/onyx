@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import ShimmerText from "@/refresh-components/texts/ShimmerText";
 import { useStreamingDuration } from "../hooks/useStreamingDuration";
 import { formatDurationSeconds } from "@opal/time";
 
@@ -28,6 +29,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   streamingStartTime,
   toolProcessingDuration,
 }: StreamingHeaderProps) {
+  const t = useTranslations("chat.messages.timeline");
   // Use backend duration when available, otherwise continue live timer
   const elapsedSeconds = useStreamingDuration(
     toolProcessingDuration === undefined, // Stop updating when we have backend duration
@@ -40,9 +42,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   return (
     <>
       <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-        <Text as="p" mainUiAction text03 className="shimmer-text">
-          {headerText}
-        </Text>
+        <ShimmerText>{headerText}</ShimmerText>
       </div>
 
       {collapsible &&
@@ -62,7 +62,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
             size="md"
             onClick={onToggle}
             rightIcon={SvgFold}
-            aria-label="Collapse timeline"
+            aria-label={t("collapseButton.ariaLabel")}
             aria-expanded={true}
           >
             {formatDurationSeconds(elapsedSeconds)}
@@ -73,7 +73,11 @@ export const StreamingHeader = React.memo(function StreamingHeader({
             size="md"
             onClick={onToggle}
             icon={isExpanded ? SvgFold : SvgExpand}
-            aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
+            aria-label={
+              isExpanded
+                ? t("collapseButton.ariaLabel")
+                : t("expandButton.ariaLabel")
+            }
             aria-expanded={isExpanded}
           />
         ))}

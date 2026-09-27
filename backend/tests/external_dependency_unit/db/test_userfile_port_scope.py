@@ -38,7 +38,7 @@ from onyx.db.user_file import (
     mark_user_file_reconcile_pending,
     user_file_port_scope_active,
 )
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -74,7 +74,7 @@ def _delete_user_and_files(db_session: Session, user_id: UUID) -> None:
     )
     user = db_session.get(User, user_id)
     if user is not None:
-        db_session.delete(user)
+        delete_test_user(db_session, user)
     db_session.commit()
 
 
@@ -411,9 +411,7 @@ def test_reindex_progress_counts_and_errors_both_scopes(
             db_session.query(UserFile).filter(UserFile.user_id == u.id).delete(
                 synchronize_session="fetch"
             )
-            obj = db_session.get(User, u.id)
-            if obj is not None:
-                db_session.delete(obj)
+        delete_test_user(db_session, *users)
         db_session.commit()
         for cc in cc_pairs:
             cleanup_cc_pair(db_session, cc)

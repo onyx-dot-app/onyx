@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
 from onyx.db.admin_banner import clear_admin_banner, get_admin_banner, set_admin_banner
-from onyx.db.models import UserRole
 from onyx.db.notification import get_notifications
 from onyx.server.features.admin_banner import api as admin_banner_api
 from onyx.server.features.admin_banner.api import AdminBannerUpdateRequest
@@ -97,7 +96,7 @@ def test_upsert_wipes_prior_rows_so_edit_reshows(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    admin = create_test_user(db_session, "sys_announce_edit", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "sys_announce_edit", is_admin=True)
     set_admin_banner(title="v1 title", content="v1 body")
     ensure_system_announcement_notification(admin, db_session)
 
@@ -125,7 +124,7 @@ def test_delete_clears_banner_and_notifications(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    admin = create_test_user(db_session, "sys_announce_delete", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "sys_announce_delete", is_admin=True)
     set_admin_banner(title="Temporary notice", content="Ends soon.")
     ensure_system_announcement_notification(admin, db_session)
     assert len(_system_announcements(admin, db_session)) == 1
@@ -143,7 +142,7 @@ def test_upsert_stores_show_as_popup(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    admin = create_test_user(db_session, "sys_announce_popup", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "sys_announce_popup", is_admin=True)
     admin_banner_api.upsert_admin_banner(
         AdminBannerUpdateRequest(
             title="Maintenance", content="Soon", show_as_popup=True

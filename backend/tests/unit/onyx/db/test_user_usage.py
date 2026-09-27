@@ -5,6 +5,7 @@ session like tenant usage. Read-path helpers still run against in-memory SQLite
 seeded with ORM inserts."""
 
 import datetime
+import logging
 import sqlite3
 from collections.abc import Generator
 from typing import cast
@@ -12,19 +13,30 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from cachetools import TTLCache
 from sqlalchemy import Table, create_engine, event, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.db.models import User__UserGroup, UserUsage
+import onyx.db.user_usage as user_usage_module
+from onyx.db.enums import SystemUsageAttribution, UsageActorKind
+from onyx.db.llm_usage import LLMUsageRecord
+from onyx.db.models import (
+    TokenRateLimit,
+    TokenRateLimitScope,
+    User__UserGroup,
+    UserUsage,
+)
 from onyx.db.user_usage import (
     DELETED_USER_EXPORT_EMAIL,
     TokenUsageBucket,
     UserUsageByDay,
+    cost_budget_limits,
     get_cost_window_start,
     get_group_cost_cents_since,
     get_group_token_buckets_since,
@@ -33,6 +45,7 @@ from onyx.db.user_usage import (
     get_total_cost_cents_since,
     get_total_token_buckets_since,
     get_usage_export,
+    get_usage_reset_window_start,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_in_window,
     get_user_cost_cents_since,
@@ -57,13 +70,13 @@ def test_token_periods_use_whole_utc_days() -> None:
     )
 
 
-def test_cost_window_uses_whole_utc_day_buckets() -> None:
+def test_cost_windows_use_fixed_utc_calendar_periods() -> None:
     now = datetime.datetime(2026, 7, 21, 13, 30, tzinfo=datetime.timezone.utc)
 
     assert get_cost_window_start(now, 24) == datetime.datetime(
         2026, 7, 21, tzinfo=datetime.timezone.utc
     )
-    assert get_cost_window_start(now, 48) == datetime.datetime(
+    assert get_cost_window_start(now, 168) == datetime.datetime(
         2026, 7, 20, tzinfo=datetime.timezone.utc
     )
 
@@ -89,6 +102,7 @@ def _seed_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime.datetime,
+    cache_creation_tokens: int = 0,
 ) -> None:
     """Insert a ledger row without going through the Postgres upsert path."""
     db_session.add(
@@ -101,6 +115,36 @@ def _seed_usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            cost_cents=cost_cents,
+        )
+    )
+    db_session.flush()
+
+
+def _seed_system_usage(
+    db_session: Session,
+    window_start: datetime.datetime,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cost_cents: float,
+    attribution: SystemUsageAttribution = SystemUsageAttribution.ATTRIBUTED,
+) -> None:
+    db_session.add(
+        UserUsage(
+            user_id=None,
+            actor_kind=UsageActorKind.SYSTEM,
+            system_attribution=attribution,
+            window_start=window_start,
+            model="m",
+            flow="image_summarization",
+            provider="anthropic",
+            incognito=False,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
             cost_cents=cost_cents,
         )
     )
@@ -132,6 +176,18 @@ def db_session() -> Generator[Session, None, None]:
         session.close()
 
 
+def test_system_usage_rejects_unknown_attribution(db_session: Session) -> None:
+    with pytest.raises(IntegrityError):
+        _seed_system_usage(
+            db_session,
+            datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc),
+            input_tokens=1,
+            output_tokens=1,
+            cost_cents=1.0,
+            attribution=cast(SystemUsageAttribution, "UNKNOWN"),
+        )
+
+
 class TestRecordUserUsage:
     """Postgres upsert path — mock the session; do not execute SQL."""
 
@@ -143,18 +199,29 @@ class TestRecordUserUsage:
         record_user_usage(
             mock_session,
             user_id=user_id,
-            model="claude-3",
-            flow="CHAT",
-            provider="anthropic",
-            input_tokens=100,
-            output_tokens=50,
-            cache_read_tokens=10,
-            cost_cents=1.5,
-            window_start=window,
+            usage=LLMUsageRecord(
+                model="claude-3",
+                flow="CHAT",
+                provider="anthropic",
+                input_tokens=100,
+                output_tokens=50,
+                cache_read_tokens=10,
+                cache_creation_tokens=25,
+                cost_cents=1.5,
+                window_start=window,
+            ),
         )
 
         mock_session.execute.assert_called_once()
         mock_session.flush.assert_called_once()
+        stmt = mock_session.execute.call_args[0][0]
+        compiled = stmt.compile(dialect=postgresql.dialect())
+        assert compiled.params["cache_creation_tokens"] == 25
+        assert (
+            "cache_creation_tokens = "
+            "(user_usage.cache_creation_tokens + excluded.cache_creation_tokens)"
+            in str(compiled)
+        )
 
     def test_null_provider_stored_as_empty_string(self) -> None:
         mock_session = MagicMock()
@@ -163,19 +230,48 @@ class TestRecordUserUsage:
         record_user_usage(
             mock_session,
             user_id=str(uuid4()),
-            model="model-a",
-            flow="CHAT",
-            provider=None,
-            input_tokens=10,
-            output_tokens=5,
-            cache_read_tokens=0,
-            cost_cents=0.1,
-            window_start=window,
+            usage=LLMUsageRecord(
+                model="model-a",
+                flow="CHAT",
+                provider=None,
+                input_tokens=10,
+                output_tokens=5,
+                cache_read_tokens=0,
+                cost_cents=0.1,
+                window_start=window,
+            ),
         )
 
         stmt = mock_session.execute.call_args[0][0]
         compiled = stmt.compile(dialect=postgresql.dialect())
         assert compiled.params["provider"] == ""
+
+    def test_incognito_dimension_reaches_the_upsert(self) -> None:
+        """The flag must land in both the inserted row and the conflict target,
+        or incognito spend would silently merge into regular rows."""
+        mock_session = MagicMock()
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+
+        record_user_usage(
+            mock_session,
+            user_id=str(uuid4()),
+            usage=LLMUsageRecord(
+                model="model-a",
+                flow="CHAT",
+                provider="openai",
+                input_tokens=10,
+                output_tokens=5,
+                cache_read_tokens=0,
+                cost_cents=0.1,
+                window_start=window,
+            ),
+            incognito=True,
+        )
+
+        stmt = mock_session.execute.call_args[0][0]
+        compiled = stmt.compile(dialect=postgresql.dialect())
+        assert compiled.params["incognito"] is True
+        assert "incognito" in str(compiled).split("ON CONFLICT")[1]
 
     def test_user_deletion_retains_usage_row_with_null_user_id(self) -> None:
         engine: Engine = create_engine("sqlite://")
@@ -212,6 +308,16 @@ class TestRecordUserUsage:
 
 
 class TestUsageExport:
+    def test_system_usage_is_excluded(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_system_usage(
+            db_session, window, input_tokens=20, output_tokens=7, cost_cents=4.0
+        )
+
+        rows = get_usage_export(db_session, window, window + datetime.timedelta(days=1))
+
+        assert rows == []
+
     def test_orphaned_usage_is_exported_and_reconciles_with_total(
         self, db_session: Session
     ) -> None:
@@ -284,7 +390,17 @@ class TestAggregation:
         day2 = datetime.datetime(2026, 6, 2, tzinfo=datetime.timezone.utc)
 
         _seed_usage(
-            db_session, user_id, "model-a", "CHAT", "anthropic", 100, 50, 0, 1.0, day1
+            db_session,
+            user_id,
+            "model-a",
+            "CHAT",
+            "anthropic",
+            100,
+            50,
+            0,
+            1.0,
+            day1,
+            cache_creation_tokens=7,
         )
         _seed_usage(
             db_session, user_id, "model-b", "CHAT", "anthropic", 200, 60, 0, 2.0, day1
@@ -306,6 +422,7 @@ class TestAggregation:
                 input_tokens=100,
                 output_tokens=50,
                 cache_read_tokens=0,
+                cache_creation_tokens=7,
                 cost_cents=1.0,
             ),
             UserUsageByDay(
@@ -314,6 +431,7 @@ class TestAggregation:
                 input_tokens=200,
                 output_tokens=60,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=2.0,
             ),
             UserUsageByDay(
@@ -322,6 +440,7 @@ class TestAggregation:
                 input_tokens=300,
                 output_tokens=70,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=3.0,
             ),
         ]
@@ -404,6 +523,23 @@ class TestTotalCostSince:
 
         assert get_total_cost_cents_since(db_session, window) == pytest.approx(7.0)
 
+    def test_includes_system_usage(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_usage(db_session, str(uuid4()), "m", "CHAT", None, 1, 1, 0, 3.0, window)
+        _seed_system_usage(
+            db_session, window, input_tokens=5, output_tokens=2, cost_cents=4.0
+        )
+        _seed_system_usage(
+            db_session,
+            window,
+            input_tokens=3,
+            output_tokens=1,
+            cost_cents=2.0,
+            attribution=SystemUsageAttribution.UNATTRIBUTED,
+        )
+
+        assert get_total_cost_cents_since(db_session, window) == pytest.approx(9.0)
+
     def test_older_window_excluded(self, db_session: Session) -> None:
         u1 = str(uuid4())
         w1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
@@ -444,6 +580,16 @@ class TestTotalCostBucketsSince:
         assert buckets[w1] == pytest.approx(7.0)
         assert buckets[w2] == pytest.approx(9.0)
 
+    def test_includes_system_usage(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_system_usage(
+            db_session, window, input_tokens=5, output_tokens=2, cost_cents=4.0
+        )
+
+        assert dict(get_total_cost_cents_buckets_since(db_session, window))[
+            window
+        ] == pytest.approx(4.0)
+
 
 class TestTokenBuckets:
     def test_user_tokens_are_provider_input_plus_output(
@@ -468,6 +614,24 @@ class TestTokenBuckets:
 
         assert get_total_token_buckets_since(db_session, window) == [
             TokenUsageBucket(window_start=window, tokens=180)
+        ]
+
+    def test_total_tokens_include_system_usage(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_system_usage(
+            db_session, window, input_tokens=50, output_tokens=10, cost_cents=1.0
+        )
+        _seed_system_usage(
+            db_session,
+            window,
+            input_tokens=10,
+            output_tokens=5,
+            cost_cents=1.0,
+            attribution=SystemUsageAttribution.UNATTRIBUTED,
+        )
+
+        assert get_total_token_buckets_since(db_session, window) == [
+            TokenUsageBucket(window_start=window, tokens=75)
         ]
 
 
@@ -517,3 +681,47 @@ class TestGroupCostSince:
         assert get_group_token_buckets_since(session, [10], window) == {
             10: [TokenUsageBucket(window_start=window, tokens=125)]
         }
+
+
+def test_usage_reset_window_start_skips_legacy_cost_period() -> None:
+    """An unsupported stored cost period is skipped instead of raising."""
+    now = datetime.datetime(2026, 8, 12, 15, tzinfo=datetime.timezone.utc)
+    legacy = TokenRateLimit(
+        enabled=True,
+        token_budget=None,
+        cost_budget_cents=100.0,
+        period_hours=2136,
+        scope=TokenRateLimitScope.GLOBAL,
+    )
+    assert get_usage_reset_window_start(now, [legacy]) == datetime.datetime(
+        2026, 8, 12, tzinfo=datetime.timezone.utc
+    )
+
+
+def test_invalid_cost_period_warning_is_rate_limited(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        user_usage_module,
+        "_invalid_cost_budget_warning_cache",
+        TTLCache(maxsize=10, ttl=300),
+    )
+    legacy = TokenRateLimit(
+        id=1,
+        enabled=True,
+        token_budget=None,
+        cost_budget_cents=100.0,
+        period_hours=2136,
+        scope=TokenRateLimitScope.GLOBAL,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        assert cost_budget_limits([legacy]) == []
+        assert cost_budget_limits([legacy]) == []
+
+    warnings = [
+        record
+        for record in caplog.records
+        if "Skipping cost budget" in record.getMessage()
+    ]
+    assert len(warnings) == 1

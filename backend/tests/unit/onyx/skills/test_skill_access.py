@@ -2,16 +2,24 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.auth.schemas import UserRole
-from onyx.db.enums import SkillAccessLevel, SkillSharePermission
+from onyx.db.enums import Permission, SkillAccessLevel, SkillSharePermission
 from onyx.db.models import Skill, Skill__User, Skill__UserGroup, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import _ensure_can_edit_org_visibility
 from onyx.server.features.skill.response_helpers import user_permission_for_skill
 
 
-def _user(role: UserRole = UserRole.BASIC) -> User:
-    return User(id=uuid4(), email=f"{uuid4().hex}@example.com", role=role)
+def _user(*, is_admin: bool = False) -> User:
+    """Scoped-manager reach is passed per call via `managed_user_group_ids`,
+    never carried on the user."""
+    granted = [Permission.BASIC_ACCESS.value]
+    if is_admin:
+        granted.append(Permission.FULL_ADMIN_PANEL_ACCESS.value)
+    return User(
+        id=uuid4(),
+        email=f"{uuid4().hex}@example.com",
+        effective_permissions=granted,
+    )
 
 
 def _skill(
@@ -75,7 +83,7 @@ def test_author_retains_owner_permission_after_sharing() -> None:
 
 def test_admin_can_edit_custom_skill_regardless_of_share_state() -> None:
     author = _user()
-    admin = _user(UserRole.ADMIN)
+    admin = _user(is_admin=True)
 
     assert (
         user_permission_for_skill(_skill(author), admin, set())
@@ -217,7 +225,7 @@ def test_any_editor_grant_wins_over_viewer_grants() -> None:
 
 def test_curator_viewer_access_does_not_grant_editor() -> None:
     author = _user()
-    curator = _user(UserRole.CURATOR)
+    curator = _user()
 
     public_skill = _skill(author, is_public=True)
     assert (
@@ -225,7 +233,7 @@ def test_curator_viewer_access_does_not_grant_editor() -> None:
             public_skill,
             curator,
             user_group_ids=set(),
-            curated_user_group_ids=set(),
+            managed_user_group_ids=set(),
         )
         == SkillAccessLevel.VIEWER
     )
@@ -237,7 +245,7 @@ def test_curator_viewer_access_does_not_grant_editor() -> None:
             direct_shared,
             curator,
             user_group_ids=set(),
-            curated_user_group_ids=set(),
+            managed_user_group_ids=set(),
         )
         == SkillAccessLevel.VIEWER
     )
@@ -245,7 +253,7 @@ def test_curator_viewer_access_does_not_grant_editor() -> None:
 
 def test_curator_can_edit_skill_shared_with_curated_groups() -> None:
     author = _user()
-    curator = _user(UserRole.CURATOR)
+    curator = _user()
     skill = _skill(author)
     _share_with_groups(skill, [1])
 
@@ -254,7 +262,7 @@ def test_curator_can_edit_skill_shared_with_curated_groups() -> None:
             skill,
             curator,
             user_group_ids={1},
-            curated_user_group_ids={1},
+            managed_user_group_ids={1},
         )
         == SkillAccessLevel.EDITOR
     )
@@ -262,7 +270,7 @@ def test_curator_can_edit_skill_shared_with_curated_groups() -> None:
 
 def test_curator_cannot_edit_skill_shared_outside_curated_groups() -> None:
     author = _user()
-    curator = _user(UserRole.CURATOR)
+    curator = _user()
     skill = _skill(author)
     _share_with_groups(skill, [1, 2])
 
@@ -271,31 +279,33 @@ def test_curator_cannot_edit_skill_shared_outside_curated_groups() -> None:
             skill,
             curator,
             user_group_ids={1},
-            curated_user_group_ids={1},
+            managed_user_group_ids={1},
         )
         == SkillAccessLevel.VIEWER
     )
 
 
-def test_global_curator_can_edit_skill_shared_with_member_groups() -> None:
+def test_group_membership_alone_does_not_grant_editor() -> None:
+    """The old GLOBAL_CURATOR role let mere membership curate; the permission
+    system requires the group be one the user *manages*."""
     author = _user()
-    global_curator = _user(UserRole.GLOBAL_CURATOR)
+    member = _user()
     skill = _skill(author)
     _share_with_groups(skill, [1, 2])
 
     assert (
         user_permission_for_skill(
             skill,
-            global_curator,
+            member,
             user_group_ids={1, 2},
         )
-        == SkillAccessLevel.EDITOR
+        == SkillAccessLevel.VIEWER
     )
 
 
 def test_curator_editor_cannot_edit_org_visibility() -> None:
     author = _user()
-    curator = _user(UserRole.CURATOR)
+    curator = _user()
     skill = _skill(author)
     _share_with_groups(skill, [1])
 
@@ -305,7 +315,7 @@ def test_curator_editor_cannot_edit_org_visibility() -> None:
 
 def test_admin_editor_can_edit_org_visibility() -> None:
     author = _user()
-    admin = _user(UserRole.ADMIN)
+    admin = _user(is_admin=True)
     skill = _skill(author, is_public=True)
 
     _ensure_can_edit_org_visibility(skill, admin)
@@ -313,6 +323,6 @@ def test_admin_editor_can_edit_org_visibility() -> None:
 
 def test_admin_can_edit_personal_skill_org_visibility() -> None:
     author = _user()
-    admin = _user(UserRole.ADMIN)
+    admin = _user(is_admin=True)
 
     _ensure_can_edit_org_visibility(_skill(author), admin)

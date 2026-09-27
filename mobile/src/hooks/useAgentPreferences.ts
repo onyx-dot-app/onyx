@@ -12,9 +12,11 @@ import { useSession } from "@/state/session";
 
 const EMPTY_PREFERENCES: AgentPreferences = {};
 
-// The PATCH replaces the whole record, so two in-flight writes are last-write-wins: an earlier
-// request completing second would undo the later toggle. Chaining keeps one write in flight at a
-// time. Module-scoped because the record is per-user, not per-hook-instance.
+/*
+ * The PATCH replaces the whole record, so two in-flight writes are last-write-wins: an earlier
+ * request completing second would undo the later toggle. Chaining keeps one write in flight at a
+ * time. Module-scoped because the record is per-user, not per-hook-instance.
+ */
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 function enqueueWrite<T>(write: () => Promise<T>): Promise<T> {
@@ -26,9 +28,18 @@ function enqueueWrite<T>(write: () => Promise<T>): Promise<T> {
 
 export interface UseAgentPreferences {
   preferences: AgentPreferences;
+  // An empty record reads as "nothing disabled", so a caller reconciling against it must wait.
+  isLoaded: boolean;
   disabledToolIdsFor: (agentId: number) => number[];
-  // Optimistic; rolls back and toasts if the PATCH fails.
-  toggleDisabledTool: (agentId: number, toolId: number) => Promise<void>;
+  /*
+   * A target, not a flip: the write re-reads the record as it runs, so a flip computed from a
+   * stale render lands inverted.
+   */
+  setToolDisabled: (
+    agentId: number,
+    toolId: number,
+    disabled: boolean,
+  ) => Promise<void>;
 }
 
 export function useAgentPreferences(): UseAgentPreferences {
@@ -49,12 +60,14 @@ export function useAgentPreferences(): UseAgentPreferences {
     [preferences],
   );
 
-  const toggleDisabledTool = useCallback(
-    async (agentId: number, toolId: number) => {
+  const setToolDisabled = useCallback(
+    async (agentId: number, toolId: number, disabled: boolean) => {
       const key = QUERY_KEYS.agentPreferences(serverUrl);
 
-      // A tap can land before the initial GET resolves, and the PATCH replaces the whole array —
-      // computing it from an empty cache would re-enable everything disabled on another client.
+      /*
+       * A tap can land before the initial GET resolves, and the PATCH replaces the whole array —
+       * computing it from an empty cache would re-enable everything disabled on another client.
+       */
       if (queryClient.getQueryData(key) === undefined) {
         try {
           await queryClient.fetchQuery({
@@ -70,12 +83,12 @@ export function useAgentPreferences(): UseAgentPreferences {
 
       await queryClient.cancelQueries({ queryKey: key });
 
-      // Live cache, not a render-time snapshot, so concurrent toggles compose instead of racing.
       const previous = queryClient.getQueryData<AgentPreferences | null>(key);
       const current = previous?.[String(agentId)]?.disabled_tool_ids ?? [];
-      const next = current.includes(toolId)
-        ? current.filter((id) => id !== toolId)
-        : [...current, toolId];
+      if (current.includes(toolId) === disabled) return;
+      const next = disabled
+        ? [...current, toolId]
+        : current.filter((id) => id !== toolId);
 
       queryClient.setQueryData<AgentPreferences>(key, {
         ...(previous ?? EMPTY_PREFERENCES),
@@ -84,9 +97,10 @@ export function useAgentPreferences(): UseAgentPreferences {
 
       try {
         await enqueueWrite(async () => {
-          // The queue defers this, and apiFetch resolves the base URL and bearer token only when
-          // it finally runs — so a write queued before a logout or instance switch would land on
-          // whoever is signed in by then. Drop it instead.
+          /*
+           * apiFetch resolves the base URL and bearer token when the queued write runs, so one
+           * queued before a logout or instance switch would land on whoever signs in next.
+           */
           if (useSession.getState().serverUrl !== serverUrl) return;
           await patchAgentPreferences(agentId, next);
         });
@@ -101,5 +115,10 @@ export function useAgentPreferences(): UseAgentPreferences {
     [queryClient, serverUrl],
   );
 
-  return { preferences, disabledToolIdsFor, toggleDisabledTool };
+  return {
+    preferences,
+    isLoaded: query.isSuccess,
+    disabledToolIdsFor,
+    setToolDisabled,
+  };
 }

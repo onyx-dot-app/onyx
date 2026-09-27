@@ -11,7 +11,6 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import { useUser } from "@/providers/UserProvider";
-import { UserRole } from "@/lib/types";
 import NonAdminStep from "./components/NonAdminStep";
 
 type OnboardingFlowProps = {
@@ -29,13 +28,13 @@ const OnboardingFlowInner = ({
   state: onboardingState,
   actions: onboardingActions,
 }: OnboardingFlowProps) => {
-  const { user } = useUser();
+  const { user, isAdmin } = useUser();
 
   if (!user) return null;
 
   const hasStarted = onboardingState.currentStep !== OnboardingStep.Welcome;
 
-  return user.role === UserRole.ADMIN ? (
+  return isAdmin ? (
     showOnboarding ? (
       <div
         className="flex flex-col items-center justify-center w-full max-w-(--app-page-main-content-width) gap-2"
@@ -49,7 +48,7 @@ const OnboardingFlowInner = ({
         />
         {hasStarted && (
           <div className="relative w-full overflow-hidden">
-            <div className="flex flex-col gap-2 animate-in slide-in-from-right duration-500 ease-out">
+            <div className="flex flex-col gap-2 animate-in slide-in-from-right rtl:slide-in-from-left duration-500 ease-out">
               <NameStep state={onboardingState} actions={onboardingActions} />
               <LLMStep
                 state={onboardingState}
@@ -63,7 +62,7 @@ const OnboardingFlowInner = ({
                   "transition-all duration-500 ease-out " +
                   (onboardingState.currentStep === OnboardingStep.Complete
                     ? "opacity-100 translate-x-0"
-                    : "opacity-0 translate-x-full")
+                    : "opacity-0 translate-x-full rtl:-translate-x-full")
                 }
               >
                 {onboardingState.currentStep === OnboardingStep.Complete && (

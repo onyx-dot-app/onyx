@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { useTranslations } from "next-intl";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
@@ -17,6 +18,10 @@ import {
 import { fetchChatFile } from "@/lib/chat/svc";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
 import { resolveVariant } from "@/sections/modals/PreviewModal/variants";
+import {
+  parseContentDispositionFileName,
+  withMimeTypeExtension,
+} from "@/sections/modals/PreviewModal/downloadFileName";
 
 interface PreviewModalProps {
   presentingDocument: MinimalOnyxDocument;
@@ -27,6 +32,7 @@ export default function PreviewModal({
   presentingDocument,
   onClose,
 }: PreviewModalProps) {
+  const t = useTranslations("chat.modals.preview");
   const [fileContent, setFileContent] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [fileName, setFileName] = useState("");
@@ -35,18 +41,20 @@ export default function PreviewModal({
   const [mimeType, setMimeType] = useState("application/octet-stream");
   const [zoom, setZoom] = useState(100);
 
+  const variantName = fileName || presentingDocument.semantic_identifier;
+
   const variant = useMemo(
-    () => resolveVariant(presentingDocument.semantic_identifier, mimeType),
-    [presentingDocument.semantic_identifier, mimeType]
+    () => resolveVariant(variantName, mimeType),
+    [variantName, mimeType]
   );
 
   const language = useMemo(
     () =>
-      getCodeLanguage(presentingDocument.semantic_identifier || "") ||
+      getCodeLanguage(variantName || "") ||
       getLanguageByMime(mimeType) ||
-      getDataLanguage(presentingDocument.semantic_identifier || "") ||
+      getDataLanguage(variantName || "") ||
       "plaintext",
-    [mimeType, presentingDocument.semantic_identifier]
+    [mimeType, variantName]
   );
 
   const lineCount = useMemo(() => {
@@ -104,20 +112,26 @@ export default function PreviewModal({
 
       const response = await fetchChatFile(fileIdLocal);
 
-      // Re-resolve using the stored MIME from the response headers, which is
-      // authoritative, BEFORE materializing the body as a blob.
+      // The stored name and MIME from the response headers are authoritative;
+      // re-resolve with them BEFORE materializing the body as a blob.
+      const storedFileName =
+        parseContentDispositionFileName(
+          response.headers.get("Content-Disposition")
+        ) ?? originalFileName;
       const rawContentType =
         response.headers.get("Content-Type") || "application/octet-stream";
       const resolvedMime =
         rawContentType === "application/octet-stream"
-          ? (mime.getType(originalFileName) ?? rawContentType)
+          ? (mime.getType(storedFileName) ?? rawContentType)
           : rawContentType;
-      setMimeType(resolvedMime);
-
-      const resolved = resolveVariant(
-        presentingDocument.semantic_identifier,
+      const resolvedFileName = withMimeTypeExtension(
+        storedFileName,
         resolvedMime
       );
+      setFileName(resolvedFileName);
+      setMimeType(resolvedMime);
+
+      const resolved = resolveVariant(resolvedFileName, resolvedMime);
       if (resolved.needsParsedContent) {
         // Name alone didn't identify a spreadsheet, but the stored MIME did
         // (e.g. an xlsx with a renamed/missing display name). Discard the raw
@@ -143,11 +157,11 @@ export default function PreviewModal({
       // Keep a usable download link for the CURRENT file even when the
       // preview itself failed (a stale previous-file URL must never win).
       updateFileUrl(rawFileUrl);
-      setLoadError("Failed to load document.");
+      setLoadError(t("loadError.message"));
     } finally {
       setIsLoading(false);
     }
-  }, [presentingDocument]);
+  }, [presentingDocument, t]);
 
   useEffect(() => {
     fetchFile();
@@ -179,6 +193,7 @@ export default function PreviewModal({
       zoom,
       onZoomIn: handleZoomIn,
       onZoomOut: handleZoomOut,
+      t,
     }),
     [
       fileContent,
@@ -190,6 +205,7 @@ export default function PreviewModal({
       zoom,
       handleZoomIn,
       handleZoomOut,
+      t,
     ]
   );
 
@@ -207,7 +223,7 @@ export default function PreviewModal({
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Modal.Header
-          title={fileName || "Document"}
+          title={fileName || t("header.fallbackTitle")}
           description={variant.headerDescription(ctx)}
           onClose={onClose}
         />
@@ -221,13 +237,13 @@ export default function PreviewModal({
               <SvgSimpleLoader className="h-8 w-8" />
             </Section>
           ) : loadError ? (
-            <Section padding={1}>
+            <Section padding={4}>
               <Text text03 mainUiBody>
                 {loadError}
               </Text>
               {fileUrl && (
                 <a href={fileUrl} download={fileName}>
-                  <Button>Download File</Button>
+                  <Button>{t("downloadButton.label")}</Button>
                 </a>
               )}
             </Section>

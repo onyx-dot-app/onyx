@@ -36,9 +36,17 @@ describe("SkillsStaleNotice", () => {
     });
   });
 
-  it("disables reload while a turn is active", () => {
-    render(<SkillsStaleNotice sessionId={SESSION_ID} turnActive />);
+  it("reveals retained stale state after an active turn stops", () => {
+    const { rerender } = render(
+      <SkillsStaleNotice sessionId={SESSION_ID} turnActive />
+    );
 
-    expect(screen.getByRole("button", { name: "Reload" })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Reload" })
+    ).not.toBeInTheDocument();
+
+    rerender(<SkillsStaleNotice sessionId={SESSION_ID} turnActive={false} />);
+
+    expect(screen.getByRole("button", { name: "Reload" })).toBeEnabled();
   });
 });

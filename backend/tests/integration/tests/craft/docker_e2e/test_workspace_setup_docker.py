@@ -24,7 +24,9 @@ from tests.integration.tests.craft.docker_e2e.conftest import (
     DockerExec,
     DockerSandbox,
     ProvisionSandbox,
+    remove_container,
 )
+from tests.integration.tests.craft.webapp_preview import webapp_script_stat_command
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,
@@ -66,7 +68,6 @@ def test_session_setup_creates_user_writable_workspace(
         "/workspace/managed/user_library",
         session_path,
         f"{session_path}/outputs",
-        f"{session_path}/outputs/web",
         f"{session_path}/attachments",
         f"{session_path}/.opencode",
     ]
@@ -111,11 +112,11 @@ def test_session_setup_creates_user_writable_workspace(
                 'printf ok > "/workspace/managed/.write-check"\n'
                 f'printf ok > "{session_path}/.write-check"\n'
                 f'printf ok > "{session_path}/attachments/.write-check"\n'
-                f'printf ok > "{session_path}/outputs/web/.write-check"\n'
+                f'printf ok > "{session_path}/outputs/.write-check"\n'
                 'rm -f "/workspace/managed/.write-check"\n'
                 f'rm -f "{session_path}/.write-check"\n'
                 f'rm -f "{session_path}/attachments/.write-check"\n'
-                f'rm -f "{session_path}/outputs/web/.write-check"\n'
+                f'rm -f "{session_path}/outputs/.write-check"\n'
             ),
         ],
         user=SANDBOX_EXEC_USER,
@@ -177,3 +178,48 @@ def test_session_setup_creates_user_writable_workspace(
     )
     post_delete_names = {entry.name for entry in post_delete_listing.entries}
     assert upload_name not in post_delete_names
+
+
+def test_session_setup_writes_read_only_webapp_script(
+    workspace_user: DATestUser,
+    provision_sandbox: ProvisionSandbox,
+    docker_exec: DockerExec,
+) -> None:
+    """A session with a preview port gets start-webapp.sh and nothing else.
+
+    Webapp provisioning is lazy, so this script is all that setup leaves
+    behind for the agent to run. Mode 444 makes a stray redirect into the
+    script fail loudly; it is not a boundary against the agent, which owns
+    both the file and its directory.
+    """
+    sandbox = provision_sandbox(workspace_user, headless=False)
+    try:
+        stat_result = docker_exec(
+            sandbox.container_name,
+            ["sh", "-c", webapp_script_stat_command(sandbox.session_id)],
+            user=SANDBOX_EXEC_USER,
+        )
+        assert stat_result.returncode == 0, (
+            "Expected start-webapp.sh after provisioning a session with a port. "
+            f"stdout={stat_result.stdout!r} stderr={stat_result.stderr!r}"
+        )
+        assert stat_result.stdout.strip() == f"{SANDBOX_EXEC_USER} 444", (
+            f"start-webapp.sh must be sandbox-user-owned and read-only: "
+            f"{stat_result.stdout!r}"
+        )
+
+        scaffolded = docker_exec(
+            sandbox.container_name,
+            [
+                "sh",
+                "-c",
+                f'test -e "/workspace/sessions/{sandbox.session_id}/outputs/web" '
+                "&& echo PRESENT || echo ABSENT",
+            ],
+            user=SANDBOX_EXEC_USER,
+        ).stdout.strip()
+        assert scaffolded == "ABSENT", (
+            "Setup must not scaffold outputs/web; provisioning is lazy."
+        )
+    finally:
+        remove_container(sandbox.container_name)

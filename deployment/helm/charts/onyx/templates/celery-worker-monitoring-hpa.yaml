@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-monitoring
+  name: {{ include "onyx.resourceName" (list . "celery-worker-monitoring") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "onyx.fullname" . }}-celery-worker-monitoring
+    name: {{ include "onyx.resourceName" (list . "celery-worker-monitoring") }}
   minReplicas: {{ .Values.celery_worker_monitoring.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.celery_worker_monitoring.autoscaling.maxReplicas }}
   metrics:

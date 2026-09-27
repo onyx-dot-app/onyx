@@ -1,23 +1,22 @@
 import re
-from collections.abc import Callable, Generator
-from functools import lru_cache, wraps
-from typing import Any, cast
-
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-from slack_sdk.web import SlackResponse
+from collections.abc import Callable
+from functools import lru_cache
 
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.slack.models import MessageType
+from onyx.connectors.slack.source_operations import (
+    SlackApiError,
+    SlackSourceOperations,
+    SlackUserInfoResponse,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
-# retry after 0.1, 1.2, 3.4, 7.8, 16.6, 34.2 seconds
-basic_retry_wrapper = retry_builder(tries=7)
-# number of messages we request per page when fetching paginated slack messages
-_SLACK_LIMIT = 900
+# Resolves one Slack user id to a validated ``users.info`` payload. The
+# gateway's ``fetch_user_info`` operation satisfies this; onyxbot (which keeps
+# its own bot-app WebClient and no gateway) passes an adapter over that client.
+FetchUserInfo = Callable[[str], SlackUserInfoResponse]
 
 # Skips an @ preceded by a word character, where a zero-width space would
 # split an address rather than defang a mention
@@ -39,21 +38,21 @@ def _defang_mentions(text: str) -> str:
     return _MENTION_AT_PATTERN.sub("@​", text)
 
 
-# used to serialize access to the retry TTL
-ONYX_SLACK_LOCK_TTL = 1800  # how long the lock is allowed to idle before it expires
-ONYX_SLACK_LOCK_BLOCKING_TIMEOUT = 60  # how long to wait for the lock per wait attempt
-ONYX_SLACK_LOCK_TOTAL_BLOCKING_TIMEOUT = 3600  # how long to wait for the lock in total
-
-
 @lru_cache()
-def get_base_url(token: str) -> str:
-    """Retrieve and cache the base URL of the Slack workspace based on the client token."""
-    client = WebClient(token=token)
-    return client.auth_test()["url"]
+def get_base_url(slack_client: SlackSourceOperations) -> str:
+    """Retrieve and cache the base URL of the Slack workspace for a gateway.
+
+    Cached per gateway instance (one credential each), replacing the old
+    per-token cache.
+    """
+    url = slack_client.check_auth().url
+    if not url:
+        raise RuntimeError("auth.test response contained no workspace url.")
+    return url
 
 
 def fetch_team_user_emails(
-    slack_client: WebClient,
+    slack_client: SlackSourceOperations,
     team_ids: list[str],
 ) -> dict[str, set[str]]:
     """Per-workspace user email sets. Used to scope public-channel access on
@@ -62,10 +61,8 @@ def fetch_team_user_emails(
     result: dict[str, set[str]] = {}
     for tid in team_ids:
         emails: set[str] = set()
-        for user_info in make_paginated_slack_api_call(
-            slack_client.users_list, team_id=tid
-        ):
-            for user in user_info.get("members", []):
+        for user_info in slack_client.list_users(team_id=tid):
+            for user in user_info.members:
                 email = user.get("profile", {}).get("email")
                 if email:
                     emails.add(email)
@@ -75,7 +72,7 @@ def fetch_team_user_emails(
 
 def get_message_link(
     event: MessageType,
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     channel_id: str,
     team_id: str | None = None,
     team_id_to_url: dict[str, str] | None = None,
@@ -88,7 +85,7 @@ def get_message_link(
     if team_id and team_id_to_url is not None:
         base_url = team_id_to_url.get(team_id)
     if not base_url:
-        base_url = get_base_url(client.token)
+        base_url = get_base_url(slack_client)
 
     link = f"{base_url.rstrip('/')}/archives/{channel_id}/p{message_ts_without_dot}" + (
         f"?thread_ts={thread_ts}" if thread_ts else ""
@@ -96,110 +93,9 @@ def get_message_link(
     return link
 
 
-def make_slack_api_call(
-    call: Callable[..., SlackResponse], **kwargs: Any
-) -> SlackResponse:
-    return call(**kwargs)
-
-
-def make_paginated_slack_api_call(
-    call: Callable[..., SlackResponse], **kwargs: Any
-) -> Generator[dict[str, Any], None, None]:
-    return _make_slack_api_call_paginated(call)(**kwargs)
-
-
-def _make_slack_api_call_paginated(
-    call: Callable[..., SlackResponse],
-) -> Callable[..., Generator[dict[str, Any], None, None]]:
-    """Wraps calls to slack API so that they automatically handle pagination"""
-
-    @wraps(call)
-    def paginated_call(**kwargs: Any) -> Generator[dict[str, Any], None, None]:
-        cursor: str | None = None
-        has_more = True
-        while has_more:
-            response = call(cursor=cursor, limit=_SLACK_LIMIT, **kwargs)
-            yield cast(dict[str, Any], response.validate())
-            cursor = cast(dict[str, Any], response.get("response_metadata", {})).get(
-                "next_cursor", ""
-            )
-            has_more = bool(cursor)
-
-    return paginated_call
-
-
-# NOTE(rkuo): we may not need this any more if the integrated retry handlers work as
-# expected.  Do we want to keep this around?
-
-# def make_slack_api_rate_limited(
-#     call: Callable[..., SlackResponse], max_retries: int = 7
-# ) -> Callable[..., SlackResponse]:
-#     """Wraps calls to slack API so that they automatically handle rate limiting"""
-
-#     @wraps(call)
-#     def rate_limited_call(**kwargs: Any) -> SlackResponse:
-#         last_exception = None
-
-#         for _ in range(max_retries):
-#             try:
-#                 # Make the API call
-#                 response = call(**kwargs)
-
-#                 # Check for errors in the response, will raise `SlackApiError`
-#                 # if anything went wrong
-#                 response.validate()
-#                 return response
-
-#             except SlackApiError as e:
-#                 last_exception = e
-#                 try:
-#                     error = e.response["error"]
-#                 except KeyError:
-#                     error = "unknown error"
-
-#                 if error == "ratelimited":
-#                     # Handle rate limiting: get the 'Retry-After' header value and sleep for that duration
-#                     retry_after = int(e.response.headers.get("Retry-After", 1))
-#                     logger.info(
-#                         f"Slack call rate limited, retrying after {retry_after} seconds. Exception: {e}"
-#                     )
-#                     time.sleep(retry_after)
-#                 elif error in ["already_reacted", "no_reaction", "internal_error"]:
-#                     # Log internal_error and return the response instead of failing
-#                     logger.warning(
-#                         f"Slack call encountered '{error}', skipping and continuing..."
-#                     )
-#                     return e.response
-#                 else:
-#                     # Raise the error for non-transient errors
-#                     raise
-
-#         # If the code reaches this point, all retries have been exhausted
-#         msg = f"Max retries ({max_retries}) exceeded"
-#         if last_exception:
-#             raise Exception(msg) from last_exception
-#         else:
-#             raise Exception(msg)
-
-#     return rate_limited_call
-
-# temporarily disabling due to using a different retry approach
-# might be permanent if everything works out
-# def make_slack_api_call_w_retries(
-#     call: Callable[..., SlackResponse], **kwargs: Any
-# ) -> SlackResponse:
-#     return basic_retry_wrapper(call)(**kwargs)
-
-
-# def make_paginated_slack_api_call_w_retries(
-#     call: Callable[..., SlackResponse], **kwargs: Any
-# ) -> Generator[dict[str, Any], None, None]:
-#     return _make_slack_api_call_paginated(basic_retry_wrapper(call))(**kwargs)
-
-
 def expert_info_from_slack_id(
     user_id: str | None,
-    client: WebClient,
+    fetch_user_info: FetchUserInfo,
     user_cache: dict[str, BasicExpertInfo | None],
 ) -> BasicExpertInfo | None:
     if not user_id:
@@ -208,13 +104,13 @@ def expert_info_from_slack_id(
     if user_id in user_cache:
         return user_cache[user_id]
 
-    response = client.users_info(user=user_id)
+    response = fetch_user_info(user_id)
 
-    if not response["ok"]:
+    if not response.ok:
         user_cache[user_id] = None
         return None
 
-    user: dict = cast(dict[Any, dict], response.data).get("user", {})
+    user = response.user
     profile = user.get("profile", {})
 
     expert = BasicExpertInfo(
@@ -234,18 +130,18 @@ class SlackTextCleaner:
     Handles caching, so the same request is not made multiple times
     for the same user ID"""
 
-    def __init__(self, client: WebClient) -> None:
-        self._client = client
+    def __init__(self, fetch_user_info: FetchUserInfo) -> None:
+        self._fetch_user_info = fetch_user_info
         self._id_to_name_map: dict[str, str] = {}
 
     def _get_slack_name(self, user_id: str) -> str:
         if user_id not in self._id_to_name_map:
             try:
-                response = self._client.users_info(user=user_id)
+                response = self._fetch_user_info(user_id)
                 # prefer display name if set, since that is what is shown in Slack
                 self._id_to_name_map[user_id] = (
-                    response["user"]["profile"]["display_name"]
-                    or response["user"]["profile"]["real_name"]
+                    response.user["profile"]["display_name"]
+                    or response.user["profile"]["real_name"]
                 )
             except SlackApiError as e:
                 # Common per-message condition: user was deleted, workspace

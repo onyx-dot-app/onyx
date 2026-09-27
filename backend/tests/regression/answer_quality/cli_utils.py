@@ -248,11 +248,12 @@ def get_api_server_host_port(env_name: str) -> str:
 
     stdout, _ = _run_command("docker ps -a --format '{{json .}}'")
     containers = [json.loads(line) for line in stdout.splitlines()]
-    server_jsons = []
 
-    for container in containers:
-        if container_name in container["Names"] and env_name in container["Names"]:
-            server_jsons.append(container)
+    server_jsons = [
+        container
+        for container in containers
+        if container_name in container["Names"] and env_name in container["Names"]
+    ]
 
     if not server_jsons:
         raise RuntimeError(

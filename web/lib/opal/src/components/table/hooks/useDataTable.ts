@@ -270,7 +270,9 @@ export default function useDataTable<TData extends RowData>(
   // Single ref for the whole serverSide config — prevents effects from
   // re-firing when the consumer passes an inline object each render.
   const serverSideRef = useRef(serverSide);
-  serverSideRef.current = serverSide;
+  useEffect(() => {
+    serverSideRef.current = serverSide;
+  }, [serverSide]);
 
   useEffect(() => {
     if (!isServerSide) return;
@@ -308,7 +310,7 @@ export default function useDataTable<TData extends RowData>(
       columnSizing,
       columnVisibility,
       pagination,
-      ...(isServerSide ? {} : { globalFilter }),
+      globalFilter: isServerSide ? undefined : globalFilter,
     },
     onSortingChange: isServerSide
       ? (updater) => {
@@ -423,7 +425,9 @@ export default function useDataTable<TData extends RowData>(
   // ---- selection change callback ------------------------------------------
   const isFirstRenderRef = useRef(true);
   const onSelectionChangeRef = useRef(onSelectionChange);
-  onSelectionChangeRef.current = onSelectionChange;
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
 
   useEffect(() => {
     if (isFirstRenderRef.current) {

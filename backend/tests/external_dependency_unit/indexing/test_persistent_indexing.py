@@ -57,8 +57,6 @@ from tests.external_dependency_unit.indexing_helpers import (
 class _MockCheckpoint(ConnectorCheckpoint):
     """Minimal checkpoint type for the mock connector."""
 
-    pass
-
 
 # Module-level config so the connector instance (constructed by the factory
 # with empty kwargs) can pick up test-specific behavior.
@@ -372,7 +370,7 @@ def test_threshold_default_aborts_attempt(
 
     try:
         mock_app = MagicMock()
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError, match="too many errors"):
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,

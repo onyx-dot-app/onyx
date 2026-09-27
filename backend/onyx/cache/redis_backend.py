@@ -55,6 +55,9 @@ class RedisCacheBackend(CacheBackend):
     def get(self, key: str) -> bytes | None:
         return self._r.get(key)
 
+    def getdel(self, key: str) -> bytes | None:
+        return self._r.getdel(key)
+
     def set(
         self,
         key: str,
@@ -62,6 +65,14 @@ class RedisCacheBackend(CacheBackend):
         ex: int | None = None,
     ) -> None:
         self._r.set(key, value, ex=ex)
+
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        return bool(self._r.set(key, value, ex=ex, nx=True))
 
     def delete(self, key: str) -> None:
         self._r.delete(key)

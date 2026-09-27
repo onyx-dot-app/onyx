@@ -238,7 +238,7 @@ def _process_file(
         )
 
     # Then any extracted images from docx, PDFs, etc.
-    for idx, (img_data, img_name) in enumerate(
+    for idx, (img_data, _img_name) in enumerate(
         extraction_result.embedded_images, start=1
     ):
         # Store each embedded image as a separate file in FileStore

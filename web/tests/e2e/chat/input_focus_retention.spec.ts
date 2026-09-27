@@ -37,11 +37,16 @@ test.describe(`Chat Input Focus Retention`, () => {
     await expect(textarea).toBeFocused();
 
     // Click on an interactive element inside the container
-    const button = page.locator("[data-main-container] button").first();
+    // The model selector's add button: an interactive element that takes
+    // focus and opens a popover. Named rather than positional so header
+    // layout changes cannot silently repoint this test.
+    const button = page.getByRole("button", { name: "Add Model" });
     await button.waitFor({ state: "visible", timeout: 5000 });
     await button.click();
 
     // Focus should have moved away from the textarea
     await expect(textarea).not.toBeFocused();
+
+    await page.keyboard.press("Escape");
   });
 });

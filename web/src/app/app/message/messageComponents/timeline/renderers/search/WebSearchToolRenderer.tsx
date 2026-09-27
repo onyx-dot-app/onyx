@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SvgSearch, SvgGlobe } from "@opal/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
@@ -41,19 +42,20 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   renderType,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
   const searchState = constructCurrentSearchState(packets);
   const { queries } = searchState;
 
   const isHighlight = renderType === RenderType.HIGHLIGHT;
   const isInline = renderType === RenderType.INLINE;
 
-  const queriesHeader = "Searching the web";
+  const queriesHeader = t("webSearch.searching.status");
 
   if (queries.length === 0) {
     return children([
       {
         icon: SvgGlobe,
-        status: "Searching the web",
+        status: queriesHeader,
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -118,7 +120,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   return children([
     {
       icon: SvgGlobe,
-      status: "Searching the web",
+      status: queriesHeader,
       content: (
         <SearchChipList
           items={queries}

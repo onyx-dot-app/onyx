@@ -37,6 +37,7 @@ Use get_sandbox_manager() from base.py to get the appropriate implementation.
 import base64
 import binascii
 import copy
+import gzip
 import hashlib
 import io
 import ipaddress
@@ -64,7 +65,6 @@ from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
-    OPENCODE_DISABLED_TOOLS,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
     SANDBOX_CONTAINER_IMAGE,
@@ -85,6 +85,7 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
     SIDECAR_SNAPSHOT_CREATE_PATH,
+    OutputsManifestResponse,
     SnapshotCreateRequest,
     sidecar_snapshot_restore_path,
 )
@@ -148,6 +149,7 @@ from onyx.server.features.build.timeouts import (
     RUNTIME_TEARDOWN_SECONDS,
     WORKSPACE_SETUP_DEADLINE_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import (
     SandboxProvisionPhase,
     time_provision_phase,
@@ -244,16 +246,17 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
             f"Bundle size {total} exceeds {_MAX_BUNDLE_BYTES} byte limit"
         )
     buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=6) as tar:
-        for name in sorted(files):
-            data = files[name]
-            info = tarfile.TarInfo(name=name)
-            info.size = len(data)
-            info.mtime = 0
-            info.uid = 0
-            info.gid = 0
-            info.mode = 0o644
-            tar.addfile(info, io.BytesIO(data))
+    with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6, mtime=0) as gzip_file:
+        with tarfile.open(fileobj=gzip_file, mode="w") as tar:
+            for name in sorted(files):
+                data = files[name]
+                info = tarfile.TarInfo(name=name)
+                info.size = len(data)
+                info.mtime = 0
+                info.uid = 0
+                info.gid = 0
+                info.mode = 0o644
+                tar.addfile(info, io.BytesIO(data))
     raw = buf.getvalue()
     return raw, hashlib.sha256(raw).hexdigest()
 
@@ -601,14 +604,14 @@ class KubernetesSandboxManager(SandboxManager):
         ]
 
         # Add ports for session Next.js servers (one port per potential session)
-        for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-            ports.append(
-                client.V1ServicePort(
-                    name=f"nextjs-{port}",
-                    port=port,
-                    target_port=port,
-                )
+        ports.extend(
+            client.V1ServicePort(
+                name=f"nextjs-{port}",
+                port=port,
+                target_port=port,
             )
+            for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END)
+        )
 
         return client.V1Service(
             api_version="v1",
@@ -760,7 +763,7 @@ class KubernetesSandboxManager(SandboxManager):
                 container=container_name,
                 tail_lines=100,  # Get last 100 lines
             )
-            return logs if logs else "(no logs available)"
+            return logs or "(no logs available)"
         except ApiException as e:
             return f"(failed to retrieve logs: {e})"
 
@@ -1106,7 +1109,7 @@ class KubernetesSandboxManager(SandboxManager):
 
                 # Secret must exist before the Pod (secretKeyRef).
                 opencode_config = build_opencode_base_config(
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    disabled_tools=get_opencode_disabled_tools(),
                     plugins=[
                         _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                         _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
@@ -1397,6 +1400,7 @@ class KubernetesSandboxManager(SandboxManager):
         """
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"{SESSIONS_ROOT}/{session_id}"
+        disabled_tools = get_opencode_disabled_tools()
 
         # Paths inside the pod (created during workspace setup below):
         # - {session_path}/attachments: user-uploaded files
@@ -1406,13 +1410,13 @@ class KubernetesSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            disabled_tools=disabled_tools,
             user_name=user_name,
         )
         session_opencode_config = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=disabled_tools,
                 mcp_servers=mcp_servers,
                 session_id=str(session_id),
             )
@@ -1896,13 +1900,14 @@ echo "Session cleanup complete"
         # (base.py) shared with restore_snapshot's own webapp-script rewrite;
         # AGENTS.md no longer embeds it.
         _ = nextjs_port
+        disabled_tools = get_opencode_disabled_tools()
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = shlex.quote(f"/workspace/sessions/{session_id}")
         agent_instructions = self._load_agent_instructions(
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            disabled_tools=disabled_tools,
             user_name=user_name,
         )
 
@@ -1911,7 +1916,7 @@ echo "Session cleanup complete"
             json.dumps(
                 build_provider_opencode_config(
                     llm_config,
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    disabled_tools=disabled_tools,
                     mcp_servers=mcp_servers,
                     session_id=str(session_id),
                 )
@@ -2027,6 +2032,16 @@ fi
             raise RuntimeError(f"Failed to list directory: {e}") from e
         except SidecarRequestError as e:
             raise RuntimeError(f"Failed to list directory: {e}") from e
+
+    def get_outputs_manifest(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> OutputsManifestResponse:
+        try:
+            return self._sidecar_client.outputs_manifest(
+                sandbox_id=sandbox_id, session_id=session_id
+            )
+        except SidecarRequestError as e:
+            raise RuntimeError(f"Failed to build outputs manifest: {e}") from e
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
         """Read a file from the session's workspace.

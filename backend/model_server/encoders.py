@@ -68,7 +68,7 @@ def get_embedding_model(
         model = _GLOBAL_MODELS_DICT[model_name]
         if max_context_length != model.max_seq_length:
             model.max_seq_length = max_context_length
-            prev = getattr(model, "_rope_prewarmed_to", 0)
+            prev = getattr(model, "_rope_prewarmed_to", 0)  # ods: ignore[getattr]
             if max_context_length > int(prev or 0):
                 _prewarm_rope(model, max_context_length)
 

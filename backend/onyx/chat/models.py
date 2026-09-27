@@ -37,6 +37,9 @@ class CustomToolResponse(BaseModel):
 
 class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
+    # Echoes the pinned mode so the client can verify the server honored an
+    # incognito request. A server that omits it did not.
+    incognito: bool = False
 
 
 AnswerStreamPart = (
@@ -93,6 +96,9 @@ class ChatFullResponse(BaseModel):
     # Metadata
     message_id: int
     chat_session_id: UUID | None = None
+    # Echoes the pinned mode for newly-created sessions, like the streaming
+    # packet does. A server that omits it did not honor an incognito request.
+    incognito: bool = False
     error_msg: str | None = None
 
 
@@ -194,6 +200,12 @@ class FileToolMetadata(BaseModel):
     file_id: str
     filename: str
     approx_char_count: int
+    # Whether this file's bytes reached ``chat_files_for_tools``, and so are
+    # available to tools that receive the files themselves (PythonTool).
+    # Messages dropped by summary truncation are filtered out of
+    # ``chat_history`` before ``load_all_chat_files`` runs, so their files are
+    # listed for the LLM but never staged. Only ``read_file`` can fetch those.
+    staged_for_tools: bool = True
 
 
 class ChatHistoryResult(BaseModel):

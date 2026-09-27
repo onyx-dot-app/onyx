@@ -36,7 +36,7 @@ export const BasicLogin: Story = {
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />
         </AuthLayouts.Fields>
-        <AuthLayouts.Submit label="submit" />
+        <AuthLayouts.Submit>Sign In</AuthLayouts.Submit>
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),
@@ -54,12 +54,12 @@ export const WithSSOAndSeparator: Story = {
         )}
       >
         <Button width="full">Continue with Google</Button>
-        <AuthLayouts.OrSeparator />
+        <AuthLayouts.OrSeparator title="or" />
         <AuthLayouts.Fields>
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />
         </AuthLayouts.Fields>
-        <AuthLayouts.Submit label="submit" />
+        <AuthLayouts.Submit>Sign In</AuthLayouts.Submit>
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),
@@ -80,7 +80,7 @@ export const Signup: Story = {
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />
         </AuthLayouts.Fields>
-        <AuthLayouts.Submit label="create" />
+        <AuthLayouts.Submit>Create Account</AuthLayouts.Submit>
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),
@@ -98,7 +98,7 @@ export const ForgotPassword: Story = {
         <AuthLayouts.Fields>
           <FieldPlaceholder label="Email" />
         </AuthLayouts.Fields>
-        <AuthLayouts.Submit label="submit" />
+        <AuthLayouts.Submit>Reset Password</AuthLayouts.Submit>
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),
@@ -116,7 +116,7 @@ export const DisabledSubmit: Story = {
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />
         </AuthLayouts.Fields>
-        <AuthLayouts.Submit label="submit" disabled />
+        <AuthLayouts.Submit isValid={false}>Sign In</AuthLayouts.Submit>
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),

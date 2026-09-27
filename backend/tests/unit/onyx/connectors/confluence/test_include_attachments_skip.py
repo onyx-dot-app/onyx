@@ -81,9 +81,7 @@ def _collect_slim_doc_ids(
     ):
         ids: list[str] = []
         for batch in connector.retrieve_all_slim_docs():
-            for item in batch:
-                if isinstance(item, SlimDocument):
-                    ids.append(item.id)
+            ids.extend(item.id for item in batch if isinstance(item, SlimDocument))
     return ids
 
 

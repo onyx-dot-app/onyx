@@ -96,20 +96,20 @@ class Document360Connector(LoadConnector, PollConnector):
 
         for category in all_categories:
             if not self.categories or category["name"] in self.categories:
-                for article in category["articles"]:
-                    articles_with_category.append(
-                        {"id": article["id"], "category_name": category["name"]}
-                    )
+                articles_with_category.extend(
+                    {"id": article["id"], "category_name": category["name"]}
+                    for article in category["articles"]
+                )
                 for child_category in category["child_categories"]:
                     all_nested_categories = flatten_child_categories(child_category)
                     for nested_category in all_nested_categories:
-                        for article in nested_category["articles"]:
-                            articles_with_category.append(
-                                {
-                                    "id": article["id"],
-                                    "category_name": nested_category["name"],
-                                }
-                            )
+                        articles_with_category.extend(
+                            {
+                                "id": article["id"],
+                                "category_name": nested_category["name"],
+                            }
+                            for article in nested_category["articles"]
+                        )
 
         return articles_with_category
 

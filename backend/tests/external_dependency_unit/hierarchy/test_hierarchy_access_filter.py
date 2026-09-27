@@ -9,7 +9,6 @@ from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.hierarchy import _get_accessible_hierarchy_nodes_for_source
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginated
 from onyx.db.enums import AccessType, AccountType, HierarchyNodeType
@@ -48,7 +47,6 @@ class UserSeed(BaseModel):
     is_active: bool
     is_superuser: bool
     is_verified: bool
-    role: UserRole
     account_type: AccountType
 
 
@@ -121,7 +119,6 @@ def connector_access_seed(
             is_active=True,
             is_superuser=False,
             is_verified=True,
-            role=UserRole.BASIC,
             account_type=AccountType.STANDARD,
         )
         for kind in ("owner", "member", "outsider")
@@ -130,9 +127,9 @@ def connector_access_seed(
         text(
             'INSERT INTO "user" '
             "(id, email, hashed_password, is_active, is_superuser, is_verified, "
-            "role, account_type) "
+            "account_type) "
             "VALUES (:id, :email, :hashed_password, :is_active, :is_superuser, "
-            ":is_verified, :role, :account_type)"
+            ":is_verified, :account_type)"
         ),
         [user.model_dump(mode="json") for user in user_rows],
     )

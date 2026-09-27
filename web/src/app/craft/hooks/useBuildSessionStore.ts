@@ -1005,7 +1005,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   noSessionOutputPanelOpen: false,
 
   // Temporary active tab when no session exists
-  noSessionActiveOutputTab: "preview" as OutputTabType,
+  noSessionActiveOutputTab: "preview",
 
   // ===========================================================================
   // Session Management (mirrors chat's pattern)
@@ -1141,10 +1141,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const session = sessions.get(currentSessionId);
       if (session) {
         const closing = session.outputPanelOpen;
-        updateSessionData(currentSessionId, {
+        const update: Partial<BuildSessionData> = {
           outputPanelOpen: !session.outputPanelOpen,
-          ...(closing ? { panelManuallyDismissed: true } : {}),
-        });
+        };
+        if (closing) update.panelManuallyDismissed = true;
+        updateSessionData(currentSessionId, update);
       }
     } else {
       // No session - toggle temporary state
@@ -1292,7 +1293,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const session = state.sessions.get(sessionId);
       if (!session) return state;
 
-      const streamItems = session.streamItems.map((item) => {
+      const streamItems = session.streamItems.map((item): StreamItem => {
         if (item.type === "tool_call" && item.toolCall.id === toolCallId) {
           return {
             ...item,
@@ -1300,7 +1301,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           };
         }
         return item;
-      }) as StreamItem[];
+      });
 
       const updatedSession: BuildSessionData = {
         ...session,
@@ -1333,7 +1334,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       if (latestInFlightIndex === -1) return state;
 
-      const streamItems = session.streamItems.map((item, index) => {
+      const streamItems = session.streamItems.map((item, index): StreamItem => {
         if (index === latestInFlightIndex && item.type === "tool_call") {
           return {
             ...item,
@@ -1341,7 +1342,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           };
         }
         return item;
-      }) as StreamItem[];
+      });
 
       const updatedSession: BuildSessionData = {
         ...session,
@@ -1371,7 +1372,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       let streamItems: StreamItem[];
       if (existingIndex >= 0) {
         // Update existing todo_list
-        streamItems = session.streamItems.map((item, index) => {
+        streamItems = session.streamItems.map((item, index): StreamItem => {
           if (index === existingIndex && item.type === "todo_list") {
             return {
               ...item,
@@ -1379,7 +1380,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             };
           }
           return item;
-        }) as StreamItem[];
+        });
       } else {
         // Create new todo_list item
         streamItems = [
@@ -1506,6 +1507,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     // Set as current and mark as loading
     setCurrentSession(sessionId);
+    const skillsStaleRevision =
+      get().sessions.get(sessionId)!.skillsStaleRevision;
+    const canApplySkillsStale = () =>
+      get().sessions.get(sessionId)?.skillsStaleRevision ===
+      skillsStaleRevision;
 
     try {
       // First fetch session to check sandbox status
@@ -1611,7 +1617,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
-        skillsStale: sessionData.skills_stale,
+        ...(sessionData.skills_stale &&
+          canApplySkillsStale() && { skillsStale: true }),
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
@@ -1626,6 +1633,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       });
 
       if (needsRestore) {
+        const skillsStaleRevisionBeforeRestore =
+          get().sessions.get(sessionId)?.skillsStaleRevision;
         try {
           sessionData = await restoreSession(sessionId);
         } catch (restoreErr) {
@@ -1647,7 +1656,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sandbox: sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
-          skillsStale: sessionData.skills_stale,
+          ...(get().sessions.get(sessionId)?.skillsStaleRevision ===
+            skillsStaleRevisionBeforeRestore && {
+            skillsStale: sessionData.skills_stale,
+          }),
           webappNeedsRefresh:
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });
@@ -1932,7 +1944,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       // Using a counter ensures each edit triggers a new refresh
       get().updateSessionData(sessionId, {
         webappNeedsRefresh: (session.webappNeedsRefresh || 0) + 1,
-        ...(session.outputPanelOpen ? {} : { outputPanelOpen: true }),
+        outputPanelOpen: true,
       });
     }
   },

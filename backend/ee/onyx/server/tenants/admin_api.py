@@ -10,11 +10,13 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
 from onyx.utils.audit import (
     AuditAction,
+    AuditActor,
     AuditOutcome,
     actor_from_user,
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import SESSION_TENANT_OVERRIDE_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -42,6 +44,25 @@ async def impersonate_user(
         )
         raise HTTPException(status_code=422, detail=detail)
 
+    # The token must name the impersonated user's workspace. Left to the ambient
+    # request tenant it would name the superuser's own.
+    override_token = SESSION_TENANT_OVERRIDE_CONTEXTVAR.set(tenant_id)
+    try:
+        return await _issue_impersonation_token(
+            impersonate_request=impersonate_request,
+            tenant_id=tenant_id,
+            actor=actor,
+        )
+    finally:
+        SESSION_TENANT_OVERRIDE_CONTEXTVAR.reset(override_token)
+
+
+async def _issue_impersonation_token(
+    *,
+    impersonate_request: ImpersonateRequest,
+    tenant_id: str,
+    actor: AuditActor | None,
+) -> Response:
     with get_session_with_tenant(tenant_id=tenant_id) as tenant_session:
         user_to_impersonate = get_user_by_email(
             impersonate_request.email, tenant_session

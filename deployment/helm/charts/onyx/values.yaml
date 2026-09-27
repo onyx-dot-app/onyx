@@ -2,10 +2,10 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 #
-# Companion overlays in this directory:
-#   - values-lite.yaml      Minimal deploy (no vector DB / Redis / model servers).
-#   - values-localdev.yaml  Laptop-sized overlay for kind/minikube; see
-#                           /docs/craft/dev/local-kubernetes.md for the full workflow.
+# Overlays:
+#   - values-lite.yaml: minimal deployment without vector DB, Redis, or model servers.
+#   - ../../dev/values-localdev.yaml: local Kubernetes development (source repository only).
+#     See /docs/craft/dev/local-kubernetes.md.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -22,8 +22,8 @@ global:
 # -- Custom (private/internal) CA certificates for outbound TLS.
 # When enabled, every pod that makes outbound TLS connections mounts the
 # referenced Secret/ConfigMap and trusts its roots. Keys must be PEM certs
-# ending in `.crt` (model servers also accept `.pem`). Two mechanisms, by pod
-# type:
+# ending in `.crt` (model servers also accept `.pem`). The handling varies by
+# pod type:
 #   - Shell-based pods (api server, celery workers, bots, MCP server) mount at
 #     /usr/local/share/ca-certificates, run `update-ca-certificates` at startup,
 #     and get REQUESTS_CA_BUNDLE / SSL_CERT_FILE pointed at the merged system
@@ -32,6 +32,10 @@ global:
 #   - Model servers run on a distroless image with no shell, so they mount at
 #     /etc/onyx/certs and merge the mounted roots with certifi's public roots in
 #     Python at startup (additive — public roots stay trusted). No root required.
+#   - The Craft sandbox proxy runs non-root on a read-only root filesystem. An
+#     init container builds an additive bundle in its writable confdir and
+#     configures mitmproxy through SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
+#     to use that bundle for upstream TLS verification.
 # Version coupling: chart >= 0.7.0 pairs with the distroless model-server image
 # and can't run older ones — the model servers now run nonroot (1001, see their
 # securityContext below) and read ONYX_CUSTOM_CA_CERTS_DIR. Upgrade the chart and
@@ -43,6 +47,41 @@ customCACerts:
   # Exactly one of secretName / configMapName must be set when enabled.
   secretName: ""
   configMapName: ""
+
+# -- TLS verification for PostgreSQL connections.
+# When enabled, the chart mounts one CA certificate into each backend workload
+# that connects to PostgreSQL and configures libpq-compatible POSTGRES_SSL*
+# settings. The certificate source must already exist in the release namespace.
+postgresTls:
+  enabled: false
+  # verify-ca validates the server certificate without requiring POSTGRES_HOST
+  # to be one of the certificate's DNS names. Use verify-full when it is.
+  sslMode: verify-ca
+  # Exactly one of caSecretName / caConfigMapName must be set when enabled.
+  caSecretName: ""
+  caConfigMapName: ""
+  caKey: ca.crt
+  # Full path exposed to POSTGRES_SSLROOTCERT.
+  caMountPath: /etc/postgres-ca/ca.crt
+
+# -- Verified TLS connections to Redis.
+# When enabled, the chart mounts one Redis server CA certificate into each
+# backend workload that uses Redis and configures REDIS_SSL with certificate
+# verification. Use an external Redis service (`redis.enabled: false`), because
+# the bundled Redis does not support TLS. The certificate source must already
+# exist in the release namespace.
+redisTls:
+  enabled: false
+  # Verify that the Redis certificate matches REDIS_HOST. Disable only when
+  # the endpoint cannot present a certificate for its configured host or IP.
+  checkHostname: true
+  # Exactly one of caSecretName / caConfigMapName must be set when enabled.
+  caSecretName: ""
+  caConfigMapName: ""
+  caKey: ca.crt
+  # Full path exposed to REDIS_SSL_CA_CERTS. The parent directory must exist
+  # in every Redis client image because Kubernetes mounts this as one file.
+  caMountPath: /etc/ssl/certs/redis-ca.crt
 
 # Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
 # cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep
@@ -188,12 +227,7 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /health
-  #     port: model-server
+  # readinessProbe: {} uses the chart default, set null to drop it.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
@@ -219,6 +253,11 @@ inferenceCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
   # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
   # This prevents pending pods when cluster resources are constrained
   strategy: {}
@@ -266,12 +305,8 @@ indexCapability:
     limits:
       cpu: 6000m
       memory: 6Gi
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /health
-  #     port: model-server
+  # readinessProbe: {} uses the chart default, set null to drop it. The default is a
+  # TCP check: --limit-concurrency answers HTTP probes with 503 under load.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
@@ -297,6 +332,11 @@ indexCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
   # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
   # This prevents pending pods when cluster resources are constrained
   strategy: {}
@@ -441,15 +481,16 @@ webserver:
       cpu: 1000m
       memory: 1Gi
 
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /api/health
-  #     port: http
+  # readinessProbe: {} uses the chart default (TCP check on the http port), set
+  # null to drop it. The web server has no health route: /api/* returns 404 here.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
+
+  # preStop sleep lets endpoint removal reach the ingress before SIGTERM. It
+  # counts against the grace period and needs Kubernetes >= 1.30.
+  preStopSleepSeconds: 15
+  terminationGracePeriodSeconds: 30
 
   autoscaling:
     enabled: false
@@ -487,6 +528,11 @@ webserver:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 api:
   extraEnv: []
@@ -554,15 +600,38 @@ api:
       cpu: 3000m
       memory: 3Gi
 
-  # Optional health probes
+  # Health probes.
+  #
+  # readinessProbe: {} uses the chart default, an httpGet on /health (process up
+  # and event loop answering). Set it to null to drop it. Readiness never
+  # restarts a pod, so it is safe while `alembic upgrade head` runs at startup.
+  #
+  # /health/ready also reports not-ready once the request threadpool is
+  # saturated. Use it for readiness only with several replicas: saturation hits
+  # every replica at once, and a lone not-ready pod leaves the Service empty.
+  # Do NOT put /health/ready on the liveness probe.
+  #
+  # Liveness and startup probes stay opt-in. Size a startupProbe for the longest
+  # migration you expect, or it kills the pod mid-migration.
+  #
   # Example:
   # readinessProbe:
+  #   httpGet:
+  #     path: /health/ready
+  #     port: api-server-port
+  # livenessProbe:
   #   httpGet:
   #     path: /health
   #     port: api-server-port
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
+
+  # preStop sleep lets endpoint removal reach the ingress before SIGTERM, then
+  # uvicorn waits for in-flight chat streams until the grace period ends. The
+  # sleep counts against the grace period and needs Kubernetes >= 1.30.
+  preStopSleepSeconds: 15
+  terminationGracePeriodSeconds: 120
 
   autoscaling:
     enabled: false
@@ -600,6 +669,11 @@ api:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
   # Disable only when a separate deployment step runs migrations.
   runStartupMigrations: true
@@ -730,6 +804,9 @@ celery_worker_heavy:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_docprocessing:
   extraEnv: []
@@ -769,6 +846,9 @@ celery_worker_docprocessing:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_light:
   extraEnv: []
@@ -808,6 +888,9 @@ celery_worker_light:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_monitoring:
   extraEnv: []
@@ -847,6 +930,9 @@ celery_worker_monitoring:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_primary:
   extraEnv: []
@@ -886,6 +972,9 @@ celery_worker_primary:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_user_file_processing:
   extraEnv: []
@@ -925,6 +1014,9 @@ celery_worker_user_file_processing:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 # Dedicated worker for Craft scheduled-task headless executor fires.
 # Isolated from `heavy` because each fire is long-running (LLM + tool calls
@@ -969,6 +1061,9 @@ celery_worker_scheduled_tasks:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 # Discord bot for Onyx
 # The bot offloads message processing to scalable API pods via HTTP requests.
@@ -1125,6 +1220,9 @@ celery_worker_docfetching:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 ######################################################################
 #
@@ -1179,6 +1277,14 @@ minio:
   mode: standalone
   replicas: 1
   drivesPerNode: 1
+  # Docker Hub and quay.io no longer serve minio/minio or minio/mc, so both come
+  # from our mirror of the newest multi-arch build we kept, which ships mc too.
+  image:
+    repository: onyxdotapp/minio
+    tag: RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
+  mcImage:
+    repository: onyxdotapp/minio
+    tag: RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
   existingSecret: onyx-objectstorage
   buckets:
     - name: onyx-file-store-bucket
@@ -1210,7 +1316,11 @@ codeInterpreter:
   service:
     port: 8000
 
-# Values passed through to the code-interpreter subchart.
+# Values passed through to the code-interpreter subchart. Notable options:
+# code-interpreter.codeInterpreter.kubernetesExecutor.{securityContext.mode,pod,podResources},
+# code-interpreter.capacity.* and code-interpreter.fileStorage.shared (required for
+# replicaCount > 1). The top-level codeInterpreter.enabled only turns the subchart on. See
+# https://github.com/onyx-dot-app/python-sandbox/tree/main/kubernetes/code-interpreter
 code-interpreter:
   # API container resources. Workspace archives staged into sandboxes are
   # routinely tens of MB and the base64-encoded snapshot path roughly doubles
@@ -1263,7 +1373,8 @@ externalSecret:
 # -- If set, adds `envFrom: - secretRef: name: <value>` to every backend
 # deployment so all keys in the named Secret are injected as env vars. Intended
 # for secrets that today live in plaintext under the `configMap:` block and
-# should move into a Secret (e.g. LINEAR_CLIENT_SECRET, BRAINTRUST_API_KEY).
+# should move into a Secret (e.g. LINEAR_CLIENT_SECRET,
+# SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, BRAINTRUST_API_KEY).
 # Typically set to the same value as externalSecret.secretName.
 extraEnvFromSecret: ""
 
@@ -1475,6 +1586,11 @@ configMap:
   # model Services; set them here to point at external model servers instead
   # (the chart defaults are then not rendered).
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
+  # Redis socket deadlines in seconds for the app client (not Celery), default
+  # 30 and 10. A peer that stops replying but keeps the TCP session open raises
+  # after this instead of holding a thread until the pod restarts.
+  REDIS_SOCKET_TIMEOUT: ""
+  REDIS_SOCKET_CONNECT_TIMEOUT: ""
 
   # Authentication is always enabled (email/password). SSO (Google/OIDC/SAML)
   # and its per-provider options are configured in the admin panel (Admin
@@ -1577,10 +1693,20 @@ configMap:
   JIRA_SERVER_API_VERSION: ""
   CANVAS_PERMISSION_DOC_SYNC_FREQUENCY: ""
   CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  AIRTABLE_ATTACHMENT_SIZE_THRESHOLD: ""
+  DROPBOX_CONNECTOR_SIZE_THRESHOLD: ""
+  ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   BOX_CONNECTOR_SIZE_THRESHOLD: ""
+  SHAREPOINT_CONNECTOR_SIZE_THRESHOLD: ""
+  OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD: ""
+  TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD: ""
+  TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY: ""
   BOX_PERMISSION_DOC_SYNC_FREQUENCY: ""
   BOX_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
+  ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
   # HTTP endpoint (failures never fail indexing). Intended for non-EE
@@ -1598,6 +1724,12 @@ configMap:
   # toward the 6h crawl deadline if group syncs run long, so periodic
   # re-dispatches can't start concurrent duplicate syncs.
   CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: ""
+  # Per-connector document permission sync lock TTL in seconds (default 3600);
+  # raise it if a sync loses its lock mid-run ("lock that's no longer owned").
+  CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: ""
+  # Document-index sync beat lock TTL in seconds (default 120); raise it if the
+  # sync pass aborts with "no longer owned" or "Lock not owned on completion".
+  CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: ""
   # OnyxBot SlackBot Configs
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""

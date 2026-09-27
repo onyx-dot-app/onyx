@@ -113,7 +113,10 @@ class ScimProvider(ABC):
                 schemas.append(SCIM_ENTERPRISE_USER_SCHEMA)
 
         name = self.build_scim_name(user, f)
-        emails = _deserialize_emails(f.scim_emails_json, username)
+        # The emails fallback is the login email, not the userName. Reporting
+        # the userName would let a GET-then-PUT IdP feed it back as an email
+        # change and re-couple the two.
+        emails = _deserialize_emails(f.scim_emails_json, user.email)
 
         resource = ScimUserResource(
             schemas=schemas,
@@ -181,7 +184,9 @@ class ScimProvider(ABC):
         )
 
 
-def _deserialize_emails(stored_json: str | None, username: str) -> list[ScimEmail]:
+def _deserialize_emails(
+    stored_json: str | None, fallback_email: str
+) -> list[ScimEmail]:
     """Deserialize stored email entries or build a default work email."""
     if stored_json:
         try:
@@ -192,7 +197,7 @@ def _deserialize_emails(stored_json: str | None, username: str) -> list[ScimEmai
             logger.warning(
                 "Corrupt scim_emails_json, falling back to default: %s", stored_json
             )
-    return [ScimEmail(value=username, type="work", primary=True)]
+    return [ScimEmail(value=fallback_email, type="work", primary=True)]
 
 
 def serialize_emails(emails: list[ScimEmail]) -> str | None:

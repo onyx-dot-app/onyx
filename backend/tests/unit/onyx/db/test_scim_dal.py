@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 
 from ee.onyx.db.scim import ScimDAL
+from onyx.db.enums import AccountType
 from onyx.db.models import ScimGroupMapping, ScimToken, ScimUserMapping, User
 from tests.unit.onyx.db.conftest import model_attrs
 
@@ -233,3 +234,35 @@ class TestScimDALUserRename:
         reconcile.assert_not_called()
         assert user.email == "user@example.com"
         assert user.prior_emails == ["old@e.com"]
+
+
+class TestScimDALPromotion:
+    """Promotion is the one update that writes two fields under one flag."""
+
+    def test_promotion_sets_standard_and_verified(self, scim_dal: ScimDAL) -> None:
+        user = User(
+            id=uuid4(),
+            email="user@example.com",
+            account_type=AccountType.EXT_PERM_USER,
+            is_verified=False,
+        )
+
+        scim_dal.update_user(user, promote_to_standard=True)
+
+        assert user.account_type == AccountType.STANDARD
+        assert user.is_verified is True
+
+    def test_other_updates_leave_promotion_fields_alone(
+        self, scim_dal: ScimDAL
+    ) -> None:
+        user = User(
+            id=uuid4(),
+            email="user@example.com",
+            account_type=AccountType.EXT_PERM_USER,
+            is_verified=False,
+        )
+
+        scim_dal.update_user(user, is_active=True)
+
+        assert user.account_type == AccountType.EXT_PERM_USER
+        assert user.is_verified is False

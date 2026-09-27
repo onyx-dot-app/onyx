@@ -53,7 +53,7 @@ def get_document_vespa_contents(
     # Convert Vespa chunks to KGChunks
     # kg_chunks: list[KGChunkFormat] = []
 
-    for i, chunk in enumerate(chunks):
+    for _i, chunk in enumerate(chunks):
         fields = chunk["fields"]
         if isinstance(fields.get("metadata", {}), str):
             fields["metadata"] = json.loads(fields["metadata"])

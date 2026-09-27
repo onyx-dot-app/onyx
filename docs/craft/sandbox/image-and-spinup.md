@@ -57,7 +57,7 @@ installs opencode via its own install script with the `--version` flag
 so the build is at least reproducible:
 
 ```dockerfile
-ARG OPENCODE_VERSION=1.18.13
+ARG OPENCODE_VERSION=1.18.19
 RUN curl -fsSL https://opencode.ai/install \
     | bash -s -- --version "${OPENCODE_VERSION}" --no-modify-path
 ```

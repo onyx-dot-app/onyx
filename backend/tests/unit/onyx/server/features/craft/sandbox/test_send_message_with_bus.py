@@ -128,17 +128,18 @@ def _run_send_message(
     events: list[Any] = []
 
     def runner() -> None:
-        for evt in client.send_message(
-            _SESSION,
-            "hello",
-            directory=_DIRECTORY,
-            model_provider=model_provider,
-            model_id=model_id,
-            attachments=attachments,
-            timeout=timeout,
-            absolute_timeout=absolute_timeout,
-        ):
-            events.append(evt)
+        events.extend(
+            client.send_message(
+                _SESSION,
+                "hello",
+                directory=_DIRECTORY,
+                model_provider=model_provider,
+                model_id=model_id,
+                attachments=attachments,
+                timeout=timeout,
+                absolute_timeout=absolute_timeout,
+            )
+        )
 
     t = threading.Thread(target=runner, daemon=True)
     t.start()

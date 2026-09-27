@@ -1,5 +1,8 @@
 [build-system]
-requires = ["hatchling==1.29.0", "go-bin~=1.26.5", "manygo==0.2.0"]
+# go-bin ships the Go toolchain that hatch_build.py compiles with. Bump it together
+# with the go.mod `go` directive, cli/Dockerfile, the setup-go pins in
+# .github/workflows/release-cli.yml, and tools/requirements/build-constraints.in.
+requires = ["hatchling==1.29.0", "go-bin==1.27.1", "manygo==0.2.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,7 +10,7 @@ name = "onyx-cli"
 readme = "README.md"
 description = "Terminal interface for chatting with your Onyx agent"
 authors = [{ name = "Onyx AI", email = "founders@onyx.app" }]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = [
   "onyx", "cli", "chat", "ai", "enterprise-search",
 ]

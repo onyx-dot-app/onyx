@@ -1,10 +1,6 @@
 import "@opal/layouts/content-action/styles.css";
 import { Content, type ContentProps } from "@opal/layouts/content/components";
-import {
-  containerSizeVariants,
-  type ContainerSizeVariants,
-} from "@opal/shared";
-import { cn } from "@opal/utils";
+import { spacingToRem } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -15,13 +11,16 @@ type ContentActionProps = ContentProps & {
   rightChildren?: React.ReactNode;
 
   /**
-   * Padding applied around the `Content` area.
-   * Uses the shared `SizeVariant` scale from `@opal/shared`.
+   * Padding applied around the `Content` area, as a spacing step (`N / 4` rem).
    *
-   * @default "lg"
-   * @see {@link ContainerSizeVariants} for the full list of presets.
+   * Narrowed to the four paddings `Interactive.Container` applies at its size
+   * presets. Matching them is the point of this prop — it is what lines a label
+   * up with an adjacent button of the same size — so an arbitrary step would
+   * only ever break that alignment.
+   *
+   * @default 2
    */
-  padding?: ContainerSizeVariants;
+  padding?: 0 | 0.5 | 1 | 2;
 
   /**
    * When true, vertically centers the Content and rightChildren.
@@ -75,9 +74,10 @@ function routesToContentMd(props: {
  * A row layout that pairs a {@link Content} block with optional right-side
  * action children (e.g. buttons, badges).
  *
- * The `Content` area receives padding controlled by `padding`, using
- * the same size scale as `Interactive.Container` and `Button`. The
- * `rightChildren` wrapper stretches to the full height of the row.
+ * The `Content` area receives padding controlled by `padding`, whose four steps
+ * are the paddings `Interactive.Container` applies at its size presets — so a row
+ * lines up with an adjacent button. The `rightChildren` wrapper stretches to the
+ * full height of the row.
  *
  * @example
  * ```tsx
@@ -91,20 +91,20 @@ function routesToContentMd(props: {
  *   description="GPT"
  *   sizePreset="main-content"
  *   variant="section"
- *   padding="lg"
+ *   padding={2}
  *   rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
  * />
  * ```
  */
 function ContentAction({
   rightChildren,
-  padding = "lg",
+  padding = 2,
   center = false,
   responsive = false,
   fillRight = false,
   ...contentProps
 }: ContentActionProps) {
-  const { padding: paddingClass } = containerSizeVariants[padding];
+  const paddingStyle = { padding: spacingToRem(padding) };
 
   // Responsive: forward rightChildren into the ContentMd slot, which reflows it
   // to the right on desktop and between the title/description on narrow widths.
@@ -113,7 +113,7 @@ function ContentAction({
     // Section) a wrapper without w-full shrinks to content width, so the input
     // wouldn't fill the row.
     return (
-      <div className={cn("w-full min-w-0", paddingClass)}>
+      <div className="w-full min-w-0" style={paddingStyle}>
         <Content {...({ ...contentProps, rightChildren } as ContentProps)} />
       </div>
     );
@@ -121,7 +121,7 @@ function ContentAction({
 
   return (
     <div className="opal-content-action" data-centered={center || undefined}>
-      <div className={cn("opal-content-action-content", paddingClass)}>
+      <div className="opal-content-action-content" style={paddingStyle}>
         <Content {...contentProps} />
       </div>
       {rightChildren && (

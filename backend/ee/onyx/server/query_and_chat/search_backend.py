@@ -34,10 +34,12 @@ from ee.onyx.server.query_and_chat.models import (
 from ee.onyx.server.query_and_chat.streaming_models import SearchErrorPacket
 from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH
+from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
 from onyx.server.utils_vector_db import require_vector_db
@@ -49,12 +51,19 @@ logger = setup_logger()
 router = APIRouter(prefix="/search")
 
 
-@router.post("/search-flow-classification")
+@router.post("/search-flow-classification", tags=PUBLIC_API_TAGS)
 def search_flow_classification(
     request: SearchFlowClassificationRequest,
     _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchFlowClassificationResponse:
+    """
+    Classify whether a query should be answered by search or by chat.
+
+    Queries longer than 200 characters are classified as a chat flow without an
+    LLM call. A failed classification falls back to ``is_search_flow: false``
+    rather than raising.
+    """
     query = request.user_query
     # This is a heuristic that if the user is typing a lot of text, it's unlikely they're looking for some specific document
     # Most likely something needs to be done with the text included so we'll just classify it as a chat flow
@@ -87,8 +96,29 @@ def search_flow_classification(
 # compatible across versions.
 @router.post(
     "/send-search-message",
-    response_model=None,
+    response_model=SearchFullResponse,
     dependencies=[Depends(require_vector_db)],
+    tags=PUBLIC_API_TAGS,
+    responses={
+        200: {
+            "description": (
+                "If `stream=true`, returns `text/event-stream`.\n"
+                "If `stream=false` (the default), returns `application/json` "
+                "(SearchFullResponse)."
+            ),
+            "content": {
+                "text/event-stream": {
+                    "schema": {"type": "string"},
+                    "examples": {
+                        "stream": {
+                            "summary": "Stream of NDJSON search packets",
+                            "value": "string",
+                        }
+                    },
+                },
+            },
+        }
+    },
 )
 def handle_send_search_message(
     request: SendSearchQueryRequest,
@@ -108,6 +138,15 @@ def handle_send_search_message(
 
     if request.hybrid_alpha is None and ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH:
         request.hybrid_alpha = 0.0
+
+    # Query expansion and LLM doc selection spend tokens, so the chat budgets apply.
+    if request.run_query_expansion or (request.num_docs_fed_to_llm_selection or 0) >= 1:
+        check_token_rate_limits(user)
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=get_default_llm().config.api_key,
+        )
 
     # Non-streaming path
     if not request.stream:
@@ -138,7 +177,7 @@ def handle_send_search_message(
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
-@router.get("/search-history")
+@router.get("/search-history", tags=PUBLIC_API_TAGS)
 def get_search_history(
     limit: int = 100,
     filter_days: int | None = None,

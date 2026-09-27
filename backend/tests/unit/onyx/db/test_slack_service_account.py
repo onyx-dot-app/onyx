@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import SLACK_SERVICE_ACCOUNT_EMAIL
 from onyx.db.enums import AccountType
 from onyx.db.users import get_or_create_slack_service_account
@@ -17,7 +16,6 @@ def test_create_slack_service_account() -> None:
     assert created.email == SLACK_SERVICE_ACCOUNT_EMAIL
     assert created.hashed_password == "hash"
     assert created.account_type == AccountType.SERVICE_ACCOUNT
-    assert created.role == UserRole.LIMITED
     db_session.add.assert_called_once_with(created)
     db_session.commit.assert_called_once_with()
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgMicrophone, SvgSimpleLoader } from "@opal/icons";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
@@ -59,6 +60,7 @@ function MicrophoneButton({
   onAudioLevel,
   isNewSession = false,
 }: MicrophoneButtonProps) {
+  const t = useTranslations("chat.input");
   const {
     isTTSPlaying,
     isTTSLoading,
@@ -112,6 +114,7 @@ function MicrophoneButton({
 
   const {
     isRecording,
+    isStarting,
     isProcessing,
     isMuted,
     error,
@@ -198,7 +201,7 @@ function MicrophoneButton({
         hasManualRecordStartRef.current = true;
       } catch (err) {
         console.error("Microphone access failed:", err);
-        toast.error("Could not access microphone");
+        toast.error(t("microphoneButton.accessError.toast"));
       }
     }
   }, [
@@ -212,6 +215,7 @@ function MicrophoneButton({
     chatState,
     currentMessage,
     withPrefix,
+    t,
   ]);
 
   // Auto-start listening shortly after TTS finishes (only if autoListen is enabled).
@@ -254,7 +258,7 @@ function MicrophoneButton({
         messagePrefixRef.current = currentMessageRef.current;
         startRecording().catch((err) => {
           console.error("Auto-start microphone failed:", err);
-          toast.error("Could not auto-start microphone");
+          toast.error(t("microphoneButton.autoStartError.toast"));
         });
       }, 400);
     }
@@ -280,6 +284,7 @@ function MicrophoneButton({
     isRecording,
     startRecording,
     manualStopCount,
+    t,
   ]);
 
   // New sessions must start with an explicit manual mic press.
@@ -312,12 +317,12 @@ function MicrophoneButton({
     }
   }, [error]);
 
-  // Icon: show loader when processing, otherwise mic
-  const icon = isProcessing ? SvgSimpleLoader : SvgMicrophone;
+  const icon = isStarting || isProcessing ? SvgSimpleLoader : SvgMicrophone;
 
   // Disable when processing or TTS is playing (don't want to pick up TTS audio)
   const isDisabled =
     disabled ||
+    isStarting ||
     isProcessing ||
     isTTSPlaying ||
     isTTSLoading ||
@@ -331,7 +336,14 @@ function MicrophoneButton({
       disabled={isDisabled}
       icon={icon}
       onClick={handleClick}
-      aria-label={isRecording ? "Stop recording" : "Start recording"}
+      aria-busy={isStarting}
+      aria-label={
+        isStarting
+          ? t("microphoneButton.startingRecording.ariaLabel")
+          : isRecording
+            ? t("microphoneButton.stopRecording.ariaLabel")
+            : t("microphoneButton.startRecording.ariaLabel")
+      }
       prominence={prominence}
     />
   );

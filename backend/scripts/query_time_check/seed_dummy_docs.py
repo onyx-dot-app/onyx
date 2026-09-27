@@ -76,9 +76,7 @@ def generate_dummy_chunk(
         image_file_id=None,
     )
 
-    document_set_names = []
-    for i in range(number_of_document_sets):
-        document_set_names.append(f"Document Set {i}")
+    document_set_names = [f"Document Set {i}" for i in range(number_of_document_sets)]
 
     user_emails: list[str | None] = []
     user_groups: list[str] = []
@@ -101,7 +99,7 @@ def generate_dummy_chunk(
             external_user_group_ids=external_user_group_ids,
             is_public=random.choice([True, False]),
         ),
-        document_sets={document_set for document_set in document_set_names},
+        document_sets=set(document_set_names),
         boost=random.randint(-1, 1),
         aggregated_chunk_boost_factor=random.random(),
         tenant_id=POSTGRES_DEFAULT_SCHEMA,

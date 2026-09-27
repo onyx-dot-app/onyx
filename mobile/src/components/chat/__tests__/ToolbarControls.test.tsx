@@ -7,9 +7,10 @@ import {
   ComposerToolsProvider,
   type ComposerTools,
 } from "@/state/ComposerToolsProvider";
+import { makeComposerTools } from "@/state/__tests__/fixtures";
 
-// The provider reaches MMKV via the settings/preferences APIs, which jest can't load; this suite
-// only needs the context.
+// These reach MMKV, which jest can't load; the suite only needs the context the provider supplies.
+jest.mock("@/state/storage");
 jest.mock("@/api/settings", () => ({ useWorkspaceSettings: jest.fn() }));
 jest.mock("@/hooks/useAgentPreferences", () => ({
   useAgentPreferences: jest.fn(),
@@ -30,24 +31,10 @@ const searchTool: ToolSnapshot = {
 };
 
 function renderControls(overrides: Partial<ComposerTools> = {}) {
-  const value: ComposerTools = {
+  const value: ComposerTools = makeComposerTools({
     showDeepResearch: true,
-    deepResearchEnabled: false,
-    toggleDeepResearch: jest.fn(),
-    actionTools: [],
-    forcedToolId: null,
-    toggleForcedTool: jest.fn(),
-    disabledToolIds: [],
-    toggleToolEnabled: jest.fn(),
-    notePendingSend: jest.fn(),
-    resolveToolOptions: () => ({
-      deepResearch: false,
-      allowedToolIds: null,
-      forcedToolId: null,
-      internalSearchFilters: null,
-    }),
     ...overrides,
-  };
+  });
   render(
     <ComposerToolsProvider value={value}>
       <ToolbarControls />
@@ -57,35 +44,20 @@ function renderControls(overrides: Partial<ComposerTools> = {}) {
 }
 
 describe("ToolbarControls", () => {
-  it("renders nothing when deep research is gated off", () => {
-    renderControls({ showDeepResearch: false });
+  // Deep research now lives in the actions sheet, so ActionsMenu covers how it behaves.
+  it("keeps deep research out of the toolbar", () => {
+    renderControls();
     expect(screen.queryByLabelText("Deep Research")).toBeNull();
   });
 
-  it("renders the pill icon-only and unselected while off", () => {
-    renderControls();
-    const pill = screen.getByLabelText("Deep Research");
-    expect(pill.props.accessibilityState.selected).toBe(false);
-    expect(screen.queryByText("Deep Research")).toBeNull();
-  });
-
-  it("shows the label and the selected state once enabled", () => {
-    renderControls({ deepResearchEnabled: true });
-    expect(screen.getByText("Deep Research")).toBeTruthy();
-    expect(
-      screen.getByLabelText("Deep Research").props.accessibilityState.selected,
-    ).toBe(true);
-  });
-
-  it("toggles on press", () => {
-    const value = renderControls();
-    fireEvent.press(screen.getByLabelText("Deep Research"));
-    expect(value.toggleDeepResearch).toHaveBeenCalledTimes(1);
-  });
-
-  it("hides the actions trigger when the agent has no selectable tools", () => {
-    renderControls({ actionTools: [] });
+  it("hides the actions trigger when there is neither a tool nor deep research", () => {
+    renderControls({ actionTools: [], showDeepResearch: false });
     expect(screen.queryByLabelText("Manage Actions")).toBeNull();
+  });
+
+  it("keeps the actions trigger for a toolless agent that still offers deep research", () => {
+    renderControls({ actionTools: [], showDeepResearch: true });
+    expect(screen.getByLabelText("Manage Actions")).toBeTruthy();
   });
 
   it("shows the actions trigger once the agent has selectable tools", () => {

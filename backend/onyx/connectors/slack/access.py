@@ -1,11 +1,10 @@
 from collections.abc import Callable
 from typing import cast
 
-from slack_sdk import WebClient
-
 from onyx.access.models import ExternalAccess
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.slack.models import ChannelType
+from onyx.connectors.slack.source_operations import SlackSourceOperations
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
@@ -13,7 +12,7 @@ from onyx.utils.variable_functionality import (
 
 
 def get_channel_access(
-    client: WebClient,
+    slack_client: SlackSourceOperations,
     channel: ChannelType,
     user_cache: dict[str, BasicExpertInfo | None],
     team_id_to_user_emails: dict[str, set[str]] | None = None,
@@ -30,7 +29,7 @@ def get_channel_access(
     ee_get_channel_access = cast(
         Callable[
             [
-                WebClient,
+                SlackSourceOperations,
                 ChannelType,
                 dict[str, BasicExpertInfo | None],
                 dict[str, set[str]] | None,
@@ -42,4 +41,6 @@ def get_channel_access(
         ),
     )
 
-    return ee_get_channel_access(client, channel, user_cache, team_id_to_user_emails)
+    return ee_get_channel_access(
+        slack_client, channel, user_cache, team_id_to_user_emails
+    )

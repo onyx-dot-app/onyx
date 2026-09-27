@@ -1,4 +1,4 @@
-"""`is_authenticated` for per-user OAuth servers must reflect a completed
+"""`user_can_authenticate` for per-user OAuth servers must reflect a completed
 handshake (stored tokens), not mere connection-config row existence, since the
 row is created before token exchange. API-token servers stay authenticated on
 row existence alone."""
@@ -57,8 +57,7 @@ def test_oauth_tokenless_row_is_not_authenticated(db_session: Session) -> None:
     db_session.commit()
 
     api_server = _db_mcp_server_to_api_mcp_server(server, db_session, request_user=user)
-    assert api_server.user_authenticated is False
-    assert api_server.is_authenticated is False
+    assert api_server.user_can_authenticate is False
 
 
 def test_oauth_row_with_tokens_is_authenticated(db_session: Session) -> None:
@@ -76,8 +75,7 @@ def test_oauth_row_with_tokens_is_authenticated(db_session: Session) -> None:
     db_session.commit()
 
     api_server = _db_mcp_server_to_api_mcp_server(server, db_session, request_user=user)
-    assert api_server.user_authenticated is True
-    assert api_server.is_authenticated is True
+    assert api_server.user_can_authenticate is True
 
 
 def test_api_token_row_is_authenticated_without_tokens_key(
@@ -97,5 +95,4 @@ def test_api_token_row_is_authenticated_without_tokens_key(
     db_session.commit()
 
     api_server = _db_mcp_server_to_api_mcp_server(server, db_session, request_user=user)
-    assert api_server.user_authenticated is True
-    assert api_server.is_authenticated is True
+    assert api_server.user_can_authenticate is True

@@ -10,6 +10,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { useTranslations } from "next-intl";
 import {
   uploadFile as uploadFileApi,
   deleteFile as deleteFileApi,
@@ -86,16 +87,20 @@ interface FileValidationResult {
   error?: string;
 }
 
+/** Translator bound to the craft.uploadFiles namespace */
+type UploadTranslate = ReturnType<typeof useTranslations<"craft.uploadFiles">>;
+
 /** Validate a single file before upload */
-function validateFile(file: File): FileValidationResult {
+function validateFile(file: File, t: UploadTranslate): FileValidationResult {
   // Check file size. Extension/type are intentionally not restricted - uploaded
   // files only run inside the isolated sandbox, which is the security boundary.
   if (file.size > MAX_FILE_SIZE_BYTES) {
     return {
       valid: false,
-      error: `File too large (${formatBytes(
-        file.size
-      )}). Maximum is ${formatBytes(MAX_FILE_SIZE_BYTES)}.`,
+      error: t("errors.fileTooLarge", {
+        size: formatBytes(file.size),
+        max: formatBytes(MAX_FILE_SIZE_BYTES),
+      }),
     };
   }
 
@@ -105,13 +110,14 @@ function validateFile(file: File): FileValidationResult {
 /** Validate total files and size constraints */
 function validateBatch(
   newFiles: File[],
-  existingFiles: BuildFile[]
+  existingFiles: BuildFile[],
+  t: UploadTranslate
 ): FileValidationResult {
   const totalCount = existingFiles.length + newFiles.length;
   if (totalCount > MAX_FILES_PER_SESSION) {
     return {
       valid: false,
-      error: `Too many files. Maximum is ${MAX_FILES_PER_SESSION} files per session.`,
+      error: t("errors.tooManyFiles", { max: MAX_FILES_PER_SESSION }),
     };
   }
 
@@ -122,9 +128,9 @@ function validateBatch(
   if (totalSize > MAX_TOTAL_SIZE_BYTES) {
     return {
       valid: false,
-      error: `Total size exceeds limit. Maximum is ${formatBytes(
-        MAX_TOTAL_SIZE_BYTES
-      )} per session.`,
+      error: t("errors.totalSizeExceeded", {
+        max: formatBytes(MAX_TOTAL_SIZE_BYTES),
+      }),
     };
   }
 
@@ -169,27 +175,36 @@ export enum UploadErrorType {
   UNKNOWN = "UNKNOWN",
 }
 
-function classifyError(error: unknown): {
+function classifyError(
+  error: unknown,
+  t: UploadTranslate
+): {
   type: UploadErrorType;
   message: string;
 } {
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     if (message.includes("401") || message.includes("unauthorized")) {
-      return { type: UploadErrorType.AUTH, message: "Session expired" };
+      return {
+        type: UploadErrorType.AUTH,
+        message: t("errors.sessionExpired"),
+      };
     }
     if (message.includes("404") || message.includes("not found")) {
-      return { type: UploadErrorType.NOT_FOUND, message: "Resource not found" };
+      return {
+        type: UploadErrorType.NOT_FOUND,
+        message: t("errors.notFound"),
+      };
     }
     if (message.includes("500") || message.includes("server")) {
-      return { type: UploadErrorType.SERVER, message: "Server error" };
+      return { type: UploadErrorType.SERVER, message: t("errors.server") };
     }
     if (message.includes("network") || message.includes("fetch")) {
-      return { type: UploadErrorType.NETWORK, message: "Network error" };
+      return { type: UploadErrorType.NETWORK, message: t("errors.network") };
     }
     return { type: UploadErrorType.UNKNOWN, message: error.message };
   }
-  return { type: UploadErrorType.UNKNOWN, message: "Upload failed" };
+  return { type: UploadErrorType.UNKNOWN, message: t("errors.uploadFailed") };
 }
 
 /**
@@ -263,6 +278,7 @@ export interface UploadFilesProviderProps {
 }
 
 export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
+  const t = useTranslations("craft.uploadFiles");
   // =========================================================================
   // State
   // =========================================================================
@@ -270,6 +286,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const [currentMessageFiles, setCurrentMessageFiles] = useState<BuildFile[]>(
     []
   );
+  const currentMessageFilesRef = useRef<BuildFile[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // Get triggerFilesRefresh from the store to refresh the file explorer
@@ -305,6 +322,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     );
   }, [currentMessageFiles]);
 
+  useEffect(() => {
+    currentMessageFilesRef.current = currentMessageFiles;
+  }, [currentMessageFiles]);
+
   // =========================================================================
   // Internal operations (not exposed to consumers)
   // =========================================================================
@@ -318,26 +339,23 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     async (sessionId: string): Promise<void> => {
       if (isUploadingPendingRef.current) return;
 
-      // Read current files and find pending ones atomically
-      let pendingFiles: BuildFile[] = [];
-      setCurrentMessageFiles((prev) => {
-        pendingFiles = prev.filter(
-          (f) => f.status === UploadFileStatus.PENDING && f.file
-        );
-        // Mark as uploading in the same state update to avoid race conditions
-        if (pendingFiles.length > 0) {
-          return prev.map((f) =>
-            pendingFiles.some((pf) => pf.id === f.id)
-              ? { ...f, status: UploadFileStatus.UPLOADING }
-              : f
-          );
-        }
-        return prev;
-      });
+      const currentFiles = currentMessageFilesRef.current;
+      const pendingFiles = currentFiles.filter(
+        (f) => f.status === UploadFileStatus.PENDING && f.file
+      );
 
       if (pendingFiles.length === 0) return;
 
       isUploadingPendingRef.current = true;
+      // Functional update so a concurrent add/remove in the same batch is
+      // never clobbered. The ref syncs from state in its own effect.
+      setCurrentMessageFiles((prev) =>
+        prev.map((f) =>
+          pendingFiles.some((pf) => pf.id === f.id)
+            ? { ...f, status: UploadFileStatus.UPLOADING }
+            : f
+        )
+      );
 
       try {
         // Upload in parallel
@@ -347,7 +365,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
               const result = await uploadFileApi(sessionId, file.file!);
               return { id: file.id, success: true as const, result };
             } catch (error) {
-              const { message } = classifyError(error);
+              const { message } = classifyError(error, t);
               return {
                 id: file.id,
                 success: false as const,
@@ -387,7 +405,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         isUploadingPendingRef.current = false;
       }
     },
-    [triggerFilesRefresh]
+    [triggerFilesRefresh, t]
   );
 
   /**
@@ -450,7 +468,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
           });
         }
       } catch (error) {
-        const { type } = classifyError(error);
+        const { type } = classifyError(error, t);
         if (type !== UploadErrorType.NOT_FOUND) {
           console.error(
             "[UploadFilesContext] fetchExistingAttachments error:",
@@ -473,7 +491,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
         fetchingSessionRef.current = null;
       }
     },
-    []
+    [t]
   );
 
   // =========================================================================
@@ -583,7 +601,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       const existingFiles = currentMessageFiles;
 
       // Validate batch constraints first
-      const batchValidation = validateBatch(files, existingFiles);
+      const batchValidation = validateBatch(files, existingFiles, t);
       if (!batchValidation.valid) {
         // Create failed files for all with the batch error
         const failedFiles = files.map((f) =>
@@ -598,7 +616,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       const failedFiles: BuildFile[] = [];
 
       for (const file of files) {
-        const validation = validateFile(file);
+        const validation = validateFile(file, t);
         if (validation.valid) {
           validFiles.push(file);
         } else {
@@ -635,7 +653,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
               result,
             };
           } catch (error) {
-            const { message } = classifyError(error);
+            const { message } = classifyError(error, t);
             return {
               id: optimisticFile.id,
               success: false as const,
@@ -688,7 +706,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
       return [...failedFiles, ...optimisticFiles];
     },
-    [activeSessionId, currentMessageFiles, triggerFilesRefresh]
+    [activeSessionId, currentMessageFiles, triggerFilesRefresh, t]
   );
 
   /**
@@ -699,23 +717,22 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       // Track this deletion to prevent refetch race condition
       activeDeletionsRef.current.add(fileId);
 
-      // Use functional update to get current state and avoid stale closures
-      let removedFile: BuildFile | null = null;
-      let removedIndex = -1;
+      const currentFiles = currentMessageFilesRef.current;
+      const removedIndex = currentFiles.findIndex((f) => f.id === fileId);
+      if (removedIndex === -1) {
+        activeDeletionsRef.current.delete(fileId);
+        return;
+      }
 
-      setCurrentMessageFiles((prev) => {
-        const index = prev.findIndex((f) => f.id === fileId);
-        if (index === -1) return prev;
+      const removedFile = currentFiles[removedIndex];
+      if (!removedFile) {
+        activeDeletionsRef.current.delete(fileId);
+        return;
+      }
 
-        // Capture file info for potential rollback and backend deletion
-        const file = prev[index];
-        if (!file) return prev;
-        removedFile = file;
-        removedIndex = index;
-
-        // Return filtered array (optimistic removal)
-        return prev.filter((f) => f.id !== fileId);
-      });
+      // Functional update keeps concurrent same-batch changes. The ref syncs
+      // from state in its own effect.
+      setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== fileId));
 
       // After state update, trigger backend deletion if needed
       // Use setTimeout to ensure state update has completed

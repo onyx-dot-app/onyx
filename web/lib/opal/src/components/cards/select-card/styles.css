@@ -6,6 +6,12 @@
   @apply w-full overflow-clip;
 }
 
+/* Keyboard focus paints like hover (see Interactive.Stateful), so the
+   default focus ring would double up. */
+.opal-select-card:focus-visible {
+  outline: none;
+}
+
 /* Border color */
 .opal-select-card[data-interactive-state="selected"] {
   border-color: var(--interactive-foreground);

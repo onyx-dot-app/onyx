@@ -9,13 +9,28 @@ from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from pydantic import Field
+
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    SALESFORCE_CLIENT_ID,
+    SALESFORCE_CLIENT_SECRET,
+)
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    get_oauth_callback_uri,
+    time_str_to_utc,
+)
 from onyx.connectors.interfaces import (
+    CredentialsConnector,
+    CredentialsProviderInterface,
     GenerateDocumentsOutput,
     GenerateSlimDocumentOutput,
     LoadConnector,
+    OAuthConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
     SlimConnectorWithPermSync,
@@ -29,11 +44,16 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
+from onyx.connectors.salesforce.auth import (
+    build_salesforce_client,
+    exchange_salesforce_authorization_code,
+)
 from onyx.connectors.salesforce.doc_conversion import (
     ID_PREFIX,
     convert_sf_object_to_doc,
     convert_sf_query_result_to_doc,
 )
+from onyx.connectors.salesforce.models import SalesforceMyDomainUrl
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
@@ -65,6 +85,10 @@ def _convert_to_metadata_value(value: Any) -> str | list[str]:
 
 
 _DEFAULT_PARENT_OBJECT_TYPES = [ACCOUNT_OBJECT_TYPE]
+_SALESFORCE_AUTHORIZATION_PATH = "/services/oauth2/authorize"
+_OAUTH_RESPONSE_TYPE = "code"
+_OAUTH_SCOPE = "api refresh_token"
+_PKCE_CHALLENGE_METHOD = "S256"
 
 _DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
     "Opportunity": {
@@ -171,7 +195,13 @@ def _validate_custom_query_config(config: dict[str, Any]) -> None:
                         )
 
 
-class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync):
+class SalesforceConnector(
+    LoadConnector,
+    PollConnector,
+    SlimConnectorWithPermSync,
+    CredentialsConnector,
+    OAuthConnector,
+):
     """Approach outline
 
     Goal
@@ -211,17 +241,95 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
     figure out why sometimes the field names are missing.
     """
 
+    supports_pkce = True
+    supports_manual_credentials = True
+
+    class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
+        salesforce_my_domain_url: SalesforceMyDomainUrl = Field(
+            title="Salesforce My Domain URL",
+            description=(
+                "Your Salesforce My Domain URL, such as "
+                "https://company.my.salesforce.com."
+            ),
+        )
+
     MAX_BATCH_BYTES = 1024 * 1024
     LOG_INTERVAL = 10.0  # how often to log stats in loop heavy parts of the connector
+
+    @classmethod
+    def oauth_enabled(cls) -> bool:
+        return bool(SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET)
+
+    @classmethod
+    def oauth_id(cls) -> DocumentSource:
+        return DocumentSource.SALESFORCE
+
+    @classmethod
+    def oauth_authorization_url(
+        cls,
+        base_domain: str,
+        state: str,
+        additional_kwargs: dict[str, str],
+        code_challenge: str | None = None,
+    ) -> str:
+        if not SALESFORCE_CLIENT_ID:
+            raise ValueError("SALESFORCE_CLIENT_ID environment variable must be set")
+        if not code_challenge:
+            raise ValueError("Salesforce OAuth requires a PKCE code challenge")
+
+        oauth_kwargs = cls.AdditionalOauthKwargs(**additional_kwargs)
+        callback_uri = get_oauth_callback_uri(
+            base_domain, DocumentSource.SALESFORCE.value
+        )
+        query = urlencode(
+            {
+                "client_id": SALESFORCE_CLIENT_ID,
+                "response_type": _OAUTH_RESPONSE_TYPE,
+                "redirect_uri": callback_uri,
+                "scope": _OAUTH_SCOPE,
+                "state": state,
+                "code_challenge": code_challenge,
+                "code_challenge_method": _PKCE_CHALLENGE_METHOD,
+            }
+        )
+        return (
+            f"{oauth_kwargs.salesforce_my_domain_url}"
+            f"{_SALESFORCE_AUTHORIZATION_PATH}?{query}"
+        )
+
+    @classmethod
+    def oauth_code_to_token(
+        cls,
+        base_domain: str,
+        code: str,
+        additional_kwargs: dict[str, str],
+        code_verifier: str | None = None,
+    ) -> dict[str, Any]:
+        if not code_verifier:
+            raise ValueError("Salesforce OAuth requires a PKCE code verifier")
+
+        oauth_kwargs = cls.AdditionalOauthKwargs(**additional_kwargs)
+        credentials = exchange_salesforce_authorization_code(
+            login_url=oauth_kwargs.salesforce_my_domain_url,
+            code=code,
+            redirect_uri=get_oauth_callback_uri(
+                base_domain, DocumentSource.SALESFORCE.value
+            ),
+            code_verifier=code_verifier,
+        )
+        return credentials.model_dump(mode="json")
 
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        requested_objects: list[str] = [],
+        requested_objects: list[str] | None = None,
         custom_query_config: str | None = None,
     ) -> None:
+        if requested_objects is None:
+            requested_objects = []
         self.batch_size = batch_size
         self._sf_client: OnyxSalesforce | None = None
+        self._credentials_provider: CredentialsProviderInterface | None = None
 
         # Validate and store custom query config
         if custom_query_config:
@@ -242,14 +350,20 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         self,
         credentials: dict[str, Any],
     ) -> dict[str, Any] | None:
-        domain = "test" if credentials.get("is_sandbox") else None
-        self._sf_client = OnyxSalesforce(
-            username=credentials["sf_username"],
-            password=credentials["sf_password"],
-            security_token=credentials["sf_security_token"],
-            domain=domain,
+        self.set_credentials_provider(
+            OnyxStaticCredentialsProvider(
+                tenant_id=None,
+                connector_name=str(DocumentSource.SALESFORCE),
+                credential_json=credentials,
+            )
         )
         return None
+
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        self._credentials_provider = credentials_provider
+        self._sf_client = build_salesforce_client(credentials_provider)
 
     @property
     def sf_client(self) -> OnyxSalesforce:
@@ -379,7 +493,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
 
                 with open(csv_path, "r", newline="", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
-                    for row in reader:
+                    for _row in reader:
                         num_records += 1
 
                 new_ids = sf_db.update_from_csv(
@@ -592,7 +706,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                     num_records = 0
                     with open(csv_path, "r", newline="", encoding="utf-8") as f:
                         reader = csv.DictReader(f)
-                        for row in reader:
+                        for _row in reader:
                             num_records += 1
 
                     logger.debug(

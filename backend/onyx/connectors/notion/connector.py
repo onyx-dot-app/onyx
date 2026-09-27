@@ -529,7 +529,7 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                 if (
                     "name" in sub_inner_dict
                     and isinstance(sub_inner_dict["name"], str)
-                    and type_name not in ("title",)
+                    and type_name != "title"
                 ):
                     return sub_inner_dict["name"]
 
@@ -879,7 +879,7 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         page_title = None
         if hasattr(page, "database_name") and page.database_name:
             return page.database_name
-        for _, prop in page.properties.items():
+        for prop in page.properties.values():
             if prop["type"] == "title" and len(prop["title"]) > 0:
                 page_title = " ".join([t["plain_text"] for t in prop["title"]]).strip()
                 break

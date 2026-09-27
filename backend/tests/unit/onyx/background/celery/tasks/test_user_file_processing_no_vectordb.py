@@ -44,6 +44,7 @@ def _make_user_file(
     status: UserFileStatus = UserFileStatus.PROCESSING,
     file_id: str = "test-file-id",
     name: str = "test.txt",
+    incognito: bool = False,
 ) -> MagicMock:
     """Return a MagicMock mimicking a UserFile ORM instance."""
     uf = MagicMock()
@@ -51,6 +52,9 @@ def _make_user_file(
     uf.file_id = file_id
     uf.name = name
     uf.status = status
+    # Explicit: an attribute left to MagicMock reads as truthy and would send
+    # every file down the incognito branch.
+    uf.incognito = incognito
     uf.token_count = None
     uf.chunk_count = None
     uf.last_project_sync_at = None
@@ -275,6 +279,36 @@ class TestProcessImplBranching:
 
         mock_with_indexing.assert_called_once()
         mock_without_vdb.assert_not_called()
+
+    @patch(f"{TASKS_MODULE}._process_user_file_without_vector_db")
+    @patch(f"{TASKS_MODULE}._process_user_file_with_indexing")
+    @patch(f"{TASKS_MODULE}.DISABLE_VECTOR_DB", False)
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
+    def test_incognito_upload_skips_the_search_index(
+        self,
+        mock_get_session: MagicMock,
+        mock_with_indexing: MagicMock,
+        mock_without_vdb: MagicMock,
+    ) -> None:
+        """An incognito upload is extracted for chat but never indexed, even
+        with the vector DB enabled."""
+        uf = _make_user_file(incognito=True)
+        session = MagicMock()
+        session.get.return_value = uf
+        mock_get_session.return_value.__enter__.return_value = session
+
+        connector_mock = MagicMock()
+        connector_mock.load_from_state.return_value = [_make_documents(["hello"])]
+
+        with patch(f"{TASKS_MODULE}.LocalFileConnector", return_value=connector_mock):
+            process_user_file_impl(
+                user_file_id=str(uf.id),
+                tenant_id="test-tenant",
+                redis_locking=False,
+            )
+
+        mock_without_vdb.assert_called_once()
+        mock_with_indexing.assert_not_called()
 
     @patch(f"{TASKS_MODULE}.run_indexing_pipeline")
     @patch(f"{TASKS_MODULE}.store_user_file_plaintext")

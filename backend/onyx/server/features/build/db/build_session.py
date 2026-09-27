@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus, SessionOrigin, SharingScope
-from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox
+from onyx.db.models import BuildMessage, BuildSession, Sandbox
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import (
@@ -316,62 +316,6 @@ def update_sandbox_heartbeat(
     if sandbox:
         sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
         db_session.commit()
-
-
-# Artifact operations
-def create_artifact(
-    session_id: UUID,
-    artifact_type: str,
-    path: str,
-    name: str,
-    db_session: Session,
-) -> Artifact:
-    """Create a new artifact record."""
-    artifact = Artifact(
-        session_id=session_id,
-        type=artifact_type,
-        path=path,
-        name=name,
-    )
-    db_session.add(artifact)
-    db_session.commit()
-    db_session.refresh(artifact)
-
-    logger.info("Created artifact %s for session %s", artifact.id, session_id)
-    return artifact
-
-
-def get_session_artifacts(
-    session_id: UUID,
-    db_session: Session,
-) -> list[Artifact]:
-    """Get all artifacts for a session."""
-    return (
-        db_session.query(Artifact)
-        .filter(Artifact.session_id == session_id)
-        .order_by(desc(Artifact.created_at))
-        .all()
-    )
-
-
-def update_artifact(
-    artifact_id: UUID,
-    db_session: Session,
-    path: str | None = None,
-    name: str | None = None,
-) -> None:
-    """Update artifact metadata."""
-    artifact = (
-        db_session.query(Artifact).filter(Artifact.id == artifact_id).one_or_none()
-    )
-    if artifact:
-        if path is not None:
-            artifact.path = path
-        if name is not None:
-            artifact.name = name
-        artifact.updated_at = datetime.now(tz=timezone.utc)
-        db_session.commit()
-        logger.info("Updated artifact %s", artifact_id)
 
 
 # Message operations

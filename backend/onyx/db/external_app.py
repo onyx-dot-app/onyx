@@ -47,7 +47,7 @@ class SkillExternalAppDependencyState:
     ready: bool
 
 
-def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
+def placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
     placeholders: set[str] = set()
     for value in auth_template.values():
         if isinstance(value, str):
@@ -63,7 +63,7 @@ def required_user_credential_keys(
     references in `auth_template` values not pre-filled by
     `organization_credentials`."""
     return sorted(
-        _placeholders_in_template(auth_template) - organization_credentials.keys()
+        placeholders_in_template(auth_template) - organization_credentials.keys()
     )
 
 

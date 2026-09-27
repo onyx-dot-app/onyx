@@ -85,8 +85,8 @@ runs:
           minio \
           inference_model_server
 
-    - name: Install Python deps and generate OpenAPI client
-      uses: ./.github/actions/install-deps-and-generate-openapi-client
+    - name: Install Python deps
+      uses: ./.github/actions/install-python-deps
       with:
         devcontainer-image: ${{ inputs.runs-on-ecr-cache }}:nightly-llm-it-devcontainer-${{ inputs.run-id }}
 

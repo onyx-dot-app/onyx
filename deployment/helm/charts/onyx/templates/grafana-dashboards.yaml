@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "onyx.fullname" . }}-indexing-pipeline-dashboard
+  name: {{ include "onyx.resourceName" (list . "indexing-pipeline-dashboard") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     grafana_dashboard: "1"
@@ -16,7 +16,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "onyx.fullname" . }}-opensearch-search-latency-dashboard
+  name: {{ include "onyx.resourceName" (list . "opensearch-search-latency-dashboard") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     grafana_dashboard: "1"
@@ -29,7 +29,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "onyx.fullname" . }}-redis-queues-dashboard
+  name: {{ include "onyx.resourceName" (list . "redis-queues-dashboard") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     grafana_dashboard: "1"
@@ -42,7 +42,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "onyx.fullname" . }}-indexing-pruning-dashboard
+  name: {{ include "onyx.resourceName" (list . "indexing-pruning-dashboard") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     grafana_dashboard: "1"

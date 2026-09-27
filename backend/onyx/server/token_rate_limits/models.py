@@ -4,9 +4,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from onyx.db.models import TokenRateLimit
 from onyx.db.user_usage import (
-    COST_BUDGET_PERIOD_ERROR,
+    COST_BUDGET_PERIOD_HOURS,
     TOKEN_BUDGET_PERIOD_ERROR,
-    USER_USAGE_BUCKET_SECONDS,
     normalize_token_period_hours,
 )
 
@@ -31,9 +30,11 @@ class _TokenRateLimitArgsBase(BaseModel):
             raise ValueError(TOKEN_BUDGET_PERIOD_ERROR)
         if (
             self.cost_budget_cents is not None
-            and (self.period_hours * 60 * 60) % USER_USAGE_BUCKET_SECONDS != 0
+            and self.period_hours not in COST_BUDGET_PERIOD_HOURS
         ):
-            raise ValueError(COST_BUDGET_PERIOD_ERROR)
+            raise ValueError(
+                "Cost budget periods must be daily (1), weekly (7), or monthly (30) days"
+            )
         return self
 
 

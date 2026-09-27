@@ -9,10 +9,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import GatedAppKind
 from onyx.db.external_app import (
     get_connectable_apps_for_user,
     get_external_app_by_skill_id,
 )
+from onyx.db.gated_app import get_action_policies
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillValidityUpdate,
@@ -116,12 +118,13 @@ def _render_template(
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is not None:
         external_app = get_external_app_by_skill_id(db_session, skill.id)
-        rendered = render_external_app_skill(
-            db_session,
-            app_type,
-            external_app,
-            definition.source_dir,
+        stored = (
+            get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
+            if external_app
+            else {}
         )
+        template = (definition.source_dir / "SKILL.md.template").read_text()
+        rendered = render_external_app_skill(template, app_type, stored)
         files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
         return
 

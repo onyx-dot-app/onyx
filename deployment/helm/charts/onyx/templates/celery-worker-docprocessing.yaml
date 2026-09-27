@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-docprocessing
+  name: {{ include "onyx.resourceName" (list . "celery-worker-docprocessing") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_worker_docprocessing.deploymentLabels }}

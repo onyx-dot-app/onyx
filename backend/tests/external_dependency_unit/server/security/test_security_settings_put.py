@@ -16,7 +16,10 @@ from fastapi import Request
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import KV_PASSWORD_AUTH_ENABLED_KEY
+from onyx.configs.constants import (
+    KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY,
+    KV_PASSWORD_AUTH_ENABLED_KEY,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SecuritySettings as SecuritySettingsRow
 from onyx.db.models import User
@@ -26,8 +29,11 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security import api as security_api
 from onyx.server.security import store as security_store
-from onyx.server.security.api import put_security_settings_endpoint
-from onyx.server.security.models import SecuritySettingsOverrides
+from onyx.server.security.api import (
+    get_pinned_fields_endpoint,
+    put_security_settings_endpoint,
+)
+from onyx.server.security.models import SecuritySettings, SecuritySettingsOverrides
 from onyx.server.security.store import (
     _build_env_defaults,
     _install_cache_for_test,
@@ -54,7 +60,7 @@ _PLACEHOLDER_USER: User = cast(User, None)
 def _put(body: dict[str, Any] | bytes) -> Any:
     raw = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
     request = cast(Request, _FakeRequest(raw))
-    return asyncio.run(put_security_settings_endpoint(request, _=_PLACEHOLDER_USER))
+    return asyncio.run(put_security_settings_endpoint(request, user=_PLACEHOLDER_USER))
 
 
 def _load_row_as_dict() -> dict[str, Any] | None:
@@ -73,19 +79,25 @@ def _delete_security_settings_row() -> None:
         session.commit()
 
 
-def _load_password_auth_kv() -> Any:
-    """Raw KV value for the kill switch, or "missing" when the key is absent."""
+def _load_kv(kv_key: str) -> Any:
+    """Raw KV value of a KV-backed override, or "missing" when the key is absent."""
     try:
-        return get_kv_store().load(KV_PASSWORD_AUTH_ENABLED_KEY, refresh_cache=True)
+        return get_kv_store().load(kv_key, refresh_cache=True)
     except KvKeyNotFoundError:
         return "missing"
 
 
-def _delete_password_auth_kv() -> None:
+def _delete_kv(kv_key: str) -> None:
     try:
-        get_kv_store().delete(KV_PASSWORD_AUTH_ENABLED_KEY)
+        get_kv_store().delete(kv_key)
     except KvKeyNotFoundError:
         pass
+
+
+def _delete_kv_backed_overrides() -> None:
+    kv_key: str
+    for kv_key in security_store.KV_BACKED_OVERRIDE_KEYS.values():
+        _delete_kv(kv_key)
 
 
 @pytest.fixture(autouse=True)
@@ -98,10 +110,10 @@ def _clean_db_and_cache(
     import time as _time
 
     _install_cache_for_test(ttl=10.0, timer=_time.monotonic)
-    _delete_password_auth_kv()
+    _delete_kv_backed_overrides()
     yield
     _delete_security_settings_row()
-    _delete_password_auth_kv()
+    _delete_kv_backed_overrides()
     invalidate_security_cache(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
 
@@ -382,7 +394,7 @@ def test_put_rejects_disabling_auth_with_no_enabled_provider(
         _put({"password_auth_enabled": False})
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert _load_row_as_dict() is None
-    assert _load_password_auth_kv() == "missing"
+    assert _load_kv(KV_PASSWORD_AUTH_ENABLED_KEY) == "missing"
 
 
 def test_put_allows_disabling_auth_with_enabled_provider(
@@ -393,7 +405,7 @@ def test_put_allows_disabling_auth_with_enabled_provider(
 
     result = _put({"password_auth_enabled": False})
     assert result.password_auth_enabled is False
-    assert _load_password_auth_kv() is False
+    assert _load_kv(KV_PASSWORD_AUTH_ENABLED_KEY) is False
     assert _load_row_as_dict() == {}
 
 
@@ -406,7 +418,32 @@ def test_put_explicit_null_clears_kill_switch(
 
     result = _put({"password_auth_enabled": None})
     assert result.password_auth_enabled is True
-    assert _load_password_auth_kv() is None
+    assert _load_kv(KV_PASSWORD_AUTH_ENABLED_KEY) is None
+
+
+def test_put_relink_window_persists_in_kv_not_row() -> None:
+    """The relink window has no row column, so it lands in KV and clears back
+    to the env default (off) on explicit null."""
+    opened: SecuritySettings = _put({"allow_same_provider_subject_relink": True})
+    assert opened.allow_same_provider_subject_relink is True
+    assert _load_kv(KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY) is True
+    assert _load_row_as_dict() == {}
+
+    cleared: SecuritySettings = _put({"allow_same_provider_subject_relink": None})
+    assert cleared.allow_same_provider_subject_relink is False
+    assert _load_kv(KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY) is None
+
+
+def test_put_multi_tenant_accepts_relink_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tenant-editable, so a tenant admin can open the window in multi-tenant."""
+    monkeypatch.setattr(security_api, "MULTI_TENANT", True)
+    monkeypatch.setattr(security_store, "MULTI_TENANT", True)
+
+    result: SecuritySettings = _put({"allow_same_provider_subject_relink": True})
+    assert result.allow_same_provider_subject_relink is True
+    assert _load_kv(KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY) is True
 
 
 def test_put_rejects_kill_switch_in_multi_tenant(
@@ -420,4 +457,51 @@ def test_put_rejects_kill_switch_in_multi_tenant(
         _put({"password_auth_enabled": False})
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert _load_row_as_dict() is None
-    assert _load_password_auth_kv() == "missing"
+    assert _load_kv(KV_PASSWORD_AUTH_ENABLED_KEY) == "missing"
+
+
+def test_put_rejects_env_pinned_field_while_env_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A set env var pins the field: the PUT refuses instead of storing an
+    override the merge would render inert."""
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_AUDIENCE", "env-aud")
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"jwt_expected_audience": "db-aud"})
+    assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def test_put_accepts_env_pinned_field_while_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_AUDIENCE", None)
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_ISSUER", None)
+    monkeypatch.setattr(security_store._cfg, "JWT_PUBLIC_KEY_URL", None)
+
+    effective = _put({"jwt_expected_audience": "db-aud"})
+    assert effective.jwt_expected_audience == "db-aud"
+    row = _load_row_as_dict()
+    assert row is not None
+    assert row["jwt_expected_audience"] == "db-aud"
+
+
+def test_put_rejects_jwt_key_url_failing_ssrf_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default SSRF level blocks loopback, so an admin cannot aim the
+    server's key fetch at itself."""
+    monkeypatch.setattr(security_store._cfg, "JWT_PUBLIC_KEY_URL", None)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"jwt_public_key_url": "https://127.0.0.1/keys"})
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
+def test_pinned_fields_endpoint_reflects_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_AUDIENCE", "env-aud")
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_ISSUER", None)
+    monkeypatch.setattr(security_store._cfg, "JWT_PUBLIC_KEY_URL", None)
+    assert get_pinned_fields_endpoint(_PLACEHOLDER_USER) == ["jwt_expected_audience"]

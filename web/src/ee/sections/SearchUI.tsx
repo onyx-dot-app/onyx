@@ -1,11 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  BaseFilters,
-  MinimalOnyxDocument,
-  SourceMetadata,
-} from "@/lib/search/interfaces";
+import { useTranslations } from "next-intl";
+import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
@@ -13,8 +10,12 @@ import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
+import {
+  countDocumentsBySource,
+  documentMatchesAnySource,
+} from "@/lib/search/utils";
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
-import useTags from "@/hooks/useTags";
+import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
@@ -42,14 +43,16 @@ export interface SearchResultsProps {
 
 const RESULTS_PER_PAGE = 20;
 
-const TIME_FILTER_OPTIONS: { value: TimeFilter; label: string }[] = [
-  { value: "day", label: "Past 24 hours" },
-  { value: "week", label: "Past week" },
-  { value: "month", label: "Past month" },
-  { value: "year", label: "Past year" },
-];
-
 export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
+  const t = useTranslations("admin.search");
+
+  const timeFilterOptions: { value: TimeFilter; label: string }[] = [
+    { value: "day", label: t("timeFilter.day.label") },
+    { value: "week", label: t("timeFilter.week.label") },
+    { value: "month", label: t("timeFilter.month.label") },
+    { value: "year", label: t("timeFilter.year.label") },
+  ];
+
   // Available tags from backend
   const { tags: availableTags } = useTags();
   const {
@@ -71,7 +74,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [error]);
 
   // Filter state
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<ValidSources[]>([]);
   const [timeFilter, setTimeFilter] = useState<TimeFilter | null>(null);
   const [timeFilterOpen, setTimeFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
@@ -115,20 +118,16 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [results]);
 
   // Create a set for fast lookup of LLM-selected docs
-  const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
+  const llmSelectedSet = useMemo(
+    () => new Set(llmSelectedDocIds ?? []),
+    [llmSelectedDocIds]
+  );
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
-    const filtered = results.filter((doc) => {
-      // Source filter (client-side)
-      if (selectedSources.length > 0) {
-        if (!doc.source_type || !selectedSources.includes(doc.source_type)) {
-          return false;
-        }
-      }
-
-      return true;
-    });
+    const filtered = results.filter((doc) =>
+      documentMatchesAnySource(doc, selectedSources)
+    );
 
     // Sort: LLM-selected first, then by score
     return filtered.sort((a, b) => {
@@ -154,34 +153,16 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
   // Extract unique sources with metadata for the source filter
   const sourcesWithMeta = useMemo(() => {
-    const sourceMap = new Map<
-      string,
-      { meta: SourceMetadata; count: number }
-    >();
-
-    for (const doc of results) {
-      if (doc.source_type) {
-        const existing = sourceMap.get(doc.source_type);
-        if (existing) {
-          existing.count++;
-        } else {
-          sourceMap.set(doc.source_type, {
-            meta: getSourceMetadata(doc.source_type as ValidSources),
-            count: 1,
-          });
-        }
-      }
-    }
-
-    return Array.from(sourceMap.entries())
-      .map(([source, data]) => ({
+    return Array.from(countDocumentsBySource(results).entries())
+      .map(([source, count]) => ({
         source,
-        ...data,
+        meta: getSourceMetadata(source),
+        count,
       }))
       .sort((a, b) => b.count - a.count);
   }, [results]);
 
-  const handleSourceToggle = (source: string) => {
+  const handleSourceToggle = (source: ValidSources) => {
     setCurrentPage(1);
     if (selectedSources.includes(source)) {
       setSelectedSources(selectedSources.filter((s) => s !== source));
@@ -223,13 +204,13 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                     onRefineSearch(buildFilters({ time: null }));
                   }}
                 >
-                  {TIME_FILTER_OPTIONS.find((o) => o.value === timeFilter)
-                    ?.label ?? "All Time"}
+                  {timeFilterOptions.find((o) => o.value === timeFilter)
+                    ?.label ?? t("timeFilter.all.label")}
                 </FilterButton>
               </Popover.Trigger>
               <Popover.Content align="start" width="md">
                 <PopoverMenu>
-                  {TIME_FILTER_OPTIONS.map((opt) => (
+                  {timeFilterOptions.map((opt) => (
                     <LineItemButton
                       key={opt.value}
                       onClick={() => {
@@ -260,17 +241,17 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   }}
                 >
                   {selectedTags.length > 0
-                    ? `${selectedTags.length} Tag${
-                        selectedTags.length > 1 ? "s" : ""
-                      }`
-                    : "Tags"}
+                    ? t("tagFilter.count.label", {
+                        count: selectedTags.length,
+                      })
+                    : t("tagFilter.empty.label")}
                 </FilterButton>
               </Popover.Trigger>
               <Popover.Content align="start" width="lg">
                 <PopoverMenu>
                   <InputTypeIn
                     searchIcon
-                    placeholder="Filter tags..."
+                    placeholder={t("tagFilter.search.placeholder")}
                     value={tagQuery}
                     onChange={(e) => setTagQuery(e.target.value)}
                     clearButton
@@ -309,18 +290,18 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             </Popover>
           </div>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
         </div>
 
         {!showEmpty && (
           <div className="flex-1 flex flex-col justify-end gap-3">
             <Section alignItems="start">
               <Text text03 mainUiMuted>
-                {results.length} Results
+                {t("results.count.label", { count: results.length })}
               </Text>
             </Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </div>
         )}
       </div>
@@ -336,7 +317,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           {error ? (
             <EmptyMessageCard
               sizePreset="main-ui"
-              title="Search failed"
+              title={t("results.failed.title")}
               description={error}
             />
           ) : paginatedResults.length > 0 ? (
@@ -357,24 +338,20 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
           ) : (
             <IllustrationContent
               illustration={SvgNoResult}
-              title="No results found"
-              description="Check your connectors/filters or try a different search term."
+              title={t("results.empty.title")}
+              description={t("results.empty.description")}
             />
           )}
         </div>
 
         {!showEmpty && (
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-1">
-            <Section gap={0.25} height="fit">
+            <Section gap={1} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItemButton
                   key={source}
                   icon={(props) => (
-                    <SourceIcon
-                      sourceType={source as ValidSources}
-                      iconSize={16}
-                      {...props}
-                    />
+                    <SourceIcon sourceType={source} iconSize={16} {...props} />
                   )}
                   onClick={() => handleSourceToggle(source)}
                   state={

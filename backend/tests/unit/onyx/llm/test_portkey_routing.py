@@ -24,7 +24,6 @@ def _make_portkey_llm(
     custom_config = {PORTKEY_API_MODE_CONFIG_KEY: mode} if mode is not None else None
     return LitellmLLM(
         api_key="pk-test-key",
-        timeout=30,
         model_provider=LlmProviderNames.PORTKEY,
         model_name=model_name,
         max_input_tokens=128_000,

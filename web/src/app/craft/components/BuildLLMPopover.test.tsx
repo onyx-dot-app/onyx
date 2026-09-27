@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@tests/setup/test-utils";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
 import type {
   LLMProviderDescriptor,

@@ -19,17 +19,17 @@ import (
 
 // Status is the machine-readable `deploy status --json` payload.
 type Status struct {
-	Installed    bool      `json:"installed"`
+	Services     []Service `json:"services"`
 	Dir          string    `json:"dir"`
 	Source       string    `json:"source"`
 	ManifestTag  string    `json:"manifest_tag,omitempty"`
 	EnvTag       string    `json:"env_tag,omitempty"`
 	RunningTag   string    `json:"running_tag,omitempty"`
 	Mode         string    `json:"mode,omitempty"`
+	AccessURL    string    `json:"access_url,omitempty"`
+	Installed    bool      `json:"installed"`
 	IncludeCraft bool      `json:"include_craft"`
 	Dev          bool      `json:"dev"`
-	AccessURL    string    `json:"access_url,omitempty"`
-	Services     []Service `json:"services"`
 	Healthy      bool      `json:"healthy"`
 }
 

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "@/lib/constants";
 import { fetchEnterpriseSettingsSS } from "@/lib/settings/svcSS";
 
-async function fetchAppName(): Promise<string> {
+/** Server-side twin of useSettings().appName for server components. */
+export async function fetchAppName(): Promise<string> {
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
     const enterprise = await fetchEnterpriseSettingsSS();
     if (enterprise?.application_name?.trim()) {

@@ -199,8 +199,9 @@ class CCPairManager:
         indexing_statuses = []
         for connectors_by_source in indexing_status_response:
             connectors = connectors_by_source["indexing_statuses"]
-            for connector in connectors:
-                indexing_statuses.append(ConnectorIndexingStatusLite(**connector))
+            indexing_statuses.extend(
+                ConnectorIndexingStatusLite(**connector) for connector in connectors
+            )
         return indexing_statuses
 
     @staticmethod

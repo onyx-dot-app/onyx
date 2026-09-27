@@ -3,6 +3,7 @@ package audit
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -103,6 +104,28 @@ func TestRenderTextNoFindings(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "No dependency vulnerabilities found") {
 		t.Errorf("unexpected empty output: %q", buf.String())
+	}
+}
+
+func TestRenderTextNoFindingsReportsSuppressions(t *testing.T) {
+	var buf bytes.Buffer
+	if err := renderText(&buf, &Result{Ignored: []Finding{{ID: "a"}, {ID: "b"}}}); err != nil {
+		t.Fatalf("renderText: %v", err)
+	}
+	want := "No dependency vulnerabilities found.\n(2 suppressed by allowlist)\n"
+	if buf.String() != want {
+		t.Errorf("expected %q, got %q", want, buf.String())
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("disk full") }
+
+func TestRenderReportReturnsWriteErrors(t *testing.T) {
+	err := renderReport(failingWriter{}, &bytes.Buffer{}, "json", sampleResult())
+	if err == nil || err.Error() != "disk full" {
+		t.Errorf("expected the write error, got %v", err)
 	}
 }
 

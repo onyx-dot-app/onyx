@@ -39,7 +39,7 @@ async function handle<T>(res: Response): Promise<T> {
   if (res.status === 204) {
     return undefined as T;
   }
-  return (await res.json()) as T;
+  return await res.json();
 }
 
 // ---------------------------------------------------------------------------

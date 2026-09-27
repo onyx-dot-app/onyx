@@ -63,7 +63,7 @@ def _generate_dummy_document(
     content: str | None = None,
     extra_metadata: dict | None = None,
 ) -> dict:
-    text = content if content else f"This is test document {document_id}"
+    text = content or f"This is test document {document_id}"
 
     metadata: dict = {"document_id": document_id}
     if extra_metadata:

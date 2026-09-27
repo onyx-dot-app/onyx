@@ -188,7 +188,11 @@ def _start_proxy(
         holder: dict[str, Any] = {}
         ready = threading.Event()
 
-        async def _amain(bind_port: int) -> None:
+        async def _amain(
+            bind_port: int,
+            holder: dict[str, Any] = holder,
+            ready: threading.Event = ready,
+        ) -> None:
             options = Options(
                 listen_host="127.0.0.1",
                 listen_port=bind_port,
@@ -207,7 +211,9 @@ def _start_proxy(
         )
         thread.start()
 
-        def _stop() -> None:
+        def _stop(
+            holder: dict[str, Any] = holder, thread: threading.Thread = thread
+        ) -> None:
             loop = holder.get("loop")
             master = holder.get("master")
             if loop is not None and master is not None:

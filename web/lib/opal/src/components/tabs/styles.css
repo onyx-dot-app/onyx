@@ -87,7 +87,7 @@
 /* ── Pill / underline indicator ─────────────────────────────────────────────── */
 
 .opal-tabs-pill-baseline {
-  @apply absolute bottom-0 left-0 h-px bg-border-02 pointer-events-none;
+  @apply absolute bottom-0 start-0 h-px bg-border-02 pointer-events-none;
 }
 
 .opal-tabs-pill-indicator {

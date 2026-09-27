@@ -3,11 +3,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import SUPPORTED_LANGUAGE_ENGLISH_NAMES, SupportedLanguage
 from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import (
+    ANSWER_COMPLETENESS_REMINDER,
+    ANSWER_COVERAGE_GUIDANCE,
     CITATION_REMINDER,
     DEFAULT_SYSTEM_PROMPT,
     FILE_REMINDER,
@@ -29,8 +32,10 @@ from onyx.prompts.tool_prompts import (
 from onyx.prompts.user_info import (
     BASIC_INFORMATION_PROMPT,
     ORGANIZATION_PROFILE_PROMPT,
+    QUERY_LANGUAGE_PROMPT,
     TEAM_INFORMATION_PROMPT,
     USER_INFORMATION_HEADER,
+    USER_LANGUAGE_PROMPT,
     USER_MEMORIES_PROMPT,
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
@@ -93,7 +98,7 @@ def calculate_reserved_tokens(
         include_all_guidance=True,
     )
 
-    custom_agent_prompt = persona_system_prompt if persona_system_prompt else ""
+    custom_agent_prompt = persona_system_prompt or ""
 
     reserved_token_count = token_counter(
         # Annoying that the dict has no attributes now
@@ -135,10 +140,11 @@ def build_reminder_message(
         reminder += "\n\n" + LAST_CYCLE_CITATION_REMINDER
     if include_citation_reminder:
         reminder += "\n\n" + CITATION_REMINDER
+        reminder += "\n\n" + ANSWER_COMPLETENESS_REMINDER
     if include_file_reminder:
         reminder += "\n\n" + FILE_REMINDER
     reminder = reminder.strip()
-    return reminder if reminder else None
+    return reminder or None
 
 
 def process_prompt_template(
@@ -159,12 +165,28 @@ def process_prompt_template(
     return processed_prompt
 
 
+def build_language_section(language: SupportedLanguage | None) -> str:
+    """The branch is decided here so the model never has to notice whether a
+    language was given. English is the column default and counts as no choice."""
+    if language is None or language is SupportedLanguage.EN:
+        return QUERY_LANGUAGE_PROMPT
+    return USER_LANGUAGE_PROMPT.format(
+        language=SUPPORTED_LANGUAGE_ENGLISH_NAMES[language]
+    )
+
+
+def with_language_section(prompt: str, language_section: str) -> str:
+    """Deep research builds its own system prompts, so the reply-language line that
+    build_system_prompt adds for chat is appended to the user-facing ones here."""
+    return f"{prompt}\n\n{language_section}"
+
+
 def _build_user_information_section(
     user_memory_context: UserMemoryContext | None,
     company_context: str | None,
 ) -> str:
-    """Build the complete '# User Information' section with all sub-sections
-    in the correct order: Basic Info → Team Info → Preferences → Memories."""
+    """'# User Information' sub-sections, in order: Basic Info → Organization Profile →
+    Team Info → Language → Preferences → Memories."""
     sections: list[str] = []
 
     if user_memory_context:
@@ -203,6 +225,14 @@ def _build_user_information_section(
             TEAM_INFORMATION_PROMPT.format(team_information=company_context.strip())
         )
 
+    # Language sits before Preferences so an explicit preference wins over the hint.
+    # Every prompt carries one line, so the model never infers whether a language was set.
+    sections.append(
+        build_language_section(
+            user_memory_context.user_info.language if user_memory_context else None
+        )
+    )
+
     if user_memory_context:
         ctx = user_memory_context
 
@@ -216,9 +246,6 @@ def _build_user_information_section(
             sections.append(
                 USER_MEMORIES_PROMPT.format(user_memories=formatted_memories)
             )
-
-    if not sections:
-        return ""
 
     return USER_INFORMATION_HEADER + "\n".join(sections)
 
@@ -253,6 +280,7 @@ def build_system_prompt(
     # This maintains backward compatibility and ensures citations are always enforced when needed
     if should_append_citation_guidance:
         system_prompt += REQUIRE_CITATION_GUIDANCE
+        system_prompt += ANSWER_COVERAGE_GUIDANCE
 
     if include_all_guidance:
         tool_sections = [

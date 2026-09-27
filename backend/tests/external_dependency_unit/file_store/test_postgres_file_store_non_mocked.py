@@ -11,6 +11,7 @@ from collections.abc import Generator
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
+import psycopg2
 import pytest
 from sqlalchemy.orm import Session
 
@@ -314,7 +315,7 @@ class TestPostgresBackedFileStore:
             assert new_oid != old_oid
 
             raw_conn = _get_raw_connection(session)
-            with pytest.raises(Exception):
+            with pytest.raises(psycopg2.Error):
                 _read_large_object(raw_conn, old_oid)
 
     # ── change_file_id ─────────────────────────────────────────────

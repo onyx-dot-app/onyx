@@ -1,4 +1,5 @@
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import type { ErrorResponseBody } from "@/lib/fetcher";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { toast } from "@opal/layouts";
 
 export async function setCCPairStatus(
@@ -19,7 +20,7 @@ export async function setCCPairStatus(
     );
 
     if (!response.ok) {
-      const { detail } = await response.json();
+      const { detail }: ErrorResponseBody = await response.json();
       toast.error(`Failed to update connector status - ${detail}`);
       return;
     }

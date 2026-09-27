@@ -48,7 +48,7 @@ def test_bitbucket_full_ids_subset_of_slim_ids(
         start=0,
         end=time.time(),
     ).documents
-    all_full_doc_ids: set[str] = set([doc.id for doc in docs])
+    all_full_doc_ids: set[str] = {doc.id for doc in docs}
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids: set[str] = set()

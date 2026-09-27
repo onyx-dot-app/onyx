@@ -1,0 +1,62 @@
+{
+  "aliases": {},
+  "models": {
+    "jamba-large": {
+      "attachment": false,
+      "cost": {
+        "input": 2,
+        "output": 8
+      },
+      "family": "jamba",
+      "limit": {
+        "context": 256000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Jamba Large",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "jamba-mini": {
+      "attachment": false,
+      "cost": {
+        "input": 0.2,
+        "output": 0.4
+      },
+      "family": "jamba",
+      "limit": {
+        "context": 256000,
+        "output": 4096
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Jamba Mini",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2026-01-01",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "ai21"
+  ]
+}

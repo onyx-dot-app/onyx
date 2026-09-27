@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import isEqual from "lodash/isEqual";
 import { Button, MessageCard, Modal } from "@opal/components";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
@@ -33,6 +34,8 @@ export default function ExternalAppSkillsStepModal({
   onClose,
   onSaved,
 }: ExternalAppSkillsStepModalProps) {
+  const t = useTranslations("craft.apps.skillsStep");
+  const tApps = useTranslations("craft.apps");
   const router = useRouter();
   const [selectedSkillIds, setSelectedSkillIds] =
     useSyncedAssociatedSkillIds(app);
@@ -120,7 +123,10 @@ export default function ExternalAppSkillsStepModal({
                 app.associated_skills.some(
                   (skill) => skill.name === draft.contents.name
                 )
-                  ? `App “${app.name}” already has an associated skill named “${draft.contents.name}”. Upload a skill with a different name.`
+                  ? tApps("errors.duplicateSkillName", {
+                      appName: app.name,
+                      skillName: draft.contents.name,
+                    })
                   : null
               }
               onContinue={(draft) =>
@@ -134,8 +140,8 @@ export default function ExternalAppSkillsStepModal({
         ) : (
           <>
             <Modal.Header
-              title={`Add skills to ${app.name}`}
-              description="Optional — associate existing skills or create one for this app."
+              title={t("title", { name: app.name })}
+              description={t("description")}
             />
             <Modal.Body>
               <div className="flex flex-col gap-3">
@@ -156,7 +162,7 @@ export default function ExternalAppSkillsStepModal({
                 {error && (
                   <MessageCard
                     variant="error"
-                    title="Couldn't save"
+                    title={t("errors.saveFailedTitle")}
                     description={error}
                   />
                 )}
@@ -169,13 +175,13 @@ export default function ExternalAppSkillsStepModal({
                   onClick={() => unsavedChanges.requestLeave(onClose)}
                   disabled={isSaving}
                 >
-                  Skip for now
+                  {t("skipButton")}
                 </Button>
                 <Button
                   disabled={isSaving || !isDirty}
                   onClick={() => void save()}
                 >
-                  {isSaving ? "Saving…" : "Save skills"}
+                  {isSaving ? t("savingButton") : t("saveButton")}
                 </Button>
               </div>
             </Modal.Footer>

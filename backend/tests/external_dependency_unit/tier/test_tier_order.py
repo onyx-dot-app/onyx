@@ -4,6 +4,7 @@ import pytest
 
 from ee.onyx.configs.license_enforcement_config import PATH_PREFIX_MIN_TIER
 from ee.onyx.server.middleware.tier_gate import _required_tier
+from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import TIER_RANK, tier_at_least
 
@@ -50,6 +51,10 @@ class TestTierGateLongestPrefix:
 
     def test_business_path_resolves(self) -> None:
         assert _required_tier("/admin/query-history/start-export") == Tier.BUSINESS
+
+    def test_gateway_requires_business_tier(self) -> None:
+        assert PATH_PREFIX_MIN_TIER[GATEWAY_PATH_PREFIX] is Tier.BUSINESS
+        assert _required_tier("/gateway/v1/models") is Tier.BUSINESS
 
     def test_enterprise_path_resolves(self) -> None:
         assert _required_tier("/admin/hooks/123") == Tier.ENTERPRISE

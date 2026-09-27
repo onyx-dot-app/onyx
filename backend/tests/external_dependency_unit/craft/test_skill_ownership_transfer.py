@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import AccountType, SkillSharePermission
-from onyx.db.models import Skill, Skill__User, User, UserRole
+from onyx.db.models import Skill, Skill__User, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import transfer_current_user_skill_ownership
@@ -52,8 +52,8 @@ def test_owner_transfers_to_active_user(
     db_session: Session,
     push_calls: list[set[object]],
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    new_owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    new_owner = make_user(db_session, standard_account=True)
     skill = _owned_skill(db_session, owner)
     share_skill_with_user(
         db_session,
@@ -83,8 +83,8 @@ def test_transfer_pushes_previous_and_new_owner_sandboxes(
     db_session: Session,
     push_calls: list[set[object]],
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    new_owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    new_owner = make_user(db_session, standard_account=True)
     make_sandbox(db_session, owner)
     make_sandbox(db_session, new_owner)
     skill = _owned_skill(db_session, owner)
@@ -108,9 +108,9 @@ def test_non_owner_sharee_cannot_transfer(
     permission: SkillSharePermission,
     push_calls: list[set[object]],
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    sharee = make_user(db_session, role=UserRole.BASIC)
-    target = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    sharee = make_user(db_session, standard_account=True)
+    target = make_user(db_session, standard_account=True)
     skill = _owned_skill(db_session, owner)
     share_skill_with_user(db_session, skill, sharee, permission)
 
@@ -133,8 +133,8 @@ def test_transfer_rejects_inactive_target(
     db_session: Session,
     push_calls: list[set[object]],
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    target = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    target = make_user(db_session, standard_account=True)
     target.is_active = False
     skill = _owned_skill(db_session, owner)
     db_session.flush()
@@ -158,10 +158,10 @@ def test_transfer_rejects_unsupported_target_account_type(
     db_session: Session,
     push_calls: list[set[object]],
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
     target = make_user(
         db_session,
-        role=UserRole.BASIC,
+        standard_account=True,
     )
     target.account_type = AccountType.BOT
     skill = _owned_skill(db_session, owner)
@@ -186,8 +186,8 @@ def test_admin_transfers_vacant_skill(
     db_session: Session,
     push_calls: list[set[object]],
 ) -> None:
-    admin = make_user(db_session, role=UserRole.ADMIN)
-    target = make_user(db_session, role=UserRole.BASIC)
+    admin = make_user(db_session, is_admin=True)
+    target = make_user(db_session, standard_account=True)
     skill = make_skill(db_session)
 
     response = transfer_current_user_skill_ownership(
@@ -208,9 +208,9 @@ def test_admin_cannot_transfer_owned_skill(
     db_session: Session,
     push_calls: list[set[object]],
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    admin = make_user(db_session, role=UserRole.ADMIN)
-    target = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    admin = make_user(db_session, is_admin=True)
+    target = make_user(db_session, standard_account=True)
     skill = _owned_skill(db_session, owner)
 
     with pytest.raises(OnyxError) as exc_info:
@@ -232,7 +232,7 @@ def test_transfer_rejects_missing_target(
     db_session: Session,
     push_calls: list[set[object]],
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
     skill = _owned_skill(db_session, owner)
 
     with pytest.raises(OnyxError) as exc_info:

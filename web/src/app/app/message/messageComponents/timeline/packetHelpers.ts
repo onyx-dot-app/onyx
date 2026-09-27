@@ -1,5 +1,6 @@
 import {
   isCodeInterpreterToolType,
+  MemoryToolPacket,
   Packet,
   PacketType,
   ToolCallArgumentDelta,
@@ -147,8 +148,11 @@ export const stepHasCollapsedStreamingContent = (
 export const isDeepResearchPlanPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START);
 
-// Check if packets belong to a memory tool
-export const isMemoryToolPackets = (packets: Packet[]): boolean =>
+// Check if packets belong to a memory tool. A step holds the packets of one
+// tool call, so a memory start/no-access packet identifies the whole step.
+export const isMemoryToolPackets = (
+  packets: Packet[]
+): packets is MemoryToolPacket[] =>
   packets.some(
     (p) =>
       p.obj.type === PacketType.MEMORY_TOOL_START ||

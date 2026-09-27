@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import isEqual from "lodash/isEqual";
 import { Divider } from "@opal/components";
 import ActionPolicyEditorModal, {
@@ -51,6 +52,8 @@ export default function ConfigureProviderModal({
   descriptor,
   existingApp,
 }: ConfigureProviderModalProps) {
+  const t = useTranslations("craft.apps.configureProvider");
+  const tApps = useTranslations("craft.apps");
   const router = useRouter();
   const upload = useSkillUploadModal();
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
@@ -76,8 +79,8 @@ export default function ConfigureProviderModal({
     : [
         {
           key: NAME_KEY,
-          label: "Name",
-          description: `A label for this connection. Use a distinct name when adding multiple instances of the same provider (e.g. "${descriptor.name} — Engineering").`,
+          label: t("fields.name.label"),
+          description: t("fields.name.description", { name: descriptor.name }),
           placeholder: descriptor.name,
           secret: false,
         },
@@ -171,7 +174,10 @@ export default function ConfigureProviderModal({
     return existingApp?.associated_skills.some(
       (skill) => skill.name === draft.contents.name
     )
-      ? `App “${existingApp.name}” already has an associated skill named “${draft.contents.name}”. Upload a skill with a different name.`
+      ? tApps("errors.duplicateSkillName", {
+          appName: existingApp.name,
+          skillName: draft.contents.name,
+        })
       : null;
   }
 
@@ -218,18 +224,14 @@ export default function ConfigureProviderModal({
       isAdditionalContentDirty={existingAssociationDirty}
       onClose={upload.isOpen ? upload.requestDismiss : onClose}
       title={
-        existingApp ? `Edit ${existingApp.name}` : `Add ${descriptor.name}`
+        existingApp
+          ? t("editTitle", { name: existingApp.name })
+          : t("addTitle", { name: descriptor.name })
       }
       description={
-        managed
-          ? "Provided by Onyx — configure what the agent may do."
-          : descriptor.setup_instructions
+        managed ? t("managedDescription") : descriptor.setup_instructions
       }
-      note={
-        managed
-          ? "This app is provided by Onyx — credentials are managed for you. Choose what the agent may do below. Users connect it from the Apps page."
-          : undefined
-      }
+      note={managed ? t("managedNote") : undefined}
       fields={fields}
       initialFieldValues={initialFieldValues}
       policyItems={descriptor.actions.map((action) => ({
@@ -239,8 +241,8 @@ export default function ConfigureProviderModal({
         defaultPolicy: action.default_policy,
       }))}
       initialPolicies={initialPolicies}
-      emptyPoliciesMessage="This provider has no actions to configure."
-      saveLabel={existingApp ? "Save" : "Add"}
+      emptyPoliciesMessage={t("emptyPolicies")}
+      saveLabel={existingApp ? t("saveButton") : t("addButton")}
       autoFocusFirstField={existingApp === null}
       allowPristineSave={existingApp === null}
       onSave={save}

@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse, Response
 
 DEFAULT_PORT = 8003
 MCP_PATH_PREFIX = "/mcp"
+USER_EMAIL_HEADER = "X-User-Email"
 
 
 # ---- pretend database --------------------------------------------------------
@@ -122,7 +123,10 @@ class RequireHeadersMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         for header in self.required_headers:
-            if not request.headers.get(header):
+            value = request.headers.get(header)
+            if header.lower() == USER_EMAIL_HEADER.lower():
+                print(f"{USER_EMAIL_HEADER}: {value!r}", flush=True)
+            if not value:
                 return JSONResponse(
                     {"error": f"Missing required header '{header}'"},
                     status_code=401,

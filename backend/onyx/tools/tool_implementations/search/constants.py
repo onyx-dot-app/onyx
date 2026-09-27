@@ -19,6 +19,10 @@ KEYWORD_QUERY_HYBRID_ALPHA = 0.2
 # Reciprocal Rank Fusion
 RRF_K_VALUE = 50
 
+# RRF ranks without reading content, so relevant documents often land just
+# below the selection cut; a wider budget lets the selection LLM rescue them.
+SELECTION_TOKEN_BUDGET_MULTIPLIER = 2
+
 # Context Expansion
 FULL_DOC_NUM_CHUNKS_AROUND = 5
 

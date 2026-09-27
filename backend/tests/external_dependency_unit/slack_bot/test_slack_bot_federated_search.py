@@ -1,6 +1,7 @@
 # NOTE: ruff and black disagree after applying this noqa, so we just set file-level.
 # ruff: noqa: ARG005
 import os
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
@@ -16,6 +17,7 @@ os.environ["DISABLE_MODEL_SERVER"] = "true"
 os.environ["MODEL_SERVER_HOST"] = "disabled"
 os.environ["MODEL_SERVER_PORT"] = "9000"
 
+import pytest
 from slack_sdk.errors import SlackApiError
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
@@ -120,10 +122,10 @@ def _create_mock_slack_client(
     )
 
     mock_users_info_response = Mock()
-    mock_users_info_response.__getitem__ = Mock(
-        side_effect=lambda key: {"ok": True}[key]
-    )
+    # A real SlackResponse carries the whole parsed body (including ``ok``) in
+    # ``.data``, and its subscript access reads from it.
     mock_users_info_response.data = {
+        "ok": True,
         "user": {
             "id": "U9876543210",
             "name": "testuser",
@@ -134,8 +136,11 @@ def _create_mock_slack_client(
                 "last_name": "User",
                 "email": "test@example.com",
             },
-        }
+        },
     }
+    mock_users_info_response.__getitem__ = Mock(
+        side_effect=mock_users_info_response.data.__getitem__
+    )
     mock_client.web_client.users_info = Mock(return_value=mock_users_info_response)
 
     mock_auth_test_response = {
@@ -229,6 +234,16 @@ def _create_mock_slack_client(
     )
 
     return mock_client
+
+
+@pytest.fixture(autouse=True)
+def _no_token_budgets() -> Generator[None, None, None]:
+    """Budgets left in the shared DB by other suites must not block these
+    answers; enforcement is covered in test_llm_entrypoint_budgets.py."""
+    with patch(
+        "onyx.onyxbot.slack.handlers.handle_regular_answer.check_token_rate_limits"
+    ):
+        yield
 
 
 class TestSlackBotFederatedSearch:

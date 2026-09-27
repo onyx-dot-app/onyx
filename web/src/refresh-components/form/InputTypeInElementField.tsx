@@ -1,6 +1,7 @@
 "use client";
 
 import { useField } from "formik";
+import { useTranslations } from "next-intl";
 import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgMinusCircle } from "@opal/icons";
@@ -23,6 +24,7 @@ export default function InputTypeInElementField({
   onBlur: onBlurProp,
   ...inputProps
 }: InputTypeInElementFieldProps) {
+  const t = useTranslations("common.inputElement");
   const [field, meta] = useField(name);
   const onChange = useOnChangeEvent(name, onChangeProp);
   const onBlur = useOnBlurEvent(name, onBlurProp);
@@ -32,7 +34,7 @@ export default function InputTypeInElementField({
     inputProps.variant === "disabled" || inputProps.variant === "readOnly";
 
   return (
-    <Section flexDirection="row" gap={0.25}>
+    <Section flexDirection="row" gap={1}>
       {/* Input */}
       <InputTypeIn
         {...inputProps}
@@ -54,7 +56,7 @@ export default function InputTypeInElementField({
         icon={SvgMinusCircle}
         prominence="tertiary"
         onClick={onRemove}
-        tooltip="Remove"
+        tooltip={t("removeButton.tooltip")}
       />
     </Section>
   );

@@ -12,7 +12,7 @@ typing error, not a silent cross-tenant write.
 # annotations like ``-> set[bytes]``.
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Mapping, Sequence
 from typing import Any, cast
 
 import redis
@@ -145,6 +145,27 @@ class TenantRedisClient:
             exist.
         """
         return cast("bytes | None", self._r.get(_prefix_key(self._prefix, name)))
+
+    def getdel(self, name: KeyArg) -> bytes | None:
+        """Atomically gets and deletes a tenant-prefixed key."""
+        return cast("bytes | None", self._r.getdel(_prefix_key(self._prefix, name)))
+
+    def mget(self, names: Sequence[KeyArg]) -> list[bytes | None]:
+        """Issues an MGET against tenant-prefixed keys.
+
+        Args:
+            names: The (unprefixed) keys to read, in the order to read them.
+                An empty sequence skips the round trip, since MGET rejects a
+                call with no keys.
+
+        Returns:
+            One entry per key, positionally aligned with *names*. A key that
+            does not exist reads as ``None``.
+        """
+        if not names:
+            return []
+        prefixed = [_prefix_key(self._prefix, n) for n in names]
+        return cast("list[bytes | None]", self._r.mget(prefixed))
 
     def set(
         self,
@@ -702,7 +723,7 @@ class TenantRedisClient:
             prefixed_keys = _prefix_key(self._prefix, keys)
         else:
             prefixed_keys = [_prefix_key(self._prefix, k) for k in keys]
-        method = getattr(self._r, method_name)
+        method = getattr(self._r, method_name)  # ods: ignore[getattr]
         result = method(prefixed_keys, timeout=timeout)
         if result is None:
             return None

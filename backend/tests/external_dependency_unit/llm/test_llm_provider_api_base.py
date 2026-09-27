@@ -22,7 +22,6 @@ from onyx.db.llm import (
     remove_llm_provider,
     upsert_llm_provider,
 )
-from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
@@ -70,7 +69,6 @@ def _cleanup_provider(db_session: Session, name: str) -> None:
 def _create_mock_admin() -> MagicMock:
     """Create a mock admin user for testing."""
     mock_admin = MagicMock()
-    mock_admin.role = UserRole.ADMIN
     return mock_admin
 
 
@@ -610,7 +608,7 @@ def test_upload_with_custom_config_then_change(
             # Check inside the database and check that custom_config is the same as the original
             db_provider = fetch_existing_llm_provider(name=name, db_session=db_session)
             if not db_provider:
-                assert False, "Provider not found in the database"
+                raise AssertionError("Provider not found in the database")
 
             assert db_provider.custom_config == custom_config, (
                 f"Expected custom_config {custom_config}, but got {db_provider.custom_config}"
@@ -822,7 +820,9 @@ def test_vertex_workload_identity_provider_create(
             )
 
         assert len(captured_llms) == 1
-        model_kwargs = getattr(captured_llms[0], "_model_kwargs", {})
+        model_kwargs = getattr(  # ods: ignore[getattr]
+            captured_llms[0], "_model_kwargs", {}
+        )
         assert "vertex_credentials" not in model_kwargs
         assert model_kwargs.get("vertex_project") == "my-gcp-project"
         assert model_kwargs.get("vertex_location") == "us-central1"
@@ -920,7 +920,9 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
             )
 
         assert len(captured_llms) == 1
-        model_kwargs = getattr(captured_llms[0], "_model_kwargs", {})
+        model_kwargs = getattr(  # ods: ignore[getattr]
+            captured_llms[0], "_model_kwargs", {}
+        )
         assert (
             model_kwargs.get("vertex_credentials")
             == original_custom_config["vertex_credentials"]

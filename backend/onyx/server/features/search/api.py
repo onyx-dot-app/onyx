@@ -16,10 +16,9 @@ from typing import cast
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.chat.emitter import NullEmitter
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -36,6 +35,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm, get_llm_for_persona, llm_from_provider
+from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     SearchRequest,
     SearchResponse,
@@ -43,6 +43,7 @@ from onyx.server.features.search.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
@@ -54,12 +55,30 @@ from shared_configs.contextvars import get_current_tenant_id
 router = APIRouter(prefix="/search")
 
 
-@router.post("", dependencies=[Depends(require_vector_db)])
+@router.post(
+    "",
+    # Budgets run before check_api_key_usage so rejected calls aren't counted.
+    dependencies=[
+        Depends(require_vector_db),
+        Depends(check_token_rate_limits),
+        Depends(check_api_key_usage),
+    ],
+    tags=PUBLIC_API_TAGS,
+)
 def search(
     request: SearchRequest,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchResponse:
+    """
+    Search the Onyx index and get back ranked document sections.
+
+    Runs the same multi-stage retrieval as the Search action in chat — query
+    expansion, hybrid retrieval, reranking and section merging — and returns the
+    ranked sections without generating an answer. Results are ordered most
+    relevant first and are always filtered by the calling user's document
+    permissions.
+    """
     # 1. Load persona
     persona = None
     if request.persona_id is not None:
@@ -100,7 +119,7 @@ def search(
             provider_model,
             user_group_ids,
             persona,
-            user.role == UserRole.ADMIN,
+            has_global_permission(user, Permission.MANAGE_LLMS),
         ):
             raise OnyxError(OnyxErrorCode.UNAUTHORIZED)
 
@@ -162,7 +181,6 @@ def search(
         user_selected_filters=base_filters,
         project_id_filter=None,
         persona_id_filter=None,
-        bypass_acl=False,
         slack_context=None,
         enable_slack_search=True,
         auto_detect_filters=load_settings().auto_detect_search_filters is not False,

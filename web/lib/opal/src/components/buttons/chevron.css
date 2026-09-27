@@ -1,8 +1,8 @@
-.opal-button-chevron {
+.opal-chevron {
   transition: rotate 200ms ease;
 }
 
-.interactive[data-interaction="hover"] .opal-button-chevron,
-.interactive[data-interaction="active"] .opal-button-chevron {
+.interactive[data-interaction="hover"] .opal-chevron,
+.interactive[data-interaction="active"] .opal-chevron {
   rotate: -180deg;
 }

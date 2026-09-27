@@ -242,7 +242,7 @@ class DynamicTenantScheduler(PersistentScheduler):
     ) -> bool:
         """Compare schedules by task name only to determine if an update is needed.
         True if equivalent, False if not."""
-        current_tasks = set(name for name, _ in schedule1)
+        current_tasks = {name for name, _ in schedule1}
         new_tasks = set(schedule2.keys())
         return current_tasks == new_tasks
 

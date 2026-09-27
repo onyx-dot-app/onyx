@@ -161,7 +161,11 @@ class HighspotClient:
                 if isinstance(error_data, dict):
                     error_msg = error_data.get("message", str(e))
             except (ValueError, KeyError):
-                pass
+                # Highspot sends some errors as plain text (e.g. the licensing
+                # 403). Keep the body so the reason reaches the logs.
+                body = e.response.text.strip()
+                if body:
+                    error_msg = f"{e} - {body}"
 
             if status_code == 401:
                 raise HighspotAuthenticationError(f"Authentication failed: {error_msg}")

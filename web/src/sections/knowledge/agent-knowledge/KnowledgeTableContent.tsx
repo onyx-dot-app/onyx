@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { getSourceMetadata } from "@/lib/sources";
+import { useSettings } from "@/lib/settings/hooks";
 import type { AgentAttachedDocument } from "@/lib/agents/types";
 import type { ProjectFile } from "@/lib/projects/types";
 import type {
@@ -34,6 +36,7 @@ export function DocumentSetsTableContent({
   selectedDocumentSetIds,
   onDocumentSetToggle,
 }: DocumentSetsTableContentProps) {
+  const t = useTranslations("knowledge");
   const [searchValue, setSearchValue] = useState("");
 
   const filteredDocumentSets = useMemo(() => {
@@ -45,7 +48,7 @@ export function DocumentSetsTableContent({
   const columns: KnowledgeTableColumn<DocumentSetSummary>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("table.columns.name.header"),
       sortable: true,
       render: (ds) => (
         <Content
@@ -58,7 +61,7 @@ export function DocumentSetsTableContent({
     },
     {
       key: "sources",
-      header: "Sources",
+      header: t("table.columns.sources.header"),
       width: 8,
       render: (ds) => (
         <TableLayouts.SourceIconsRow>
@@ -87,8 +90,8 @@ export function DocumentSetsTableContent({
       onToggleItem={(id) => onDocumentSetToggle(id as number)}
       searchValue={searchValue}
       onSearchChange={setSearchValue}
-      searchPlaceholder="Filter document sets..."
-      emptyMessage="No document sets available."
+      searchPlaceholder={t("documentSets.filter.placeholder")}
+      emptyMessage={t("documentSets.empty.description")}
       ariaLabelPrefix="document-set-row"
     />
   );
@@ -124,7 +127,7 @@ export function SourcesTableContent({
   initialNodeId,
 }: SourcesTableContentProps) {
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="stretch">
+    <GeneralLayouts.Section gap={2} alignItems="stretch">
       <SourceHierarchyBrowser
         source={source}
         selectedDocumentIds={selectedDocumentIds}
@@ -158,6 +161,9 @@ export function RecentFilesTableContent({
   onUploadChange,
   hasProcessingFiles,
 }: RecentFilesTableContentProps) {
+  const t = useTranslations("knowledge");
+  const { appName } = useSettings();
+  const locale = useLocale();
   const [searchValue, setSearchValue] = useState("");
 
   const filteredFiles = useMemo(() => {
@@ -169,7 +175,7 @@ export function RecentFilesTableContent({
   const columns: KnowledgeTableColumn<ProjectFile>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("table.columns.name.header"),
       sortable: true,
       render: (file) => (
         <Content
@@ -182,12 +188,12 @@ export function RecentFilesTableContent({
     },
     {
       key: "lastUpdated",
-      header: "Last Updated",
+      header: t("table.columns.lastUpdated.header"),
       sortable: true,
       width: 8,
       render: (file) => (
         <Text text03 secondaryBody>
-          {timeAgo(file.last_accessed_at || file.created_at)}
+          {timeAgo(file.last_accessed_at || file.created_at, locale)}
         </Text>
       ),
     },
@@ -196,7 +202,7 @@ export function RecentFilesTableContent({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="stretch">
+    <GeneralLayouts.Section gap={2} alignItems="stretch">
       <TableLayouts.HiddenInput
         inputRef={fileInputRef}
         type="file"
@@ -212,7 +218,7 @@ export function RecentFilesTableContent({
         onToggleItem={(id) => onToggleFile(id as string)}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Filter files..."
+        searchPlaceholder={t("recentFiles.filter.placeholder")}
         ariaLabelPrefix="user-file-row"
         headerActions={
           <Button
@@ -220,18 +226,16 @@ export function RecentFilesTableContent({
             icon={SvgPlusCircle}
             onClick={() => fileInputRef.current?.click()}
           >
-            Add File
+            {t("recentFiles.addFile.label")}
           </Button>
         }
-        emptyMessage="No files available. Upload files to get started."
+        emptyMessage={t("recentFiles.empty.description")}
       />
 
       {hasProcessingFiles && (
         <GeneralLayouts.Section height="auto" alignItems="start">
           <Text as="p" text03 secondaryBody>
-            Onyx is still processing your uploaded files. You can create the
-            agent now, but it will not have access to all files until processing
-            completes.
+            {t("recentFiles.processing.description", { appName })}
           </Text>
         </GeneralLayouts.Section>
       )}

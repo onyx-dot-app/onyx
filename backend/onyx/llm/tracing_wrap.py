@@ -88,7 +88,7 @@ def _validate_prompt_param(fn: Callable[..., Any]) -> inspect.Signature:
         p.kind is inspect.Parameter.VAR_POSITIONAL for p in params
     )
     if not (has_prompt or accepts_var_keyword or accepts_var_positional):
-        name = getattr(fn, "__qualname__", repr(fn))
+        name = getattr(fn, "__qualname__", repr(fn))  # ods: ignore[getattr]
         raise TypeError(
             f"Cannot auto-trace {name}: signature cannot accept a "
             f"'{_PROMPT_PARAM_NAME}' argument. LLM.invoke / LLM.stream "
@@ -126,7 +126,7 @@ def wrap_invoke(
     invoke_fn: Callable[..., "ModelResponse"],
 ) -> Callable[..., "ModelResponse"]:
     """Wrap a concrete ``LLM.invoke`` implementation with a fallback generation_span."""
-    if getattr(invoke_fn, _ALREADY_WRAPPED_ATTR, False):
+    if getattr(invoke_fn, _ALREADY_WRAPPED_ATTR, False):  # ods: ignore[getattr]
         return invoke_fn
 
     sig = _validate_prompt_param(invoke_fn)
@@ -179,7 +179,7 @@ def wrap_stream(
     Braintrust shows one complete tool-call entry per invocation rather than
     fragmented duplicates.
     """
-    if getattr(stream_fn, _ALREADY_WRAPPED_ATTR, False):
+    if getattr(stream_fn, _ALREADY_WRAPPED_ATTR, False):  # ods: ignore[getattr]
         return stream_fn
 
     sig = _validate_prompt_param(stream_fn)

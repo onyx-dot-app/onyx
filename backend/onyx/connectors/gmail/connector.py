@@ -113,7 +113,7 @@ def _clean_email_and_extract_name(email: str) -> tuple[str, str | None]:
         # Handle format: "Display Name <email@domain.com>"
         display_name = email[: email.find("<")].strip()
         email_address = email[email.find("<") + 1 : email.find(">")].strip()
-        return email_address, display_name if display_name else None
+        return email_address, display_name or None
     else:
         # Handle plain email address
         return email.strip(), None
@@ -427,15 +427,16 @@ class GmailConnector(
 
         try:
             admin_service = get_admin_service(self.creds, self.primary_admin_email)
-            emails = []
-            for user in execute_paginated_retrieval(
-                retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
-                list_key="users",
-                fields=USER_FIELDS,
-                domain=self.google_domain,
-            ):
-                if email := user.get("primaryEmail"):
-                    emails.append(email)
+            emails = [
+                email
+                for user in execute_paginated_retrieval(
+                    retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
+                    list_key="users",
+                    fields=USER_FIELDS,
+                    domain=self.google_domain,
+                )
+                if (email := user.get("primaryEmail"))
+            ]
             return emails
 
         except HttpError as e:

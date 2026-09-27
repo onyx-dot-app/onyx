@@ -131,10 +131,11 @@ def filter_tenants_by_range(
     filtered_tenant_schemas = sorted_tenant_schemas[start_idx:end_idx]
 
     # Combine with non-tenant schemas and preserve original order
-    filtered_tenants = []
-    for tenant_id in tenant_ids:
-        if tenant_id in filtered_tenant_schemas or tenant_id in non_tenant_schemas:
-            filtered_tenants.append(tenant_id)
+    filtered_tenants = [
+        tenant_id
+        for tenant_id in tenant_ids
+        if tenant_id in filtered_tenant_schemas or tenant_id in non_tenant_schemas
+    ]
 
     return filtered_tenants
 

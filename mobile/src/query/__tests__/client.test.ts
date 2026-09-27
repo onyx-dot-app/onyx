@@ -57,4 +57,14 @@ describe("dehydrateOptions PII exclusion", () => {
   it("persists non-PII success queries", () => {
     expect(wouldPersist(QUERY_KEYS.authType(url))).toBe(true);
   });
+
+  it("persists the source picker's inputs so a send right after launch isn't a guess", () => {
+    /*
+     * Connector *types* and per-agent tool ids — no content, no identity. Excluding them is what
+     * left every cold launch guessing at the user's saved source and tool choices.
+     */
+    expect(wouldPersist(QUERY_KEYS.connectorSources(url))).toBe(true);
+    expect(wouldPersist(QUERY_KEYS.federatedSources(url))).toBe(true);
+    expect(wouldPersist(QUERY_KEYS.agentPreferences(url))).toBe(true);
+  });
 });

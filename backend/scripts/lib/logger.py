@@ -24,11 +24,15 @@ class CIFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         msg = record.getMessage()
-        metadata = getattr(record, "extra", {})
+        metadata = getattr(record, "extra", {})  # ods: ignore[getattr]
 
         # Use standard extra fields as GitHub Actions metadata
         meta_fields = ["file", "line", "col", "endLine", "endColumn"]
-        metadata = {k: getattr(record, k) for k in meta_fields if hasattr(record, k)}
+        metadata = {
+            k: getattr(record, k)  # ods: ignore[getattr]
+            for k in meta_fields
+            if hasattr(record, k)
+        }
 
         if IS_CI and record.levelno >= logging.WARNING:
             command = "error" if record.levelno >= logging.ERROR else "warning"

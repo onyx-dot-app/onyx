@@ -537,11 +537,11 @@ class ConfluenceConnector(
         try:
             # Extract basic page information
             page_id = _get_page_id(page)
-            page_title = page["title"]
-            logger.info("Converting page %s to document", page_title)
             page_url = build_confluence_document_id(
                 self.wiki_base, page["_links"]["webui"], self.is_cloud
             )
+            page_title = page["title"]
+            logger.info("Converting page %s to document", page_title)
 
             # Get the page content
             page_content = extract_text_from_confluence_html(
@@ -570,8 +570,10 @@ class ConfluenceConnector(
             # Extract labels
             labels = []
             if "metadata" in page and "labels" in page["metadata"]:
-                for label in page["metadata"]["labels"].get("results", []):
-                    labels.append(label.get("name", ""))
+                labels.extend(
+                    label.get("name", "")
+                    for label in page["metadata"]["labels"].get("results", [])
+                )
             if labels:
                 metadata["labels"] = labels
 
@@ -597,7 +599,7 @@ class ConfluenceConnector(
                 metadata=metadata,
                 doc_updated_at=datetime_from_string(page["version"]["when"]),
                 doc_created_at=datetime_from_string(page["history"]["createdDate"]),
-                primary_owners=primary_owners if primary_owners else None,
+                primary_owners=primary_owners or None,
                 parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             )
         except Exception as e:
@@ -606,7 +608,11 @@ class ConfluenceConnector(
                 raise
             return ConnectorFailure(
                 failed_document=DocumentFailure(
-                    document_id=page_id,
+                    # Must equal the Document.id the success path builds
+                    # (page_url), because consumers match failures to documents
+                    # by this value. page_id is a last resort so the id is never
+                    # empty; batched_doc_ids drops failures with a falsy id.
+                    document_id=page_url or page_id,
                     document_link=page_url,
                 ),
                 failure_message=f"Error converting page {page.get('id', 'unknown')}: {e}",
@@ -722,10 +728,12 @@ class ConfluenceConnector(
                         )
                     labels: list[str] = []
                     if "metadata" in attachment and "labels" in attachment["metadata"]:
-                        for label in attachment["metadata"]["labels"].get(
-                            "results", []
-                        ):
-                            labels.append(label.get("name", ""))
+                        labels.extend(
+                            label.get("name", "")
+                            for label in attachment["metadata"]["labels"].get(
+                                "results", []
+                            )
+                        )
                     if labels:
                         attachment_metadata["labels"] = labels
                     page_url = page_url or build_confluence_document_id(
@@ -1187,8 +1195,7 @@ class ConfluenceConnector(
             )
 
         # Yield space hierarchy nodes first
-        for node in self._yield_space_hierarchy_nodes():
-            doc_metadata_list.append(node)
+        doc_metadata_list.extend(self._yield_space_hierarchy_nodes())
 
         # Per-page mode only: collapse shared ancestors to one GET each.
         ancestor_restrictions_cache: dict[str, dict[str, Any] | None] = {}
@@ -1223,8 +1230,7 @@ class ConfluenceConnector(
             limit=_SLIM_DOC_BATCH_SIZE,
         ):
             # Yield ancestor hierarchy nodes for this page
-            for node in self._yield_ancestor_hierarchy_nodes(page):
-                doc_metadata_list.append(node)
+            doc_metadata_list.extend(self._yield_ancestor_hierarchy_nodes(page))
 
             page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")

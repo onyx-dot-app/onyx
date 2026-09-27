@@ -1,7 +1,5 @@
 import os
 
-PROMPTS_YAML = "./onyx/seeding/prompts.yaml"
-PERSONAS_YAML = "./onyx/seeding/personas.yaml"
 NUM_RETURNED_HITS = 50
 
 # May be less depending on model
@@ -18,8 +16,6 @@ MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
 DOC_TIME_DECAY = float(
     os.environ.get("DOC_TIME_DECAY") or 0.5  # Hits limit at 2 years by default
 )
-BASE_RECENCY_DECAY = 0.5
-FAVOR_RECENT_DECAY_MULTIPLIER = 2.0
 # For the highest matching base size chunk, how many chunks above and below do we pull in by default
 # Note this is not in any of the deployment configs yet
 # Currently only applies to search flow not chat
@@ -30,6 +26,10 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Default total timeout for LLM.invoke. It reuses LLM_SOCKET_READ_TIMEOUT so that
+# existing operator tuning still applies: on a plain request, the single socket
+# read was already the whole call.
+LLM_INVOKE_TIMEOUT_S = LLM_SOCKET_READ_TIMEOUT
 # Total per-call timeout for image summarization. Unlike LLM_SOCKET_READ_TIMEOUT
 # (per-packet gap), this bounds the whole call so a keepalive-only stream can't
 # wedge a docprocessing thread. A generous backstop against hangs.

@@ -35,6 +35,7 @@ import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 import { FullWidthChatProvider } from "@/providers/FullWidthChatProvider";
+import { IncognitoProvider } from "@/providers/IncognitoProvider";
 import { UnsavedChangesNavigationProvider } from "@/providers/UnsavedChangesNavigationProvider";
 
 interface SidebarPersistenceProviderProps {
@@ -82,17 +83,19 @@ export default function AppProvider({ children }: AppProviderProps) {
               <SidebarPersistenceProvider>
                 <QueryControllerProvider>
                   <FullWidthChatProvider>
-                    <UnsavedChangesNavigationProvider>
-                      <ToastProvider
-                        errorAppendix={
-                          NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK
-                            ? "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
-                            : undefined
-                        }
-                      >
-                        {children}
-                      </ToastProvider>
-                    </UnsavedChangesNavigationProvider>
+                    <IncognitoProvider>
+                      <UnsavedChangesNavigationProvider>
+                        <ToastProvider
+                          errorAppendix={
+                            NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK
+                              ? "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
+                              : undefined
+                          }
+                        >
+                          {children}
+                        </ToastProvider>
+                      </UnsavedChangesNavigationProvider>
+                    </IncognitoProvider>
                   </FullWidthChatProvider>
                 </QueryControllerProvider>
               </SidebarPersistenceProvider>

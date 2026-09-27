@@ -1,47 +1,100 @@
-from simple_salesforce import Salesforce
+from datetime import datetime
+from threading import RLock
+from weakref import ReferenceType, ref
+
+from cachetools import TTLCache
 from simple_salesforce.format import format_soql
 from sqlalchemy.orm import Session
 
-from ee.onyx.external_permissions.utils import credential_json
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import build_db_credentials_provider
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.salesforce.auth import build_salesforce_client
+from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.db.document import get_cc_pairs_for_document
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# Salesforce client per tenant, built from the first cc_pair of the first censored
-# doc. Keyed by tenant_id so one tenant's org + credentials are never reused to
-# resolve another tenant's access.
-_TENANT_SALESFORCE_CLIENT: dict[str, Salesforce] = {}
+_CACHE_TTL_SECONDS = 3600
+_SALESFORCE_CLIENT_CACHE_MAX_SIZE = 256
+_SALESFORCE_USER_ID_CACHE_MAX_SIZE = 10_000
+_SALESFORCE_CACHE_LOCK = RLock()
+_SALESFORCE_CLIENT_CACHE: TTLCache[tuple[str, int], tuple[datetime, OnyxSalesforce]] = (
+    TTLCache(maxsize=_SALESFORCE_CLIENT_CACHE_MAX_SIZE, ttl=_CACHE_TTL_SECONDS)
+)
+_CACHED_SF_EMAIL_TO_ID_MAP: TTLCache[
+    tuple[str, ReferenceType[OnyxSalesforce], str], str
+] = TTLCache(maxsize=_SALESFORCE_USER_ID_CACHE_MAX_SIZE, ttl=_CACHE_TTL_SECONDS)
+
+
+def _clear_cached_user_ids_for_client(
+    tenant_id: str, sf_client: OnyxSalesforce
+) -> None:
+    with _SALESFORCE_CACHE_LOCK:
+        stale_keys = [
+            key
+            for key in _CACHED_SF_EMAIL_TO_ID_MAP
+            if key[0] == tenant_id and key[1]() is sf_client
+        ]
+        for key in stale_keys:
+            _CACHED_SF_EMAIL_TO_ID_MAP.pop(key, None)
+
+
+def _get_cached_salesforce_client(
+    cache_key: tuple[str, int], credential_updated_at: datetime
+) -> OnyxSalesforce | None:
+    with _SALESFORCE_CACHE_LOCK:
+        cached = _SALESFORCE_CLIENT_CACHE.get(cache_key)
+    if cached is None or cached[0] != credential_updated_at:
+        return None
+    return cached[1]
+
+
+def _cache_salesforce_client(
+    cache_key: tuple[str, int],
+    credential_updated_at: datetime,
+    client: OnyxSalesforce,
+) -> OnyxSalesforce:
+    with _SALESFORCE_CACHE_LOCK:
+        cached = _SALESFORCE_CLIENT_CACHE.get(cache_key)
+        if cached is not None and cached[0] >= credential_updated_at:
+            selected_client = cached[1]
+        else:
+            if cached is not None:
+                _clear_cached_user_ids_for_client(cache_key[0], cached[1])
+            _SALESFORCE_CLIENT_CACHE[cache_key] = (credential_updated_at, client)
+            selected_client = client
+
+    if selected_client is not client:
+        client.session.close()
+    return selected_client
 
 
 def get_any_salesforce_client_for_doc_id(
     db_session: Session, doc_id: str
-) -> Salesforce:
-    """
-    Return a cached Salesforce client for the current tenant, building it from the
-    first cc_pair of the given doc on first use. Cached to avoid a Postgres lookup
-    and a fresh client per query.
-
-    Still imperfect when a tenant has multiple Salesforce cc_pairs with different
-    credentials: we use the first, which may lack the permissions the query needs.
-    """
-    tenant_id = get_current_tenant_id()
-    client = _TENANT_SALESFORCE_CLIENT.get(tenant_id)
-    if client is None:
-        cc_pairs = get_cc_pairs_for_document(db_session, doc_id)
-        first_cc_pair = cc_pairs[0]
-        creds = credential_json(first_cc_pair)
-        client = Salesforce(
-            username=creds["sf_username"],
-            password=creds["sf_password"],
-            security_token=creds["sf_security_token"],
+) -> OnyxSalesforce:
+    """Return the client for the document's first connector credential pair."""
+    cc_pairs = get_cc_pairs_for_document(db_session, doc_id)
+    if not cc_pairs:
+        raise ConnectorValidationError(
+            f"No connector credential pair found for Salesforce document: {doc_id}"
         )
-        _TENANT_SALESFORCE_CLIENT[tenant_id] = client
-    return client
+
+    credential = cc_pairs[0].credential
+    tenant_id = get_current_tenant_id()
+    cache_key = (tenant_id, credential.id)
+    cached_client = _get_cached_salesforce_client(cache_key, credential.time_updated)
+    if cached_client is not None:
+        return cached_client
+
+    provider = build_db_credentials_provider(DocumentSource.SALESFORCE, credential.id)
+    client = build_salesforce_client(provider)
+    return _cache_salesforce_client(cache_key, credential.time_updated, client)
 
 
-def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | None:
+def _query_salesforce_user_id(sf_client: OnyxSalesforce, user_email: str) -> str | None:
     query = format_soql(
         "SELECT Id FROM User WHERE Username = {email} AND IsActive = true",
         email=user_email,
@@ -50,7 +103,7 @@ def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | N
     if len(result["records"]) > 0:
         return result["records"][0]["Id"]
 
-    # try emails
+    # Salesforce usernames and emails can differ.
     query = format_soql(
         "SELECT Id FROM User WHERE Email = {email} AND IsActive = true",
         email=user_email,
@@ -62,22 +115,14 @@ def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | N
     return None
 
 
-# (tenant_id, user_email) -> Salesforce user_id. Keyed by tenant so a shared email
-# never resolves to another tenant's Salesforce user. Only real (non-None) ids are
-# stored; unknown emails are re-queried each call.
-_CACHED_SF_EMAIL_TO_ID_MAP: dict[tuple[str, str], str] = {}
-
-
 def get_salesforce_user_id_from_email(
-    sf_client: Salesforce,
+    sf_client: OnyxSalesforce,
     user_email: str,
 ) -> str | None:
-    """
-    Resolve a Salesforce user_id for an email, cached per tenant since Salesforce
-    user ids are stable. A miss queries Salesforce (~0.1-0.3s); a hit is ~instant.
-    """
-    cache_key = (get_current_tenant_id(), user_email)
-    cached_user_id = _CACHED_SF_EMAIL_TO_ID_MAP.get(cache_key)
+    """Resolve a Salesforce user ID, cached by tenant and client identity."""
+    cache_key = (get_current_tenant_id(), ref(sf_client), user_email)
+    with _SALESFORCE_CACHE_LOCK:
+        cached_user_id = _CACHED_SF_EMAIL_TO_ID_MAP.get(cache_key)
     if cached_user_id is not None:
         return cached_user_id
 
@@ -85,7 +130,8 @@ def get_salesforce_user_id_from_email(
     if user_id is None:
         return None
 
-    _CACHED_SF_EMAIL_TO_ID_MAP[cache_key] = user_id
+    with _SALESFORCE_CACHE_LOCK:
+        _CACHED_SF_EMAIL_TO_ID_MAP[cache_key] = user_id
     return user_id
 
 
@@ -93,18 +139,11 @@ _MAX_RECORD_IDS_PER_QUERY = 200
 
 
 def get_objects_access_for_user_id(
-    salesforce_client: Salesforce,
+    salesforce_client: OnyxSalesforce,
     user_id: str,
     record_ids: list[str],
 ) -> dict[str, bool]:
-    """
-    Salesforce has a limit of 200 record ids per query. So we just truncate
-    the list of record ids to 200. We only ever retrieve 50 chunks at a time
-    so this should be fine (unlikely that we retrieve all 50 chunks contain
-    4 unique objects).
-    If we decide this isn't acceptable we can use multiple queries but they
-    should be in parallel so query time doesn't get too long.
-    """
+    """Return access for up to Salesforce's 200 record ID query limit."""
     truncated_record_ids = record_ids[:_MAX_RECORD_IDS_PER_QUERY]
     # SOQL `IN ()` with an empty list is a malformed query, so short-circuit.
     if not truncated_record_ids:

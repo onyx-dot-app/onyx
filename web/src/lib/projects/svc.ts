@@ -34,12 +34,17 @@ export async function createProject(name: string): Promise<Project> {
 export async function uploadFiles(
   files: File[],
   projectId?: number | null,
-  tempIdMap?: Map<string, string>
+  tempIdMap?: Map<string, string>,
+  incognitoSessionId?: string | null
 ): Promise<CategorizedFiles> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (projectId !== undefined && projectId !== null) {
     formData.append("project_id", String(projectId));
+  }
+  // Names the session before it exists, so the server owns the privacy call.
+  if (incognitoSessionId) {
+    formData.append("incognito_session_id", incognitoSessionId);
   }
   if (tempIdMap !== undefined && tempIdMap !== null) {
     formData.append(
@@ -117,7 +122,7 @@ export async function getProjectInstructions(
   if (!response.ok) {
     handleRequestError("Fetch project instructions", response);
   }
-  const data = (await response.json()) as { instructions: string | null };
+  const data: { instructions: string | null } = await response.json();
   return data.instructions ?? null;
 }
 
@@ -133,7 +138,7 @@ export async function upsertProjectInstructions(
   if (!response.ok) {
     handleRequestError("Update project instructions", response);
   }
-  const data = (await response.json()) as { instructions: string | null };
+  const data: { instructions: string | null } = await response.json();
   return data.instructions ?? null;
 }
 
@@ -191,7 +196,7 @@ export async function deleteUserFile(
   if (!response.ok) {
     handleRequestError("Delete file", response);
   }
-  return (await response.json()) as UserFileDeleteResult;
+  return await response.json();
 }
 
 export async function getUserFileStatuses(
@@ -219,7 +224,7 @@ export async function getSessionProjectTokenCount(
   if (!response.ok) {
     return 0;
   }
-  const data = (await response.json()) as { total_tokens: number };
+  const data: { total_tokens: number } = await response.json();
   return data.total_tokens ?? 0;
 }
 
@@ -242,7 +247,7 @@ export async function getProjectTokenCount(projectId: number): Promise<number> {
   if (!response.ok) {
     return 0;
   }
-  const data = (await response.json()) as { total_tokens: number };
+  const data: { total_tokens: number } = await response.json();
   return data.total_tokens ?? 0;
 }
 
@@ -255,8 +260,9 @@ export async function getMaxSelectedDocumentTokens(
   if (!response.ok) {
     return null;
   }
-  const json = await response.json();
-  return (json?.max_tokens as number) ?? null;
+  // Mirrors `MaxSelectedDocumentTokens` in chat_backend.py.
+  const json: { max_tokens: number } = await response.json();
+  return json?.max_tokens ?? null;
 }
 
 export async function moveChatSession(

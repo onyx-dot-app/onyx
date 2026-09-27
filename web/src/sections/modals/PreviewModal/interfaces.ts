@@ -1,5 +1,11 @@
 import React from "react";
+import type { useTranslations } from "next-intl";
 import type { ModalContentProps } from "@opal/components";
+
+/** Variants are plain objects, so the modal threads its translator to them. */
+export type PreviewTranslate = ReturnType<
+  typeof useTranslations<"chat.modals.preview">
+>;
 
 export interface PreviewContext {
   fileContent: string;
@@ -11,6 +17,7 @@ export interface PreviewContext {
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  t: PreviewTranslate;
 }
 
 export interface PreviewVariant extends Required<

@@ -20,7 +20,7 @@ User lifecycle tests live in test_scim_users.py.
 import httpx
 import pytest
 
-from onyx.auth.schemas import UserRole
+from onyx.db.enums import Permission
 from tests.integration.common_utils.constants import (
     ADMIN_USER_NAME,
     API_SERVER_URL,
@@ -34,11 +34,18 @@ from tests.integration.common_utils.managers.user import (
     UserManager,
     build_email,
 )
+from tests.integration.common_utils.managers.user_group import UserGroupManager
+from tests.integration.common_utils.permission_state import (
+    effective_permissions,
+    is_group_manager,
+    managed_group_ids,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 SCIM_GROUP_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Group"
 SCIM_USER_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:User"
 SCIM_PATCH_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+MANAGE_LLMS = Permission.MANAGE_LLMS.value
 
 
 @pytest.fixture(scope="module", params=["okta", "entra"])
@@ -48,33 +55,48 @@ def idp_style(request: pytest.FixtureRequest) -> str:
 
 
 @pytest.fixture(scope="module")
-def scim_token(idp_style: str) -> str:
-    """Create a single SCIM token shared across all tests in this module.
-
-    Creating a new token revokes the previous one, so we create exactly once
-    per IdP-style run and reuse. Uses UserManager directly to avoid
-    fixture-scope conflicts with the function-scoped admin_user fixture.
-    """
+def scim_admin() -> DATestUser:
+    """The admin that owns the SCIM token, also used to drive the non-SCIM admin
+    API. Uses UserManager directly to avoid fixture-scope conflicts with the
+    function-scoped admin_user fixture."""
     try:
-        admin = UserManager.create(name=ADMIN_USER_NAME)
+        return UserManager.create(name=ADMIN_USER_NAME)
     except Exception:
-        admin = UserManager.login_as_user(
+        return UserManager.login_as_user(
             DATestUser(
                 id="",
                 email=build_email(ADMIN_USER_NAME),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
 
+
+@pytest.fixture(scope="module")
+def scim_token(idp_style: str, scim_admin: DATestUser) -> str:
+    """Create a single SCIM token shared across all tests in this module.
+
+    Creating a new token revokes the previous one, so we create exactly once
+    per IdP-style run and reuse.
+    """
     token = ScimTokenManager.create(
         name=f"scim-group-tests-{idp_style}",
-        user_performing_action=admin,
+        user_performing_action=scim_admin,
     ).raw_token
     assert token is not None
     return token
+
+
+def _set_manager(
+    group_id: str, user_id: str, is_manager: bool, admin: DATestUser
+) -> None:
+    """Seed through the real route: a test that plants the edge itself can't
+    detect production losing it."""
+    UserGroupManager.set_manager_by_id(
+        group_id, user_id, is_manager, admin
+    ).raise_for_status()
 
 
 def _make_group_resource(
@@ -313,6 +335,90 @@ def test_replace_group_clears_members(scim_token: str, idp_style: str) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["members"] == []
+
+
+def test_replace_group_preserves_manager_for_retained_member(
+    scim_token: str, idp_style: str, scim_admin: DATestUser
+) -> None:
+    """IdPs push PUT /Groups on routine reconciliation, so a
+    delete-all-then-reinsert replace would strip every manager on each sync —
+    silently, since the new row takes is_manager's server_default."""
+    keeper = _create_scim_user(
+        scim_token, f"grp_mgr_keep_{idp_style}@example.com", f"ext-gmk-{idp_style}"
+    ).json()
+    dropped = _create_scim_user(
+        scim_token, f"grp_mgr_drop_{idp_style}@example.com", f"ext-gmd-{idp_style}"
+    ).json()
+    created = _create_scim_group(
+        scim_token,
+        f"Manager Sync Group {idp_style}",
+        external_id=f"ext-mgr-sync-{idp_style}",
+        members=[{"value": keeper["id"]}, {"value": dropped["id"]}],
+    ).json()
+
+    _set_manager(created["id"], keeper["id"], True, scim_admin)
+    _set_manager(created["id"], dropped["id"], True, scim_admin)
+    assert UserGroupManager.get_manager_ids(created["id"], scim_admin) == {
+        keeper["id"],
+        dropped["id"],
+    }
+
+    resp = ScimClient.put(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_group_resource(
+            f"Manager Sync Group {idp_style}",
+            f"ext-mgr-sync-{idp_style}",
+            members=[{"value": keeper["id"]}],
+        ),
+    )
+    assert resp.status_code == 200
+
+    # keeper stays a manager; dropped loses it only because they left the group.
+    assert UserGroupManager.get_manager_ids(created["id"], scim_admin) == {keeper["id"]}
+
+    # get_manager_ids reads edge rows, which the removal deletes regardless of whether the
+    # rollup recompute ran. Assert the cached is_group_manager column (what GATE 1 reads) and
+    # the source edges agree: cleared for the departed manager, intact for the keeper.
+    assert is_group_manager(dropped["id"]) is False
+    assert managed_group_ids(dropped["id"]) == set()
+    assert is_group_manager(keeper["id"]) is True
+    assert managed_group_ids(keeper["id"]) == {int(created["id"])}
+
+
+def test_patch_group_preserves_manager_for_retained_member(
+    scim_token: str, idp_style: str, scim_admin: DATestUser
+) -> None:
+    """PATCH diffs rather than replacing, so an unrelated add must not disturb an
+    existing manager. Pins PUT and PATCH to the same contract."""
+    manager = _create_scim_user(
+        scim_token, f"grp_mgr_patch_{idp_style}@example.com", f"ext-gmp-{idp_style}"
+    ).json()
+    newcomer = _create_scim_user(
+        scim_token, f"grp_mgr_new_{idp_style}@example.com", f"ext-gmn-{idp_style}"
+    ).json()
+    created = _create_scim_group(
+        scim_token,
+        f"Manager Patch Group {idp_style}",
+        external_id=f"ext-mgr-patch-{idp_style}",
+        members=[{"value": manager["id"]}],
+    ).json()
+
+    _set_manager(created["id"], manager["id"], True, scim_admin)
+
+    resp = ScimClient.patch(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_patch_request(
+            [{"op": "add", "path": "members", "value": [{"value": newcomer["id"]}]}],
+            idp_style,
+        ),
+    )
+    assert resp.status_code == 200
+
+    assert UserGroupManager.get_manager_ids(created["id"], scim_admin) == {
+        manager["id"]
+    }
 
 
 def test_patch_add_member(scim_token: str, idp_style: str) -> None:
@@ -644,14 +750,17 @@ def test_scim_created_group_has_basic_permission(
         email=build_email(ADMIN_USER_NAME),
         password=DEFAULT_PASSWORD,
         headers=GENERAL_HEADERS,
-        role=UserRole.ADMIN,
+        is_admin=True,
         is_active=True,
     )
     admin = UserManager.login_as_user(admin)
 
-    # Verify the group itself was granted the basic permission
+    # Verify the group itself was granted the basic permission. BASIC_ACCESS
+    # is non-toggleable so the default GET response hides it; pass
+    # include_non_toggleable=true to surface all grants for this assertion.
     perms_resp = client.get(
         f"{API_SERVER_URL}/manage/admin/user-group/{group_id}/permissions",
+        params={"include_non_toggleable": "true"},
         headers=admin.headers,
     )
     perms_resp.raise_for_status()
@@ -696,3 +805,131 @@ def test_patch_rename_from_reserved_name(scim_token: str, idp_style: str) -> Non
     )
     assert resp.status_code == 409
     assert "reserved" in resp.json()["detail"].lower()
+
+
+def test_scim_group_create_propagates_permissions(
+    scim_token: str, idp_style: str, scim_admin: DATestUser
+) -> None:
+    user = _create_scim_user(
+        scim_token, f"scim_prop_create_{idp_style}@example.com", f"ext-spc-{idp_style}"
+    ).json()
+    created = _create_scim_group(
+        scim_token,
+        f"Prop Create Group {idp_style}",
+        external_id=f"ext-prop-create-{idp_style}",
+        members=[{"value": user["id"]}],
+    ).json()
+
+    UserGroupManager.set_permissions_by_id(
+        created["id"], [MANAGE_LLMS], scim_admin
+    ).raise_for_status()
+
+    assert MANAGE_LLMS in effective_permissions(user["id"])
+
+
+def test_scim_patch_membership_propagates_permissions(
+    scim_token: str, idp_style: str, scim_admin: DATestUser
+) -> None:
+    user = _create_scim_user(
+        scim_token, f"scim_prop_patch_{idp_style}@example.com", f"ext-spp-{idp_style}"
+    ).json()
+    created = _create_scim_group(
+        scim_token,
+        f"Prop Patch Group {idp_style}",
+        external_id=f"ext-prop-patch-{idp_style}",
+    ).json()
+    UserGroupManager.set_permissions_by_id(
+        created["id"], [MANAGE_LLMS], scim_admin
+    ).raise_for_status()
+    assert MANAGE_LLMS not in effective_permissions(user["id"])
+
+    add = ScimClient.patch(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_patch_request(
+            [{"op": "add", "path": "members", "value": [{"value": user["id"]}]}],
+            idp_style,
+        ),
+    )
+    assert add.status_code == 200
+    assert MANAGE_LLMS in effective_permissions(user["id"])
+
+    remove = ScimClient.patch(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_patch_request(
+            [
+                {
+                    "op": "remove",
+                    "path": f'members[value eq "{user["id"]}"]',
+                }
+            ],
+            idp_style,
+        ),
+    )
+    assert remove.status_code == 200
+    assert MANAGE_LLMS not in effective_permissions(user["id"])
+
+
+def test_scim_replace_membership_propagates_permissions(
+    scim_token: str, idp_style: str, scim_admin: DATestUser
+) -> None:
+    """PUT recomputes survivors as a batch and departures separately; the two
+    calls must agree, so assert both directions."""
+    keeper = _create_scim_user(
+        scim_token, f"scim_prop_keep_{idp_style}@example.com", f"ext-spk-{idp_style}"
+    ).json()
+    dropped = _create_scim_user(
+        scim_token, f"scim_prop_drop_{idp_style}@example.com", f"ext-spd-{idp_style}"
+    ).json()
+    added = _create_scim_user(
+        scim_token, f"scim_prop_add_{idp_style}@example.com", f"ext-spa-{idp_style}"
+    ).json()
+    created = _create_scim_group(
+        scim_token,
+        f"Prop Replace Group {idp_style}",
+        external_id=f"ext-prop-replace-{idp_style}",
+        members=[{"value": keeper["id"]}, {"value": dropped["id"]}],
+    ).json()
+    UserGroupManager.set_permissions_by_id(
+        created["id"], [MANAGE_LLMS], scim_admin
+    ).raise_for_status()
+    assert MANAGE_LLMS in effective_permissions(dropped["id"])
+
+    resp = ScimClient.put(
+        f"/Groups/{created['id']}",
+        scim_token,
+        json=_make_group_resource(
+            f"Prop Replace Group {idp_style}",
+            f"ext-prop-replace-{idp_style}",
+            members=[{"value": keeper["id"]}, {"value": added["id"]}],
+        ),
+    )
+    assert resp.status_code == 200
+
+    assert MANAGE_LLMS in effective_permissions(keeper["id"])
+    assert MANAGE_LLMS in effective_permissions(added["id"])
+    assert MANAGE_LLMS not in effective_permissions(dropped["id"])
+
+
+def test_scim_group_delete_revokes_permissions(
+    scim_token: str, idp_style: str, scim_admin: DATestUser
+) -> None:
+    user = _create_scim_user(
+        scim_token, f"scim_prop_del_{idp_style}@example.com", f"ext-spdel-{idp_style}"
+    ).json()
+    created = _create_scim_group(
+        scim_token,
+        f"Prop Delete Group {idp_style}",
+        external_id=f"ext-prop-delete-{idp_style}",
+        members=[{"value": user["id"]}],
+    ).json()
+    UserGroupManager.set_permissions_by_id(
+        created["id"], [MANAGE_LLMS], scim_admin
+    ).raise_for_status()
+    assert MANAGE_LLMS in effective_permissions(user["id"])
+
+    resp = ScimClient.delete(f"/Groups/{created['id']}", scim_token)
+    assert resp.status_code == 204
+
+    assert MANAGE_LLMS not in effective_permissions(user["id"])

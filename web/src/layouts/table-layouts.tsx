@@ -1,4 +1,4 @@
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
 import React from "react";
 
@@ -19,11 +19,29 @@ interface TableRowProps extends WithoutStyles<
   selected?: boolean;
 }
 function TableRow({ selected, children, onClick, ...rest }: TableRowProps) {
+  const className = cn("table-row-layout", onClick && "cursor-pointer");
+  const dataSelected = selected ? "true" : undefined;
+
+  if (!onClick) {
+    return (
+      <div className={className} data-selected={dataSelected} {...rest}>
+        {children}
+      </div>
+    );
+  }
+
+  // Rows hold their own buttons, so a clickable row stays a div with button
+  // semantics rather than a <button> wrapping a <button>.
   return (
     <div
-      className={cn("table-row-layout", onClick && "cursor-pointer")}
-      data-selected={selected ? "true" : undefined}
+      className={className}
+      data-selected={dataSelected}
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(event) =>
+        clickOnKeyDown(() => event.currentTarget.click())(event)
+      }
       {...rest}
     >
       {children}

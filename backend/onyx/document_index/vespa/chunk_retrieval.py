@@ -429,9 +429,9 @@ def get_all_chunks_paginated(
         )
 
     chunks: list[dict] = []
-    next_continuation_token_map: dict[int, str | None] = {
-        key: value for key, value in continuation_token_map.items()
-    }
+    next_continuation_token_map: dict[int, str | None] = dict(
+        continuation_token_map.items()
+    )
     for i, parallel_result in enumerate(parallel_results):
         if i not in next_continuation_token_map:
             raise RuntimeError(f"Slice {i} is not in the continuation token map.")
@@ -582,7 +582,7 @@ def query_vespa(
     try:
         num_retrieved_inference_chunks = len(inference_chunks)
         num_retrieved_document_ids = len(
-            set([chunk.document_id for chunk in inference_chunks])
+            {chunk.document_id for chunk in inference_chunks}
         )
         logger.info(
             "Retrieved %s inference chunks for %s documents",

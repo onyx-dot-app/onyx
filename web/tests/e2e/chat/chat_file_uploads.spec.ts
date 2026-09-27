@@ -215,7 +215,7 @@ test.describe("Chat File Uploads", () => {
       );
 
       const aiMessage = page.getByTestId("onyx-ai-message").first();
-      const generatedImage = aiMessage.locator('img[alt="Chat Message Image"]');
+      const generatedImage = aiMessage.locator('img[alt="Chat attachment"]');
       await expect(generatedImage).toBeVisible({ timeout: 10000 });
       await expect(generatedImage).toHaveAttribute(
         "src",

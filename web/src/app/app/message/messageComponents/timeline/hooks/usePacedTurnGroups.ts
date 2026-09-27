@@ -59,7 +59,7 @@ interface PacingState {
   nodeId: string | null;
 }
 
-function createInitialPacingState(): PacingState {
+function createInitialPacingState(nodeId: string): PacingState {
   return {
     revealedStepKeys: new Set(),
     lastRevealedPacketType: null,
@@ -67,7 +67,7 @@ function createInitialPacingState(): PacingState {
     pacingTimer: null,
     toolPacingComplete: false,
     stopPacketSeen: false,
-    nodeId: null,
+    nodeId,
   };
 }
 
@@ -97,8 +97,11 @@ export function usePacedTurnGroups(
   pacedDisplayGroups: GroupedPacket[];
   pacedFinalAnswerComing: boolean;
 } {
+  // Stable nodeId string for comparison
+  const nodeIdStr = String(nodeId);
+
   // Ref-based pacing state (no re-renders)
-  const stateRef = useRef<PacingState>(createInitialPacingState());
+  const stateRef = useRef<PacingState>(createInitialPacingState(nodeIdStr));
 
   // Track previous finalAnswerComing to detect tool-after-message transitions
   const prevFinalAnswerComingRef = useRef(finalAnswerComing);
@@ -110,21 +113,13 @@ export function usePacedTurnGroups(
   // Trigger re-render when content should update
   // Used in useMemo dependencies since state.revealedStepKeys is stored in a ref
   const [revealTrigger, setRevealTrigger] = useState(0);
-
-  // Stable nodeId string for comparison
-  const nodeIdStr = String(nodeId);
-
-  // Reset on nodeId change
-  if (stateRef.current.nodeId !== nodeIdStr) {
-    if (stateRef.current.pacingTimer) {
-      clearTimeout(stateRef.current.pacingTimer);
-    }
-    stateRef.current = createInitialPacingState();
-    stateRef.current.nodeId = nodeIdStr;
-    prevPacedRef.current = [];
-  }
-
-  const state = stateRef.current;
+  const [timerTrigger, setTimerTrigger] = useState(0);
+  const resetState = useMemo(
+    () => createInitialPacingState(nodeIdStr),
+    [nodeIdStr]
+  );
+  const hasNodeChanged = stateRef.current.nodeId !== nodeIdStr;
+  const state = hasNodeChanged ? resetState : stateRef.current;
 
   // Bypass pacing for completed messages (old messages loaded from history)
   // If stopPacketSeen is true on first render, return everything immediately
@@ -145,7 +140,7 @@ export function usePacedTurnGroups(
 
       // Schedule next step if more pending (always delay, regardless of type)
       if (state.pendingSteps.length > 0) {
-        state.pacingTimer = setTimeout(revealNextPendingStep, PACING_DELAY_MS);
+        setTimerTrigger((t) => t + 1);
         setRevealTrigger((t) => t + 1);
         return;
       }
@@ -156,6 +151,48 @@ export function usePacedTurnGroups(
     state.pacingTimer = null;
     setRevealTrigger((t) => t + 1);
   }, []);
+
+  useEffect(() => {
+    if (!hasNodeChanged) {
+      return;
+    }
+
+    if (stateRef.current.pacingTimer) {
+      clearTimeout(stateRef.current.pacingTimer);
+    }
+
+    stateRef.current = resetState;
+    prevPacedRef.current = [];
+    prevFinalAnswerComingRef.current = finalAnswerComing;
+  }, [finalAnswerComing, hasNodeChanged, resetState]);
+
+  useEffect(() => {
+    const state = stateRef.current;
+
+    if (
+      shouldBypassPacing ||
+      state.pendingSteps.length === 0 ||
+      state.pacingTimer
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (stateRef.current.pacingTimer === timer) {
+        stateRef.current.pacingTimer = null;
+      }
+      revealNextPendingStep();
+    }, PACING_DELAY_MS);
+
+    state.pacingTimer = timer;
+
+    return () => {
+      clearTimeout(timer);
+      if (stateRef.current.pacingTimer === timer) {
+        stateRef.current.pacingTimer = null;
+      }
+    };
+  }, [revealNextPendingStep, shouldBypassPacing, timerTrigger]);
 
   // Process incoming turn groups
   useEffect(() => {
@@ -256,7 +293,7 @@ export function usePacedTurnGroups(
 
       // Start timer if not already running
       if (!state.pacingTimer && state.pendingSteps.length === 1) {
-        state.pacingTimer = setTimeout(revealNextPendingStep, PACING_DELAY_MS);
+        setTimerTrigger((t) => t + 1);
       }
     }
 
@@ -270,16 +307,10 @@ export function usePacedTurnGroups(
     finalAnswerComing,
     revealNextPendingStep,
     shouldBypassPacing,
+    // Re-process after the node-change reset so the fresh state's first step
+    // reveals immediately even when the group identities are unchanged.
+    nodeIdStr,
   ]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (stateRef.current.pacingTimer) {
-        clearTimeout(stateRef.current.pacingTimer);
-      }
-    };
-  }, []);
 
   // Build paced turn groups from revealed step keys
   // Memoized to prevent unnecessary re-renders in downstream components
@@ -305,7 +336,7 @@ export function usePacedTurnGroups(
     // Stabilize: reuse previous TurnGroup objects when their content hasn't changed.
     // This preserves referential equality for completed groups, preventing
     // unnecessary re-renders in downstream components (e.g. SearchChipList).
-    const prev = prevPacedRef.current;
+    const prev = hasNodeChanged ? [] : prevPacedRef.current;
     if (prev.length === result.length) {
       let allMatch = true;
       for (let i = 0; i < result.length; i++) {
@@ -332,10 +363,13 @@ export function usePacedTurnGroups(
       }
     }
 
-    prevPacedRef.current = result;
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toolTurnGroups, revealTrigger, shouldBypassPacing]);
+  }, [toolTurnGroups, revealTrigger, shouldBypassPacing, hasNodeChanged]);
+
+  useEffect(() => {
+    prevPacedRef.current = pacedTurnGroups;
+  }, [pacedTurnGroups]);
 
   // Only return display groups when tool pacing is complete (or bypassing).
   // Also bypass when stop packet is already seen (e.g. history reload of stopped messages)

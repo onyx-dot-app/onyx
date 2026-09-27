@@ -241,6 +241,27 @@ def is_reasoning_model(model_id: str, display_name: str) -> bool:
     return any(pattern in combined for pattern in REASONING_MODEL_PATTERNS)
 
 
+def lm_studio_capability_enabled(value: object) -> bool:
+    """Read one entry of an LM Studio `capabilities` object as a boolean.
+
+    LM Studio reports a capability either as a plain boolean or as an options
+    object, for example
+    `{"allowed_options": ["off", "low", "high"], "default": "off"}`.
+    An options object means the model supports the capability, unless "off" is
+    the only allowed option.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dict):
+        allowed_options = value.get("allowed_options")
+        if isinstance(allowed_options, list):
+            return any(str(option).lower() != "off" for option in allowed_options)
+        return True
+    if isinstance(value, str):
+        return value.lower() not in {"", "off", "false", "none"}
+    return bool(value)
+
+
 def extract_base_model_name(model: str) -> str | None:
     """Extract base model name by removing date suffixes.
 
@@ -271,35 +292,41 @@ def filter_model_configurations(
     model_configurations: list,
     provider: str,
     use_stored_display_name: bool = False,
+    custom_config: dict[str, str] | None = None,
+    deployment_name: str | None = None,
 ) -> list:
-    """Filter out obsolete and dated duplicate models from configurations.
+    """Filter out dated duplicate models from configurations.
 
     Args:
         model_configurations: List of ModelConfiguration DB models
         provider: The provider name (e.g., "openai", "anthropic")
         use_stored_display_name: If True, prefer the display_name stored in the
             DB over LiteLLM enrichments. Set for custom-config providers.
+        custom_config: The provider's custom config, which for a gateway holds
+            the admin-selected API surface.
+        deployment_name: The provider-level deployment alias (e.g. Azure AI
+            Foundry), which is the string actually sent to LiteLLM when a
+            model's own name doesn't carry its identity.
 
     Returns:
-        List of ModelConfigurationView objects with obsolete/duplicate models removed
+        List of ModelConfigurationView objects with duplicate models removed
     """
-    # Import here to avoid circular imports
-    from onyx.llm.well_known_providers.llm_provider_options import is_obsolete_model
     from onyx.server.manage.llm.models import ModelConfigurationView
 
     all_model_names = {mc.name for mc in model_configurations}
 
     filtered_configs = []
     for model_configuration in model_configurations:
-        # Skip obsolete models
-        if is_obsolete_model(model_configuration.name, provider):
-            continue
         # Skip dated duplicates when non-dated version exists
         if should_filter_as_dated_duplicate(model_configuration.name, all_model_names):
             continue
         filtered_configs.append(
             ModelConfigurationView.from_model(
-                model_configuration, provider, use_stored_display_name
+                model_configuration,
+                provider,
+                use_stored_display_name=use_stored_display_name,
+                custom_config=custom_config,
+                deployment_name=deployment_name,
             )
         )
 
@@ -363,15 +390,7 @@ def extract_vendor_from_model_name(model_name: str, provider: str) -> str | None
 
 
 def is_embedding_model(model_name: str) -> bool:
-    """Checks for if a model is an embedding model"""
-    from litellm import get_model_info
+    """Checks for if a model is an embedding model."""
+    from onyx.llm.model_catalog import is_embedding_model_name
 
-    try:
-        # get_model_info raises on unknown models
-        # default to False
-        model_info = get_model_info(model_name)
-    except Exception:
-        return False
-    is_embedding_mode = model_info.get("mode") == "embedding"
-
-    return is_embedding_mode
+    return is_embedding_model_name(model_name)

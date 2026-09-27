@@ -463,7 +463,7 @@ const SourceTagInner = ({
       <div
         className={cn(
           "flex items-baseline",
-          !inlineCitation && "pr-0.5",
+          !inlineCitation && "pe-0.5",
           isQuery && expanded && "w-fit"
         )}
       >

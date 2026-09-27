@@ -312,7 +312,9 @@ class TestCustomTool(unittest.TestCase):
             email=user_email,
         )
 
-        expected_url = f"http://localhost:8080/users/{user_id}/by-email/{user_email}"
+        expected_url = (
+            f"http://localhost:8080/users/{user_id}/by-email/alice%40example.com"
+        )
         # Custom headers do NOT receive placeholder substitution today;
         # only the OpenAPI schema string is templated.
         expected_headers = {

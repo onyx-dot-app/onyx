@@ -7,7 +7,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.models import (
     MCPServer,
     MCPServer__UserGroup,
@@ -63,7 +62,7 @@ def _update_persona_tools(
 
 
 def test_non_member_cannot_attach_restricted_mcp_tool(db_session: Session) -> None:
-    outsider = create_test_user(db_session, "gate_outsider", role=UserRole.BASIC)
+    outsider = create_test_user(db_session, "gate_outsider")
     group = UserGroup(name=f"gate_group_{uuid4().hex[:8]}", is_up_to_date=True)
     db_session.add(group)
     db_session.commit()
@@ -87,7 +86,7 @@ def test_non_member_cannot_attach_restricted_mcp_tool(db_session: Session) -> No
 
 
 def test_member_passes_the_mcp_access_gate(db_session: Session) -> None:
-    member = create_test_user(db_session, "gate_member", role=UserRole.BASIC)
+    member = create_test_user(db_session, "gate_member")
     group = UserGroup(name=f"gate_group_member_{uuid4().hex[:8]}", is_up_to_date=True)
     db_session.add(group)
     db_session.commit()
@@ -119,7 +118,7 @@ def test_member_passes_the_mcp_access_gate(db_session: Session) -> None:
 def test_revoked_mcp_tool_is_preserved_but_cannot_be_readded(
     db_session: Session,
 ) -> None:
-    member = create_test_user(db_session, "gate_revoked", role=UserRole.BASIC)
+    member = create_test_user(db_session, "gate_revoked")
     group = UserGroup(name=f"gate_group_revoked_{uuid4().hex[:8]}", is_up_to_date=True)
     db_session.add(group)
     db_session.commit()

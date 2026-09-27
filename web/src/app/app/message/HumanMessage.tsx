@@ -12,6 +12,7 @@ import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import FileDisplay from "./FileDisplay";
+import { useTranslations } from "next-intl";
 
 interface MessageEditingProps {
   content: string;
@@ -24,6 +25,7 @@ function MessageEditing({
   onSubmitEdit,
   onCancelEdit,
 }: MessageEditingProps) {
+  const t = useTranslations("chat.messages");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [editedContent, setEditedContent] = useState(content);
 
@@ -53,11 +55,10 @@ function MessageEditing({
       >
         <textarea
           ref={textareaRef}
+          dir="auto"
           className={cn(
             "w-full h-full resize-none outline-hidden bg-transparent overflow-y-scroll whitespace-normal break-word"
           )}
-          aria-multiline
-          role="textarea"
           value={editedContent}
           style={{ scrollbarWidth: "thin" }}
           onChange={(e) => {
@@ -75,9 +76,11 @@ function MessageEditing({
           }}
         />
         <div className="flex justify-end gap-1">
-          <Button onClick={handleSubmit}>Submit</Button>
+          <Button onClick={handleSubmit}>
+            {t("messageEditing.submitButton.label")}
+          </Button>
           <Button prominence="secondary" onClick={handleCancel}>
-            Cancel
+            {t("messageEditing.cancelButton.label")}
           </Button>
         </div>
       </div>
@@ -132,6 +135,8 @@ const HumanMessage = React.memo(function HumanMessage({
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
 }: HumanMessageProps) {
+  const t = useTranslations("chat.messages");
+
   // TODO (@raunakab):
   //
   // This is some duplicated state that is patching a memoization issue with `HumanMessage`.
@@ -183,14 +188,14 @@ const HumanMessage = React.memo(function HumanMessage({
           <Button
             icon={SvgEdit}
             prominence="tertiary"
-            tooltip="Edit"
+            tooltip={t("humanMessage.editButton.tooltip")}
             onClick={() => setIsEditing(true)}
             data-testid="HumanMessage/edit-button"
           />
         )}
       </div>
     ),
-    [content, onEdit]
+    [content, onEdit, t]
   );
 
   const copyEditButton = (
@@ -227,7 +232,7 @@ const HumanMessage = React.memo(function HumanMessage({
             <div className="md:max-w-150">
               <div
                 className={
-                  "max-w-120 md:max-w-150 whitespace-break-spaces break-anywhere rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                  "max-w-120 md:max-w-150 whitespace-break-spaces break-anywhere rounded-t-16 rounded-es-16 bg-background-tint-02 py-2 px-3"
                 }
                 onCopy={(e) => {
                   const selection = window.getSelection();
@@ -243,6 +248,7 @@ const HumanMessage = React.memo(function HumanMessage({
               >
                 <Text
                   as="p"
+                  dir="auto"
                   className="inline-block align-middle"
                   mainContentBody
                   text04

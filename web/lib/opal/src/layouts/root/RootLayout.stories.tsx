@@ -16,7 +16,7 @@ type Story = StoryObj;
 
 function DemoSidebar() {
   return (
-    <div className="h-full w-60 bg-background-neutral-02 border-r border-border-01 p-4 flex flex-col gap-3">
+    <div className="h-full w-60 bg-background-neutral-02 border-e border-border-01 p-4 flex flex-col gap-3">
       <div className="h-6 w-24 rounded-04 bg-background-neutral-04" />
       <div className="h-4 w-full rounded-04 bg-background-neutral-03" />
       <div className="h-4 w-3/4 rounded-04 bg-background-neutral-03" />
@@ -61,7 +61,7 @@ function WithPanelsDemo() {
     <div className="w-full h-screen">
       <RootLayout.Root>
         <DemoSidebar />
-        <RootLayout.LeftPanel className="w-56 bg-background-neutral-02 border-r border-border-01">
+        <RootLayout.LeftPanel className="w-56 bg-background-neutral-02 border-e border-border-01">
           <DemoContent label="Left panel" />
         </RootLayout.LeftPanel>
         <RootLayout.App>
@@ -69,7 +69,7 @@ function WithPanelsDemo() {
             <DemoContent label="Main content" />
           </RootLayout.MainContent>
         </RootLayout.App>
-        <RootLayout.RightPanel className="w-72 bg-background-neutral-02 border-l border-border-01">
+        <RootLayout.RightPanel className="w-72 bg-background-neutral-02 border-s border-border-01">
           <DemoContent label="Right panel" />
         </RootLayout.RightPanel>
       </RootLayout.Root>

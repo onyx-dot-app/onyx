@@ -192,10 +192,9 @@ class OutlineConnector(LoadConnector, PollConnector):
                 )
 
                 # Apply time filtering if specified
-                filtered_batch: list[Document | HierarchyNode] = []
-                for doc in doc_batch:
-                    if time_filter is None or time_filter(doc):
-                        filtered_batch.append(doc)
+                filtered_batch: list[Document | HierarchyNode] = [
+                    doc for doc in doc_batch if time_filter is None or time_filter(doc)
+                ]
 
                 start_ind += num_results
                 if filtered_batch:

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "ES2017",
     "lib": [
       "dom",
       "dom.iterable",
@@ -52,6 +52,7 @@
   "exclude": [
     "node_modules",
     "lib/opal",
-    "lib/shared"
+    "lib/shared",
+    "tools"
   ]
 }

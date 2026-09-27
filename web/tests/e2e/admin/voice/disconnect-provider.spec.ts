@@ -1,8 +1,9 @@
 import { test, expect, Page, Locator } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
-const VOICE_URL = "/admin/configuration/voice";
+const VOICE_URL = ADMIN_ROUTES.VOICE.path;
 
 const FAKE_PROVIDERS = {
   openai_active_stt: {

@@ -41,7 +41,6 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
@@ -273,14 +272,14 @@ def on_task_revoked(
     srem's the taskset) never fires. Without this, the stranded id keeps the
     taskset non-empty and wedges the sync fence until its 7-day TTL.
     """
-    task_id = getattr(request, "id", None)
+    task_id = getattr(request, "id", None)  # ods: ignore[getattr]
     if not task_id:
         return
 
     if not task_id.startswith(DOCUMENT_SYNC_PREFIX):
         return
 
-    request_kwargs = getattr(request, "kwargs", None) or {}
+    request_kwargs = getattr(request, "kwargs", None) or {}  # ods: ignore[getattr]
     tenant_id = cast(str, request_kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
 
     r = get_redis_client(tenant_id=tenant_id)
@@ -689,6 +688,11 @@ def wait_for_document_index_or_shutdown() -> None:
             raise WorkerShutdown(msg)
 
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+        # Imported here: opensearchpy costs ~18 MB and not every worker needs it.
+        from onyx.document_index.opensearch.client import (
+            wait_for_opensearch_with_timeout,
+        )
+
         if not wait_for_opensearch_with_timeout():
             msg = "[OpenSearch] Readiness probe did not succeed within the timeout. Exiting..."
             logger.error(msg)

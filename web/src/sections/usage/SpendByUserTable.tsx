@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
-  InputSelect,
+  InputSingleComboBox,
   InputTypeIn,
   Table,
   Text,
@@ -18,9 +19,11 @@ const ALL = "__all__";
 export interface SpendRow {
   email: string;
   cost_cents: number;
+  total_tokens: number;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_creation_tokens: number;
 }
 
 function emptyTotals(): UsageExportTotals {
@@ -28,6 +31,7 @@ function emptyTotals(): UsageExportTotals {
     input_tokens: 0,
     output_tokens: 0,
     cache_read_tokens: 0,
+    cache_creation_tokens: 0,
     cost_cents: 0,
   };
 }
@@ -38,7 +42,11 @@ function filteredRow(
   flow: string
 ): SpendRow | null {
   if (model === ALL && flow === ALL) {
-    return { email: user.email, ...user.totals };
+    return {
+      email: user.email,
+      ...user.totals,
+      total_tokens: user.totals.input_tokens + user.totals.output_tokens,
+    };
   }
   const records = user.records.filter(
     (record) =>
@@ -51,72 +59,100 @@ function filteredRow(
       input_tokens: sum.input_tokens + record.input_tokens,
       output_tokens: sum.output_tokens + record.output_tokens,
       cache_read_tokens: sum.cache_read_tokens + record.cache_read_tokens,
+      cache_creation_tokens:
+        sum.cache_creation_tokens + record.cache_creation_tokens,
       cost_cents: sum.cost_cents + record.cost_cents,
     }),
     emptyTotals()
   );
-  return { email: user.email, ...totals };
+  return {
+    email: user.email,
+    ...totals,
+    total_tokens: totals.input_tokens + totals.output_tokens,
+  };
 }
 
 const tc = createTableColumns<SpendRow>();
 
-function buildColumns() {
+type UsageTranslate = ReturnType<typeof useTranslations<"admin.usage">>;
+
+function buildColumns(t: UsageTranslate) {
   return [
     tc.qualifier({ content: "icon", getContent: () => SvgUser }),
     tc.column("email", {
-      header: "User",
-      weight: 34,
+      header: t("spendByUser.columns.user.header"),
+      weight: 38,
       cell: (value) => (
         <span className="underline-offset-2 group-hover/row:underline">
-          <Text font="main-ui-body" color="text-05" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-05"
+            wordWrap="whitespace-nowrap"
+          >
             {value}
           </Text>
         </span>
       ),
     }),
     tc.column("cost_cents", {
-      header: "Spend",
-      weight: 14,
+      header: t("spendByUser.columns.spend.header"),
+      weight: 16,
       alignment: "right",
       cell: (value) => (
         <span className="tabular-nums">
-          <Text font="main-ui-action" color="text-05" nowrap>
+          <Text
+            font="main-ui-action"
+            color="text-05"
+            wordWrap="whitespace-nowrap"
+          >
             {formatCost(value)}
           </Text>
         </span>
       ),
     }),
+    tc.column("total_tokens", {
+      header: t("spendByUser.columns.tokens.header"),
+      weight: 18,
+      alignment: "right",
+      cell: (value) => (
+        <span className="tabular-nums">
+          <Text
+            font="main-ui-action"
+            color="text-05"
+            wordWrap="whitespace-nowrap"
+          >
+            {formatTokens(value)}
+          </Text>
+        </span>
+      ),
+    }),
     tc.column("input_tokens", {
-      header: "Input",
+      header: t("spendByUser.columns.input.header"),
       weight: 14,
       alignment: "right",
       cell: (value) => (
         <span className="tabular-nums">
-          <Text font="main-ui-body" color="text-03" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {formatTokens(value)}
           </Text>
         </span>
       ),
     }),
     tc.column("output_tokens", {
-      header: "Output",
+      header: t("spendByUser.columns.output.header"),
       weight: 14,
       alignment: "right",
       cell: (value) => (
         <span className="tabular-nums">
-          <Text font="main-ui-body" color="text-03" nowrap>
-            {formatTokens(value)}
-          </Text>
-        </span>
-      ),
-    }),
-    tc.column("cache_read_tokens", {
-      header: "Cache",
-      weight: 14,
-      alignment: "right",
-      cell: (value) => (
-        <span className="tabular-nums">
-          <Text font="main-ui-body" color="text-03" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {formatTokens(value)}
           </Text>
         </span>
@@ -124,8 +160,6 @@ function buildColumns() {
     }),
   ];
 }
-
-const COLUMNS = buildColumns();
 
 interface SpendByUserTableProps {
   users: UsageExportUser[];
@@ -136,9 +170,12 @@ export default function SpendByUserTable({
   users,
   onSelectUser,
 }: SpendByUserTableProps) {
+  const t = useTranslations("admin.usage");
   const [searchTerm, setSearchTerm] = useState("");
   const [model, setModel] = useState(ALL);
   const [flow, setFlow] = useState(ALL);
+
+  const columns = useMemo(() => buildColumns(t), [t]);
 
   const models = useMemo(
     () =>
@@ -186,7 +223,7 @@ export default function SpendByUserTable({
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={0.5}
+      gap={2}
       width="full"
       height="fit"
     >
@@ -195,60 +232,74 @@ export default function SpendByUserTable({
         <div className="min-w-0 flex-1 sm:max-w-72">
           <InputTypeIn
             value={searchTerm}
-            placeholder="Search users by email…"
-            aria-label="Search users by email"
+            placeholder={t("spendByUser.search.placeholder")}
+            aria-label={t("spendByUser.search.ariaLabel")}
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
-        <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row">
+        <div className="flex w-full flex-col gap-2 sm:ms-auto sm:w-auto sm:flex-row">
           {models.length > 0 && (
             <div className="w-full sm:w-44">
-              <InputSelect value={model} onValueChange={setModel}>
-                <InputSelect.Trigger placeholder="All models" />
-                <InputSelect.Content>
-                  <InputSelect.Item value={ALL}>All models</InputSelect.Item>
-                  {models.map((option) => (
-                    <InputSelect.Item key={option} value={option}>
-                      {option}
-                    </InputSelect.Item>
-                  ))}
-                </InputSelect.Content>
-              </InputSelect>
+              <InputSingleComboBox
+                value={model}
+                onValueChange={setModel}
+                placeholder={t("spendByUser.filters.allModels.label")}
+                options={[
+                  {
+                    value: ALL,
+                    title: t("spendByUser.filters.allModels.label"),
+                  },
+                  ...models.map((option) => ({
+                    value: option,
+                    title: option,
+                  })),
+                ]}
+              />
             </div>
           )}
           {flows.length > 0 && (
             <div className="w-full sm:w-40">
-              <InputSelect value={flow} onValueChange={setFlow}>
-                <InputSelect.Trigger placeholder="All flows" />
-                <InputSelect.Content>
-                  <InputSelect.Item value={ALL}>All flows</InputSelect.Item>
-                  {flows.map((option) => (
-                    <InputSelect.Item key={option} value={option}>
-                      {option}
-                    </InputSelect.Item>
-                  ))}
-                </InputSelect.Content>
-              </InputSelect>
+              <InputSingleComboBox
+                value={flow}
+                onValueChange={setFlow}
+                placeholder={t("spendByUser.filters.allFlows.label")}
+                options={[
+                  {
+                    value: ALL,
+                    title: t("spendByUser.filters.allFlows.label"),
+                  },
+                  ...flows.map((option) => ({
+                    value: option,
+                    title: option,
+                  })),
+                ]}
+              />
             </div>
           )}
         </div>
       </div>
+
+      <Text font="secondary-body" color="text-03" aria-live="polite">
+        {t("spendByUser.rowCount.label", { count: rows.length })}
+      </Text>
 
       <Table
         // Remount on filter change so the Table's internal page index resets;
         // otherwise a narrower `rows` can leave it stranded past the last page.
         key={`${model}-${flow}-${searchTerm}`}
         data={rows}
-        columns={COLUMNS}
+        columns={columns}
         getRowId={(row) => row.email}
         pageSize={10}
         initialSorting={[{ id: "cost_cents", desc: true }]}
         onRowClick={(row) => onSelectUser(row.email)}
-        getRowLabel={(row) => `View usage details for ${row.email}`}
+        getRowLabel={(row) =>
+          t("spendByUser.row.ariaLabel", { email: row.email })
+        }
         footer={{}}
         emptyState={
           <Text font="main-ui-body" color="text-03">
-            No usage matches the current filters.
+            {t("spendByUser.empty.description")}
           </Text>
         }
       />

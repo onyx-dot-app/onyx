@@ -2,16 +2,17 @@ from collections.abc import Sequence
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import Select, and_, delete, exists, func, or_, select
+from sqlalchemy import Select, and_, delete, func, or_, select
 from sqlalchemy.orm import Session, aliased, selectinload
 
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import (
     get_cc_pair_groups_for_ids,
     get_connector_credential_pairs,
 )
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
-from onyx.db.federated import create_federated_connector_document_set_mapping
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, Permission
+from onyx.db.federated import create_federated_connector_document_set_mapping__no_commit
 from onyx.db.models import (
     ConnectorCredentialPair,
     Document,
@@ -21,12 +22,16 @@ from onyx.db.models import (
     FederatedConnector__DocumentSet,
     User,
     User__UserGroup,
-    UserRole,
 )
 from onyx.db.models import DocumentSet as DocumentSetDBModel
+from onyx.db.scoped_permissions import (
+    scoped_group_ids_subquery,
+    within_managed_scope_clause,
+)
 from onyx.server.features.document_set.models import (
     DocumentSetCreationRequest,
     DocumentSetUpdateRequest,
+    FederatedConnectorConfig,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -35,53 +40,55 @@ logger = setup_logger()
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if user.role == UserRole.ADMIN:
+    # MANAGE → always return all
+    if has_global_permission(user, Permission.MANAGE_DOCUMENT_SETS):
+        return stmt
+    # Read mirror of GATE 2 for a scoped manager: PRIVATE doc sets whose every
+    # group is managed. Non-managers get an empty subquery, so it fails closed
+    # like the prior sa_false().
+    if get_editable:
+        # no managed scope matches a groupless set, stranding its creator; all three
+        # conditions matter — creator alone survives publishing and re-grouping
+        owns_groupless_set = and_(
+            DocumentSetDBModel.user_id == user.id,
+            DocumentSetDBModel.is_public.is_(False),
+            ~(
+                select(DocumentSet__UserGroup.document_set_id)
+                .where(DocumentSet__UserGroup.document_set_id == DocumentSetDBModel.id)
+                .exists()
+            ),
+        )
+        return stmt.where(
+            or_(
+                within_managed_scope_clause(
+                    resource_id_col=DocumentSetDBModel.id,
+                    junction_resource_col=DocumentSet__UserGroup.document_set_id,
+                    junction_group_col=DocumentSet__UserGroup.user_group_id,
+                    non_public_clause=DocumentSetDBModel.is_public.is_(False),
+                    managed_subq=scoped_group_ids_subquery(user),
+                ),
+                owns_groupless_set,
+            )
+        )
+    # READ → return all when reading, nothing when editing
+    if has_global_permission(user, Permission.READ_DOCUMENT_SETS):
         return stmt
 
-    stmt = stmt.distinct()
-    DocumentSet__UG = aliased(DocumentSet__UserGroup)
-    User__UG = aliased(User__UserGroup)
-    """
-    Here we select cc_pairs by relation:
-    User -> User__UserGroup -> DocumentSet__UserGroup -> DocumentSet
-    """
-    stmt = stmt.outerjoin(DocumentSet__UG).outerjoin(
-        User__UserGroup,
-        User__UserGroup.user_group_id == DocumentSet__UG.user_group_id,
+    # Otherwise: public document sets, plus those owned by groups the user
+    # is a member of (so a user can use a private group-owned document set
+    # they have access to via group membership in chat / search).
+    user_group_ids = select(User__UserGroup.user_group_id).where(
+        User__UserGroup.user_id == user.id
     )
-    """
-    Filter DocumentSets by:
-    - if the user is in the user_group that owns the DocumentSet
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out DocumentSets that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all DocumentSets in the groups the user is a curator
-    for (as well as public DocumentSets)
-    """
-
-    # Anonymous users only see public DocumentSets
-    if user.is_anonymous:
-        where_clause = DocumentSetDBModel.is_public == True  # noqa: E712
-        return stmt.where(where_clause)
-
-    where_clause = User__UserGroup.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UserGroup.is_curator == True  # noqa: E712
-    if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
-        where_clause &= ~exists().where(
-            DocumentSet__UG.document_set_id == DocumentSetDBModel.id
-        ).where(~DocumentSet__UG.user_group_id.in_(user_groups)).correlate(
-            DocumentSetDBModel
+    accessible_via_group = select(DocumentSet__UserGroup.document_set_id).where(
+        DocumentSet__UserGroup.user_group_id.in_(user_group_ids)
+    )
+    return stmt.where(
+        or_(
+            DocumentSetDBModel.is_public.is_(True),
+            DocumentSetDBModel.id.in_(accessible_via_group),
         )
-        where_clause |= DocumentSetDBModel.user_id == user.id
-    else:
-        where_clause |= DocumentSetDBModel.is_public == True  # noqa: E712
-
-    return stmt.where(where_clause)
+    )
 
 
 def _delete_document_set_cc_pairs__no_commit(
@@ -125,18 +132,73 @@ def get_document_set_by_id_for_user(
     return db_session.scalar(stmt)
 
 
+def get_group_ids_for_document_set(
+    db_session: Session, document_set_id: int
+) -> set[int]:
+    """Current groups on a document set — the ``current_group_ids`` for GATE 2."""
+    return set(
+        db_session.scalars(
+            select(DocumentSet__UserGroup.user_group_id).where(
+                DocumentSet__UserGroup.document_set_id == document_set_id
+            )
+        ).all()
+    )
+
+
+def user_owns_groupless_document_set(
+    document_set: DocumentSetDBModel, user: User
+) -> bool:
+    """Whether a set is shared with nobody but its creator.
+
+    Matches the creator fallback in _add_user_filters. The delete gate and the delete
+    affordance both read this, so keep it the only definition — they must not drift.
+    """
+    return (
+        document_set.user_id == user.id
+        and not document_set.is_public
+        and not document_set.groups
+    )
+
+
+def get_group_ids_for_document_sets(
+    db_session: Session, document_set_ids: list[int]
+) -> dict[int, set[int]]:
+    """Batched ``get_group_ids_for_document_set``; every requested id gets an entry."""
+    groups_by_document_set: dict[int, set[int]] = {
+        document_set_id: set() for document_set_id in document_set_ids
+    }
+    if not document_set_ids:
+        return groups_by_document_set
+    rows = db_session.execute(
+        select(
+            DocumentSet__UserGroup.document_set_id,
+            DocumentSet__UserGroup.user_group_id,
+        ).where(DocumentSet__UserGroup.document_set_id.in_(document_set_ids))
+    )
+    for document_set_id, user_group_id in rows:
+        groups_by_document_set[document_set_id].add(user_group_id)
+    return groups_by_document_set
+
+
 def get_document_set_by_id(
     db_session: Session,
     document_set_id: int,
     prefetch_relationships: bool = False,
+    for_update: bool = False,
 ) -> DocumentSetDBModel | None:
-    stmt = select(DocumentSetDBModel).distinct()
+    stmt = select(DocumentSetDBModel)
     if prefetch_relationships:
         stmt = stmt.options(
             selectinload(DocumentSetDBModel.connector_credential_pairs),
             selectinload(DocumentSetDBModel.federated_connectors),
         )
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
+    if for_update:
+        # Lock the row so a scoped-manager GATE-2 check and its write serialize with a
+        # concurrent admin edit. No DISTINCT — Postgres forbids it with FOR UPDATE.
+        stmt = stmt.execution_options(populate_existing=True).with_for_update()
+    else:
+        stmt = stmt.distinct()
     return db_session.scalar(stmt)
 
 
@@ -192,13 +254,20 @@ def filter_document_set_ids_by_user_access(
 
 
 def get_document_sets_by_ids(
-    db_session: Session, document_set_ids: list[int]
+    db_session: Session,
+    document_set_ids: list[int],
+    for_update: bool = False,
 ) -> Sequence[DocumentSetDBModel]:
     if not document_set_ids:
         return []
-    return db_session.scalars(
-        select(DocumentSetDBModel).where(DocumentSetDBModel.id.in_(document_set_ids))
-    ).all()
+    stmt = select(DocumentSetDBModel).where(DocumentSetDBModel.id.in_(document_set_ids))
+    if for_update:
+        stmt = (
+            stmt.order_by(DocumentSetDBModel.id)
+            .execution_options(populate_existing=True)
+            .with_for_update(key_share=True)
+        )
+    return db_session.scalars(stmt).all()
 
 
 def make_doc_set_private(
@@ -212,7 +281,7 @@ def make_doc_set_private(
         raise NotImplementedError("Onyx MIT does not support private Document Sets")
 
 
-def _check_if_cc_pairs_are_owned_by_groups(
+def check_if_cc_pairs_are_owned_by_groups(
     db_session: Session,
     cc_pair_ids: list[int],
     group_ids: list[int],
@@ -226,9 +295,12 @@ def _check_if_cc_pairs_are_owned_by_groups(
         cc_pair_ids=cc_pair_ids,
     )
 
+    # is_current only: a detached cc_pair keeps a stale row until the index sync deletes
+    # it, and counting those would admit a set whose connector the group just lost.
     group_cc_pair_relationships_set = {
         (relationship.cc_pair_id, relationship.user_group_id)
         for relationship in group_cc_pair_relationships
+        if relationship.is_current
     }
 
     missing_cc_pair_ids = []
@@ -250,6 +322,16 @@ def _check_if_cc_pairs_are_owned_by_groups(
                 )
 
 
+def _check_federated_connectors_are_distinct(
+    federated_connectors: list[FederatedConnectorConfig],
+) -> None:
+    """The junction is unique on (federated_connector_id, document_set_id), so a
+    repeated id would fail the insert partway through the write."""
+    ids = [fc.federated_connector_id for fc in federated_connectors]
+    if len(ids) != len(set(ids)):
+        raise ValueError("A federated connector can only be attached once")
+
+
 def insert_document_set(
     document_set_creation_request: DocumentSetCreationRequest,
     user_id: UUID | None,
@@ -262,8 +344,12 @@ def insert_document_set(
     ):
         raise ValueError("Cannot create a document set with no connectors")
 
+    _check_federated_connectors_are_distinct(
+        document_set_creation_request.federated_connectors
+    )
+
     if not document_set_creation_request.is_public:
-        _check_if_cc_pairs_are_owned_by_groups(
+        check_if_cc_pairs_are_owned_by_groups(
             db_session=db_session,
             cc_pair_ids=document_set_creation_request.cc_pair_ids,
             group_ids=document_set_creation_request.groups or [],
@@ -295,10 +381,8 @@ def insert_document_set(
         db_session.add_all(ds_cc_pairs)
 
         # Create federated connector mappings
-        from onyx.db.federated import create_federated_connector_document_set_mapping
-
         for fc_config in document_set_creation_request.federated_connectors:
-            create_federated_connector_document_set_mapping(
+            create_federated_connector_document_set_mapping__no_commit(
                 db_session=db_session,
                 federated_connector_id=fc_config.federated_connector_id,
                 document_set_id=new_document_set_row.id,
@@ -342,8 +426,12 @@ def update_document_set(
     ):
         raise ValueError("Cannot update a document set with no connectors")
 
+    _check_federated_connectors_are_distinct(
+        document_set_update_request.federated_connectors
+    )
+
     if not document_set_update_request.is_public:
-        _check_if_cc_pairs_are_owned_by_groups(
+        check_if_cc_pairs_are_owned_by_groups(
             db_session=db_session,
             cc_pair_ids=document_set_update_request.cc_pair_ids,
             group_ids=document_set_update_request.groups,
@@ -409,7 +497,7 @@ def update_document_set(
 
         # Create new federated connector mappings
         for fc_config in document_set_update_request.federated_connectors:
-            create_federated_connector_document_set_mapping(
+            create_federated_connector_document_set_mapping__no_commit(
                 db_session=db_session,
                 federated_connector_id=fc_config.federated_connector_id,
                 document_set_id=document_set_row.id,

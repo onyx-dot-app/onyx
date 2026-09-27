@@ -31,6 +31,16 @@ def test_custom_api_prefix_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
     assert tenant_tracking._is_path_allowed("/v2/chat") is False
 
 
+@pytest.mark.parametrize("path", ["/health", "/health/ready", "/metrics"])
+def test_probe_paths_skip_tenant_resolution_under_api_prefix(
+    monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    """Probes must never reach the Redis session lookup, prefixed or not."""
+    monkeypatch.setattr(api_prefix, "APP_API_PREFIX", "v2")
+    stripped = api_prefix.strip_api_prefix(f"/v2{path}")
+    assert stripped in tenant_tracking.TENANT_RESOLUTION_SKIP_PATHS
+
+
 @pytest.mark.asyncio
 @patch(f"{MODULE}.retrieve_auth_token_data_from_bearer")
 @patch(f"{MODULE}.retrieve_auth_token_data_from_redis")
@@ -95,5 +105,23 @@ async def test_no_auth_returns_default_schema(
     mock_bearer.return_value = None
 
     req = _request()
+    tenant_id = await tenant_tracking._get_tenant_id_from_request(req, MagicMock())
+    assert tenant_id == POSTGRES_DEFAULT_SCHEMA
+
+
+@pytest.mark.asyncio
+@patch(f"{MODULE}.retrieve_auth_token_data_from_bearer")
+@patch(f"{MODULE}.retrieve_auth_token_data_from_redis")
+async def test_client_supplied_cookie_cannot_select_a_workspace(
+    mock_cookie: AsyncMock,
+    mock_bearer: AsyncMock,
+) -> None:
+    """Every accepted source is signed or server-issued. A bare cookie naming a
+    schema is attacker input, and honoring it would hand an unauthenticated
+    caller that workspace on any route that reads tenant-scoped data."""
+    mock_cookie.return_value = None
+    mock_bearer.return_value = None
+
+    req = _request({"cookie": "onyx_tid=tenant_victim"})
     tenant_id = await tenant_tracking._get_tenant_id_from_request(req, MagicMock())
     assert tenant_id == POSTGRES_DEFAULT_SCHEMA

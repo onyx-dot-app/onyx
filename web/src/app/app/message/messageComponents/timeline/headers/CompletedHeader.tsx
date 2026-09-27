@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
 import { Button } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
@@ -10,6 +11,7 @@ import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 import { formatDurationSeconds } from "@opal/time";
 import { noProp } from "@/lib/utils";
+import { clickOnKeyDown } from "@opal/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@opal/components";
 
@@ -30,10 +32,13 @@ function MemoryTagWithTooltip({
   memoryId,
   memoryIndex,
 }: MemoryTagWithTooltipProps) {
+  const t = useTranslations("chat.messages.timeline");
   const memoriesModal = useCreateModal();
 
   const operationLabel =
-    memoryOperation === "add" ? "Added to memories" : "Updated memory";
+    memoryOperation === "add"
+      ? t("memoryTag.added.label")
+      : t("memoryTag.updated.label");
 
   const tag = <Tag icon={SvgAddLines} label={operationLabel} />;
 
@@ -58,8 +63,8 @@ function MemoryTagWithTooltip({
             <Section
               flexDirection="column"
               alignItems="start"
-              padding={0.25}
-              gap={0.25}
+              padding={1}
+              gap={1}
               height="auto"
             >
               <div className="p-1">
@@ -71,7 +76,7 @@ function MemoryTagWithTooltip({
                 icon={SvgAddLines}
                 title={operationLabel}
                 sizePreset="secondary"
-                padding="sm"
+                padding={1}
                 variant="body"
                 color="muted"
                 rightChildren={
@@ -128,6 +133,8 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   memoryId = null,
   memoryIndex = null,
 }: CompletedHeaderProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   if (isMemoryOnly) {
     return (
       <div className="flex w-full justify-between">
@@ -145,10 +152,10 @@ export const CompletedHeader = React.memo(function CompletedHeader({
             size="md"
             onClick={noProp(onToggle)}
             rightIcon={isExpanded ? SvgFold : SvgExpand}
-            aria-label="Expand timeline"
+            aria-label={t("expandButton.ariaLabel")}
             aria-expanded={isExpanded}
           >
-            {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
+            {t("stepsButton.label", { count: totalSteps })}
           </Button>
         )}
       </div>
@@ -156,48 +163,62 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   }
 
   const durationText = processingDurationSeconds
-    ? `Thought for ${formatDurationSeconds(processingDurationSeconds)}`
-    : "Thought for some time";
+    ? t("thoughtDuration.label", {
+        duration: formatDurationSeconds(processingDurationSeconds),
+      })
+    : t("thoughtUnknownDuration.label");
 
   const imageText =
     generatedImageCount > 0
-      ? `Generated ${generatedImageCount} ${
-          generatedImageCount === 1 ? "image" : "images"
-        }`
+      ? t("generatedImages.label", { count: generatedImageCount })
       : null;
 
+  const summary = (
+    <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <Text as="p" mainUiAction text03>
+        {isExpanded ? durationText : (imageText ?? durationText)}
+      </Text>
+      {memoryOperation && !isExpanded && (
+        <MemoryTagWithTooltip
+          memoryText={memoryText}
+          memoryOperation={memoryOperation}
+          memoryId={memoryId}
+          memoryIndex={memoryIndex}
+        />
+      )}
+    </div>
+  );
+
+  const className = "flex items-center justify-between w-full";
+
+  // Without a toggle target the row must not announce itself as a button.
+  if (!collapsible || totalSteps === 0) {
+    return <div className={className}>{summary}</div>;
+  }
+
   return (
+    // The row holds its own expand button, so it stays a div with button
+    // semantics rather than a <button> wrapping a <button>.
     <div
       role="button"
+      tabIndex={0}
+      aria-label={t("toggleRow.ariaLabel")}
+      onKeyDown={clickOnKeyDown(onToggle)}
       onClick={onToggle}
-      className="flex items-center justify-between w-full"
+      className={className}
     >
-      <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-        <Text as="p" mainUiAction text03>
-          {isExpanded ? durationText : (imageText ?? durationText)}
-        </Text>
-        {memoryOperation && !isExpanded && (
-          <MemoryTagWithTooltip
-            memoryText={memoryText}
-            memoryOperation={memoryOperation}
-            memoryId={memoryId}
-            memoryIndex={memoryIndex}
-          />
-        )}
-      </div>
+      {summary}
 
-      {collapsible && totalSteps > 0 && (
-        <Button
-          prominence="tertiary"
-          size="md"
-          onClick={noProp(onToggle)}
-          rightIcon={isExpanded ? SvgFold : SvgExpand}
-          aria-label="Expand timeline"
-          aria-expanded={isExpanded}
-        >
-          {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
-        </Button>
-      )}
+      <Button
+        prominence="tertiary"
+        size="md"
+        onClick={noProp(onToggle)}
+        rightIcon={isExpanded ? SvgFold : SvgExpand}
+        aria-label={t("expandButton.ariaLabel")}
+        aria-expanded={isExpanded}
+      >
+        {t("stepsButton.label", { count: totalSteps })}
+      </Button>
     </div>
   );
 });

@@ -1,129 +1,134 @@
-function conditionallyAddPlural(noun: string, cnt: number): string {
-  return cnt === 1 ? noun : `${noun}s`;
+/** Date and duration helpers. The date formatters take the active UI locale (BCP 47). */
+
+// Rows in long tables format many dates per render, so formatters are reused per locale.
+const relativeTimeFormatters = new Map<string, Intl.RelativeTimeFormat>();
+
+function relativeTimeFormatter(locale: string): Intl.RelativeTimeFormat {
+  let formatter = relativeTimeFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.RelativeTimeFormat(locale, { numeric: "always" });
+    relativeTimeFormatters.set(locale, formatter);
+  }
+  return formatter;
 }
 
 /**
- * Returns a human-readable relative time string for a past date, or `null`
- * if the input is absent. Granularity increases with distance: seconds →
- * minutes → hours → days → weeks → months → years.
- *
- * @example
- * timeAgo(new Date(Date.now() - 3_000).toISOString())                    // "3 seconds ago"
- * timeAgo(new Date(Date.now() - 42 * 60_000).toISOString())              // "42 minutes ago"
- * timeAgo(new Date(Date.now() - 5 * 3_600_000).toISOString())            // "5 hours ago"
- * timeAgo(new Date(Date.now() - 12 * 86_400_000).toISOString())          // "12 days ago"
- * timeAgo(new Date(Date.now() - 14 * 86_400_000).toISOString())          // "2 weeks ago"
- * timeAgo(new Date(Date.now() - 240 * 86_400_000).toISOString())         // "8 months ago"
- * timeAgo(new Date(Date.now() - 3 * 365 * 86_400_000).toISOString())     // "3 years ago"
- * timeAgo(null)                                                           // null
+ * Formats how long ago a date was, e.g. "12 days ago", or null without a date.
  */
-export function timeAgo(dateString: string | undefined | null): string | null {
+export function timeAgo(
+  dateString: string | undefined | null,
+  locale: string
+): string | null {
   if (!dateString) {
     return null;
   }
 
-  const date = new Date(dateString);
-  const now = new Date();
-  const secondsDiff = Math.floor((now.getTime() - date.getTime()) / 1000);
+  const time = new Date(dateString).getTime();
+  if (Number.isNaN(time)) {
+    return null;
+  }
+
+  const formatter = relativeTimeFormatter(locale);
+  // Clamped so clock skew on a stored timestamp never reads as "in 5 seconds".
+  const secondsDiff = Math.max(0, Math.floor((Date.now() - time) / 1000));
 
   if (secondsDiff < 60) {
-    return `${secondsDiff} ${conditionallyAddPlural("second", secondsDiff)} ago`;
+    return formatter.format(-secondsDiff, "second");
   }
 
   const minutesDiff = Math.floor(secondsDiff / 60);
   if (minutesDiff < 60) {
-    return `${minutesDiff} ${conditionallyAddPlural("minute", minutesDiff)} ago`;
+    return formatter.format(-minutesDiff, "minute");
   }
 
   const hoursDiff = Math.floor(minutesDiff / 60);
   if (hoursDiff < 24) {
-    return `${hoursDiff} ${conditionallyAddPlural("hour", hoursDiff)} ago`;
+    return formatter.format(-hoursDiff, "hour");
   }
 
   const daysDiff = Math.floor(hoursDiff / 24);
   if (daysDiff < 30) {
-    return `${daysDiff} ${conditionallyAddPlural("day", daysDiff)} ago`;
-  }
-
-  const weeksDiff = Math.floor(daysDiff / 7);
-  if (weeksDiff < 4) {
-    return `${weeksDiff} ${conditionallyAddPlural("week", weeksDiff)} ago`;
+    return formatter.format(-daysDiff, "day");
   }
 
   const monthsDiff = Math.floor(daysDiff / 30);
   if (monthsDiff < 12) {
-    return `${monthsDiff} ${conditionallyAddPlural("month", monthsDiff)} ago`;
+    return formatter.format(-monthsDiff, "month");
   }
 
-  const yearsDiff = Math.floor(monthsDiff / 12);
-  return `${yearsDiff} ${conditionallyAddPlural("year", yearsDiff)} ago`;
+  return formatter.format(-Math.floor(monthsDiff / 12), "year");
 }
 
 /**
- * Formats a date string using the browser's locale and timezone, producing a
- * short, human-friendly date-and-time string.
+ * Formats a date string as a short date-and-time in the local timezone.
  *
  * @example
- * localizeAndPrettify("2025-01-15T10:30:00Z") // "1/15/2025, 10:30:00 AM"
+ * localizeAndPrettify("2025-01-15T10:30:00Z", "en") // "1/15/2025, 10:30:00 AM"
  */
-export function localizeAndPrettify(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleString();
+export function localizeAndPrettify(
+  dateString: string,
+  locale: string
+): string {
+  return new Date(dateString).toLocaleString(locale);
 }
 
 /**
  * Formats a date string as a long-form date: full month name, numeric day,
- * and four-digit year, in US English.
+ * and four-digit year.
  *
  * @example
- * humanReadableFormat("2025-01-15T10:30:00Z") // "January 15, 2025"
+ * humanReadableFormat("2025-01-15T10:30:00Z", "en") // "January 15, 2025"
  */
-export function humanReadableFormat(dateString: string): string {
-  const date = new Date(dateString);
-  const formatter = new Intl.DateTimeFormat("en-US", {
+export function humanReadableFormat(
+  dateString: string,
+  locale: string
+): string {
+  return new Intl.DateTimeFormat(locale, {
     month: "long",
     day: "numeric",
     year: "numeric",
-  });
-  return formatter.format(date);
+  }).format(new Date(dateString));
 }
 
 /**
  * Formats a date as a short-form date: abbreviated month name, numeric day,
- * and four-digit year, in US English. Returns an empty string for a null input.
+ * and four-digit year. Returns an empty string for a null input.
  *
  * @example
- * humanReadableFormatShort("2025-01-15T10:30:00Z") // "Jan 15, 2025"
- * humanReadableFormatShort(null)                   // ""
+ * humanReadableFormatShort("2025-01-15T10:30:00Z", "en") // "Jan 15, 2025"
+ * humanReadableFormatShort(null, "en")                   // ""
  */
-export function humanReadableFormatShort(date: string | Date | null): string {
+export function humanReadableFormatShort(
+  date: string | Date | null,
+  locale: string
+): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
-  const formatter = new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     year: "numeric",
-  });
-  return formatter.format(d);
+  }).format(d);
 }
 
 /**
  * Formats a datetime string as a long-form date with clock time: full month
- * name, numeric day, four-digit year, and 12-hour time, in US English.
+ * name, numeric day, four-digit year, and the locale's clock format.
  *
  * @example
- * humanReadableFormatWithTime("2025-01-15T10:30:00Z") // "January 15, 2025 at 10:30 AM"
+ * humanReadableFormatWithTime("2025-01-15T10:30:00Z", "en") // "January 15, 2025 at 10:30 AM"
  */
-export function humanReadableFormatWithTime(datetimeString: string): string {
-  const date = new Date(datetimeString);
-  const formatter = new Intl.DateTimeFormat("en-US", {
+export function humanReadableFormatWithTime(
+  datetimeString: string,
+  locale: string
+): string {
+  return new Intl.DateTimeFormat(locale, {
     month: "long",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "numeric",
-  });
-  return formatter.format(date);
+  }).format(new Date(datetimeString));
 }
 
 export type TimeFilter = "day" | "week" | "month" | "year";

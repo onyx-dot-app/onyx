@@ -52,13 +52,29 @@ def test_censoring_only_source_has_no_perm_sync_capabilities() -> None:
 
 def test_probeless_sync_source_gets_no_fallback() -> None:
     """
-    Verifies the no-trivial-pass rule: Slack and Gmail are sync-capable, but
-    their legacy ``validate_perm_sync`` dispatch is a no-op, so no fallback is
-    synthesized and no verdict can pass on the basis of a no-op probe.
+    Verifies the no-trivial-pass rule: Gmail is sync-capable, but its legacy
+    ``validate_perm_sync`` dispatch is a no-op, so no fallback is synthesized
+    and no verdict can pass on the basis of a no-op probe.
     """
     # Under test and postcondition.
-    assert get_perm_sync_capability_checks(DocumentSource.SLACK) == []
     assert get_perm_sync_capability_checks(DocumentSource.GMAIL) == []
+
+
+def test_slack_registers_named_doc_sync_checks_only() -> None:
+    """
+    Verifies Slack's registered perm-sync suite: named DOC_PERMISSION_SYNC
+    checks (no fallback), and nothing under EXTERNAL_GROUP_SYNC, which is not
+    applicable for Slack by design.
+    """
+    # Under test.
+    checks = get_perm_sync_capability_checks(DocumentSource.SLACK)
+
+    # Postcondition.
+    assert checks
+    assert {check.capability for check in checks} == {
+        CredentialCapability.DOC_PERMISSION_SYNC
+    }
+    assert not any(check.is_fallback for check in checks)
 
 
 def test_fallback_synthesis_respects_applicability(

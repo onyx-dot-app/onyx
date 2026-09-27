@@ -1,11 +1,15 @@
 import { runBrowserSso } from "@/api/auth/browserSso";
 import type { ProviderDescriptor } from "@/api/auth/providers";
 import { apiFetch } from "@/api/client";
-import { getToken, setToken } from "@/api/auth/tokenStore";
+import {
+  getInFlightRefresh,
+  setInFlightRefresh,
+} from "@/api/auth/refreshState";
+import { setToken } from "@/api/auth/tokenStore";
 import { isAuthError } from "@/api/errors";
 import { toast } from "@/hooks/useToast";
 import { persister, queryClient } from "@/query/client";
-import { useSession } from "@/state/session";
+import { getStoredServerUrl, useSession } from "@/state/session";
 import { useUserFileStore } from "@/state/userFileStore";
 
 export interface BearerTokenResponse {
@@ -24,12 +28,20 @@ const SSO_EXCHANGE_PATH = "/auth/mobile/sso/exchange";
 // Shared (non-mobile) route; only creates the user, mints no token.
 const REGISTER_PATH = "/auth/register";
 
-// Bumped on every identity change; a late refresh applies its result only if
-// unchanged, so it can't resurrect a logged-out or cross-contaminate a new session.
+// Bumped on every identity change; a late refresh applies its result only if unchanged, so it can't resurrect a logged-out session.
 let sessionEpoch = 0;
 
-// Drop in-memory + on-disk cache so a new identity can't read a prior user's data. Includes the
-// userFileStore (holds committed file records now), which lives outside the Query cache.
+/*
+ * The epoch alone can't see an instance switch: the connect screen swaps the stored server URL
+ * without touching it, while `setToken` derives its keychain key from whatever URL is current when
+ * it writes. A refresh that outlived the switch would file the old instance's bearer under the new
+ * one's key, and every later request would hand that bearer to a different server.
+ */
+function sameSession(epoch: number, serverUrl: string | null): boolean {
+  return sessionEpoch === epoch && getStoredServerUrl() === serverUrl;
+}
+
+// userFileStore keeps file records outside the Query cache, so clearing that cache alone would leak the prior user's data.
 async function purgeCache(): Promise<void> {
   queryClient.clear();
   useUserFileStore.getState().reset();
@@ -46,7 +58,7 @@ function passwordForm(email: string, password: string): URLSearchParams {
 }
 
 async function installSession(accessToken: string): Promise<void> {
-  sessionEpoch += 1; // new identity → invalidate any in-flight refresh
+  sessionEpoch += 1;
   // Install the new token before purging, else a query firing mid-purge repopulates the cache with the prior user's data.
   await setToken(accessToken);
   await purgeCache();
@@ -67,7 +79,7 @@ async function browserLogin(provider: ProviderDescriptor): Promise<string> {
   const { code, codeVerifier } = await runBrowserSso(provider);
   const res = await apiFetch<BearerTokenResponse>(SSO_EXCHANGE_PATH, {
     method: "POST",
-    auth: false, // the code itself is the credential
+    auth: false,
     body: { code, code_verifier: codeVerifier },
   });
   return res.access_token;
@@ -81,8 +93,7 @@ export async function login(method: LoginMethod): Promise<void> {
   await installSession(accessToken);
 }
 
-// Register succeeded but auto-login failed (e.g. email verification required):
-// account exists, so the UI must say "sign in", not "signup failed".
+// The account exists (auto-login failed, e.g. email verification required), so the UI must say "sign in", not "signup failed".
 export class PostRegisterLoginError extends Error {
   readonly loginError: unknown;
   constructor(loginError: unknown) {
@@ -92,7 +103,6 @@ export class PostRegisterLoginError extends Error {
   }
 }
 
-// Create the account, then log in to mint the bearer (register issues no token).
 export async function register(params: {
   email: string;
   password: string;
@@ -114,14 +124,13 @@ export async function register(params: {
 }
 
 export async function clearLocalSession(): Promise<void> {
-  sessionEpoch += 1; // a late refresh can't resurrect us
+  sessionEpoch += 1;
   await setToken(null);
   await purgeCache();
   useSession.getState().setStatus("anon");
 }
 
 export async function logout(): Promise<void> {
-  // Best-effort revoke; the local wipe below runs regardless of network failure.
   try {
     await apiFetch<void>(LOGOUT_PATH, { method: "POST" });
   } catch (err) {
@@ -130,52 +139,64 @@ export async function logout(): Promise<void> {
   await clearLocalSession();
 }
 
-// Single-flight: concurrent callers share one in-flight refresh.
-let inFlightRefresh: Promise<string | null> | null = null;
-
 export function refreshToken(): Promise<string | null> {
-  if (inFlightRefresh) return inFlightRefresh;
+  const pending = getInFlightRefresh();
+  if (pending) return pending;
   const startedEpoch = sessionEpoch;
-  inFlightRefresh = (async () => {
+  const startedServerUrl = getStoredServerUrl();
+  const refresh = (async () => {
     try {
       const res = await apiFetch<BearerTokenResponse>(REFRESH_PATH, {
         method: "POST",
+        // This request *is* the in-flight refresh, so asking for a "valid" token would await its own promise.
+        auth: "stored",
       });
-      // Logged out/replaced mid-flight: discard rather than mix identities.
-      if (sessionEpoch !== startedEpoch) return null;
+      /*
+       * Logged out, replaced, or pointed at another instance mid-flight: discard rather than mix
+       * identities.
+       */
+      if (!sameSession(startedEpoch, startedServerUrl)) return null;
       await setToken(res.access_token);
       useSession.getState().setStatus("authed");
       return res.access_token;
     } catch (err) {
-      // Auth error = token rejected, unrecoverable → wipe (if same session).
-      // Transient errors re-throw so the caller keeps the existing token.
+      // Only an auth error means the token is dead; a transient one re-throws so the caller keeps it.
       if (isAuthError(err)) {
-        if (sessionEpoch === startedEpoch) await clearLocalSession();
+        // Same reasoning: clearing here after a switch would wipe the new instance's session.
+        if (sameSession(startedEpoch, startedServerUrl)) {
+          try {
+            await clearLocalSession();
+          } catch (clearError) {
+            /*
+             * A throw in here escapes the enclosing catch, so it would reach the fire-and-forget
+             * caller as an unlogged rejection with the session half-cleared. The token is dead
+             * either way, so report it and still answer null.
+             */
+            console.warn("Mobile session clear failed", clearError);
+          }
+        }
         return null;
       }
+      /*
+       * Both callers swallow this — the refresh loop drops it, and `getValidToken` falls back to
+       * the stored token — so without a line here a session that dies from repeated failed
+       * refreshes leaves no trace. Logged at the attempt, not at the call sites: one line per
+       * refresh however many requests were waiting on it.
+       */
+      console.warn("Mobile token refresh failed", err);
       throw err;
     } finally {
-      inFlightRefresh = null;
+      setInFlightRefresh(null);
     }
   })();
-  return inFlightRefresh;
+  // Safe after the call: the IIFE can only reach its `finally` on a later microtask.
+  setInFlightRefresh(refresh);
+  return refresh;
 }
 
-// Test-only: clear module state so a leaked `inFlightRefresh` can't bleed into the next test.
 export function __resetSessionStateForTests(): void {
   sessionEpoch = 0;
-  inFlightRefresh = null;
+  setInFlightRefresh(null);
 }
 
-// Token is opaque (not a JWT), so no client-side expiry check; return it as-is.
-// Await an in-flight refresh for freshness, but fall back to the stored token on a transient throw.
-export async function getValidToken(): Promise<string | null> {
-  if (inFlightRefresh) {
-    try {
-      return await inFlightRefresh;
-    } catch {
-      return getToken();
-    }
-  }
-  return getToken();
-}
+export { getValidToken } from "@/api/auth/refreshState";

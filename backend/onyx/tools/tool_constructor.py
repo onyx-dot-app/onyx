@@ -13,10 +13,8 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.mcp import (
-    MCPCredentialsError,
     get_all_mcp_tools_for_server,
     get_mcp_server_by_id,
-    resolve_mcp_credentials,
 )
 from onyx.db.models import Persona, User
 from onyx.db.models import Tool as ToolDBModel
@@ -27,6 +25,10 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.features.mcp.credentials import (
+    MCPCredentialsError,
+    resolve_mcp_credentials,
+)
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo, SearchToolUsage
@@ -67,7 +69,6 @@ class SearchToolConfig(BaseModel):
     # must be found via vector DB search instead.
     project_id_filter: int | None = None
     persona_id_filter: int | None = None
-    bypass_acl: bool = False
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
@@ -117,6 +118,19 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         max_input_tokens=llm.config.max_input_tokens,
         custom_config=llm_provider.custom_config,
     )
+
+
+def _require_chat_session_id(
+    custom_tool_config: CustomToolConfig | None, tool_name: str
+) -> UUID:
+    """Generated files are scoped to the chat session that produced them, so
+    the tools that write them cannot be built without one."""
+    if custom_tool_config is None or custom_tool_config.chat_session_id is None:
+        raise ValueError(
+            f"{tool_name} requires CustomToolConfig.chat_session_id: generated "
+            "files are scoped to the chat session that produced them"
+        )
+    return custom_tool_config.chat_session_id
 
 
 def should_disable_open_url_web_fetch(
@@ -197,10 +211,7 @@ def _construct_tools_impl(
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
-    # Get user's OAuth token if available
-    user_oauth_token = None
-    if user.oauth_accounts:
-        user_oauth_token = user.oauth_accounts[0].access_token
+    user_oauth_token: str | None = user.live_oauth_token
 
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
@@ -223,7 +234,6 @@ def _construct_tools_impl(
             user_selected_filters=config.user_selected_filters,
             project_id_filter=config.project_id_filter,
             persona_id_filter=config.persona_id_filter,
-            bypass_acl=config.bypass_acl,
             slack_context=config.slack_context,
             enable_slack_search=config.enable_slack_search,
             auto_detect_filters=config.auto_detect_filters,
@@ -235,6 +245,13 @@ def _construct_tools_impl(
 
     added_search_tool = False
     for db_tool_model in persona.tools:
+        # Disabling an action leaves it attached to its personas, so an attached
+        # tool is not necessarily a usable one (see Persona__Tool). Only the tool
+        # listing endpoints filtered on this, which left a disabled tool callable
+        # by any request that sends no allowed_tool_ids whitelist.
+        if not db_tool_model.enabled:
+            continue
+
         # If allowed_tool_ids is specified, skip tools not in the allowed list
         if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
             continue
@@ -292,6 +309,9 @@ def _construct_tools_impl(
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
                         emitter=emitter,
+                        chat_session_id=_require_chat_session_id(
+                            custom_tool_config, ImageGenerationTool.__name__
+                        ),
                     )
                 ]
 
@@ -336,7 +356,13 @@ def _construct_tools_impl(
             # Handle Python/Code Interpreter Tool
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
-                    PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                    PythonTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        chat_session_id=_require_chat_session_id(
+                            custom_tool_config, PythonTool.__name__
+                        ),
+                    )
                 ]
 
             # Handle Coding Agent Tool

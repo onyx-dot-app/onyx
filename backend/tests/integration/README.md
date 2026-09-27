@@ -18,19 +18,10 @@ exposed cleanly through public APIs; direct task/stub checks belong in
 `tests/external_dependency_unit/craft/`.
 
 ## Instructions for Running Integration Tests Locally
-0. Generate dependencies
-First install openap-generator
-```sh
-brew install openapi-generator
-```
 
-Then, using the VSCode/Cursor debugger, run the `Onyx OpenAPI Schema Generator` task (see `CONTRIBUTING_VSCODE.md` for `launch.json` setup instructions).
-The task automatically generates the Python client needed for integration tests.
-
-If the client generation fails, try running this command manually:
-```sh
-openapi-generator generate -i backend/generated/openapi.json -g python -o backend/generated/onyx_openapi_client --package-name onyx_openapi_client --skip-validate-spec --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
-```
+The tests call the API through the manager classes in `common_utils/managers`, so
+the generated OpenAPI client is not needed. Use `ods openapi all` only if you want
+the schema or client for other work.
 
 1. Launch onyx (using Docker or running with a debugger), ensuring the API server is running on port 8080.
    - If you'd like to set environment variables, you can do so by creating a `.env` file in the onyx/backend/tests/integration/ directory.

@@ -32,6 +32,9 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallProgress,
     ToolCallStart,
 )
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    OutputsManifestResponse,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -468,6 +471,19 @@ class SandboxManager(_ServeMixin, ABC):
 
         Raises:
             ValueError: If path traversal attempted or path is not a directory
+        """
+        ...
+
+    @abstractmethod
+    def get_outputs_manifest(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> OutputsManifestResponse:
+        """Describe the session's outputs tree in one call.
+
+        Symlinks and non-regular files are counted, never followed. Regular
+        files carry size, mtime, and a content hash when under the hash
+        ceilings. A missing outputs tree is an empty manifest, not an error.
+        Raises RuntimeError-family errors when the backend cannot answer.
         """
         ...
 

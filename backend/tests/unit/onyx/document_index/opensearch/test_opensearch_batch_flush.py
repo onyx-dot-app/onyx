@@ -183,8 +183,7 @@ def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
     chunks = []
     for doc_idx in range(3):
         doc_id = f"doc_{doc_idx}"
-        for chunk_idx in range(50):
-            chunks.append(_make_chunk(doc_id, chunk_idx))
+        chunks.extend(_make_chunk(doc_id, chunk_idx) for chunk_idx in range(50))
 
     metadata = IndexingMetadata(
         doc_id_to_chunk_cnt_diff={
@@ -217,3 +216,24 @@ def test_delete_called_once_per_document() -> None:
         index.index(chunks, metadata)
 
     mock_delete.assert_called_once_with(doc_id, None)
+
+
+def test_index_writes_all_enriched_source_types() -> None:
+    index, mock_bulk = _make_index()
+    chunk = _make_chunk("doc_1", 0).model_copy(
+        update={
+            "source_types": (
+                DocumentSource.WEB,
+                DocumentSource.GOOGLE_DRIVE,
+            )
+        }
+    )
+
+    with patch.object(index, "delete", return_value=0):
+        index.index([chunk], _make_metadata("doc_1", 1))
+
+    indexed_chunk = mock_bulk.call_args.kwargs["documents"][0]
+    assert indexed_chunk.model_dump()["source_type"] == [
+        DocumentSource.GOOGLE_DRIVE.value,
+        DocumentSource.WEB.value,
+    ]

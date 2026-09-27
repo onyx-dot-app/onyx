@@ -17,6 +17,7 @@ from onyx.db.enums import (
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
+from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
 from onyx.db.models import ScheduledTask, ScheduledTaskRun
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -51,6 +52,7 @@ def _create_task(
     editor_payload: dict[str, Any] | None = None,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
     run_immediately: bool = False,
+    pre_approved_mcp_server_ids: list[int] | None = None,
 ) -> httpx.Response:
     body: dict[str, Any] = {
         "name": name or f"task-{uuid4().hex[:8]}",
@@ -60,6 +62,8 @@ def _create_task(
         "status": status.value,
         "run_immediately": run_immediately,
     }
+    if pre_approved_mcp_server_ids is not None:
+        body["pre_approved_mcp_server_ids"] = pre_approved_mcp_server_ids
     return client.post(
         _url(),
         json=body,
@@ -135,6 +139,28 @@ def _get_runs_for_task(task_id: UUID) -> list[ScheduledTaskRun]:
         )
 
 
+def _create_mcp_server(owner: str, *, available_in_craft: bool) -> int:
+    with get_session_with_current_tenant() as db_session:
+        server = create_mcp_server__no_commit(
+            owner_email=owner,
+            name=f"scheduled-task-mcp-{uuid4().hex[:8]}",
+            description=None,
+            server_url="https://example.com/mcp",
+            auth_type=None,
+            transport=None,
+            auth_performer=None,
+            db_session=db_session,
+            is_public=True,
+        )
+        update_mcp_server__no_commit(
+            server_id=server.id,
+            db_session=db_session,
+            available_in_craft=available_in_craft,
+        )
+        db_session.commit()
+        return server.id
+
+
 def test_create_task_compiles_cron(admin_user: DATestUser) -> None:
     response = _create_task(
         admin_user,
@@ -150,6 +176,82 @@ def test_create_task_compiles_cron(admin_user: DATestUser) -> None:
     row = _get_task_row(UUID(body["id"]))
     assert row is not None
     assert row.cron_expression == cron
+
+
+def test_create_and_patch_mcp_pre_approvals(admin_user: DATestUser) -> None:
+    server_a = _create_mcp_server(admin_user.email, available_in_craft=True)
+    server_b = _create_mcp_server(admin_user.email, available_in_craft=True)
+    unavailable_server = _create_mcp_server(admin_user.email, available_in_craft=False)
+
+    create_response = _create_task(
+        admin_user,
+        pre_approved_mcp_server_ids=[server_b, server_a, server_b],
+    )
+    create_response.raise_for_status()
+    created = create_response.json()
+    task_id = UUID(created["id"])
+    created_mcp_server_ids = created["pre_approved_mcp_server_ids"]
+    assert len(created_mcp_server_ids) == 2
+    assert set(created_mcp_server_ids) == {server_a, server_b}
+
+    patch_response = _patch_task(
+        admin_user,
+        task_id,
+        {"pre_approved_mcp_server_ids": [server_a]},
+    )
+    patch_response.raise_for_status()
+    assert patch_response.json()["pre_approved_mcp_server_ids"] == [server_a]
+
+    rejected_response = _patch_task(
+        admin_user,
+        task_id,
+        {"pre_approved_mcp_server_ids": [unavailable_server]},
+    )
+    assert rejected_response.status_code == 400
+
+    detail_response = client.get(
+        _url(str(task_id)),
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    detail_response.raise_for_status()
+    assert detail_response.json()["pre_approved_mcp_server_ids"] == [server_a]
+
+
+def test_patch_retains_and_removes_existing_unavailable_mcp_pre_approval(
+    admin_user: DATestUser,
+) -> None:
+    server_id = _create_mcp_server(admin_user.email, available_in_craft=True)
+    create_response = _create_task(
+        admin_user,
+        pre_approved_mcp_server_ids=[server_id],
+    )
+    create_response.raise_for_status()
+    task_id = UUID(create_response.json()["id"])
+
+    with get_session_with_current_tenant() as db_session:
+        update_mcp_server__no_commit(
+            server_id=server_id,
+            db_session=db_session,
+            available_in_craft=False,
+        )
+        db_session.commit()
+
+    retain_response = _patch_task(
+        admin_user,
+        task_id,
+        {"pre_approved_mcp_server_ids": [server_id]},
+    )
+    retain_response.raise_for_status()
+    assert retain_response.json()["pre_approved_mcp_server_ids"] == [server_id]
+
+    remove_response = _patch_task(
+        admin_user,
+        task_id,
+        {"pre_approved_mcp_server_ids": []},
+    )
+    remove_response.raise_for_status()
+    assert remove_response.json()["pre_approved_mcp_server_ids"] == []
 
 
 def test_create_task_interval_days_requires_time_of_day(admin_user: DATestUser) -> None:

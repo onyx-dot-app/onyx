@@ -2,13 +2,17 @@ import contextlib
 import time
 from collections.abc import Generator, Iterable, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 from sqlalchemy import (
     CompoundSelect,
+    Integer,
     Select,
+    String,
     and_,
+    case,
+    column,
     delete,
     distinct,
     exists,
@@ -16,8 +20,10 @@ from sqlalchemy import (
     literal,
     or_,
     select,
+    true,
     tuple_,
     update,
+    values,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
@@ -304,6 +310,58 @@ def get_document_ids_for_cc_pair_batch(
     return list(db_session.execute(stmt).scalars().all())
 
 
+class PortedScope(NamedTuple):
+    connector_id: int
+    credential_id: int
+    up_to_doc_id: str | None
+
+
+def sample_ported_document_ids(
+    db_session: Session,
+    cc_pair_scopes: Sequence[PortedScope],
+    per_scope_limit: int,
+) -> list[str]:
+    """Gets up to `per_scope_limit` document IDs per cc_pair that its port copied.
+
+    A scope with a None `up_to_doc_id` is skipped: that port found no documents when it
+    started, so it copied nothing. Documents with a NULL chunk_count are included; the
+    column was added without a backfill and the port copies them too.
+
+    The result is the same for the same scopes on every call. A fresh random sample on
+    each retry would eventually miss the gap in a partly-missing index and pass.
+    """
+    scope_rows = [
+        (scope.connector_id, scope.credential_id, scope.up_to_doc_id)
+        for scope in cc_pair_scopes
+        if scope.up_to_doc_id is not None
+    ]
+    if per_scope_limit <= 0 or not scope_rows:
+        return []
+
+    scopes = values(
+        column("connector_id", Integer),
+        column("credential_id", Integer),
+        column("up_to_id", String),
+        name="cc_pair_scope",
+    ).data(scope_rows)
+
+    per_cc_pair = (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == scopes.c.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == scopes.c.credential_id,
+            or_(DbDocument.chunk_count.is_(None), DbDocument.chunk_count > 0),
+            DocumentByConnectorCredentialPair.id <= scopes.c.up_to_id,
+        )
+        .order_by(DocumentByConnectorCredentialPair.id)
+        .limit(per_scope_limit)
+        .lateral("sampled_document")
+    )
+    stmt = select(per_cc_pair.c.id).select_from(scopes.join(per_cc_pair, true()))
+    return list(db_session.execute(stmt).scalars().all())
+
+
 def get_max_document_id_for_cc_pair(db_session: Session, cc_pair_id: int) -> str | None:
     """The lexicographically-max Document.id linked to this cc_pair, or None if it
     has none. The reindex port snapshots this at start as its upper bound so it
@@ -361,7 +419,10 @@ def get_documents_for_connector_credential_pair_limited_columns(
     )
 
     stmt = select(
-        DbDocument.id, DbDocument.doc_metadata, DbDocument.external_user_group_ids
+        DbDocument.id,
+        DbDocument.doc_metadata,
+        DbDocument.external_user_group_ids,
+        DbDocument.external_user_emails,
     )
 
     stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery))
@@ -379,6 +440,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
             id=row.id,
             doc_metadata=row.doc_metadata,
             external_user_group_ids=row.external_user_group_ids or [],
+            external_user_emails=row.external_user_emails or [],
         )
         doc_rows.append(doc_row)
     return doc_rows
@@ -660,6 +722,57 @@ def fetch_document_ids_by_links(
     return {link: doc_id for link, doc_id in rows if link}
 
 
+def get_document_source_types(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, tuple[DocumentSource, ...]]:
+    if not document_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(DocumentByConnectorCredentialPair.id, Connector.source)
+        .join(
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .distinct()
+    ).all()
+
+    sources_by_document: dict[str, set[DocumentSource]] = {}
+    for document_id, source in rows:
+        sources_by_document.setdefault(document_id, set()).add(source)
+    return {
+        document_id: tuple(sorted(sources, key=lambda source: source.value))
+        for document_id, sources in sources_by_document.items()
+    }
+
+
+def get_document_source_types_after_cc_pair_removal(
+    db_session: Session,
+    document_id: str,
+    connector_id: int,
+    credential_id: int,
+) -> tuple[DocumentSource, ...]:
+    sources = db_session.execute(
+        select(Connector.source)
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id == document_id,
+            ~and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            ),
+        )
+        .distinct()
+    ).scalars()
+    return tuple(sorted(set(sources), key=lambda source: source.value))
+
+
 def get_document_connector_count(
     db_session: Session,
     document_id: str,
@@ -818,7 +931,9 @@ def get_access_info_for_documents(
             User,
             and_(
                 Credential.user_id == User.id,
-                ConnectorCredentialPair.access_type != AccessType.SYNC,
+                ConnectorCredentialPair.access_type.notin_(
+                    AccessType.perm_synced_types()
+                ),
             ),
         )
         # don't include CC pairs that are being deleted
@@ -833,6 +948,7 @@ def upsert_documents(
     db_session: Session,
     document_metadata_batch: list[DocumentMetadata],
     initial_boost: int = DEFAULT_BOOST,
+    source: DocumentSource | None = None,
 ) -> None:
     """NOTE: this function is Postgres specific. Not all DBs support the ON CONFLICT clause.
     Also note, this function should not be used for updating documents, only creating and
@@ -902,23 +1018,63 @@ def upsert_documents(
         "file_id": insert_stmt.excluded.file_id,
     }
     if includes_permissions:
+        preserve_onedrive_permissions = exists(
+            select(DocumentByConnectorCredentialPair.id)
+            .join(
+                Connector,
+                Connector.id == DocumentByConnectorCredentialPair.connector_id,
+            )
+            .join(
+                ConnectorCredentialPair,
+                and_(
+                    ConnectorCredentialPair.connector_id
+                    == DocumentByConnectorCredentialPair.connector_id,
+                    ConnectorCredentialPair.credential_id
+                    == DocumentByConnectorCredentialPair.credential_id,
+                ),
+            )
+            .where(
+                DocumentByConnectorCredentialPair.id == DbDocument.id,
+                DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+                Connector.source == DocumentSource.ONEDRIVE,
+                ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
+            )
+            .correlate(DbDocument)
+        )
+
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
+        external_user_emails = func.coalesce(
+            insert_stmt.excluded.external_user_emails,
+            DbDocument.external_user_emails,
+        )
+        external_user_group_ids = func.coalesce(
+            insert_stmt.excluded.external_user_group_ids,
+            DbDocument.external_user_group_ids,
+        )
+        is_public = func.coalesce(
+            insert_stmt.excluded.is_public,
+            DbDocument.is_public,
+        )
+        if source == DocumentSource.SHAREPOINT:
+            external_user_emails = case(
+                (preserve_onedrive_permissions, DbDocument.external_user_emails),
+                else_=external_user_emails,
+            )
+            external_user_group_ids = case(
+                (preserve_onedrive_permissions, DbDocument.external_user_group_ids),
+                else_=external_user_group_ids,
+            )
+            is_public = case(
+                (preserve_onedrive_permissions, DbDocument.is_public),
+                else_=is_public,
+            )
         update_set.update(
             {
-                "external_user_emails": func.coalesce(
-                    insert_stmt.excluded.external_user_emails,
-                    DbDocument.external_user_emails,
-                ),
-                "external_user_group_ids": func.coalesce(
-                    insert_stmt.excluded.external_user_group_ids,
-                    DbDocument.external_user_group_ids,
-                ),
-                "is_public": func.coalesce(
-                    insert_stmt.excluded.is_public,
-                    DbDocument.is_public,
-                ),
+                "external_user_emails": external_user_emails,
+                "external_user_group_ids": external_user_group_ids,
+                "is_public": is_public,
             }
         )
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
@@ -953,8 +1109,20 @@ def upsert_document_by_connector_credential_pair(
     # this must be `on_conflict_do_nothing` rather than `on_conflict_do_update`
     # since we don't want to update the `has_been_indexed` field for documents
     # that already exist
-    on_conflict_stmt = insert_stmt.on_conflict_do_nothing()
-    db_session.execute(on_conflict_stmt)
+    on_conflict_stmt = insert_stmt.on_conflict_do_nothing().returning(
+        DocumentByConnectorCredentialPair.id
+    )
+    inserted_document_ids = list(db_session.scalars(on_conflict_stmt))
+    if inserted_document_ids:
+        # Relationship changes use metadata sync for chunks that already exist.
+        db_session.execute(
+            update(DbDocument)
+            .where(
+                DbDocument.id.in_(inserted_document_ids),
+                DbDocument.chunk_count.is_not(None),
+            )
+            .values(last_modified=datetime.now(timezone.utc))
+        )
     db_session.commit()
 
 
@@ -1071,17 +1239,25 @@ def update_docs_content_hash__no_commit(
         doc.content_hash = ids_to_new_hash[doc.id]
 
 
-def mark_document_as_modified(
+def mark_document_as_modified__no_commit(
     document_id: str,
     db_session: Session,
-) -> None:
+) -> datetime:
     stmt = select(DbDocument).where(DbDocument.id == document_id)
     doc = db_session.scalar(stmt)
     if doc is None:
         raise ValueError(f"No document with ID: {document_id}")
 
-    # update last_synced
-    doc.last_modified = datetime.now(timezone.utc)
+    modified_at = datetime.now(timezone.utc)
+    doc.last_modified = modified_at
+    return modified_at
+
+
+def mark_document_as_modified(
+    document_id: str,
+    db_session: Session,
+) -> None:
+    mark_document_as_modified__no_commit(document_id, db_session)
     db_session.commit()
 
 
@@ -1230,7 +1406,7 @@ def get_document_id_to_file_id_map(
         .filter(DbDocument.file_id.isnot(None))
         .all()
     )
-    return {doc_id: file_id for doc_id, file_id in rows}
+    return {doc_id: file_id for doc_id, file_id in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def delete_documents_complete__no_commit(
@@ -1471,6 +1647,14 @@ def get_document(
     return doc
 
 
+def get_document_for_update(
+    document_id: str,
+    db_session: Session,
+) -> DbDocument | None:
+    stmt = select(DbDocument).where(DbDocument.id == document_id).with_for_update()
+    return db_session.scalar(stmt)
+
+
 def get_cc_pairs_for_document(
     db_session: Session,
     document_id: str,
@@ -1522,7 +1706,7 @@ def get_document_sources(
     )
 
     results = db_session.execute(stmt).all()
-    return {doc_id: source for doc_id, source in results}
+    return {doc_id: source for doc_id, source in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def fetch_chunk_counts_for_documents(
@@ -1681,7 +1865,7 @@ def get_base_llm_doc_information(
 
     documents = []
 
-    for doc_nr, doc in enumerate(results):
+    for _doc_nr, doc in enumerate(results):
         bare_doc = doc[0]
         documents.append(
             f"""* [{bare_doc.semantic_id}]({bare_doc.link}) ({bare_doc.doc_updated_at})"""

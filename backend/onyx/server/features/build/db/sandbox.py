@@ -233,7 +233,7 @@ def lock_sandbox_skills_hashes(
         .order_by(Sandbox.id)
         .with_for_update()
     )
-    return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}
+    return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:

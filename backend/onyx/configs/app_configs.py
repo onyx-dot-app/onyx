@@ -79,6 +79,10 @@ DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() ==
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
 
+# Hides the "Powered by Onyx" tagline on Enterprise deployments. Do not set
+# without explicit permission from Onyx.
+HIDE_ONYX_BRANDING = os.environ.get("HIDE_ONYX_BRANDING", "").lower() == "true"
+
 # TEMPORARY (will be removed soon): operator-forced Search-UI scope (self-hosted only) —
 # comma-separated document set NAMES. When set, the Onyx Search UI is restricted to those sets
 # (AND'd on top of any persona/user scope; ACL still enforced) — chat/other flows are unaffected,
@@ -211,11 +215,10 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 # lifetime, so a paired-up cookie + token never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
-# Redis TTL for cached control-plane billing/trial lookups. 24h default —
-# trial→paid conversions propagate within this window in the worst case,
-# and the admin panel call sites invalidate on write so immediate UI
-# refreshes are not stale. Env-tunable for emergency tightening.
-BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
+# Redis TTL for cached control-plane billing/trial lookups. Backstop only:
+# successful /tenants/tier-update pushes and admin-panel billing mutations
+# drop this cache, so 1h bounds staleness when a push is missed or fails.
+BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "3600"))
 
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
@@ -358,7 +361,11 @@ if not MOBILE_ALLOWED_REDIRECT_URIS:
     MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
 
 # JWT Public Key URL for JWT token verification
-JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL") or None
+# Optional aud/iss scoping for JWT_PUBLIC_KEY_URL auth, off when unset. Empty
+# counts as unset because compose files pass absent vars through as "".
+JWT_EXPECTED_AUDIENCE: str | None = os.getenv("JWT_EXPECTED_AUDIENCE") or None
+JWT_EXPECTED_ISSUER: str | None = os.getenv("JWT_EXPECTED_ISSUER") or None
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -982,10 +989,25 @@ REDIS_HEALTH_CHECK_INTERVAL = int(os.environ.get("REDIS_HEALTH_CHECK_INTERVAL", 
 # our redis client only, not celery's
 REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 128))
 
+# Per-recv and connect deadlines in seconds for our redis client, not celery's.
+# A peer that keeps the TCP session open without replying raises after this
+# instead of holding the thread until restart. The read value caps BLPOP too.
+REDIS_SOCKET_CONNECT_TIMEOUT = float(
+    os.environ.get("REDIS_SOCKET_CONNECT_TIMEOUT") or 10
+)
+REDIS_SOCKET_TIMEOUT = float(os.environ.get("REDIS_SOCKET_TIMEOUT") or 30)
+REDIS_SOCKET_TIMEOUT_KWARGS: dict[str, float] = {
+    "socket_connect_timeout": REDIS_SOCKET_CONNECT_TIMEOUT,
+    "socket_timeout": REDIS_SOCKET_TIMEOUT,
+}
+
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#redis-backend-settings
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+REDIS_SSL_CHECK_HOSTNAME = (
+    os.getenv("REDIS_SSL_CHECK_HOSTNAME", "false").lower() == "true"
+)
 # Client certificate + key for Redis mutual TLS (the server authenticating us).
 # Both must be set together and require REDIS_SSL=true. A managed Redis may hand
 # these out base64-encoded — decode them to files (e.g. a mounted secret) and
@@ -1087,11 +1109,22 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )
 
+# How many documents the pre-swap check samples per cc_pair and per user. 0 skips the
+# sample; the other swap conditions still apply.
+PORT_SWAP_VERIFY_DOCS_PER_UNIT = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_DOCS_PER_UNIT", 3
+)
+# Seconds to hold the swap after a failed pre-swap check before checking again.
+# 0 retries on the next 15-second tick.
+PORT_SWAP_VERIFY_RETRY_DELAY_S = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_RETRY_DELAY_S", 300
+)
+
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
-# Master switch: when False the reclaim beat task no-ops entirely. Ships dark
-# (default off); flip True to go live. Instant kill switch if anything goes wrong.
+# Master switch: when False the reclaim beat task and every dispatched task no-op.
+# Set it to false to turn reclamation off; that takes effect once the workers restart.
 OLD_INDEX_RECLAIM_ENABLED = (
-    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "").lower() == "true"
+    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "true").lower() == "true"
 )
 # Soak before deleting a PAST index, anchored to when it stopped being read.
 # 0 = delete immediately once the soak gate is reached.
@@ -1171,12 +1204,6 @@ POLL_CONNECTOR_OFFSET = 30  # Minutes overlap between poll windows
 # only very select connectors are enabled and admins cannot add other connector types
 ENABLED_CONNECTOR_TYPES = os.environ.get("ENABLED_CONNECTOR_TYPES") or ""
 
-# If set to true, curators can only access and edit assistants that they created
-CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS = (
-    os.environ.get("CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS", "").lower()
-    == "true"
-)
-
 # Some calls to get information on expert users are quite costly especially with rate limiting
 # Since experts are not used in the actual user experience, currently it is turned off
 # for some connectors
@@ -1200,6 +1227,23 @@ WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 # the Chromium binary installed).
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
+)
+
+# Limits for the built-in open_url crawler. The body read stops at the larger
+# of the HTML and PDF caps (decoded bytes); each type is then checked on its own.
+OPEN_URL_MAX_HTML_SIZE_BYTES = int(
+    os.environ.get("OPEN_URL_MAX_HTML_SIZE_BYTES") or 20 * 1024 * 1024
+)
+OPEN_URL_MAX_PDF_SIZE_BYTES = int(
+    os.environ.get("OPEN_URL_MAX_PDF_SIZE_BYTES") or 50 * 1024 * 1024
+)
+# Wall-clock limit for reading one response body.
+OPEN_URL_BODY_DEADLINE_SECONDS = float(
+    os.environ.get("OPEN_URL_BODY_DEADLINE_SECONDS") or 120
+)
+# Max URLs in one /web-search/open-urls request (also the MCP open_urls tool).
+OPEN_URLS_MAX_URLS_PER_REQUEST = int(
+    os.environ.get("OPEN_URLS_MAX_URLS_PER_REQUEST") or 20
 )
 
 # NOTE: the three SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
@@ -1350,6 +1394,16 @@ SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Largest mail attachment the Outlook connector downloads and extracts.
+OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+# Largest file posted in a channel that the Teams connector downloads and extracts.
+TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
 # When False (default), only groups found in site role assignments are synced.
 # Can be overridden per-connector via the "exhaustive_ad_enumeration" key in
@@ -1358,12 +1412,20 @@ SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
     os.environ.get("SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION", "").lower() == "true"
 )
 
+AIRTABLE_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("AIRTABLE_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
 BLOB_STORAGE_SIZE_THRESHOLD = int(
     os.environ.get("BLOB_STORAGE_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+DROPBOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("DROPBOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
@@ -1378,6 +1440,16 @@ JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
 JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
+
+# An occurrence is picked up by when the meeting ran, but its transcript
+# lands later, so each poll reaches back this far to catch ones that were
+# still processing. Zoom publishes no maximum for that lag, so raise this if
+# a deployment sees transcripts arrive later than the default covers.
+# Clamped at zero: a negative value would narrow the poll window instead of
+# widening it, quietly skipping occurrences the connector should have indexed.
+ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS = max(
+    0, int(os.environ.get("ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS") or 72)
+)
 
 GITHUB_CONNECTOR_BASE_URL = os.environ.get("GITHUB_CONNECTOR_BASE_URL") or None
 
@@ -1395,6 +1467,10 @@ EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
 # Linear specific configs
 LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
+
+# Salesforce specific configs
+SALESFORCE_CLIENT_ID = os.getenv("SALESFORCE_CLIENT_ID")
+SALESFORCE_CLIENT_SECRET = os.getenv("SALESFORCE_CLIENT_SECRET")
 
 # Slack specific configs
 SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
@@ -1472,8 +1548,6 @@ ENABLE_MULTIPASS_INDEXING = (
 # Enable contextual retrieval
 ENABLE_CONTEXTUAL_RAG = os.environ.get("ENABLE_CONTEXTUAL_RAG", "").lower() == "true"
 
-DEFAULT_CONTEXTUAL_RAG_LLM_NAME = "gpt-4o-mini"
-DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER = "DevEnvPresetOpenAI"
 # Finer grained chunking for more detail retention
 # Slightly larger since the sentence aware split is a max cutoff so most minichunks will be under MINI_CHUNK_SIZE
 # tokens. But we need it to be at least as big as 1/4th chunk size to avoid having a tiny mini-chunk at the end
@@ -1547,13 +1621,22 @@ MAX_FILE_SIZE_BYTES = int(
 # with thousands of embedded images can OOM the user-file-processing worker
 # because every image is decoded with PIL and then sent to the vision LLM.
 # Enforced both at upload time (rejects the file) and during extraction
-# (defense-in-depth: caps the number of images materialized).
+# (defense-in-depth: caps the number of images materialized). For PDFs the
+# count is of unique images that pass the content filters in
+# onyx/file_processing/pdf_image_utils.py.
 #
 # Clamped to >= 0; a negative env value would turn upload validation into
 # always-fail and extraction into always-stop, which is never desired. 0
 # disables image extraction entirely, which is a valid (if aggressive) setting.
 MAX_EMBEDDED_IMAGES_PER_FILE = max(
     0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_FILE") or 500)
+)
+
+# Embedded PDF images narrower or shorter than this (px) are treated as
+# rendering artifacts (scanline strips, spacers, gradient tiles), not content,
+# and are skipped by both upload-time counting and extraction. 0 disables.
+MIN_EMBEDDED_IMAGE_DIMENSION_PX = max(
+    0, int(os.environ.get("MIN_EMBEDDED_IMAGE_DIMENSION_PX") or 16)
 )
 
 # Maximum embedded images allowed across all files in a single upload batch.
@@ -1886,6 +1969,14 @@ API_KEY_HASH_ROUNDS = (
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+_MCP_SERVER_API_REQUEST_TIMEOUT_RAW = int(
+    os.environ.get("MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS") or 300
+)
+MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS: int = (
+    _MCP_SERVER_API_REQUEST_TIMEOUT_RAW
+    if _MCP_SERVER_API_REQUEST_TIMEOUT_RAW > 0
+    else 300
+)
 MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")  # noqa: S104 — server bind address; intentional default for containerized deployment
 MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
 
@@ -1937,9 +2028,7 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 # Set to true to mock LLM responses for testing purposes
-MOCK_LLM_RESPONSE = (
-    os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
-)
+MOCK_LLM_RESPONSE = os.environ.get("MOCK_LLM_RESPONSE") or None
 
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20

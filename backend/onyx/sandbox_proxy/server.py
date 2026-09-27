@@ -35,6 +35,7 @@ from onyx.server.features.build.configs import (
     SANDBOX_NAMESPACE,
     SANDBOX_PROXY_HEALTHZ_PORT,
     SANDBOX_PROXY_LISTEN_PORT,
+    SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
@@ -152,6 +153,7 @@ def _build_mitm_options() -> Options:
         confdir=_MITM_CONFDIR,
         mode=["regular"],
         ssl_insecure=False,
+        ssl_verify_upstream_trusted_ca=SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
     )
 
 

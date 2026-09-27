@@ -6,23 +6,14 @@ heavier register/logout flows (their emit calls follow the same one-line
 pattern). Emission itself is covered in tests/unit/onyx/utils/test_audit.py.
 """
 
-import json
 import logging
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.security import OAuth2PasswordRequestForm
 
 from onyx.auth.users import UserManager
-
-
-def _audit_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
-    return [
-        json.loads(r.getMessage())
-        for r in caplog.records
-        if r.name.startswith("onyx.audit")
-    ]
+from tests.utils.audit import audit_events
 
 
 @pytest.mark.asyncio
@@ -37,7 +28,7 @@ async def test_on_after_login_emits_login_success(
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         await manager.on_after_login(user, request=None, response=None)
 
-    events = _audit_events(caplog)
+    events = audit_events(caplog)
     assert len(events) == 1
     assert events[0]["action"] == "auth.login"
     assert events[0]["outcome"] == "success"
@@ -59,7 +50,7 @@ async def test_authenticate_unknown_user_emits_login_failure(
         result = await manager.authenticate(creds)
 
     assert result is None
-    events = _audit_events(caplog)
+    events = audit_events(caplog)
     assert len(events) == 1
     assert events[0]["action"] == "auth.login_failure"
     assert events[0]["outcome"] == "failure"
@@ -82,7 +73,7 @@ async def test_on_after_forgot_password_emits_event(
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         await manager.on_after_forgot_password(user, token="tok", request=None)
 
-    events = _audit_events(caplog)
+    events = audit_events(caplog)
     assert len(events) == 1
     assert events[0]["action"] == "auth.password_forgot"
     assert events[0]["outcome"] == "success"
@@ -109,7 +100,7 @@ async def test_on_after_request_verify_emits_event(
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         await manager.on_after_request_verify(user, token="tok", request=None)
 
-    events = _audit_events(caplog)
+    events = audit_events(caplog)
     assert len(events) == 1
     assert events[0]["action"] == "auth.email_verify"
     assert events[0]["outcome"] == "success"
@@ -125,7 +116,7 @@ async def test_on_after_reset_password_emits_event(
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         await manager.on_after_reset_password(user, request=None)
 
-    events = _audit_events(caplog)
+    events = audit_events(caplog)
     assert len(events) == 1
     assert events[0]["action"] == "auth.password_reset"
     assert events[0]["outcome"] == "success"

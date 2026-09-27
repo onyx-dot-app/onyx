@@ -258,9 +258,7 @@ class TestLoadFromState:
         reference_data: dict[str, Any],  # noqa: ARG002
     ) -> None:
         """Test that no documents are yielded twice."""
-        document_ids = []
-        for doc in connector_doc_generator(connector):
-            document_ids.append(doc.id)
+        document_ids = [doc.id for doc in connector_doc_generator(connector)]
 
         unique_ids = set(document_ids)
         assert len(document_ids) == len(unique_ids), (

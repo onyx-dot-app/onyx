@@ -72,3 +72,13 @@ class LLMFlow(StrEnum):
 IMAGE_FLOWS: frozenset[LLMFlow] = frozenset(
     {LLMFlow.IMAGE_GENERATION, LLMFlow.IMAGE_EDIT}
 )
+
+SYSTEM_TEXT_GENERATION_FLOWS: frozenset[LLMFlow] = frozenset(
+    {
+        LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+        LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
+        LLMFlow.IMAGE_SUMMARIZATION,
+        LLMFlow.KG_DOCUMENT_CLASSIFICATION,
+        LLMFlow.KG_DEEP_EXTRACTION,
+    }
+)

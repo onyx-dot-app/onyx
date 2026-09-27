@@ -359,7 +359,7 @@ class TestXmlToolCallContentFilter:
             "</invoke></function_calls> suffix"
         )
         output += f.flush()
-        assert output == "prefix  suffix"
+        assert output == "prefix suffix"
 
     def test_strips_function_calls_block_split_across_chunks(self) -> None:
         f = _XmlToolCallContentFilter()
@@ -372,7 +372,92 @@ class TestXmlToolCallContentFilter:
             " End",
         ]
         output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
-        assert output == "Start  End"
+        assert output == "Start End"
+
+    def test_whitespace_after_block_split_across_chunks_is_dropped(self) -> None:
+        f = _XmlToolCallContentFilter()
+        chunks = [
+            "before ",
+            "<function_calls><invoke></invoke></function_calls>",
+            "  ",
+            "\t",
+            "after",
+        ]
+        output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
+        assert output == "before after"
+
+    def test_newline_after_block_is_kept_after_space(self) -> None:
+        f = _XmlToolCallContentFilter()
+        chunks = [
+            "Text ",
+            "<function_calls><invoke></invoke></function_calls>",
+            "  ",
+            "\n",
+            "## Details",
+        ]
+        output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
+        assert output == "Text \n## Details"
+
+    def test_indentation_after_block_is_kept(self) -> None:
+        f = _XmlToolCallContentFilter()
+        chunks = [
+            "Intro\n",
+            "<function_calls><invoke></invoke></function_calls>",
+            "\n  ",
+            "  code",
+        ]
+        output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
+        assert output == "Intro\n\n    code"
+
+    def test_indentation_on_block_line_is_kept(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process(
+            "- item\n<function_calls><invoke></invoke></function_calls>  - nested"
+        )
+        output += f.flush()
+        assert output == "- item\n  - nested"
+
+    def test_block_at_start_drops_spaces_and_keeps_line_breaks(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process("<function_calls><invoke></invoke></function_calls>  ")
+        output += f.process("\nAnswer")
+        output += f.flush()
+        assert output == "\nAnswer"
+
+    def test_block_at_end_keeps_preceding_text(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process("Answer. <function_calls><invoke></invoke>")
+        output += f.process("</function_calls> ")
+        output += f.flush()
+        assert output == "Answer. "
+
+    def test_newline_separated_block_keeps_line_breaks(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process(
+            "Line one.\n<function_calls><invoke></invoke></function_calls>\nLine two."
+        )
+        output += f.flush()
+        assert output == "Line one.\n\nLine two."
+
+    def test_whitespace_kept_when_none_precedes_block(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process(
+            "before<function_calls><invoke></invoke></function_calls> after"
+        )
+        output += f.flush()
+        assert output == "before after"
+
+    def test_no_whitespace_around_block_does_not_add_any(self) -> None:
+        f = _XmlToolCallContentFilter()
+        output = f.process("a<function_calls><invoke></invoke></function_calls>b")
+        output += f.flush()
+        assert output == "ab"
+
+    def test_text_without_block_is_unchanged(self) -> None:
+        f = _XmlToolCallContentFilter()
+        chunks = ["  Hello  ", "\n\n", "  world  "]
+        output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
+        assert output == "  Hello  \n\n  world  "
 
     def test_preserves_non_tool_call_xml(self) -> None:
         f = _XmlToolCallContentFilter()
@@ -1046,6 +1131,27 @@ class TestEmptyAnswerRecovery:
             p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
         )
         assert emitted == ""
+
+    def test_function_call_block_split_across_chunks_is_removed(self) -> None:
+        from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
+
+        llm_step_result, packets = self._run(
+            [
+                "before <function_",
+                'calls><invoke name="x"></invoke>',
+                "</function_calls> after",
+            ],
+            with_citation_processor=False,
+        )
+
+        emitted = "".join(
+            p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+        )
+        assert emitted == "before after"
+        assert llm_step_result.answer == "before after"
+        assert llm_step_result.raw_answer == (
+            'before <function_calls><invoke name="x"></invoke></function_calls> after'
+        )
 
 
 class TestFinishReasonPropagation:

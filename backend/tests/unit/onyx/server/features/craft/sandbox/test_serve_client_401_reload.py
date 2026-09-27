@@ -54,7 +54,7 @@ def test_request_does_not_retry_when_password_unchanged() -> None:
     # 401 with unchanged password → no retry, surfaces as HTTPStatusError.
     try:
         client.ensure_session(None, directory="/workspace/sessions/x")
-        assert False, "expected HTTPStatusError"
+        raise AssertionError("expected HTTPStatusError")
     except httpx.HTTPStatusError:
         pass
     assert n == 1, n

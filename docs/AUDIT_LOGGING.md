@@ -35,6 +35,8 @@ always-emit (an audit event is never silently dropped because of infra trouble).
 | `onyx.audit` | Root of the audit tree (filter on this prefix to capture everything). |
 | `onyx.audit.authentication` | OCSF Authentication class events. |
 | `onyx.audit.account_change` | OCSF Account Change class events. |
+| `onyx.audit.user_access_management` | OCSF User Access Management class events. |
+| `onyx.audit.group_management` | OCSF Group Management class events (group membership, permissions, lifecycle). |
 | `onyx.audit.api_activity` | OCSF API Activity class events. |
 | `onyx.audit.credential_access` | Credential-decrypt events (predates the generalized schema; see note below). |
 
@@ -52,7 +54,7 @@ Generalized events (`emit_audit_event`, `backend/onyx/utils/audit.py`):
 | `audit_schema_version` | string | Schema version (currently `"1.0"`). |
 | `ts` | float | Event time, epoch seconds. |
 | `action` | string | Action taxonomy value, `<domain>.<verb>` (e.g. `llm_provider.update`). Append-only contract. |
-| `ocsf_class` | string | `authentication` \| `account_change` \| `api_activity`. |
+| `ocsf_class` | string | `authentication` \| `account_change` \| `user_access_management` \| `group_management` \| `api_activity`. |
 | `outcome` | string | `success` \| `failure` \| `denied`. |
 | `tenant_id` | string \| null | Tenant the action occurred in (best-effort). |
 | `actor` | object \| null | `{ user_id, email, api_key_id, auth_type }`. Never contains a secret. |
@@ -72,13 +74,44 @@ them). Current taxonomy (`AuditAction` in `backend/onyx/utils/audit.py`):
   `auth.register`, `auth.password_forgot`, `auth.password_reset`,
   `auth.email_verify`, `auth.impersonate`
 - **Account change:** `user.create`, `user.delete`, `user.deactivate`,
-  `user.reactivate`, `user.role_change`, `user.group_change`
-- **API activity (admin config / resource CRUD):** `llm_provider.{create,update,delete}`,
+  `user.reactivate`
+- **User access management:** `user.role_change`, `user.craft_access_change`
+- **Group management:** `user.group_change`, `user_group.create`,
+  `user_group.rename`, `user_group.delete`, `user_group.permission_change`,
+  `user_group.manager_change`
+- **API activity (admin config / resource CRUD):** `settings.craft_default_change`,
+  `search_settings.contextual_rag_model_update`, `llm_provider.{create,update,delete}`,
   `connector.{create,update,delete}`, `cc_pair.{create,update,delete}`,
-  `api_key.{create,regenerate,delete}`, `credential.{create,update,delete}`,
-  `credential.access`
+  `api_key.{create,regenerate,update,delete}`, `credential.{create,update,delete}`,
+  `credential.access`, `permission.denied`
 
-> All actions in the taxonomy are wired to call sites.
+> Two actions are defined without a call site: `auth.logout`, and
+> `credential.access` (the live credential path still uses the older
+> `emit_credential_access`, described below).
+
+### Authorization refusals
+
+`permission.denied` carries `outcome: "denied"` and fires when a scoped write gate
+refuses an actor who holds *partial* authority — a group manager acting outside the
+groups they manage, or one hitting an admin-only operation. `extra.gate` says which
+gate refused: `within_scope`, `manages_group`, or `global_only`. Plain 403s from the
+route-level permission check are not audited; they are ordinary access control, not
+an escalation signal.
+
+Every refusal is recorded. These gates see no resource identity, so suppressing
+repeats would also drop distinct attempts — a bulk update refusing two look-alike
+document sets is two separate events.
+
+### SCIM-sourced events
+
+Group writes arriving over SCIM reuse the same actions as the admin UI, so
+"every membership change" stays a single filter. They are distinguished by
+`extra.source == "scim"`, carry `extra.scim_token_name`, and their actor is the
+provisioning token rather than a user:
+`{"api_key_id": "scim_token:<id>", "auth_type": "scim", "user_id": null}`.
+
+SCIM emits only on a real change. IdPs re-`PUT` a group's full state on routine
+reconciliation, and a sync that changes nothing produces no event.
 
 ### Example event
 
@@ -142,6 +175,23 @@ Example **Fluent Bit** grep filter:
     Match   onyx.*
     Regex   logger ^onyx\.audit
 ```
+
+## Schema changes
+
+`audit_schema_version` is still `1.0` — no field has been added, removed or
+retyped. Three actions did move to a more accurate OCSF class, which changes their
+`ocsf_class` value and therefore the child logger they land on:
+
+| Action | Was | Now |
+|---|---|---|
+| `user.group_change` | `account_change` | `group_management` |
+| `user.role_change` | `account_change` | `user_access_management` |
+| `user.craft_access_change` | `account_change` | `user_access_management` |
+
+The `action` values are unchanged, so a consumer that filters on the `onyx.audit`
+prefix and parses the JSON (the pattern documented above, and what the example
+shipper configs do) needs no update. Update any rule that routes on a specific
+child logger name or matches `ocsf_class` directly.
 
 > Roadmap: a syslog/CEF formatter, an OCSF-native emitter mode, and an in-product
 > `audit_event` table + read API are planned follow-ups. The JSON export path

@@ -14,10 +14,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.db.models import User
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @pytest.fixture
@@ -25,7 +24,7 @@ def users_to_clean(db_session: Session) -> Generator[list[User], None, None]:
     created: list[User] = []
     yield created
     for user in created:
-        db_session.delete(user)
+        delete_test_user(db_session, user)
     db_session.commit()
 
 
@@ -51,7 +50,6 @@ def test_inserting_a_user_strips_the_address_from_other_aliases(
         hashed_password="unused",
         is_active=True,
         is_verified=True,
-        role=UserRole.BASIC,
         account_type=AccountType.STANDARD,
     )
     db_session.add(claimant)

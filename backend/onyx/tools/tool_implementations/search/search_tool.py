@@ -120,6 +120,7 @@ from onyx.tools.tool_implementations.search.constants import (
     LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_CHUNKS_FOR_RELEVANCE,
     ORIGINAL_QUERY_WEIGHT,
+    SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -288,7 +289,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # fit in the LLM context and need to be searched via vector DB.
         project_id_filter: int | None,
         persona_id_filter: int | None = None,
-        bypass_acl: bool = False,
         # Slack context for federated Slack search (tokens fetched internally)
         slack_context: SlackContext | None = None,
         # Whether to enable Slack federated search
@@ -306,7 +306,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.user_selected_filters = user_selected_filters
         self.project_id_filter = project_id_filter
         self.persona_id_filter = persona_id_filter
-        self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
@@ -462,6 +461,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 bot_token=bot_token,
                 team_id=None,
                 search_settings=search_settings,
+                llm=self.llm,
             )
 
             logger.info("Slack federated search returned %s chunks", len(chunks))
@@ -476,7 +476,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         query: str,
         hybrid_alpha: float | None,
         num_hits: int,
-        acl_filters: list[str] | None,
+        acl_filters: list[str],
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
         effective_filters: BaseFilters | None,
@@ -490,7 +490,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             query: The search query string
             hybrid_alpha: Hybrid search alpha parameter (None for default)
             num_hits: Maximum number of hits to return
-            acl_filters: Pre-fetched ACL filters (None when bypass_acl)
+            acl_filters: Pre-fetched ACL filters for the acting user
             embedding_model: Pre-fetched embedding model
             federated_retrieval_infos: Pre-fetched federated retrieval functions
             effective_filters: Filters for THIS search, with the per-call source
@@ -507,7 +507,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 user_selected_filters=(
                     effective_filters if self.project_id_filter is None else None
                 ),
-                bypass_acl=self.bypass_acl,
                 limit=num_hits,
             ),
             project_id_filter=self.project_id_filter,
@@ -665,6 +664,41 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         override_kwargs: SearchToolOverrideKwargs,
         **llm_kwargs: Any,
     ) -> ToolResponse:
+        # Malformed calls fail loudly whatever the source selection says, so
+        # the argument check comes before any short-circuit.
+        if QUERIES_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                llm_facing_message=(
+                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
+
+        # An explicitly empty source selection is a statement, not an absent
+        # filter: the tool still runs (it may be forced), and it honestly
+        # finds nothing. `None` keeps its meaning of "no source filter".
+        # Project mode ignores user filters entirely, so the guard must too.
+        if (
+            self.user_selected_filters is not None
+            and self.project_id_filter is None
+            and self.user_selected_filters.source_type is not None
+            and len(self.user_selected_filters.source_type) == 0
+        ):
+            empty_response, _ = convert_inference_sections_to_llm_string(
+                top_sections=[],
+                note=None,
+            )
+            return ToolResponse(
+                rich_response=SearchDocsResponse(
+                    search_docs=[],
+                    citation_mapping={},
+                    displayed_docs=None,
+                ),
+                llm_facing_response=empty_response,
+            )
+
         # Start overall timing
         overall_start_time = time.time()
 
@@ -678,17 +712,14 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # parallel search workers need zero DB connections.
         with get_session_with_current_tenant() as db_session:
             # ACL filters
-            acl_filters: list[str] | None = (
-                None
-                if self.bypass_acl
-                else build_access_filters_for_user(self.user, db_session)
+            acl_filters: list[str] = build_access_filters_for_user(
+                self.user, db_session
             )
 
             # Validate document-set access for user-supplied filters.
             if (
                 self.user_selected_filters
                 and self.user_selected_filters.document_set
-                and not self.bypass_acl
                 and self.user
                 and not self.user.is_anonymous
             ):
@@ -760,22 +791,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 )
         # Session is closed here — all parallel work uses plain Python objects only
 
-        if QUERIES_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
         llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
-        message_history = (
-            override_kwargs.message_history if override_kwargs.message_history else []
-        )
+        message_history = override_kwargs.message_history or []
         memories = (
             override_kwargs.user_memory_context.as_formatted_list()
             if override_kwargs.user_memory_context
@@ -922,12 +942,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if semantic_query
             else []
         )
-        for llm_query in llm_queries:
-            # In rare cases, the LLM may fail to provide real queries
-            if llm_query:
-                semantic_queries_with_weights.append(
-                    (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
-                )
+        # In rare cases, the LLM may fail to provide real queries
+        semantic_queries_with_weights.extend(
+            (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
+            for llm_query in llm_queries
+            if llm_query
+        )
         if override_kwargs.original_query:
             semantic_queries_with_weights.append(
                 (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)
@@ -1085,8 +1105,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
         # documents with many matching sections
         max_tokens_for_selection = (
-            override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
-        ) * DOC_EMBEDDING_CONTEXT_SIZE
+            (override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
+            * DOC_EMBEDDING_CONTEXT_SIZE
+            * SELECTION_TOKEN_BUDGET_MULTIPLIER
+        )
 
         # This is approximate since it doesn't build the exact string of the call below
         # Some things are estimated and may be under (like the metadata tokens)

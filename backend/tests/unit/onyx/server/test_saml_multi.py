@@ -56,11 +56,11 @@ def test_build_saml_settings_optional_sp_defaults_empty() -> None:
 
 
 def _provider(**overrides: object) -> SSOProvider:
-    base: dict[str, Any] = dict(
-        provider_type=SSOProviderType.SAML,
-        allowed_email_domains=[],
-        config=make_mock_sensitive_value(dict(_IDP)),
-    )
+    base: dict[str, Any] = {
+        "provider_type": SSOProviderType.SAML,
+        "allowed_email_domains": [],
+        "config": make_mock_sensitive_value(dict(_IDP)),
+    }
     base.update(overrides)
     return cast(SSOProvider, SimpleNamespace(**base))
 

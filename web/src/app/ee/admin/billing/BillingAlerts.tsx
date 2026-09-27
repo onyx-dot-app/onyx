@@ -1,19 +1,19 @@
+import { useLocale } from "next-intl";
 import { MessageCard, Text } from "@opal/components";
 import { BillingInformation, BillingStatus } from "@/lib/billing/interfaces";
-import { useIsTrialingEnterprise } from "@/hooks/useIsTrialingEnterprise";
 
 export function BillingAlerts({
   billingInformation,
 }: {
   billingInformation: BillingInformation;
 }) {
+  const locale = useLocale();
   const isTrialing = billingInformation.status === BillingStatus.TRIALING;
   const isCancelled = billingInformation.cancel_at_period_end;
   const isExpired = billingInformation.current_period_end
     ? new Date(billingInformation.current_period_end) < new Date()
     : false;
   const noPaymentMethod = !billingInformation.payment_method_enabled;
-  const isTrialingEnterprise = useIsTrialingEnterprise();
 
   const messages: string[] = [];
 
@@ -26,17 +26,17 @@ export function BillingAlerts({
     messages.push(
       `Your subscription will cancel on ${new Date(
         billingInformation.current_period_end
-      ).toLocaleDateString()}. You can resubscribe before this date to remain uninterrupted.`
+      ).toLocaleDateString(
+        locale
+      )}. You can resubscribe before this date to remain uninterrupted.`
     );
   }
   if (isTrialing) {
     const trialEndStr = billingInformation.trial_end
-      ? new Date(billingInformation.trial_end).toLocaleDateString()
+      ? new Date(billingInformation.trial_end).toLocaleDateString(locale)
       : "N/A";
     messages.push(
-      isTrialingEnterprise
-        ? `You're trialing Enterprise features. Your trial ends on ${trialEndStr}. After that, your workspace will revert to the Business plan.`
-        : `You're currently on a trial. Your trial ends on ${trialEndStr}.`
+      `You're currently on a trial. Your trial ends on ${trialEndStr}.`
     );
   }
   if (noPaymentMethod) {

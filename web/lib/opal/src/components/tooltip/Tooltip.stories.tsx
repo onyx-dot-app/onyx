@@ -35,7 +35,7 @@ export const Sides: Story = {
 export const OnCard: Story = {
   render: () => (
     <Tooltip tooltip="Card tooltip appears on hover">
-      <Card border="solid" padding="md">
+      <Card border="solid" padding={4}>
         <p className="text-sm">Hover this card</p>
       </Card>
     </Tooltip>

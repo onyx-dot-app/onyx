@@ -66,7 +66,7 @@ def _get_usage_value(usage: Any, key: str) -> int:
     if isinstance(usage, dict):
         value = usage.get(key)
     else:
-        value = getattr(usage, key, None)
+        value = getattr(usage, key, None)  # ods: ignore[getattr]
     return int(value or 0)
 
 

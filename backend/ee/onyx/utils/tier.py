@@ -4,18 +4,15 @@ Cloud: Redis HGET → CP lazy-refresh on miss → BUSINESS fallback.
 Self-hosted: license_payload.customer_tier (legacy licenses lacking the
 field default to ENTERPRISE).
 
-Promotion rule (cloud-only): a tenant whose contractual `customer_tier`
-is BUSINESS but whose subscription is still inside its trial window
-(`trial_end > now`) resolves to `Tier.ENTERPRISE` — they're being shown
-a preview of the Enterprise feature set during the trial. The contractual
-`customer_tier` on the tenant row is left unchanged; promotion is applied
-purely at read time so the moment `trial_end` passes, the cached entry
-naturally resolves back to BUSINESS without waiting on a webhook.
+Trial state never changes the resolved tier: a trialing tenant gets exactly
+the feature set it will hold when the trial expires. Both writers of the
+cache entry (the CP tier push and the lazy refresh) carry `trial_end` so the
+cached shape stays uniform. Resolution never reads it.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import requests
 from redis.exceptions import RedisError
@@ -26,7 +23,12 @@ from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cach
 from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
-from ee.onyx.server.tenants.tier_management import get_cached_tier, update_tenant_tier
+from ee.onyx.server.tenants.tier_management import (
+    get_cached_tier,
+    has_recent_tenant_tier_miss,
+    mark_tenant_tier_miss,
+    update_tenant_tier,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -35,7 +37,7 @@ from onyx.server.settings.models import ApplicationStatus, Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -47,21 +49,8 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
 }
 
 
-def _effective_tier(customer_tier: CustomerTier, trial_end: datetime | None) -> Tier:
-    """Apply the cloud trial-business → enterprise promotion.
-
-    A BUSINESS tenant whose `trial_end` is still in the future is resolved
-    to ENTERPRISE for the duration of the trial. Once `trial_end` is in the
-    past (or absent), the unpromoted mapping is used.
-    """
-    if (
-        customer_tier == CustomerTier.BUSINESS
-        and trial_end is not None
-        and trial_end > datetime.now(timezone.utc)
-    ):
-        return Tier.ENTERPRISE
-    # Unknown tier (e.g. a future CustomerTier value): fall back to the
-    # cloud floor — BUSINESS — rather than over-granting ENTERPRISE.
+def _cloud_tier(customer_tier: CustomerTier) -> Tier:
+    # Use the BUSINESS floor for an unknown cloud tier.
     return _CUSTOMER_TIER_TO_TIER.get(customer_tier, Tier.BUSINESS)
 
 
@@ -74,10 +63,10 @@ def tier_from_license_metadata(metadata: object | None) -> Tier:
     """
     if metadata is None:
         return Tier.COMMUNITY
-    status = getattr(metadata, "status", None)
+    status = getattr(metadata, "status", None)  # ods: ignore[getattr]
     if status == ApplicationStatus.GATED_ACCESS:
         return Tier.COMMUNITY
-    customer_tier = getattr(metadata, "customer_tier", None)
+    customer_tier = getattr(metadata, "customer_tier", None)  # ods: ignore[getattr]
     if not isinstance(customer_tier, CustomerTier):
         # None (legacy license) or unrecognized -> ENTERPRISE for back-compat.
         return Tier.ENTERPRISE
@@ -118,16 +107,13 @@ def _self_hosted_tier() -> Tier:
 def _extract_billing_state(
     billing: BillingInformation | SubscriptionStatusResponse,
 ) -> tuple[CustomerTier, datetime | None] | None:
-    customer_tier = getattr(billing, "customer_tier", None)
+    customer_tier = getattr(billing, "customer_tier", None)  # ods: ignore[getattr]
     if customer_tier is None:
         return None
-    trial_end = getattr(billing, "trial_end", None)
+    trial_end = getattr(billing, "trial_end", None)  # ods: ignore[getattr]
     if not isinstance(trial_end, datetime):
         trial_end = None
     elif trial_end.tzinfo is None or trial_end.tzinfo.utcoffset(trial_end) is None:
-        # Mirrors the cache-read guard: a naive trial_end would crash the
-        # tz-aware comparison in `_effective_tier`. Drop it and log so a
-        # CP-side regression is visible.
         logger.warning("CP returned naive trial_end; dropping: %r", trial_end)
         trial_end = None
     return customer_tier, trial_end
@@ -136,17 +122,13 @@ def _extract_billing_state(
 def _lazy_refresh_from_cp(
     tenant_id: str,
 ) -> tuple[CustomerTier, datetime | None] | None:
-    try:
-        billing = fetch_billing_information(tenant_id)
-    except (requests.RequestException, ValueError) as e:
-        logger.warning(
-            "Tier lazy-refresh failed for tenant %s; CP unreachable: %s",
-            tenant_id,
-            e,
-        )
-        return None
-
-    return _extract_billing_state(billing)
+    billing = fetch_billing_information(tenant_id)
+    state = _extract_billing_state(billing)
+    if state is None and not (
+        isinstance(billing, SubscriptionStatusResponse) and not billing.subscribed
+    ):
+        raise ValueError("Control-plane response has no customer tier")
+    return state
 
 
 def get_tier(tenant_id: str | None = None) -> Tier:
@@ -155,8 +137,12 @@ def get_tier(tenant_id: str | None = None) -> Tier:
 
     tid = tenant_id or get_current_tenant_id()
 
+    if tid == POSTGRES_DEFAULT_SCHEMA:
+        return Tier.BUSINESS
+
     try:
         cached = get_cached_tier(tid)
+        recent_miss = cached is None and has_recent_tenant_tier_miss(tid)
     except RedisError as e:
         # Don't try CP either — likely a wider outage; keep failures cheap.
         logger.warning(
@@ -167,9 +153,16 @@ def get_tier(tenant_id: str | None = None) -> Tier:
         return Tier.BUSINESS
 
     if cached is not None:
-        return _effective_tier(cached.customer_tier, cached.trial_end)
+        return _cloud_tier(cached.customer_tier)
 
-    fresh = _lazy_refresh_from_cp(tid)
+    if recent_miss:
+        return Tier.BUSINESS
+
+    try:
+        fresh = _lazy_refresh_from_cp(tid)
+    except (requests.RequestException, ValueError, TypeError) as e:
+        logger.warning("Tier lazy-refresh failed for tenant %s: %s", tid, e)
+        return Tier.BUSINESS
     if fresh is not None:
         fresh_tier, fresh_trial_end = fresh
         try:
@@ -180,9 +173,12 @@ def get_tier(tenant_id: str | None = None) -> Tier:
                 tid,
                 e,
             )
-        return _effective_tier(fresh_tier, fresh_trial_end)
+        return _cloud_tier(fresh_tier)
 
-    # Don't cache the fallback — next call retries the refresh.
+    try:
+        mark_tenant_tier_miss(tid)
+    except RedisError as e:
+        logger.warning("Tier miss marker write failed for tenant %s: %s", tid, e)
     return Tier.BUSINESS
 
 
@@ -198,7 +194,7 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
     LICENSE_ENFORCEMENT_ENABLED=False, treat the tenant as ENTERPRISE so
     legacy EE deployments without a license aren't broken.
     """
-    if access_type != AccessType.SYNC:
+    if not access_type.is_perm_synced():
         return
     if not LICENSE_ENFORCEMENT_ENABLED:
         return
@@ -206,6 +202,21 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,
             "Auto-sync access requires the Business or Enterprise plan.",
+        )
+
+
+def require_business_tier_for_connector_group_restrictions() -> None:
+    """Gate turning on data-access group restrictions for perm-synced
+    connectors. Groups and perm sync are Business+, so the setting would be
+    inert below that. LICENSE_ENFORCEMENT_ENABLED=False passes, matching the
+    sync-access guard."""
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        return
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Group restrictions on permission-synced connectors require the "
+            "Business or Enterprise plan.",
         )
 
 

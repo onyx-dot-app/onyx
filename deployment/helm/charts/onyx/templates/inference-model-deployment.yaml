@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-inference-model
+  name: {{ include "onyx.resourceName" (list . "inference-model") }}
   labels:
     {{- range .Values.inferenceCapability.labels }}
     {{ .key }}: {{ .value }}
@@ -37,6 +37,10 @@ spec:
       {{- end }}
       {{- with .Values.inferenceCapability.affinity }}
       affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inferenceCapability.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.inferenceCapability.tolerations }}
@@ -75,9 +79,8 @@ spec:
         startupProbe:
           {{- toYaml . | nindent 10 }}
         {{- end }}
-        {{- with .Values.inferenceCapability.readinessProbe }}
-        readinessProbe:
-          {{- toYaml . | nindent 10 }}
+        {{- with include "onyx.readinessProbe" (dict "values" .Values.inferenceCapability "handler" (dict "httpGet" (dict "path" "/api/health" "port" "model-server"))) | trim }}
+        {{- . | nindent 8 }}
         {{- end }}
         {{- with .Values.inferenceCapability.livenessProbe }}
         livenessProbe:
@@ -86,7 +89,7 @@ spec:
         {{- with include "onyx.modelServer.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.inferenceCapability.volumeMounts) }}
         {{- . | nindent 8 }}
         {{- end }}
-      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.inferenceCapability.volumes) }}
+      {{- with include "onyx.modelServer.volumesWithCA" (dict "ctx" . "volumes" .Values.inferenceCapability.volumes) }}
       {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

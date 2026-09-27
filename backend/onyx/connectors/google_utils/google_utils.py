@@ -9,6 +9,7 @@ from typing import Any
 
 from googleapiclient.errors import HttpError
 
+from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
@@ -26,7 +27,7 @@ def _is_rate_limit_error(error: HttpError) -> bool:
         return True
     if error.resp.status != 403:
         return False
-    error_details = getattr(error, "error_details", None) or []
+    error_details = getattr(error, "error_details", None) or []  # ods: ignore[getattr]
     for detail in error_details:
         if isinstance(detail, dict) and detail.get("reason") in _RATE_LIMIT_REASONS:
             return True
@@ -77,7 +78,7 @@ def _execute_with_retry(request: Any) -> Any:
                 # Attempt to get 'Retry-After' from headers
                 retry_after = parse_retry_after_seconds(error.resp.get("Retry-After"))
                 if retry_after is not None:
-                    sleep_time = retry_after
+                    sleep_time = bound_server_wait(retry_after, "google")
                 else:
                     # Extract 'Retry after' timestamp from error message
                     match = re.search(
@@ -90,9 +91,9 @@ def _execute_with_retry(request: Any) -> Any:
                             retry_after_timestamp, "%Y-%m-%dT%H:%M:%S.%fZ"
                         ).replace(tzinfo=timezone.utc)
                         current_time = datetime.now(timezone.utc)
-                        sleep_time = max(
-                            int((retry_after_dt - current_time).total_seconds()),
-                            0,
+                        sleep_time = bound_server_wait(
+                            (retry_after_dt - current_time).total_seconds(),
+                            "google",
                         )
                     else:
                         logger.error(

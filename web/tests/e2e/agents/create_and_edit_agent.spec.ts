@@ -2,6 +2,11 @@ import { test, expect, Page, Browser } from "@playwright/test";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
+import { Permission } from "@/lib/types";
+import {
+  grantWorkerPermissions,
+  cleanupPermissionGroup,
+} from "@tests/e2e/utils/permissions";
 
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');
@@ -14,34 +19,32 @@ const getReminderTextarea = (page: Page) =>
 const getKnowledgeToggle = (page: Page) =>
   page.locator('button[role="switch"][name="enable_knowledge"]');
 
-// Helper function to set date using InputDatePicker (sets to today's date)
+// Helper function to set date using the Opal InputDatePicker (sets today).
+// The picker is a segmented MM/DD/YYYY field — type the segments and commit
+// with Enter; there is no "Select Date" button or Today action.
 const setKnowledgeCutoffDate = async (page: Page) => {
-  // Find and click the date picker button within the Knowledge Cutoff Date section
-  const datePickerButton = page
+  const dateGroup = page
     .locator('label:has-text("Knowledge Cutoff Date")')
     .locator("..")
-    .locator('button:has-text("Select Date"), button:has-text("/")');
+    .locator('[role="group"][aria-label="Date"]');
 
-  await datePickerButton.click();
+  const today = new Date();
+  await dateGroup.getByLabel("Month").fill(String(today.getMonth() + 1));
+  await dateGroup.getByLabel("Day").fill(String(today.getDate()));
+  await dateGroup.getByLabel("Year").fill(String(today.getFullYear()));
+  await dateGroup.getByLabel("Year").press("Enter");
 
-  // Wait for the popover to open
-  await page.waitForSelector('[role="dialog"]', {
-    state: "visible",
-    timeout: 5000,
-  });
-
-  // Click the "Today" button to set to today's date
-  const todayButton = page
-    .locator('[role="dialog"]')
-    .getByRole("button", { name: "Today" })
-    .first();
-  await todayButton.click();
-
-  // The popover should close automatically after selection
-  await page.waitForSelector('[role="dialog"]', {
-    state: "hidden",
-    timeout: 5000,
-  });
+  // The commit is async React state; the zero-padded values are the signal
+  // that it landed rather than reverting the draft.
+  await expect(dateGroup.getByLabel("Month")).toHaveValue(
+    String(today.getMonth() + 1).padStart(2, "0")
+  );
+  await expect(dateGroup.getByLabel("Day")).toHaveValue(
+    String(today.getDate()).padStart(2, "0")
+  );
+  await expect(dateGroup.getByLabel("Year")).toHaveValue(
+    String(today.getFullYear())
+  );
 };
 const getStarterMessageInput = (page: Page, index: number = 0) =>
   page.locator(`input[name="starter_messages.${index}"]`);
@@ -121,6 +124,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
 
   test.describe("User Files Only", () => {
     let userFilesAssistantId: number | null = null;
+    let permGroupId: number | undefined;
 
     test.afterAll(async ({ browser }: { browser: Browser }) => {
       if (userFilesAssistantId !== null) {
@@ -135,11 +139,16 @@ test.describe("Assistant Creation and Edit Verification", () => {
           "[test] Cleanup completed - deleted User Files Only assistant"
         );
       }
+      await cleanupPermissionGroup(browser, permGroupId);
     });
 
     test("should create assistant with user files when no connectors exist @exclusive", async ({
       page,
     }, testInfo) => {
+      permGroupId = await grantWorkerPermissions(page, testInfo.workerIndex, [
+        Permission.ADD_AGENTS,
+      ]);
+
       await page.context().clearCookies();
       await loginAsWorkerUser(page, testInfo.workerIndex);
 
@@ -193,6 +202,7 @@ test.describe("Assistant Creation and Edit Verification", () => {
     let ccPairId: number;
     let documentSetId: number;
     let knowledgeAssistantId: number | null = null;
+    let permGroupId: number | undefined;
 
     test.afterAll(async ({ browser }: { browser: Browser }) => {
       // Cleanup using browser fixture (worker-scoped) to avoid per-test fixture limitation
@@ -214,11 +224,17 @@ test.describe("Assistant Creation and Edit Verification", () => {
       console.log(
         "[test] Cleanup completed - deleted assistant, connector, and document set"
       );
+      await cleanupPermissionGroup(browser, permGroupId);
     });
 
     test("should create and edit assistant with Knowledge enabled", async ({
       page,
     }, testInfo) => {
+      permGroupId = await grantWorkerPermissions(page, testInfo.workerIndex, [
+        Permission.ADD_AGENTS,
+        Permission.MANAGE_DOCUMENT_SETS,
+      ]);
+
       // Login as admin to create connector and document set (requires admin permissions)
       await page.context().clearCookies();
       await loginAs(page, "admin");

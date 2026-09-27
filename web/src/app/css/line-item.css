@@ -1,6 +1,6 @@
 /* LineItem Button Variants */
 /* Hover styles are disabled when keyboard navigation is active (data-keyboard-nav on parent) */
-.line-item-button-main {
+.line-item-row-main {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -8,7 +8,7 @@
   }
 }
 
-.line-item-button-main-emphasized {
+.line-item-row-main-emphasized {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -25,7 +25,7 @@
   }
 }
 
-.line-item-button-strikethrough {
+.line-item-row-strikethrough {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -33,7 +33,7 @@
   }
 }
 
-.line-item-button-strikethrough-emphasized {
+.line-item-row-strikethrough-emphasized {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -41,15 +41,15 @@
   }
 }
 
-.line-item-button-disabled {
+.line-item-row-disabled {
   @apply bg-transparent cursor-not-allowed;
 }
 
-.line-item-button-disabled-emphasized {
+.line-item-row-disabled-emphasized {
   @apply bg-transparent cursor-not-allowed;
 }
 
-.line-item-button-danger {
+.line-item-row-danger {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -57,7 +57,7 @@
   }
 }
 
-.line-item-button-danger-emphasized {
+.line-item-row-danger-emphasized {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -75,7 +75,7 @@
 }
 
 /* Action Variant - same background behavior as main */
-.line-item-button-action {
+.line-item-row-action {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -83,7 +83,7 @@
   }
 }
 
-.line-item-button-action-emphasized {
+.line-item-row-action-emphasized {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -101,7 +101,7 @@
 }
 
 /* Muted Variant - subdued styling for less prominent items */
-.line-item-button-muted {
+.line-item-row-muted {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -109,7 +109,7 @@
   }
 }
 
-.line-item-button-muted-emphasized {
+.line-item-row-muted-emphasized {
   @apply bg-transparent hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {
@@ -127,7 +127,7 @@
 }
 
 /* Skeleton Variant - dashed border placeholder style */
-.line-item-button-skeleton {
+.line-item-row-skeleton {
   @apply bg-transparent border border-dashed border-border-01 hover:bg-background-tint-01;
 
   [data-keyboard-nav="true"] &:hover {
@@ -135,7 +135,7 @@
   }
 }
 
-.line-item-button-skeleton-emphasized {
+.line-item-row-skeleton-emphasized {
   @apply bg-transparent border border-dashed border-border-01 hover:bg-background-tint-02;
 
   [data-keyboard-nav="true"] &:hover {

@@ -60,7 +60,7 @@ class HookPointSpec:
         if missing:
             raise TypeError(f"{cls.__name__} must define class attributes: {missing}")
         for attr in ("payload_model", "response_model"):
-            val = getattr(cls, attr, None)
+            val = getattr(cls, attr, None)  # ods: ignore[getattr]
             if val is None or not (
                 isinstance(val, type) and issubclass(val, BaseModel)
             ):

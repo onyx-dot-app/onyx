@@ -260,9 +260,9 @@ def get_vespa_visit_state(
     if record is None:
         raise RuntimeError("OpenSearchTenantMigrationRecord not found.")
     if record.vespa_visit_continuation_token is None:
-        continuation_token_map: dict[int, str | None] = {
-            slice_id: None for slice_id in range(GET_VESPA_CHUNKS_SLICE_COUNT)
-        }
+        continuation_token_map: dict[int, str | None] = dict.fromkeys(
+            range(GET_VESPA_CHUNKS_SLICE_COUNT)
+        )
     else:
         json_loaded_continuation_token_map = json.loads(
             record.vespa_visit_continuation_token

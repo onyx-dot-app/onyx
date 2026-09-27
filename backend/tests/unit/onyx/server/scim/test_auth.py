@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -9,6 +9,7 @@ from ee.onyx.server.scim.auth import (
     generate_scim_token,
     verify_scim_token,
 )
+from onyx.auth.utils import extract_tenant_from_auth_header
 
 
 class TestGenerateScimToken:
@@ -35,6 +36,53 @@ class TestGenerateScimToken:
     def test_tokens_are_unique(self) -> None:
         tokens = {generate_scim_token()[0] for _ in range(10)}
         assert len(tokens) == 10
+
+
+class TestScimTokenTenantResolution:
+    """An IdP sends nothing but the bearer token, so the token itself has to
+    carry the tenant. Without it every SCIM call on cloud resolved to the
+    default schema and the tier gate rejected it as non-Enterprise.
+    """
+
+    TENANT = "tenant_abc123"
+
+    def _request(self, auth_header: str) -> MagicMock:
+        request = MagicMock()
+        request.headers = {"Authorization": auth_header}
+        return request
+
+    @patch("ee.onyx.server.scim.auth.MULTI_TENANT", True)
+    def test_multi_tenant_token_embeds_tenant(self) -> None:
+        raw, _, _ = generate_scim_token(self.TENANT)
+        assert raw.startswith(f"{SCIM_TOKEN_PREFIX}{self.TENANT}.")
+
+    @patch("ee.onyx.server.scim.auth.MULTI_TENANT", True)
+    def test_tenant_round_trips_through_auth_header(self) -> None:
+        raw, _, _ = generate_scim_token(self.TENANT)
+        assert (
+            extract_tenant_from_auth_header(self._request(f"Bearer {raw}"))
+            == self.TENANT
+        )
+
+    @patch("ee.onyx.server.scim.auth.MULTI_TENANT", True)
+    def test_hash_covers_the_whole_token(self) -> None:
+        raw, hashed, _ = generate_scim_token(self.TENANT)
+        assert hashed == _hash_scim_token(raw)
+
+    @patch("ee.onyx.server.scim.auth.MULTI_TENANT", True)
+    def test_verify_accepts_tenant_bearing_token(self) -> None:
+        raw, _, _ = generate_scim_token(self.TENANT)
+        token = MagicMock()
+        token.is_active = True
+        dal = MagicMock()
+        dal.get_token_by_hash.return_value = token
+        assert verify_scim_token(self._request(f"Bearer {raw}"), dal) is token
+
+    @patch("ee.onyx.server.scim.auth.MULTI_TENANT", False)
+    def test_self_hosted_token_keeps_the_untenanted_format(self) -> None:
+        raw, _, _ = generate_scim_token(self.TENANT)
+        assert "." not in raw
+        assert extract_tenant_from_auth_header(self._request(f"Bearer {raw}")) is None
 
 
 class TestHashScimToken:

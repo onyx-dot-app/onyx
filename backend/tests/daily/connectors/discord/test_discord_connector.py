@@ -28,10 +28,9 @@ def test_discord_connector_basic(discord_connector: DiscordConnector) -> None:
 
     doc_batch = next(doc_batch_generator)
 
-    docs: list[Document] = []
-    for doc in doc_batch:
-        if not isinstance(doc, HierarchyNode):
-            docs.append(doc)
+    docs: list[Document] = [
+        doc for doc in doc_batch if not isinstance(doc, HierarchyNode)
+    ]
 
     assert len(docs) > 0, "No documents were retrieved from the connector"
 

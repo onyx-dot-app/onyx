@@ -4,7 +4,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-discordbot
+  name: {{ include "onyx.resourceName" (list . "discordbot") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.discordbot.deploymentLabels }}

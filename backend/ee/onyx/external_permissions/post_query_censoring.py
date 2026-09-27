@@ -81,11 +81,12 @@ def _post_query_chunk_censoring(
             final_chunk_dict[censored_chunk.unique_id] = censored_chunk
 
     # IMPORTANT: make sure to retain the same ordering as the original `chunks` passed in
-    final_chunk_list: list[InferenceChunk] = []
-    for chunk in chunks:
-        # only if the chunk is in the final censored chunks, add it to the final list
-        # if it is missing, that means it was intentionally left out
-        if chunk.unique_id in final_chunk_dict:
-            final_chunk_list.append(final_chunk_dict[chunk.unique_id])
+    # only if the chunk is in the final censored chunks, add it to the final list
+    # if it is missing, that means it was intentionally left out
+    final_chunk_list: list[InferenceChunk] = [
+        final_chunk_dict[chunk.unique_id]
+        for chunk in chunks
+        if chunk.unique_id in final_chunk_dict
+    ]
 
     return final_chunk_list

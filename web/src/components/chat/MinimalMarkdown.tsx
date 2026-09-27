@@ -14,6 +14,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 
 type MinimalMarkdownComponentOverrides = Partial<Components>;
@@ -45,8 +46,9 @@ export default function MinimalMarkdown({
         ? [
             [rehypeHighlight, { detect: true, languages: highlightLanguages }],
             rehypeKatex,
+            rehypeDirection,
           ]
-        : [rehypeKatex],
+        : [rehypeKatex, rehypeDirection],
     [streaming, highlightLanguages]
   );
   const markdownComponents = useMemo(() => {
@@ -78,17 +80,24 @@ export default function MinimalMarkdown({
   }, [content, components, showHeader]);
 
   return (
-    <ReactMarkdown
-      className={cn(
-        "prose dark:prose-invert max-w-full text-sm wrap-break-word",
-        className
-      )}
-      components={markdownComponents}
-      rehypePlugins={rehypePlugins}
-      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
-      urlTransform={transformLinkUri}
-    >
-      {content}
-    </ReactMarkdown>
+    // dir="auto" backstops component overrides that do not forward the
+    // per-block dir stamped by rehypeDirection.
+    <div dir="auto">
+      <ReactMarkdown
+        className={cn(
+          "prose dark:prose-invert max-w-full text-sm wrap-break-word",
+          className
+        )}
+        components={markdownComponents}
+        rehypePlugins={rehypePlugins}
+        remarkPlugins={[
+          remarkGfm,
+          [remarkMath, { singleDollarTextMath: false }],
+        ]}
+        urlTransform={transformLinkUri}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }

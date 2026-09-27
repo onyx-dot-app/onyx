@@ -139,9 +139,7 @@ class UserFileIndexingAdapter:
         # docs and their stale chunks from a prior indexing remain in the vector
         # DB. Mirrors DocumentIndexingBatchAdapter.prepare_enrichment so both
         # adapters expose the same keyset contract.
-        doc_id_to_new_chunk_cnt: dict[str, int] = {
-            doc_id: 0 for doc_id in updatable_ids
-        }
+        doc_id_to_new_chunk_cnt: dict[str, int] = dict.fromkeys(updatable_ids, 0)
         content_by_file: dict[str, list[str]] = defaultdict(list)
         for chunk in chunks:
             doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1
@@ -167,13 +165,12 @@ class UserFileIndexingAdapter:
             user_file_ids=updatable_ids,
             db_session=db_session,
         )
-        user_file_id_to_previous_chunk_cnt: dict[str, int] = {
-            user_file_id: chunk_count
-            for user_file_id, chunk_count in fetch_chunk_counts_for_user_files(
+        user_file_id_to_previous_chunk_cnt: dict[str, int] = dict(
+            fetch_chunk_counts_for_user_files(
                 user_file_ids=updatable_ids,
                 db_session=db_session,
             )
-        }
+        )
 
         # Initialize tokenizer used for token count calculation
         try:

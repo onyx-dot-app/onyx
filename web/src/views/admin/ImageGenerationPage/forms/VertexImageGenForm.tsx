@@ -1,11 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn } from "@opal/components";
-import InputFile from "@/refresh-components/inputs/InputFile";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputFile } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
@@ -43,24 +45,10 @@ const initialValues: VertexImageGenFormValues = {
   },
 };
 
-const validationSchema = Yup.object().shape({
-  custom_config: Yup.object().shape({
-    vertex_auth_method: Yup.string().required(
-      "Authentication method is required"
-    ),
-    vertex_location: Yup.string().required("Location is required"),
-    vertex_credentials: Yup.string().when("vertex_auth_method", {
-      is: AUTH_METHOD_SERVICE_ACCOUNT,
-      then: (schema) => schema.required("Credentials file is required"),
-      otherwise: (schema) => schema.notRequired(),
-    }),
-    vertex_project: Yup.string().when("vertex_auth_method", {
-      is: AUTH_METHOD_WORKLOAD_IDENTITY,
-      then: (schema) => schema.required("Project ID is required"),
-      otherwise: (schema) => schema.notRequired(),
-    }),
-  }),
-});
+const SERVICE_ACCOUNTS_URL =
+  "https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project";
+const VERTEX_LOCATIONS_DOCS_URL =
+  "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations";
 
 function getInitialValuesFromCredentials(
   credentials: ImageGenerationCredentials,
@@ -107,6 +95,8 @@ function transformValues(
 function VertexFormFields(
   props: ImageGenFormChildProps<VertexImageGenFormValues>
 ) {
+  const t = useTranslations("admin.imageGeneration");
+  const tInputSelect = useTranslations("common.inputSelect");
   const {
     apiStatus,
     showApiMessage,
@@ -135,33 +125,37 @@ function VertexFormFields(
               state={state}
               className="w-full"
             >
-              <FormField.Label>Authentication Method</FormField.Label>
+              <FormField.Label>{t("form.authMethod.label")}</FormField.Label>
               <FormField.Control>
-                <InputSelect
+                <InputSingleSelect
                   value={field.value}
                   onValueChange={(value) => helper.setValue(value)}
                   disabled={disabled}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    <InputSelect.Item
-                      value={AUTH_METHOD_SERVICE_ACCOUNT}
-                      description="Upload a GCP service account key JSON file"
-                    >
-                      Service Account JSON
-                    </InputSelect.Item>
-                    <InputSelect.Item
-                      value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                      description="Use the pod's ambient GCP credentials (GKE Workload Identity)"
-                    >
-                      Workload Identity (GKE)
-                    </InputSelect.Item>
-                  </InputSelect.Content>
-                </InputSelect>
+                  defaultOption={AUTH_METHOD_SERVICE_ACCOUNT}
+                  placeholder={tInputSelect("placeholder.fallback")}
+                  options={[
+                    {
+                      value: AUTH_METHOD_SERVICE_ACCOUNT,
+                      title: t("form.authMethod.serviceAccount.label"),
+                      description: t(
+                        "form.authMethod.serviceAccount.description"
+                      ),
+                    },
+                    {
+                      value: AUTH_METHOD_WORKLOAD_IDENTITY,
+                      title: t("form.authMethod.workloadIdentity.label"),
+                      description: t(
+                        "form.authMethod.workloadIdentity.description"
+                      ),
+                    },
+                  ]}
+                />
               </FormField.Control>
               <FormField.Message
                 messages={{
-                  idle: "Choose how Onyx should authenticate with Google Vertex AI.",
+                  idle: t("form.authMethod.idle", {
+                    appName: settings.appName,
+                  }),
                 }}
               />
             </FormField>
@@ -179,7 +173,7 @@ function VertexFormFields(
               state={apiStatus === "error" ? "error" : state}
               className="w-full"
             >
-              <FormField.Label>Credentials File</FormField.Label>
+              <FormField.Label>{t("form.credentials.label")}</FormField.Label>
               <FormField.Control>
                 <InputFile
                   setValue={(value) => helper.setValue(value)}
@@ -187,30 +181,30 @@ function VertexFormFields(
                   onBlur={field.onBlur}
                   disabled={disabled}
                   accept="application/json"
-                  placeholder="Upload or paste your credentials"
+                  placeholder={t("form.credentials.placeholder")}
                 />
               </FormField.Control>
               {showApiMessage ? (
                 <FormField.APIMessage
                   state={apiStatus}
                   messages={{
-                    loading: `Testing credentials with ${imageProvider.title}...`,
-                    success: "Credentials valid. Configuration saved.",
-                    error: errorMessage || "Invalid credentials",
+                    loading: t("form.credentialsTest.loading", {
+                      title: imageProvider.title,
+                    }),
+                    success: t("form.credentialsTest.success"),
+                    error: errorMessage || t("form.credentialsTest.error"),
                   }}
                 />
               ) : (
                 <FormField.Message
                   messages={{
-                    idle: (
-                      <>
-                        {"Upload or paste your "}
-                        <InlineExternalLink href="https://console.cloud.google.com/projectselector2/iam-admin/serviceaccounts?supportedpurview=project">
-                          service account credentials
+                    idle: t.rich("form.credentials.idle", {
+                      link: (chunks) => (
+                        <InlineExternalLink href={SERVICE_ACCOUNTS_URL}>
+                          {chunks}
                         </InlineExternalLink>
-                        {" from Google Cloud."}
-                      </>
-                    ),
+                      ),
+                    }),
                     error: meta.error,
                   }}
                 />
@@ -230,7 +224,7 @@ function VertexFormFields(
               state={apiStatus === "error" ? "error" : state}
               className="w-full"
             >
-              <FormField.Label>GCP Project ID</FormField.Label>
+              <FormField.Label>{t("form.projectId.label")}</FormField.Label>
               <FormField.Control>
                 <InputTypeIn
                   value={field.value}
@@ -244,15 +238,19 @@ function VertexFormFields(
                 <FormField.APIMessage
                   state={apiStatus}
                   messages={{
-                    loading: `Testing credentials with ${imageProvider.title}...`,
-                    success: "Credentials valid. Configuration saved.",
-                    error: errorMessage || "Invalid credentials",
+                    loading: t("form.credentialsTest.loading", {
+                      title: imageProvider.title,
+                    }),
+                    success: t("form.credentialsTest.success"),
+                    error: errorMessage || t("form.credentialsTest.error"),
                   }}
                 />
               ) : (
                 <FormField.Message
                   messages={{
-                    idle: "The GCP project where Vertex AI is enabled. Onyx authenticates with the pod's bound service account (GKE Workload Identity).",
+                    idle: t("form.projectId.idle", {
+                      appName: settings.appName,
+                    }),
                     error: meta.error,
                   }}
                 />
@@ -271,7 +269,7 @@ function VertexFormFields(
             state={state}
             className="w-full"
           >
-            <FormField.Label>Location</FormField.Label>
+            <FormField.Label>{t("form.location.label")}</FormField.Label>
             <FormField.Control>
               <InputTypeIn
                 value={field.value}
@@ -283,15 +281,13 @@ function VertexFormFields(
             </FormField.Control>
             <FormField.Message
               messages={{
-                idle: (
-                  <>
-                    {"The Google Cloud region for your Vertex AI models. See "}
-                    <InlineExternalLink href="https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations">
-                      Google&apos;s documentation
+                idle: t.rich("form.location.idle", {
+                  link: (chunks) => (
+                    <InlineExternalLink href={VERTEX_LOCATIONS_DOCS_URL}>
+                      {chunks}
                     </InlineExternalLink>
-                    {" for available regions."}
-                  </>
-                ),
+                  ),
+                }),
                 error: meta.error,
               }}
             />
@@ -303,17 +299,41 @@ function VertexFormFields(
 }
 
 export function VertexImageGenForm(props: ImageGenFormBaseProps) {
+  const t = useTranslations("admin.imageGeneration");
   const { imageProvider, existingConfig } = props;
+
+  const validationSchema = useMemo(
+    () =>
+      Yup.object().shape({
+        custom_config: Yup.object().shape({
+          vertex_auth_method: Yup.string().required(
+            t("form.authMethod.required")
+          ),
+          vertex_location: Yup.string().required(t("form.location.required")),
+          vertex_credentials: Yup.string().when("vertex_auth_method", {
+            is: AUTH_METHOD_SERVICE_ACCOUNT,
+            then: (schema) => schema.required(t("form.credentials.required")),
+            otherwise: (schema) => schema.notRequired(),
+          }),
+          vertex_project: Yup.string().when("vertex_auth_method", {
+            is: AUTH_METHOD_WORKLOAD_IDENTITY,
+            then: (schema) => schema.required(t("form.projectId.required")),
+            otherwise: (schema) => schema.notRequired(),
+          }),
+        }),
+      }),
+    [t]
+  );
 
   return (
     <ImageGenFormWrapper<VertexImageGenFormValues>
       {...props}
       title={
         existingConfig
-          ? `Edit ${imageProvider.title}`
-          : `Connect ${imageProvider.title}`
+          ? t("form.editHeader.title", { title: imageProvider.title })
+          : t("form.connectHeader.title", { title: imageProvider.title })
       }
-      description={imageProvider.description}
+      description={t(imageProvider.descriptionKey)}
       initialValues={initialValues}
       validationSchema={validationSchema}
       getInitialValuesFromCredentials={getInitialValuesFromCredentials}

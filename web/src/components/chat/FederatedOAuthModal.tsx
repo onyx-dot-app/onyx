@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Modal } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { Card, Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
-import { Card } from "@/refresh-components/cards";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
@@ -101,6 +101,7 @@ function useFederatedOauthModal() {
 }
 
 export default function FederatedOAuthModal() {
+  const t = useTranslations("chat.federatedOAuth");
   const { appName: applicationName } = useSettings();
 
   const {
@@ -122,8 +123,8 @@ export default function FederatedOAuthModal() {
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgLink}
-          title="Connect Your Apps"
-          description={`Improve answer quality by letting ${applicationName} search all your connected data.`}
+          title={t("header.title")}
+          description={t("header.description", { appName: applicationName })}
         />
         <Modal.Body>
           {needsAuth.map((connector) => {
@@ -132,29 +133,37 @@ export default function FederatedOAuthModal() {
             );
 
             return (
-              <Card key={connector.federated_connector_id}>
-                <ContentAction
-                  icon={sourceMetadata.icon}
-                  title={sourceMetadata.displayName}
-                  description={sourceMetadata.category}
-                  sizePreset="main-content"
-                  variant="section"
-                  rightChildren={
-                    <Button
-                      prominence="secondary"
-                      target="_blank"
-                      href={connector.authorize_url}
-                    >
-                      Connect
-                    </Button>
-                  }
-                />
+              <Card
+                border="solid"
+                key={connector.federated_connector_id}
+                rounding={4}
+              >
+                <Section alignItems="start" height="fit">
+                  <ContentAction
+                    icon={sourceMetadata.icon}
+                    title={sourceMetadata.displayName}
+                    description={sourceMetadata.category}
+                    sizePreset="main-content"
+                    variant="section"
+                    rightChildren={
+                      <Button
+                        prominence="secondary"
+                        target="_blank"
+                        href={connector.authorize_url}
+                      >
+                        {t("connectButton.label")}
+                      </Button>
+                    }
+                  />
+                </Section>
               </Card>
             );
           })}
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={handleOAuthModalSkip}>Skip for now</Button>
+          <Button onClick={handleOAuthModalSkip}>
+            {t("skipButton.label")}
+          </Button>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

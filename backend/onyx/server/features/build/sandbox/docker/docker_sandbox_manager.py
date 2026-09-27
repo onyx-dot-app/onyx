@@ -62,6 +62,7 @@ import binascii
 import io
 import json
 import mimetypes
+import posixpath
 import re
 import secrets
 import shlex
@@ -83,7 +84,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ATTACHMENTS_DIRECTORY,
     ONYX_SERVER_URL,
-    OPENCODE_DISABLED_TOOLS,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
     SANDBOX_CONTAINER_IMAGE,
@@ -112,6 +112,9 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     run_in_container,
     stream_stdin_to_container,
     stream_stdout_from_container,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
@@ -157,6 +160,7 @@ from onyx.server.features.build.timeouts import (
     POLL_INTERVAL_SECONDS,
     PROVISION_DEADLINE_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -295,6 +299,38 @@ def _validate_strict_path(path: str) -> None:
         raise ValueError("Invalid path: contains disallowed characters")
     if not re.match(r"^[a-zA-Z0-9_\-./]+$", path.lstrip("/")):
         raise ValueError("Invalid path: contains disallowed characters")
+
+
+def _validate_opencode_history_archive(archive_bytes: bytes) -> None:
+    """Rejects members that would land outside ``OPENCODE_DATA_DIR``.
+
+    The archive is built inside the sandbox, but ``put_archive`` extracts it as
+    the Docker daemon, so an unchecked member could plant a root-run file (e.g.
+    ``firewall-init.sh``) anywhere under ``WORKSPACE_ROOT``.
+    """
+    archive_root = posixpath.basename(OPENCODE_DATA_DIR)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
+            members = tar.getmembers()
+    except (tarfile.TarError, EOFError) as e:
+        # A truncated gzip stream raises EOFError, not TarError.
+        raise RuntimeError(f"Opencode history archive is unreadable: {e}") from e
+
+    for member in members:
+        if not (member.isfile() or member.isdir()):
+            raise RuntimeError(
+                f"Opencode history archive member is not a file or directory: "
+                f"{member.name}"
+            )
+        name = posixpath.normpath(member.name)
+        if (
+            member.name.startswith("/")
+            or ".." in member.name.split("/")
+            or (name != archive_root and not name.startswith(f"{archive_root}/"))
+        ):
+            raise RuntimeError(
+                f"Opencode history archive member escapes {archive_root}: {member.name}"
+            )
 
 
 _COMPOSE_INTERNAL_HOSTNAMES = {
@@ -857,7 +893,7 @@ class DockerSandboxManager(SandboxManager):
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
             opencode_config = build_opencode_base_config(
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 plugins=plugins,
             )
             opencode_config_json = json.dumps(opencode_config)
@@ -1010,7 +1046,10 @@ class DockerSandboxManager(SandboxManager):
         try:
             return self._docker.containers.create(**run_kwargs), True
         except APIError as e:
-            if "Conflict" in str(e) or getattr(e, "status_code", None) == 409:
+            if (
+                "Conflict" in str(e)
+                or getattr(e, "status_code", None) == 409  # ods: ignore[getattr]
+            ):
                 logger.info("Sandbox container %s already exists, reusing.", sandbox_id)
                 return self._require_container(sandbox_id), False
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
@@ -1067,7 +1106,7 @@ class DockerSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            disabled_tools=get_opencode_disabled_tools(),
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
         )
@@ -1093,7 +1132,7 @@ class DockerSandboxManager(SandboxManager):
         session_opencode_config = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 mcp_servers=mcp_servers,
                 session_id=str(session_id),
             )
@@ -1382,6 +1421,8 @@ echo "Session cleanup complete"
             )
             return
 
+        _validate_opencode_history_archive(archive_bytes)
+
         try:
             # put_archive untars (gzip ok) into the stopped container's writable layer.
             if not container.put_archive(WORKSPACE_ROOT, archive_bytes):
@@ -1455,7 +1496,7 @@ if [ -f "$web_dir/bun.lock" ]; then
     ) 9>{BUN_CACHE_DIR}.lock
     cd "$web_dir"
     BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
-        bun install --frozen-lockfile --backend=hardlink
+        bun install --frozen-lockfile --ignore-scripts --backend=hardlink
 fi
 """
         try:
@@ -1521,7 +1562,7 @@ fi
             json.dumps(
                 build_provider_opencode_config(
                     llm_config,
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    disabled_tools=get_opencode_disabled_tools(),
                     mcp_servers=mcp_servers,
                     session_id=str(session_id),
                 )
@@ -1620,6 +1661,32 @@ fi
 
         entries = self._parse_ls_output(output, clean_path)
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
+
+    def get_outputs_manifest(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> OutputsManifestResponse:
+        container = self._require_container(sandbox_id)
+        try:
+            # Root-owned interpreter and module: the sandbox user owns
+            # /workspace, so anything under it could be swapped to lie.
+            # workdir=/opt is load-bearing, python -m imports the root-owned
+            # /opt/sandbox_daemon only because cwd leads sys.path. -E -s
+            # ignore PYTHON* env vars and the user site directory.
+            result = _run_in_container_as_sandbox_user(
+                container,
+                [
+                    "/usr/local/bin/python3",
+                    "-E",
+                    "-s",
+                    "-m",
+                    "sandbox_daemon.manifest",
+                    str(session_id),
+                ],
+                workdir="/opt",
+            )
+        except ExecError as e:
+            raise RuntimeError(f"Failed to build outputs manifest: {e}") from e
+        return OutputsManifestResponse.model_validate_json(result.stdout_text)
 
     def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
         entries: list[FilesystemEntry] = []

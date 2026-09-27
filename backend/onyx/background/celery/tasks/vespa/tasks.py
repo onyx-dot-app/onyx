@@ -28,7 +28,7 @@ from onyx.background.celery.tasks.vespa.document_sync import (
 )
 from onyx.configs.app_configs import JOB_TIMEOUT, VESPA_SYNC_MAX_TASKS
 from onyx.configs.constants import (
-    CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+    CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryTask,
     OnyxRedisConstants,
     OnyxRedisLocks,
@@ -36,6 +36,7 @@ from onyx.configs.constants import (
 from onyx.db.document import (
     document_has_indexable_cc_pair,
     get_document,
+    get_document_source_types,
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
 )
@@ -107,7 +108,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
 
     lock_beat: RedisLock = r.lock(
         OnyxRedisLocks.CHECK_VESPA_SYNC_BEAT_LOCK,
-        timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+        timeout=CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT,
     )
 
     # these tasks should never overlap
@@ -159,8 +160,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
                         db_session=db_session, only_up_to_date=False
                     )
 
-                    for usergroup in user_groups:
-                        usergroup_ids.append(usergroup.id)
+                    usergroup_ids.extend(usergroup.id for usergroup in user_groups)
 
                 for usergroup_id in usergroup_ids:
                     lock_beat.reacquire()
@@ -432,7 +432,7 @@ def monitor_document_set_taskset(
         has_connector_pairs = bool(document_set.connector_credential_pairs)
         # Federated connectors should keep a document set alive even without cc pairs.
         has_federated_connectors = bool(
-            getattr(document_set, "federated_connectors", [])
+            getattr(document_set, "federated_connectors", [])  # ods: ignore[getattr]
         )
 
         if not has_connector_pairs and not has_federated_connectors:
@@ -512,6 +512,10 @@ def document_index_metadata_sync_task(
                 doc_access = get_access_for_document(
                     document_id=document_id, db_session=db_session
                 )
+                source_types = get_document_source_types(
+                    db_session=db_session,
+                    document_ids=[document_id],
+                ).get(document_id)
 
                 update_request = MetadataUpdateRequest(
                     document_ids=[document_id],
@@ -524,6 +528,7 @@ def document_index_metadata_sync_task(
                     document_sets=update_doc_sets,
                     boost=doc.boost,
                     hidden=doc.hidden,
+                    source_types=source_types,
                     created_at=doc.doc_created_at,
                 )
 

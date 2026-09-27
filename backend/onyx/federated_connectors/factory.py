@@ -37,7 +37,7 @@ def _load_federated_connector_class(
 
     try:
         module = importlib.import_module(mapping.module_path)
-        connector_class = getattr(module, mapping.class_name)
+        connector_class = getattr(module, mapping.class_name)  # ods: ignore[getattr]
         _federated_connector_cache[source] = connector_class
         return connector_class
     except (ImportError, AttributeError) as e:

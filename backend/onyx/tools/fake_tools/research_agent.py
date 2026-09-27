@@ -18,6 +18,7 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
+from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
@@ -67,7 +68,11 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo, ToolCallKickoff, ToolResponse
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -102,6 +107,7 @@ def generate_intermediate_report(
     user_identity: LLMUserIdentity | None,
     emitter: Emitter,
     placement: Placement,
+    language_section: str,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> str:
     # NOTE: This step outputs a lot of tokens and has been observed to run for more than 10 minutes in a nontrivial percentage of
@@ -113,9 +119,11 @@ def generate_intermediate_report(
         # Having the state container here to handle the tokens and not passed through means there is no way to
         # get partial saves of the report. Arguably this is not useful anyway so not going to implement partial saves.
         state_container = ChatStateContainer()
+        # The report streams to the UI, so it carries the reply-language line.
+        report_prompt = with_language_section(RESEARCH_REPORT_PROMPT, language_section)
         system_prompt = ChatMessageSimple(
-            message=RESEARCH_REPORT_PROMPT,
-            token_count=token_counter(RESEARCH_REPORT_PROMPT),
+            message=report_prompt,
+            token_count=token_counter(report_prompt),
             message_type=MessageType.SYSTEM,
         )
 
@@ -149,7 +157,7 @@ def generate_intermediate_report(
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
             is_deep_research=True,
-            timeout_override=DR_REPORT_LLM_TIMEOUT_S,
+            stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S,
         )
 
         while True:
@@ -204,7 +212,7 @@ def generate_intermediate_report(
         llm_step_result = cast(LlmStepResult, llm_step_result)
 
         final_report = llm_step_result.answer
-        span.span_data.output = final_report if final_report else None
+        span.span_data.output = final_report or None
         if final_report is None:
             raise ValueError(
                 f"LLM failed to generate a report for research task: {research_topic}"
@@ -223,6 +231,7 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
+    language_section: str,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
@@ -414,13 +423,14 @@ def run_research_agent_call(
                         citation_processor=citation_processor,
                         user_identity=user_identity,
                         emitter=emitter,
+                        language_section=language_section,
                         reasoning_effort=reasoning_effort,
                         placement=Placement(
                             turn_index=turn_index,
                             tab_index=tab_index,
                         ),
                     )
-                    span.span_data.output = final_report if final_report else None
+                    span.span_data.output = final_report or None
                     return ResearchAgentCallResult(
                         intermediate_report=final_report,
                         citation_mapping=citation_processor.get_seen_citations(),
@@ -615,13 +625,14 @@ def run_research_agent_call(
                 citation_processor=citation_processor,
                 user_identity=user_identity,
                 emitter=emitter,
+                language_section=language_section,
                 reasoning_effort=reasoning_effort,
                 placement=Placement(
                     turn_index=turn_index,
                     tab_index=tab_index,
                 ),
             )
-            span.span_data.output = final_report if final_report else None
+            span.span_data.output = final_report or None
             return ResearchAgentCallResult(
                 intermediate_report=final_report,
                 citation_mapping=citation_processor.get_seen_citations(),
@@ -673,6 +684,7 @@ def run_research_agent_calls(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     citation_mapping: CitationMapping,
+    language_section: str,
     user_identity: LLMUserIdentity | None = None,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> CombinedResearchAgentCallResult:
@@ -690,11 +702,12 @@ def run_research_agent_calls(
                 is_reasoning_model,
                 token_counter,
                 user_identity,
+                language_section,
                 reasoning_effort,
             ),
         )
         for research_agent_call, parent_tool_call_id in zip(
-            research_agent_calls, parent_tool_call_ids
+            research_agent_calls, parent_tool_call_ids, strict=False
         )
     ]
 
@@ -770,19 +783,22 @@ if __name__ == "__main__":
         emitter = Emitter(merged_queue=emitter_queue)
         state_container = ChatStateContainer()
 
+        # No chat session exists here, so skip the tools that write
+        # session-scoped generated files.
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
             emitter=emitter,
             user=user,
             llm=llm,
+            allowed_tool_ids=[
+                tool.id
+                for tool in persona.tools
+                if tool.in_code_tool_id
+                not in (ImageGenerationTool.__name__, PythonTool.__name__)
+            ],
         )
-        tools = [
-            tool
-            for tool_list in tool_dict.values()
-            for tool in tool_list
-            if tool.name != "generate_image"
-        ]
+        tools = [tool for tool_list in tool_dict.values() for tool in tool_list]
 
         logger.info("Running research agent with prompt: %s", RESEARCH_PROMPT)
         logger.info("LLM: %s/%s", llm.config.model_provider, llm.config.model_name)
@@ -803,6 +819,7 @@ if __name__ == "__main__":
             is_reasoning_model=is_reasoning,
             token_counter=token_counter,
             user_identity=None,
+            language_section=build_language_section(None),
         )
 
         if result is None:

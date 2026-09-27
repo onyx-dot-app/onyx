@@ -96,7 +96,9 @@ class ProjectManager:
             return False
         try:
             project = UserProjectSnapshot.model_validate(response.json())
-            chat_sessions = getattr(project, "chat_sessions", [])
+            chat_sessions = getattr(  # ods: ignore[getattr]
+                project, "chat_sessions", []
+            )
             return len(chat_sessions or []) == 0
         except Exception:
             # If response doesn't include chat_sessions, assume unlinked

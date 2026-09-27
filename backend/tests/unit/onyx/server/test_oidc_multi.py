@@ -28,17 +28,29 @@ _OIDC_CONFIG = {
     "openid_config_url": "https://idp.example.com/.well-known/openid-configuration",
 }
 _GOOGLE_CONFIG = {"client_id": "gid", "client_secret": "gsecret"}
+
+
+@pytest.fixture(autouse=True)
+def _stub_idp_url_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These tests build clients from fake IdP URLs and stay off the network. The
+    # URL guard's own DNS/SSRF checks live in test_sso_url_guard.
+    monkeypatch.setattr(oidc_multi, "validate_idp_url", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        oidc_multi, "validate_discovered_endpoints", lambda *_a, **_k: None
+    )
+
+
 _DB = cast(Session, object())
 _TEST_SECRET = "unit-test-secret"
 
 
 def _provider(**overrides: object) -> SSOProvider:
-    base: dict[str, Any] = dict(
-        name="okta",
-        provider_type=SSOProviderType.OIDC,
-        allowed_email_domains=["companya.com"],
-        config=make_mock_sensitive_value(dict(_OIDC_CONFIG)),
-    )
+    base: dict[str, Any] = {
+        "name": "okta",
+        "provider_type": SSOProviderType.OIDC,
+        "allowed_email_domains": ["companya.com"],
+        "config": make_mock_sensitive_value(dict(_OIDC_CONFIG)),
+    }
     base.update(overrides)
     return cast(SSOProvider, SimpleNamespace(**base))
 
@@ -432,7 +444,6 @@ def test_fixed_callback_rejects_missing_state() -> None:
                 code="code",
                 state=None,
                 error=None,
-                db_session=_DB,
                 strategy=cast(Any, None),
                 user_manager=cast(Any, None),
             )
@@ -460,7 +471,6 @@ def test_fixed_callback_rejects_state_without_provider(
                 code="code",
                 state=state,
                 error=None,
-                db_session=_DB,
                 strategy=cast(Any, None),
                 user_manager=cast(Any, None),
             )

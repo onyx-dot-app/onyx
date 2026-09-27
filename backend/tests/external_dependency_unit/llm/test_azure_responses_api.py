@@ -50,7 +50,6 @@ def _build_azure_llm(test_secrets: dict[TestSecret, str]) -> LitellmLLM:
         api_base=_resource_base(test_secrets[TestSecret.AZURE_API_URL]),
         api_version=_DATED_API_VERSION,
         max_input_tokens=128_000,
-        timeout=60,
     )
 
 

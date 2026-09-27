@@ -9,6 +9,7 @@ from typing import Any, cast
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
+from onyx.chat.incognito import current_turn_persists_content
 from onyx.chat.models import ChatMessageSimple, LlmStepResult
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.configs.app_configs import (
@@ -16,6 +17,7 @@ from onyx.configs.app_configs import (
     LOG_ONYX_MODEL_INTERACTIONS,
     PROMPT_CACHE_CHAT_HISTORY,
 )
+from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
@@ -42,6 +44,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.request_context import get_llm_request_params
 from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
 from onyx.prompts.chat_prompts import (
     CODE_BLOCK_MARKDOWN,
@@ -81,102 +84,77 @@ _XML_PARAMETER_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _FUNCTION_CALLS_OPEN_MARKER = "<function_calls"
-_FUNCTION_CALLS_CLOSE_MARKER = "</function_calls>"
+_FUNCTION_CALLS_OPEN_RE = re.compile(
+    r"<function_calls(?=[> \t\n\r]|\Z)", re.IGNORECASE | re.ASCII
+)
+_FUNCTION_CALLS_CLOSE_RE = re.compile(r"</function_calls>", re.IGNORECASE | re.ASCII)
+_SPACES = " \t"
 
 
 class _XmlToolCallContentFilter:
-    """Streaming filter that strips XML-style tool call payload blocks from text."""
+    """Streaming filter that strips XML-style tool call payload blocks from text.
+
+    Text that could be the start of a split "<function_calls" marker is held
+    back until the next chunk (or flush) decides it.
+    """
 
     def __init__(self) -> None:
         self._pending = ""
-        self._inside_function_calls_block = False
+        self._inside_block = False
+        # Empty until text is emitted.
+        self._last_emitted_char = ""
+        # Set after a removed block so spaces after it do not double up with
+        # spaces emitted before it. Line breaks are always kept.
+        self._drop_spaces = False
 
     def process(self, content: str) -> str:
-        if not content:
-            return ""
-
         self._pending += content
         output_parts: list[str] = []
+        while True:
+            if self._inside_block:
+                close = _FUNCTION_CALLS_CLOSE_RE.search(self._pending)
+                if close is None:
+                    break
+                self._pending = self._pending[close.end() :]
+                self._inside_block = False
+                self._drop_spaces = self._last_emitted_char in ("", *_SPACES)
 
-        while self._pending:
-            pending_lower = self._pending.lower()
+            if self._drop_spaces:
+                self._pending = self._pending.lstrip(_SPACES)
+                if not self._pending:
+                    break
+                self._drop_spaces = False
 
-            if self._inside_function_calls_block:
-                end_idx = pending_lower.find(_FUNCTION_CALLS_CLOSE_MARKER)
-                if end_idx == -1:
-                    # Keep buffering until we see the close marker.
-                    return "".join(output_parts)
+            open_match = _FUNCTION_CALLS_OPEN_RE.search(self._pending)
+            if open_match is not None:
+                cut = open_match.start()
+            else:
+                # A possible marker prefix can only start at the last "<".
+                cut = self._pending.rfind("<")
+                if cut == -1 or not _FUNCTION_CALLS_OPEN_MARKER.startswith(
+                    self._pending[cut:].lower()
+                ):
+                    cut = len(self._pending)
 
-                # Drop the whole function_calls block.
-                self._pending = self._pending[
-                    end_idx + len(_FUNCTION_CALLS_CLOSE_MARKER) :
-                ]
-                self._inside_function_calls_block = False
-                continue
+            if cut > 0:
+                output_parts.append(self._pending[:cut])
+                self._last_emitted_char = self._pending[cut - 1]
 
-            start_idx = _find_function_calls_open_marker(pending_lower)
-            if start_idx == -1:
-                # Keep only a possible prefix of "<function_calls" in the buffer so
-                # marker splits across chunks are handled correctly.
-                tail_len = _matching_open_marker_prefix_len(self._pending)
-                emit_upto = len(self._pending) - tail_len
-                if emit_upto > 0:
-                    output_parts.append(self._pending[:emit_upto])
-                    self._pending = self._pending[emit_upto:]
-                return "".join(output_parts)
-
-            if start_idx > 0:
-                output_parts.append(self._pending[:start_idx])
-
-            # Enter block-stripping mode and keep scanning for close marker.
-            self._pending = self._pending[start_idx:]
-            self._inside_function_calls_block = True
+            if open_match is None:
+                self._pending = self._pending[cut:]
+                break
+            self._pending = self._pending[open_match.end() :]
+            self._inside_block = True
 
         return "".join(output_parts)
 
     def flush(self) -> str:
-        if self._inside_function_calls_block:
-            # Drop any incomplete block at stream end.
-            self._pending = ""
-            self._inside_function_calls_block = False
-            return ""
-
-        remaining = self._pending
+        # An incomplete block at stream end is dropped.
+        remaining = "" if self._inside_block else self._pending
         self._pending = ""
+        self._inside_block = False
+        self._drop_spaces = False
         return remaining
-
-
-def _matching_open_marker_prefix_len(text: str) -> int:
-    """Return longest suffix of text that matches prefix of "<function_calls"."""
-    max_len = min(len(text), len(_FUNCTION_CALLS_OPEN_MARKER) - 1)
-    text_lower = text.lower()
-    marker_lower = _FUNCTION_CALLS_OPEN_MARKER
-
-    for candidate_len in range(max_len, 0, -1):
-        if text_lower.endswith(marker_lower[:candidate_len]):
-            return candidate_len
-
-    return 0
-
-
-def _is_valid_function_calls_open_follower(char: str | None) -> bool:
-    return char is None or char in {">", " ", "\t", "\n", "\r"}
-
-
-def _find_function_calls_open_marker(text_lower: str) -> int:
-    """Find '<function_calls' with a valid tag boundary follower."""
-    search_from = 0
-    while True:
-        idx = text_lower.find(_FUNCTION_CALLS_OPEN_MARKER, search_from)
-        if idx == -1:
-            return -1
-
-        follower_pos = idx + len(_FUNCTION_CALLS_OPEN_MARKER)
-        follower = text_lower[follower_pos] if follower_pos < len(text_lower) else None
-        if _is_valid_function_calls_open_follower(follower):
-            return idx
-
-        search_from = idx + 1
 
 
 def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
@@ -873,7 +851,9 @@ def translate_history_to_llm_format(
     supports_image_input = True
     if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
         supports_image_input = model_supports_image_input(
-            llm_config.model_name, llm_config.model_provider
+            llm_config.model_name,
+            llm_config.model_provider,
+            llm_config.deployment_name,
         )
 
     # Per-request image cap (provider-aware). When the cap is enforced and
@@ -1028,7 +1008,9 @@ def translate_history_to_llm_format(
 
     # Apply model-specific formatting when translating to LLM format (e.g. OpenAI
     # reasoning models need CODE_BLOCK_MARKDOWN prefix for correct markdown generation)
-    if model_needs_formatting_reenabled(llm_config.model_name):
+    if model_needs_formatting_reenabled(
+        llm_config.model_name, llm_config.deployment_name
+    ):
         for i, m in enumerate(messages):
             if isinstance(m, SystemMessage):
                 messages[i] = SystemMessage(
@@ -1084,7 +1066,7 @@ def run_llm_step_pkt_generator(
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
     pre_answer_processing_time: float | None = None,
-    timeout_override: int | None = None,
+    stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
 ) -> Generator[Packet, None, tuple[LlmStepResult, bool]]:
     """Run an LLM step and stream the response as packets.
     NOTE: DO NOT TOUCH THIS FUNCTION BEFORE ASKING YUHONG, this is very finicky and
@@ -1119,7 +1101,7 @@ def run_llm_step_pkt_generator(
             when tool_choice is REQUIRED.
         pre_answer_processing_time: Optional time spent processing before the
             answer started, recorded in state_container for analytics.
-        timeout_override: Optional timeout override for the LLM call.
+        stall_timeout_s: Longest gap tolerated between stream deltas.
 
     Yields:
         Packet: Streaming packets containing:
@@ -1155,7 +1137,7 @@ def run_llm_step_pkt_generator(
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
     has_reasoned = False
 
-    if LOG_ONYX_MODEL_INTERACTIONS:
+    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug(
             "Message history:\n%s",
             _format_message_history_for_logging(llm_msg_history),
@@ -1306,8 +1288,12 @@ def run_llm_step_pkt_generator(
             max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
             user_identity=user_identity,
-            timeout_override=timeout_override,
+            stall_timeout_s=stall_timeout_s,
         ):
+            # On the first chunk, not at stream end: a mid-step stop persists
+            # from another thread and needs this step's params already there.
+            if stream_chunk_count == 0 and state_container:
+                state_container.set_request_params(get_llm_request_params())
             stream_chunk_count += 1
             if packet.usage:
                 usage = packet.usage
@@ -1503,7 +1489,7 @@ def run_llm_step_pkt_generator(
 
             assistant_msg: AssistantMessage = AssistantMessage(
                 role="assistant",
-                content=accumulated_answer if accumulated_answer else None,
+                content=accumulated_answer or None,
                 tool_calls=tool_calls_list,
             )
             span_generation.span_data.output = [assistant_msg.model_dump()]
@@ -1521,7 +1507,7 @@ def run_llm_step_pkt_generator(
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
-    if LOG_ONYX_MODEL_INTERACTIONS:
+    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug("Accumulated reasoning: %s", accumulated_reasoning)
         logger.debug("Accumulated answer: %s", accumulated_answer)
 
@@ -1552,10 +1538,10 @@ def run_llm_step_pkt_generator(
 
     return (
         LlmStepResult(
-            reasoning=accumulated_reasoning if accumulated_reasoning else None,
-            answer=accumulated_answer if accumulated_answer else None,
-            tool_calls=tool_calls if tool_calls else None,
-            raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
+            reasoning=accumulated_reasoning or None,
+            answer=accumulated_answer or None,
+            tool_calls=tool_calls or None,
+            raw_answer=accumulated_raw_answer or None,
             finish_reason=terminal_finish_reason,
         ),
         has_reasoned,
@@ -1581,7 +1567,7 @@ def run_llm_step(
     use_existing_tab_index: bool = False,
     is_deep_research: bool = False,
     pre_answer_processing_time: float | None = None,
-    timeout_override: int | None = None,
+    stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
 ) -> tuple[LlmStepResult, bool]:
     """Wrapper around run_llm_step_pkt_generator that consumes packets and emits them.
 
@@ -1604,7 +1590,7 @@ def run_llm_step(
         use_existing_tab_index=use_existing_tab_index,
         is_deep_research=is_deep_research,
         pre_answer_processing_time=pre_answer_processing_time,
-        timeout_override=timeout_override,
+        stall_timeout_s=stall_timeout_s,
     )
 
     while True:

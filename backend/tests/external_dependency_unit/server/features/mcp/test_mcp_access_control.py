@@ -8,7 +8,6 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.mcp import get_mcp_servers_accessible_to_user, user_can_access_mcp_server
 from onyx.db.models import (
     MCPServer,
@@ -66,7 +65,7 @@ def _accessible_ids(user: User, db_session: Session) -> set[int]:
 
 
 def test_public_server_visible_to_every_user(db_session: Session) -> None:
-    user = create_test_user(db_session, "mcp_pub", role=UserRole.BASIC)
+    user = create_test_user(db_session, "mcp_pub")
     public = _make_server(db_session, "mcp_pub_server", is_public=True)
 
     assert public.id in _accessible_ids(user, db_session)
@@ -74,8 +73,8 @@ def test_public_server_visible_to_every_user(db_session: Session) -> None:
 
 
 def test_group_restricted_server_gates_by_membership(db_session: Session) -> None:
-    member = create_test_user(db_session, "mcp_member", role=UserRole.BASIC)
-    outsider = create_test_user(db_session, "mcp_outsider", role=UserRole.BASIC)
+    member = create_test_user(db_session, "mcp_member")
+    outsider = create_test_user(db_session, "mcp_outsider")
     group = _make_group(db_session, "mcp_group")
     _add_user_to_group(db_session, member, group)
 
@@ -90,8 +89,8 @@ def test_group_restricted_server_gates_by_membership(db_session: Session) -> Non
 
 
 def test_user_restricted_server_gates_by_direct_grant(db_session: Session) -> None:
-    granted = create_test_user(db_session, "mcp_granted", role=UserRole.BASIC)
-    other = create_test_user(db_session, "mcp_other", role=UserRole.BASIC)
+    granted = create_test_user(db_session, "mcp_granted")
+    other = create_test_user(db_session, "mcp_other")
 
     restricted = _make_server(db_session, "mcp_user_server", is_public=False)
     _restrict_to_user(db_session, restricted, granted)
@@ -101,7 +100,7 @@ def test_user_restricted_server_gates_by_direct_grant(db_session: Session) -> No
 
 
 def test_admin_sees_all_servers(db_session: Session) -> None:
-    admin = create_test_user(db_session, "mcp_admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "mcp_admin", is_admin=True)
     restricted = _make_server(db_session, "mcp_admin_restricted", is_public=False)
 
     assert restricted.id in _accessible_ids(admin, db_session)
@@ -109,7 +108,7 @@ def test_admin_sees_all_servers(db_session: Session) -> None:
 
 
 def test_non_member_cannot_access_other_groups_server(db_session: Session) -> None:
-    user = create_test_user(db_session, "mcp_wronggroup", role=UserRole.BASIC)
+    user = create_test_user(db_session, "mcp_wronggroup")
     user_group = _make_group(db_session, "mcp_users_group")
     _add_user_to_group(db_session, user, user_group)
 

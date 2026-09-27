@@ -200,12 +200,11 @@ def get_or_create_discord_service_api_key(db_session: Session, tenant_id: str) -
     if existing:
         return regenerate_key(existing)
 
-    # Create LIMITED role key (chat-only permissions)
+    # Create a service key with the default service-account permissions.
     return insert_api_key(
         db_session=db_session,
         api_key_args=APIKeyArgs(
             name=DISCORD_SERVICE_API_KEY_NAME,
-            role=UserRole.LIMITED,  # Minimal permissions
         ),
         user_id=None,  # Service account (system-owned)
     ).api_key

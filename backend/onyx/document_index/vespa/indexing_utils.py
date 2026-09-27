@@ -215,8 +215,8 @@ def _index_vespa_chunk(
         # element an arbitrary weight
         # rkuo: acl, docset and boost metadata are also updated through the metadata sync queue
         # which only calls VespaIndex.update
-        ACCESS_CONTROL_LIST: {acl_entry: 1 for acl_entry in chunk.access.to_acl()},
-        DOCUMENT_SETS: {document_set: 1 for document_set in chunk.document_sets},
+        ACCESS_CONTROL_LIST: dict.fromkeys(chunk.access.to_acl(), 1),
+        DOCUMENT_SETS: dict.fromkeys(chunk.document_sets, 1),
         # still called `image_file_name` in Vespa for backwards compatibility
         IMAGE_FILE_NAME: chunk.image_file_id,
         USER_PROJECT: chunk.user_project if chunk.user_project is not None else [],

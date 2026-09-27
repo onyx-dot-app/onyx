@@ -7,10 +7,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UserStatus } from "@/lib/types";
 import type { InvitedUserSnapshot } from "@/lib/types";
-import type {
-  FullUserSnapshot,
-  UserRow,
-} from "@/views/admin/UsersPage/interfaces";
+import type { FullUserSnapshot, UserRow } from "@/views/admin/UsersPage/types";
 
 // ---------------------------------------------------------------------------
 // Converters
@@ -20,7 +17,8 @@ function toUserRow(snapshot: FullUserSnapshot): UserRow {
   return {
     id: snapshot.id,
     email: snapshot.email,
-    role: snapshot.role,
+    account_type: snapshot.account_type,
+    is_admin: snapshot.is_admin,
     status: snapshot.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE,
     is_active: snapshot.is_active,
     is_scim_synced: snapshot.is_scim_synced,
@@ -28,6 +26,7 @@ function toUserRow(snapshot: FullUserSnapshot): UserRow {
     personal_name: snapshot.personal_name,
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
+    last_active: snapshot.last_active ?? null,
     groups: snapshot.groups,
   };
 }
@@ -39,7 +38,8 @@ function emailToUserRow(
   return {
     id: null,
     email,
-    role: null,
+    account_type: null,
+    is_admin: false,
     status,
     is_active: false,
     is_scim_synced: false,
@@ -47,6 +47,7 @@ function emailToUserRow(
     personal_name: null,
     created_at: null,
     updated_at: null,
+    last_active: null,
     groups: [],
   };
 }

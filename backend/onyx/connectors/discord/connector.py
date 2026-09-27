@@ -266,14 +266,18 @@ def _manage_async_retrieval(
 class DiscordConnector(PollConnector, LoadConnector):
     def __init__(
         self,
-        server_ids: list[str] = [],
-        channel_names: list[str] = [],
+        server_ids: list[str] | None = None,
+        channel_names: list[str] | None = None,
         # YYYY-MM-DD
         start_date: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ):
+        if channel_names is None:
+            channel_names = []
+        if server_ids is None:
+            server_ids = []
         self.batch_size = batch_size
-        self.channel_names: list[str] = channel_names if channel_names else []
+        self.channel_names: list[str] = channel_names or []
         self.server_ids: list[int] = (
             [int(server_id) for server_id in server_ids] if server_ids else []
         )

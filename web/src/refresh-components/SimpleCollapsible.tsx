@@ -48,7 +48,7 @@ import {
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
 import { Button, type TagProps } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { Content, type SizePreset } from "@opal/layouts";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import type { WithoutStyles } from "@opal/types";
 
@@ -189,9 +189,11 @@ interface SimpleCollapsibleHeaderProps extends WithoutStyles<
   description?: string;
   /** Optional tag rendered inline next to the title (e.g. a plan badge). */
   tag?: TagProps;
+  /** Content scale. Defaults to the existing main-content setting. */
+  sizePreset?: Extract<SizePreset, "main-content" | "main-ui" | "secondary">;
 }
 const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
-  ({ title, description, tag, ...props }, ref) => {
+  ({ title, description, tag, sizePreset = "main-content", ...props }, ref) => {
     const { open } = useSimpleCollapsible();
     const { ref: boundingRef, inside } = useBoundingBox();
 
@@ -206,7 +208,7 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
             <Content
               title={title}
               description={description}
-              sizePreset="main-content"
+              sizePreset={sizePreset}
               variant="section"
               tag={tag}
             />

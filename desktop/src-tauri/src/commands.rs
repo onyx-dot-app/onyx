@@ -4,7 +4,7 @@
 #![allow(clippy::needless_pass_by_value)]
 
 use crate::config::{get_config_dir, get_config_path, save_config, AppConfig, ConfigState};
-use crate::window::{build_and_setup_window, open_in_default_browser};
+use crate::window::{build_and_setup_window, is_externally_openable, open_in_default_browser};
 use serde::Serialize;
 use std::fs;
 use tauri::Manager;
@@ -37,9 +37,8 @@ pub async fn check_server_reachable(state: tauri::State<'_, ConfigState>) -> Res
 #[tauri::command]
 pub fn open_in_browser(url: String) -> Result<(), String> {
     let parsed_url = Url::parse(&url).map_err(|_| "Invalid URL".to_string())?;
-    match parsed_url.scheme() {
-        "http" | "https" | "mailto" | "tel" => {}
-        _ => return Err("Unsupported URL scheme".to_string()),
+    if !is_externally_openable(&parsed_url) {
+        return Err("Unsupported URL scheme".to_string());
     }
 
     if open_in_default_browser(parsed_url.as_str()) {

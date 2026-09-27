@@ -1,7 +1,8 @@
 """Tests for llm_loop.py, including history construction and empty-response paths."""
 
+from contextlib import nullcontext
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -11,6 +12,8 @@ from onyx.chat.llm_loop import (
     _build_empty_llm_response_error,
     _try_fallback_tool_extraction,
     construct_message_history,
+    count_message_replay_tokens,
+    run_llm_loop,
     select_reminder_text,
 )
 from onyx.chat.models import (
@@ -27,7 +30,9 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.constants import FILE_READER_TOOL_NAME
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 def create_message(
@@ -667,6 +672,7 @@ class TestConstructMessageHistory:
             context_files=context_files,
             available_tokens=1000,
             token_counter=_simple_token_counter,
+            available_tool_names={"read_file"},
         )
 
         # Should have: system, tool_metadata_message, user
@@ -674,6 +680,7 @@ class TestConstructMessageHistory:
         metadata_msg = result[1]
         assert metadata_msg.message_type == MessageType.USER
         assert "report.xlsx" in metadata_msg.message
+        # read_file is offered, so the listing carries the id it consumes.
         assert "xlsx-1" in metadata_msg.message
 
     def test_metadata_only_and_text_files_both_present(self) -> None:
@@ -730,10 +737,16 @@ def _simple_token_counter(text: str) -> int:
 
 
 def _make_file_metadata(
-    file_id: str, filename: str, approx_chars: int = 50_000
+    file_id: str,
+    filename: str,
+    approx_chars: int = 50_000,
+    staged_for_tools: bool = True,
 ) -> FileToolMetadata:
     return FileToolMetadata(
-        file_id=file_id, filename=filename, approx_char_count=approx_chars
+        file_id=file_id,
+        filename=filename,
+        approx_char_count=approx_chars,
+        staged_for_tools=staged_for_tools,
     )
 
 
@@ -789,6 +802,100 @@ class TestNonVisionImageBudgeting:
             "Follow-up",
         ]
 
+    @pytest.mark.parametrize("stored_image_tokens", [0, 20000])
+    @pytest.mark.parametrize("configured_input_limit", [8000, 24000])
+    def test_output_allowance_uses_image_replay_cost(
+        self,
+        stored_image_tokens: int,
+        configured_input_limit: int,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        image_msg = self._image_user_msg()
+        image_msg.token_count = stored_image_tokens + 5
+        image_msg.image_token_count = stored_image_tokens
+        monkeypatch.setattr(
+            "onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05
+        )
+        llm = Mock()
+        llm.config = LLMConfig(
+            model_provider="openai",
+            model_name="text-only-model",
+            temperature=0,
+            max_input_tokens=configured_input_limit,
+        )
+        older_user = create_message("Old input", MessageType.USER, 20000)
+        older_answer = create_message("Old answer", MessageType.ASSISTANT, 5)
+        with (
+            patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+            patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+            patch(
+                "onyx.chat.llm_loop.get_session_with_current_tenant",
+                return_value=nullcontext(),
+            ),
+            patch("onyx.chat.llm_loop.get_default_base_system_prompt", return_value=""),
+            patch("onyx.chat.llm_loop.select_reminder_text", return_value=""),
+            patch("onyx.chat.llm_loop.model_supports_image_input", return_value=False),
+            patch(
+                "onyx.chat.token_budget.get_model_map",
+                return_value={
+                    "openai/text-only-model": {
+                        "max_input_tokens": 24000,
+                        "max_output_tokens": 16000,
+                    }
+                },
+            ),
+            patch(
+                "onyx.chat.llm_loop.run_llm_step",
+                return_value=(
+                    LlmStepResult(answer="Done", tool_calls=None, reasoning=None),
+                    False,
+                ),
+            ) as step,
+        ):
+            run_llm_loop(
+                emitter=Mock(),
+                state_container=Mock(),
+                simple_chat_history=[older_user, older_answer, image_msg],
+                tools=[],
+                custom_agent_prompt=None,
+                context_files=create_context_files(),
+                persona=None,
+                user_memory_context=None,
+                llm=llm,
+                token_counter=lambda _: 10,
+            )
+
+        if configured_input_limit == 8000:
+            assert step.call_args.kwargs["history"] == [older_answer, image_msg]
+            assert step.call_args.kwargs["max_tokens"] == 16000
+        else:
+            assert step.call_args.kwargs["history"] == [
+                older_user,
+                older_answer,
+                image_msg,
+            ]
+            assert step.call_args.kwargs["max_tokens"] == 2780
+        assert (
+            count_message_replay_tokens(
+                image_msg,
+                image_files_replayed_as_markers=True,
+                token_counter=lambda _: 10,
+            )
+            == 15
+        )
+        assert image_msg.token_count == stored_image_tokens + 5
+
+    def test_vision_output_budget_keeps_stored_image_cost(self) -> None:
+        assert count_message_replay_tokens(self._image_user_msg()) == 505
+
+    def test_image_marker_budget_without_tokenizer(self) -> None:
+        assert (
+            count_message_replay_tokens(
+                self._image_user_msg(), image_files_replayed_as_markers=True
+            )
+            == 45
+        )
+
 
 class TestForgottenFileMetadata:
     """Tests for the forgotten-files mechanism in construct_message_history.
@@ -802,7 +909,11 @@ class TestForgottenFileMetadata:
          entry with no corresponding file_id-tagged ChatMessageSimple.
 
     The forgotten-files mechanism must detect both cases and inject a
-    lightweight metadata message so the LLM knows to use read_file.
+    lightweight metadata message pointing the LLM at whichever retrieval path
+    the deployment actually offers (read_file or internal search).
+
+    This class covers a request that was given the FileReaderTool.
+    TestForgottenFilesWithoutFileReader covers one that was not.
     """
 
     def _build(
@@ -821,15 +932,20 @@ class TestForgottenFileMetadata:
             available_tokens=available_tokens,
             token_counter=_simple_token_counter,
             all_injected_file_metadata=all_injected_file_metadata,
+            available_tool_names={FILE_READER_TOOL_NAME},
         )
 
     @staticmethod
     def _find_forgotten_message(
         result: list[ChatMessageSimple],
     ) -> ChatMessageSimple | None:
-        """Find the forgotten-files metadata message in the result, if any."""
+        """Find the forgotten-files metadata message in the result, if any.
+
+        Matches the file listing rather than the header: the header names
+        read_file or internal search depending on the deployment.
+        """
         for msg in result:
-            if "Use the read_file tool" in msg.message:
+            if 'filename="' in msg.message:
                 return msg
         return None
 
@@ -896,7 +1012,7 @@ class TestForgottenFileMetadata:
 
         # The original file message should NOT be in context
         assert not any(
-            getattr(m, "file_id", None) == "file-abc"
+            getattr(m, "file_id", None) == "file-abc"  # ods: ignore[getattr]
             and m.message_type == MessageType.USER
             for m in result
             if m is not forgotten
@@ -1069,6 +1185,166 @@ class TestForgottenFileMetadata:
                 f"Turn {turn}: forgotten-files message must persist every turn"
             )
             assert "moby_dick.txt" in forgotten.message
+
+
+def _notice_for_dropped_file(
+    available_tool_names: set[str] | None = None,
+    staged_for_tools: bool = True,
+) -> ChatMessageSimple:
+    """Truncate one oversized attachment out of context and return the notice."""
+    file_meta = _make_file_metadata(
+        "file-abc", "sustainability.pdf", staged_for_tools=staged_for_tools
+    )
+    file_msg = create_message("x" * 2000, MessageType.USER, 500)
+    file_msg.file_id = "file-abc"
+
+    result = construct_message_history(
+        system_prompt=create_message("system", MessageType.SYSTEM, 5),
+        custom_agent_prompt=None,
+        simple_chat_history=[
+            file_msg,
+            create_message("Got it", MessageType.ASSISTANT, 10),
+            create_message("Summarize it", MessageType.USER, 10),
+        ],
+        reminder_message=None,
+        context_files=create_context_files(),
+        # Too tight for the 500-token file message.
+        available_tokens=100,
+        token_counter=_simple_token_counter,
+        all_injected_file_metadata={"file-abc": file_meta},
+        available_tool_names=available_tool_names,
+    )
+    notice = next((m for m in result if 'filename="' in m.message), None)
+    assert notice is not None, "dropped file should still produce a notice"
+    return notice
+
+
+class TestForgottenFilesWithoutFileReader:
+    """The forgotten-files notice must not name read_file where the tool is absent.
+
+    FileReaderTool is only attached when the vector DB is disabled (see
+    ``FileReaderTool.is_available``), but the notice was emitted whenever the
+    persona had the tool row attached. On a vector-DB deployment that told the
+    model to call a tool it had never been given, so it reported read_file as
+    unavailable and fell back to guessing or web-searching the document.
+    """
+
+    def _build_with_dropped_file(
+        self, available_tool_names: set[str] | None = None
+    ) -> ChatMessageSimple:
+        return _notice_for_dropped_file(available_tool_names or {SearchTool.NAME})
+
+    def test_notice_does_not_name_read_file(self) -> None:
+        notice = self._build_with_dropped_file()
+        assert "read_file" not in notice.message
+
+    def test_notice_points_at_internal_search(self) -> None:
+        notice = self._build_with_dropped_file()
+        assert "internal search" in notice.message
+        assert "sustainability.pdf" in notice.message
+
+    def test_notice_forbids_guessing_and_web_search(self) -> None:
+        """The failure this replaced was the model web-searching the document."""
+        notice = self._build_with_dropped_file()
+        assert "Do not guess" in notice.message
+        assert "search the web" in notice.message
+
+    def test_notice_omits_the_file_id(self) -> None:
+        """The file_id only means something to read_file; internal search takes
+        a query, so showing the UUID invites another dead end.
+        """
+        notice = self._build_with_dropped_file()
+        assert "file-abc" not in notice.message
+
+
+class TestForgottenFilesNoticeFollowsConstructedTools:
+    """The notice names a tool only when this request actually received it.
+
+    Deployment config alone is not enough: internal search can be missing on a
+    vector-DB deployment when the persona omits it, ``allowed_tool_ids``
+    excludes it, or the search usage setting disables it.
+    """
+
+    def test_names_read_file_when_the_request_has_it(self) -> None:
+        notice = _notice_for_dropped_file({"read_file", "internal_search"})
+        assert "read_file" in notice.message
+        # read_file is the one consumer of the UUID, so it comes back with it.
+        assert "file-abc" in notice.message
+
+    def test_names_internal_search_when_only_search_is_offered(self) -> None:
+        notice = _notice_for_dropped_file({"internal_search"})
+        assert "internal search" in notice.message
+        assert "read_file" not in notice.message
+
+    def test_names_python_when_it_is_the_only_reader(self) -> None:
+        """The python tool is handed the files themselves, so an evicted file is
+        still readable there. Calling it unreadable makes the model refuse work
+        it could actually do.
+        """
+        notice = _notice_for_dropped_file({"run_python"})
+        assert "python tool" in notice.message
+        assert "no tool here can read them" not in notice.message
+        assert "sustainability.pdf" in notice.message
+
+    def test_python_tier_omits_the_file_id(self) -> None:
+        """The UUID is a read_file identifier; PythonTool never sees it."""
+        notice = _notice_for_dropped_file({"run_python"})
+        assert "file-abc" not in notice.message
+
+    def test_python_tier_does_not_promise_an_exact_path(self) -> None:
+        """PythonTool normalizes and de-duplicates names at staging time, so the
+        notice cannot know the sandbox path. It must not assert one.
+        """
+        notice = _notice_for_dropped_file({"run_python"})
+        assert "by filename" not in notice.message
+        assert "listing the working directory" in notice.message
+
+    def test_python_tier_skipped_for_summary_truncated_files(self) -> None:
+        """Summary truncation filters the message out of chat_history before
+        load_all_chat_files runs, so those bytes never reach the python tool.
+        Advertising python for them points the model at nothing.
+        """
+        notice = _notice_for_dropped_file({"run_python"}, staged_for_tools=False)
+        assert "python tool" not in notice.message
+        assert "no tool here can read them" in notice.message
+        assert "sustainability.pdf" in notice.message
+
+    def test_search_wins_over_python_when_both_are_offered(self) -> None:
+        """Indexed retrieval beats writing code to parse an oversized file."""
+        notice = _notice_for_dropped_file({"internal_search", "run_python"})
+        assert "internal search" in notice.message
+        assert "python tool" not in notice.message
+
+    def test_python_only_persona_reaches_the_python_tier(self) -> None:
+        """Regression for a real deployment: read_file is attached to the
+        persona but filtered out by availability, internal_search was never
+        attached, and run_python is live.
+        """
+        notice = _notice_for_dropped_file(
+            {"generate_image", "web_search", "run_python", "open_url"}
+        )
+        assert "python tool" in notice.message
+        assert "read_file" not in notice.message
+        assert "internal search" not in notice.message
+
+    def test_names_no_tool_when_the_request_has_no_reader(self) -> None:
+        """No read_file, no search, no python — do not promise anything."""
+        notice = _notice_for_dropped_file({"generate_image", "web_search"})
+        assert "read_file" not in notice.message
+        assert "internal search" not in notice.message
+        assert "python tool" not in notice.message
+        assert "no tool here can read them" in notice.message
+
+    def test_still_forbids_guessing_when_no_tool_is_offered(self) -> None:
+        notice = _notice_for_dropped_file({"generate_image", "web_search"})
+        assert "Do not guess" in notice.message
+        assert "search the web" in notice.message
+        assert "sustainability.pdf" in notice.message
+
+    def test_python_tier_also_forbids_guessing_and_web_search(self) -> None:
+        notice = _notice_for_dropped_file({"run_python"})
+        assert "Do not guess" in notice.message
+        assert "search the web" in notice.message
 
 
 class TestFallbackToolExtraction:
@@ -1414,15 +1690,15 @@ class TestSelectReminderText:
     "open_url is not available" replies)."""
 
     def _select(self, **overrides: Any) -> str | None:
-        kwargs: dict[str, Any] = dict(
-            ran_image_gen=False,
-            just_ran_web_search=False,
-            has_open_url_tool=True,
-            out_of_cycles=False,
-            persona_task_prompt=None,
-            include_citation_reminder=False,
-            include_file_reminder=False,
-        )
+        kwargs: dict[str, Any] = {
+            "ran_image_gen": False,
+            "just_ran_web_search": False,
+            "has_open_url_tool": True,
+            "out_of_cycles": False,
+            "persona_task_prompt": None,
+            "include_citation_reminder": False,
+            "include_file_reminder": False,
+        }
         kwargs.update(overrides)
         return select_reminder_text(**kwargs)
 

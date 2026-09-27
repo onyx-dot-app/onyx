@@ -69,6 +69,7 @@ from onyx.db.port_attempt import (
     mark_port_succeeded,
     pause_port_attempt,
     port_backfill_has_pending_work,
+    request_port_cancel,
     resume_paused_port_attempt,
     touch_port_progress,
 )
@@ -76,6 +77,7 @@ from onyx.db.port_orphan_candidate import (
     cleanup_stale_port_orphan_candidates,
     clear_port_orphan_candidates,
     get_port_orphan_candidate_doc_ids,
+    port_target_settings_id,
 )
 from onyx.db.search_settings import (
     get_current_search_settings,
@@ -176,6 +178,12 @@ def _copy_batch_with_retry(
                 _PORT_BATCH_MAX_RETRIES,
                 e,
             )
+            # A revert/supersede/deletion landed mid-batch: bail instead of burning the
+            # remaining retries (each stacked on the embed/model-server timeouts). Return
+            # aborted so the caller acks the cancel rather than failing the attempt.
+            if should_abort is not None and should_abort():
+                log.info("Port batch aborted between retries; stopping")
+                return 0, True
             if attempt_num < _PORT_BATCH_MAX_RETRIES:
                 time.sleep(_PORT_BATCH_RETRY_SLEEP_S)
     assert last_error is not None
@@ -251,9 +259,10 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             )
             return
         if attempt.cancel_requested:
-            # nothing written yet; ack immediately
-            mark_port_canceled(db_session, port_attempt_id)
-            log.info("Port cancel requested at startup; acknowledged and stopping")
+            # Don't ack: this task hasn't claimed the attempt yet (the claim is below), so
+            # the row belongs to a worker still writing, which acks after its last write.
+            # Acking for it would open the reclaim gate mid-write.
+            log.info("Port cancel requested at startup; stopping")
             return
 
         cc_pair_id = attempt.cc_pair_id
@@ -274,6 +283,23 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         if future_search_settings is None:
             mark_port_failed(
                 db_session, port_attempt_id, error_msg="FUTURE search settings missing"
+            )
+            return
+        # Refuse a FUTURE that is no longer the port target: a revert/supersede or stale
+        # enqueue can leave a fresh attempt that cancel_active_port_attempts never flagged.
+        # Cancel through request_port_cancel, not outright — a second dispatch of an
+        # attempt another worker owns must not ack for it.
+        target_id = port_target_settings_id(
+            get_current_search_settings(db_session),
+            get_secondary_search_settings(db_session),
+        )
+        if target_id != attempt.search_settings_id:
+            request_port_cancel(db_session, port_attempt_id)
+            log.info(
+                "PortAttempt targets settings %s, no longer the port target (now %s); "
+                "canceling",
+                attempt.search_settings_id,
+                target_id,
             )
             return
         # Source to copy from: the recorded backfill source when the target was

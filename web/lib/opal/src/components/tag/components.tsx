@@ -1,9 +1,12 @@
+"use client";
+
 import "@opal/components/tag/styles.css";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { Text, Tooltip } from "@opal/components";
 import { SvgAlertTriangle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,6 +33,13 @@ interface TagProps {
    * keyboard-selection state before deleting a tag.
    */
   onRemove?: () => void;
+
+  /**
+   * Editable only: whether the remove button is a Tab stop. A chip field
+   * walks its chips with the arrows and keeps Tab for leaving the field.
+   * @default true
+   */
+  removeInTabOrder?: boolean;
 
   /** Editable only: dims the tag and hides the remove button. */
   disabled?: boolean;
@@ -64,12 +74,14 @@ function Tag({
   color = "gray",
   size = "sm",
   onRemove,
+  removeInTabOrder = true,
   disabled = false,
   value,
   truncate = false,
   tooltip,
   error = false,
 }: TagProps) {
+  const strings = useOpalStrings();
   const config = TAG_COLORS[color];
   const editable = onRemove !== undefined;
   const capped = editable || truncate;
@@ -105,13 +117,13 @@ function Tag({
             capped && "opal-auxiliary-tag-capped"
           )}
         >
-          <Text font={font} color="inherit" nowrap>
+          <Text font={font} color="inherit" wordWrap="whitespace-nowrap">
             {title}
           </Text>
         </span>
         {value !== undefined && (
           <span className="opal-auxiliary-tag-value">
-            <Text font={font} color="inherit" nowrap>
+            <Text font={font} color="inherit" wordWrap="whitespace-nowrap">
               {value}
             </Text>
           </span>
@@ -124,8 +136,11 @@ function Tag({
           <button
             type="button"
             className={TAG_REMOVE_CLASS}
+            tabIndex={removeInTabOrder ? undefined : -1}
             aria-label={
-              typeof title === "string" ? `Remove ${title}` : "Remove"
+              typeof title === "string"
+                ? strings.removeItem(title)
+                : strings.remove
             }
             onClick={(event) => {
               event.stopPropagation();

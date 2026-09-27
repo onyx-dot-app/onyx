@@ -249,7 +249,9 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         valid_results: list[list[WebSearchResult]] = []
         failed_queries: dict[str, str] = {}
 
-        for query, (results, error) in zip(queries, search_results_with_errors):
+        for query, (results, error) in zip(
+            queries, search_results_with_errors, strict=True
+        ):
             if error is not None:
                 failed_queries[query] = error
             elif results is not None:

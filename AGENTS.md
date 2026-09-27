@@ -22,6 +22,8 @@ This file provides guidance to AI agents when working with code in this reposito
   This works on a host checkout and inside the devcontainer. If no `psql` client is available, fall back to
   `docker exec onyx-relational_db-1 psql -U postgres -c "<SQL>"` (no `-it` — agent shells have no TTY).
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
+- If `.agents-local.md` exists at the repo root and its rules are not already in your context,
+  read and follow it. It carries developer-local agent guidance and is never committed.
 
 ## Project Overview
 
@@ -63,8 +65,20 @@ pre-commit run --files <path> [<path> ...]
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 
-NOTE: Keep comments brief and focused on information that stays relevant long-term. Don't write
-comments that only describe the instantaneous change (e.g. what was just added/removed/refactored).
+NOTE: Keep code comments brief and focused on information that stays relevant long-term.
+
+## Writing
+
+These rules apply to all prose you write: docs, commit messages, PR descriptions, reports, and replies.
+
+Follow ASD-STE100 Simplified Technical English for technical text:
+
+- Use approved words only. Each word has one meaning.
+- Use one word for one idea. Do not use two words for the same thing.
+- Write short sentences. Use 20 words or less for instructions.
+- Use active voice. Write "Turn the switch", not "The switch must be turned".
+- Write short paragraphs. Keep one topic in each paragraph.
+- Keep code comments focused on information that is relevant long-term or for future readers.
 
 ## Testing
 
