@@ -7,6 +7,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from onyx.file_processing.extract_file_text import (
     _sheet_to_csv,
+    extract_text_and_images,
     xlsx_sheet_extraction,
     xlsx_to_text,
 )
@@ -28,6 +29,16 @@ def _make_xlsx(sheets: dict[str, list[list[str]]]) -> io.BytesIO:
 
 
 class TestXlsxToText:
+    def test_extract_text_and_images_supports_xlsm(self) -> None:
+        workbook = _make_xlsx({"Sheet1": [["Name", "Value"], ["alpha", "1"]]})
+        with patch(
+            "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+            return_value=None,
+        ):
+            result = extract_text_and_images(workbook, "macro-enabled.xlsm")
+        assert "alpha" in result.text_content
+        assert result.embedded_images == []
+
     def test_formula_strings_are_not_indexed(self) -> None:
         # Workbooks are read with data_only=True: cached calculated values are
         # extracted instead of formula source. A cell whose formula was never
