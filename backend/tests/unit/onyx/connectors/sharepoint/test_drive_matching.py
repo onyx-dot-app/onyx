@@ -12,6 +12,10 @@ from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
+from onyx.connectors.microsoft_utils.drive_delta import (
+    DriveDeltaFetchResult,
+    DriveDeltaPage,
+)
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.models import (
@@ -87,6 +91,22 @@ _SAMPLE_ITEM = DriveItemData(
     parent_reference_path=None,
     drive_id="fake-drive-id",
 )
+
+
+def _delta_fetch_result(item: DriveItemData) -> DriveDeltaFetchResult:
+    page = DriveDeltaPage.model_validate(
+        {
+            "value": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "webUrl": item.web_url,
+                    "parentReference": {"driveId": item.drive_id},
+                }
+            ]
+        }
+    )
+    return DriveDeltaFetchResult(page=page)
 
 
 def _build_connector(drives: Sequence[_FakeDrive]) -> SharepointConnector:
@@ -177,15 +197,8 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
             web_url="https://example.sharepoint.com/sites/sample/Documents",
         )
 
-    def fake_fetch_one_delta_page(
-        client: Any,  # noqa: ARG001
-        page_url: str,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
-    ) -> tuple[list[DriveItemData], str | None]:
-        return [sample_item], None
+    def fake_fetch_delta_page(*_args: Any, **_kwargs: Any) -> DriveDeltaFetchResult:
+        return _delta_fetch_result(sample_item)
 
     def fake_convert(
         driveitem: DriveItemData,  # noqa: ARG001
@@ -219,8 +232,8 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     )
     monkeypatch.setattr(
         sp_connector,
-        "fetch_one_delta_page",
-        fake_fetch_one_delta_page,
+        "fetch_drive_delta_checkpoint_page",
+        fake_fetch_delta_page,
     )
     monkeypatch.setattr(
         "onyx.connectors.sharepoint.connector._convert_driveitem_to_document_with_permissions",
@@ -394,8 +407,8 @@ def test_load_from_checkpoint_uses_display_name_for_library_url(
 
     monkeypatch.setattr(
         sp_connector,
-        "fetch_one_delta_page",
-        lambda *_, **__: ([_SAMPLE_ITEM], None),
+        "fetch_drive_delta_checkpoint_page",
+        lambda *_, **__: _delta_fetch_result(_SAMPLE_ITEM),
     )
     monkeypatch.setattr(
         sp_connector, "_convert_driveitem_to_document_with_permissions", fake_convert

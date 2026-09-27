@@ -38,15 +38,19 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
+from onyx.connectors.microsoft_utils.drive_delta import (
+    fetch_drive_delta_checkpoint_page,
+)
 from onyx.connectors.microsoft_utils.drive_items import (
+    DRIVE_ITEM_SELECT_FIELDS,
     DriveItemContentError,
     DriveItemData,
     build_delta_start_url,
     build_item_relative_path,
     extract_drive_item_content,
     extract_folder_path_from_parent_reference,
-    fetch_one_delta_page,
     is_path_excluded,
+    iter_delta_page_files,
     iter_drive_items_delta,
     iter_drive_items_paged,
     parse_graph_datetime,
@@ -229,6 +233,7 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     # When set, Phase 3b fetches one page at a time so progress is persisted
     # between pages.  None means BFS path or no active delta traversal.
     current_drive_delta_next_link: str | None = None
+    current_drive_delta_resync_attempted: bool = False
 
     process_site_pages: bool = False
 
@@ -1390,6 +1395,7 @@ class SharepointConnector(
         checkpoint.current_drive_id = None
         checkpoint.current_drive_web_url = None
         checkpoint.current_drive_delta_next_link = None
+        checkpoint.current_drive_delta_resync_attempted = False
         checkpoint.seen_document_ids.clear()
 
     def _fetch_slim_documents_from_sharepoint(
@@ -2179,12 +2185,14 @@ class SharepointConnector(
             if checkpoint.current_drive_delta_next_link:
                 # Delta path: fetch one page at a time for checkpointing
                 try:
-                    page_items, next_url = fetch_one_delta_page(
+                    result = fetch_drive_delta_checkpoint_page(
                         self.graph_api,
                         page_url=checkpoint.current_drive_delta_next_link,
                         drive_id=checkpoint.current_drive_id,
-                        start=start_dt,
-                        end=end_dt,
+                        select_fields=DRIVE_ITEM_SELECT_FIELDS,
+                        allow_full_resync=not (
+                            checkpoint.current_drive_delta_resync_attempted
+                        ),
                     )
                 except Exception as e:
                     logger.error(
@@ -2201,10 +2209,11 @@ class SharepointConnector(
                     self._clear_drive_checkpoint_state(checkpoint)
                     return checkpoint
 
-                driveitems = page_items
-                has_more_delta_pages = next_url is not None
-                if next_url:
-                    checkpoint.current_drive_delta_next_link = next_url
+                if result.resync_after_410:
+                    checkpoint.current_drive_delta_resync_attempted = True
+                driveitems = iter_delta_page_files(result.page, start_dt, end_dt)
+                has_more_delta_pages = result.next_checkpoint_url is not None
+                checkpoint.current_drive_delta_next_link = result.next_checkpoint_url
             else:
                 # BFS path (folder-scoped): process all items at once
                 driveitems = iter_drive_items_paged(
