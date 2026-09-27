@@ -45,6 +45,7 @@ import type {
   R2CredentialJson,
   S3CredentialJson,
   SalesforceCredentialJson,
+  SeafileCredentialJson,
   SharepointCredentialJson,
   SlabCredentialJson,
   SlackCredentialJson,
@@ -101,6 +102,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   zoom: ZoomCredentialJson;
   braintrust: BraintrustCredentialJson;
   canvas: CanvasCredentialJson;
+  seafile: SeafileCredentialJson;
   egnyte: EgnyteCredentialJson;
   airtable: AirtableCredentialJson;
   drupal_wiki: DrupalWikiCredentialJson;
@@ -388,6 +390,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
     domain: "",
     access_token: "",
   },
+  seafile: {
+    seafile_api_token: "",
+  },
   airtable: {
     airtable_access_token: "",
   },
@@ -620,6 +625,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Canvas
   canvas_access_token: "Canvas Access Token",
+
+  // Seafile
+  seafile_api_token: "Seafile Service Account Web API Auth Token",
 
   // GitBook
   gitbook_space_id: "GitBook Space ID",
