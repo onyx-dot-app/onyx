@@ -969,7 +969,7 @@ def _extract_text_and_images(
                 text_content=text_content, embedded_images=images, metadata={}
             )
 
-        if extension == ".xlsx":
+        if extension in OnyxFileExtensions.SPREADSHEET_EXTENSIONS:
             return ExtractionResult(
                 text_content=xlsx_to_text(file, file_name=file_name),
                 embedded_images=[],
