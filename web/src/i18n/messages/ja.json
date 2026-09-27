@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "ドキュメント ID",
+          "documentId": "失敗 ID",
           "errorMessage": "エラーメッセージ",
           "status": "ステータス",
           "time": "時刻"

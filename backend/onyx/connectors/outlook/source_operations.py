@@ -10,49 +10,41 @@ messages, ``Calendars.Read`` for the calendar view, ``User.Read.All`` to
 enumerate and resolve mailboxes.
 """
 
-import base64
-import json
-import re
-from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import quote
 
 import bs4
 import requests
-from msal.exceptions import MsalServiceError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
-from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.drive_items import (
     download_graph_url_with_cap,
     parse_graph_datetime,
-)
-from onyx.connectors.microsoft_utils.graph_auth import (
-    MicrosoftAuthContext,
-    MicrosoftAuthMethod,
-    acquire_graph_token,
-    build_msal_app,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    microsoft_error_from_exception,
+)
+from onyx.connectors.microsoft_utils.graph_gateway import (
+    MicrosoftGraphAuthConfig,
+    MicrosoftGraphGateway,
+    build_graph_user_url,
+)
 from onyx.connectors.outlook.models import (
-    INVALID_AUTH_METHOD_CODE,
-    INVALID_AUTHORITY_CODE,
-    INVALID_CERTIFICATE_CODE,
-    MISSING_CREDENTIAL_CODE,
     OutlookAttachment,
-    OutlookAuthError,
     OutlookDeltaPage,
     OutlookEvent,
     OutlookEventPage,
     OutlookFolder,
     OutlookFolderPage,
-    OutlookGraphError,
     OutlookMailbox,
     OutlookMailboxPage,
     OutlookMessage,
@@ -79,20 +71,6 @@ CREDENTIAL_PRIVATE_KEY = "outlook_private_key"
 CREDENTIAL_CERTIFICATE_PASSWORD = "outlook_certificate_password"
 # Missing means client secret, the shared package's default.
 CREDENTIAL_AUTH_METHOD = "authentication_method"
-# The fields each authentication method needs filled.
-CREDENTIAL_FIELDS_BY_METHOD: dict[MicrosoftAuthMethod, tuple[str, ...]] = {
-    MicrosoftAuthMethod.CLIENT_SECRET: (
-        CREDENTIAL_CLIENT_ID,
-        CREDENTIAL_DIRECTORY_ID,
-        CREDENTIAL_CLIENT_SECRET,
-    ),
-    MicrosoftAuthMethod.CERTIFICATE: (
-        CREDENTIAL_CLIENT_ID,
-        CREDENTIAL_DIRECTORY_ID,
-        CREDENTIAL_PRIVATE_KEY,
-        CREDENTIAL_CERTIFICATE_PASSWORD,
-    ),
-}
 
 CONFIG_AUTHORITY_HOST = "authority_host"
 CONFIG_GRAPH_API_HOST = "graph_api_host"
@@ -148,63 +126,9 @@ EPOCH_TIMESTAMP = "1970-01-01T00:00:00Z"
 EMPTY_PAGE_FOLLOW_LIMIT = 20
 
 
-def _exception_chain(error: BaseException) -> Generator[BaseException, None, None]:
-    """The error and what it was raised from. MSAL wraps its discovery
-    failures in a second ValueError, so the detail sits one level down."""
-    current: BaseException | None = error
-    while current is not None:
-        yield current
-        current = current.__cause__ or current.__context__
-
-
-def _is_decode_error(error: BaseException) -> bool:
-    """A discovery body MSAL cannot parse must not read as a bad directory id."""
-    return any(isinstance(e, json.JSONDecodeError) for e in _exception_chain(error))
-
-
-# MSAL reports the HTTP status of a failed discovery or token call only inside
-# the exception text: "HTTP status: 429" for a 4xx discovery answer (ValueError)
-# and "HTTP Error: 503" for any 5xx (MsalServiceError).
-_MSAL_STATUS_RE = re.compile(r"HTTP (?:status|Error): (\d{3})")
-
-
-def _msal_http_status(error: BaseException) -> int | None:
-    for wrapped in _exception_chain(error):
-        match = _MSAL_STATUS_RE.search(str(wrapped))
-        if match:
-            return int(match.group(1))
-    return None
-
-
-def _msal_error(error: BaseException) -> OutlookGraphError:
-    return OutlookGraphError(_msal_http_status(error), type(error).__name__, str(error))
-
-
 def _odata_quote(value: str) -> str:
     """Escape a value for an OData string literal. Only the quote is special."""
     return value.replace("'", "''")
-
-
-def _to_graph_error(error: Exception) -> OutlookGraphError:
-    response = error.response if isinstance(error, requests.RequestException) else None
-    if response is None:
-        return OutlookGraphError(None, type(error).__name__, str(error))
-    try:
-        payload = response.json()
-    except ValueError:
-        payload = None
-    if not isinstance(payload, dict):
-        return OutlookGraphError(response.status_code, "<no code>", response.text[:500])
-    detail = payload.get("error")
-    # Graph nests code and message under "error". The OAuth token endpoint puts
-    # the code there as a bare string and the text in "error_description".
-    if isinstance(detail, dict):
-        code = detail.get("code") or "<no code>"
-        message = detail.get("message") or response.text
-    else:
-        code = detail or "<no code>"
-        message = payload.get("error_description") or response.text
-    return OutlookGraphError(response.status_code, str(code), str(message)[:500])
 
 
 def _recipient(raw: dict[str, Any] | None) -> OutlookRecipient | None:
@@ -383,8 +307,7 @@ class OutlookSourceOperations(SourceOperations):
 
     # Built lazily on first use so the credential is decrypted at the first
     # remote call, not at construction.
-    _auth_context: MicrosoftAuthContext | None = None
-    _graph_client: GraphApiClient | None = None
+    _graph_gateway: MicrosoftGraphGateway | None = None
 
     def _config_value(self, key: str, default: str) -> str:
         config = self.connector_specific_config or {}
@@ -395,86 +318,37 @@ class OutlookSourceOperations(SourceOperations):
         return self._config_value(CONFIG_GRAPH_API_HOST, DEFAULT_GRAPH_API_HOST)
 
     def _graph_base(self) -> str:
-        return f"{self._graph_host()}/{GRAPH_API_VERSION}"
+        return self._gateway().graph_api_base
 
-    def _auth(self) -> MicrosoftAuthContext:
-        if self._auth_context is None:
-            credentials = self.credentials_provider.get_credentials()
-            try:
-                method = MicrosoftAuthMethod.parse(
-                    credentials.get(CREDENTIAL_AUTH_METHOD)
-                )
-            except ConnectorValidationError as e:
-                raise OutlookAuthError(INVALID_AUTH_METHOD_CODE, str(e)) from e
-            missing = [
-                field
-                for field in CREDENTIAL_FIELDS_BY_METHOD[method]
-                if not str(credentials.get(field) or "").strip()
-            ]
-            if missing:
-                raise OutlookAuthError(
-                    MISSING_CREDENTIAL_CODE, "missing " + ", ".join(missing)
-                )
-            if method is MicrosoftAuthMethod.CERTIFICATE:
-                # Decoded here first, so a PFX that is not base64 reads as a
-                # bad upload and not as the bad directory id MSAL would report.
-                try:
-                    base64.b64decode(credentials[CREDENTIAL_PRIVATE_KEY])
-                except ValueError as e:
-                    raise OutlookAuthError(INVALID_CERTIFICATE_CODE, str(e)) from e
-            # MSAL checks the authority against Microsoft's discovery endpoint
-            # while building the app. 400 means a bad directory id. 429, 5xx or
-            # an unreadable body is the service's fault. A bad PFX is a RuntimeError.
-            try:
-                self._auth_context = build_msal_app(
-                    client_id=credentials[CREDENTIAL_CLIENT_ID],
-                    directory_id=credentials[CREDENTIAL_DIRECTORY_ID],
-                    authority_host=self._config_value(
-                        CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
-                    ),
-                    auth_method=method,
-                    client_secret=credentials.get(CREDENTIAL_CLIENT_SECRET),
-                    private_key_b64=credentials.get(CREDENTIAL_PRIVATE_KEY),
-                    certificate_password=credentials.get(
-                        CREDENTIAL_CERTIFICATE_PASSWORD
-                    ),
-                )
-            except ValueError as e:
-                if _is_decode_error(e) or _msal_http_status(e) == 429:
-                    raise _msal_error(e) from e
-                raise OutlookAuthError(INVALID_AUTHORITY_CODE, str(e)) from e
-            except RuntimeError as e:
-                raise OutlookAuthError(INVALID_CERTIFICATE_CODE, str(e)) from e
-            except MsalServiceError as e:
-                raise _msal_error(e) from e
-            except requests.RequestException as e:
-                raise _to_graph_error(e) from e
-        return self._auth_context
+    def _gateway(self) -> MicrosoftGraphGateway:
+        if self._graph_gateway is not None:
+            return self._graph_gateway
+        credentials = self.credentials_provider.get_credentials()
+        self._graph_gateway = MicrosoftGraphGateway(
+            auth_config=MicrosoftGraphAuthConfig(
+                client_id=credentials.get(CREDENTIAL_CLIENT_ID),
+                directory_id=credentials.get(CREDENTIAL_DIRECTORY_ID),
+                authority_host=self._config_value(
+                    CONFIG_AUTHORITY_HOST, DEFAULT_AUTHORITY_HOST
+                ),
+                auth_method=credentials.get(CREDENTIAL_AUTH_METHOD),
+                client_secret=credentials.get(CREDENTIAL_CLIENT_SECRET),
+                private_key_b64=credentials.get(CREDENTIAL_PRIVATE_KEY),
+                certificate_password=credentials.get(CREDENTIAL_CERTIFICATE_PASSWORD),
+            ),
+            graph_api_host=self._graph_host(),
+            graph_api_version=GRAPH_API_VERSION,
+        )
+        return self._graph_gateway
 
     def _token_response(self) -> dict[str, Any]:
-        # MSAL raises for a 5xx from the token endpoint, for one it cannot
-        # reach and for a body it cannot parse. A 4xx comes back as the
-        # OAuth error dict handled below.
-        try:
-            response = acquire_graph_token(self._auth().app, self._graph_host())
-        except (MsalServiceError, ValueError) as e:
-            raise _msal_error(e) from e
-        except requests.RequestException as e:
-            raise _to_graph_error(e) from e
-        if "access_token" not in response:
-            raise OutlookAuthError(
-                str(response.get("error") or "unknown_error"),
-                str(response.get("error_description") or ""),
-            )
-        return response
+        return self._gateway().token_response()
 
     def _access_token(self) -> str:
-        return str(self._token_response()["access_token"])
+        return self._gateway().access_token()
 
     def _client(self) -> GraphApiClient:
-        if self._graph_client is None:
-            self._graph_client = GraphApiClient(self._access_token, self._graph_base())
-        return self._graph_client
+        return self._gateway().client
 
     def _get(
         self,
@@ -482,13 +356,7 @@ class OutlookSourceOperations(SourceOperations):
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        # The shared client re-raises a transport error or a non-JSON body once
-        # its retries are spent. Both become gateway errors so callers see one
-        # failure type.
-        try:
-            return self._client().get_json(url, params, headers)
-        except (requests.RequestException, ValueError) as e:
-            raise _to_graph_error(e) from e
+        return self._gateway().get_json(url, params, headers)
 
     def _first_item(
         self,
@@ -518,12 +386,7 @@ class OutlookSourceOperations(SourceOperations):
         )
 
     def _user_url(self, mailbox_id: str) -> str:
-        # Graph rejects the slash form for a principal name that starts with
-        # ``$`` and documents the key-literal form for those.
-        if mailbox_id.startswith("$"):
-            literal = quote(_odata_quote(mailbox_id), safe="@$'")
-            return f"{self._graph_base()}/users('{literal}')"
-        return f"{self._graph_base()}/users/{quote(mailbox_id, safe='@')}"
+        return build_graph_user_url(self._graph_base(), mailbox_id)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -814,7 +677,7 @@ class OutlookSourceOperations(SourceOperations):
                 description=f"outlook attachment {attachment_id}",
             )
         except requests.RequestException as e:
-            raise _to_graph_error(e) from e
+            raise microsoft_error_from_exception(e) from e
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

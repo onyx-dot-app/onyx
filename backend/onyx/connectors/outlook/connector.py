@@ -50,6 +50,13 @@ from onyx.connectors.microsoft_utils.graph_env import (
     DEFAULT_GRAPH_API_HOST,
     resolve_microsoft_environment,
 )
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import raise_for_auth_error
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
@@ -66,7 +73,6 @@ from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
-    raise_for_auth_error,
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
@@ -76,10 +82,8 @@ from onyx.connectors.outlook.mailboxes import (
 from onyx.connectors.outlook.models import (
     EVENT_OCCURRENCE,
     OutlookAttachment,
-    OutlookAuthError,
     OutlookEvent,
     OutlookFolder,
-    OutlookGraphError,
     OutlookMailbox,
     OutlookMessage,
     OutlookRecipient,

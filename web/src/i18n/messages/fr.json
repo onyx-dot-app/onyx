@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "ID du document",
+          "documentId": "ID de l’échec",
           "errorMessage": "Message d'erreur",
           "status": "Statut",
           "time": "Heure"

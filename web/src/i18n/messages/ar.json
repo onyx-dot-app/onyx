@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "معرّف المستند",
+          "documentId": "معرّف الفشل",
           "errorMessage": "رسالة الخطأ",
           "status": "الحالة",
           "time": "الوقت"

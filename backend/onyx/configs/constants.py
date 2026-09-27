@@ -293,6 +293,7 @@ class DocumentSource(str, Enum):
     BOX = "box"
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
+    ONEDRIVE = "onedrive"
     TEAMS = "teams"
     OUTLOOK = "outlook"
     SALESFORCE = "salesforce"
@@ -821,6 +822,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.BOX: "Cloud-stored files and folders",
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
+    DocumentSource.ONEDRIVE: "Files and folders from Microsoft 365 OneDrive",
     DocumentSource.TEAMS: "Chat messages and channels",
     DocumentSource.OUTLOOK: "Email conversations and calendar events from Microsoft 365 mailboxes",
     DocumentSource.SALESFORCE: "Sales data, accounts, and opportunities",

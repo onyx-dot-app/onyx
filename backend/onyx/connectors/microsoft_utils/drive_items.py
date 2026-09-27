@@ -772,25 +772,3 @@ def iter_delta_pages(
         else:
             yield from iter_delta_page_files(result.page, start, end)
         page_url = result.next_checkpoint_url
-
-
-def build_delta_start_url(
-    graph_api_base: str,
-    drive_id: str,
-    start: datetime | None = None,
-    page_size: int = 200,
-) -> str:
-    """Build the initial delta API URL with query parameters embedded.
-
-    Embeds ``$top``, ``$select``, and optionally ``token`` so the URL can be
-    stored in a checkpoint without a separate params dict.
-    """
-    base_url = f"{graph_api_base}/drives/{drive_id}/root/delta"
-    params = [
-        f"$top={page_size}",
-        f"$select={DRIVE_ITEM_SELECT_FIELDS}",
-    ]
-    if start is not None and start > _EPOCH:
-        token = quote(start.isoformat(timespec="seconds"))
-        params.append(f"token={token}")
-    return f"{base_url}?{'&'.join(params)}"
