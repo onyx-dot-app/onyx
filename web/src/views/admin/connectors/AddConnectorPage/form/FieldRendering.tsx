@@ -9,6 +9,7 @@ import type {
 import { MultiSelectField } from "@/components/Field";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
+import SeafileLibraryPicker from "@/lib/connectors/seafile/SeafileLibraryPicker";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import {
   InputKeyValue,
@@ -359,6 +360,12 @@ export const RenderField: FC<RenderFieldProps> = ({
             />
           )}
         </InputVertical>
+      ) : connector === "seafile" && field.name === "repo_ids" ? (
+        <SeafileLibraryPicker
+          currentCredential={currentCredential}
+          label={label ?? ""}
+          description={description ?? ""}
+        />
       ) : field.type === "list" ? (
         <InputVertical
           disabled={disabled}

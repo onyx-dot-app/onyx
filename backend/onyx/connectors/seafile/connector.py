@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.seafile.constants import SEAFILE_DEFAULT_MAX_FILE_SIZE_BYTES
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
@@ -59,7 +60,6 @@ from onyx.utils.retry_wrapper import request_with_retries
 logger = setup_logger()
 
 SEAFILE_API_TOKEN_KEY = "seafile_api_token"
-SEAFILE_DEFAULT_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
 SEAFILE_ADDITIONAL_TEXT_EXTENSIONS = frozenset({".markdown"})
 SEAFILE_SUPPORTED_EXTENSIONS = frozenset(
     OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS | SEAFILE_ADDITIONAL_TEXT_EXTENSIONS

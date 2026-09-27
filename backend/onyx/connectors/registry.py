@@ -48,6 +48,7 @@ from onyx.connectors.outline.config import OutlineConnectorConfig
 from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.productboard.config import ProductboardConnectorConfig
 from onyx.connectors.salesforce.config import SalesforceConnectorConfig
+from onyx.connectors.seafile.config import SeafileConnectorConfig
 from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.slab.config import SlabConnectorConfig
 from onyx.connectors.slack.config import SlackConnectorConfig
@@ -318,6 +319,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.SEAFILE: ConnectorMapping(
         module_path="onyx.connectors.seafile.connector",
         class_name="SeafileConnector",
+        config_class=SeafileConnectorConfig,
     ),
     DocumentSource.AIRTABLE: ConnectorMapping(
         module_path="onyx.connectors.airtable.airtable_connector",

@@ -536,6 +536,10 @@ export const CREDENTIAL_SPECS = {
       access_token: secret("apiToken"),
     },
   }),
+  seafile: defineCredentialSpec({
+    brandName: "Seafile",
+    fields: { seafile_api_token: secret("apiToken") },
+  }),
   airtable: defineCredentialSpec({
     brandName: "Airtable",
     fields: { airtable_access_token: secret("apiToken") },
