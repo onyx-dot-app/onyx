@@ -23,7 +23,7 @@ from onyx.connectors.zoom.models import (
     ZOOM_MISSING_SCOPE_CODE,
     ZOOM_NOT_ENTITLED_CODE,
     ZoomAccessToken,
-    ZoomInvitee,
+    ZoomMeetingDetails,
     ZoomPanelist,
     ZoomParticipant,
     ZoomPastMeetingDetails,
@@ -31,7 +31,6 @@ from onyx.connectors.zoom.models import (
     ZoomRecordingPage,
     ZoomRegistrant,
     ZoomSessionOccurrence,
-    ZoomTranscript,
     ZoomUser,
     ZoomUserPage,
     ZoomWebinarDetails,
@@ -397,19 +396,24 @@ class ZoomClient:
             f"{MAX_LISTING_PAGES} pages"
         )
 
-    def get_transcript(self, meeting_identifier: str) -> ZoomTranscript | None:
+    def get_recording(self, meeting_identifier: str) -> ZoomRecordingEntry:
         """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Webinars
         come here too because Zoom has no webinar equivalent of this endpoint.
 
-        None means Zoom recorded the session but never transcribed it. A session
-        with no cloud recording at all answers 404, which raises.
+        A session with no cloud recording at all answers 404, which raises.
 
         Do not switch this to `GET /meetings/{meetingId}/transcript`. Against a
         live account that answered 404 for a session whose VTT was sitting in
         `recording_files`.
         """
         response = self._get(endpoints.MEETING_RECORDINGS, meeting_identifier)
-        return ZoomRecordingEntry.model_validate(response.json()).transcript
+        return ZoomRecordingEntry.model_validate(response.json())
+
+    def get_meeting_details(self, meeting_id: str) -> ZoomMeetingDetails:
+        """The scheduled meeting. `get_past_meeting_details` is the occurrence
+        equivalent and answers for a meeting this one has stopped knowing."""
+        response = self._get(endpoints.MEETING_DETAILS, meeting_id)
+        return ZoomMeetingDetails.model_validate(response.json())
 
     def get_past_meeting_details(
         self, meeting_identifier: str
@@ -478,6 +482,7 @@ class ZoomClient:
         return ZoomUserPage(
             users=[ZoomUser.model_validate(m) for m in body.get("members", [])],
             next_page_token=_next_page_token(body),
+            total_records=body.get("total_records"),
         )
 
     def list_users(self, page_token: str | None = None) -> ZoomUserPage:
@@ -493,6 +498,7 @@ class ZoomClient:
         return ZoomUserPage(
             users=[ZoomUser.model_validate(u) for u in body.get("users", [])],
             next_page_token=_next_page_token(body),
+            total_records=body.get("total_records"),
         )
 
     def list_user_recordings(
@@ -502,9 +508,12 @@ class ZoomClient:
         to_date: date,
         page_token: str | None = None,
     ) -> ZoomRecordingPage:
-        """A 404 here is not "nothing to index": Zoom sends it when the user id
-        doesn't exist, so swallowing it would turn a mistyped host email into an
-        empty index with nothing to explain it."""
+        """Zoom takes an email here as well as a user id, and covers at most a
+        month per call.
+
+        A 404 is not "nothing to index": Zoom sends it when the user does not
+        exist, so swallowing it would turn a mistyped host email into an empty
+        index with nothing to explain it."""
         params: dict[str, Any] = {
             "from": from_date.isoformat(),
             "to": to_date.isoformat(),
@@ -517,6 +526,7 @@ class ZoomClient:
         return ZoomRecordingPage(
             recordings=body.get("meetings", []),
             next_page_token=_next_page_token(body),
+            total_records=body.get("total_records"),
         )
 
     def list_past_meeting_participants(
@@ -569,18 +579,6 @@ class ZoomClient:
         self, webinar_id: str, status: str | None = None
     ) -> list[ZoomRegistrant]:
         return self._list_registrants(endpoints.WEBINAR_REGISTRANTS, webinar_id, status)
-
-    def list_meeting_invitees(self, meeting_id: str) -> list[ZoomInvitee]:
-        """Who was invited, which is not the same as who turned up. The list
-        hangs off the scheduled meeting, so a recurring series has one covering
-        every run and an ad-hoc meeting has none at all. There is no age limit
-        here, so an old meeting still answers.
-        """
-        response = self._get(endpoints.MEETING_DETAILS, meeting_id)
-        settings = response.json().get("settings") or {}
-        return [
-            ZoomInvitee.model_validate(i) for i in settings.get("meeting_invitees", [])
-        ]
 
     def list_webinar_panelists(self, webinar_id: str) -> list[ZoomPanelist]:
         """A panelist does not have to register, so without this a presenter is
