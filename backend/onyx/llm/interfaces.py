@@ -1,9 +1,15 @@
 import abc
+from collections.abc import Generator
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from onyx.llm.models import AssistantMessage, GenerationRequest, ReasoningEffort
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationEvent,
+    GenerationRequest,
+    ReasoningEffort,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
 
@@ -18,7 +24,9 @@ class GenerationContext(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Invoke defaults to LLM_INVOKE_TIMEOUT_S.
+    # Streaming idle reads only; invoke uses its total deadline.
+    stall_timeout_s: int | None = Field(default=None, gt=0)
+    # Invoke defaults to LLM_INVOKE_TIMEOUT_S; streams have no default deadline.
     total_timeout_s: float | None = Field(default=None, gt=0)
     user_identity: LLMUserIdentity | None = None
     flow: LLMFlow | None = None
@@ -69,5 +77,22 @@ class LLM(abc.ABC):
         timeout is always finite: our Celery pools disable Celery's own time
         limits, so a call that never ends would hold its worker thread forever.
         The call records its own generation span; set ``context.flow`` to tag it.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def stream(
+        self, request: GenerationRequest, context: GenerationContext | None = None
+    ) -> Generator[GenerationEvent, None, None]:
+        """Yield content updates followed by generation status and usage.
+
+        Apply events to a caller-owned message; lifecycle events contain no
+        content.
+        ``context.stall_timeout_s`` bounds the gap between provider chunks and
+        defaults to ``LLM_SOCKET_READ_TIMEOUT``. A stream has no total deadline:
+        its consumer sees progress and owns the end-to-end deadline, and some
+        runs (deep research reports) take many minutes. Close the generator
+        when stopping early to release provider resources. The call records its
+        own generation span; set ``context.flow`` to tag it.
         """
         raise NotImplementedError

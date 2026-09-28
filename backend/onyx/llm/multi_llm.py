@@ -1,8 +1,9 @@
 import copy
+import json
 import math
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union, cast
@@ -29,6 +30,7 @@ from onyx.llm.api_surfaces import (
     LlmApiSurface,
     resolve_api_surface,
 )
+from onyx.llm.cancellation import isolated_context
 from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
@@ -57,18 +59,24 @@ from onyx.llm.model_capabilities import (
 )
 from onyx.llm.model_request import (
     ChatCompletionMessage,
+    RequestFunctionCall,
     serialize_request,
     serialize_tools,
 )
+from onyx.llm.model_request import ToolCall as ProviderToolCall
 from onyx.llm.model_response import (
+    MessageAccumulator,
     ModelResponse,
     ModelResponseStream,
     to_assistant_message,
 )
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationErrorEvent,
+    GenerationEvent,
     GenerationRequest,
     GenerationRequestParams,
+    GenerationStartEvent,
     NamedToolChoice,
     ReasoningEffort,
     ToolChoice,
@@ -85,6 +93,7 @@ from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_request_params,
     record_llm_response,
+    record_llm_span_output,
 )
 from onyx.utils.encryption import mask_env_value_for_logging, mask_string
 from onyx.utils.logger import setup_logger
@@ -121,6 +130,7 @@ ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
 }
 
 logger = setup_logger()
+
 
 # Write-preferring reader-writer lock guarding os.environ during litellm calls.
 # Calls that inject custom_config env vars hold the write lock; all other calls
@@ -244,6 +254,14 @@ class ProviderOperation(BaseModel):
     """Diagnostics for one provider call, including its retry attempts."""
 
     request_params: GenerationRequestParams | None = None
+
+
+def _event_with_request_params(
+    event: GenerationEvent, operation: ProviderOperation
+) -> GenerationEvent:
+    return event.model_copy(
+        update={"request_params": copy.deepcopy(operation.request_params)}
+    )
 
 
 def _as_onyx_llm_error(error: Exception) -> Exception:
@@ -1591,6 +1609,114 @@ class LitellmLLM(LLM):
                 raise
             record_llm_response(span, response)
         return to_assistant_message(response, request)
+
+    @isolated_context
+    def stream(
+        self, request: GenerationRequest, context: GenerationContext | None = None
+    ) -> Generator[GenerationEvent, None, None]:
+        context = context or GenerationContext()
+        operation = ProviderOperation()
+        accumulator = MessageAccumulator(request.tools)
+        messages = self._prepare_request(request)
+        tools = serialize_tools(request.tools) or None
+        with llm_generation_span(
+            self,
+            context.flow or LLMFlow.UNTAGGED_STREAM,
+            input_messages=messages,
+            tools=tools,
+            content_mode=context.content_mode,
+        ) as span:
+            started = time.monotonic()
+            first_action = False
+            request_params_sent = False
+            yield GenerationStartEvent()
+            events = accumulator.consume(
+                iter(
+                    self.stream_raw(
+                        messages,
+                        tools=tools,
+                        tool_choice=request.options.tool_choice,
+                        structured_response_format=request.options.structured_response_format,
+                        max_tokens=request.options.max_tokens,
+                        reasoning_effort=request.options.reasoning_effort,
+                        user_identity=context.user_identity,
+                        stall_timeout_s=context.stall_timeout_s
+                        or LLM_SOCKET_READ_TIMEOUT,
+                        operation=operation,
+                    )
+                ),
+                request,
+            )
+            try:
+                for event in events:
+                    if not first_action:
+                        span.span_data.time_to_first_action_seconds = (
+                            time.monotonic() - started
+                        )
+                        first_action = True
+                    if not request_params_sent and operation.request_params is not None:
+                        event = _event_with_request_params(event, operation)
+                        request_params_sent = True
+                    yield event
+                if not (
+                    accumulator.message.text
+                    or accumulator.message.thinking
+                    or accumulator.message.thinking_blocks
+                    or accumulator.message.tool_calls
+                ):
+                    logger.warning(
+                        "Empty generation: provider=%s model=%s stop_reason=%s chunks=%s",
+                        self.config.model_provider,
+                        self.config.model_name,
+                        accumulator.message.stop_reason,
+                        accumulator.chunk_count,
+                    )
+                for event in accumulator.end():
+                    yield (
+                        _event_with_request_params(event, operation)
+                        if event.type == "done"
+                        else event
+                    )
+            except Exception as exc:
+                span.set_error(
+                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                )
+                accumulator.message.stop_reason = "error"
+                accumulator.message.error_message = "Generation failed"
+                yield _event_with_request_params(
+                    GenerationErrorEvent(
+                        error_message=accumulator.message.error_message,
+                        usage=accumulator.message.usage.model_copy(deep=True)
+                        if accumulator.message.usage
+                        else None,
+                    ),
+                    operation,
+                )
+                raise
+            finally:
+                # Providers bill for tokens streamed before consumer abandonment.
+                # Record partial content and usage on errors and GeneratorExit,
+                # not just clean completion. GeneratorExit is a BaseException,
+                # so it does not pass through the Exception handler above.
+                events.close()
+                accumulator.finalize()
+                message = accumulator.message
+                record_llm_span_output(
+                    span,
+                    output=message.text or None,
+                    usage=message.usage,
+                    reasoning=message.thinking or None,
+                    tool_calls=[
+                        ProviderToolCall(
+                            id=call.id,
+                            function=RequestFunctionCall(
+                                name=call.name, arguments=json.dumps(call.arguments)
+                            ),
+                        )
+                        for call in message.tool_calls
+                    ]
+                    or None,
+                )
 
 
 @contextmanager
