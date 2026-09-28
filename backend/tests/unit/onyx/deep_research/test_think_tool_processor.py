@@ -7,7 +7,11 @@ import pytest
 
 from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
 from onyx.deep_research.utils import create_think_tool_token_processor
-from onyx.llm.model_response import ChatCompletionDeltaToolCall, Delta, FunctionCall
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 
 
 def _args_delta(arguments: str, name: str | None = None) -> Delta:
@@ -16,7 +20,7 @@ def _args_delta(arguments: str, name: str | None = None) -> Delta:
             ChatCompletionDeltaToolCall(
                 id="think_1" if name else None,
                 index=0,
-                function=FunctionCall(name=name, arguments=arguments),
+                function=ResponseFunctionCall(name=name, arguments=arguments),
             )
         ]
     )
