@@ -1,10 +1,12 @@
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import BaseUrlCredentialBinding, ConnectorConfig
 
 
-class LumAppsConnectorConfig(ConnectorConfig):
-    base_url: str
+class LumAppsCredentialBinding(BaseUrlCredentialBinding):
     organization_id: str
+
+
+class LumAppsConnectorConfig(LumAppsCredentialBinding, ConnectorConfig):
     instance_ids: list[str] | None = None
     custom_content_types: list[str] | None = None
     lang: str = "en"

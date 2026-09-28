@@ -10,6 +10,7 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
+from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
@@ -191,6 +192,56 @@ def instantiate_connector(
     return connector
 
 
+def _validate_credential_binding(
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+) -> None:
+    """Raises ``ConnectorValidationError`` if the config's credential-bound
+    values cannot be used with the credential, or cannot be checked because they
+    do not match the source's binding model."""
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    # A source without a connector class fails at instantiation with a clearer
+    # error.
+    binding_class = mapping.config_class.credential_binding_class() if mapping else None
+    # Skip the decrypt when the source has no binding rule.
+    if (
+        binding_class is None
+        or binding_class.validate_credential is CredentialBinding.validate_credential
+    ):
+        return
+    try:
+        binding = binding_class.model_validate(connector_specific_config)
+    except pydantic.ValidationError as e:
+        raise ConnectorValidationError(
+            f"The connector's credential-bound settings are invalid: {e}"
+        ) from e
+    if not credential.credential_json:
+        return
+    emit_credential_access(
+        credential_type="connector", provider=str(source), row_id=credential.id
+    )
+    binding.validate_credential(credential.credential_json.get_value(apply_mask=False))
+
+
+def validate_connector_credential_bindings(
+    connector_id: int,
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any],
+    db_session: Session,
+) -> None:
+    """Raises ``ConnectorValidationError`` if the config cannot be used with a
+    credential the connector is already paired with. Config edits call this;
+    pairing checks the binding in ``validate_ccpair_for_user``."""
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        return
+    for cc_pair in connector.credentials:
+        _validate_credential_binding(
+            source, connector_specific_config, cc_pair.credential
+        )
+
+
 def validate_ccpair_for_user(
     connector_id: int,
     credential_id: int,
@@ -241,6 +292,7 @@ def validate_ccpair_for_user(
         )
 
     try:
+        _validate_credential_binding(source, connector_specific_config, credential)
         runnable_connector = instantiate_connector(
             db_session=db_session,
             source=connector.source,
