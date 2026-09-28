@@ -123,3 +123,30 @@ output "cloud_armor_policy_name" {
   description = "Cloud Armor policy to name in a BackendConfig or GCPBackendPolicy, null when disabled"
   value       = try(module.cloud_armor[0].policy_name, null)
 }
+
+# --- Values the Gateway objects need -----------------------------------------
+
+output "l7_ip_address" {
+  description = "Address of the L7 load balancer, null when enable_l7_ingress is false. Point the A record of each l7_domains entry at it."
+  value       = one(module.l7_ingress[*].ip_address)
+}
+
+output "l7_address_name" {
+  description = "Put in the Gateway's spec.addresses as a NamedAddress, null when enable_l7_ingress is false"
+  value       = one(module.l7_ingress[*].address_name)
+}
+
+output "l7_certificate_map_name" {
+  description = "Put in the Gateway annotation networking.gke.io/certmap, null when enable_l7_ingress is false"
+  value       = one(module.l7_ingress[*].certificate_map_name)
+}
+
+output "l7_dns_authorization_records" {
+  description = "Record { name, type, data } to add at the DNS provider for each domain, null when enable_l7_ingress is false"
+  value       = one(module.l7_ingress[*].dns_authorization_records)
+}
+
+output "l7_certificate_names" {
+  description = "Certificate name for each domain, to check its state with gcloud. Null when enable_l7_ingress is false."
+  value       = one(module.l7_ingress[*].certificate_names)
+}
