@@ -8,12 +8,12 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.mock_services.mock_llm_server.handle import ScriptHandle
 from tests.integration.mock_services.mock_llm_server.models import (
-    Matcher,
     RecordedRequest,
-    Step,
+    Reply,
+    RequestConditions,
     ToolCall,
 )
 
@@ -50,12 +50,12 @@ def _replayed_packet_types(chat_session_id: UUID, user: DATestUser) -> list[str]
 
 
 def test_unknown_call_in_mixed_batch_gets_failure_response(
-    admin_user: DATestUser, mock_llm: ScriptHandle
+    admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     chat_session_id = _setup(admin_user)
-    mock_llm.lane(
+    mock_llm.conversation(
         "chat",
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(
                     id="call_search_alpha",
@@ -73,11 +73,11 @@ def test_unknown_call_in_mixed_batch_gets_failure_response(
                     arguments={"x": 1},
                 ),
             ],
-            match=Matcher(offered_tools=["internal_search"]),
+            conditions=RequestConditions(offers=["internal_search"]),
         ),
-        Step(
+        Reply(
             text="The answer is 42.",
-            match=Matcher(tool_results_for=["call_unknown_tool"]),
+            conditions=RequestConditions(has_results_for=["call_unknown_tool"]),
         ),
     )
 
@@ -99,7 +99,7 @@ def test_unknown_call_in_mixed_batch_gets_failure_response(
     assert packet_types.count(StreamingType.SEARCH_TOOL_START.value) == 1
 
     # The merged search call is listed once; the unknown call follows it.
-    _, answer_request = mock_llm.lane_requests("chat")
+    _, answer_request = mock_llm.requests_in("chat")
     assert _assistant_tool_call_ids(answer_request) == [
         ["call_search_alpha", "call_unknown_tool"]
     ]
@@ -116,12 +116,12 @@ def test_unknown_call_in_mixed_batch_gets_failure_response(
 
 
 def test_all_unknown_calls_get_failure_responses_and_retry(
-    admin_user: DATestUser, mock_llm: ScriptHandle
+    admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     chat_session_id = _setup(admin_user)
-    mock_llm.lane(
+    mock_llm.conversation(
         "chat",
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(
                     id="call_only_unknown",
@@ -129,11 +129,11 @@ def test_all_unknown_calls_get_failure_responses_and_retry(
                     arguments={"x": 1},
                 )
             ],
-            match=Matcher(tools_offered=True),
+            conditions=RequestConditions(has_tools=True),
         ),
-        Step(
+        Reply(
             text="Recovered.",
-            match=Matcher(tool_results_for=["call_only_unknown"]),
+            conditions=RequestConditions(has_results_for=["call_only_unknown"]),
         ),
     )
 
@@ -147,7 +147,7 @@ def test_all_unknown_calls_get_failure_responses_and_retry(
     assert [tc.tool_call_id for tc in response.tool_call_debug] == ["call_only_unknown"]
     assert response.full_message == "Recovered."
 
-    _, retry_request = mock_llm.lane_requests("chat")
+    _, retry_request = mock_llm.requests_in("chat")
     assert _assistant_tool_call_ids(retry_request) == [["call_only_unknown"]]
     assert retry_request.tool_result_ids() == ["call_only_unknown"]
     assert retry_request.tool_result("call_only_unknown") == TOOL_CALL_FAILURE_PROMPT
