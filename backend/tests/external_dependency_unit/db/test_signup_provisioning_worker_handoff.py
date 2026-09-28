@@ -14,6 +14,7 @@ per-user lock. Alembic, the control plane, seat billing and the celery broker
 are mocked. Multi-tenant mode is patched in so the suite runs in the default CI lane.
 """
 
+import asyncio
 import threading
 import uuid
 from collections.abc import Generator
@@ -254,6 +255,32 @@ async def test_request_fails_when_the_worker_never_answers(
         await provisioning.get_or_provision_tenant(email)
 
     assert excinfo.value.error_code == provisioning.OnyxErrorCode.SERVICE_UNAVAILABLE
+    no_alembic.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_request_takes_a_tenant_the_refill_adds_while_it_waits(
+    email: str,
+    pool_tenant_id: str,
+    no_alembic: MagicMock,
+    control_plane: MagicMock,
+) -> None:
+    async def refill_later() -> None:
+        await asyncio.sleep(1.5)
+        _add_pool_tenant(pool_tenant_id, get_alembic_head_revision())
+
+    with (
+        patch.object(provisioning, "TENANT_PROVISIONING_WAIT_SECONDS", 10),
+        patch.object(provisioning.client_app, "send_task") as send_task,
+    ):
+        refill = asyncio.ensure_future(refill_later())
+        tenant_id = await provisioning.get_or_provision_tenant(email)
+        await refill
+
+    send_task.assert_called_once()
+    assert tenant_id == pool_tenant_id
+    assert _mapped_tenant(email) == pool_tenant_id
+    control_plane.assert_called_once()
     no_alembic.assert_not_called()
 
 

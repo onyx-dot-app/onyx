@@ -6,6 +6,7 @@ task the api server hands a signup to when the pool cannot serve it.
 import asyncio
 import datetime
 import threading
+import time
 import uuid
 
 from celery import Task, shared_task
@@ -115,16 +116,27 @@ def provision_tenant_for_user(
 
 
 class _LockHeartbeat(threading.Thread):
-    """Extends a Redis lock's TTL at a third of its timeout until stopped."""
+    """Extends a Redis lock's TTL at a third of its timeout until stopped.
+
+    Gives up after one full timeout: a hung migration then lets the lock lapse
+    so a retried signup for the email can proceed on another slot."""
 
     def __init__(self, lock: RedisLock, timeout_seconds: int) -> None:
         super().__init__(daemon=True, name="user-provision-lock-heartbeat")
         self._lock = lock
         self._interval = timeout_seconds / 3
+        self._max_lifetime = timeout_seconds
         self._stopped = threading.Event()
 
     def run(self) -> None:
+        started = time.monotonic()
         while not self._stopped.wait(self._interval):
+            if time.monotonic() - started >= self._max_lifetime:
+                task_logger.error(
+                    "User provision lock heartbeat gave up after %s s",
+                    self._max_lifetime,
+                )
+                return
             try:
                 self._lock.reacquire()
             except Exception:

@@ -146,7 +146,8 @@ async def get_or_provision_tenant(
 
     Alembic never runs in the api server. A pool tenant that is already at the
     code's head revision is assigned here. Anything that needs a migration is
-    built by a worker while this request waits for the mapping to appear.
+    built by a worker while this request waits for the mapping to appear, or
+    for the refill task to add a pool tenant this request can take itself.
     """
     # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
@@ -184,12 +185,18 @@ async def get_or_provision_tenant(
         logger.error("Failed to provision tenant", exc_info=e)
         raise _provisioning_failed_error()
     finally:
-        try:
-            lock.release()
-        except Exception:
-            logger.warning("Could not release the signup lock (likely expired)")
+        _release_signup_lock(lock)
 
-    return await _wait_for_tenant(email, oauth_name, account_id, attempt_id, deadline)
+    return await _wait_for_tenant(
+        email, oauth_name, account_id, referral_source, attempt_id, deadline, lock
+    )
+
+
+def _release_signup_lock(lock: RedisLock) -> None:
+    try:
+        lock.release()
+    except Exception:
+        logger.warning("Could not release the signup lock (likely expired)")
 
 
 async def _acquire_signup_lock(lock: RedisLock, deadline: float) -> None:
@@ -322,8 +329,10 @@ async def _wait_for_tenant(
     email: str,
     oauth_name: str | None,
     account_id: str | None,
+    referral_source: str | None,
     attempt_id: str,
     deadline: float,
+    lock: RedisLock,
 ) -> str:
     redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     failure_key = provision_attempt_failure_key(attempt_id)
@@ -337,9 +346,42 @@ async def _wait_for_tenant(
             return tenant_id
         if await asyncio.to_thread(redis_client.get, failure_key) is not None:
             raise _provisioning_failed_error()
+        tenant_id = await _take_pool_tenant_while_waiting(
+            lock, email, oauth_name, account_id, referral_source
+        )
+        if tenant_id:
+            return tenant_id
         await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
     logger.warning("Timed out waiting for tenant provisioning for user %s", email)
     raise _still_provisioning_error()
+
+
+async def _take_pool_tenant_while_waiting(
+    lock: RedisLock,
+    email: str,
+    oauth_name: str | None,
+    account_id: str | None,
+    referral_source: str | None,
+) -> str | None:
+    """The refill task may add a head-revision tenant while this signup waits,
+    and taking it here beats waiting for the worker to build one. Skipped when
+    the worker holds the lock, since it is then already building for this email."""
+    if not lock.acquire(blocking=False):
+        return None
+    try:
+        tenant_id = resolve_tenant_id(email, oauth_name, account_id)
+        if tenant_id:
+            return tenant_id
+        tenant_id = await get_available_tenant()
+        if tenant_id is None:
+            return None
+        await _finish_tenant_assignment(tenant_id, email, referral_source)
+        return tenant_id
+    except Exception as e:
+        logger.error("Failed to provision tenant", exc_info=e)
+        raise _provisioning_failed_error()
+    finally:
+        _release_signup_lock(lock)
 
 
 async def provision_user_tenant(email: str, referral_source: str | None) -> str:
