@@ -367,12 +367,16 @@ def to_assistant_message(
     """Convert a complete provider response without creating stream events."""
     source = response.choice.message
     message = AssistantMessage(
-        stop_reason=response.choice.finish_reason, usage=response.usage
+        stop_reason=response.choice.finish_reason,
+        usage=response.usage.model_copy() if response.usage else None,
     )
     if source.reasoning_content or source.thinking_blocks:
         message.content.append(
             ThinkingContent(
-                text=source.reasoning_content or "", blocks=source.thinking_blocks
+                text=source.reasoning_content or "",
+                blocks=[block.model_copy() for block in source.thinking_blocks]
+                if source.thinking_blocks
+                else None,
             )
         )
     if source.content:
@@ -396,7 +400,7 @@ def to_assistant_message(
         message.content.append(call)
     if request.tools:
         message = recover_tool_calls(message, request)
-    return message.model_copy(deep=True)
+    return message
 
 
 class _PendingToolCall:

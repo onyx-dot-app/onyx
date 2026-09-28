@@ -111,7 +111,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     )
     assert len(llm.requests) == 2
     assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.REQUIRED
-    assert llm.requests[1]["tools"] == []
+    assert llm.requests[1]["tools"] is None
     assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.NONE
     assert [message.role for message in agent.agent.state.messages] == [
         "user",

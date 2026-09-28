@@ -137,7 +137,7 @@ def test_coding_bash_order_history_and_final_answer() -> None:
         ("call-1", "second"),
         ("call-0", "Ready to produce the final answer."),
     ]
-    assert llm.requests[-1]["tools"] == []
+    assert llm.requests[-1]["tools"] is None
 
 
 def test_cancel_after_coding_tools_prevents_final_model_call() -> None:

@@ -1,4 +1,5 @@
 import copy
+import json
 import math
 import os
 import threading
@@ -83,6 +84,7 @@ from onyx.llm.model_capabilities import (
 )
 from onyx.llm.model_request import (
     ChatCompletionMessage,
+    RequestFunctionCall,
     serialize_request,
     serialize_tools,
 )
@@ -115,6 +117,7 @@ from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_request_params,
+    record_llm_response,
     record_llm_span_output,
 )
 from onyx.utils.encryption import mask_env_value_for_logging
@@ -1348,8 +1351,9 @@ class LitellmLLM(LLM):
             raise _as_onyx_llm_error(e)
 
     def redact_error(self, text: str) -> str:
+        config = self.config
         return scrub_sensitive_values(
-            text, collect_credential_values(self._api_key, self._custom_config)
+            text, collect_credential_values(config.api_key, config.custom_config)
         )
 
     @property
@@ -1596,7 +1600,7 @@ class LitellmLLM(LLM):
                 update={"total_timeout_s": LLM_INVOKE_TIMEOUT_S}
             )
         messages = self._prepare_request(request)
-        definitions = serialize_tools(request.tools)
+        definitions = serialize_tools(request.tools) or None
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
@@ -1631,12 +1635,7 @@ class LitellmLLM(LLM):
                 raise
             signal.check()
             message = to_assistant_message(response, request)
-            record_llm_span_output(
-                span,
-                [message.model_dump()],
-                usage=message.usage,
-                reasoning=message.thinking,
-            )
+            record_llm_response(span, response)
             return message
 
     @isolated_context
@@ -1647,7 +1646,7 @@ class LitellmLLM(LLM):
         operation = ProviderOperation()
         accumulator = MessageAccumulator(request.tools)
         messages = self._prepare_request(request)
-        definitions = serialize_tools(request.tools)
+        definitions = serialize_tools(request.tools) or None
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
@@ -1713,6 +1712,14 @@ class LitellmLLM(LLM):
                         else event
                     )
             except (Exception, AgentCancelled) as error:
+                span.set_error(
+                    {
+                        "message": self.redact_error(
+                            f"{type(error).__name__}: {error}"
+                        ),
+                        "data": None,
+                    }
+                )
                 accumulator.message.stop_reason = (
                     "aborted" if isinstance(error, AgentCancelled) else "error"
                 )
@@ -1744,9 +1751,19 @@ class LitellmLLM(LLM):
                 message = accumulator.message
                 record_llm_span_output(
                     span,
-                    [message.model_dump()],
+                    output=message.text or None,
                     usage=message.usage,
-                    reasoning=message.thinking,
+                    reasoning=message.thinking or None,
+                    tool_calls=[
+                        ProviderToolCall(
+                            id=call.id,
+                            function=RequestFunctionCall(
+                                name=call.name, arguments=json.dumps(call.arguments)
+                            ),
+                        )
+                        for call in message.tool_calls
+                    ]
+                    or None,
                 )
 
 
