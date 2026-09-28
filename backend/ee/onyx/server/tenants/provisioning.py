@@ -193,7 +193,9 @@ async def get_or_provision_tenant(
 
 
 async def _acquire_signup_lock(lock: RedisLock, deadline: float) -> None:
-    """Poll for the lock without blocking the event loop."""
+    """Poll for the lock without blocking the event loop. The non-blocking
+    acquire is one round trip and must stay on this thread: the token that
+    release() checks is thread-local."""
     while not lock.acquire(blocking=False):
         if time.monotonic() >= deadline:
             raise _still_provisioning_error()
@@ -325,11 +327,15 @@ async def _wait_for_tenant(
 ) -> str:
     redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     failure_key = provision_attempt_failure_key(attempt_id)
+    # The sync clients run on the default executor, which no longer runs
+    # alembic, so a slow database or Redis stalls this request alone.
     while time.monotonic() < deadline:
-        tenant_id = resolve_tenant_id(email, oauth_name, account_id)
+        tenant_id = await asyncio.to_thread(
+            resolve_tenant_id, email, oauth_name, account_id
+        )
         if tenant_id:
             return tenant_id
-        if redis_client.get(failure_key) is not None:
+        if await asyncio.to_thread(redis_client.get, failure_key) is not None:
             raise _provisioning_failed_error()
         await asyncio.sleep(_PROVISIONING_POLL_INTERVAL_S)
     logger.warning("Timed out waiting for tenant provisioning for user %s", email)

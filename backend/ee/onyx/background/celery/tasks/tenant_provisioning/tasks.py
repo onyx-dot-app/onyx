@@ -171,6 +171,10 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         return
 
     try:
+        # First, so a billing record left by a failed signup is retried even
+        # when the refill below fails or runs long.
+        _reconcile_control_plane_orphans()
+
         # Get the current count of available tenants
         with get_session_with_shared_schema() as db_session:
             num_available_tenants = db_session.query(AvailableTenant).count()
@@ -211,8 +215,6 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
 
         # Migrate any pool tenants that were provisioned before a new migration was deployed
         _migrate_stale_pool_tenants()
-
-        _reconcile_control_plane_orphans()
 
     except Exception:
         task_logger.exception("Error in check_available_tenants task")
