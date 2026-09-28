@@ -107,9 +107,13 @@
   pointer-events: none;
 }
 
-/* A foldable group wraps its title and rows; the same row gap as the list. */
+/* A foldable group wraps its title and its fold. The row gap lives inside
+   the fold, so a closed group collapses to its title with no stray gap. */
 .opal-select-group {
-  @apply flex flex-col gap-1;
+  @apply flex flex-col;
+}
+.opal-select-group-rows {
+  @apply flex flex-col gap-1 pt-1;
 }
 
 /* Keyboard scrolling brings a stop to the nearest edge; the mask fade there
