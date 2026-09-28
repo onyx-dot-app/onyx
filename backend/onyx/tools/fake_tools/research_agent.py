@@ -46,6 +46,7 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
 from onyx.prompts.deep_research.research_agent import (
     MAX_RESEARCH_CYCLES,
     OPEN_URL_REMINDER_RESEARCH_AGENT,
+    RESEARCH_AGENT_CYCLE_REMINDER,
     RESEARCH_AGENT_PROMPT,
     RESEARCH_AGENT_PROMPT_REASONING,
     RESEARCH_REPORT_PROMPT,
@@ -320,7 +321,6 @@ def run_research_agent_call(
                 system_prompt_str = system_prompt_template.format(
                     available_tools=tools_description,
                     current_datetime=get_current_llm_day_time(full_sentence=False),
-                    current_cycle_count=research_cycle_count,
                     optional_internal_search_tool_description=internal_search_tip,
                     optional_web_search_tool_description=web_search_tip,
                     optional_open_url_tool_description=open_urls_tip,
@@ -332,15 +332,23 @@ def run_research_agent_call(
                     message_type=MessageType.SYSTEM,
                 )
 
+                # The cycle counter changes each cycle, so it travels in the
+                # tail reminder; the system prompt stays identical so the
+                # provider prefix cache keeps matching.
+                reminder_text = RESEARCH_AGENT_CYCLE_REMINDER.format(
+                    current_cycle_count=research_cycle_count,
+                    max_cycles=MAX_RESEARCH_CYCLES,
+                )
                 # Gate the open_url nudge on the tool actually being available.
                 if just_ran_web_search and has_open_url_tool:
-                    reminder_message = ChatMessageSimple(
-                        message=OPEN_URL_REMINDER_RESEARCH_AGENT,
-                        token_count=100,
-                        message_type=MessageType.USER,
+                    reminder_text = (
+                        f"{reminder_text}\n\n{OPEN_URL_REMINDER_RESEARCH_AGENT}"
                     )
-                else:
-                    reminder_message = None
+                reminder_message = ChatMessageSimple(
+                    message=reminder_text,
+                    token_count=token_counter(reminder_text),
+                    message_type=MessageType.USER,
+                )
 
                 research_agent_tools = get_research_agent_additional_tool_definitions(
                     include_think_tool=not is_reasoning_model
@@ -456,6 +464,7 @@ def run_research_agent_call(
                             message_type=MessageType.ASSISTANT,
                             tool_calls=[think_tool_simple],
                             image_files=None,
+                            should_cache=True,
                         )
                         msg_history.append(think_assistant_msg)
 
@@ -465,6 +474,7 @@ def run_research_agent_call(
                             message_type=MessageType.TOOL_CALL_RESPONSE,
                             tool_call_id=think_tool_call.tool_call_id,
                             image_files=None,
+                            should_cache=True,
                         )
                         msg_history.append(think_tool_response_msg)
                         think_span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
@@ -501,7 +511,9 @@ def run_research_agent_call(
 
                     if tool_calls and not tool_responses:
                         failure_messages = create_tool_call_failure_messages(
-                            tool_calls, token_counter
+                            tool_calls,
+                            token_counter,
+                            thinking_blocks=llm_step_result.thinking_blocks,
                         )
                         msg_history.extend(failure_messages)
 
@@ -541,6 +553,8 @@ def run_research_agent_call(
                             message_type=MessageType.ASSISTANT,
                             tool_calls=tool_calls_simple,
                             image_files=None,
+                            should_cache=True,
+                            thinking_blocks=llm_step_result.thinking_blocks,
                         )
                         msg_history.append(assistant_with_tools)
 
@@ -608,6 +622,7 @@ def run_research_agent_call(
                             message_type=MessageType.TOOL_CALL_RESPONSE,
                             tool_call_id=tc.tool_call_id,
                             image_files=None,
+                            should_cache=True,
                         )
                         msg_history.append(tool_response_msg)
 

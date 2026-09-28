@@ -27,6 +27,7 @@ from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.coding_agent.coding_agent import (
+    CODING_AGENT_CYCLE_REMINDER,
     CODING_AGENT_FINAL_ANSWER_PROMPT,
     CODING_AGENT_PROMPT,
     CODING_AGENT_PROMPT_REASONING,
@@ -322,7 +323,6 @@ def run_coding_agent_call(
                     )
                     system_prompt_str = system_prompt_template.format(
                         current_datetime=get_current_llm_day_time(full_sentence=False),
-                        current_cycle_count=cycle_count,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
@@ -330,11 +330,22 @@ def run_coding_agent_call(
                         message_type=MessageType.SYSTEM,
                     )
 
+                    # The cycle counter changes each cycle, so it travels in
+                    # the tail reminder; the system prompt stays identical so
+                    # the provider prefix cache keeps matching.
+                    reminder_text = CODING_AGENT_CYCLE_REMINDER.format(
+                        current_cycle_count=cycle_count,
+                        max_cycles=MAX_CODING_AGENT_CYCLES,
+                    )
                     constructed_history = construct_message_history(
                         system_prompt=system_prompt,
                         custom_agent_prompt=None,
                         simple_chat_history=msg_history,
-                        reminder_message=None,
+                        reminder_message=ChatMessageSimple(
+                            message=reminder_text,
+                            token_count=token_counter(reminder_text),
+                            message_type=MessageType.USER_REMINDER,
+                        ),
                         context_files=None,
                         available_tokens=llm.config.max_input_tokens,
                     )
@@ -424,6 +435,8 @@ def run_coding_agent_call(
                                 )
                             ],
                             image_files=None,
+                            should_cache=True,
+                            thinking_blocks=llm_step_result.thinking_blocks,
                         )
                         msg_history.append(think_assistant_msg)
                         msg_history.append(
@@ -433,6 +446,7 @@ def run_coding_agent_call(
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
                                 tool_call_id=think_tool_call.tool_call_id,
                                 image_files=None,
+                                should_cache=True,
                             )
                         )
                         most_recent_reasoning = llm_step_result.reasoning
@@ -470,6 +484,8 @@ def run_coding_agent_call(
                         message_type=MessageType.ASSISTANT,
                         tool_calls=tool_calls_simple,
                         image_files=None,
+                        should_cache=True,
+                        thinking_blocks=llm_step_result.thinking_blocks,
                     )
                     msg_history.append(assistant_with_tools)
 
@@ -482,6 +498,7 @@ def run_coding_agent_call(
                                 message_type=MessageType.TOOL_CALL_RESPONSE,
                                 tool_call_id=tc.tool_call_id,
                                 image_files=None,
+                                should_cache=True,
                             )
                         )
 

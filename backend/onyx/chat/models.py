@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.llm.models import AnyThinkingBlock
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     MultiModelMessageResponseIDInfo,
@@ -170,6 +171,11 @@ class ChatMessageSimple(BaseModel):
     tool_call_id: str | None = None
     # For ASSISTANT messages with tool calls (OpenAI parallel tool calling format)
     tool_calls: list[ToolCallSimple] | None = None
+    # Signed thinking/redacted-thinking blocks the model returned on this
+    # assistant message. Anthropic requires them back verbatim when the
+    # message carries tool calls and thinking is enabled; other providers
+    # ignore them (stripped at request assembly).
+    thinking_blocks: list[AnyThinkingBlock] | None = None
     # The last message for which this is true
     # AND is true for all previous messages
     # (counting from the start of the history)
@@ -248,6 +254,9 @@ class LlmStepResult(BaseModel):
     reasoning: str | None
     answer: str | None
     tool_calls: list[ToolCallKickoff] | None
+    # Signed thinking blocks returned alongside the answer/tool calls, kept
+    # so they can be replayed verbatim on the next request.
+    thinking_blocks: list[AnyThinkingBlock] | None = None
     # Raw LLM text before any display-oriented filtering/sanitization.
     # Used for fallback tool-call extraction when providers emit calls as text.
     raw_answer: str | None = None

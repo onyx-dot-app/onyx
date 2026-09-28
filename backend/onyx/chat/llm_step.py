@@ -31,14 +31,17 @@ from onyx.llm.interfaces import (
 )
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
+    AnyThinkingBlock,
     AssistantMessage,
     ChatCompletionMessage,
     FunctionCall,
     ImageContentPart,
     ImageUrlDetail,
     ReasoningEffort,
+    RedactedThinkingBlock,
     SystemMessage,
     TextContentPart,
+    ThinkingBlock,
     ToolCall,
     ToolMessage,
     UserMessage,
@@ -695,6 +698,7 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
         role="assistant",
         content=msg.message or None,
         tool_calls=tool_calls_list,
+        thinking_blocks=msg.thinking_blocks,
     )
 
 
@@ -825,6 +829,35 @@ def _select_recent_image_indices(
                 keep.add((msg_idx, img_idx))
                 kept += 1
     return keep, max(0, total - cap)
+
+
+def _cache_split_stats(history: list[ChatMessageSimple]) -> dict[str, str]:
+    """Cache-layout stats for the generation span, so operators can see
+    per-request whether prompt caching is engaged and how large the
+    cacheable prefix is. Mirrors the contiguous-prefix rule used by
+    translate_history_to_llm_format."""
+    prefix_msgs = 0
+    prefix_tokens = 0
+    if PROMPT_CACHE_CHAT_HISTORY:
+        for msg in history:
+            if msg.message_type not in [
+                MessageType.SYSTEM,
+                MessageType.USER,
+                MessageType.USER_REMINDER,
+                MessageType.ASSISTANT,
+                MessageType.TOOL_CALL_RESPONSE,
+            ]:
+                break
+            if not msg.should_cache:
+                break
+            prefix_msgs += 1
+            prefix_tokens += msg.token_count
+    return {
+        "prompt_cache_chat_history": "on" if PROMPT_CACHE_CHAT_HISTORY else "off",
+        "cacheable_prefix_msgs": str(prefix_msgs),
+        "cacheable_prefix_tokens": str(prefix_tokens),
+        "history_msgs": str(len(history)),
+    }
 
 
 def translate_history_to_llm_format(
@@ -1150,6 +1183,13 @@ def run_llm_step_pkt_generator(
     accumulated_reasoning = ""
     accumulated_answer = ""
     accumulated_raw_answer = ""
+    # Signed thinking blocks arrive fragmented across deltas: thinking text
+    # streams piecewise and the signature lands on the last fragment of each
+    # block. Accumulate fragments and only seal a block once its signature
+    # arrives (unsigned thinking text can't be replayed, so it is dropped),
+    # matching LiteLLM's own chunk-assembly semantics.
+    accumulated_thinking_blocks: list[AnyThinkingBlock] = []
+    thinking_text_parts: list[str] = []
     stream_chunk_count = 0
     actionable_chunk_count = 0
     empty_chunk_count = 0
@@ -1166,6 +1206,10 @@ def run_llm_step_pkt_generator(
             "model_impl": "litellm",
         },
     ) as span_generation:
+        span_generation.span_data.model_config = {
+            **(span_generation.span_data.model_config or {}),
+            **_cache_split_stats(history),
+        }
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
         )
@@ -1315,6 +1359,7 @@ def run_llm_step_pkt_generator(
                 not delta.content
                 and delta.reasoning_content is None
                 and not delta.tool_calls
+                and not delta.thinking_blocks
             ):
                 empty_chunk_count += 1
                 logger.warning(
@@ -1332,6 +1377,23 @@ def run_llm_step_pkt_generator(
                 first_action_recorded = True
             if _delta_has_action(delta):
                 actionable_chunk_count += 1
+
+            if delta.thinking_blocks:
+                for thinking_block in delta.thinking_blocks:
+                    if isinstance(thinking_block, RedactedThinkingBlock):
+                        thinking_text_parts = []
+                        accumulated_thinking_blocks.append(thinking_block)
+                        continue
+                    if thinking_block.thinking:
+                        thinking_text_parts.append(thinking_block.thinking)
+                    if thinking_block.signature:
+                        accumulated_thinking_blocks.append(
+                            ThinkingBlock(
+                                thinking="".join(thinking_text_parts),
+                                signature=thinking_block.signature,
+                            )
+                        )
+                        thinking_text_parts = []
 
             if custom_token_processor:
                 # The custom token processor can modify the deltas for specific custom logic
@@ -1541,6 +1603,7 @@ def run_llm_step_pkt_generator(
             reasoning=accumulated_reasoning or None,
             answer=accumulated_answer or None,
             tool_calls=tool_calls or None,
+            thinking_blocks=accumulated_thinking_blocks or None,
             raw_answer=accumulated_raw_answer or None,
             finish_reason=terminal_finish_reason,
         ),

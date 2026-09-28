@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.chat_configs import SLIM_TOOL_GUIDANCE
 from onyx.db.enums import SUPPORTED_LANGUAGE_ENGLISH_NAMES, SupportedLanguage
 from onyx.db.memory import UserMemoryContext
 from onyx.db.persona import get_default_behavior_persona
@@ -24,6 +25,13 @@ from onyx.prompts.tool_prompts import (
     MEMORY_GUIDANCE,
     OPEN_URLS_GUIDANCE,
     PYTHON_TOOL_GUIDANCE,
+    SLIM_GENERATE_IMAGE_GUIDANCE,
+    SLIM_INTERNAL_SEARCH_GUIDANCE,
+    SLIM_MEMORY_GUIDANCE,
+    SLIM_OPEN_URLS_GUIDANCE,
+    SLIM_PYTHON_TOOL_GUIDANCE,
+    SLIM_TOOL_DESCRIPTION_SEARCH_GUIDANCE,
+    SLIM_WEB_SEARCH_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
     TOOL_SECTION_HEADER,
     WEB_SEARCH_GUIDANCE,
@@ -282,17 +290,32 @@ def build_system_prompt(
         system_prompt += REQUIRE_CITATION_GUIDANCE
         system_prompt += ANSWER_COVERAGE_GUIDANCE
 
+    if SLIM_TOOL_GUIDANCE:
+        search_guidance = SLIM_TOOL_DESCRIPTION_SEARCH_GUIDANCE
+        internal_guidance = SLIM_INTERNAL_SEARCH_GUIDANCE
+        web_guidance = SLIM_WEB_SEARCH_GUIDANCE
+        open_url_guidance = SLIM_OPEN_URLS_GUIDANCE
+        python_guidance = SLIM_PYTHON_TOOL_GUIDANCE
+        image_guidance = SLIM_GENERATE_IMAGE_GUIDANCE
+        memory_guidance = SLIM_MEMORY_GUIDANCE
+    else:
+        search_guidance = TOOL_DESCRIPTION_SEARCH_GUIDANCE
+        internal_guidance = INTERNAL_SEARCH_GUIDANCE
+        web_guidance = WEB_SEARCH_GUIDANCE
+        open_url_guidance = OPEN_URLS_GUIDANCE
+        python_guidance = PYTHON_TOOL_GUIDANCE
+        image_guidance = GENERATE_IMAGE_GUIDANCE
+        memory_guidance = MEMORY_GUIDANCE
+
     if include_all_guidance:
         tool_sections = [
-            TOOL_DESCRIPTION_SEARCH_GUIDANCE,
-            INTERNAL_SEARCH_GUIDANCE,
-            WEB_SEARCH_GUIDANCE.format(
-                site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE
-            ),
-            OPEN_URLS_GUIDANCE,
-            PYTHON_TOOL_GUIDANCE,
-            GENERATE_IMAGE_GUIDANCE,
-            MEMORY_GUIDANCE,
+            search_guidance,
+            internal_guidance,
+            web_guidance.format(site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE),
+            open_url_guidance,
+            python_guidance,
+            image_guidance,
+            memory_guidance,
         ]
         system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_sections)
         return system_prompt
@@ -310,11 +333,11 @@ def build_system_prompt(
         tool_guidance_sections: list[str] = []
 
         if has_web_search or has_internal_search or include_all_guidance:
-            tool_guidance_sections.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
+            tool_guidance_sections.append(search_guidance)
 
         # These are not included at the Tool level because the ordering may matter.
         if has_internal_search or include_all_guidance:
-            tool_guidance_sections.append(INTERNAL_SEARCH_GUIDANCE)
+            tool_guidance_sections.append(internal_guidance)
 
         if has_web_search or include_all_guidance:
             site_disabled_guidance = ""
@@ -325,20 +348,20 @@ def build_system_prompt(
                 if web_search_tool and not web_search_tool.supports_site_filter:
                     site_disabled_guidance = WEB_SEARCH_SITE_DISABLED_GUIDANCE
             tool_guidance_sections.append(
-                WEB_SEARCH_GUIDANCE.format(site_colon_disabled=site_disabled_guidance)
+                web_guidance.format(site_colon_disabled=site_disabled_guidance)
             )
 
         if has_open_urls or include_all_guidance:
-            tool_guidance_sections.append(OPEN_URLS_GUIDANCE)
+            tool_guidance_sections.append(open_url_guidance)
 
         if has_python or include_all_guidance:
-            tool_guidance_sections.append(PYTHON_TOOL_GUIDANCE)
+            tool_guidance_sections.append(python_guidance)
 
         if has_generate_image or include_all_guidance:
-            tool_guidance_sections.append(GENERATE_IMAGE_GUIDANCE)
+            tool_guidance_sections.append(image_guidance)
 
         if has_memory or include_all_guidance:
-            tool_guidance_sections.append(MEMORY_GUIDANCE)
+            tool_guidance_sections.append(memory_guidance)
 
         if tool_guidance_sections:
             system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
