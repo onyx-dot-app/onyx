@@ -3,7 +3,7 @@
   align-items: center;
   flex-shrink: 0;
   box-sizing: border-box;
-  height: 20px;
+  height: var(--height-line-main);
   padding: 1px 2px;
 }
 

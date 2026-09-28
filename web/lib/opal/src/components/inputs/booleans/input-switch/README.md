@@ -32,7 +32,7 @@ All other `<button>` attributes (except `style`, `className`, `onChange`, and `t
 
 ## Layout
 
-The `<button>` is the track, 32×18px. A wrapping `<div>` pads it by 1px vertically and 2px horizontally, as in the design mocks, and is fixed at 20px tall so a parent's line box or stretch cannot grow it. The rendered footprint is 36×20px.
+The `<button>` is the track, 32×18px. A wrapping `<div>` pads it by 1px vertically and 2px horizontally, as in the design mocks, and is fixed to the `height-line-main` token (20px) so a parent's line box or stretch cannot grow it. The rendered footprint is 36×20px.
 
 ## Visual States
 
