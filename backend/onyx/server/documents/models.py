@@ -1,13 +1,15 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timezone
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Self, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.connector_config import CredentialBinding
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
 from onyx.db.enums import (
     AccessType,
@@ -33,6 +35,7 @@ from onyx.db.models import (
 )
 from onyx.db.models import Document as DbDocument
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -156,16 +159,24 @@ class CredentialSnapshot(CredentialBase):
         credential: Credential,
         *,
         mask_credential_prefix: bool,
-    ) -> "CredentialSnapshot":
-        # Get the credential_json value with appropriate masking
-        if credential.credential_json is None:
-            credential_json_value: dict[str, Any] = {}
-        else:
-            credential_json_value = credential.credential_json.get_value(
-                apply_mask=mask_credential_prefix
-            )
+        view_source: DocumentSource | None = None,
+    ) -> Self:
+        """``view_source`` picks the keys ``credential_json`` is shown in: a
+        family credential listed for another source of its family is shown in
+        that source's keys. Defaults to the credential's own source."""
+        source = credential.source or DocumentSource.NOT_APPLICABLE
+        credential_json_value = to_source_credential_json(
+            view_source or source,
+            (
+                credential.credential_json.get_value(apply_mask=False)
+                if credential.credential_json
+                else {}
+            ),
+        )
+        if mask_credential_prefix:
+            credential_json_value = mask_credential_dict(credential_json_value)
 
-        return CredentialSnapshot(
+        return cls(
             id=credential.id,
             credential_json=credential_json_value,
             user_id=credential.user_id,
@@ -173,10 +184,27 @@ class CredentialSnapshot(CredentialBase):
             admin_public=credential.admin_public,
             time_created=credential.time_created,
             time_updated=credential.time_updated,
-            source=credential.source or DocumentSource.NOT_APPLICABLE,
+            source=source,
             name=credential.name,
             curator_public=credential.curator_public,
         )
+
+
+class CredentialUsage(BaseModel):
+    """A connector that uses a credential, as a hint for picking a credential."""
+
+    cc_pair_id: int
+    cc_pair_name: str | None
+    connector_id: int
+    source: DocumentSource
+    # None when the source has no binding model or the stored config does not
+    # match it.
+    credential_binding: SerializeAsAny[CredentialBinding] | None
+
+
+class SimilarCredentialSnapshot(CredentialSnapshot):
+    # Only connectors the requesting user can manage.
+    usages: list[CredentialUsage] = Field(default_factory=list)
 
 
 class IndexAttemptSnapshot(BaseModel):

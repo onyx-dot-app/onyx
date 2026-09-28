@@ -11,6 +11,7 @@ from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
 from onyx.connectors.connector_config import CredentialBinding
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
@@ -174,15 +175,20 @@ def instantiate_connector(
                 provider=str(source),
                 row_id=credential.id,
             )
-        credential_json = (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
+        credential_json = to_source_credential_json(
+            source,
+            (
+                credential.credential_json.get_value(apply_mask=False)
+                if credential.credential_json
+                else {}
+            ),
         )
         new_credentials = connector.load_credentials(credential_json)
 
         if new_credentials is not None:
-            backend_update_credential_json(credential, new_credentials, db_session)
+            backend_update_credential_json(
+                credential, source, new_credentials, db_session
+            )
 
     connector.set_allow_images(get_image_extraction_and_analysis_enabled())
 
@@ -190,6 +196,27 @@ def instantiate_connector(
         connector.set_raw_file_callback(raw_file_callback)
 
     return connector
+
+
+def parse_credential_binding(
+    source: DocumentSource, connector_specific_config: dict[str, Any]
+) -> CredentialBinding | None:
+    """The config's credential-bound values, or ``None`` if the source has no
+    binding model or the stored config does not match it (rows written before
+    typed configs existed may not conform)."""
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    binding_class = mapping.config_class.credential_binding_class() if mapping else None
+    if binding_class is None:
+        return None
+    try:
+        return binding_class.model_validate(connector_specific_config)
+    except pydantic.ValidationError as e:
+        logger.warning(
+            "Stored connector config does not match its binding model: source=%s errors=%s",
+            source,
+            e,
+        )
+        return None
 
 
 def _validate_credential_binding(
@@ -221,7 +248,11 @@ def _validate_credential_binding(
     emit_credential_access(
         credential_type="connector", provider=str(source), row_id=credential.id
     )
-    binding.validate_credential(credential.credential_json.get_value(apply_mask=False))
+    binding.validate_credential(
+        to_source_credential_json(
+            source, credential.credential_json.get_value(apply_mask=False)
+        )
+    )
 
 
 def validate_connector_credential_bindings(
