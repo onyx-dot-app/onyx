@@ -366,21 +366,21 @@ export function useSelectOverlay() {
     }
   }, [isOpen]);
 
-  const { refs, floatingStyles } = useFloating({
+  const { refs, floatingStyles, isPositioned } = useFloating({
     open: isOpen,
     placement: "bottom-start",
     middleware: [
-      // 4px wider on each side than the trigger, shifted start-ward by 4px:
-      // with the dropdown's 4px inset, the rows' bounding boxes then align
-      // flush with the trigger's edges. crossAxis is direction-aware, so
-      // RTL mirrors correctly.
-      offset({ mainAxis: 4, crossAxis: -4 }),
+      // 6px wider on each side than the trigger, shifted start-ward by 6px:
+      // with the dropdown's 6px inset, the rows' bounding boxes then align
+      // flush with the trigger's edges, the trigger's own border included.
+      // crossAxis is direction-aware, so RTL mirrors correctly.
+      offset({ mainAxis: 4, crossAxis: -6 }),
       flip(),
       shift({ padding: 8 }),
       size({
         apply({ rects, elements }) {
           Object.assign(elements.floating.style, {
-            width: `${rects.reference.width + 8}px`,
+            width: `${rects.reference.width + 12}px`,
           });
         },
       }),
@@ -426,5 +426,6 @@ export function useSelectOverlay() {
     dropdownRef,
     setFloatingRef: refs.setFloating,
     floatingStyles,
+    isPositioned,
   };
 }

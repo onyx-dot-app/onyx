@@ -13,6 +13,11 @@ interface SelectDropdownProps {
   isOpen: boolean;
   disabled: boolean;
   floatingStyles: React.CSSProperties;
+  /**
+   * floating-ui has placed and sized the box. Until then the rows lay out
+   * at the wrong width, so anything measured against them is off.
+   */
+  isPositioned: boolean;
   setFloatingRef: (node: HTMLDivElement | null) => void;
   fieldId: string;
   placeholder: string;
@@ -66,6 +71,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       isOpen,
       disabled,
       floatingStyles,
+      isPositioned,
       setFloatingRef,
       fieldId,
       placeholder,
@@ -131,9 +137,18 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
     }, [highlightedIndex, isOpen, keyboardNav, ref]);
 
     // Opening shows the selection: the (first) selected row is centred in
-    // view, so a long list opens around the current value.
+    // view, so a long list opens around the current value. Waits for
+    // floating-ui to size the box: before that the rows lay out single-line
+    // at the wrong width, the centre is computed on those heights, and the
+    // selection lands below the fold once the descriptions wrap.
     useEffect(() => {
-      if (!isOpen || !ref || typeof ref === "function" || !ref.current) {
+      if (
+        !isOpen ||
+        !isPositioned ||
+        !ref ||
+        typeof ref === "function" ||
+        !ref.current
+      ) {
         return;
       }
       const selectedElement = ref.current.querySelector(
@@ -143,7 +158,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
         block: "center",
         behavior: "instant",
       });
-    }, [isOpen, ref]);
+    }, [isOpen, isPositioned, ref]);
 
     if (!presence.mounted || disabled || typeof document === "undefined") {
       return null;

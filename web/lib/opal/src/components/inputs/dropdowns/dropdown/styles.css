@@ -14,9 +14,9 @@
 }
 
 /* The search field pinned above the rows: a borderless input on its own
-   row, with the same 4px inset as the rows below it. */
+   row, with the same 6px inset as the rows below it. */
 .opal-select-search {
-  @apply p-1 pb-0;
+  @apply p-1.5 pb-0;
 }
 
 /* The inner padding sits inside the ShadowDiv, so its scroll gradients span
@@ -24,7 +24,7 @@
    list scrolls without a visible scrollbar: the mask fade at each edge
    already says there is more. */
 .opal-select-dropdown-scroll {
-  @apply flex flex-col gap-1 overflow-x-hidden p-1;
+  @apply flex flex-col gap-1 overflow-x-hidden p-1.5;
   scrollbar-width: none;
 }
 .opal-select-dropdown-scroll::-webkit-scrollbar {
@@ -97,7 +97,7 @@
    Option rows
    --------------------------------------------------------------------------- */
 
-/* 8px side padding: with the listbox 4px wider than the trigger on each
+/* 8px side padding: with the listbox 6px wider than the trigger on each
    side, a row's text and icon then sit exactly under the trigger's. */
 /* Keyboard mode: rows and titles ignore the pointer, so the pointer's hover
    cannot paint a second highlight beside the keyboard's. A pointer movement
