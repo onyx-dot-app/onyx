@@ -621,9 +621,9 @@ POSTGRES_PASSWORD = urllib.parse.quote_plus(
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
-# Host for the alembic runs tenant provisioning starts in-process, when the app itself
-# connects through a transaction-pooling proxy that drops env.py's session search_path
-# at the first mid-run commit. Command-line migrations always use POSTGRES_HOST.
+# Direct database host for the alembic runs that tenant provisioning starts in-process.
+# Needed when the app connects through a transaction-pooling proxy that drops env.py's
+# session search_path at the first mid-run commit. Command-line migrations ignore it.
 POSTGRES_MIGRATION_HOST: str | None = os.environ.get("POSTGRES_MIGRATION_HOST") or None
 # Defaults to the Postgres port, not the pooler port the app may use.
 POSTGRES_MIGRATION_PORT: str = os.environ.get("POSTGRES_MIGRATION_PORT") or "5432"

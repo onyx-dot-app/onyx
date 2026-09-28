@@ -42,3 +42,25 @@ def test_without_override_the_shard_host_is_used() -> None:
     ):
         url: str = schema_management._tenant_connection_string("tenant_x")
     assert "@pgbouncer-service:5432/postgres" in url
+
+
+def test_other_shards_keep_their_own_host() -> None:
+    other: ShardSpec = ShardSpec(
+        name="shard_1",
+        host="shard-1.rds.internal",
+        port="5432",
+        db="postgres",
+        user="postgres",
+        password="secret",
+    )
+    with (
+        patch.object(
+            schema_management, "get_shard_for_tenant", return_value=other.name
+        ),
+        patch.object(schema_management, "get_shard_spec", return_value=other),
+        patch.object(
+            schema_management, "POSTGRES_MIGRATION_HOST", "writer.rds.internal"
+        ),
+    ):
+        url: str = schema_management._tenant_connection_string("tenant_y")
+    assert "@shard-1.rds.internal:5432/postgres" in url

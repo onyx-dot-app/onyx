@@ -14,8 +14,8 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.engine.shard_registry import (
     ALEMBIC_TARGET_URL_ATTRIBUTE,
-    ONYX_DB_DEFAULT_SHARD,
     get_shard_spec,
+    is_default_shard,
 )
 from onyx.db.engine.shard_routing import get_engine_for_tenant, get_shard_for_tenant
 from onyx.db.engine.sql_engine import build_connection_string
@@ -27,13 +27,13 @@ logger = logging.getLogger(__name__)
 def _tenant_connection_string(tenant_id: str) -> str:
     """Alembic URL for the database holding this tenant's schema.
 
-    For the default shard this is byte-identical to ``build_connection_string()``,
-    since the default shard's spec is derived from the same POSTGRES_* settings.
+    POSTGRES_MIGRATION_HOST replaces the default shard's host and port so the run
+    can bypass a transaction-pooling proxy. Other shards keep their configured host.
     """
     spec = get_shard_spec(get_shard_for_tenant(tenant_id))
     host: str = spec.host
     port: str = spec.port
-    if POSTGRES_MIGRATION_HOST and spec.name == ONYX_DB_DEFAULT_SHARD:
+    if POSTGRES_MIGRATION_HOST and is_default_shard(spec.name):
         host, port = POSTGRES_MIGRATION_HOST, POSTGRES_MIGRATION_PORT
     return build_connection_string(
         user=spec.user,
