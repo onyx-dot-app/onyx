@@ -30,21 +30,6 @@ _T = TypeVar("_T")  # Default type
 _MISSING: object = object()
 
 
-class ContextThreadPoolExecutor(ThreadPoolExecutor):
-    """Give each submitted operation its own copy of the caller's context."""
-
-    def __init__(self, max_workers: int, thread_name_prefix: str = "") -> None:
-        super().__init__(max_workers=max_workers, thread_name_prefix=thread_name_prefix)
-
-    def submit[T, **P](
-        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> Future[T]:
-        # A single Context cannot be entered concurrently by multiple threads.
-        # Copy per submission to preserve tenant and trace state without races.
-        context = contextvars.copy_context()
-        return super().submit(lambda: context.run(fn, *args, **kwargs))
-
-
 class ThreadSafeDict(MutableMapping[KT, VT]):
     """
     A thread-safe dictionary implementation that uses a lock to ensure thread safety.
@@ -467,25 +452,6 @@ def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
         return future.result()
 
 
-def run_multiple_in_background(
-    funcs: list[Callable[[], None]],
-    thread_name_prefix: str = "worker",
-) -> ThreadPoolExecutor:
-    """Submit multiple callables to a ``ThreadPoolExecutor`` with context propagation.
-
-    Each callable runs in its own copy of the current ``contextvars`` context,
-    which preserves tenant IDs and other context-local state across threads.
-
-    Returns the executor so the caller can ``shutdown()`` when done.
-    """
-    executor = ContextThreadPoolExecutor(
-        max_workers=len(funcs), thread_name_prefix=thread_name_prefix
-    )
-    for func in funcs:
-        executor.submit(func)
-    return executor
-
-
 def start_thread_with_context(
     target: Callable[..., Any],
     *,
@@ -493,18 +459,16 @@ def start_thread_with_context(
     daemon: bool = False,
     args: tuple[Any, ...] = (),
     kwargs: dict[str, Any] | None = None,
-    context: contextvars.Context | None = None,
 ) -> threading.Thread:
     """Spawn a fire-and-forget thread that inherits the caller's contextvars
     (tenant id, request id, trace context). A raw ``threading.Thread`` starts
     with an empty context, so tenant-scoped DB access inside the thread would
-    raise "Tenant ID is not set". Pass ``context`` to run in that context
-    instead of a copy of the caller's.
+    raise "Tenant ID is not set".
 
-    Unlike ``run_in_background`` / ``run_multiple_in_background``, this is for
-    daemon producer threads that are never joined.
+    Unlike ``run_in_background``, this is for daemon producer threads that are
+    never joined.
     """
-    ctx = context if context is not None else contextvars.copy_context()
+    ctx = contextvars.copy_context()
     thread = threading.Thread(
         target=lambda: ctx.run(target, *args, **(kwargs or {})),
         name=name,
