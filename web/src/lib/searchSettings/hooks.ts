@@ -18,7 +18,6 @@ import {
   LLMContextualCost,
   ReindexErrorRow,
   ReindexProgress,
-  ImageProcessingSettings,
   SavedSearchSettings,
 } from "@/lib/searchSettings/types";
 
@@ -135,9 +134,3 @@ export function useConfiguredEmbeddingProviders() {
  * The tenant's image processing settings. `data` is `null` when the feature
  * is off and `undefined` while loading.
  */
-export function useImageProcessingSettings() {
-  return useSWR<ImageProcessingSettings | null>(
-    SWR_KEYS.imageProcessingSettings,
-    errorHandlingFetcher
-  );
-}
