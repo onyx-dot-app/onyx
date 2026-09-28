@@ -18,7 +18,7 @@ import {
   type ContentMdEditHandle,
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
-import type { TagProps } from "@opal/components";
+import type { TagProps, TextColor } from "@opal/components";
 import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 import type { ExtremaSizeVariants } from "@opal/types";
@@ -93,6 +93,25 @@ interface ContentBaseProps {
    */
   color?: ColorTypes;
 
+  /**
+   * Overrides the title's colour only. `color` still picks the icon and the
+   * description; this replaces the title tone the preset would give. Inside
+   * an interactive surface the override holds at rest and yields to hover,
+   * pressed, selected and disabled, so the row's states still reach the
+   * title. `"inherit"` is not offered: the default already inherits where
+   * that is meant. Covers the title as displayed; an editable title being
+   * edited keeps the input's standard colour.
+   *
+   * Unset, the title takes the tone its `color` mode sets in `styles.css`:
+   *
+   * - `"default"` — `text-04`
+   * - `"muted"` — `text-03`
+   * - `"success"` / `"warning"` / `"danger"` — `text-03`
+   * - `"interactive"` — `text-04` on its own; inside an interactive surface,
+   *   the surface's foreground
+   */
+  titleColor?: Exclude<TextColor, "inherit">;
+
   /** Ref forwarded to the root `<div>` of the resolved layout. */
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -161,6 +180,7 @@ function Content(props: ContentProps) {
     variant = "heading",
     width = "full",
     color = "default",
+    titleColor,
     ref,
     ...rest
   } = props;
@@ -220,8 +240,22 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
+  // The override rides an unregistered variable that the colour modes read
+  // with the preset tone as fallback, so the disabled rule still wins.
+  // SAFETY: CSSProperties has no index for custom properties; the object
+  // holds only the one custom property the stylesheet reads.
+  const titleColorStyle: React.CSSProperties | undefined = titleColor
+    ? ({
+        "--content-title-color": `var(--${titleColor})`,
+      } as React.CSSProperties)
+    : undefined;
+
   return (
-    <div className={widthVariants[width]} data-content-color={color}>
+    <div
+      className={widthVariants[width]}
+      data-content-color={color}
+      style={titleColorStyle}
+    >
       {layout}
     </div>
   );

@@ -34,6 +34,11 @@
   initial-value: transparent;
 }
 
+/* `titleColor` sets --content-title-color inline on the wrapper. It stays
+   unregistered on purpose: only an unregistered variable honours the var()
+   fallback each colour mode gives the title, and the disabled rule below
+   assigns --content-foreground directly, so it still outranks the override. */
+
 /* ---------------------------------------------------------------------------
    Color modes — driven by `data-content-color` on the dispatcher wrapper
    --------------------------------------------------------------------------- */
@@ -42,16 +47,20 @@
    them. A mode that needs its own can still override below. */
 [data-content-color] {
   --content-foreground-secondary: var(--text-03);
+  /* Custom properties inherit, so a nested Content would take an outer
+     titleColor. Reset at every boundary; an override set inline on this
+     element still wins over this rule. */
+  --content-title-color: initial;
 }
 
 [data-content-color="default"] {
-  --content-foreground: var(--text-04);
+  --content-foreground: var(--content-title-color, var(--text-04));
   --content-foreground-icon: var(--text-04);
   color: var(--content-foreground);
 }
 
 [data-content-color="muted"] {
-  --content-foreground: var(--text-03);
+  --content-foreground: var(--content-title-color, var(--text-03));
   --content-foreground-icon: var(--text-03);
   color: var(--content-foreground);
 }
@@ -59,19 +68,19 @@
 /* Status glyph against muted body text: the icon carries the state and the
    text stays secondary. */
 [data-content-color="success"] {
-  --content-foreground: var(--text-03);
+  --content-foreground: var(--content-title-color, var(--text-03));
   --content-foreground-icon: var(--status-success-05);
   color: var(--content-foreground);
 }
 
 [data-content-color="warning"] {
-  --content-foreground: var(--text-03);
+  --content-foreground: var(--content-title-color, var(--text-03));
   --content-foreground-icon: var(--status-warning-05);
   color: var(--content-foreground);
 }
 
 [data-content-color="danger"] {
-  --content-foreground: var(--text-03);
+  --content-foreground: var(--content-title-color, var(--text-03));
   --content-foreground-icon: var(--status-error-05);
   color: var(--content-foreground);
 }
@@ -82,7 +91,7 @@
    reach them; the registered interactive variables never fall back on
    their own, which is why the bare case is spelled out. */
 [data-content-color="interactive"] {
-  --content-foreground: var(--text-04);
+  --content-foreground: var(--content-title-color, var(--text-04));
   --content-foreground-icon: var(--text-04);
   color: var(--content-foreground);
 }
@@ -90,6 +99,18 @@
 .interactive [data-content-color="interactive"] {
   color: inherit;
   --content-foreground-icon: var(--interactive-foreground-icon);
+}
+
+/* A title override on an interactive Content holds at rest only: any
+   hover, press, focus, selection or disabled state on the surface drops
+   back to the inherited interactive foreground. */
+.interactive:not(:hover):not(:active):not(:focus-visible):not(
+    [data-interaction="hover"]
+  ):not([data-interaction="active"]):not(
+    [data-interactive-state="selected"]
+  ):not([data-disabled])
+  [data-content-color="interactive"] {
+  color: var(--content-title-color, inherit);
 }
 
 /* Disabled is a state, so it outranks whatever the content normally looks
