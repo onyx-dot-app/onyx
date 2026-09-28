@@ -2128,7 +2128,7 @@ export default function IndexSettingsPage() {
                                 description={t("imageExtraction.description")}
                                 withLabel
                               >
-                                <div className="flex flex-col items-end gap-1">
+                                <div className="flex flex-col items-end">
                                   <SwitchField name="image_processing_enabled" />
                                   {captioningModelMissing && (
                                     <Content
