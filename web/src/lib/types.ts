@@ -659,6 +659,7 @@ export enum ValidSources {
   Braintrust = "braintrust",
   Lumapps = "lumapps",
   Canvas = "canvas",
+  JiraServiceManagement = "jira_service_management",
 
   // Craft-specific sources
   CraftFile = "craft_file",
@@ -679,6 +680,7 @@ export const federatedSourceToRegularSource = (
 export const validAutoSyncSources = [
   ValidSources.Confluence,
   ValidSources.Jira,
+  ValidSources.JiraServiceManagement,
   ValidSources.GoogleDrive,
   ValidSources.Gmail,
   ValidSources.Slack,
