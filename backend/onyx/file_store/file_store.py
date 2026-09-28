@@ -4,7 +4,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from functools import partial
+from functools import partial, reduce
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, TypeVar, cast
 
@@ -148,22 +148,23 @@ def build_s3_client(
             "service_name": "s3",
             "region_name": region_name,
         }
+        # AWS keeps boto3's defaults unless a pool size is given. An explicit None
+        # would size the pool at one.
+        configs: list[Config] = []
         # One connection per concurrent caller, or the pool opens and drops a
-        # connection for every request beyond boto3's default of ten. An explicit
-        # None would size the pool at one.
-        config = Config()
+        # connection for every request beyond boto3's default of ten.
         if max_pool_connections is not None:
-            config = Config(max_pool_connections=max_pool_connections)
+            configs.append(Config(max_pool_connections=max_pool_connections))
 
         # An endpoint URL means a self-hosted store, which needs path-style addressing.
         if endpoint_url:
             client_kwargs["endpoint_url"] = endpoint_url
-            config = config.merge(
+            configs.append(
                 Config(signature_version="s3v4", s3={"addressing_style": "path"})
             )
             # A hung secondary store must not hold up the request it serves.
             if fail_fast:
-                config = config.merge(
+                configs.append(
                     Config(
                         connect_timeout=5,
                         read_timeout=10,
@@ -176,7 +177,8 @@ def build_s3_client(
 
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 client_kwargs["verify"] = False
-        client_kwargs["config"] = config
+        if configs:
+            client_kwargs["config"] = reduce(Config.merge, configs)
 
         # Without explicit keys, boto3 uses the IAM role or default credentials.
         if access_key_id and secret_access_key:
