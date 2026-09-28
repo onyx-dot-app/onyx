@@ -9,9 +9,9 @@
   /* Must sit above sticky table headers so the settings page header scrolls
      over pinned columns without being obscured. */
   --z-settings-header: 11;
-  /* A settings page's sticky changes banner: above the page content it
-     scrolls over, below the header so a sticky header still covers it. */
-  --z-settings-banner: 10;
+  /* A page's sticky banner: above the content it scrolls over, below the
+     settings header so a sticky header still covers it. */
+  --z-banner: 10;
 
   /* Modal scrim and card. Below popovers/tooltips so pickers opened from
      inside a modal stack above it. */
@@ -28,8 +28,8 @@
 .z-settings-header {
   z-index: var(--z-settings-header);
 }
-.z-settings-banner {
-  z-index: var(--z-settings-banner);
+.z-banner {
+  z-index: var(--z-banner);
 }
 .z-modal-overlay {
   z-index: var(--z-modal-overlay);

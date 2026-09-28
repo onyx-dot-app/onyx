@@ -1524,9 +1524,7 @@ export default function IndexSettingsPage() {
                       // Active (staged or blocked), the banner pins to the top
                       // so its actions stay in reach while the page scrolls.
                       <div
-                        className={cn(
-                          bannerActive && "sticky top-0 z-settings-banner"
-                        )}
+                        className={cn(bannerActive && "sticky top-0 z-banner")}
                       >
                         <MessageCard
                           variant={bannerVariant}
