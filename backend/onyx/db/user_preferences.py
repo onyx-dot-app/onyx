@@ -14,6 +14,7 @@ from onyx.db.models import (
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     is_limited_user,
+    release_personas_owned_by_user__no_commit,
     user_is_admin,
 )
 from onyx.llm.models import ReasoningEffort
@@ -27,8 +28,11 @@ def deactivate_user(
     user: User,
     db_session: Session,
 ) -> None:
-    """Deactivate a user by setting is_active to False."""
+    """Deactivate a user and release the personas they own."""
     user.is_active = False
+    release_personas_owned_by_user__no_commit(
+        db_session, user.id, soft_delete_private=False
+    )
     db_session.add(user)
     db_session.commit()
 
