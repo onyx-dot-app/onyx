@@ -729,7 +729,7 @@ class OnyxSalesforceSQLite:
         relationships of the child to the parents in the db and removes old relationships.
 
         Args:
-            conn: The database connection to use (must be in a transaction)
+            cursor: The database cursor to use (must be in a transaction)
             child_id: The ID of the child record
             parent_ids: Set of parent IDs to link to
         """
