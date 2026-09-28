@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import KV_CRED_KEY, DocumentSource
 from onyx.connectors.google_utils.google_kv import (
+    _consent_scopes,
     build_service_account_creds,
     get_auth_url,
     update_credential_access_tokens,
@@ -22,6 +23,8 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    GOOGLE_FAMILY_SCOPES,
+    GOOGLE_SCOPES,
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.db.models import User
@@ -190,12 +193,20 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
         def to_json(self) -> str:
             return "{}"
 
+    class _StubSession:
+        scope: list[str] | None = ["requested-scope"]
+
     class _StubFlow:
         code_verifier: str | None = None
+
+        def __init__(self) -> None:
+            self.oauth2session = _StubSession()
 
         def fetch_token(self, code: str) -> None:
             captured["code"] = code
             captured["code_verifier"] = self.code_verifier
+            # Partial grants must not fail the exchange.
+            captured["exchange_scope"] = self.oauth2session.scope
 
         @property
         def credentials(self) -> _StubCreds:
@@ -278,6 +289,7 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
     assert captured["code"] == "auth-code"
     assert captured["code_verifier"] == "test-verifier"
     assert captured["deleted_key"] == KV_CRED_KEY.format("42")
+    assert captured["exchange_scope"] is None
     assert captured["new_creds_dict"][DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY] == payload
     assert captured["new_creds_dict"][DB_CREDENTIALS_DICT_TOKEN_KEY] == "{}"
     assert (
@@ -539,3 +551,33 @@ def test_verify_csrf_rejects_missing_state(monkeypatch: Any) -> None:
         verify_csrf(42, "test-state")
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
     assert "No Google authorization flow" in exc_info.value.detail
+
+
+@pytest.mark.parametrize(
+    "stored_json,expected_scopes",
+    [
+        (
+            {"google_app_credential": {"web": {}}, "credential_family": "google"},
+            GOOGLE_FAMILY_SCOPES,
+        ),
+        ({"google_app_credential": {"web": {}}}, GOOGLE_SCOPES[DocumentSource.GMAIL]),
+    ],
+)
+def test_consent_scopes_cover_every_source_of_a_shared_credential(
+    monkeypatch: pytest.MonkeyPatch,
+    stored_json: dict[str, object],
+    expected_scopes: list[str],
+) -> None:
+    # Precondition.
+    monkeypatch.setattr(
+        "onyx.connectors.google_utils.google_kv.fetch_credential_by_id_for_user",
+        lambda *_args, **_kwargs: _StubCredential(stored_json),
+    )
+
+    # Under test.
+    scopes = _consent_scopes(
+        1, DocumentSource.GMAIL, cast(User, object()), cast(Session, object())
+    )
+
+    # Postcondition.
+    assert scopes == expected_scopes

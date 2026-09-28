@@ -170,3 +170,29 @@ def test_malformed_family_credential_is_not_usable_by_other_sources() -> None:
     assert not is_credential_usable_for_source(
         DocumentSource.CONFLUENCE, stored, DocumentSource.JIRA
     )
+
+
+def test_gmail_service_account_credential_is_usable_by_google_drive() -> None:
+    gmail_json = {
+        "google_service_account_key": '{"type": "service_account"}',
+        "google_primary_admin": "admin@example.com",
+        "authentication_method": "uploaded",
+    }
+
+    stored = to_stored_credential_json(DocumentSource.GMAIL, gmail_json, None)
+
+    # Absent keys stay absent: the Google auth helpers branch on key presence.
+    assert to_source_credential_json(DocumentSource.GOOGLE_DRIVE, stored) == gmail_json
+    assert is_credential_usable_for_source(
+        DocumentSource.GMAIL, stored, DocumentSource.GOOGLE_DRIVE
+    )
+
+
+def test_unknown_google_credential_keys_are_kept() -> None:
+    source_json = {"client_id": "id", "client_secret": "secret"}
+
+    stored = to_stored_credential_json(DocumentSource.GMAIL, source_json, None)
+
+    assert to_source_credential_json(DocumentSource.GOOGLE_DRIVE, stored) == (
+        source_json
+    )

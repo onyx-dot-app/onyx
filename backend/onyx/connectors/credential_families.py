@@ -23,10 +23,13 @@ from onyx.connectors.credential_family_base import (
     FamilyCredential,
     FamilyCredentialCodec,
 )
+from onyx.connectors.google_credential import GoogleCredentialCodec
 
 FAMILY_CREDENTIAL_CODECS: dict[DocumentSource, FamilyCredentialCodec[Any]] = {
     DocumentSource.CONFLUENCE: ConfluenceCredentialCodec(),
     DocumentSource.JIRA: JiraCredentialCodec(),
+    DocumentSource.GMAIL: GoogleCredentialCodec(),
+    DocumentSource.GOOGLE_DRIVE: GoogleCredentialCodec(),
 }
 
 
