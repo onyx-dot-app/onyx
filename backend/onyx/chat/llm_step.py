@@ -4,6 +4,8 @@ import uuid
 from collections.abc import Callable, Generator, Mapping, Sequence
 from typing import Any, cast
 
+from pydantic import JsonValue
+
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
@@ -69,7 +71,6 @@ from onyx.tracing.llm_utils import build_llm_model_config
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
-from onyx.utils.streaming_json import StreamingJsonParser
 
 logger = setup_logger()
 
@@ -816,7 +817,7 @@ def run_llm_step_pkt_generator(
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
-    arg_parsers: dict[int, StreamingJsonParser | None] = {}
+    parsed_tool_arguments: dict[int, dict[str, JsonValue]] = {}
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""
@@ -1061,7 +1062,7 @@ def run_llm_step_pkt_generator(
                         tool_calls_in_progress=id_to_tool_call_map,
                         tool_call_delta=tool_call_delta,
                         placement=_current_placement(),
-                        parsers=arg_parsers,
+                        previous_arguments=parsed_tool_arguments,
                     )
 
         # Flush any tail text buffered while checking for split "<function_calls" markers.

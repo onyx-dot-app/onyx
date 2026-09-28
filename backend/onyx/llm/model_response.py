@@ -34,7 +34,7 @@ from onyx.llm.tool_parsing import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
-from onyx.utils.streaming_json import StreamingJsonParser
+from onyx.utils.streaming_json import appended_text, parse_partial_object
 
 logger = setup_logger()
 
@@ -481,7 +481,7 @@ class _PendingToolCall:
         self.content_index = content_index
         self.call = call
         self.arguments: str | None = ""
-        self.parser: StreamingJsonParser | None = StreamingJsonParser()
+        self.streaming = True
         self.finalized = False
 
     def update(self, delta: ChatCompletionDeltaToolCall) -> dict[str, str]:
@@ -495,16 +495,17 @@ class _PendingToolCall:
         text = delta.function.arguments or ""
         self.arguments = (self.arguments or "") + text
         self.call.raw_arguments = self.arguments
-        if self.parser is None or not text:
+        if not self.streaming or not text:
             return {}
         try:
-            fragments = self.parser.feed(text)
+            current = parse_partial_object(self.arguments)
         except ValueError:
             # Retain invalid arguments so execution can return a paired tool error.
             logger.debug("Tool arguments cannot be parsed incrementally", exc_info=True)
-            self.parser = None
+            self.streaming = False
             return {}
-        self.call.arguments = self.parser.snapshot()
+        fragments = appended_text(self.call.arguments, current)
+        self.call.arguments = current
         return fragments
 
 
