@@ -1693,6 +1693,19 @@ class LitellmLLM(LLM):
                         request_params_sent = True
                     yield event
                 signal.check()
+                if not (
+                    accumulator.message.text
+                    or accumulator.message.thinking
+                    or accumulator.message.thinking_blocks
+                    or accumulator.message.tool_calls
+                ):
+                    logger.warning(
+                        "Empty generation: provider=%s model=%s stop_reason=%s chunks=%s",
+                        self.config.model_provider,
+                        self.config.model_name,
+                        accumulator.message.stop_reason,
+                        accumulator.chunk_count,
+                    )
                 for event in accumulator.end():
                     yield (
                         _event_with_request_params(event, operation)
