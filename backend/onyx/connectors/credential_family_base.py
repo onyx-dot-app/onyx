@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, ClassVar, Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 CREDENTIAL_FAMILY_KEY = "credential_family"
 
@@ -17,6 +17,9 @@ class CredentialFamily(str, Enum):
 
 class FamilyCredential(BaseModel):
     """The credential shape shared by every source of one family."""
+
+    # Errors must not echo secret values.
+    model_config = ConfigDict(hide_input_in_errors=True)
 
 
 FamilyCredentialT = TypeVar("FamilyCredentialT", bound=FamilyCredential)
