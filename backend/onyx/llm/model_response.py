@@ -527,17 +527,17 @@ class MessageAccumulator:
     def consume(
         self, stream: Iterator[ModelResponseStream], request: GenerationRequest
     ) -> Generator[GenerationEvent, None, None]:
-        """Filter provider text and recover calls before producing shared events."""
+        """Stream provider text as events, then recover calls written as text."""
         ids: dict[int, str] = {}
-        buffered: list[ModelResponseStream] = []
-        recover = (
+        recovery_enabled = (
             bool(request.tools)
             and request.options.tool_choice != ToolChoiceOptions.NONE
         )
-        buffering = recover
+        recover = recovery_enabled
         raw_text: list[str] = []
         raw_thinking: list[str] = []
-        content_filter = XmlToolCallContentFilter()
+        # Without tool-call recovery, XML-like text is part of the answer.
+        content_filter = XmlToolCallContentFilter() if recovery_enabled else None
         usage: Usage | None = None
         stop_reason: str | None = None
 
@@ -545,7 +545,7 @@ class MessageAccumulator:
             chunk = chunk.model_copy(deep=True)
             for call in chunk.choice.delta.tool_calls:
                 call.id = ids.setdefault(call.index, call.id or str(uuid4()))
-            if chunk.choice.delta.content:
+            if content_filter is not None and chunk.choice.delta.content:
                 chunk.choice.delta.content = content_filter.process(
                     chunk.choice.delta.content
                 )
@@ -566,21 +566,7 @@ class MessageAccumulator:
                     self.message.usage = usage
                 if chunk.choice.finish_reason:
                     stop_reason = chunk.choice.finish_reason
-                if not buffering:
-                    yield from add_filtered(chunk)
-                    continue
-                buffered.append(chunk)
-                text = "".join(raw_text).lstrip()
-                prose = (
-                    request.options.tool_choice != ToolChoiceOptions.REQUIRED
-                    and bool(text)
-                    and not text.startswith(("<", "`", "{"))
-                )
-                if delta.tool_calls or prose:
-                    for pending_chunk in buffered:
-                        yield from add_filtered(pending_chunk)
-                    buffered.clear()
-                    buffering = False
+                yield from add_filtered(chunk)
 
             recovered: AssistantMessage | None = None
             if recover and not self.calls:
@@ -593,9 +579,7 @@ class MessageAccumulator:
                     ),
                     request,
                 )
-            for pending_chunk in buffered:
-                yield from add_filtered(pending_chunk)
-            tail = content_filter.flush()
+            tail = content_filter.flush() if content_filter is not None else ""
             if tail:
                 yield from self._add_text(TextContent(text=tail))
             if not self.calls and recovered is not None and recovered.tool_calls:

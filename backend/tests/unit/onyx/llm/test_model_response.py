@@ -9,6 +9,7 @@ from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStrea
 from pydantic import BaseModel, JsonValue
 
 from onyx.llm.exceptions import ClassifiedLLMError
+from onyx.llm.model_request import format_provider_message
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Choice,
@@ -35,6 +36,7 @@ from onyx.llm.models import (
     GenerationRequest,
     GenerationTextEvent,
     GenerationToolCallEvent,
+    RedactedThinkingBlock,
     TextContent,
     TextDeltaEvent,
     ThinkingBlock,
@@ -800,7 +802,7 @@ def test_stream_conversion_closes_provider_source(ending: str) -> None:
 
 
 @pytest.mark.parametrize("reasoning", [False, True])
-def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
+def test_recovery_preserves_content_and_emits_one_call_with_usage(
     reasoning: bool,
 ) -> None:
     payload = '{"name":"search","arguments":{"query":"recovered"}}'
@@ -861,7 +863,7 @@ def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     assert final.thinking == (payload if reasoning else "")
 
 
-def test_buffered_stream_failure_keeps_unresolved_tool_payload_out_of_events() -> None:
+def test_stream_failure_preserves_unresolved_text_without_executing_it() -> None:
     payload = '{"name":"search","arguments":{"query":"unfinished'
     failure = RuntimeError("provider failed")
     closed: list[bool] = []
@@ -887,9 +889,11 @@ def test_buffered_stream_failure_keeps_unresolved_tool_payload_out_of_events() -
         events.extend(client.stream(request))
     assert caught.value is failure
     assert closed == [True]
-    assert [event.type for event in events] == ["start", "error"]
-    assert collect_generation(events).content == []
-    assert payload not in str(record.call_args)
+    assert [event.type for event in events] == ["start", "text_delta", "error"]
+    message = collect_generation(events)
+    assert message.text == payload
+    assert message.tool_calls == []
+    assert payload in str(record.call_args)
 
 
 def test_incremental_events_preserve_partial_content_and_snapshot_isolation() -> None:
@@ -1067,3 +1071,100 @@ def test_terminal_events_preserve_content_without_copying_it(failed: bool) -> No
     assert accepted.content[0] is block
     assert accepted.text == "x" * 100_000
     assert len(terminal.model_dump_json()) < 200
+
+
+@pytest.mark.parametrize(
+    "text", ['{"answer":', "<section>", "```python", "ordinary prose"]
+)
+@pytest.mark.parametrize("choice", [ToolChoiceOptions.AUTO, ToolChoiceOptions.REQUIRED])
+def test_tool_recovery_does_not_delay_answer_text(
+    text: str, choice: ToolChoiceOptions
+) -> None:
+    def chunks() -> Iterator[ModelResponseStream]:
+        yield _stream_chunk(Delta(content=text))
+        raise AssertionError("Read ahead before delivering answer text")
+
+    accumulator = MessageAccumulator()
+    events = accumulator.consume(
+        chunks(),
+        GenerationRequest(
+            tools=[ToolDefinition(name="search", description="Search", parameters={})],
+            options=GenerationOptions(tool_choice=choice),
+        ),
+    )
+    try:
+        event = next(events)
+        assert isinstance(event, TextDeltaEvent)
+        assert event.text == text
+    finally:
+        events.close()
+
+
+@pytest.mark.parametrize("has_tools", [False, True])
+def test_disabled_recovery_preserves_literal_xml(has_tools: bool) -> None:
+    text = '<function_calls><invoke name="search"></invoke></function_calls>'
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})]
+        if has_tools
+        else [],
+        options=GenerationOptions(
+            tool_choice=ToolChoiceOptions.NONE if has_tools else ToolChoiceOptions.AUTO
+        ),
+    )
+    accumulator = MessageAccumulator(request.tools)
+    events = list(
+        accumulator.consume(
+            iter([_stream_chunk(Delta(content=part)) for part in [text[:8], text[8:]]]),
+            request,
+        )
+    )
+    events.extend(accumulator.end())
+    message = collect_generation(events)
+    complete = to_assistant_message(
+        ModelResponse(
+            id="test", created="1", choice=Choice(message=ResponseMessage(content=text))
+        ),
+        request,
+    )
+    assert message.text == complete.text == text
+    assert message.tool_calls == []
+
+
+def test_thinking_fragments_form_signed_blocks_for_replay() -> None:
+    accumulator = MessageAccumulator()
+    accepted = AssistantMessage()
+    blocks = [
+        ThinkingBlock(thinking="First"),
+        ThinkingBlock(thinking=" thought"),
+        ThinkingBlock(signature="first-signature"),
+        RedactedThinkingBlock(data="redacted"),
+        ThinkingBlock(thinking="Second"),
+        ThinkingBlock(signature="second-signature"),
+    ]
+    saved = None
+    events: list[GenerationEvent] = []
+    for index, block in enumerate(blocks):
+        updates = accumulator.add(_stream_chunk(Delta(thinking_blocks=[block])))
+        events.extend(updates)
+        for event in updates:
+            apply_generation_event(accepted, event)
+        if index == 0:
+            saved = accepted.model_copy(deep=True)
+    for event in accumulator.end():
+        apply_generation_event(accepted, event)
+    expected = [
+        ThinkingBlock(thinking="First thought", signature="first-signature"),
+        RedactedThinkingBlock(data="redacted"),
+        ThinkingBlock(thinking="Second", signature="second-signature"),
+    ]
+    assert accepted.thinking_blocks == accumulator.message.thinking_blocks == expected
+    assert saved is not None and saved.thinking_blocks == [
+        ThinkingBlock(thinking="First")
+    ]
+    replay = format_provider_message(accepted)
+    assert replay.model_dump()["thinking_blocks"] == [
+        block.model_dump() for block in expected
+    ]
+    first = events[0]
+    assert isinstance(first, ThinkingDeltaEvent)
+    assert first.blocks == [ThinkingBlock(thinking="First")]

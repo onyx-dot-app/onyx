@@ -456,7 +456,18 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
         if event.blocks:
             if content.blocks is None:
                 content.blocks = []
-            content.blocks.extend(block.model_copy(deep=True) for block in event.blocks)
+            for block in event.blocks:
+                previous = content.blocks[-1] if content.blocks else None
+                # Anthropic sends thinking fragments followed by a signature-only block.
+                if (
+                    isinstance(block, ThinkingBlock)
+                    and isinstance(previous, ThinkingBlock)
+                    and not previous.signature
+                ):
+                    previous.thinking += block.thinking
+                    previous.signature = block.signature
+                else:
+                    content.blocks.append(block.model_copy(deep=True))
     else:
         if not isinstance(content, TextContent):
             raise ValueError("Text update targets non-text content")
