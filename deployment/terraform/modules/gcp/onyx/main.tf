@@ -18,7 +18,7 @@ locals {
     "${substr(local.bucket_name_sanitized, 0, 54)}-${local.bucket_name_digest}",
   )
 
-  project_apis = var.enable_project_apis ? toset([
+  project_apis = var.enable_project_apis ? setunion([
     "compute.googleapis.com",
     "container.googleapis.com",
     "sqladmin.googleapis.com",
@@ -30,7 +30,7 @@ locals {
     "iam.googleapis.com",
     # Project IAM grants for the node service account go through this API.
     "cloudresourcemanager.googleapis.com",
-  ]) : toset([])
+  ], var.enable_l7_ingress ? ["certificatemanager.googleapis.com"] : []) : toset([])
 
   # T-shirt size defaults, chosen so each tier lands on the GCP machine closest
   # to what the AWS and Azure compositions pick. The index pool is
@@ -108,6 +108,7 @@ locals {
     redis       = var.deletion_protection
     gcs         = var.deletion_protection
     cloud_armor = var.deletion_protection
+    l7_ingress  = var.deletion_protection
   }
 }
 
@@ -277,4 +278,15 @@ module "cloud_armor" {
   rate_limit_threshold        = var.cloud_armor_rate_limit_threshold
   api_rate_limit_threshold    = var.cloud_armor_api_rate_limit_threshold
   adaptive_protection_enabled = var.cloud_armor_adaptive_protection_enabled
+}
+
+module "l7_ingress" {
+  source = "../l7-ingress"
+  count  = var.enable_l7_ingress ? 1 : 0
+
+  name                = local.resource_prefix
+  project_id          = local.project_id
+  domains             = var.l7_domains
+  deletion_protection = local.deletion_protection.l7_ingress
+  labels              = local.merged_labels
 }
