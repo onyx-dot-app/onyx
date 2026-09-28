@@ -1,7 +1,7 @@
 """Unit tests for chat history compression module."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from onyx.chat.compression import (
     SummaryContent,
@@ -14,7 +14,7 @@ from onyx.chat.compression import (
     get_summary_parent_message_id,
 )
 from onyx.configs.constants import MessageType
-from onyx.llm.model_request import AssistantMessage, SystemMessage, UserMessage
+from onyx.llm.models import AssistantMessage, SystemMessage, TextContent, UserMessage
 from onyx.prompts.compression_prompts import (
     PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK,
     PROGRESSIVE_USER_REMINDER,
@@ -368,7 +368,7 @@ def test__build_llm_messages_for_summarization_assistant_messages() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], AssistantMessage)
-    assert result[0].content == "I'm doing great!"
+    assert result[0].text == "I'm doing great!"
 
 
 def test__build_llm_messages_for_summarization_tool_calls() -> None:
@@ -385,7 +385,7 @@ def test__build_llm_messages_for_summarization_tool_calls() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], AssistantMessage)
-    assert result[0].content == "[Used tools: search]"
+    assert result[0].text == "[Used tools: search]"
 
 
 def test__build_llm_messages_for_summarization_skips_tool_responses() -> None:
@@ -435,23 +435,23 @@ def test_generate_summary_initial_system_prompt() -> None:
     ]
 
     mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choice.message.content = "Summary of conversation"
+    mock_response = AssistantMessage(
+        content=[TextContent(text="Summary of conversation")]
+    )
     mock_llm.invoke.return_value = mock_response
 
-    with patch("onyx.chat.compression.llm_generation_span"):
-        result = generate_summary(
-            older_messages=older_messages,  # ty: ignore[invalid-argument-type]
-            recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
-            llm=mock_llm,
-            tool_id_to_name={},
-            existing_summary=None,
-        )
+    result = generate_summary(
+        older_messages=older_messages,  # ty: ignore[invalid-argument-type]
+        recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
+        llm=mock_llm,
+        tool_id_to_name={},
+        existing_summary=None,
+    )
 
     assert result == "Summary of conversation"
 
     # Check the messages passed to the LLM
-    call_args = mock_llm.invoke.call_args[0][0]
+    call_args = mock_llm.invoke.call_args[0][0].messages
 
     # First message should be SystemMessage with just SUMMARIZATION_PROMPT
     assert isinstance(call_args[0], SystemMessage)
@@ -481,23 +481,21 @@ def test_generate_summary_progressive_system_prompt() -> None:
     existing_summary = "Previous conversation summary"
 
     mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choice.message.content = "Updated summary"
+    mock_response = AssistantMessage(content=[TextContent(text="Updated summary")])
     mock_llm.invoke.return_value = mock_response
 
-    with patch("onyx.chat.compression.llm_generation_span"):
-        result = generate_summary(
-            older_messages=older_messages,  # ty: ignore[invalid-argument-type]
-            recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
-            llm=mock_llm,
-            tool_id_to_name={},
-            existing_summary=existing_summary,
-        )
+    result = generate_summary(
+        older_messages=older_messages,  # ty: ignore[invalid-argument-type]
+        recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
+        llm=mock_llm,
+        tool_id_to_name={},
+        existing_summary=existing_summary,
+    )
 
     assert result == "Updated summary"
 
     # Check the messages passed to the LLM
-    call_args = mock_llm.invoke.call_args[0][0]
+    call_args = mock_llm.invoke.call_args[0][0].messages
 
     # First message should be SystemMessage with SUMMARIZATION_PROMPT + PROGRESSIVE_SUMMARY_SYSTEM_PROMPT_BLOCK
     assert isinstance(call_args[0], SystemMessage)
@@ -524,20 +522,18 @@ def test_generate_summary_cutoff_marker_as_separate_message() -> None:
     ]
 
     mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choice.message.content = "Summary"
+    mock_response = AssistantMessage(content=[TextContent(text="Summary")])
     mock_llm.invoke.return_value = mock_response
 
-    with patch("onyx.chat.compression.llm_generation_span"):
-        generate_summary(
-            older_messages=older_messages,  # ty: ignore[invalid-argument-type]
-            recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
-            llm=mock_llm,
-            tool_id_to_name={},
-            existing_summary=None,
-        )
+    generate_summary(
+        older_messages=older_messages,  # ty: ignore[invalid-argument-type]
+        recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
+        llm=mock_llm,
+        tool_id_to_name={},
+        existing_summary=None,
+    )
 
-    call_args = mock_llm.invoke.call_args[0][0]
+    call_args = mock_llm.invoke.call_args[0][0].messages
 
     # Find the cutoff marker message
     cutoff_messages = [
@@ -561,20 +557,18 @@ def test_generate_summary_messages_are_separate() -> None:
     ]
 
     mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choice.message.content = "Summary"
+    mock_response = AssistantMessage(content=[TextContent(text="Summary")])
     mock_llm.invoke.return_value = mock_response
 
-    with patch("onyx.chat.compression.llm_generation_span"):
-        generate_summary(
-            older_messages=older_messages,  # ty: ignore[invalid-argument-type]
-            recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
-            llm=mock_llm,
-            tool_id_to_name={},
-            existing_summary=None,
-        )
+    generate_summary(
+        older_messages=older_messages,  # ty: ignore[invalid-argument-type]
+        recent_messages=recent_messages,  # ty: ignore[invalid-argument-type]
+        llm=mock_llm,
+        tool_id_to_name={},
+        existing_summary=None,
+    )
 
-    call_args = mock_llm.invoke.call_args[0][0]
+    call_args = mock_llm.invoke.call_args[0][0].messages
 
     # Should have multiple messages, not just 2 (SystemMessage + single UserMessage)
     assert len(call_args) > 2

@@ -26,7 +26,7 @@ from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TA
 def _ensure_list(
     result: list[ChatCompletionMessage] | ChatCompletionMessage,
 ) -> list[ChatCompletionMessage]:
-    """Convert LanguageModelInput to a list for easier testing."""
+    """Convert list[ChatCompletionMessage] to a list for easier testing."""
     if isinstance(result, list):
         return result
     return [result]

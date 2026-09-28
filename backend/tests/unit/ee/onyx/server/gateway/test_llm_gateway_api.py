@@ -21,7 +21,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.interfaces import LLM, LLMConfig
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
@@ -51,7 +51,7 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     Usage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
@@ -129,8 +129,15 @@ def _provider(
     )
 
 
-class _ConfigOnlyLLM(LLM):
+class _ConfigOnlyLLM(LitellmLLM):
     def __init__(self, config: LLMConfig) -> None:
+        super().__init__(
+            model_provider=config.model_provider,
+            model_name=config.model_name,
+            api_key=config.api_key,
+            max_input_tokens=config.max_input_tokens,
+            custom_config=config.custom_config,
+        )
         self._config = config
 
     @property
@@ -152,7 +159,7 @@ class _ChunkStreamLLM(_ConfigOnlyLLM):
         )
         self._chunks = chunks
 
-    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream_raw(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
         del args, kwargs
         yield from self._chunks
 
@@ -224,7 +231,7 @@ class _StreamingLLM(_ConfigOnlyLLM):
         self._fail = fail
         self._exc = exc or RuntimeError("secret-provider-response")
 
-    def stream(self, *args: object, **kwargs: object):
+    def stream_raw(self, *args: object, **kwargs: object):
         del args, kwargs
         try:
             if self._fail:
@@ -261,12 +268,12 @@ class _RaisingCloseStream:
 
 
 class _RaisingCloseLLM(_ConfigOnlyLLM):
-    def stream(self, *args: object, **kwargs: object) -> _RaisingCloseStream:
+    def stream_raw(self, *args: object, **kwargs: object) -> _RaisingCloseStream:
         del args, kwargs
         return _RaisingCloseStream()
 
 
-def _gateway_stream(llm: LLM):
+def _gateway_stream(llm: LitellmLLM):
     return stream_bridge._run_bridged_stream(
         gateway_api._stream_worker,
         {
@@ -678,7 +685,7 @@ class _RaisingInvokeLLM(_ConfigOnlyLLM):
         )
         self._exc = exc
 
-    def invoke(self, *args: object, **kwargs: object):
+    def invoke_raw(self, *args: object, **kwargs: object):
         del args, kwargs
         raise self._exc
 
@@ -695,7 +702,7 @@ class _InvokeLLM(_ConfigOnlyLLM):
         )
         self._response = response
 
-    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
         del args, kwargs
         return self._response
 
@@ -705,9 +712,9 @@ class _RecordingInvokeLLM(_InvokeLLM):
         super().__init__(response)
         self.received_tool_choice: ToolChoice | None = None
 
-    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
         self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
-        return super().invoke(*args, **kwargs)
+        return super().invoke_raw(*args, **kwargs)
 
 
 def _handle_completion_call(request: ChatCompletionRequest) -> Any:
@@ -1438,7 +1445,7 @@ _TOOL_CALL_CHUNKS = [
 
 
 def _responses_stream_events(
-    llm: LLM,
+    llm: LitellmLLM,
     *,
     tools: list[dict[str, Any]] | None = None,
     model: str = "1/test",
@@ -1643,7 +1650,7 @@ class _FailAfterTextLLM(_ConfigOnlyLLM):
         )
         self._exc = exc
 
-    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream_raw(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
         del args, kwargs
         yield ModelResponseStream(
             id="p1", created="0", choice=StreamingChoice(delta=Delta(content="partial"))

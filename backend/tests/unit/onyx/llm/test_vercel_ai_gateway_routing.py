@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.model_request import LanguageModelInput, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 
 
@@ -32,8 +32,8 @@ def _make_llm(
 def _completion_kwargs(llm: LitellmLLM) -> dict:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
-        messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages))
+        messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
+        list(llm.stream_raw(messages))
         return dict(mock_completion.call_args.kwargs)
 
 

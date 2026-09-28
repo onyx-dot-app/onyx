@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from contextlib import nullcontext
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters, TimeRange
-from onyx.llm.model_request import UserMessage
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequest,
+    TextContent,
+    UserMessage,
+)
 from onyx.secondary_llm_flows.time_filter import (
     DocumentTimeField,
     TimeFilter,
@@ -14,6 +19,7 @@ from onyx.secondary_llm_flows.time_filter import (
     decide_time_filter,
 )
 from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tracing.flows import LLMFlow
 
 
 def _run_decision(
@@ -24,22 +30,17 @@ def _run_decision(
     Returns (TimeFilter | None, prompt_messages)."""
     captured: dict = {}
 
-    def fake_invoke(prompt: list, **_kwargs: object) -> MagicMock:
-        captured["prompt"] = prompt
-        resp = MagicMock()
-        resp.choice.message.content = llm_returns
+    def fake_invoke(
+        request: GenerationRequest, context: GenerationContext | None = None
+    ) -> AssistantMessage:
+        assert context is not None and context.flow == LLMFlow.TIME_FILTER_EXTRACTION
+        captured["prompt"] = request.messages
+        resp = AssistantMessage(content=[TextContent(text=llm_returns)])
         return resp
 
     llm = MagicMock()
     llm.invoke.side_effect = fake_invoke
-    with (
-        patch(
-            "onyx.secondary_llm_flows.time_filter.llm_generation_span",
-            return_value=nullcontext(MagicMock()),
-        ),
-        patch("onyx.secondary_llm_flows.time_filter.record_llm_response"),
-    ):
-        tf = decide_time_filter(history, llm)
+    tf = decide_time_filter(history, llm)
     return tf, captured.get("prompt", [])
 
 

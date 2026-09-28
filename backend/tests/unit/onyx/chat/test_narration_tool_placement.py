@@ -24,6 +24,7 @@ from onyx.llm.model_response import (
     StreamingChoice,
 )
 from onyx.llm.models import ToolChoiceOptions
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
@@ -66,11 +67,11 @@ def _narration_then_tool_stream() -> Iterator[ModelResponseStream]:
 
 
 def _make_llm() -> MagicMock:
-    llm = MagicMock()
+    llm = MagicMock(spec=LitellmLLM)
     llm.config.model_name = "test-model"
     llm.config.model_provider = "openai"
     llm.config.api_base = None
-    llm.stream.return_value = _narration_then_tool_stream()
+    llm.stream_raw.return_value = _narration_then_tool_stream()
     return llm
 
 

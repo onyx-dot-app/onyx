@@ -30,7 +30,6 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import llm_from_provider
-from onyx.llm.interfaces import LLM
 from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.configs import (
@@ -339,7 +338,7 @@ def handle_anthropic_passthrough(
             if isinstance(block, dict) and block.get("type") == "text"
         )
         converted_usage = _usage_from_anthropic_wire(usage) if usage else None
-        if converted_usage is not None and isinstance(llm, LitellmLLM):
+        if converted_usage is not None:
             # Managed-key cost accounting normally happens inside
             # LLM.invoke/stream, which this path bypasses.
             llm._track_llm_cost(converted_usage)
@@ -369,7 +368,7 @@ def _passthrough_stream_worker(
     url: str,
     headers: dict[str, str],
     body: dict[str, Any],
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     input_messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
@@ -497,7 +496,7 @@ def _passthrough_stream_worker(
                 _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled)
             # Managed-key cost accounting normally happens inside
             # LLM.invoke/stream, which this path bypasses.
-            if state.usage is not None and isinstance(llm, LitellmLLM):
+            if state.usage is not None:
                 llm._track_llm_cost(state.usage)
 
 

@@ -9,8 +9,6 @@ from onyx.chat.llm_step import (
     _extract_tool_call_kickoffs,
     _increment_turns,
     _parse_tool_args_to_dict,
-    _resolve_tool_arguments,
-    _XmlToolCallContentFilter,
     extract_tool_calls_from_response_text,
     translate_history_to_llm_format,
 )
@@ -21,6 +19,8 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import AssistantMessage, ToolMessage, UserMessage
 from onyx.llm.models import ImageContentPart, TextContentPart, ToolChoiceOptions
+from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.tool_parsing import XmlToolCallContentFilter, _resolve_tool_arguments
 from onyx.llm.well_known_providers.constants import (
     AZURE_PROVIDER_NAME,
     OPENAI_PROVIDER_NAME,
@@ -346,7 +346,7 @@ class TestExtractToolCallKickoffs:
 
 class TestXmlToolCallContentFilter:
     def test_strips_function_calls_block_single_chunk(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process(
             "prefix "
             '<function_calls><invoke name="internal_search">'
@@ -357,7 +357,7 @@ class TestXmlToolCallContentFilter:
         assert output == "prefix suffix"
 
     def test_strips_function_calls_block_split_across_chunks(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         chunks = [
             "Start ",
             "<function_",
@@ -370,7 +370,7 @@ class TestXmlToolCallContentFilter:
         assert output == "Start End"
 
     def test_whitespace_after_block_split_across_chunks_is_dropped(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         chunks = [
             "before ",
             "<function_calls><invoke></invoke></function_calls>",
@@ -382,7 +382,7 @@ class TestXmlToolCallContentFilter:
         assert output == "before after"
 
     def test_newline_after_block_is_kept_after_space(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         chunks = [
             "Text ",
             "<function_calls><invoke></invoke></function_calls>",
@@ -394,7 +394,7 @@ class TestXmlToolCallContentFilter:
         assert output == "Text \n## Details"
 
     def test_indentation_after_block_is_kept(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         chunks = [
             "Intro\n",
             "<function_calls><invoke></invoke></function_calls>",
@@ -405,7 +405,7 @@ class TestXmlToolCallContentFilter:
         assert output == "Intro\n\n    code"
 
     def test_indentation_on_block_line_is_kept(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process(
             "- item\n<function_calls><invoke></invoke></function_calls>  - nested"
         )
@@ -413,21 +413,21 @@ class TestXmlToolCallContentFilter:
         assert output == "- item\n  - nested"
 
     def test_block_at_start_drops_spaces_and_keeps_line_breaks(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process("<function_calls><invoke></invoke></function_calls>  ")
         output += f.process("\nAnswer")
         output += f.flush()
         assert output == "\nAnswer"
 
     def test_block_at_end_keeps_preceding_text(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process("Answer. <function_calls><invoke></invoke>")
         output += f.process("</function_calls> ")
         output += f.flush()
         assert output == "Answer. "
 
     def test_newline_separated_block_keeps_line_breaks(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process(
             "Line one.\n<function_calls><invoke></invoke></function_calls>\nLine two."
         )
@@ -435,7 +435,7 @@ class TestXmlToolCallContentFilter:
         assert output == "Line one.\n\nLine two."
 
     def test_whitespace_kept_when_none_precedes_block(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process(
             "before<function_calls><invoke></invoke></function_calls> after"
         )
@@ -443,25 +443,25 @@ class TestXmlToolCallContentFilter:
         assert output == "before after"
 
     def test_no_whitespace_around_block_does_not_add_any(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process("a<function_calls><invoke></invoke></function_calls>b")
         output += f.flush()
         assert output == "ab"
 
     def test_text_without_block_is_unchanged(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         chunks = ["  Hello  ", "\n\n", "  world  "]
         output = "".join(f.process(chunk) for chunk in chunks) + f.flush()
         assert output == "  Hello  \n\n  world  "
 
     def test_preserves_non_tool_call_xml(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process("A <tag>value</tag> B")
         output += f.flush()
         assert output == "A <tag>value</tag> B"
 
     def test_does_not_strip_similar_tag_names(self) -> None:
-        f = _XmlToolCallContentFilter()
+        f = XmlToolCallContentFilter()
         output = f.process(
             "A <function_calls_v2><invoke>noop</invoke></function_calls_v2> B"
         )
@@ -888,7 +888,7 @@ class TestEmptyAnswerRecovery:
 
         from onyx.llm.interfaces import LLMConfig
 
-        llm = MagicMock()
+        llm = MagicMock(spec=LitellmLLM)
         llm.config = LLMConfig(
             model_provider="litellm_proxy",
             model_name="claude-4.6-opus",
@@ -932,7 +932,7 @@ class TestEmptyAnswerRecovery:
         from onyx.chat.llm_step import run_llm_step_pkt_generator
 
         llm = self._make_llm()
-        llm.stream = self._content_stream(chunks)
+        llm.stream_raw = self._content_stream(chunks)
 
         citation_processor = (
             DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
@@ -1162,7 +1162,7 @@ class TestFinishReasonPropagation:
         from onyx.chat.llm_step import run_llm_step_pkt_generator
         from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
 
-        llm = MagicMock()
+        llm = MagicMock(spec=LitellmLLM)
         llm.config = LLMConfig(
             model_provider=LlmProviderNames.ANTHROPIC.value,
             model_name="claude-fable-5",
@@ -1181,7 +1181,7 @@ class TestFinishReasonPropagation:
                     ),
                 )
 
-        llm.stream = _gen
+        llm.stream_raw = _gen
 
         gen = run_llm_step_pkt_generator(
             history=[],

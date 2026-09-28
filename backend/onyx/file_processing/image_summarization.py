@@ -8,19 +8,20 @@ from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_USER_PROMPT,
 )
 from onyx.configs.chat_configs import IMAGE_SUMMARIZATION_TIMEOUT
-from onyx.llm.interfaces import LLM
-from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
+from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     ContentPart,
+    GenerationRequest,
     ImageContentPart,
     ImageUrlDetail,
+    Message,
+    SystemMessage,
     TextContentPart,
+    UserMessage,
 )
-from onyx.llm.utils import llm_response_to_string
 from onyx.server.metrics.image_processing import track_image_summarization
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
@@ -113,7 +114,7 @@ def _summarize_image(
 ) -> str:
     """Use default LLM (if it is multimodal) to generate a summary of an image."""
 
-    messages: list[ChatCompletionMessage] = []
+    messages: list[Message] = []
 
     if system_prompt:
         messages.append(SystemMessage(content=system_prompt))
@@ -130,20 +131,15 @@ def _summarize_image(
     )
 
     try:
-        # Call LLM with Braintrust tracing
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.IMAGE_SUMMARIZATION,
-            content_mode=TraceContentMode.METADATA_ONLY,
-        ) as span_generation:
-            response = llm.invoke(
-                messages,
+        response = llm.invoke(
+            GenerationRequest(messages=messages),
+            context=GenerationContext(
+                flow=LLMFlow.IMAGE_SUMMARIZATION,
+                content_mode=TraceContentMode.METADATA_ONLY,
                 total_timeout_s=IMAGE_SUMMARIZATION_TIMEOUT,
-            )
-            record_llm_response(span_generation, response)
-            summary = llm_response_to_string(response)
-
-        return summary
+            ),
+        )
+        return response.text
 
     except Exception as e:
         # Extract structured details from LiteLLM exceptions when available,

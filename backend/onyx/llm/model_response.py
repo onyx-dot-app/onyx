@@ -1,16 +1,30 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, List
+from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 
 from onyx.llm.models import (
     AnyThinkingBlock,
+    AssistantMessage,
+    GenerationRequest,
     RedactedThinkingBlock,
+    TextContent,
     ThinkingBlock,
+    ThinkingContent,
+    ToolCall,
+    ToolChoiceOptions,
+    ToolDefinition,
     Usage,
 )
+from onyx.llm.tool_parsing import (
+    XmlToolCallContentFilter,
+    extract_tool_calls_from_response_text,
+    looks_like_xml_tool_call_payload,
+)
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 
 logger = setup_logger()
 
@@ -332,3 +346,132 @@ def from_litellm_model_response(
         choice=choice,
         usage=(_usage_from_usage_data(usage_data) if usage_data else None),
     )
+
+
+_ARGUMENTS = TypeAdapter(dict[str, JsonValue])
+_ENCODED_ARGUMENTS = TypeAdapter(dict[str, JsonValue] | str)
+_JSON_VALUE = TypeAdapter(JsonValue)
+
+
+def _normalize_arguments(
+    arguments: dict[str, JsonValue], definition: ToolDefinition | None
+) -> dict[str, JsonValue]:
+    if definition is None:
+        return arguments
+    properties = definition.parameters.get("properties")
+    if not isinstance(properties, dict):
+        return arguments
+    normalized = arguments.copy()
+    for name, value in arguments.items():
+        schema = properties.get(name)
+        if not isinstance(value, str) or not isinstance(schema, dict):
+            continue
+        expected_type = schema.get("type")
+        if expected_type not in ("array", "object"):
+            continue
+        # Only structured fields accept JSON strings; string fields retain literal text.
+        try:
+            decoded = _JSON_VALUE.validate_json(value)
+        except ValidationError:
+            logger.debug("Tool field %s is not encoded JSON", name, exc_info=True)
+            continue
+        if (expected_type == "array" and isinstance(decoded, list)) or (
+            expected_type == "object" and isinstance(decoded, dict)
+        ):
+            normalized[name] = decoded
+    return normalized
+
+
+def _finish_tool_call(
+    call: ToolCall, arguments: str, definition: ToolDefinition | None
+) -> None:
+    try:
+        decoded = _ENCODED_ARGUMENTS.validate_json(sanitize_string(arguments or "{}"))
+        if isinstance(decoded, str):
+            decoded = _ARGUMENTS.validate_json(decoded)
+        call.arguments = _normalize_arguments(decoded, definition)
+        call.arguments_complete = True
+        call.raw_arguments = None
+    except ValidationError:
+        logger.debug("Tool arguments are not a JSON object", exc_info=True)
+        call.arguments = {}
+        call.argument_error = "Tool arguments are not a valid JSON object."
+
+
+def to_assistant_message(
+    response: ModelResponse, request: GenerationRequest
+) -> AssistantMessage:
+    """Convert a complete provider response without creating stream events."""
+    source = response.choice.message
+    # Pydantic stores model instances passed to a constructor without copying
+    # them. Copy the usage and thinking blocks so that changes to the returned
+    # message cannot alter the provider response or its thinking signatures.
+    message = AssistantMessage(
+        stop_reason=response.choice.finish_reason,
+        usage=response.usage.model_copy() if response.usage else None,
+    )
+    if source.reasoning_content or source.thinking_blocks:
+        message.content.append(
+            ThinkingContent(
+                text=source.reasoning_content or "",
+                blocks=[block.model_copy() for block in source.thinking_blocks]
+                if source.thinking_blocks
+                else None,
+            )
+        )
+    if source.content:
+        message.content.append(TextContent(text=source.content))
+    definitions = {tool.name: tool for tool in request.tools}
+    for source_call in source.tool_calls or []:
+        arguments = source_call.function.arguments or ""
+        call = ToolCall(
+            id=source_call.id or str(uuid4()),
+            name=source_call.function.name or "",
+            arguments={},
+            raw_arguments=arguments,
+            arguments_complete=False,
+        )
+        _finish_tool_call(call, arguments, definitions.get(call.name))
+        message.content.append(call)
+    if request.tools:
+        message = recover_tool_calls(message, request)
+    return message
+
+
+def recover_tool_calls(
+    message: AssistantMessage, request: GenerationRequest
+) -> AssistantMessage:
+    """Recover provider text tool payloads when native calls are absent."""
+    if message.tool_calls or request.options.tool_choice == ToolChoiceOptions.NONE:
+        return message
+    should_try = (
+        request.options.tool_choice == ToolChoiceOptions.REQUIRED
+        or bool(message.thinking and not message.text)
+        or looks_like_xml_tool_call_payload(message.text)
+        or looks_like_xml_tool_call_payload(message.thinking)
+    )
+    if not should_try:
+        return message
+    calls = extract_tool_calls_from_response_text(
+        message.text, request.tools
+    ) or extract_tool_calls_from_response_text(message.thinking, request.tools)
+    if not calls:
+        return message
+    tools = {tool.name: tool for tool in request.tools}
+    for call in calls:
+        call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
+    # Keep answer text and signed thinking beside the recovered calls; strip
+    # only XML call payloads, which are not meant for the reader.
+    content: list[TextContent | ThinkingContent | ToolCall] = []
+    for block in message.content:
+        if isinstance(block, TextContent) and looks_like_xml_tool_call_payload(
+            block.text
+        ):
+            content_filter = XmlToolCallContentFilter()
+            visible_text = content_filter.process(block.text) + content_filter.flush()
+            if visible_text:
+                content.append(TextContent(text=visible_text))
+        elif isinstance(block, (TextContent, ThinkingContent)):
+            content.append(block)
+    content.extend(calls)
+    return message.model_copy(update={"content": content})
