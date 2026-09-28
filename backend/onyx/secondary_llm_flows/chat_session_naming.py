@@ -2,6 +2,7 @@ from collections.abc import Sequence
 
 from onyx.chat.llm_step import translate_history_to_llm_format
 from onyx.chat.models import ChatMessageSimple
+from onyx.configs.chat_configs import CHAT_NAMING_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.db.models import ChatMessage
 from onyx.llm.interfaces import LLM
@@ -61,7 +62,11 @@ def generate_chat_session_name(
         flow=LLMFlow.CHAT_SESSION_NAMING,
         input_messages=llm_facing_history,
     ) as span_generation:
-        response = llm.invoke(llm_facing_history, reasoning_effort=ReasoningEffort.OFF)
+        response = llm.invoke(
+            llm_facing_history,
+            reasoning_effort=ReasoningEffort.OFF,
+            timeout_override=CHAT_NAMING_TIMEOUT_S,
+        )
         record_llm_response(span_generation, response)
         new_name_raw = llm_response_to_string(response)
 
