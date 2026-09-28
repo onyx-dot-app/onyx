@@ -32,7 +32,13 @@ from onyx.file_store.file_store import (
     S3BackedFileStore,
     is_missing_object,
 )
-from onyx.file_store.legacy_copy import CopyOutcome, PassStats, copy_object, run_pass
+from onyx.file_store.legacy_copy import (
+    CopyOutcome,
+    PassStats,
+    _list_and_ensure_buckets,
+    copy_object,
+    run_pass,
+)
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
@@ -765,6 +771,42 @@ def test_retire_refuses_while_an_older_release_still_writes(
     assert not _object_exists(target, LEGACY_RETIRED_MARKER_KEY)
     key = new_release.read_file_record(written[0]).object_key
     assert _object_exists(target, key)
+
+
+def test_replay_covers_a_bucket_created_while_minio_was_down(
+    stores: tuple[S3BackedFileStore, S3BackedFileStore],
+    retirable: MagicMock,
+) -> None:
+    old_release, new_release = stores
+    source, target = old_release._get_s3_client(), new_release._get_s3_client()
+    bucket = f"onyx-legacy-replay-{uuid.uuid4().hex[:8]}"
+    key = f"{new_release._s3_prefix}/public/new-bucket-file"
+    target.create_bucket(Bucket=bucket)
+    target.put_object(Bucket=bucket, Key=key, Body=b"written while MinIO was down")
+    target.put_object(Bucket=bucket, Key=LEGACY_OUT_OF_SYNC_PREFIX + key, Body=b"x")
+    retirable.side_effect = _list_and_ensure_buckets
+    sleeps = 0
+
+    def retire_on_the_second_pass(_seconds: float) -> None:
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 2:
+            target.put_object(
+                Bucket=BUCKET, Key=LEGACY_RETIRED_MARKER_KEY, Body=b"retired"
+            )
+
+    try:
+        with patch.object(
+            legacy_copy.time, "sleep", side_effect=retire_on_the_second_pass
+        ):
+            legacy_copy.replay_legacy_writes()
+
+        mirrored = source.get_object(Bucket=bucket, Key=key)["Body"].read()
+        assert mirrored == b"written while MinIO was down"
+    finally:
+        for client in (source, target):
+            _delete_objects(client, bucket)
+            client.delete_bucket(Bucket=bucket)
 
 
 def test_replay_mirrors_a_write_that_failed_after_the_copy(

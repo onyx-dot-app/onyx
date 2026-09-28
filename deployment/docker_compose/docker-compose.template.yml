@@ -752,7 +752,10 @@ services:
           sleep 300
         done
         # Replays writes that failed in minio until it is retired, then idles, since an exit would rerun the copy.
-        python -m onyx.file_store.legacy_copy --replay
+        until python -m onyx.file_store.legacy_copy --replay; do
+          echo "Legacy MinIO replay failed, retrying in 5 minutes"
+          sleep 300
+        done
         exec sleep infinity
 
   code-interpreter:

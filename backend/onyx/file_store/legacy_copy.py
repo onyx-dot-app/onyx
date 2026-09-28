@@ -479,7 +479,9 @@ def replay_legacy_writes() -> None:
     while not _retired(target):
         time.sleep(_REPLAY_INTERVAL_SECONDS)
         try:
-            for bucket in _list_and_ensure_buckets(source, target, ensured):
+            # The markers live in the object store, so its buckets are the ones
+            # to replay, including a bucket first created while MinIO was down.
+            for bucket in _list_and_ensure_buckets(target, source, ensured):
                 _resync_out_of_sync(source, target, bucket)
         except Exception:
             logger.exception("Failed to replay writes into the legacy MinIO store")
