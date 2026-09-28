@@ -63,7 +63,7 @@ class _MemoryCacheBackend(CacheBackend):
     def expire(self, key: str, seconds: int) -> None:
         pass
 
-    def expire_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
         if self.get(key) != expected:
             return False
         self.expire(key, seconds)

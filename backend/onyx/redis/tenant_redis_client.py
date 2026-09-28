@@ -810,7 +810,7 @@ class TenantRedisClient:
         """
         return cast(int, self._r.pttl(_prefix_key(self._prefix, name)))
 
-    def expire_if_value(self, name: KeyArg, expected: bytes, seconds: int) -> bool:
+    def renew_if_value(self, name: KeyArg, expected: bytes, seconds: int) -> bool:
         """Renew only the current tenant's matching lease, without a lock wait."""
         key = _prefix_key(self._prefix, name)
         with self._r.pipeline() as pipeline:

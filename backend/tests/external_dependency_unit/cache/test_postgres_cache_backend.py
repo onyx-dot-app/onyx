@@ -331,8 +331,8 @@ def test_control_lease_renewal_does_not_wait_for_a_locked_cache_row(
                 select(CacheStore).where(CacheStore.key == key).with_for_update()
             )
             with pytest.raises(OperationalError, match="timeout"):
-                control.expire_if_value(key, b"owner", 60)
-        assert control.expire_if_value(key, b"owner", 60)
+                control.renew_if_value(key, b"owner", 60)
+        assert control.renew_if_value(key, b"owner", 60)
     finally:
         pg_cache.delete(key)
 
@@ -349,7 +349,7 @@ def test_lease_renewal_rejects_lease_that_expires_during_row_lock_wait(
                 session.execute(
                     select(CacheStore).where(CacheStore.key == key).with_for_update()
                 )
-                renewal = executor.submit(pg_cache.expire_if_value, key, b"owner", 60)
+                renewal = executor.submit(pg_cache.renew_if_value, key, b"owner", 60)
                 time.sleep(3)
                 assert not renewal.done()
             assert renewal.result(timeout=5) is False

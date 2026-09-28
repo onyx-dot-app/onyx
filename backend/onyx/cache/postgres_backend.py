@@ -305,7 +305,7 @@ class PostgresCacheBackend(CacheBackend):
             session.execute(stmt)
             session.commit()
 
-    def expire_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
         """Renew a matching unexpired lease and commit the update.
 
         The row lock is taken first so the expiry check and the new deadline
