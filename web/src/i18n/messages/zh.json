@@ -912,6 +912,9 @@
         "onedrive": {
           "description": "Microsoft 云存储"
         },
+        "zoom": {
+          "description": "会议和网络研讨会录制"
+        },
         "teams": {
           "description": "Microsoft 团队聊天"
         },
