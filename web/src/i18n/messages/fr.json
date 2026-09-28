@@ -4907,12 +4907,16 @@
           "description": "La modification des paramètres d'embedding ou de récupération exige une réindexation complète de tous les documents pour prendre effet. Cela peut prendre **des heures ou des jours** selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Les modifications exigent une réindexation complète."
         },
-        "imageProcessingOnly": {
-          "description": "Appliquez sans réindexer pour que seuls les documents indexés à partir de maintenant utilisent les nouveaux paramètres, ou reconstruisez tous les documents existants pour que chaque image soit légendée avec eux.",
-          "title": "Choisissez comment appliquer ces paramètres de traitement d’images"
+        "doNotReindex": {
+          "description": "Les paramètres de traitement d’images ne prendront effet que pour les documents indexés à partir de maintenant. Les documents existants ne seront pas mis à jour sauf si vous lancez une réindexation complète.\n\nLa réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows).\n\nVous pouvez suivre la progression de la réindexation sur cette page.",
+          "title": "Les modifications s’appliquent uniquement au contenu nouvellement indexé."
         },
         "orSeparator": {
           "label": "ou"
+        },
+        "reindex": {
+          "description": "La réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)\n\nVous pouvez suivre la progression de la réindexation sur cette page.",
+          "title": "Une réindexation complète va s’exécuter."
         }
       },
       "cloudDisabled": {

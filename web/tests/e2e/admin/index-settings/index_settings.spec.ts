@@ -687,7 +687,7 @@ test.describe("Index Settings — image processing @exclusive", () => {
     await expect(indexSettings.noModelSelectedWarning).toBeVisible();
     // A setting warning, not an indexing prompt: the banner keeps its copy.
     await indexSettings.expectBannerTitle(
-      "Choose how to apply these image processing settings"
+      "Changes apply to newly indexed content only."
     );
     await expect(indexSettings.applyWithoutReindexButton).toBeDisabled();
 

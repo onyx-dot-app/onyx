@@ -4907,12 +4907,16 @@
           "description": "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Changes require a full re-index."
         },
-        "imageProcessingOnly": {
-          "description": "Apply without re-indexing so only documents indexed from now on use the new settings, or rebuild all existing documents so every image is captioned with them.",
-          "title": "Choose how to apply these image processing settings"
+        "doNotReindex": {
+          "description": "Image processing settings will take effect only for documents indexed going forward. Existing documents will not be updated unless you run a full re-index.\n\nRe-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows).\n\nYou can monitor the re-indexing progress on this page.",
+          "title": "Changes apply to newly indexed content only."
         },
         "orSeparator": {
           "label": "or"
+        },
+        "reindex": {
+          "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)\n\nYou can monitor the re-indexing progress on this page.",
+          "title": "A full re-index will run."
         }
       },
       "cloudDisabled": {

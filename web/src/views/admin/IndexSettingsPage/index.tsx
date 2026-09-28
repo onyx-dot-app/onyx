@@ -1234,6 +1234,13 @@ export default function IndexSettingsPage() {
                 bannerMode
               );
               const saveOnly = effectiveStrategy === DO_NOT_REINDEX;
+              // Once something is staged the banner's copy follows the chosen
+              // strategy: save-only, or any of the three that re-index.
+              const strategyCopy: "doNotReindex" | "reindex" | null = hasChanges
+                ? saveOnly
+                  ? "doNotReindex"
+                  : "reindex"
+                : null;
               // Staged changes tint the banner and only the cards that hold
               // them. Do Not Re-index touches no index, so it reads as info
               // rather than as the warning the re-index strategies carry.
@@ -1533,9 +1540,11 @@ export default function IndexSettingsPage() {
                               ? t("changesBanner.contextualModelMissing.title")
                               : contextualModelOnlyChange
                                 ? t("changesBanner.contextualModelOnly.title")
-                                : imageOnlyChange
-                                  ? t("changesBanner.imageProcessingOnly.title")
-                                  : t("changesBanner.default.title")
+                                : strategyCopy === "doNotReindex"
+                                  ? t("changesBanner.doNotReindex.title")
+                                  : strategyCopy === "reindex"
+                                    ? t("changesBanner.reindex.title")
+                                    : t("changesBanner.default.title")
                           }
                           description={markdown(
                             contextualRagModelMissing
@@ -1546,11 +1555,11 @@ export default function IndexSettingsPage() {
                                 ? t(
                                     "changesBanner.contextualModelOnly.description"
                                   )
-                                : imageOnlyChange
-                                  ? t(
-                                      "changesBanner.imageProcessingOnly.description"
-                                    )
-                                  : t("changesBanner.default.description")
+                                : strategyCopy === "doNotReindex"
+                                  ? t("changesBanner.doNotReindex.description")
+                                  : strategyCopy === "reindex"
+                                    ? t("changesBanner.reindex.description")
+                                    : t("changesBanner.default.description")
                           )}
                           bottomChildren={
                             bannerActive ? (

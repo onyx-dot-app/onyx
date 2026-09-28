@@ -4907,12 +4907,16 @@
           "description": "embedding または検索の設定を変更すると、反映するためにすべてのドキュメントの完全な再インデックスが必要です。コーパスの規模によっては **数時間から数日** かかることがあります。[詳細を見る](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "変更には完全な再インデックスが必要です。"
         },
-        "imageProcessingOnly": {
-          "description": "再インデックスせずに適用すると、今後インデックスされるドキュメントのみに新しい設定が使われます。既存のすべてのドキュメントを再構築すると、すべての画像がこの設定でキャプション付けされます。",
-          "title": "この画像処理設定の適用方法を選択"
+        "doNotReindex": {
+          "description": "画像処理設定は、今後インデックスされるドキュメントにのみ適用されます。既存のドキュメントは、完全な再インデックスを実行しない限り更新されません。\n\n再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)。\n\n再インデックスの進捗はこのページで確認できます。",
+          "title": "変更は新しくインデックスされたコンテンツにのみ適用されます。"
         },
         "orSeparator": {
           "label": "または"
+        },
+        "reindex": {
+          "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)\n\n再インデックスの進捗はこのページで確認できます。",
+          "title": "完全な再インデックスが実行されます。"
         }
       },
       "cloudDisabled": {

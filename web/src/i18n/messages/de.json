@@ -4907,12 +4907,16 @@
           "description": "Änderungen an den Embedding- oder Retrieval-Einstellungen erfordern eine vollständige Neuindizierung aller Dokumente, damit sie wirksam werden. Das kann je nach Korpusgröße **Stunden oder Tage** dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Änderungen erfordern eine vollständige Neuindizierung."
         },
-        "imageProcessingOnly": {
-          "description": "Ohne Neuindexierung anwenden, damit nur ab jetzt indexierte Dokumente die neuen Einstellungen nutzen, oder alle vorhandenen Dokumente neu aufbauen, damit jedes Bild damit beschriftet wird.",
-          "title": "Wählen Sie, wie diese Bildverarbeitungseinstellungen angewendet werden"
+        "doNotReindex": {
+          "description": "Bildverarbeitungseinstellungen wirken nur auf Dokumente, die ab jetzt indexiert werden. Vorhandene Dokumente werden nicht aktualisiert, sofern Sie keine vollständige Neuindexierung ausführen.\n\nDie Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows).\n\nDen Fortschritt der Neuindexierung können Sie auf dieser Seite verfolgen.",
+          "title": "Änderungen gelten nur für neu indexierte Inhalte."
         },
         "orSeparator": {
           "label": "oder"
+        },
+        "reindex": {
+          "description": "Die Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)\n\nDen Fortschritt der Neuindexierung können Sie auf dieser Seite verfolgen.",
+          "title": "Eine vollständige Neuindexierung wird ausgeführt."
         }
       },
       "cloudDisabled": {
