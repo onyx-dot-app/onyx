@@ -113,9 +113,10 @@ def validate_connector_config(
     source: DocumentSource, connector_specific_config: dict[str, Any]
 ) -> None:
     """Raises ``pydantic.ValidationError`` (a ``ValueError``) if the config does
-    not match the source's typed config. Sources without one are not checked."""
+    not match the source's typed config. Sources without a connector class
+    (e.g. ingestion API) are not checked."""
     mapping = CONNECTOR_CLASS_MAP.get(source)
-    if mapping is None or mapping.config_class is None:
+    if mapping is None:
         return
     mapping.config_class.model_validate(connector_specific_config)
 
@@ -130,7 +131,7 @@ def build_connector_kwargs(
     since rows written before typed configs existed may not conform.
     """
     mapping = CONNECTOR_CLASS_MAP.get(source)
-    if mapping is None or mapping.config_class is None:
+    if mapping is None:
         return connector_specific_config
     try:
         config = mapping.config_class.model_validate(connector_specific_config)

@@ -43,6 +43,7 @@ from onyx.connectors.lumapps.config import LumAppsConnectorConfig
 from onyx.connectors.mediawiki.config import MediaWikiConnectorConfig
 from onyx.connectors.mock_connector.config import MockConnectorConfig
 from onyx.connectors.notion.config import NotionConnectorConfig
+from onyx.connectors.onedrive.config import OneDriveConnectorConfig
 from onyx.connectors.outline.config import OutlineConnectorConfig
 from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.productboard.config import ProductboardConnectorConfig
@@ -63,8 +64,7 @@ from onyx.connectors.zulip.config import ZulipConnectorConfig
 class ConnectorMapping(BaseModel):
     module_path: str
     class_name: str
-    # TODO(evan-onyx): make required once every connector has a typed config.
-    config_class: type[ConnectorConfig] | None = None
+    config_class: type[ConnectorConfig]
 
 
 # Mapping of DocumentSource to connector details for lazy loading
@@ -217,6 +217,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.ONEDRIVE: ConnectorMapping(
         module_path="onyx.connectors.onedrive.connector",
         class_name="OneDriveConnector",
+        config_class=OneDriveConnectorConfig,
     ),
     DocumentSource.TEAMS: ConnectorMapping(
         module_path="onyx.connectors.teams.connector",
