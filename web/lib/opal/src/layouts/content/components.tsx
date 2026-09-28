@@ -99,7 +99,8 @@ interface ContentBaseProps {
    * an interactive surface the override holds at rest and yields to hover,
    * pressed, selected and disabled, so the row's states still reach the
    * title. `"inherit"` is not offered: the default already inherits where
-   * that is meant.
+   * that is meant. Covers the title as displayed; an editable title being
+   * edited keeps the input's standard colour.
    *
    * Unset, the title takes the tone its `color` mode sets in `styles.css`:
    *
@@ -241,8 +242,12 @@ function Content(props: ContentProps) {
 
   // The override rides an unregistered variable that the colour modes read
   // with the preset tone as fallback, so the disabled rule still wins.
-  const titleColorStyle = titleColor
-    ? { "--content-title-color": `var(--${titleColor})` }
+  // SAFETY: CSSProperties has no index for custom properties; the object
+  // holds only the one custom property the stylesheet reads.
+  const titleColorStyle: React.CSSProperties | undefined = titleColor
+    ? ({
+        "--content-title-color": `var(--${titleColor})`,
+      } as React.CSSProperties)
     : undefined;
 
   return (

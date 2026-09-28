@@ -47,6 +47,10 @@
    them. A mode that needs its own can still override below. */
 [data-content-color] {
   --content-foreground-secondary: var(--text-03);
+  /* Custom properties inherit, so a nested Content would take an outer
+     titleColor. Reset at every boundary; an override set inline on this
+     element still wins over this rule. */
+  --content-title-color: initial;
 }
 
 [data-content-color="default"] {
