@@ -5,7 +5,6 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
 from ee.onyx.external_permissions.utils import credential_json
-from onyx.configs.app_configs import SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
@@ -43,10 +42,6 @@ def sharepoint_group_sync(
 
     logger.info("Processing %s sites for group sync", len(site_descriptors))
 
-    enumerate_all = connector_config.get(
-        "exhaustive_ad_enumeration", SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
-    )
-
     for site_descriptor in site_descriptors:
         logger.debug("Processing site: %s", site_descriptor.url)
 
@@ -58,7 +53,7 @@ def sharepoint_group_sync(
             ctx,
             connector.graph_client,
             graph_api=connector.graph_api,
-            enumerate_all_ad_groups=enumerate_all,
+            enumerate_all_ad_groups=connector.exhaustive_ad_enumeration,
         )
 
         # Yield each group

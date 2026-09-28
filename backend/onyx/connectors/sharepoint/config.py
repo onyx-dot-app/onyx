@@ -1,4 +1,7 @@
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
+)
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
@@ -18,3 +21,4 @@ class SharepointConnectorConfig(ConnectorConfig):
     authority_host: str = DEFAULT_AUTHORITY_HOST
     graph_api_host: str = DEFAULT_GRAPH_API_HOST
     sharepoint_domain_suffix: str = DEFAULT_SHAREPOINT_DOMAIN_SUFFIX
+    exhaustive_ad_enumeration: bool = SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
