@@ -24,12 +24,10 @@ from onyx.chat.incognito import (
 )
 from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import (
-    AnswerStreamPart,
     AvailableFiles,
     ChatHistoryMessage,
     ChatHistoryResult,
     ChatTurnSetup,
-    CreateChatSessionID,
     PersonaPromptConfig,
     ReservedChatResponse,
 )
@@ -94,9 +92,6 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.models import (
-    MessageResponseIDInfo,
-    ModelResponseSlot,
-    MultiModelMessageResponseIDInfo,
     SendMessageRequest,
 )
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
@@ -570,33 +565,8 @@ def prepare_chat_turn(
             prepared.selected_models, response_ids, strict=True
         )
     ]
-    initial_packets: list[AnswerStreamPart] = []
-    if new_msg_req.chat_session_id is None:
-        initial_packets.append(
-            CreateChatSessionID(
-                chat_session_id=prepared.session_id,
-                incognito=prepared.incognito_record_mode is not None,
-            )
-        )
     is_multi = bool(llm_overrides)
-    initial_packets.append(
-        MultiModelMessageResponseIDInfo(
-            user_message_id=prepared.user_message_id,
-            responses=[
-                ModelResponseSlot(
-                    message_id=model.message_id, model_name=model.display_name
-                )
-                for model in models
-            ],
-        )
-        if is_multi
-        else MessageResponseIDInfo(
-            user_message_id=prepared.user_message_id,
-            reserved_assistant_message_id=models[0].message_id,
-        )
-    )
     return ChatTurnSetup(
-        initial_packets=initial_packets,
         new_msg_req=new_msg_req,
         chat_session_id=prepared.session_id,
         chat_session_project_id=prepared.project_id,

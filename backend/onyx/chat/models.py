@@ -415,7 +415,6 @@ class ChatTurnSetup(BaseModel):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    initial_packets: list[AnswerStreamPart]
     new_msg_req: SendMessageRequest
     chat_session_id: UUID
     chat_session_project_id: int | None

@@ -1,6 +1,7 @@
 import json
 import logging
 from unittest.mock import MagicMock, Mock
+from uuid import uuid4
 
 import pytest
 import requests
@@ -150,7 +151,9 @@ def test_chat_provider_tracebacks_only_reach_development_clients(
 ) -> None:
     setup = MagicMock()
     setup.incognito_record_mode = None
-    setup.initial_packets = []
+    setup.chat_session_id = uuid4()
+    setup.user_message_id = 1
+    setup.responses[0].message_id = 2
     llm = setup.responses[0].llm
     llm.config.model_name = "test-model"
     llm.config.model_provider = "test-provider"

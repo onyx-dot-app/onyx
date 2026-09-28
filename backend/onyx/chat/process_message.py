@@ -17,6 +17,7 @@ from onyx.chat.execution import (
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import (
     AnswerStream,
+    AnswerStreamPart,
     ChatBasicResponse,
     ChatFullResponse,
     ChatResponseOutcome,
@@ -37,7 +38,12 @@ from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
 from onyx.onyxbot.slack.models import SlackContext
-from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
@@ -89,6 +95,30 @@ def _stream_chat_turn(
             slack_context=slack_context,
             additional_context=additional_context,
         )
+        initial_packets: list[AnswerStreamPart] = []
+        if new_msg_req.chat_session_id is None:
+            initial_packets.append(
+                CreateChatSessionID(
+                    chat_session_id=setup.chat_session_id,
+                    incognito=setup.incognito_record_mode is not None,
+                )
+            )
+        initial_packets.append(
+            MultiModelMessageResponseIDInfo(
+                user_message_id=setup.user_message_id,
+                responses=[
+                    ModelResponseSlot(
+                        message_id=response.message_id, model_name=response.display_name
+                    )
+                    for response in setup.responses
+                ],
+            )
+            if llm_overrides
+            else MessageResponseIDInfo(
+                user_message_id=setup.user_message_id,
+                reserved_assistant_message_id=setup.responses[0].message_id,
+            )
+        )
         if new_msg_req.mock_llm_response is not None:
             mock_token = set_llm_mock_response(new_msg_req.mock_llm_response)
         mode = setup.incognito_record_mode
@@ -109,7 +139,7 @@ def _stream_chat_turn(
                 else None
             ),
         )
-        for packet in setup.initial_packets:
+        for packet in initial_packets:
             stream_buffer.append_line(get_json_line(packet.model_dump()))
         stream = start_chat_turn(
             setup,
@@ -118,7 +148,7 @@ def _stream_chat_turn(
             stream_buffer,
             active_chat_turns=active_chat_turns,
         )
-        yield from setup.initial_packets
+        yield from initial_packets
         yield from stream
     except Exception as error:
         if isinstance(error, OnyxError):

@@ -37,6 +37,7 @@ from onyx.chat.models import (
     ChatResponseOutcome,
     ChatResponseSnapshot,
     ChatTurnSetup,
+    CreateChatSessionID,
     PersistenceStatus,
     ReservedChatResponse,
     StreamingError,
@@ -49,6 +50,7 @@ from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stream_buffer import ChatStream, StreamBufferWriter
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
+from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import (
@@ -66,7 +68,12 @@ from onyx.llm.models import (
     ToolChoiceOptions,
 )
 from onyx.llm.override_models import LLMOverride
-from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    MessageResponseIDInfo,
+    ModelResponseSlot,
+    MultiModelMessageResponseIDInfo,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     ChatHeartbeat,
@@ -74,6 +81,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     ReasoningStart,
 )
+from onyx.server.utils import get_json_line
 from onyx.utils.threadpool_concurrency import (
     ContextThreadPoolExecutor,
 )
@@ -354,7 +362,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     setup.input_messages = []
     setup.chat_session_id = uuid4()
     setup.chat_session_project_id = None
-    setup.user_message_id = None
+    setup.user_message_id = 999
     setup.custom_tool_additional_headers = None
     setup.mcp_headers = None
     return setup
@@ -1338,14 +1346,84 @@ def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
     buffer.mark_done.assert_called_once()
 
 
+@pytest.mark.parametrize("new_session", [False, True])
+@pytest.mark.parametrize("multi_model", [False, True])
+@pytest.mark.parametrize("incognito", [False, True])
+def test_message_ids_match_replay_prefix_before_response_output(
+    new_session: bool, multi_model: bool, incognito: bool
+) -> None:
+    setup = _make_setup(2 if multi_model else 1)
+    setup.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY if incognito else None
+    request = _make_request(
+        chat_session_id=None if new_session else setup.chat_session_id
+    )
+    expected: list[AnswerStreamPart] = []
+    if new_session:
+        expected.append(
+            CreateChatSessionID(
+                chat_session_id=setup.chat_session_id, incognito=incognito
+            )
+        )
+    expected.append(
+        MultiModelMessageResponseIDInfo(
+            user_message_id=999,
+            responses=[
+                ModelResponseSlot(message_id=1000, model_name="model-0"),
+                ModelResponseSlot(message_id=1001, model_name="model-1"),
+            ],
+        )
+        if multi_model
+        else MessageResponseIDInfo(
+            user_message_id=999, reserved_assistant_message_id=1000
+        )
+    )
+    reader = ChatStream()
+    response = Packet(placement=Placement(turn_index=0), obj=OverallStop())
+    reader.publish(response)
+    order = MagicMock()
+    with (
+        patch("onyx.chat.process_message.prepare_chat_turn", return_value=setup),
+        patch("onyx.chat.process_message.StreamBufferWriter") as writer,
+        patch(
+            "onyx.chat.process_message.start_chat_turn", return_value=reader
+        ) as start,
+    ):
+        order.attach_mock(writer.return_value.append_line, "append")
+        order.attach_mock(start, "start")
+        stream = cast(
+            Generator[AnswerStreamPart, None, None],
+            _stream_chat_turn(
+                request,
+                MagicMock(),
+                llm_overrides=[_make_override(), _make_override()]
+                if multi_model
+                else None,
+            ),
+        )
+        try:
+            assert [next(stream) for _ in expected] == expected
+            assert next(stream) == response
+            assert [
+                entry.args[0]
+                for entry in writer.return_value.append_line.call_args_list
+            ] == [get_json_line(packet.model_dump()) for packet in expected]
+            assert [entry[0] for entry in order.mock_calls] == ["append"] * len(
+                expected
+            ) + ["start"]
+            assert writer.call_args.kwargs["delete_on_done"] is incognito
+        finally:
+            stream.close()
+
+
 def test_disconnect_during_initial_packets_closes_unstarted_reader() -> None:
     from onyx.chat.process_message import _stream_chat_turn
     from onyx.chat.stream_buffer import ChatStream
     from onyx.server.query_and_chat.streaming_models import heartbeat_packet
 
     setup = _make_setup()
-    first = heartbeat_packet()
-    setup.initial_packets = [first]
+    first = MessageResponseIDInfo(
+        user_message_id=999, reserved_assistant_message_id=1000
+    )
     reader = ChatStream()
     reader.publish(heartbeat_packet())
     with (
@@ -1356,7 +1434,7 @@ def test_disconnect_during_initial_packets_closes_unstarted_reader() -> None:
         stream = cast(
             Generator[Any, None, None], _stream_chat_turn(_make_request(), MagicMock())
         )
-        assert next(stream) is first
+        assert next(stream) == first
         stream.close()
 
     reader.publish(heartbeat_packet())
