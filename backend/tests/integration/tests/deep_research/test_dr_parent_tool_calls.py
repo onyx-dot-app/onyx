@@ -12,11 +12,11 @@ from onyx.deep_research.dr_mock_tools import (
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.mock_services.mock_llm_server.handle import ScriptHandle
 from tests.integration.mock_services.mock_llm_server.models import (
-    Matcher,
-    Step,
+    Reply,
+    RequestConditions,
     ToolCall,
 )
 
@@ -28,25 +28,25 @@ _RESEARCH_TASK = "Find the zebra-linkage onboarding policy"
 _FINAL_REPORT = "The zebra-linkage policy is documented."
 
 
-def _script_deep_research(mock_llm: ScriptHandle) -> None:
-    mock_llm.lane(
+def _script_deep_research(mock_llm: MockLLMScript) -> None:
+    mock_llm.conversation(
         "clarification",
-        # Config can turn the clarification step off.
-        Step(
+        # Config can turn clarification off.
+        Reply(
             tool_calls=[ToolCall(id="call_dr_plan", name=GENERATE_PLAN_TOOL_NAME)],
             required=False,
         ),
-        match=Matcher(offered_tools=[GENERATE_PLAN_TOOL_NAME]),
+        conditions=RequestConditions(offers=[GENERATE_PLAN_TOOL_NAME]),
     )
-    mock_llm.lane(
+    mock_llm.conversation(
         "plan",
-        Step(text="1. Look up the onboarding policy"),
-        match=Matcher(tools_offered=False),
+        Reply(text="1. Look up the onboarding policy"),
+        conditions=RequestConditions(has_tools=False),
     )
-    mock_llm.lane(
+    mock_llm.conversation(
         "orchestrator",
         # The non-research call comes first so the research call is not at index 0.
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(
                     id=_STRAY_CALL_ID,
@@ -60,17 +60,17 @@ def _script_deep_research(mock_llm: ScriptHandle) -> None:
                 ),
             ]
         ),
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(id="call_dr_final_report", name=GENERATE_REPORT_TOOL_NAME)
             ],
-            match=Matcher(tool_results_for=[_RESEARCH_CALL_ID]),
+            conditions=RequestConditions(has_results_for=[_RESEARCH_CALL_ID]),
         ),
-        match=Matcher(offered_tools=[RESEARCH_AGENT_TOOL_NAME]),
+        conditions=RequestConditions(offers=[RESEARCH_AGENT_TOOL_NAME]),
     )
-    mock_llm.lane(
+    mock_llm.conversation(
         "research_agent",
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(
                     id=_CHILD_SEARCH_CALL_ID,
@@ -79,31 +79,35 @@ def _script_deep_research(mock_llm: ScriptHandle) -> None:
                 )
             ]
         ),
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(id="call_dr_child_report", name=GENERATE_REPORT_TOOL_NAME)
             ],
-            match=Matcher(tool_results_for=[_CHILD_SEARCH_CALL_ID]),
+            conditions=RequestConditions(has_results_for=[_CHILD_SEARCH_CALL_ID]),
         ),
-        match=Matcher(
-            offered_tools=[SearchTool.NAME, GENERATE_REPORT_TOOL_NAME],
-            not_offered_tools=[RESEARCH_AGENT_TOOL_NAME],
+        conditions=RequestConditions(
+            offers=[SearchTool.NAME, GENERATE_REPORT_TOOL_NAME],
+            does_not_offer=[RESEARCH_AGENT_TOOL_NAME],
         ),
     )
-    mock_llm.lane(
+    mock_llm.conversation(
         "intermediate_report",
-        Step(text="Intermediate zebra-linkage findings."),
-        match=Matcher(tools_offered=False, tool_results_for=[_CHILD_SEARCH_CALL_ID]),
+        Reply(text="Intermediate zebra-linkage findings."),
+        conditions=RequestConditions(
+            has_tools=False, has_results_for=[_CHILD_SEARCH_CALL_ID]
+        ),
     )
-    mock_llm.lane(
+    mock_llm.conversation(
         "final_report",
-        Step(text=_FINAL_REPORT),
-        match=Matcher(tools_offered=False, tool_results_for=[_RESEARCH_CALL_ID]),
+        Reply(text=_FINAL_REPORT),
+        conditions=RequestConditions(
+            has_tools=False, has_results_for=[_RESEARCH_CALL_ID]
+        ),
     )
 
 
 def test_research_child_tool_calls_attach_to_research_call(
-    admin_user: DATestUser, mock_llm: ScriptHandle
+    admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     # SearchTool is only exposed when at least one non-default connector exists.
     CCPairManager.create_from_scratch(
@@ -124,7 +128,7 @@ def test_research_child_tool_calls_attach_to_research_call(
     assert response.full_message == _FINAL_REPORT
 
     # The orchestrator replays only the research call, and the stray call never runs.
-    _, orchestrator_followup = mock_llm.lane_requests("orchestrator")
+    _, orchestrator_followup = mock_llm.requests_in("orchestrator")
     replayed_calls = [
         call.id
         for message in orchestrator_followup.messages
@@ -134,7 +138,7 @@ def test_research_child_tool_calls_attach_to_research_call(
     assert replayed_calls == [_RESEARCH_CALL_ID]
     assert all(r.tool_result(_STRAY_CALL_ID) is None for r in mock_llm.requests)
 
-    _, child_followup = mock_llm.lane_requests("research_agent")
+    _, child_followup = mock_llm.requests_in("research_agent")
     assert child_followup.tool_result(_CHILD_SEARCH_CALL_ID) is not None
 
     with get_session_with_current_tenant() as db_session:
