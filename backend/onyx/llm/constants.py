@@ -33,6 +33,7 @@ class LlmProviderNames(str, Enum):
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
     VERCEL_AI_GATEWAY = "vercel_ai_gateway"
+    REQUESTY = "requesty"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -67,6 +68,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
     LlmProviderNames.VERCEL_AI_GATEWAY,
+    LlmProviderNames.REQUESTY,
 ]
 
 
@@ -91,6 +93,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
     LlmProviderNames.VERCEL_AI_GATEWAY: "Vercel AI Gateway",
+    LlmProviderNames.REQUESTY: "Requesty",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -185,6 +188,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
     LlmProviderNames.VERCEL_AI_GATEWAY,
+    LlmProviderNames.REQUESTY,
 }
 
 # Providers whose model catalog lists the models they release. Only these
@@ -214,14 +218,15 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
 # Providers whose `available-models` endpoint reads a context limit from the
 # source API and persists it as `max_input_tokens`. Those values are
 # authoritative and must never be second-guessed against LiteLLM's model map.
-# Nebius TokenFactory, Portkey, and Vercel AI Gateway do this without being
-# dynamic providers, so this is deliberately a superset of
+# Nebius TokenFactory, Portkey, Vercel AI Gateway, and Requesty do this without
+# being dynamic providers, so this is deliberately a superset of
 # DYNAMIC_LLM_PROVIDERS rather than a reuse.
 SOURCE_API_CONTEXT_LIMIT_PROVIDERS: frozenset[str] = DYNAMIC_LLM_PROVIDERS | frozenset(
     {
         LlmProviderNames.NEBIUS_TOKENFACTORY,
         LlmProviderNames.PORTKEY,
         LlmProviderNames.VERCEL_AI_GATEWAY,
+        LlmProviderNames.REQUESTY,
     }
 )
 
