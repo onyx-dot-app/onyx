@@ -56,6 +56,11 @@ _MAX_LISTING_WINDOW_DAYS = 30
 # no indexing start date than a deliberate backfill.
 _WIDE_BACKFILL_WINDOWS = 24
 
+# Zoom 1.0 shipped in January 2013, so no cloud recording can predate it. Without
+# this floor a connector with no indexing start date asks Zoom for every 30-day
+# window back to 1970, which is four times the calls and finds nothing.
+_EARLIEST_RECORDING_DATE = date(2013, 1, 1)
+
 
 def _poll_window_range(
     start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
@@ -105,11 +110,18 @@ def _poll_window_dates(
     start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
 ) -> tuple[date, date]:
     """The lag buffer comes off the start before the dates are rounded, or a
-    transcript that lands slowly falls outside the window and is never indexed."""
+    transcript that lands slowly falls outside the window and is never indexed.
+
+    The start is floored at Zoom's own launch, because a connector with no
+    indexing start date arrives here asking for 1970.
+    """
     from_moment = datetime.fromtimestamp(
         max(start - _OCCURRENCE_POLL_OVERLAP_SECONDS, 0), tz=timezone.utc
     )
-    return from_moment.date(), datetime.fromtimestamp(end, tz=timezone.utc).date()
+    return (
+        max(from_moment.date(), _EARLIEST_RECORDING_DATE),
+        datetime.fromtimestamp(end, tz=timezone.utc).date(),
+    )
 
 
 def _listing_windows(from_date: date, to_date: date) -> list[tuple[date, date]]:
@@ -518,8 +530,8 @@ class _UserRecordingsSource(DiscoverySource):
             return
         logger.warning(
             "Zoom %s is listing recordings from %s, which Zoom's %s-day range cap "
-            "splits into %s calls per host (%s hosts, about %s calls). Set an "
-            "indexing start date on the connector to narrow this.",
+            "splits into %s calls per host (%s hosts, about %s calls). Set "
+            "Advanced Configuration > Indexing Start on this connector to narrow it.",
             self._scope_entity_id,
             windows[0][0],
             _MAX_LISTING_WINDOW_DAYS,
