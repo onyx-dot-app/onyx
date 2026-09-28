@@ -410,13 +410,6 @@ class MessageType(str, Enum):
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
 
 
-class ChatMessageSimpleType(str, Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL_CALL = "tool_call"
-    FILE_TEXT = "file_text"
-
-
 class TokenRateLimitScope(str, Enum):
     USER = "user"
     USER_GROUP = "user_group"
