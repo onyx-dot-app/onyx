@@ -1534,20 +1534,16 @@ export default function IndexSettingsPage() {
                     // Cloud has no re-index path, so only an image-only diff,
                     // which saves without one, gets a banner there.
                     (!NEXT_PUBLIC_CLOUD_ENABLED || imageOnlyChange) && (
-                      // Active (staged or blocked), the banner pins to the top
-                      // so its actions stay in reach while the page scrolls.
-                      // Only the 8px strip above the card is painted with the
-                      // page background, so content does not scroll through
-                      // the gap while the card's corners stay see-through; the
-                      // negative margin keeps the banner where it sat at rest.
+                      // Active (staged or blocked), the banner pins 8px below
+                      // the top so its actions stay in reach while the page
+                      // scrolls. The gap is transparent on purpose: the card
+                      // is opaque and rounded, and anything painted outside it
+                      // would show square corners over the content beneath.
                       <div
                         className={cn(
-                          bannerActive && "sticky top-0 z-sticky-banner -mt-2"
+                          bannerActive && "sticky top-2 z-sticky-banner"
                         )}
                       >
-                        {bannerActive && (
-                          <div className="h-2 bg-background-tint-01" />
-                        )}
                         <MessageCard
                           variant={bannerVariant}
                           title={
