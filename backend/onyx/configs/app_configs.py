@@ -625,7 +625,8 @@ POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 # transaction-pooling proxy. env.py sets search_path once per session, which such
 # a proxy drops at the first mid-run commit. Unset means the app's own host.
 POSTGRES_MIGRATION_HOST = os.environ.get("POSTGRES_MIGRATION_HOST") or None
-POSTGRES_MIGRATION_PORT = os.environ.get("POSTGRES_MIGRATION_PORT") or POSTGRES_PORT
+# Defaults to the Postgres port, not the pooler port the app may use.
+POSTGRES_MIGRATION_PORT = os.environ.get("POSTGRES_MIGRATION_PORT") or "5432"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
 
 # --- Tenant sharding (multi-database) ---------------------------------------
