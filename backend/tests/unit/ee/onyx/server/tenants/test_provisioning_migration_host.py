@@ -7,7 +7,7 @@ from unittest.mock import patch
 from ee.onyx.server.tenants import schema_management
 from onyx.db.engine.shard_registry import ONYX_DB_DEFAULT_SHARD, ShardSpec
 
-_DEFAULT = ShardSpec(
+_DEFAULT: ShardSpec = ShardSpec(
     name=ONYX_DB_DEFAULT_SHARD,
     host="pgbouncer-service",
     port="5432",
@@ -28,7 +28,7 @@ def test_migration_host_overrides_the_default_shard() -> None:
         ),
         patch.object(schema_management, "POSTGRES_MIGRATION_PORT", "5433"),
     ):
-        url = schema_management._tenant_connection_string("tenant_x")
+        url: str = schema_management._tenant_connection_string("tenant_x")
     assert "@writer.rds.internal:5433/postgres" in url
 
 
@@ -40,5 +40,5 @@ def test_without_override_the_shard_host_is_used() -> None:
         patch.object(schema_management, "get_shard_spec", return_value=_DEFAULT),
         patch.object(schema_management, "POSTGRES_MIGRATION_HOST", None),
     ):
-        url = schema_management._tenant_connection_string("tenant_x")
+        url: str = schema_management._tenant_connection_string("tenant_x")
     assert "@pgbouncer-service:5432/postgres" in url
