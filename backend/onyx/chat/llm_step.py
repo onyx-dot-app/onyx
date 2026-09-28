@@ -4,14 +4,15 @@ import uuid
 from collections.abc import Callable, Generator, Mapping, Sequence
 from typing import Any, cast
 
-from pydantic import JsonValue
-
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import current_turn_persists_content
 from onyx.chat.models import ChatMessageSimple, LlmStepResult
-from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
+from onyx.chat.tool_call_args_streaming import (
+    ParsedToolArguments,
+    maybe_emit_argument_delta,
+)
 from onyx.configs.app_configs import (
     ENABLE_AZURE_IMAGE_CAP,
     LOG_ONYX_MODEL_INTERACTIONS,
@@ -817,7 +818,7 @@ def run_llm_step_pkt_generator(
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
-    parsed_tool_arguments: dict[int, dict[str, JsonValue]] = {}
+    parsed_tool_arguments: ParsedToolArguments = {}
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""

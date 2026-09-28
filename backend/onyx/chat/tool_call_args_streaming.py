@@ -1,5 +1,5 @@
 from collections.abc import Generator, Mapping
-from typing import Any, Type
+from typing import Any, Type, TypeAlias
 
 from pydantic import JsonValue
 
@@ -12,6 +12,9 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.streaming_json import appended_text, parse_partial_object
 
 logger = setup_logger()
+
+# The last partial parse of each streaming tool call's arguments, by tool-call index.
+ParsedToolArguments: TypeAlias = dict[int, dict[str, JsonValue]]
 
 
 def _get_tool_class(
@@ -29,7 +32,7 @@ def maybe_emit_argument_delta(
     tool_calls_in_progress: Mapping[int, Mapping[str, Any]],
     tool_call_delta: ChatCompletionDeltaToolCall,
     placement: Placement,
-    previous_arguments: dict[int, dict[str, JsonValue]],
+    previous_arguments: ParsedToolArguments,
 ) -> Generator[Packet, None, None]:
     """Emit decoded tool-call argument deltas to the frontend.
 

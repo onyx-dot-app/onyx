@@ -1,9 +1,10 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from pydantic import JsonValue
-
-from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
+from onyx.chat.tool_call_args_streaming import (
+    ParsedToolArguments,
+    maybe_emit_argument_delta,
+)
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
 
@@ -39,8 +40,8 @@ def _mock_tool_class(emit: bool = True) -> MagicMock:
 def _collect(
     tc_map: dict[int, dict[str, Any]],
     delta: MagicMock,
+    previous_arguments: ParsedToolArguments,
     placement: Placement | None = None,
-    previous_arguments: dict[int, dict[str, JsonValue]] | None = None,
 ) -> list[Any]:
     """Run maybe_emit_argument_delta and return the yielded packets."""
     return list(
@@ -48,7 +49,7 @@ def _collect(
             tc_map,
             delta,
             placement or _make_placement(),
-            previous_arguments if previous_arguments is not None else {},
+            previous_arguments,
         )
     )
 
@@ -61,14 +62,12 @@ def _stream_fragments(
     """Feed fragments into maybe_emit_argument_delta one by one, returning
     all emitted content values concatenated per-key as a flat list."""
     pl = placement or _make_placement()
-    parsers: dict[int, dict[str, JsonValue]] = {}
+    previous_arguments: ParsedToolArguments = {}
     emitted: list[str] = []
     for frag in fragments:
         tc_map[0]["arguments"] += frag
         delta = _make_tool_call_delta(arguments=frag)
-        for packet in maybe_emit_argument_delta(
-            tc_map, delta, pl, previous_arguments=parsers
-        ):
+        for packet in maybe_emit_argument_delta(tc_map, delta, pl, previous_arguments):
             obj = packet.obj
             assert isinstance(obj, ToolCallArgumentDelta)
             emitted.extend(obj.argument_deltas.values())
@@ -88,7 +87,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         tc_map: dict[int, dict[str, Any]] = {
             0: {"id": "tc_1", "name": "run_python", "arguments": '{"code": "x'}
         }
-        assert _collect(tc_map, _make_tool_call_delta(arguments="x")) == []
+        assert _collect(tc_map, _make_tool_call_delta(arguments="x"), {}) == []
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_no_emission_when_tool_class_unknown(
@@ -99,7 +98,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         tc_map: dict[int, dict[str, Any]] = {
             0: {"id": "tc_1", "name": "unknown", "arguments": '{"code": "x'}
         }
-        assert _collect(tc_map, _make_tool_call_delta(arguments="x")) == []
+        assert _collect(tc_map, _make_tool_call_delta(arguments="x"), {}) == []
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_no_emission_when_no_argument_fragment(
@@ -110,7 +109,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         tc_map: dict[int, dict[str, Any]] = {
             0: {"id": "tc_1", "name": "run_python", "arguments": '{"code": "x'}
         }
-        assert _collect(tc_map, _make_tool_call_delta(arguments=None)) == []
+        assert _collect(tc_map, _make_tool_call_delta(arguments=None), {}) == []
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_no_emission_when_key_value_not_started(
@@ -122,7 +121,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         tc_map: dict[int, dict[str, Any]] = {
             0: {"id": "tc_1", "name": "run_python", "arguments": '{"code":'}
         }
-        assert _collect(tc_map, _make_tool_call_delta(arguments=":")) == []
+        assert _collect(tc_map, _make_tool_call_delta(arguments=":"), {}) == []
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_no_emission_before_any_key(self, mock_get_tool: MagicMock) -> None:
@@ -132,7 +131,7 @@ class TestMaybeEmitArgumentDeltaGuards:
         tc_map: dict[int, dict[str, Any]] = {
             0: {"id": "tc_1", "name": "run_python", "arguments": "{"}
         }
-        assert _collect(tc_map, _make_tool_call_delta(arguments="{")) == []
+        assert _collect(tc_map, _make_tool_call_delta(arguments="{"), {}) == []
 
 
 class TestMaybeEmitArgumentDeltaBasic:
@@ -148,12 +147,12 @@ class TestMaybeEmitArgumentDeltaBasic:
         fragments = ['{"code": "', "print(1)", '"}']
 
         pl = _make_placement()
-        parsers: dict[int, dict[str, JsonValue]] = {}
+        previous_arguments: ParsedToolArguments = {}
         all_packets = []
         for frag in fragments:
             tc_map[0]["arguments"] += frag
             packets = _collect(
-                tc_map, _make_tool_call_delta(arguments=frag), pl, parsers
+                tc_map, _make_tool_call_delta(arguments=frag), previous_arguments, pl
             )
             all_packets.extend(packets)
 
@@ -180,13 +179,16 @@ class TestMaybeEmitArgumentDeltaBasic:
         tc_map: dict[int, dict[str, Any]] = {
             0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
-        parsers: dict[int, dict[str, JsonValue]] = {}
+        previous_arguments: ParsedToolArguments = {}
         pl = _make_placement()
 
         # First fragment opens the string
         tc_map[0]["arguments"] = '{"code": "abc'
         packets_1 = _collect(
-            tc_map, _make_tool_call_delta(arguments='{"code": "abc'), pl, parsers
+            tc_map,
+            _make_tool_call_delta(arguments='{"code": "abc'),
+            previous_arguments,
+            pl,
         )
         code_1 = ""
         for p in packets_1:
@@ -197,7 +199,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         # Second fragment appends more
         tc_map[0]["arguments"] = '{"code": "abcdef'
         packets_2 = _collect(
-            tc_map, _make_tool_call_delta(arguments="def"), pl, parsers
+            tc_map, _make_tool_call_delta(arguments="def"), previous_arguments, pl
         )
         code_2 = ""
         for p in packets_2:
@@ -253,7 +255,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         }
         # Opening quote just arrived, value is empty
         tc_map[0]["arguments"] = '{"code": "'
-        packets = _collect(tc_map, _make_tool_call_delta(arguments='{"code": "'))
+        packets = _collect(tc_map, _make_tool_call_delta(arguments='{"code": "'), {})
         # No string content yet, so either no packet or empty deltas
         for p in packets:
             assert isinstance(p.obj, ToolCallArgumentDelta)
@@ -521,7 +523,7 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
             0: {"id": "tc_1", "name": "run_python", "arguments": '{"code": "x'}
         }
         delta = _make_tool_call_delta(arguments=None, function_is_none=True)
-        assert _collect(tc_map, delta) == []
+        assert _collect(tc_map, delta, {}) == []
 
     @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
     def test_multiple_concurrent_tool_calls(self, mock_get_tool: MagicMock) -> None:
@@ -533,7 +535,7 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
             1: {"id": "tc_2", "name": "run_python", "arguments": ""},
         }
 
-        parsers: dict[int, dict[str, JsonValue]] = {}
+        previous_arguments: ParsedToolArguments = {}
         pl = _make_placement()
 
         # Feed full JSON to index 0
@@ -541,8 +543,8 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         packets_0 = _collect(
             tc_map,
             _make_tool_call_delta(index=0, arguments='{"code": "aaa"}'),
+            previous_arguments,
             pl,
-            parsers,
         )
         code_0 = ""
         for p in packets_0:
@@ -555,8 +557,8 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         packets_1 = _collect(
             tc_map,
             _make_tool_call_delta(index=1, arguments='{"code": "bbb"}'),
+            previous_arguments,
             pl,
-            parsers,
         )
         code_1 = ""
         for p in packets_1:
@@ -574,9 +576,9 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
             0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         tc_map[0]["arguments"] = full
-        parsers: dict[int, dict[str, JsonValue]] = {}
+        previous_arguments: ParsedToolArguments = {}
         packets = _collect(
-            tc_map, _make_tool_call_delta(arguments=full), previous_arguments=parsers
+            tc_map, _make_tool_call_delta(arguments=full), previous_arguments
         )
 
         # Collect all argument deltas across packets
@@ -655,7 +657,7 @@ class TestArgumentDeltaParsing:
         tc_map: dict[int, dict[str, Any]] = {
             0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
-        previous: dict[int, dict[str, JsonValue]] = {}
+        previous: ParsedToolArguments = {}
         packets: list[list[Any]] = []
         # A raw newline inside a JSON string is invalid.
         for fragment in ['{"code": "a', "\nb", 'c"}']:
