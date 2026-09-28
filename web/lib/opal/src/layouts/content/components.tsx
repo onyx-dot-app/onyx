@@ -100,6 +100,14 @@ interface ContentBaseProps {
    * pressed, selected and disabled, so the row's states still reach the
    * title. `"inherit"` is not offered: the default already inherits where
    * that is meant.
+   *
+   * Unset, the title takes the tone its `color` mode sets in `styles.css`:
+   *
+   * - `"default"` — `text-04`
+   * - `"muted"` — `text-03`
+   * - `"success"` / `"warning"` / `"danger"` — `text-03`
+   * - `"interactive"` — `text-04` on its own; inside an interactive surface,
+   *   the surface's foreground
    */
   titleColor?: Exclude<TextColor, "inherit">;
 
