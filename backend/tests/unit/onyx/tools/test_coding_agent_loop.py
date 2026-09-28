@@ -15,19 +15,22 @@ from onyx.coding_agent.mock_tools import (
     GENERATE_ANSWER_TOOL_NAME,
 )
 from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.deep_research.dr_mock_tools import (
     THINK_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
 )
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
+from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, ToolMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
-    FunctionCall,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
-from onyx.llm.models import SystemMessage, ToolMessage
+from onyx.llm.models import ReasoningEffort, ToolChoice
+from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CodingAgentThinkingDelta,
@@ -65,7 +68,7 @@ def tool_call(
                     ChatCompletionDeltaToolCall(
                         id=call_id,
                         index=index,
-                        function=FunctionCall(name=name, arguments=""),
+                        function=ResponseFunctionCall(name=name, arguments=""),
                     )
                 ]
             )
@@ -75,7 +78,7 @@ def tool_call(
                 tool_calls=[
                     ChatCompletionDeltaToolCall(
                         index=index,
-                        function=FunctionCall(arguments=json.dumps(args)),
+                        function=ResponseFunctionCall(arguments=json.dumps(args)),
                     )
                 ]
             )
@@ -98,19 +101,39 @@ def generate_answer() -> list[ModelResponseStream]:
 FINAL_ANSWER = text("The final answer.")
 
 
-class ScriptedLLM:
+class ScriptedLLM(LitellmLLM):
     def __init__(self, steps: list[list[ModelResponseStream]]) -> None:
+        super().__init__(
+            model_provider="openai",
+            api_key=None,
+            model_name="mock-model",
+            max_input_tokens=100_000,
+        )
         self._steps = list(steps)
-        self.requests: list[dict[str, Any]] = []
-        self.config = LLMConfig(
+        self.prompts: list[list[ChatCompletionMessage]] = []
+
+    @property
+    def config(self) -> LLMConfig:
+        return LLMConfig(
             model_provider="mock",
             model_name="mock-model",
             temperature=0.0,
             max_input_tokens=100_000,
         )
 
-    def stream(self, **kwargs: Any) -> Iterator[ModelResponseStream]:
-        self.requests.append(kwargs)
+    def stream_raw(
+        self,
+        prompt: list[ChatCompletionMessage],
+        tools: list[dict] | None = None,  # noqa: ARG002
+        tool_choice: ToolChoice | None = None,  # noqa: ARG002
+        structured_response_format: dict | None = None,  # noqa: ARG002
+        max_tokens: int | None = None,  # noqa: ARG002
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
+        user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
+        operation: ProviderOperation | None = None,  # noqa: ARG002
+    ) -> Iterator[ModelResponseStream]:
+        self.prompts.append(prompt)
         if not self._steps:
             raise AssertionError("LLM called more times than scripted")
         return iter(self._steps.pop(0))
@@ -173,7 +196,7 @@ def run_agent(
                 placement=Placement(turn_index=TURN_INDEX, tab_index=TAB_INDEX),
             ),
             emitter=Emitter(merged_queue=merged_queue),
-            llm=llm,  # ty: ignore[invalid-argument-type]
+            llm=llm,
             token_counter=lambda s: len(s) // 4,
             user_identity=None,
             github_token="tok",
@@ -187,8 +210,8 @@ def run_agent(
     return Run(llm, packets, result)
 
 
-def system_prompt(request: dict[str, Any]) -> str:
-    first = request["prompt"][0]
+def system_prompt(prompt: list[ChatCompletionMessage]) -> str:
+    first = prompt[0]
     assert isinstance(first, SystemMessage)
     return first.content
 
@@ -225,11 +248,9 @@ class TestThinkPlacement:
         )
         assert reasoning_text.startswith("I should look at the repo")
         assert thinking_sub_turns(run.packets) == [1]
-        assert "you are on cycle 1" in system_prompt(run.llm.requests[1])
+        assert "you are on cycle 1" in system_prompt(run.llm.prompts[1])
 
-        tool_msgs = [
-            m for m in run.llm.requests[1]["prompt"] if isinstance(m, ToolMessage)
-        ]
+        tool_msgs = [m for m in run.llm.prompts[1] if isinstance(m, ToolMessage)]
         assert [(m.tool_call_id, m.content) for m in tool_msgs] == [
             ("t1", THINK_TOOL_RESPONSE_MESSAGE)
         ]
@@ -246,7 +267,7 @@ class TestThinkPlacement:
             is_reasoning_model=True,
         )
 
-        prompts = [system_prompt(r) for r in run.llm.requests[:3]]
+        prompts = [system_prompt(r) for r in run.llm.prompts[:3]]
         assert "you are on cycle 0" in prompts[0]
         assert "you are on cycle 1" in prompts[1]
         assert "you are on cycle 2" in prompts[2]
