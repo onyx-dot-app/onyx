@@ -31,7 +31,8 @@ def _tenant_connection_string(tenant_id: str) -> str:
     since the default shard's spec is derived from the same POSTGRES_* settings.
     """
     spec = get_shard_spec(get_shard_for_tenant(tenant_id))
-    host, port = spec.host, spec.port
+    host: str = spec.host
+    port: str = spec.port
     if POSTGRES_MIGRATION_HOST and spec.name == ONYX_DB_DEFAULT_SHARD:
         host, port = POSTGRES_MIGRATION_HOST, POSTGRES_MIGRATION_PORT
     return build_connection_string(
