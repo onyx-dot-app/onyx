@@ -527,7 +527,9 @@ export function listSourceMetadata(): SourceMetadata[] {
         // user_file is for internal use (projects), not the Add Connector page
         source !== "user_file" &&
         // craft_file backs the Craft user library, which has its own upload UI
-        source !== "craft_file"
+        source !== "craft_file" &&
+        // TODO: unhide once the rest of the Zoom connector stack has merged
+        source !== "zoom"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);
