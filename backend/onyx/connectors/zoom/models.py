@@ -277,6 +277,9 @@ APPROVED_REGISTRANT_STATUS = "approved"
 ZOOM_MEETING_TOO_OLD_CODE = "12702"
 ZOOM_NOT_FOUND_CODE = "3001"
 ZOOM_NOT_ENTITLED_CODE = "200"
+# Undocumented in the spec; the shape is a 400 with a message that lists the
+# missing scopes.
+ZOOM_MISSING_SCOPE_CODE = "4711"
 
 
 class ZoomRegistrant(BaseModel):
