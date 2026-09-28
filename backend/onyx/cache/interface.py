@@ -119,7 +119,7 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def expire_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
         """Extend an unexpired key only while it still contains the expected value."""
         raise NotImplementedError
 

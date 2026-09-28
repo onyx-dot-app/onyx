@@ -392,7 +392,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 self._owned.pop(run_id, None)
 
     def _refresh_owner(self, run_id: str, owner: ResponseOwner) -> None:
-        if not self.control_cache.expire_if_value(
+        if not self.control_cache.renew_if_value(
             self._owner_key(run_id), owner.model_dump_json().encode(), OWNER_TTL_SECONDS
         ):
             raise _OwnershipLost("Response ownership was lost")

@@ -484,17 +484,17 @@ def test_watched_transaction_reads_and_updates_only_tenant_keys(
     assert raw_redis.hgetall(hash_key) == {}
 
 
-def test_expire_if_value_renews_only_the_tenant_key(
+def test_renew_if_value_renews_only_the_tenant_key(
     tenant_redis: TenantRedisClient, tenant_id: str, raw_redis: Redis
 ) -> None:
     key = _unique_key()
     tenant_redis.set(key, "owner", ex=10)
     raw_redis.set(key, "owner", ex=10)
     try:
-        assert not tenant_redis.expire_if_value(key, b"other", 60)
-        assert tenant_redis.expire_if_value(key, b"owner", 60)
+        assert not tenant_redis.renew_if_value(key, b"other", 60)
+        assert tenant_redis.renew_if_value(key, b"owner", 60)
         assert cast(int, raw_redis.ttl(f"{tenant_id}:{key}")) > 10
         assert cast(int, raw_redis.ttl(key)) <= 10
-        assert not tenant_redis.expire_if_value(_unique_key(), b"owner", 60)
+        assert not tenant_redis.renew_if_value(_unique_key(), b"owner", 60)
     finally:
         raw_redis.delete(key)

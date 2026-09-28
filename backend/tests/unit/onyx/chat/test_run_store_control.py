@@ -38,7 +38,7 @@ def ownership(
     monkeypatch.setattr(run_store, "start_thread_future", completed)
     cache = MagicMock(spec=CacheBackend)
     cache.exists.return_value = False
-    cache.expire_if_value.return_value = True
+    cache.renew_if_value.return_value = True
     store = ChatRunStore(
         tenant_id="tenant",
         chat_session_id=uuid4(),
@@ -58,14 +58,14 @@ def test_transient_renewal_failure_retries_without_cancelling(
     ownership: tuple[ChatRunStore, _OwnerLease, MagicMock, MagicMock, Clock],
 ) -> None:
     store, lease, run, cache, clock = ownership
-    cache.expire_if_value.side_effect = [ConnectionError("offline"), True]
+    cache.renew_if_value.side_effect = [ConnectionError("offline"), True]
     clock.now = 10
     store.poll_control()
     store.poll_control()
     assert lease.error is None
     clock.now = 10.5
     store.poll_control()
-    assert cache.expire_if_value.call_count == 1
+    assert cache.renew_if_value.call_count == 1
     clock.now = 11
     store.poll_control()
     store.poll_control()
@@ -77,13 +77,13 @@ def test_confirmed_ownership_loss_cancels_without_retry(
     ownership: tuple[ChatRunStore, _OwnerLease, MagicMock, MagicMock, Clock],
 ) -> None:
     store, lease, run, cache, clock = ownership
-    cache.expire_if_value.return_value = False
+    cache.renew_if_value.return_value = False
     clock.now = 10
     store.poll_control()
     store.poll_control()
     assert lease.error is not None
     run.cancel.assert_called_once()
-    assert cache.expire_if_value.call_count == 1
+    assert cache.renew_if_value.call_count == 1
 
 
 def test_blocked_renewal_and_stop_read_cannot_hide_expiry(
@@ -111,7 +111,7 @@ def test_blocked_renewal_and_stop_read_cannot_hide_expiry(
     store.poll_control()
     assert lease.refreshed == 0
     assert isinstance(lease.error, TimeoutError)
-    cache.expire_if_value.assert_not_called()
+    cache.renew_if_value.assert_not_called()
 
 
 def test_renewal_ttl_starts_before_response_arrives(
