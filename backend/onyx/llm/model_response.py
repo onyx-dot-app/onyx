@@ -592,16 +592,8 @@ class MessageAccumulator:
                     ),
                     request,
                 )
-            if buffered:
-                if recovered is not None and recovered.tool_calls:
-                    if recovered.text:
-                        yield from self._add_text(
-                            TextContent(text=content_filter.process(recovered.text))
-                        )
-                    yield from self._add_recovered_calls(recovered.tool_calls)
-                else:
-                    for pending_chunk in buffered:
-                        yield from add_filtered(pending_chunk)
+            for pending_chunk in buffered:
+                yield from add_filtered(pending_chunk)
             tail = content_filter.flush()
             if tail:
                 yield from self._add_text(TextContent(text=tail))
@@ -662,11 +654,17 @@ def recover_tool_calls(
     tools = {tool.name: tool for tool in request.tools}
     for call in calls:
         call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
-    content: list[TextContent | ToolCall] = []
-    if _looks_like_xml_tool_call_payload(message.text):
-        content_filter = XmlToolCallContentFilter()
-        visible_text = content_filter.process(message.text) + content_filter.flush()
-        if visible_text:
-            content.append(TextContent(text=visible_text))
+    # Preserve signed thinking for provider replay; hide only XML call payloads.
+    content: list[TextContent | ThinkingContent | ToolCall] = []
+    for block in message.content:
+        if isinstance(block, TextContent) and _looks_like_xml_tool_call_payload(
+            block.text
+        ):
+            content_filter = XmlToolCallContentFilter()
+            visible_text = content_filter.process(block.text) + content_filter.flush()
+            if visible_text:
+                content.append(TextContent(text=visible_text))
+        else:
+            content.append(block)
     content.extend(calls)
     return message.model_copy(update={"content": content})

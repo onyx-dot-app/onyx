@@ -1608,16 +1608,27 @@ class LitellmLLM(LLM):
             ) as span,
         ):
             signal.check()
-            response = self.invoke_raw(
-                messages,
-                tools=definitions,
-                tool_choice=request.options.tool_choice,
-                structured_response_format=request.options.structured_response_format,
-                total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
-                max_tokens=request.options.max_tokens,
-                reasoning_effort=request.options.reasoning_effort,
-                user_identity=context.user_identity,
-            )
+            try:
+                response = self.invoke_raw(
+                    messages,
+                    tools=definitions,
+                    tool_choice=request.options.tool_choice,
+                    structured_response_format=request.options.structured_response_format,
+                    total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
+                    max_tokens=request.options.max_tokens,
+                    reasoning_effort=request.options.reasoning_effort,
+                    user_identity=context.user_identity,
+                )
+            except Exception as error:
+                span.set_error(
+                    {
+                        "message": self.redact_error(
+                            f"{type(error).__name__}: {error}"
+                        ),
+                        "data": None,
+                    }
+                )
+                raise
             signal.check()
             message = to_assistant_message(response, request)
             record_llm_span_output(

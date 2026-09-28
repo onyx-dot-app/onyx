@@ -799,7 +799,7 @@ def test_stream_conversion_closes_provider_source(ending: str) -> None:
 
 
 @pytest.mark.parametrize("reasoning", [False, True])
-def test_buffered_recovery_emits_one_call_with_usage_and_no_payload_text(
+def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     reasoning: bool,
 ) -> None:
     payload = '{"name":"search","arguments":{"query":"recovered"}}'
@@ -814,6 +814,7 @@ def test_buffered_recovery_emits_one_call_with_usage_and_no_payload_text(
         tools=[ToolDefinition(name="search", description="Search", parameters={})],
         options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
     )
+    signed = ThinkingBlock(thinking=payload, signature="provider-signature")
     closed: list[bool] = []
 
     def chunks() -> Iterator[ModelResponseStream]:
@@ -824,6 +825,7 @@ def test_buffered_recovery_emits_one_call_with_usage_and_no_payload_text(
                     if reasoning
                     else Delta(content=fragment)
                 )
+            yield _stream_chunk(Delta(thinking_blocks=[signed]))
             yield ModelResponseStream(
                 id="response",
                 created="1",
@@ -837,18 +839,9 @@ def test_buffered_recovery_emits_one_call_with_usage_and_no_payload_text(
     with patch.object(client, "stream_raw", return_value=chunks()):
         events = list(client.stream(request))
     assert closed == [True]
-    assert [event.type for event in events] == [
-        "start",
-        "tool_call_start",
-        "tool_call_delta",
-        "tool_call_end",
-        "done",
-    ]
-    assert all(
-        not event.message.text and not event.message.thinking
-        for event in events
-        if isinstance(event, GenerationLifecycleEvent)
-    )
+    assert [
+        event.type for event in events if not isinstance(event, GenerationTextEvent)
+    ] == ["start", "tool_call_start", "tool_call_delta", "tool_call_end", "done"]
     calls = [
         event.tool_call
         for event in events
@@ -859,9 +852,12 @@ def test_buffered_recovery_emits_one_call_with_usage_and_no_payload_text(
     terminal = events[-1]
     assert isinstance(terminal, GenerationDoneEvent)
     final = terminal.message
+    assert final.thinking_blocks == [signed]
     assert final.usage == usage
     assert final.stop_reason == "stop"
     assert final.tool_calls == [calls[-1]]
+    assert final.text == ("" if reasoning else payload)
+    assert final.thinking == (payload if reasoning else "")
 
 
 def test_buffered_stream_failure_keeps_unresolved_tool_payload_out_of_events() -> None:
@@ -1014,3 +1010,44 @@ def test_provider_payload_tolerance(
     assert (
         [block.model_dump() for block in blocks] if blocks else None
     ) == expected_blocks
+
+
+@pytest.mark.parametrize(
+    "payload, expected_text",
+    [
+        (
+            'Searching now. {"name":"search","arguments":{"query":"onyx"}}',
+            'Searching now. {"name":"search","arguments":{"query":"onyx"}}',
+        ),
+        (
+            'Searching now.<function_calls><invoke name="search">'
+            '<parameter name="query">onyx</parameter></invoke></function_calls>',
+            "Searching now.",
+        ),
+    ],
+)
+def test_recovered_calls_preserve_text_and_signed_thinking(
+    payload: str, expected_text: str
+) -> None:
+    signed = ThinkingBlock(thinking="plan", signature="provider-signature")
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    response = ModelResponse(
+        id="response",
+        created="1",
+        choice=Choice(
+            message=ResponseMessage(
+                content=payload,
+                reasoning_content="plan",
+                thinking_blocks=[signed],
+            )
+        ),
+    )
+    message = to_assistant_message(response, request)
+    assert message.text == expected_text
+    assert message.thinking == "plan"
+    assert message.thinking_blocks == [signed]
+    assert [call.name for call in message.tool_calls] == ["search"]
+    assert message.tool_calls[0].arguments == {"query": "onyx"}

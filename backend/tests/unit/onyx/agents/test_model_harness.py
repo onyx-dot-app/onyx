@@ -245,7 +245,9 @@ class TestToolRecovery:
                 AssistantMessage(content=blocks), self.context()
             )
             assert result.tool_calls[0].arguments == {"value": 3}
-            assert not result.text
+            original = AssistantMessage(content=blocks)
+            assert result.text == original.text
+            assert result.thinking == original.thinking
 
     def test_auto_xml_and_disabled_tools(self) -> None:
         from onyx.llm.models import AssistantMessage, TextContent

@@ -1,7 +1,7 @@
 """Generation tracing at the public model client boundary."""
 
 from collections.abc import Iterator
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -134,3 +134,27 @@ def test_stream_failure_keeps_private_exception_out_of_messages_and_trace() -> N
         for event in events
     )
     assert "synthetic-private-provider-detail" not in str(record.call_args)
+
+
+def test_invoke_failure_marks_span_without_exposing_credentials() -> None:
+    client = LitellmLLM(
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        api_key="synthetic-provider-secret",
+        max_input_tokens=1000,
+    )
+    span = MagicMock()
+    failure = TimeoutError("provider stalled: synthetic-provider-secret")
+    with (
+        patch("onyx.llm.multi_llm.llm_generation_span") as open_span,
+        patch.object(client, "invoke_raw", side_effect=failure),
+        pytest.raises(TimeoutError) as caught,
+    ):
+        open_span.return_value.__enter__.return_value = span
+        client.invoke(GenerationRequest(messages=[UserMessage(content="Hi")]))
+
+    assert caught.value is failure
+    span.set_error.assert_called_once_with(
+        {"message": client.redact_error(f"TimeoutError: {failure}"), "data": None}
+    )
+    assert "synthetic-provider-secret" not in str(span.set_error.call_args)

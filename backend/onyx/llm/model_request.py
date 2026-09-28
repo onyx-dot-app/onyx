@@ -148,8 +148,6 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
             or None,
         )
     if isinstance(message, app.ToolResultMessage):
-        if not isinstance(message.content, str):
-            raise ValueError("Provider tool messages require text content")
         if not message.tool_call_id:
             raise ValueError("Provider tool messages require tool_call_id")
         return ToolMessage(content=message.content, tool_call_id=message.tool_call_id)

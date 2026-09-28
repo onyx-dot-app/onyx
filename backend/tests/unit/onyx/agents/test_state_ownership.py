@@ -27,7 +27,6 @@ from onyx.chat.response import response_record
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
-from onyx.llm.model_request import serialize_request
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -36,7 +35,6 @@ from onyx.llm.models import (
     GenerationRequest,
     GenerationToolCallEvent,
     ImageContentPart,
-    ImageUrlDetail,
     Message,
     TextContent,
     ThinkingDeltaEvent,
@@ -148,25 +146,6 @@ def test_default_model_accepts_application_metadata_without_chat_policy() -> Non
     assert output.message.text == "done"
     assert llm.requests[0]["prompt"][0].content == "plain input"
     assert "private metadata" not in str(llm.requests)
-    with pytest.raises(ValueError, match="text content"):
-        serialize_request(
-            GenerationRequest(
-                messages=[
-                    ToolResultMessage(
-                        tool_call_id="c",
-                        tool_name="image",
-                        content=[
-                            ImageContentPart(
-                                image_url=ImageUrlDetail(
-                                    url="https://example.com/image.png"
-                                )
-                            )
-                        ],
-                    )
-                ]
-            ),
-            llm.config,
-        )
 
 
 def test_stream_consumer_cannot_mutate_later_events() -> None:

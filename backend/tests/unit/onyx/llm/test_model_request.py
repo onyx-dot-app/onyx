@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -27,6 +28,8 @@ from onyx.llm.models import (
     NamedToolChoice,
     ThinkingBlock,
     ToolDefinition,
+    ToolResult,
+    ToolResultMessage,
     Usage,
     UserMessage,
 )
@@ -306,3 +309,17 @@ def test_interleaved_streams_isolate_cancellation_and_trace_context() -> None:
             assert_caller_context()
         assert closed == [first_signal, second_signal]
         assert_caller_context()
+
+
+@pytest.mark.parametrize("result_type", [ToolResult, ToolResultMessage])
+def test_tool_results_reject_nontext_content(
+    result_type: type[ToolResult],
+) -> None:
+    with pytest.raises(ValidationError, match="content"):
+        result_type.model_validate(
+            {
+                "content": [{"type": "text", "text": "result"}],
+                "tool_call_id": "call",
+                "tool_name": "search",
+            }
+        )

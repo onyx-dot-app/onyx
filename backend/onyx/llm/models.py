@@ -163,14 +163,14 @@ class AssistantMessage(BaseMessage):
 
 
 class ToolResult(BaseMessage):
-    content: str | list[TextContentPart | ImageContentPart]
+    content: str
     details: SerializeAsAny[BaseModel] | None = None
     is_error: bool = False
     terminate: bool = False
 
     @property
     def text(self) -> str:
-        return content_text(self.content)
+        return self.content
 
 
 class ToolResultMessage(ToolResult):
