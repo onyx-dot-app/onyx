@@ -19,12 +19,14 @@ from onyx.llm.models import (
     GenerationErrorEvent,
     GenerationEvent,
     GenerationRequest,
+    Usage,
     UserMessage,
 )
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span, trace
 from onyx.tracing.framework.traces import TraceContentMode
+from tests.unit.onyx.agents.fakes import collect_generation
 
 
 @pytest.mark.parametrize("streaming", [False, True])
@@ -57,9 +59,10 @@ def test_generation_has_one_tagged_span(
         patch.object(client, "stream_raw", return_value=iter([chunk])),
     ):
         if streaming:
-            terminal = list(client.stream(request, context))[-1]
+            events = list(client.stream(request, context))
+            terminal = events[-1]
             assert isinstance(terminal, GenerationDoneEvent)
-            result = terminal.message
+            result = collect_generation(events)
         else:
             result = client.invoke(request, context)
     assert result.text == "answer"
@@ -103,12 +106,20 @@ def test_stream_failure_keeps_private_exception_out_of_messages_and_trace() -> N
         max_input_tokens=1000,
     )
     failure = RuntimeError("synthetic-private-provider-detail")
+    usage = Usage(
+        prompt_tokens=3,
+        completion_tokens=1,
+        total_tokens=4,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=0,
+    )
 
     def chunks() -> Iterator[ModelResponseStream]:
         yield ModelResponseStream(
             id="test",
             created="1",
             choice=StreamingChoice(delta=Delta(content="Partial")),
+            usage=usage,
         )
         raise failure
 
@@ -127,8 +138,10 @@ def test_stream_failure_keeps_private_exception_out_of_messages_and_trace() -> N
     assert caught.value is failure
     terminal = events[-1]
     assert isinstance(terminal, GenerationErrorEvent)
-    assert terminal.message.text == "Partial"
-    assert terminal.message.error_message == "Generation failed"
+    assert collect_generation(events).text == "Partial"
+    assert terminal.error_message == "Generation failed"
+    assert terminal.usage == usage
+    assert collect_generation(events).usage == usage
     assert all(
         "synthetic-private-provider-detail" not in event.model_dump_json()
         for event in events

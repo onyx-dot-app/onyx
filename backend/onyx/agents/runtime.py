@@ -1167,6 +1167,10 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         request = _fit_context(
             run, llm, source, prepared, generation_context, force=True
         )
+        with run._lock:
+            recorded_step.message = AssistantMessage(
+                id=message_id, metadata=recorded_step.message.metadata
+            )
         generate()
     with run._lock:
         cancellation_signal.check()

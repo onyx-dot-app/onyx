@@ -1,6 +1,6 @@
 """Run the chat adapter through model streaming, tools, and packet rendering."""
 
-from collections.abc import Callable, Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from typing import Any
 
 from onyx.agents.agent_coordination import (
@@ -23,9 +23,17 @@ from onyx.llm.models import (
     GenerationDoneEvent,
     GenerationEvent,
     GenerationRequest,
+    GenerationStartEvent,
     Message,
+    TextContent,
+    TextDeltaEvent,
+    ThinkingContent,
+    ThinkingDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
     ToolDefinition,
     ToolResult,
+    apply_generation_event,
 )
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tools.interface import Tool, ToolContext
@@ -167,7 +175,7 @@ class FakeModelClient(LLM):
     def stream(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> Generator[GenerationEvent, None, None]:
-        yield GenerationDoneEvent(message=self.invoke(request, context))
+        yield from message_events(self.invoke(request, context))
 
 
 class EchoTool(Tool):
@@ -231,3 +239,29 @@ def run_agent(
             assert run.wait_for_idle(timeout=5)
 
     return execute()
+
+
+def message_events(message: AssistantMessage) -> Iterator[GenerationEvent]:
+    yield GenerationStartEvent()
+    for index, block in enumerate(message.content):
+        if isinstance(block, TextContent):
+            yield TextDeltaEvent(content_index=index, text=block.text)
+        elif isinstance(block, ThinkingContent):
+            yield ThinkingDeltaEvent(
+                content_index=index, text=block.text, blocks=block.blocks
+            )
+        else:
+            yield ToolCallStartEvent(
+                content_index=index, tool_call=block.model_copy(deep=True)
+            )
+            yield ToolCallEndEvent(
+                content_index=index, tool_call=block.model_copy(deep=True)
+            )
+    yield GenerationDoneEvent(usage=message.usage, stop_reason=message.stop_reason)
+
+
+def collect_generation(events: Iterable[GenerationEvent]) -> AssistantMessage:
+    message = AssistantMessage()
+    for event in events:
+        apply_generation_event(message, event)
+    return message

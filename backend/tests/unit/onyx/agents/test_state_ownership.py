@@ -30,8 +30,6 @@ from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
-    GenerationDoneEvent,
-    GenerationLifecycleEvent,
     GenerationRequest,
     GenerationToolCallEvent,
     ImageContentPart,
@@ -43,7 +41,11 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from tests.unit.onyx.agents.fakes import FakeModelClient, ScriptedLLM
+from tests.unit.onyx.agents.fakes import (
+    FakeModelClient,
+    ScriptedLLM,
+    collect_generation,
+)
 
 
 class ExtraData(BaseModel):
@@ -136,27 +138,15 @@ def test_default_model_accepts_application_metadata_without_chat_policy() -> Non
     llm = ScriptedLLM([Delta(content="done")])
     message = UserMessage(content="plain input", metadata=ExtraData())
     model = llm
-    output = list(
+    output = collect_generation(
         model.stream(
             GenerationRequest(messages=[message]),
             GenerationContext(cancellation=CancellationSignal()),
         )
-    )[-1]
-    assert isinstance(output, GenerationDoneEvent)
-    assert output.message.text == "done"
+    )
+    assert output.text == "done"
     assert llm.requests[0]["prompt"][0].content == "plain input"
     assert "private metadata" not in str(llm.requests)
-
-
-def test_stream_consumer_cannot_mutate_later_events() -> None:
-    model = ScriptedLLM([Delta(content="answer")])
-    terminal = None
-    for event in model.stream(GenerationRequest()):
-        if event.type == "done":
-            terminal = event.message
-        elif isinstance(event, GenerationLifecycleEvent):
-            event.message.content.clear()
-    assert terminal is not None and terminal.text == "answer"
 
 
 @pytest.mark.parametrize("replace", [False, True])

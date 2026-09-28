@@ -563,6 +563,7 @@ class MessageAccumulator:
                     raw_thinking.append(delta.reasoning_content or "")
                 if chunk.usage is not None:
                     usage = chunk.usage
+                    self.message.usage = usage
                 if chunk.choice.finish_reason:
                     stop_reason = chunk.choice.finish_reason
                 if not buffering:
@@ -628,7 +629,14 @@ class MessageAccumulator:
             )
             for pending in self.calls.values()
         ]
-        events.append(GenerationDoneEvent(message=self.message.model_copy(deep=True)))
+        events.append(
+            GenerationDoneEvent(
+                usage=self.message.usage.model_copy(deep=True)
+                if self.message.usage
+                else None,
+                stop_reason=self.message.stop_reason,
+            )
+        )
         return events
 
 

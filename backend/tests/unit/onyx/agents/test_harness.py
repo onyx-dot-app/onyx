@@ -395,7 +395,7 @@ def test_cancellation_closes_active_client_stream() -> None:
                 with signal.on_cancel(cancelled.set):
                     assert cancelled.wait(2)
                 signal.check()
-                yield GenerationDoneEvent(message=answer("complete"))
+                yield GenerationDoneEvent()
             finally:
                 closed.append(True)
 

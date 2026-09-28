@@ -28,6 +28,7 @@ from onyx.llm.model_response import Message as ResponseMessage
 from onyx.llm.models import (
     AssistantMessage,
     GenerationDoneEvent,
+    GenerationErrorEvent,
     GenerationEvent,
     GenerationLifecycleEvent,
     GenerationOptions,
@@ -45,7 +46,7 @@ from onyx.llm.models import (
     UserMessage,
     apply_generation_event,
 )
-from tests.unit.onyx.agents.fakes import ScriptedLLM
+from tests.unit.onyx.agents.fakes import ScriptedLLM, collect_generation
 
 
 def _build_tool_call_payload() -> dict[str, JsonValue]:
@@ -389,7 +390,7 @@ def test_accumulator_keeps_interleaved_calls_and_signed_thinking_separate() -> N
     events = accumulator.end()
     terminal = events[-1]
     assert isinstance(terminal, GenerationDoneEvent)
-    message = terminal.message
+    message = accumulator.message
     assert message.thinking_blocks == [signed]
     assert [(call.id, call.arguments) for call in message.tool_calls] == [
         ("first", {"query": "first"}),
@@ -460,7 +461,7 @@ def test_text_deltas_preserve_content_boundaries_without_boundary_events() -> No
     assert text_events[1].text == "first"
     terminal = accumulator.end()[-1]
     assert isinstance(terminal, GenerationDoneEvent)
-    assert terminal.message.text == "first partlast"
+    assert accumulator.message.text == "first partlast"
 
 
 class StructuredToolArguments(BaseModel):
@@ -529,7 +530,7 @@ def test_shared_client_normalizes_schema_directed_tool_arguments(
             events = list(client.stream(request))
             terminal = events[-1]
             assert isinstance(terminal, GenerationDoneEvent)
-            message = terminal.message
+            message = collect_generation(events)
             ends = [event for event in events if isinstance(event, ToolCallEndEvent)]
             assert len(ends) == 1
             assert ends[0].tool_call == message.tool_calls[0]
@@ -758,12 +759,12 @@ def test_stream_keeps_native_precedence_stable_ids_and_event_snapshots() -> None
     assert calls[-1].arguments == {"query": "first"}
     start, delta, terminal = events[0], events[1], events[-1]
     assert isinstance(start, GenerationLifecycleEvent)
-    assert start.message.content == []
+    assert start.type == "start"
     assert isinstance(delta, TextDeltaEvent)
     assert delta.text == fallback
     assert isinstance(terminal, GenerationDoneEvent)
-    assert terminal.message.text == fallback
-    assert len(terminal.message.tool_calls) == 1
+    assert collect_generation(events).text == fallback
+    assert len(collect_generation(events).tool_calls) == 1
     assert chunks[1].choice.delta.tool_calls[0].id is None
     assert chunks[2].choice.delta.tool_calls[0].id == "late-provider-id"
 
@@ -851,7 +852,7 @@ def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     assert calls[-1].arguments == {"query": "recovered"}
     terminal = events[-1]
     assert isinstance(terminal, GenerationDoneEvent)
-    final = terminal.message
+    final = collect_generation(events)
     assert final.thinking_blocks == [signed]
     assert final.usage == usage
     assert final.stop_reason == "stop"
@@ -887,10 +888,7 @@ def test_buffered_stream_failure_keeps_unresolved_tool_payload_out_of_events() -
     assert caught.value is failure
     assert closed == [True]
     assert [event.type for event in events] == ["start", "error"]
-    assert all(
-        isinstance(event, GenerationLifecycleEvent) and event.message.content == []
-        for event in events
-    )
+    assert collect_generation(events).content == []
     assert payload not in str(record.call_args)
 
 
@@ -944,9 +942,7 @@ def test_incremental_events_preserve_partial_content_and_snapshot_isolation() ->
     assert not accepted.tool_calls[0].arguments_complete
     for event in accumulator.end():
         apply_generation_event(accepted, event)
-        if isinstance(event, GenerationDoneEvent):
-            event.message.content.clear()
-        elif isinstance(event, GenerationToolCallEvent):
+        if isinstance(event, GenerationToolCallEvent):
             event.tool_call.arguments.clear()
     assert accepted.id == "run:0"
     assert accepted.content == accumulator.message.content
@@ -1051,3 +1047,23 @@ def test_recovered_calls_preserve_text_and_signed_thinking(
     assert message.thinking_blocks == [signed]
     assert [call.name for call in message.tool_calls] == ["search"]
     assert message.tool_calls[0].arguments == {"query": "onyx"}
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_terminal_events_preserve_content_without_copying_it(failed: bool) -> None:
+    accumulator = MessageAccumulator()
+    accepted = AssistantMessage()
+    for event in accumulator.add(_stream_chunk(Delta(content="x" * 100_000))):
+        apply_generation_event(accepted, event)
+    content = accepted.content
+    block = content[0]
+    terminal = (
+        GenerationErrorEvent(error_message="Generation failed")
+        if failed
+        else accumulator.end()[-1]
+    )
+    apply_generation_event(accepted, terminal)
+    assert accepted.content is content
+    assert accepted.content[0] is block
+    assert accepted.text == "x" * 100_000
+    assert len(terminal.model_dump_json()) < 200

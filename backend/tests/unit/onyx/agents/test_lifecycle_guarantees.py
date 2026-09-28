@@ -334,9 +334,7 @@ def test_provider_receives_acceptance_before_reading_next_chunk() -> None:
                     text="x",
                 )
                 assert run.snapshot().messages[-1].text == text
-            yield GenerationDoneEvent(
-                message=AssistantMessage(content=[TextContent(text=text)])
-            )
+            yield GenerationDoneEvent()
 
     run = Agent(StreamingModel(answer)).start(max_steps=1)
     started.set()

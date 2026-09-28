@@ -34,6 +34,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.multi_llm import LitellmLLM
+from tests.unit.onyx.agents.fakes import collect_generation
 
 
 class RecordingProvider(LitellmLLM):
@@ -206,7 +207,7 @@ def test_stream_idle_timeout_does_not_create_a_total_deadline(
         )
     terminal = events[-1]
     assert isinstance(terminal, GenerationDoneEvent)
-    assert terminal.message.text == "answer"
+    assert collect_generation(events).text == "answer"
     assert stream.call_args.kwargs["stall_timeout_s"] == (
         stall_timeout_s or LLM_SOCKET_READ_TIMEOUT
     )

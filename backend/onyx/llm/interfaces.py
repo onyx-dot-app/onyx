@@ -90,7 +90,9 @@ class LLM(abc.ABC):
     def stream(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> Generator[GenerationEvent, None, None]:
-        """Yield generation events as output arrives.
+        """Yield content updates followed by generation status and usage.
+
+        Apply events to a caller-owned message; lifecycle events contain no content.
 
         context.stall_timeout_s limits idle reads and defaults to LLM_SOCKET_READ_TIMEOUT.
         Streams have no total deadline unless context.total_timeout_s is set.

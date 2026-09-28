@@ -1662,9 +1662,7 @@ class LitellmLLM(LLM):
             first_action = False
             request_params_sent = False
             signal.check()
-            yield GenerationStartEvent(
-                message=accumulator.message.model_copy(deep=True)
-            )
+            yield GenerationStartEvent()
             stream = accumulator.consume(
                 iter(
                     self.stream_raw(
@@ -1712,7 +1710,13 @@ class LitellmLLM(LLM):
                 )
                 yield _event_with_request_params(
                     GenerationErrorEvent(
-                        message=accumulator.message.model_copy(deep=True)
+                        stop_reason="aborted"
+                        if isinstance(error, AgentCancelled)
+                        else "error",
+                        error_message=accumulator.message.error_message,
+                        usage=accumulator.message.usage.model_copy(deep=True)
+                        if accumulator.message.usage
+                        else None,
                     ),
                     operation,
                 )

@@ -337,7 +337,7 @@ class _Event(BaseModel):
 
 
 class GenerationLifecycleEvent(_Event):
-    message: AssistantMessage
+    """Generation status; content arrives through incremental content events."""
 
 
 class GenerationStartEvent(GenerationLifecycleEvent):
@@ -346,10 +346,15 @@ class GenerationStartEvent(GenerationLifecycleEvent):
 
 class GenerationDoneEvent(GenerationLifecycleEvent):
     type: Literal["done"] = "done"
+    usage: Usage | None = None
+    stop_reason: str | None = None
 
 
 class GenerationErrorEvent(GenerationLifecycleEvent):
     type: Literal["error"] = "error"
+    usage: Usage | None = None
+    stop_reason: Literal["error", "aborted"] = "error"
+    error_message: str
 
 
 class GenerationTextEvent(_Event):
@@ -414,15 +419,14 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
     copied, so later message updates cannot alter the event. Copy the message
     before exposing it as a snapshot.
     """
-    if isinstance(event, GenerationLifecycleEvent):
-        message.content = [
-            block.model_copy(deep=True) for block in event.message.content
-        ]
-        message.stop_reason = event.message.stop_reason
-        message.error_message = event.message.error_message
-        message.usage = (
-            event.message.usage.model_copy(deep=True) if event.message.usage else None
+    if isinstance(event, GenerationStartEvent):
+        return
+    if isinstance(event, (GenerationDoneEvent, GenerationErrorEvent)):
+        message.stop_reason = event.stop_reason
+        message.error_message = (
+            event.error_message if isinstance(event, GenerationErrorEvent) else None
         )
+        message.usage = event.usage.model_copy(deep=True) if event.usage else None
         return
     index = event.content_index
     if index > len(message.content):

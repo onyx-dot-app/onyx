@@ -44,6 +44,7 @@ from onyx.llm.models import (
     GenerationStartEvent,
     ReasoningEffort,
     TextContent,
+    TextDeltaEvent,
     ToolCall,
     ToolResultMessage,
 )
@@ -81,16 +82,12 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
             self, request: GenerationRequest, context: GenerationContext | None = None
         ) -> Generator[GenerationEvent, None, None]:
             del request, context
-            yield GenerationStartEvent(
-                message=AssistantMessage(content=[TextContent(text="partial")]),
-                request_params=params,
-            )
+            yield GenerationStartEvent(request_params=params)
+            yield TextDeltaEvent(content_index=0, text="partial")
             partial_ready.set()
             assert finish.wait(2)
-            yield GenerationDoneEvent(
-                message=AssistantMessage(content=[TextContent(text="complete")]),
-                request_params=params,
-            )
+            yield TextDeltaEvent(content_index=0, text=" complete")
+            yield GenerationDoneEvent(request_params=params)
 
     started: Future[Run] = Future()
     agent = Agent(
@@ -121,7 +118,7 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     assert saved.response.status == RunStatus.RUNNING
     assert (
         project_response(started.result(timeout=2).snapshot(), tool_ids={}).answer
-        == "complete"
+        == "partial complete"
     )
     assert project_response(
         started.result(timeout=2).snapshot(), tool_ids={}

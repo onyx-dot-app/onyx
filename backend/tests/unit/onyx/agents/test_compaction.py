@@ -20,7 +20,6 @@ from onyx.llm.exceptions import LLMContextLimitError
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
-    GenerationDoneEvent,
     GenerationErrorEvent,
     GenerationEvent,
     GenerationOptions,
@@ -28,6 +27,7 @@ from onyx.llm.models import (
     Message,
     SystemMessage,
     TextContent,
+    ThinkingDeltaEvent,
     ToolCall,
     ToolResult,
     ToolResultMessage,
@@ -36,6 +36,7 @@ from onyx.llm.models import (
 from onyx.llm.token_budget import TokenBudget
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
+from tests.unit.onyx.agents.fakes import message_events
 
 TASK = "Compare the evidence and preserve citations."
 
@@ -95,11 +96,10 @@ class ContextModel(LLM):
         try:
             message = self.invoke(request, context)
         except LLMContextLimitError:
-            yield GenerationErrorEvent(
-                message=AssistantMessage(error_message="Too much context")
-            )
+            yield ThinkingDeltaEvent(content_index=0, text="Discarded attempt")
+            yield GenerationErrorEvent(error_message="Too much context")
             raise
-        yield GenerationDoneEvent(message=message)
+        yield from message_events(message)
 
 
 def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> None:
@@ -209,6 +209,7 @@ def test_provider_context_rejection_preserves_execution_settings(
     assert starts[0].message_id == ends[0].message_id == result.output.id
     assert ends[0].status == ExecutionStatus.COMPLETE
     assert ends[0].message.error_message is None
+    assert ends[0].message.thinking == ""
     assert prepared == [0]
     assert [context.flow for context in model.contexts] == [
         LLMFlow.RESEARCH_AGENT,

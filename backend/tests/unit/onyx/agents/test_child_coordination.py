@@ -532,7 +532,7 @@ def test_failed_child_settlement_retains_accepted_partial_output(
             yield TextDeltaEvent(content_index=0, text=message.text)
             partial_accepted.set()
             assert release.wait(3)
-            yield GenerationDoneEvent(message=message)
+            yield GenerationDoneEvent()
 
     child = Agent(PartialModel(lambda _request, _signal: AssistantMessage()))
 

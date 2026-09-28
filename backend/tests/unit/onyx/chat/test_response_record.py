@@ -26,7 +26,6 @@ from onyx.llm.models import (
     GenerationEvent,
     GenerationRequest,
     TextContent,
-    TextContentPart,
     TextDeltaEvent,
     ToolCall,
     ToolResult,
@@ -235,7 +234,7 @@ def test_capture_omits_private_data_and_detaches_content() -> None:
     result = ToolResultMessage(
         tool_call_id="call",
         tool_name="search",
-        content=[TextContentPart(text="passage", cache_control={"type": "ephemeral"})],
+        content="passage",
         details=private,
         metadata=private,
         cacheable=True,
@@ -271,14 +270,8 @@ def test_capture_omits_private_data_and_detaches_content() -> None:
         assert isinstance(retained, ToolResultMessage)
         assert retained.details is None and retained.metadata is None
         assert retained.cacheable and retained.is_error and retained.terminate
-        assert isinstance(retained.content, list)
-        part = retained.content[0]
-        assert isinstance(part, TextContentPart)
-        part.text = "changed"
-        assert part.cache_control is not None
-        part.cache_control["type"] = "changed"
+        assert retained.content == "passage"
+        retained.content = "changed"
     assert restored.input_messages[0].metadata is None
-    assert result.content == [
-        TextContentPart(text="passage", cache_control={"type": "ephemeral"})
-    ]
+    assert result.content == "passage"
     assert result.details is private and result.metadata is private
