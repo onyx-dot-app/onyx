@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.models import AnswerStreamPart, StreamingError
 from onyx.chat.process_message import handle_stream_message_objects
-from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
+from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import (
@@ -19,22 +19,18 @@ from onyx.deep_research.dr_mock_tools import (
     RESEARCH_AGENT_TOOL_NAME,
 )
 from onyx.deep_research.models import ResearchAgentCallResult
-from onyx.llm.interfaces import (
-    LLM,
-    LanguageModelInput,
-    LLMConfig,
-    LLMUserIdentity,
-    ReasoningEffort,
-    ToolChoice,
-)
+from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
+from onyx.llm.model_request import ChatCompletionMessage, ToolMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
-    FunctionCall,
+    ModelResponse,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
-from onyx.llm.models import ChatCompletionMessage, ToolMessage
+from onyx.llm.models import ReasoningEffort, ToolChoice
+from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.tools.fake_tools import research_agent
 from onyx.tools.fake_tools.research_agent import RESEARCH_AGENT_TIMEOUT_MESSAGE
@@ -83,13 +79,19 @@ class RecordedRequest:
         )
 
 
-class DeepResearchScriptLLM(LLM):
+class DeepResearchScriptLLM(LitellmLLM):
     """Answers each Deep Research step by the shape of its request.
 
     Safe to call from the parallel research-agent threads.
     """
 
     def __init__(self) -> None:
+        super().__init__(
+            model_provider="openai",
+            api_key=None,
+            model_name="gpt-5-mini",
+            max_input_tokens=1_000_000_000,
+        )
         self._lock = threading.Lock()
         self.requests: list[RecordedRequest] = []
 
@@ -102,9 +104,23 @@ class DeepResearchScriptLLM(LLM):
             max_input_tokens=1_000_000_000,
         )
 
-    def stream(
+    def invoke_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],  # noqa: ARG002
+        tools: list[dict] | None = None,  # noqa: ARG002
+        tool_choice: ToolChoice | None = None,  # noqa: ARG002
+        structured_response_format: dict | None = None,  # noqa: ARG002
+        max_tokens: int | None = None,  # noqa: ARG002
+        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
+        user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
+        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,  # noqa: ARG002
+        operation: ProviderOperation | None = None,  # noqa: ARG002
+    ) -> ModelResponse:
+        raise NotImplementedError("Deep Research only streams")
+
+    def stream_raw(
+        self,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
@@ -112,11 +128,9 @@ class DeepResearchScriptLLM(LLM):
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
+        operation: ProviderOperation | None = None,  # noqa: ARG002
     ) -> Iterator[ModelResponseStream]:
-        request = RecordedRequest(
-            messages=list(prompt) if isinstance(prompt, list) else [prompt],
-            tools=tools or [],
-        )
+        request = RecordedRequest(messages=list(prompt), tools=tools or [])
         with self._lock:
             self.requests.append(request)
 
@@ -130,7 +144,7 @@ class DeepResearchScriptLLM(LLM):
                     ChatCompletionDeltaToolCall(
                         id=call.call_id,
                         index=index,
-                        function=FunctionCall(
+                        function=ResponseFunctionCall(
                             name=call.name, arguments=json.dumps(call.arguments)
                         ),
                     )
