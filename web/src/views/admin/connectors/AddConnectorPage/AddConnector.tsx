@@ -40,7 +40,6 @@ import {
 } from "@/lib/connectors/utils";
 import type {
   ConnectionConfiguration,
-  Connector,
   ConnectorBase,
 } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -67,6 +66,12 @@ import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import { SvgArrowExchange, SvgKey, SvgSimpleLoader } from "@opal/icons";
 import { useTranslations } from "next-intl";
 import { toWireAccess } from "@/lib/connectors/accessType";
+import {
+  type ConnectorCreationResponse,
+  type ConnectorWithMockCredentialCreationResponse,
+  getCreatedConnectorId,
+  type ObjectCreationIdResponse,
+} from "@/views/admin/connectors/AddConnectorPage/creationResponse";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -84,7 +89,7 @@ export async function submitConnector<T>(
 ): Promise<{
   errorDetail?: string;
   isSuccess: boolean;
-  response?: Connector<T>;
+  response?: ConnectorCreationResponse;
 }> {
   const isUpdate = connectorId !== undefined;
   if (!connector.connector_specific_config) {
@@ -104,7 +109,8 @@ export async function submitConnector<T>(
         }
       );
       if (response.ok) {
-        const responseJson = await response.json();
+        const responseJson: ConnectorWithMockCredentialCreationResponse =
+          await response.json();
         return { isSuccess: true, response: responseJson };
       } else {
         const errorData = await response.json();
@@ -123,7 +129,7 @@ export async function submitConnector<T>(
       );
 
       if (response.ok) {
-        const responseJson = await response.json();
+        const responseJson: ObjectCreationIdResponse = await response.json();
         return { isSuccess: true, response: responseJson };
       } else {
         const errorData = await response.json();
@@ -474,9 +480,20 @@ export default function AddConnector({
                 credentialActivated ? false : true
               );
 
-            // Store the connector id immediately for potential timeout
-            if (response?.id) {
-              connectorIdRef.current = response.id;
+            const connectorId = response
+              ? getCreatedConnectorId(response)
+              : null;
+
+            if (connectorId !== null) {
+              connectorIdRef.current = connectorId;
+
+              // The request can finish after the timeout wins the race.
+              if (timeoutErrorHappenedRef.current) {
+                await deleteConnector(connectorId);
+                connectorIdRef.current = null;
+                timeoutErrorHappenedRef.current = false;
+                return;
+              }
             }
 
             if (!credentialActivated) {
@@ -492,7 +509,7 @@ export default function AddConnector({
             }
 
             // With credential
-            if (credentialActivated && isSuccess && response) {
+            if (credentialActivated && isSuccess && connectorId !== null) {
               const credential =
                 currentCredential ||
                 liveGDriveCredential ||
@@ -500,7 +517,7 @@ export default function AddConnector({
               // TODO(evan, ENG-4342): send wireAccess.restriction_group_ids
               // once the backend accepts them; this call creates the cc-pair.
               const linkCredentialResponse = await linkCredential(
-                response.id,
+                connectorId,
                 credential!.id,
                 name,
                 access_type,

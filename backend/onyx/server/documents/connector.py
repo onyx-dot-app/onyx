@@ -139,6 +139,7 @@ from onyx.server.documents.models import (
     ConnectorSnapshot,
     ConnectorStatus,
     ConnectorUpdateRequest,
+    ConnectorWithMockCredentialCreationResponse,
     CredentialBase,
     CredentialSnapshot,
     DocsCountOperator,
@@ -1550,7 +1551,7 @@ def create_connector_with_mock_credential(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
-) -> StatusResponse:
+) -> ConnectorWithMockCredentialCreationResponse:
     tenant_id = get_current_tenant_id()
 
     if connector_data.access_type == AccessType.SYNC_RESTRICTED:
@@ -1630,7 +1631,9 @@ def create_connector_with_mock_credential(
             distinct_id=str(user.id),
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
-        return response
+        return ConnectorWithMockCredentialCreationResponse(
+            **response.model_dump(), connector_id=connector_id
+        )
 
     except ConnectorValidationError as e:
         raise HTTPException(
