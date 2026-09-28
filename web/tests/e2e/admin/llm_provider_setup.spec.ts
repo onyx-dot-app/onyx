@@ -11,10 +11,17 @@ const PROVIDER_API_KEY =
   process.env.OPENAI_API_KEY ||
   "e2e-placeholder-api-key-not-used";
 
+type AdminModelConfiguration = {
+  name: string;
+  display_name: string | null;
+  custom_display_name: string | null;
+};
+
 type AdminLLMProvider = {
   id: number;
   name: string;
   is_auto_mode: boolean;
+  model_configurations: AdminModelConfiguration[];
 };
 
 type DefaultModelInfo = {
@@ -76,6 +83,24 @@ async function getAdminLLMProviderResponse(page: Page) {
 async function listAdminLLMProviders(page: Page): Promise<AdminLLMProvider[]> {
   const data = await getAdminLLMProviderResponse(page);
   return data.providers;
+}
+
+/**
+ * The name a model shows under in the pickers. The backend prettifies raw
+ * model names, and the picker's search matches that title, not the raw name.
+ */
+async function getModelDisplayName(
+  page: Page,
+  providerId: number,
+  modelName: string
+): Promise<string> {
+  const providers = await listAdminLLMProviders(page);
+  const provider = providers.find((p) => p.id === providerId);
+  const model = provider?.model_configurations.find(
+    (mc) => mc.name === modelName
+  );
+  expect(model).toBeTruthy();
+  return model!.custom_display_name || model!.display_name || modelName;
 }
 
 async function getDefaultTextModel(page: Page): Promise<DefaultModelInfo> {
@@ -382,18 +407,26 @@ test.describe("LLM Provider Setup @exclusive", () => {
       const listbox = page.getByRole("listbox", { name: "Select model" });
       await listbox.waitFor({ state: "visible", timeout: 10000 });
 
-      // Search for the target model to filter the list to just its entry.
-      // The list carries its own search box; the page has one too.
+      // Search for the target model by its display name to filter the list
+      // to just its entry. The list carries its own search box; the page
+      // has one too.
+      const secondModelDisplayName = await getModelDisplayName(
+        page,
+        secondProviderId,
+        secondModelName
+      );
       await listbox
         .getByRole("textbox", { name: "Search" })
-        .fill(secondModelName);
+        .fill(secondModelDisplayName);
 
       const defaultResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/admin/llm/default") &&
           response.request().method() === "POST"
       );
-      await listbox.getByRole("option", { name: secondModelName }).click();
+      await listbox
+        .getByRole("option", { name: secondModelDisplayName })
+        .click();
       await defaultResponsePromise;
 
       // Verify the default switched to the second provider
