@@ -12,8 +12,11 @@ from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 # the ``__init__`` annotation, e.g. a str Enum for a closed set of values.
 _NARROWED_FIELD_TYPES: set[tuple[str, str]] = {
     ("BlobStorageConnector", "bucket_type"),
+    ("ClickupConnector", "connector_type"),
+    ("HubSpotConnector", "object_types"),
     ("LocalFileConnector", "file_locations"),
     ("WebConnector", "web_connector_type"),
+    ("ZendeskConnector", "content_type"),
     ("ZoomConnector", "rate_limit_percent"),
 }
 

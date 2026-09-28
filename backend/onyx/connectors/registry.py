@@ -3,10 +3,16 @@
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.airtable.config import AirtableConnectorConfig
+from onyx.connectors.asana.config import AsanaConnectorConfig
 from onyx.connectors.axero.config import AxeroConnectorConfig
+from onyx.connectors.bitbucket.config import BitbucketConnectorConfig
 from onyx.connectors.blob.config import BlobStorageConnectorConfig
 from onyx.connectors.bookstack.config import BookstackConnectorConfig
 from onyx.connectors.box.config import BoxConnectorConfig
+from onyx.connectors.braintrust.config import BraintrustConnectorConfig
+from onyx.connectors.canvas.config import CanvasConnectorConfig
+from onyx.connectors.clickup.config import ClickupConnectorConfig
 from onyx.connectors.coda.config import CodaConnectorConfig
 from onyx.connectors.confluence.config import ConfluenceConnectorConfig
 from onyx.connectors.connector_config import ConnectorConfig
@@ -18,14 +24,20 @@ from onyx.connectors.drupal_wiki.config import DrupalWikiConnectorConfig
 from onyx.connectors.egnyte.config import EgnyteConnectorConfig
 from onyx.connectors.file.config import LocalFileConnectorConfig
 from onyx.connectors.fireflies.config import FirefliesConnectorConfig
+from onyx.connectors.freshdesk.config import FreshdeskConnectorConfig
 from onyx.connectors.gitbook.config import GitbookConnectorConfig
+from onyx.connectors.github.config import GithubConnectorConfig
+from onyx.connectors.gitlab.config import GitlabConnectorConfig
 from onyx.connectors.gmail.config import GmailConnectorConfig
 from onyx.connectors.gong.config import GongConnectorConfig
 from onyx.connectors.google_drive.config import GoogleDriveConnectorConfig
 from onyx.connectors.google_site.config import GoogleSitesConnectorConfig
 from onyx.connectors.guru.config import GuruConnectorConfig
 from onyx.connectors.highspot.config import HighspotConnectorConfig
+from onyx.connectors.hubspot.config import HubSpotConnectorConfig
 from onyx.connectors.imap.config import ImapConnectorConfig
+from onyx.connectors.jira.config import JiraConnectorConfig
+from onyx.connectors.linear.config import LinearConnectorConfig
 from onyx.connectors.loopio.config import LoopioConnectorConfig
 from onyx.connectors.lumapps.config import LumAppsConnectorConfig
 from onyx.connectors.mediawiki.config import MediaWikiConnectorConfig
@@ -33,13 +45,17 @@ from onyx.connectors.mock_connector.config import MockConnectorConfig
 from onyx.connectors.notion.config import NotionConnectorConfig
 from onyx.connectors.outline.config import OutlineConnectorConfig
 from onyx.connectors.outlook.config import OutlookConnectorConfig
+from onyx.connectors.productboard.config import ProductboardConnectorConfig
+from onyx.connectors.salesforce.config import SalesforceConnectorConfig
 from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.slab.config import SlabConnectorConfig
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.connectors.teams.config import TeamsConnectorConfig
+from onyx.connectors.testrail.config import TestRailConnectorConfig
 from onyx.connectors.web.config import WebConnectorConfig
 from onyx.connectors.wikipedia.config import WikipediaConnectorConfig
 from onyx.connectors.xenforo.config import XenforoConnectorConfig
+from onyx.connectors.zendesk.config import ZendeskConnectorConfig
 from onyx.connectors.zoom.config import ZoomConnectorConfig
 from onyx.connectors.zulip.config import ZulipConnectorConfig
 
@@ -71,6 +87,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.GITHUB: ConnectorMapping(
         module_path="onyx.connectors.github.connector",
         class_name="GithubConnector",
+        config_class=GithubConnectorConfig,
     ),
     DocumentSource.GMAIL: ConnectorMapping(
         module_path="onyx.connectors.gmail.connector",
@@ -80,6 +97,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.GITLAB: ConnectorMapping(
         module_path="onyx.connectors.gitlab.connector",
         class_name="GitlabConnector",
+        config_class=GitlabConnectorConfig,
     ),
     DocumentSource.GITBOOK: ConnectorMapping(
         module_path="onyx.connectors.gitbook.connector",
@@ -109,10 +127,12 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.JIRA: ConnectorMapping(
         module_path="onyx.connectors.jira.connector",
         class_name="JiraConnector",
+        config_class=JiraConnectorConfig,
     ),
     DocumentSource.PRODUCTBOARD: ConnectorMapping(
         module_path="onyx.connectors.productboard.connector",
         class_name="ProductboardConnector",
+        config_class=ProductboardConnectorConfig,
     ),
     DocumentSource.SLAB: ConnectorMapping(
         module_path="onyx.connectors.slab.connector",
@@ -127,6 +147,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.CANVAS: ConnectorMapping(
         module_path="onyx.connectors.canvas.connector",
         class_name="CanvasConnector",
+        config_class=CanvasConnectorConfig,
     ),
     DocumentSource.NOTION: ConnectorMapping(
         module_path="onyx.connectors.notion.connector",
@@ -146,10 +167,12 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.LINEAR: ConnectorMapping(
         module_path="onyx.connectors.linear.connector",
         class_name="LinearConnector",
+        config_class=LinearConnectorConfig,
     ),
     DocumentSource.HUBSPOT: ConnectorMapping(
         module_path="onyx.connectors.hubspot.connector",
         class_name="HubSpotConnector",
+        config_class=HubSpotConnectorConfig,
     ),
     DocumentSource.DOCUMENT360: ConnectorMapping(
         module_path="onyx.connectors.document360.connector",
@@ -169,6 +192,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.ZENDESK: ConnectorMapping(
         module_path="onyx.connectors.zendesk.connector",
         class_name="ZendeskConnector",
+        config_class=ZendeskConnectorConfig,
     ),
     DocumentSource.LOOPIO: ConnectorMapping(
         module_path="onyx.connectors.loopio.connector",
@@ -207,6 +231,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.SALESFORCE: ConnectorMapping(
         module_path="onyx.connectors.salesforce.connector",
         class_name="SalesforceConnector",
+        config_class=SalesforceConnectorConfig,
     ),
     DocumentSource.DISCOURSE: ConnectorMapping(
         module_path="onyx.connectors.discourse.connector",
@@ -221,6 +246,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.CLICKUP: ConnectorMapping(
         module_path="onyx.connectors.clickup.connector",
         class_name="ClickupConnector",
+        config_class=ClickupConnectorConfig,
     ),
     DocumentSource.MEDIAWIKI: ConnectorMapping(
         module_path="onyx.connectors.mediawiki.wiki",
@@ -235,6 +261,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.ASANA: ConnectorMapping(
         module_path="onyx.connectors.asana.connector",
         class_name="AsanaConnector",
+        config_class=AsanaConnectorConfig,
     ),
     DocumentSource.S3: ConnectorMapping(
         module_path="onyx.connectors.blob.connector",
@@ -269,6 +296,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.FRESHDESK: ConnectorMapping(
         module_path="onyx.connectors.freshdesk.connector",
         class_name="FreshdeskConnector",
+        config_class=FreshdeskConnectorConfig,
     ),
     DocumentSource.FIREFLIES: ConnectorMapping(
         module_path="onyx.connectors.fireflies.connector",
@@ -288,6 +316,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.AIRTABLE: ConnectorMapping(
         module_path="onyx.connectors.airtable.airtable_connector",
         class_name="AirtableConnector",
+        config_class=AirtableConnectorConfig,
     ),
     DocumentSource.HIGHSPOT: ConnectorMapping(
         module_path="onyx.connectors.highspot.connector",
@@ -307,14 +336,17 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.BITBUCKET: ConnectorMapping(
         module_path="onyx.connectors.bitbucket.connector",
         class_name="BitbucketConnector",
+        config_class=BitbucketConnectorConfig,
     ),
     DocumentSource.TESTRAIL: ConnectorMapping(
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",
+        config_class=TestRailConnectorConfig,
     ),
     DocumentSource.BRAINTRUST: ConnectorMapping(
         module_path="onyx.connectors.braintrust.connector",
         class_name="BraintrustConnector",
+        config_class=BraintrustConnectorConfig,
     ),
     DocumentSource.LUMAPPS: ConnectorMapping(
         module_path="onyx.connectors.lumapps.connector",
