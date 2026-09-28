@@ -3,14 +3,22 @@
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.blob.config import BlobStorageConnectorConfig
+from onyx.connectors.box.config import BoxConnectorConfig
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.discord.config import DiscordConnectorConfig
+from onyx.connectors.dropbox.config import DropboxConnectorConfig
+from onyx.connectors.egnyte.config import EgnyteConnectorConfig
+from onyx.connectors.file.config import LocalFileConnectorConfig
 from onyx.connectors.fireflies.config import FirefliesConnectorConfig
 from onyx.connectors.gmail.config import GmailConnectorConfig
 from onyx.connectors.gong.config import GongConnectorConfig
+from onyx.connectors.google_drive.config import GoogleDriveConnectorConfig
+from onyx.connectors.google_site.config import GoogleSitesConnectorConfig
 from onyx.connectors.imap.config import ImapConnectorConfig
 from onyx.connectors.mock_connector.config import MockConnectorConfig
 from onyx.connectors.outlook.config import OutlookConnectorConfig
+from onyx.connectors.sharepoint.config import SharepointConnectorConfig
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.connectors.teams.config import TeamsConnectorConfig
 from onyx.connectors.zoom.config import ZoomConnectorConfig
@@ -33,6 +41,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.FILE: ConnectorMapping(
         module_path="onyx.connectors.file.connector",
         class_name="LocalFileConnector",
+        config_class=LocalFileConnectorConfig,
     ),
     DocumentSource.SLACK: ConnectorMapping(
         module_path="onyx.connectors.slack.connector",
@@ -59,6 +68,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.GOOGLE_DRIVE: ConnectorMapping(
         module_path="onyx.connectors.google_drive.connector",
         class_name="GoogleDriveConnector",
+        config_class=GoogleDriveConnectorConfig,
     ),
     DocumentSource.BOOKSTACK: ConnectorMapping(
         module_path="onyx.connectors.bookstack.connector",
@@ -125,6 +135,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.GOOGLE_SITES: ConnectorMapping(
         module_path="onyx.connectors.google_site.connector",
         class_name="GoogleSitesConnector",
+        config_class=GoogleSitesConnectorConfig,
     ),
     DocumentSource.ZENDESK: ConnectorMapping(
         module_path="onyx.connectors.zendesk.connector",
@@ -137,14 +148,17 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.BOX: ConnectorMapping(
         module_path="onyx.connectors.box.connector",
         class_name="BoxConnector",
+        config_class=BoxConnectorConfig,
     ),
     DocumentSource.DROPBOX: ConnectorMapping(
         module_path="onyx.connectors.dropbox.connector",
         class_name="DropboxConnector",
+        config_class=DropboxConnectorConfig,
     ),
     DocumentSource.SHAREPOINT: ConnectorMapping(
         module_path="onyx.connectors.sharepoint.connector",
         class_name="SharepointConnector",
+        config_class=SharepointConnectorConfig,
     ),
     DocumentSource.ONEDRIVE: ConnectorMapping(
         module_path="onyx.connectors.onedrive.connector",
@@ -191,18 +205,22 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.S3: ConnectorMapping(
         module_path="onyx.connectors.blob.connector",
         class_name="BlobStorageConnector",
+        config_class=BlobStorageConnectorConfig,
     ),
     DocumentSource.R2: ConnectorMapping(
         module_path="onyx.connectors.blob.connector",
         class_name="BlobStorageConnector",
+        config_class=BlobStorageConnectorConfig,
     ),
     DocumentSource.GOOGLE_CLOUD_STORAGE: ConnectorMapping(
         module_path="onyx.connectors.blob.connector",
         class_name="BlobStorageConnector",
+        config_class=BlobStorageConnectorConfig,
     ),
     DocumentSource.OCI_STORAGE: ConnectorMapping(
         module_path="onyx.connectors.blob.connector",
         class_name="BlobStorageConnector",
+        config_class=BlobStorageConnectorConfig,
     ),
     DocumentSource.XENFORO: ConnectorMapping(
         module_path="onyx.connectors.xenforo.connector",
@@ -230,6 +248,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.EGNYTE: ConnectorMapping(
         module_path="onyx.connectors.egnyte.connector",
         class_name="EgnyteConnector",
+        config_class=EgnyteConnectorConfig,
     ),
     DocumentSource.AIRTABLE: ConnectorMapping(
         module_path="onyx.connectors.airtable.airtable_connector",

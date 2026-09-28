@@ -1,0 +1,13 @@
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.constants import BlobType
+from onyx.connectors.connector_config import ConnectorConfig
+
+
+class BlobStorageConnectorConfig(ConnectorConfig):
+    # The connector annotates this as str and converts it with BlobType(...).
+    bucket_type: BlobType
+    bucket_name: str
+    prefix: str = ""
+    batch_size: int = INDEX_BATCH_SIZE
+    european_residency: bool = False
+    region_name: str | None = None

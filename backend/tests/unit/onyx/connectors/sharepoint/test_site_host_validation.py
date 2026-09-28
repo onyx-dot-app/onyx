@@ -12,11 +12,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.sharepoint.connector import (
+from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
-    SharepointConnector,
 )
+from onyx.connectors.sharepoint.connector import SharepointConnector
 
 SITE_URL = "https://tenant.sharepoint.com/sites/MySite"
 ONEDRIVE_URL = "https://tenant-my.sharepoint.com/personal/alice_tenant_com"
