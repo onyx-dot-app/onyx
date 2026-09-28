@@ -30,9 +30,7 @@ def deactivate_user(
 ) -> None:
     """Deactivate a user and release the personas they own."""
     user.is_active = False
-    release_personas_owned_by_user__no_commit(
-        db_session, user.id, soft_delete_private=False
-    )
+    release_personas_owned_by_user__no_commit(db_session, user.id)
     db_session.add(user)
     db_session.commit()
 

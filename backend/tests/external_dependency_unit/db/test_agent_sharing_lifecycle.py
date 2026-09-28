@@ -1,7 +1,6 @@
-"""Regression coverage for the persona ownership lifecycle: user deletion
-soft-deletes private personas and orphans shared/public ones, deactivation
-orphans every owned persona, and self-removal from the share list works for
-everyone except the owner."""
+"""Regression coverage for the persona ownership lifecycle: user deletion and
+deactivation both orphan every owned persona without soft-deleting any, and
+self-removal from the share list works for everyone except the owner."""
 
 import pytest
 from sqlalchemy.orm import Session
@@ -19,9 +18,7 @@ from tests.external_dependency_unit.db.agent_sharing_helpers import (
 )
 
 
-def test_user_deletion_soft_deletes_private_and_orphans_shared(
-    db_session: Session,
-) -> None:
+def test_user_deletion_orphans_all_owned_personas(db_session: Session) -> None:
     owner = create_test_user(db_session, "owner")
     viewer = create_test_user(db_session, "viewer")
     private_persona = create_test_persona(db_session, owner)
@@ -33,16 +30,14 @@ def test_user_deletion_soft_deletes_private_and_orphans_shared(
 
     delete_user_from_db(owner, db_session)
 
-    private_after = db_session.get(Persona, private_persona.id)
-    shared_after = db_session.get(Persona, shared_persona.id)
-    public_after = db_session.get(Persona, public_persona.id)
-    assert private_after is not None and private_after.deleted
-    assert shared_after is not None and not shared_after.deleted
-    assert shared_after.user_id is None
-    assert public_after is not None and not public_after.deleted
-    assert public_after.user_id is None
-    # Orphaned personas are admin-manageable
-    assert persona_ownership_is_vacant(shared_after)
+    # A private persona survives too: the admin flow deactivates before it
+    # deletes, so ownership is already gone by then and only admins can reach it
+    for persona_id in (private_persona.id, shared_persona.id, public_persona.id):
+        persona = db_session.get(Persona, persona_id)
+        assert persona is not None
+        assert not persona.deleted
+        assert persona.user_id is None
+        assert persona_ownership_is_vacant(persona)
 
 
 def test_deactivation_orphans_all_owned_personas(db_session: Session) -> None:

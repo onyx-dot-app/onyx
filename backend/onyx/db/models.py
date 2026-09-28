@@ -4195,9 +4195,8 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Owner user. SET NULL (not CASCADE) so deleting a user orphans shared
-    # personas instead of destroying them; the delete flow soft-deletes the
-    # private ones first.
+    # Owner user. SET NULL (not CASCADE) so deleting a user orphans their
+    # personas for the admins instead of destroying them.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )

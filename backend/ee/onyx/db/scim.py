@@ -294,9 +294,7 @@ class ScimDAL(DAL):
     def deactivate_user(self, user: User) -> None:
         """Mark a user as inactive and hand their agents to the admins."""
         user.is_active = False
-        release_personas_owned_by_user__no_commit(
-            self._session, user.id, soft_delete_private=False
-        )
+        release_personas_owned_by_user__no_commit(self._session, user.id)
 
     def list_users(
         self,

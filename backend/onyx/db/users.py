@@ -936,30 +936,15 @@ def get_active_admin_count(db_session: Session) -> int:
 
 
 def release_personas_owned_by_user__no_commit(
-    db_session: Session, user_id: UUID, *, soft_delete_private: bool
+    db_session: Session, user_id: UUID
 ) -> None:
     """Clear the user's ownership so the personas become vacant (managed by
-    admins until transferred away). Ownership is not restored on reactivation.
-    With soft_delete_private, personas that are neither public nor shared are
-    also soft-deleted."""
-    owned_personas = (
-        db_session.query(Persona)
-        .options(
-            selectinload(Persona.user_shares),
-            selectinload(Persona.group_shares),
-        )
-        .filter(Persona.user_id == user_id)
-        .all()
+    admins until transferred away or deleted). Nothing is soft-deleted, even a
+    private persona, so admins can still recover it. Ownership is not restored
+    on reactivation."""
+    db_session.query(Persona).filter(Persona.user_id == user_id).update(
+        {Persona.user_id: None}, synchronize_session="fetch"
     )
-    for persona in owned_personas:
-        if (
-            soft_delete_private
-            and not persona.is_public
-            and not persona.user_shares
-            and not persona.group_shares
-        ):
-            persona.deleted = True
-        persona.user_id = None
 
 
 def delete_user_from_db__no_commit(
@@ -984,9 +969,7 @@ def delete_user_from_db__no_commit(
     db_session.query(DocumentSet).filter(
         DocumentSet.user_id == user_to_delete.id
     ).update({DocumentSet.user_id: None})
-    release_personas_owned_by_user__no_commit(
-        db_session, user_to_delete.id, soft_delete_private=True
-    )
+    release_personas_owned_by_user__no_commit(db_session, user_to_delete.id)
 
     db_session.query(DocumentSet__User).filter(
         DocumentSet__User.user_id == user_to_delete.id
