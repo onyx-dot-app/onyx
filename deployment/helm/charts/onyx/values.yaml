@@ -8,12 +8,16 @@
 #     See /docs/craft/dev/local-kubernetes.md.
 
 global:
-  # Global version for all Onyx components (overrides .Chart.AppVersion)
+  # Image tag for all Onyx components. Empty uses the chart appVersion, which the
+  # published chart pins to the latest stable release (e.g. "v1.2.3") when it is
+  # packaged, so pods never float to a newer app version on restart. Set a tag
+  # here to choose the version yourself; a component's image.tag overrides it.
+  # Upgrading the app runs its database migrations, so change this on purpose.
   # Every Onyx image publishes a -dev twin for each of its tags (e.g. "latest-dev",
   # "v1.2.3-dev"), so this single value can select the dev variant of the whole
   # deployment. Today only the backend image actually differs: its -dev twin adds
   # debugging tools (vim, nano, curl, ps, psql) that the default image leaves out.
-  version: "latest"
+  version: ""
   # Global pull policy for all Onyx component images
   pullPolicy: "IfNotPresent"
   # Host for all Onyx components
