@@ -27,7 +27,6 @@ from onyx.db.models import (
 from onyx.server.documents.credential import get_cc_source_full_info
 from onyx.server.documents.models import CredentialBase
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
-from tests.utils.fake_credential_family import register_fake_atlassian_family
 
 _SITE = "https://acme.atlassian.net"
 
@@ -82,9 +81,8 @@ def _make_pair(
 
 @pytest.fixture
 def setup(
-    db_session: Session, monkeypatch: pytest.MonkeyPatch
+    db_session: Session,
 ) -> Generator[_Setup, None, None]:
-    register_fake_atlassian_family(monkeypatch)
     owner = create_test_user(db_session, "family_owner")
     admin = create_test_user(db_session, "family_admin", is_admin=True)
     family_credential = create_credential(
@@ -217,6 +215,7 @@ def test_refresh_write_back_keeps_the_family_shape(
     assert stored == {
         "email": "user@example.com",
         "token": "rotated-token",
+        "oauth": None,
         "credential_family": "atlassian",
     }
 
