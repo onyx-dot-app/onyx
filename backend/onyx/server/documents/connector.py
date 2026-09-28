@@ -48,7 +48,11 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.factory import validate_ccpair_for_user, validate_connector_config
+from onyx.connectors.factory import (
+    validate_ccpair_for_user,
+    validate_connector_config,
+    validate_connector_credential_bindings,
+)
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
@@ -1658,9 +1662,15 @@ def update_connector_from_model(
 ) -> ConnectorSnapshot | StatusResponse[int]:
     try:
         _validate_connector_request(connector_data)
+        validate_connector_credential_bindings(
+            connector_id,
+            connector_data.source,
+            connector_data.connector_specific_config,
+            db_session,
+        )
         connector_base = connector_data.to_connector_base()
-    except ValueError as e:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+    except (ValueError, ConnectorValidationError) as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
     # TODO(andrei, evan): Validate the updated config here like the creation
     # flows do (``validate_ccpair_for_user`` / ``validate_connector_settings``).
