@@ -839,6 +839,13 @@ class LitellmLLM(LLM):
             model = f"responses/{model_bare}"
         elif self._api_surface is not None:
             model = model_bare
+            # LiteLLM strips a leading "openai/" when custom_llm_provider is
+            # "openai". Requesty needs the vendor in "openai/gpt-4o-mini", so
+            # prefix once more and let LiteLLM strip only the outer copy.
+            if self._model_provider == LlmProviderNames.REQUESTY and (
+                model_bare.startswith("openai/")
+            ):
+                model = f"openai/{model_bare}"
         else:
             model = f"{model_provider}/{model_bare}"
 

@@ -27,6 +27,18 @@ VERCEL_AI_GATEWAY_PROVIDER_NAME = "vercel_ai_gateway"
 # Public, unauthenticated catalog; also litellm's default base for this provider.
 VERCEL_AI_GATEWAY_DEFAULT_API_BASE = "https://ai-gateway.vercel.sh/v1"
 
+REQUESTY_PROVIDER_NAME = "requesty"
+REQUESTY_DEFAULT_API_BASE = "https://router.requesty.ai/v1"
+# Global and regional routers. The model fetch only sends a key to these hosts.
+REQUESTY_ALLOWED_HOSTS: frozenset[str] = frozenset(
+    {
+        "router.requesty.ai",
+        "router.eu.requesty.ai",
+        "router.us.requesty.ai",
+        "router.ap.requesty.ai",
+    }
+)
+
 PORTKEY_PROVIDER_NAME = "portkey"
 # Which API surface a Portkey provider targets; stored in custom_config.
 PORTKEY_API_MODE_CONFIG_KEY = "portkey_api_mode"

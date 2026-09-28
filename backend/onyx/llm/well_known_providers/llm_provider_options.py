@@ -31,6 +31,7 @@ from onyx.llm.well_known_providers.constants import (
     OPENAI_PROVIDER_NAME,
     OPENROUTER_PROVIDER_NAME,
     PORTKEY_PROVIDER_NAME,
+    REQUESTY_PROVIDER_NAME,
     VERCEL_AI_GATEWAY_PROVIDER_NAME,
     VERTEXAI_PROVIDER_NAME,
 )
@@ -67,6 +68,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
         VERCEL_AI_GATEWAY_PROVIDER_NAME: [],  # Dynamic - fetched from the public catalog
+        REQUESTY_PROVIDER_NAME: [],  # Dynamic - fetched from the Requesty router
     }
 
 
@@ -298,6 +300,7 @@ def get_provider_display_name(provider_name: str) -> str:
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",
         PORTKEY_PROVIDER_NAME: "Portkey",
         VERCEL_AI_GATEWAY_PROVIDER_NAME: "Vercel AI Gateway",
+        REQUESTY_PROVIDER_NAME: "Requesty",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:
