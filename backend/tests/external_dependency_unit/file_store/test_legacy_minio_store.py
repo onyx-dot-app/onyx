@@ -403,32 +403,6 @@ def test_copy_retries_a_source_that_changes_after_its_check(
     assert new_release.read_file(file_id).read() == b"before the rollback"
 
 
-def test_a_watch_pass_copies_only_what_changed(
-    stores: tuple[S3BackedFileStore, S3BackedFileStore],
-) -> None:
-    old_release, new_release = stores
-    file_ids = [_save(old_release, f"file {i}".encode()) for i in range(3)]
-    source, target = old_release._get_s3_client(), new_release._get_s3_client()
-    assert run_pass(source, target, [BUCKET], workers=4).failed == 0
-    newest = max(
-        obj["LastModified"] for obj in source.list_objects_v2(Bucket=BUCKET)["Contents"]
-    )
-    time.sleep(1.1)
-    key = new_release.read_file_record(file_ids[0]).object_key
-    source.put_object(Bucket=BUCKET, Key=key, Body=b"written during a rollback")
-
-    watched = run_pass(
-        source,
-        target,
-        [BUCKET],
-        workers=4,
-        modified_since=newest + timedelta(seconds=1),
-    )
-
-    assert (watched.listed, watched.copied) == (1, 1)
-    assert new_release.read_file(file_ids[0]).read() == b"written during a rollback"
-
-
 def test_copy_does_not_bring_back_a_file_deleted_during_the_copy(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:
@@ -866,45 +840,6 @@ def test_the_copy_stops_once_the_store_is_retired(
     legacy_copy.copy_legacy_objects()
 
     assert not _object_exists(target, key)
-
-
-def test_the_watch_copies_late_writes_until_a_retired_store_stops(
-    stores: tuple[S3BackedFileStore, S3BackedFileStore],
-    retirable: MagicMock,
-) -> None:
-    old_release, new_release = stores
-    target = new_release._get_s3_client()
-    late: list[str] = []
-    down = ClientError({"Error": {"Code": "503"}}, "ListBuckets")
-    sleeps = 0
-
-    def before_each_pass(_seconds: float) -> None:
-        nonlocal sleeps
-        sleeps += 1
-        if sleeps == 1:
-            target.put_object(
-                Bucket=BUCKET, Key=LEGACY_RETIRED_MARKER_KEY, Body=b"retired"
-            )
-            # A pod still on an older release writes after retirement.
-            late.append(_save(old_release, b"written after retiring"))
-        elif sleeps == 2:
-            retirable.side_effect = down
-        elif sleeps == 3:
-            # MinIO comes back from a blip, and the watch carries on.
-            retirable.side_effect = None
-            late.append(_save(old_release, b"written after the blip"))
-        elif sleeps == 4:
-            retirable.side_effect = down
-        elif sleeps > 6:
-            raise AssertionError("the watch kept running after MinIO stopped")
-
-    with patch.object(legacy_copy.time, "sleep", side_effect=before_each_pass):
-        legacy_copy.copy_legacy_objects(watch=True)
-
-    assert sleeps == 6
-    for file_id in late:
-        key = new_release.read_file_record(file_id).object_key
-        assert _object_exists(target, key)
 
 
 def test_craft_snapshots_survive_the_upgrade_and_a_rollback(

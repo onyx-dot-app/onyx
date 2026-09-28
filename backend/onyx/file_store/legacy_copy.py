@@ -5,7 +5,7 @@ never blocks traffic. Conditional puts let a file the app writes during the copy
 win. Each pass first replays into the legacy store the keys a failed app write or
 delete marked.
 
-Usage: python -m onyx.file_store.legacy_copy [--watch | --retire]
+Usage: python -m onyx.file_store.legacy_copy [--retire]
 """
 
 import argparse
@@ -15,7 +15,7 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
 from functools import partial
 from typing import IO, TYPE_CHECKING, TypedDict
@@ -65,10 +65,6 @@ logger = setup_logger()
 _SPOOL_MAX_BYTES = 16 * 1024 * 1024
 _CHUNK_BYTES = 8 * 1024 * 1024
 _PASS_INTERVAL_SECONDS = 60
-_WATCH_INTERVAL_SECONDS = 300
-# Each watch pass also covers this long before the previous pass started, for
-# uploads that were in flight then and for clock skew between the stores.
-_WATCH_OVERLAP = timedelta(minutes=10)
 # A release before the object store writes to MinIO alone, and a pass after this
 # long without such a write shows that none still runs.
 _RETIRE_QUIET_SECONDS = 60
@@ -76,8 +72,6 @@ _RETIRE_QUIET_SECONDS = 60
 # row the pass gives up, so the retry in a few minutes finds the store back
 # instead of timing out on every remaining object.
 _MAX_CONSECUTIVE_FAILURES = 32
-# A retired MinIO that misses this many watch passes in a row has been stopped.
-_RETIRED_STOP_AFTER_FAILED_PASSES = 3
 
 
 class _Condition(TypedDict, total=False):
@@ -358,11 +352,10 @@ def run_pass(
     target: "S3Client",
     buckets: list[str],
     workers: int,
-    modified_since: datetime | None = None,
 ) -> PassStats:
-    """Copy the objects of the given buckets that a file record points at, or
-    only those modified since the given time. Raises RuntimeError once
-    _MAX_CONSECUTIVE_FAILURES objects in a row fail, since a store is down."""
+    """Copy the objects of the given buckets that a file record points at.
+    Raises RuntimeError once _MAX_CONSECUTIVE_FAILURES objects in a row fail,
+    since a store is down."""
     stats = PassStats()
     consecutive_failures = 0
     paginator = source.get_paginator("list_objects_v2")
@@ -372,11 +365,7 @@ def run_pass(
             stats.failed += _resync_out_of_sync(source, target, bucket)
             copy_key = partial(_copy_object_logged, source, target, bucket)
             for page in paginator.paginate(Bucket=bucket):
-                listed = [
-                    obj["Key"]
-                    for obj in page.get("Contents", [])
-                    if modified_since is None or obj["LastModified"] >= modified_since
-                ]
+                listed = [obj["Key"] for obj in page.get("Contents", [])]
                 with_records = _keys_with_records(bucket, listed)
                 keys = [key for key in listed if key in with_records]
                 stats.unreferenced += len(listed) - len(keys)
@@ -451,11 +440,9 @@ def _retired(target: "S3Client") -> bool:
     return legacy_store_retired(target, S3_ENDPOINT_URL, S3_FILE_STORE_BUCKET_NAME)
 
 
-def copy_legacy_objects(watch: bool = False) -> None:
+def copy_legacy_objects() -> None:
     """Copy until a pass finds nothing new after the settle window. Raises
-    RuntimeError when objects fail to copy, so the job exits non-zero. With
-    watch, it then copies what changes and retries failures instead of raising,
-    until the legacy store is retired and stops answering."""
+    RuntimeError when objects fail to copy, so the job exits non-zero."""
     if not S3_LEGACY_ENDPOINT_URL:
         logger.info("No legacy MinIO store to copy from.")
         return
@@ -467,8 +454,6 @@ def copy_legacy_objects(watch: bool = False) -> None:
     started = time.monotonic()
     ensured: set[str] = set()
     while True:
-        # A pass can run for hours, so the watch starts from when it began.
-        since = datetime.now(timezone.utc)
         buckets = _list_and_ensure_buckets(source, target, ensured)
         stats = run_pass(source, target, buckets, LEGACY_COPY_WORKERS)
         if stats.failed:
@@ -484,37 +469,6 @@ def copy_legacy_objects(watch: bool = False) -> None:
             )
             break
         time.sleep(_PASS_INTERVAL_SECONDS)
-    if not watch:
-        return
-
-    # After a rollback an older release writes to MinIO only, and a container
-    # that outlives the rollback copies what it writes. After retirement it
-    # keeps copying late writes of an older release until MinIO is stopped.
-    failed_passes = 0
-    while True:
-        time.sleep(_WATCH_INTERVAL_SECONDS)
-        retired = _retired(target)
-        started_at = datetime.now(timezone.utc)
-        try:
-            buckets = _list_and_ensure_buckets(source, target, ensured)
-            stats = run_pass(
-                source, target, buckets, LEGACY_COPY_WORKERS, since - _WATCH_OVERLAP
-            )
-        except Exception:
-            failed_passes += 1
-            if retired and failed_passes >= _RETIRED_STOP_AFTER_FAILED_PASSES:
-                logger.info(
-                    "The legacy MinIO store is retired and has not answered for "
-                    "%d passes, so the watch stops.",
-                    failed_passes,
-                )
-                return
-            logger.exception("Legacy MinIO watch pass failed, retrying")
-            continue
-        failed_passes = 0
-        # Failed objects stay in the window, so the next pass tries them again.
-        if stats.failed == 0:
-            since = started_at
 
 
 def _copy_until_clean(
@@ -570,11 +524,7 @@ def retire_legacy_store() -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--watch", action="store_true", help="keep copying after the copy completes"
-    )
-    mode.add_argument(
+    parser.add_argument(
         "--retire",
         action="store_true",
         help="finish the copy, then stop every process from using MinIO",
@@ -584,4 +534,4 @@ if __name__ == "__main__":
     if args.retire:
         retire_legacy_store()
     else:
-        copy_legacy_objects(watch=args.watch)
+        copy_legacy_objects()
