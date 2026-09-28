@@ -357,19 +357,7 @@ class Tokenizer:
                     if self.input.length < 6:
                         return
 
-                    code = 0
-                    for j in range(2, 6):
-                        c = self.input.peek_char_code(j)
-                        if 48 <= c <= 57:  # 0-9
-                            digit = c - 48
-                        elif 65 <= c <= 70:  # A-F
-                            digit = c - 55
-                        elif 97 <= c <= 102:  # a-f
-                            digit = c - 87
-                        else:
-                            raise ValueError("Bad Unicode escape in JSON")
-                        code = (code << 4) | digit
-
+                    code = self._read_hex4(2)
                     width = 6
                     if 0xD800 <= code <= 0xDBFF:
                         # Keep a surrogate pair together across input fragments.
@@ -381,12 +369,7 @@ class Tokenizer:
                             if self.input.peek(7) == "u":
                                 if self.input.length < 12:
                                     return
-                                low = int(
-                                    "".join(
-                                        self.input.peek(i) or "" for i in range(8, 12)
-                                    ),
-                                    16,
-                                )
+                                low = self._read_hex4(8)
                                 if 0xDC00 <= low <= 0xDFFF:
                                     code = (
                                         0x10000 + ((code - 0xD800) << 10) + low - 0xDC00
@@ -419,6 +402,22 @@ class Tokenizer:
                 self.input.advance(2)
                 self._handler.handle_string_middle(value)
                 self._emitted_tokens += 1
+
+    def _read_hex4(self, offset: int) -> int:
+        """Read four ASCII hex digits of a \\u escape, starting at offset"""
+        code = 0
+        for j in range(offset, offset + 4):
+            c = self.input.peek_char_code(j)
+            if 48 <= c <= 57:  # 0-9
+                digit = c - 48
+            elif 65 <= c <= 70:  # A-F
+                digit = c - 55
+            elif 97 <= c <= 102:  # a-f
+                digit = c - 87
+            else:
+                raise ValueError("Bad Unicode escape in JSON")
+            code = (code << 4) | digit
+        return code
 
     def _tokenize_array_start(self) -> None:
         """Tokenize start of array (check for empty or first element)"""

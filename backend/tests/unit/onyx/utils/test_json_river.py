@@ -194,6 +194,10 @@ class TestEscapeSequences:
         ]
         assert "".join(parts) == "a\U0001f600b"
 
+    def test_surrogate_pair_rejects_non_ascii_hex_digits(self) -> None:
+        with pytest.raises(ValueError, match="Bad Unicode escape"):
+            _all_deltas(['{"e": "\\ud83d\\ude٠٠"}'])
+
     def test_backslash_escape(self) -> None:
         deltas = _all_deltas(['{"p": "c:\\\\dir"}'])
         parts = [
