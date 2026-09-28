@@ -495,7 +495,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
             logger.exception("Failed to dispose readonly SQLAlchemy engine on shutdown")
 
         if RATE_LIMITING_ENABLED:
-            await close_auth_limiter()
+            try:
+                await close_auth_limiter()
+            except Exception:
+                logger.exception("Failed to close auth rate limiter on shutdown")
 
 
 def log_http_error(request: Request, exc: Exception) -> JSONResponse:

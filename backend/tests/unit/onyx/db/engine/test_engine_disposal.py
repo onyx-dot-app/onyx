@@ -102,8 +102,9 @@ async def test_reset_async_engine_is_a_noop_when_uninitialized() -> None:
 @pytest.mark.parametrize(
     "drained, body_fails", [(True, False), (False, False), (True, True)]
 )
+@pytest.mark.parametrize("shutdown_fails", [False, True])
 async def test_lifespan_shutdown_disposes_all_three_engines(
-    drained: bool, body_fails: bool
+    drained: bool, body_fails: bool, shutdown_fails: bool
 ) -> None:
     """End-to-end check: the FastAPI lifespan's shutdown phase must dispose
     each engine. The lifespan touches a lot of other startup machinery; we
@@ -164,7 +165,13 @@ async def test_lifespan_shutdown_disposes_all_three_engines(
         stack.enter_context(patch.object(onyx_main, "get_or_generate_uuid"))
         stack.enter_context(patch.object(onyx_main, "optional_telemetry"))
         stack.enter_context(patch.object(onyx_main, "MULTI_TENANT", False))
-        stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", False))
+        stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", True))
+        stack.enter_context(
+            patch.object(onyx_main, "setup_auth_limiter", new=AsyncMock())
+        )
+        close_limiter = stack.enter_context(
+            patch.object(onyx_main, "close_auth_limiter", new=AsyncMock())
+        )
         stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", True))
         stack.enter_context(
             patch("onyx.background.periodic_poller.recover_stuck_user_files")
@@ -185,6 +192,12 @@ async def test_lifespan_shutdown_disposes_all_three_engines(
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_SECRET", ""))
         stack.enter_context(patch.object(onyx_main, "SYSTEM_RECURSION_LIMIT", None))
 
+        if shutdown_fails:
+            shutdown_tracing.side_effect = RuntimeError("Tracing shutdown failed")
+            reset_async.side_effect = RuntimeError("Async disposal failed")
+            reset_sync.side_effect = RuntimeError("Sync disposal failed")
+            close_limiter.side_effect = RuntimeError("Rate limiter close failed")
+
         try:
             async with onyx_main.lifespan(MagicMock()):
                 reset_sync.assert_not_called()
@@ -199,6 +212,7 @@ async def test_lifespan_shutdown_disposes_all_three_engines(
             assert not body_fails
         shutdown_tracing.assert_called_once_with()
         stop_poller.assert_called_once_with()
+        close_limiter.assert_awaited_once_with()
 
         # After exiting the context manager: shutdown ran.
         reset_async.assert_awaited_once_with()

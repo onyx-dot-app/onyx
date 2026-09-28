@@ -7,6 +7,7 @@ and the periodic cleanup function.
 
 import math
 import time
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import pytest
@@ -332,5 +333,26 @@ def test_control_lease_renewal_does_not_wait_for_a_locked_cache_row(
             with pytest.raises(OperationalError, match="timeout"):
                 control.expire_if_value(key, b"owner", 60)
         assert control.expire_if_value(key, b"owner", 60)
+    finally:
+        pg_cache.delete(key)
+
+
+def test_lease_renewal_rejects_lease_that_expires_during_row_lock_wait(
+    pg_cache: PostgresCacheBackend,
+) -> None:
+    tenant_id = POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    key = _key()
+    pg_cache.set(key, b"owner", ex=2)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with get_session_with_tenant(tenant_id=tenant_id) as session:
+                session.execute(
+                    select(CacheStore).where(CacheStore.key == key).with_for_update()
+                )
+                renewal = executor.submit(pg_cache.expire_if_value, key, b"owner", 60)
+                time.sleep(3)
+                assert not renewal.done()
+            assert renewal.result(timeout=5) is False
+        assert pg_cache.ttl(key) == TTL_KEY_NOT_FOUND
     finally:
         pg_cache.delete(key)
