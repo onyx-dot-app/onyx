@@ -687,6 +687,8 @@ export default function OpenAPIAuthenticationModal({
                     )}
                     {values.authMethod === "pt-oauth" && (
                       <MessageCard
+                        outerPadding={1}
+                        innerPadding={1}
                         title={t("openApiAuthModal.passThroughNotice.title")}
                         description={t(
                           "openApiAuthModal.passThroughNotice.description",

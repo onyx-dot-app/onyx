@@ -104,10 +104,11 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
         );
         const card = (
           <MessageCard
+            innerPadding={1}
             variant={t.level ?? "info"}
             title={truncatedTitle}
             description={buildDescription(t, errorAppendix)}
-            padding={1}
+            outerPadding={1}
             onClose={t.dismissible ? () => handleClose(t.id) : undefined}
             bottomChildren={
               isExpanded ? <ExpandedDetails message={t.message} /> : undefined

@@ -413,6 +413,8 @@ export default function Page({ params }: Props) {
           )}
         >
           <MessageCard
+            outerPadding={1}
+            innerPadding={1}
             variant="warning"
             title={t("unsavedChanges.title")}
             description={t("unsavedChanges.description")}

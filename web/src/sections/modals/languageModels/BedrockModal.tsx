@@ -216,6 +216,8 @@ function BedrockModalInternals({
       {authMethod === AUTH_METHOD_IAM && (
         <InputPadder>
           <MessageCard
+            outerPadding={1}
+            innerPadding={1}
             variant="info"
             title={t("bedrock.iamNotice.title", { appName })}
           />

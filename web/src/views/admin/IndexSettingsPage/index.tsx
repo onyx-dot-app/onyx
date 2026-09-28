@@ -1267,7 +1267,6 @@ export default function IndexSettingsPage() {
                       // Non-port reindex has no PortAttempt progress → the original banner.
                       <MessageCard
                         variant="warning"
-                        headerPadding={2}
                         title={t("reindexBanner.title")}
                         description={markdown(
                           t("reindexBanner.description", {
@@ -1304,7 +1303,6 @@ export default function IndexSettingsPage() {
                         variant={
                           contextualRagModelMissing ? "error" : statusVariant
                         }
-                        headerPadding={2}
                         title={
                           contextualRagModelMissing
                             ? t("changesBanner.contextualModelMissing.title")
