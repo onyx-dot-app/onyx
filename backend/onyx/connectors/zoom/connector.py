@@ -62,7 +62,11 @@ from onyx.connectors.zoom.recordings.processing import (
     process_occurrence,
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
-from onyx.connectors.zoom.validation import probe_zoom
+from onyx.connectors.zoom.validation import (
+    ProbeSample,
+    probe_recording_access_scopes,
+    probe_zoom,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -217,6 +221,10 @@ class ZoomConnector(
         self.plan_tier = plan_tier
         self.rate_limit_percent = rate_limit_percent
         self.client: ZoomClient | None = None
+        # validate_connector_settings keeps what it sampled here so the
+        # permission-sync probe asks about the same things instead of sampling
+        # again. None means it has not run.
+        self._probe_sample: ProbeSample | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         account_id = credentials.get("zoom_account_id")
@@ -235,6 +243,8 @@ class ZoomConnector(
                 share=parse_rate_limit_percent(self.rate_limit_percent),
             ),
         )
+        # A sample from the old credential may not exist for the new one.
+        self._probe_sample = None
         return None
 
     def _raise_if_nothing_is_in_scope(self) -> None:
@@ -265,15 +275,30 @@ class ZoomConnector(
         except ValueError as e:
             raise ConnectorValidationError(str(e)) from e
 
+        self._probe_zoom()
+
+    def _probe_zoom(self) -> ProbeSample:
         if self.client is None:
             raise ConnectorMissingCredentialError("Zoom")
-        probe_zoom(
+        self._probe_sample = probe_zoom(
             self.client,
             meeting_ids=self._meeting_ids,
             webinar_ids=self._webinar_ids,
             host_emails=self._host_emails,
             group_id=self._group_id,
         )
+        return self._probe_sample
+
+    def probe_recording_access_permissions(self) -> None:
+        """A missing permission-sync scope would otherwise index every transcript
+        as readable by its owner alone, with nothing to say why. Reuses the
+        recording validate_connector_settings sampled, or samples if that has
+        not run.
+        """
+        if self.client is None:
+            raise ConnectorMissingCredentialError("Zoom")
+        sample = self._probe_sample or self._probe_zoom()
+        probe_recording_access_scopes(self.client, sample)
 
     def build_dummy_checkpoint(self) -> ZoomConnectorCheckpoint:
         return ZoomConnectorCheckpoint(has_more=True)
