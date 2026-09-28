@@ -3,11 +3,15 @@
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.mock_connector.config import MockConnectorConfig
 
 
 class ConnectorMapping(BaseModel):
     module_path: str
     class_name: str
+    # TODO(evan-onyx): make required once every connector has a typed config.
+    config_class: type[ConnectorConfig] | None = None
 
 
 # Mapping of DocumentSource to connector details for lazy loading
@@ -244,5 +248,6 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",
         class_name="MockConnector",
+        config_class=MockConnectorConfig,
     ),
 }
