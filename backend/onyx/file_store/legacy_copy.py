@@ -1,9 +1,9 @@
-"""Copy every object from the legacy MinIO store into the bundled object store.
+"""Copy every object a file record points at from the legacy MinIO store into
+the bundled object store.
 
 Runs beside the app, which falls back to the legacy store on a miss, so the copy
 never blocks traffic. Conditional puts let a file the app writes during the copy
-win. Each pass first replays into the legacy store the keys a failed app write or
-delete marked.
+win. Each pass first replays into the legacy store the writes that failed there.
 
 Usage: python -m onyx.file_store.legacy_copy [--retire]
 """
@@ -101,9 +101,13 @@ class PassStats:
     # outlived a failed delete. They are never copied.
     unreferenced: int = 0
     copied_bytes: int = 0
+    failed_in_a_row: int = 0
 
     def add(self, outcome: CopyOutcome, size: int) -> None:
         self.listed += 1
+        self.failed_in_a_row = (
+            self.failed_in_a_row + 1 if outcome == CopyOutcome.FAILED else 0
+        )
         if outcome == CopyOutcome.COPIED:
             self.copied += 1
             self.copied_bytes += size
@@ -331,9 +335,10 @@ def _resync_out_of_sync(source: "S3Client", target: "S3Client", bucket: str) -> 
     return failed
 
 
-# Only the copy uses multipart uploads and its passes run one at a time, so an
-# upload open when a pass starts is a copy that died mid-put, holding disk.
-def _abort_stale_uploads(target: "S3Client", bucket: str) -> int:
+# Only the copy uses multipart uploads, so one open at pass start is a copy that
+# died mid-put, holding disk. A retire run during the copy fails both passes'
+# puts in flight, and the next pass repeats them.
+def _abort_stale_uploads(target: "S3Client", bucket: str) -> None:
     aborted = 0
     paginator = target.get_paginator("list_multipart_uploads")
     for page in paginator.paginate(Bucket=bucket):
@@ -344,7 +349,6 @@ def _abort_stale_uploads(target: "S3Client", bucket: str) -> int:
             aborted += 1
     if aborted:
         logger.info("Aborted %d uploads left by an earlier copy of %s", aborted, bucket)
-    return aborted
 
 
 def run_pass(
@@ -357,7 +361,6 @@ def run_pass(
     Raises RuntimeError once _MAX_CONSECUTIVE_FAILURES objects in a row fail,
     since a store is down."""
     stats = PassStats()
-    consecutive_failures = 0
     paginator = source.get_paginator("list_objects_v2")
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for bucket in buckets:
@@ -373,16 +376,12 @@ def run_pass(
                     continue
                 for outcome, size in pool.map(copy_key, keys):
                     stats.add(outcome, size)
-                    if outcome != CopyOutcome.FAILED:
-                        consecutive_failures = 0
-                        continue
-                    consecutive_failures += 1
-                    if consecutive_failures < _MAX_CONSECUTIVE_FAILURES:
+                    if stats.failed_in_a_row < _MAX_CONSECUTIVE_FAILURES:
                         continue
                     # Only the copies in flight finish, not the rest of the page.
                     pool.shutdown(wait=False, cancel_futures=True)
                     raise RuntimeError(
-                        f"{consecutive_failures} objects in a row failed to copy "
+                        f"{stats.failed_in_a_row} objects in a row failed to copy "
                         f"from {bucket}, so a store is not answering and the pass stops"
                     )
                 logger.info(
@@ -415,24 +414,19 @@ def _clients() -> tuple["S3Client", "S3Client"]:
     """(legacy MinIO, object store). Short timeouts, so a hung store fails a
     pass in about a minute rather than minutes per object."""
     assert S3_LEGACY_ENDPOINT_URL
-    source = build_s3_client(
+    build = partial(
+        build_s3_client,
+        region_name=AWS_REGION_NAME,
+        verify_ssl=S3_VERIFY_SSL,
+        fail_fast=True,
+        max_pool_connections=LEGACY_COPY_WORKERS,
+    )
+    source = build(
         S3_LEGACY_ENDPOINT_URL,
         S3_LEGACY_AWS_ACCESS_KEY_ID,
         S3_LEGACY_AWS_SECRET_ACCESS_KEY,
-        AWS_REGION_NAME,
-        S3_VERIFY_SSL,
-        fail_fast=True,
-        max_pool_connections=LEGACY_COPY_WORKERS,
     )
-    target = build_s3_client(
-        S3_ENDPOINT_URL,
-        S3_AWS_ACCESS_KEY_ID,
-        S3_AWS_SECRET_ACCESS_KEY,
-        AWS_REGION_NAME,
-        S3_VERIFY_SSL,
-        fail_fast=True,
-        max_pool_connections=LEGACY_COPY_WORKERS,
-    )
+    target = build(S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, S3_AWS_SECRET_ACCESS_KEY)
     return source, target
 
 

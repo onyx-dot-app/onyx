@@ -4859,10 +4859,6 @@ class SecuritySettings(Base):
 
 class FileRecord(Base):
     __tablename__ = "file_record"
-    # The legacy copy looks records up by object, once per copied file.
-    __table_args__ = (
-        Index("ix_file_record_bucket_name_object_key", "bucket_name", "object_key"),
-    )
 
     # Internal file ID, must be unique across all files.
     file_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -4888,6 +4884,11 @@ class FileRecord(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # The legacy copy looks records up by object, once per copied file.
+    __table_args__ = (
+        Index("ix_file_record_bucket_name_object_key", "bucket_name", "object_key"),
     )
 
 

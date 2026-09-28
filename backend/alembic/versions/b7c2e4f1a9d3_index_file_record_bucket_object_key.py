@@ -20,7 +20,6 @@ def upgrade() -> None:
         "ix_file_record_bucket_name_object_key",
         "file_record",
         ["bucket_name", "object_key"],
-        unique=False,
     )
 
 

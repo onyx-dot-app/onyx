@@ -149,16 +149,18 @@ def build_s3_client(
             "region_name": region_name,
         }
         # One connection per concurrent caller, or the pool opens and drops a
-        # connection for every request beyond boto3's default of ten.
+        # connection for every request beyond boto3's default of ten. An explicit
+        # None would size the pool at one.
+        config = Config()
         if max_pool_connections is not None:
-            client_kwargs["config"] = Config(max_pool_connections=max_pool_connections)
+            config = Config(max_pool_connections=max_pool_connections)
 
         # An endpoint URL means a self-hosted store, which needs path-style addressing.
         if endpoint_url:
             client_kwargs["endpoint_url"] = endpoint_url
-            config = Config(signature_version="s3v4", s3={"addressing_style": "path"})
-            if max_pool_connections is not None:
-                config = config.merge(client_kwargs["config"])
+            config = config.merge(
+                Config(signature_version="s3v4", s3={"addressing_style": "path"})
+            )
             # A hung secondary store must not hold up the request it serves.
             if fail_fast:
                 config = config.merge(
@@ -168,13 +170,13 @@ def build_s3_client(
                         retries={"total_max_attempts": 2},
                     )
                 )
-            client_kwargs["config"] = config
             # Disable SSL verification if requested (for local development)
             if not verify_ssl:
                 import urllib3
 
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
                 client_kwargs["verify"] = False
+        client_kwargs["config"] = config
 
         # Without explicit keys, boto3 uses the IAM role or default credentials.
         if access_key_id and secret_access_key:
@@ -404,7 +406,7 @@ class S3BackedFileStore(FileStore):
         return self._legacy_s3_client
 
     # Writes and deletes skip a retired legacy store. Reads still fall back to
-    # it, so a late write of an older release stays readable until it is copied.
+    # it while MinIO runs, so a late write of an older release stays readable.
     def _get_legacy_write_client(self) -> "S3Client | None":
         legacy_client = self._get_legacy_s3_client()
         if legacy_client is None or self._legacy_store_retired():
