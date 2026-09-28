@@ -129,8 +129,3 @@ export function useConfiguredEmbeddingProviders() {
     errorHandlingFetcher
   );
 }
-
-/**
- * The tenant's image processing settings. `data` is `null` when the feature
- * is off and `undefined` while loading.
- */
