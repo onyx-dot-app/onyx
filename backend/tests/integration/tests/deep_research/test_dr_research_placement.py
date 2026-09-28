@@ -16,11 +16,11 @@ from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.mock_services.mock_llm_server.handle import ScriptHandle
 from tests.integration.mock_services.mock_llm_server.models import (
-    Matcher,
-    Step,
+    Reply,
+    RequestConditions,
     ToolCall,
 )
 
@@ -40,25 +40,25 @@ _SEARCH_PACKET_TYPES = {
 }
 
 
-def _script_deep_research(mock_llm: ScriptHandle) -> None:
+def _script_deep_research(mock_llm: MockLLMScript) -> None:
     # Runs only when Deep Research clarification is enabled.
-    mock_llm.lane(
+    mock_llm.conversation(
         "clarification",
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(id="call_generate_plan", name=GENERATE_PLAN_TOOL_NAME)
             ],
             required=False,
         ),
-        match=Matcher(offered_tools=[GENERATE_PLAN_TOOL_NAME]),
+        conditions=RequestConditions(offers=[GENERATE_PLAN_TOOL_NAME]),
     )
-    mock_llm.lane(
+    mock_llm.conversation(
         "orchestrator",
-        Step(
+        Reply(
             text="1. Research the zebra quartz launch timeline.",
-            match=Matcher(tools_offered=False),
+            conditions=RequestConditions(has_tools=False),
         ),
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(
                     id=_RESEARCH_CALL_ID,
@@ -66,28 +66,30 @@ def _script_deep_research(mock_llm: ScriptHandle) -> None:
                     arguments={RESEARCH_AGENT_TASK_KEY: _RESEARCH_TASK},
                 )
             ],
-            match=Matcher(
-                offered_tools=[RESEARCH_AGENT_TOOL_NAME, THINK_TOOL_NAME],
+            conditions=RequestConditions(
+                offers=[RESEARCH_AGENT_TOOL_NAME, THINK_TOOL_NAME],
                 tool_choice="required",
             ),
         ),
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(id=_PARENT_REPORT_CALL_ID, name=GENERATE_REPORT_TOOL_NAME)
             ],
-            match=Matcher(
-                offered_tools=[RESEARCH_AGENT_TOOL_NAME],
-                tool_results_for=[_RESEARCH_CALL_ID],
+            conditions=RequestConditions(
+                offers=[RESEARCH_AGENT_TOOL_NAME],
+                has_results_for=[_RESEARCH_CALL_ID],
             ),
         ),
-        Step(
+        Reply(
             text=_FINAL_REPORT,
-            match=Matcher(tools_offered=False, tool_results_for=[_RESEARCH_CALL_ID]),
+            conditions=RequestConditions(
+                has_tools=False, has_results_for=[_RESEARCH_CALL_ID]
+            ),
         ),
     )
-    mock_llm.lane(
+    mock_llm.conversation(
         "research",
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(
                     id=_THINK_CALL_ID,
@@ -95,17 +97,17 @@ def _script_deep_research(mock_llm: ScriptHandle) -> None:
                     arguments={"reasoning": _THINK_TEXT},
                 )
             ],
-            match=Matcher(
-                offered_tools=[
+            conditions=RequestConditions(
+                offers=[
                     SearchTool.NAME,
                     THINK_TOOL_NAME,
                     GENERATE_REPORT_TOOL_NAME,
                 ],
-                not_offered_tools=[RESEARCH_AGENT_TOOL_NAME],
+                does_not_offer=[RESEARCH_AGENT_TOOL_NAME],
                 tool_choice="required",
             ),
         ),
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(
                     id=_SEARCH_CALL_ID,
@@ -113,23 +115,25 @@ def _script_deep_research(mock_llm: ScriptHandle) -> None:
                     arguments={"queries": ["zebra quartz launch"]},
                 )
             ],
-            match=Matcher(
-                offered_tools=[SearchTool.NAME],
-                tool_results_for=[_THINK_CALL_ID],
+            conditions=RequestConditions(
+                offers=[SearchTool.NAME],
+                has_results_for=[_THINK_CALL_ID],
             ),
         ),
-        Step(
+        Reply(
             tool_calls=[
                 ToolCall(id=_CHILD_REPORT_CALL_ID, name=GENERATE_REPORT_TOOL_NAME)
             ],
-            match=Matcher(
-                offered_tools=[SearchTool.NAME],
-                tool_results_for=[_SEARCH_CALL_ID],
+            conditions=RequestConditions(
+                offers=[SearchTool.NAME],
+                has_results_for=[_SEARCH_CALL_ID],
             ),
         ),
-        Step(
+        Reply(
             text="The launch timeline is not in the internal docs.",
-            match=Matcher(tools_offered=False, tool_results_for=[_SEARCH_CALL_ID]),
+            conditions=RequestConditions(
+                has_tools=False, has_results_for=[_SEARCH_CALL_ID]
+            ),
         ),
     )
 
@@ -144,7 +148,7 @@ def _placement(packet: dict[str, Any]) -> tuple[int, int, int | None]:
 
 
 def test_research_think_step_takes_one_sub_turn(
-    admin_user: DATestUser, mock_llm: ScriptHandle
+    admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     """A research child that thinks before it searches places the search one
     sub-turn after the think reasoning, in the stream and in the saved tool call."""
@@ -164,7 +168,7 @@ def test_research_think_step_takes_one_sub_turn(
     )
     assert response.error is None, f"Unexpected stream error: {response.error}"
     assert response.full_message == _FINAL_REPORT
-    assert [r.step_index for r in mock_llm.lane_requests("research")] == [0, 1, 2, 3]
+    assert [r.reply_index for r in mock_llm.requests_in("research")] == [0, 1, 2, 3]
 
     # The think arguments stream as the child's only reasoning section.
     child_reasoning = [
