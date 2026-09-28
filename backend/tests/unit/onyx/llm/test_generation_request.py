@@ -388,6 +388,12 @@ def test_complete_conversion_preserves_native_calls_and_response_metadata(
     assert message.usage is not None
     message.usage.prompt_tokens = 999
     assert response.usage is not None and response.usage.prompt_tokens == 10
+    assert message.thinking_blocks is not None
+    thinking = message.thinking_blocks[0]
+    assert isinstance(thinking, ThinkingBlock)
+    thinking.signature = "changed-signature"
+    assert response.choice.message.thinking_blocks == [signed]
+    assert signed.signature == "provider-signature"
 
 
 def test_invoke_records_the_provider_response_on_its_span() -> None:
