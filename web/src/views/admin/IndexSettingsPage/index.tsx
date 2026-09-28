@@ -1277,19 +1277,23 @@ export default function IndexSettingsPage() {
                   {
                     value: SwitchoverType.REINDEX,
                     title: t("switchover.reindexAll.label"),
-                    description: t("switchover.reindexAll.description"),
+                    description: markdown(
+                      t("switchover.reindexAll.description")
+                    ),
                     icon: SvgClock,
                   },
                   {
                     value: SwitchoverType.ACTIVE_ONLY,
                     title: t("switchover.activeOnly.label"),
-                    description: t("switchover.activeOnly.description"),
+                    description: markdown(
+                      t("switchover.activeOnly.description")
+                    ),
                     icon: SvgSlowTime,
                   },
                   {
                     value: SwitchoverType.INSTANT,
                     title: t("switchover.instant.label"),
-                    description: t("switchover.instant.description"),
+                    description: markdown(t("switchover.instant.description")),
                     icon: SvgEmpty,
                   },
                 ],
@@ -1301,7 +1305,9 @@ export default function IndexSettingsPage() {
                     {
                       value: DO_NOT_REINDEX,
                       title: t("switchover.doNotReindex.label"),
-                      description: t("switchover.doNotReindex.description"),
+                      description: markdown(
+                        t("switchover.doNotReindex.description")
+                      ),
                       icon: SvgCheckSquare,
                     },
                     reindexStrategyOptions,

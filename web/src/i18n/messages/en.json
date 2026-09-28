@@ -5200,20 +5200,20 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt.",
+          "description": "Continue using the current document index with existing settings until all **active** (not paused/deleting) connectors have completed a successful index attempt.",
           "label": "Re-index Active Connectors Then Switch"
         },
         "doNotReindex": {
-          "description": "Save the settings and leave the current index as it is. Only documents indexed from now on use them.",
+          "description": "**Safest option.** Only apply changes to newly indexed content.",
           "label": "Do Not Re-index"
         },
         "instant": {
-          "description": "Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search.",
+          "description": "Immediately **clear the current document index** and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search.",
           "label": "Switch Before Re-index"
         },
         "placeholder": "Select a switchover strategy",
         "reindexAll": {
-          "description": "Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt.",
+          "description": "Continue using the current document index with existing settings until all connectors have completed a successful index attempt.",
           "label": "Re-index All Connectors Then Switch"
         },
         "reindexOptions": {

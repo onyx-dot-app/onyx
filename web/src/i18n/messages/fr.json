@@ -5200,20 +5200,20 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Continuez d'utiliser l'index de documents actuel avec les paramètres existants jusqu'à ce que tous les connecteurs actifs (ni en pause ni en cours de suppression) aient terminé une indexation réussie.",
+          "description": "Continue d’utiliser l’index de documents actuel avec les paramètres existants jusqu’à ce que tous les connecteurs **actifs** (non suspendus/en suppression) aient terminé une indexation réussie.",
           "label": "Réindexer les connecteurs actifs puis basculer"
         },
         "doNotReindex": {
-          "description": "Enregistre les paramètres et laisse l’index actuel tel quel. Seuls les documents indexés à partir de maintenant les utilisent.",
+          "description": "**Option la plus sûre.** Applique les modifications uniquement au contenu nouvellement indexé.",
           "label": "Ne pas réindexer"
         },
         "instant": {
-          "description": "Videz immédiatement l'index de documents actuel et passez aux nouveaux paramètres. Nécessite de réindexer tous les connecteurs avant que l'index soit de nouveau disponible pour la recherche.",
+          "description": "**Vide immédiatement l’index de documents actuel** et bascule vers les nouveaux paramètres. Nécessite de réindexer tous les connecteurs avant que l’index soit de nouveau disponible pour la recherche.",
           "label": "Basculer avant la réindexation"
         },
         "placeholder": "Sélectionnez une stratégie de bascule",
         "reindexAll": {
-          "description": "Option la plus sûre. Continuez d'utiliser l'index de documents actuel avec les paramètres existants jusqu'à ce que tous les connecteurs aient terminé une indexation réussie.",
+          "description": "Continue d’utiliser l’index de documents actuel avec les paramètres existants jusqu’à ce que tous les connecteurs aient terminé une indexation réussie.",
           "label": "Réindexer tous les connecteurs puis basculer"
         },
         "reindexOptions": {

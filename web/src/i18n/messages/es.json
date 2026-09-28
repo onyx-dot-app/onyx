@@ -5200,20 +5200,20 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores activos (no pausados ni en eliminación) hayan completado un intento de indexación correcto.",
+          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores **activos** (no pausados/en eliminación) completen un intento de indexación correcto.",
           "label": "Reindexar los conectores activos y luego cambiar"
         },
         "doNotReindex": {
-          "description": "Guarda la configuración y deja el índice actual como está. Solo la usan los documentos indexados a partir de ahora.",
+          "description": "**Opción más segura.** Aplica los cambios solo al contenido indexado a partir de ahora.",
           "label": "No reindexar"
         },
         "instant": {
-          "description": "Vacía de inmediato el índice de documentos actual y cambia a la nueva configuración. Requiere reindexar todos los conectores antes de que el índice se vuelva a llenar para la búsqueda.",
+          "description": "**Borra de inmediato el índice de documentos actual** y cambia a la nueva configuración. Requiere reindexar todos los conectores antes de que el índice vuelva a estar disponible para la búsqueda.",
           "label": "Cambiar antes de reindexar"
         },
         "placeholder": "Selecciona una estrategia de cambio",
         "reindexAll": {
-          "description": "La opción más segura. Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores hayan completado un intento de indexación correcto.",
+          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores completen un intento de indexación correcto.",
           "label": "Reindexar todos los conectores y luego cambiar"
         },
         "reindexOptions": {

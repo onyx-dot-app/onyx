@@ -5200,20 +5200,20 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Verwenden Sie den aktuellen Dokumentenindex mit den bestehenden Einstellungen weiter, bis alle aktiven Konnektoren (nicht pausiert oder in Löschung) einen erfolgreichen Indizierungsversuch abgeschlossen haben.",
+          "description": "Den aktuellen Dokumentindex mit den bestehenden Einstellungen weiter verwenden, bis alle **aktiven** (nicht pausierten/gelöschten) Konnektoren einen erfolgreichen Indexierungslauf abgeschlossen haben.",
           "label": "Aktive Konnektoren neu indizieren, dann umstellen"
         },
         "doNotReindex": {
-          "description": "Speichert die Einstellungen und lässt den aktuellen Index unverändert. Nur ab jetzt indexierte Dokumente nutzen sie.",
+          "description": "**Sicherste Option.** Änderungen gelten nur für neu indexierte Inhalte.",
           "label": "Nicht neu indexieren"
         },
         "instant": {
-          "description": "Leeren Sie den aktuellen Dokumentenindex sofort und wechseln Sie zu den neuen Einstellungen. Erfordert eine Neuindizierung aller Konnektoren, bevor der Index wieder für die Suche gefüllt ist.",
+          "description": "Den **aktuellen Dokumentindex sofort leeren** und zu den neuen Einstellungen wechseln. Alle Konnektoren müssen neu indexiert werden, bevor der Index wieder durchsuchbar ist.",
           "label": "Vor der Neuindizierung umstellen"
         },
         "placeholder": "Wählen Sie eine Umstellungsstrategie",
         "reindexAll": {
-          "description": "Sicherste Option. Verwenden Sie den aktuellen Dokumentenindex mit den bestehenden Einstellungen weiter, bis alle Konnektoren einen erfolgreichen Indizierungsversuch abgeschlossen haben.",
+          "description": "Den aktuellen Dokumentindex mit den bestehenden Einstellungen weiter verwenden, bis alle Konnektoren einen erfolgreichen Indexierungslauf abgeschlossen haben.",
           "label": "Alle Konnektoren neu indizieren, dann umstellen"
         },
         "reindexOptions": {

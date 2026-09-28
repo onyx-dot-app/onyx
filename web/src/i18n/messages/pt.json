@@ -5200,20 +5200,20 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Continue usando o índice de documentos atual com as configurações existentes até que todos os conectores ativos (não pausados nem em exclusão) concluam uma tentativa de indexação bem-sucedida.",
+          "description": "Continua usando o índice de documentos atual com as configurações existentes até que todos os conectores **ativos** (não pausados/em exclusão) concluam uma tentativa de indexação bem-sucedida.",
           "label": "Reindexar os conectores ativos e depois trocar"
         },
         "doNotReindex": {
-          "description": "Salva as configurações e mantém o índice atual como está. Apenas os documentos indexados a partir de agora as usam.",
+          "description": "**Opção mais segura.** Aplica as alterações apenas ao conteúdo indexado a partir de agora.",
           "label": "Não reindexar"
         },
         "instant": {
-          "description": "Limpe imediatamente o índice de documentos atual e mude para as novas configurações. Exige reindexar todos os conectores antes que o índice seja repovoado para pesquisa.",
+          "description": "**Limpa imediatamente o índice de documentos atual** e muda para as novas configurações. Exige reindexar todos os conectores antes que o índice volte a ficar disponível para busca.",
           "label": "Trocar antes de reindexar"
         },
         "placeholder": "Selecione uma estratégia de troca",
         "reindexAll": {
-          "description": "Opção mais segura. Continue usando o índice de documentos atual com as configurações existentes até que todos os conectores concluam uma tentativa de indexação bem-sucedida.",
+          "description": "Continua usando o índice de documentos atual com as configurações existentes até que todos os conectores concluam uma tentativa de indexação bem-sucedida.",
           "label": "Reindexar todos os conectores e depois trocar"
         },
         "reindexOptions": {
