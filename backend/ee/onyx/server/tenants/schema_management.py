@@ -8,8 +8,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
+from onyx.configs.app_configs import (
+    POSTGRES_MIGRATION_HOST,
+    POSTGRES_MIGRATION_PORT,
+)
 from onyx.db.engine.shard_registry import (
     ALEMBIC_TARGET_URL_ATTRIBUTE,
+    ONYX_DB_DEFAULT_SHARD,
     get_shard_spec,
 )
 from onyx.db.engine.shard_routing import get_engine_for_tenant, get_shard_for_tenant
@@ -26,11 +31,14 @@ def _tenant_connection_string(tenant_id: str) -> str:
     since the default shard's spec is derived from the same POSTGRES_* settings.
     """
     spec = get_shard_spec(get_shard_for_tenant(tenant_id))
+    host, port = spec.host, spec.port
+    if POSTGRES_MIGRATION_HOST and spec.name == ONYX_DB_DEFAULT_SHARD:
+        host, port = POSTGRES_MIGRATION_HOST, POSTGRES_MIGRATION_PORT
     return build_connection_string(
         user=spec.user,
         password=spec.password,
-        host=spec.host,
-        port=spec.port,
+        host=host,
+        port=port,
         db=spec.db,
     )
 
