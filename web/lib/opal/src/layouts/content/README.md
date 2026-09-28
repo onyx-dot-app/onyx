@@ -65,6 +65,7 @@ Invalid combinations (e.g. `sizePreset="headline" + variant="body"`) are exclude
 | `moreIcon1`     | `IconFunctionComponent`      | —              | Secondary icon in icon row (ContentXl only); colored with the secondary foreground (`text-03`)                       |
 | `moreIcon2`     | `IconFunctionComponent`      | —              | Tertiary icon in icon row (ContentXl only); boxed and sized exactly like `icon`                                       |
 | `color`         | `ColorTypes`                 | `"default"`    | Icon and title color pair. `"success"` / `"warning"` / `"danger"` color only the icon and leave the text at `text-03` |
+| `titleColor`    | `Exclude<TextColor, "inherit">` | —           | Overrides the title colour only; `color` still picks the icon and description. Inside an interactive surface it holds at rest and yields to hover, pressed, selected and disabled |
 | `strikethrough` | `boolean`                    | `false`        | Strike the title through, for a title whose option is switched off                                                   |
 
 ## Internal Layouts
