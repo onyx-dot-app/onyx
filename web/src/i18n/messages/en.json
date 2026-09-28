@@ -4891,7 +4891,7 @@
         "title": "Cancel Re-index"
       },
       "captioningModel": {
-        "description": "This model will be used to analyze images during indexing. Only vision-capable models can be selected. Updates apply to documents indexed going forward — existing captions are baked into prior embeddings.",
+        "description": "This model will be used to analyze images during indexing.",
         "title": "Captioning LLM"
       },
       "changesBanner": {
@@ -5013,7 +5013,7 @@
         "description": "Configure how documents are indexed, embedded, and prepared for search and retrieval."
       },
       "imageExtraction": {
-        "description": "Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM.",
+        "description": "Extract images during document indexing and generate searchable descriptions.",
         "title": "Extract & Caption Images"
       },
       "imageProcessing": {

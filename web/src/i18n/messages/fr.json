@@ -4891,7 +4891,7 @@
         "title": "Annuler la réindexation"
       },
       "captioningModel": {
-        "description": "Ce modèle servira à analyser les images pendant l'indexation. Seuls les modèles capables de traiter les images peuvent être sélectionnés. Les mises à jour s'appliquent aux documents indexés à partir de maintenant : les légendes existantes sont figées dans les embeddings précédents.",
+        "description": "Ce modèle sera utilisé pour analyser les images lors de l’indexation.",
         "title": "LLM de légendage"
       },
       "changesBanner": {
@@ -5013,7 +5013,7 @@
         "description": "Configurez la façon dont les documents sont indexés, encodés et préparés pour la recherche et la récupération."
       },
       "imageExtraction": {
-        "description": "Extrayez les images intégrées aux fichiers téléversés (PDF, DOCX, etc.) et résumez-les avec un LLM capable de traiter les images, afin que les documents composés uniquement d'images deviennent consultables. Nécessite un LLM par défaut capable de traiter les images.",
+        "description": "Extrait les images lors de l’indexation des documents et génère des descriptions consultables.",
         "title": "Extraire et légender les images"
       },
       "imageProcessing": {
@@ -5033,7 +5033,7 @@
         }
       },
       "maxImageSize": {
-        "description": "Les images qui dépassent cette taille seront ignorées afin de limiter l'utilisation des ressources.",
+        "description": "Les images dépassant cette taille seront ignorées pour limiter l’utilisation des ressources.",
         "suffix": "(Mo)",
         "title": "Taille maximale des images à analyser"
       },

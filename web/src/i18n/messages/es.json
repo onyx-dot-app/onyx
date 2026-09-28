@@ -4891,7 +4891,7 @@
         "title": "Cancelar la reindexación"
       },
       "captioningModel": {
-        "description": "Este modelo se usará para analizar las imágenes durante la indexación. Solo se pueden seleccionar modelos con capacidad de visión. Las actualizaciones se aplican a los documentos indexados a partir de ahora: las descripciones existentes ya están integradas en los embeddings anteriores.",
+        "description": "Este modelo se usará para analizar imágenes durante la indexación.",
         "title": "LLM de descripción de imágenes"
       },
       "changesBanner": {
@@ -5013,7 +5013,7 @@
         "description": "Configura cómo se indexan y se preparan los documentos, y cómo se generan sus embeddings para la búsqueda y la recuperación."
       },
       "imageExtraction": {
-        "description": "Extrae las imágenes incrustadas en los archivos subidos (PDF, DOCX, etc.) y resúmelas con un LLM con capacidad de visión para que los documentos que solo tienen imágenes se puedan buscar y responder. Requiere un LLM predeterminado con capacidad de visión.",
+        "description": "Extrae imágenes durante la indexación de documentos y genera descripciones buscables.",
         "title": "Extraer y describir imágenes"
       },
       "imageProcessing": {

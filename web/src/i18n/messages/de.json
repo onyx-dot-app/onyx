@@ -4891,7 +4891,7 @@
         "title": "Neuindizierung abbrechen"
       },
       "captioningModel": {
-        "description": "Dieses Modell analysiert Bilder während der Indizierung. Es können nur Modelle mit Bildverständnis ausgewählt werden. Aktualisierungen gelten für künftig indizierte Dokumente — vorhandene Bildbeschreibungen sind in früheren Embeddings fest enthalten.",
+        "description": "Dieses Modell wird zur Analyse von Bildern bei der Indexierung verwendet.",
         "title": "LLM für Bildbeschreibungen"
       },
       "changesBanner": {
@@ -5013,7 +5013,7 @@
         "description": "Konfigurieren Sie, wie Dokumente indiziert, eingebettet und für Suche und Retrieval vorbereitet werden."
       },
       "imageExtraction": {
-        "description": "Extrahieren Sie eingebettete Bilder aus hochgeladenen Dateien (PDF, DOCX usw.) und fassen Sie sie mit einem LLM mit Bildverständnis zusammen, damit reine Bilddokumente durchsuchbar und beantwortbar werden. Erfordert ein Standard-LLM mit Bildverständnis.",
+        "description": "Bilder bei der Dokumentindexierung extrahieren und durchsuchbare Beschreibungen erzeugen.",
         "title": "Bilder extrahieren & beschreiben"
       },
       "imageProcessing": {

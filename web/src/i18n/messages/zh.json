@@ -4891,7 +4891,7 @@
         "title": "取消重新索引"
       },
       "captioningModel": {
-        "description": "此模型用于在索引期间分析图像。只能选择支持视觉的模型。更新仅对之后索引的文档生效——现有的图像描述已固化在先前的 embedding 中。",
+        "description": "此模型将用于在索引期间分析图片。",
         "title": "图像描述 LLM"
       },
       "changesBanner": {
@@ -5013,7 +5013,7 @@
         "description": "配置文档的索引方式、embedding 方式，以及为搜索和检索所做的准备。"
       },
       "imageExtraction": {
-        "description": "从上传的文件（PDF、DOCX 等）中提取内嵌图像，并用支持视觉的 LLM 进行总结，让纯图像文档也可被搜索和回答。需要支持视觉的默认 LLM。",
+        "description": "在文档索引期间提取图片并生成可搜索的描述。",
         "title": "提取并描述图像"
       },
       "imageProcessing": {
@@ -5033,7 +5033,7 @@
         }
       },
       "maxImageSize": {
-        "description": "超过此大小的图像将被跳过，以限制资源占用。",
+        "description": "超过此大小的图片将被跳过，以限制资源使用。",
         "suffix": "(MB)",
         "title": "分析的最大图像大小"
       },
