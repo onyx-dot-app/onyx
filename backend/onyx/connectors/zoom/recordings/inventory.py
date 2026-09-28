@@ -123,15 +123,16 @@ def _merged(scopes: list[HostScope]) -> list[HostScope]:
     only by Zoom's user id, so a scope carrying both, such as a Group member's,
     is what ties the two together."""
     ids_by_email = {
-        _normalised(scope.host.email): scope.host.user_id
+        email: scope.host.user_id
         for scope in scopes
-        if scope.host.email and _normalised(scope.host.email) != scope.host.user_id
+        if scope.host.email
+        and (email := scope.host.email.strip().lower()) != scope.host.user_id
     }
     merged: dict[str, HostScope] = {}
     for scope in scopes:
         user_id = scope.host.user_id
         if scope.host.email:
-            user_id = ids_by_email.get(_normalised(scope.host.email), user_id)
+            user_id = ids_by_email.get(scope.host.email.strip().lower(), user_id)
         if user_id != scope.host.user_id:
             scope = scope.model_copy(
                 update={"host": Host(user_id=user_id, email=scope.host.email)}
@@ -139,10 +140,6 @@ def _merged(scopes: list[HostScope]) -> list[HostScope]:
         seen = merged.get(user_id)
         merged[user_id] = seen.merged_with(scope) if seen else scope
     return list(merged.values())
-
-
-def _normalised(email: str) -> str:
-    return email.strip().lower()
 
 
 def _host_documents(

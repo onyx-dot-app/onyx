@@ -791,11 +791,6 @@ class _UserRecordingsSource(DiscoverySource):
             )
         return _advance_host(hosts, index, work, failures)
 
-    def _scope_for(self, host: Host) -> InventoryScope:
-        return InventoryScope(
-            hosts=[HostScope(host=host, session_types=self._session_types)]
-        )
-
 
 class HostAllowlistSource(_UserRecordingsSource):
     def __init__(
@@ -846,7 +841,14 @@ class HostAllowlistSource(_UserRecordingsSource):
         back short. Pruning would read that silence as a deletion."""
         for email in sorted(self._emails):
             if has_a_recordings_listing(client, email):
-                yield self._scope_for(Host(user_id=email, email=email))
+                yield InventoryScope(
+                    hosts=[
+                        HostScope(
+                            host=Host(user_id=email, email=email),
+                            session_types=self._session_types,
+                        )
+                    ]
+                )
                 continue
             logger.warning(
                 "Zoom has no user with the email %s, so every document indexed "
@@ -938,7 +940,9 @@ class GroupSource(_UserRecordingsSource):
         that person at all."""
         hosts, _ = self._resolve_hosts(client, 0, 0)
         for host in hosts:
-            yield self._scope_for(host)
+            yield InventoryScope(
+                hosts=[HostScope(host=host, session_types=self._session_types)]
+            )
 
 
 def build_discovery_sources(
