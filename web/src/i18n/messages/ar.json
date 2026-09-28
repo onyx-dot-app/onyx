@@ -912,6 +912,9 @@
         "onedrive": {
           "description": "تخزين Microsoft السحابي"
         },
+        "zoom": {
+          "description": "تسجيلات الاجتماعات والندوات عبر الإنترنت"
+        },
         "teams": {
           "description": "دردشات فرق Microsoft"
         },
