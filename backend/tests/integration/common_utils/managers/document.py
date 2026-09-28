@@ -1,3 +1,4 @@
+import time
 from uuid import uuid4
 
 from sqlalchemy import and_, select
@@ -161,6 +162,31 @@ class DocumentManager:
             id=document["document"]["id"],
             content=document["document"]["sections"][0]["text"],
         )
+
+    @staticmethod
+    def wait_until_searchable(
+        contents: list[str],
+        user_performing_action: DATestUser,
+        timeout: float = 30,
+    ) -> None:
+        """Block until a search for each content string returns it. The index
+        makes new writes searchable only after its next refresh."""
+        deadline = time.monotonic() + timeout
+        pending = list(contents)
+        while pending:
+            content = pending[0]
+            response = client.post(
+                f"{API_SERVER_URL}/search",
+                json={"query": content, "skip_query_expansion": True},
+                headers=user_performing_action.headers,
+            )
+            response.raise_for_status()
+            if any(content in r["content"] for r in response.json()["results"]):
+                pending.pop(0)
+                continue
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"Documents not searchable: {pending}")
+            time.sleep(0.5)
 
     @staticmethod
     def verify(
