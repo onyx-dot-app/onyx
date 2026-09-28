@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.interfaces import GenerationContext, LLMConfig
@@ -21,6 +21,7 @@ from onyx.llm.model_response import (
     ResponseFunctionCall,
     StreamingChoice,
     recover_tool_calls,
+    to_assistant_message,
 )
 from onyx.llm.model_response import ChatCompletionMessageToolCall as WireToolCall
 from onyx.llm.model_response import Message as ResponseMessage
@@ -781,3 +782,199 @@ def test_streamed_thinking_fragments_merge_into_one_signed_block() -> None:
     ]
     assert accumulator.message.thinking_blocks == expected
     assert collect_generation(events).thinking_blocks == expected
+
+
+def test_tool_call_waits_for_name_and_preserves_early_arguments() -> None:
+    accumulator = MessageAccumulator()
+    assert (
+        accumulator.add(
+            _stream_chunk(
+                Delta(
+                    tool_calls=[
+                        ChatCompletionDeltaToolCall(
+                            index=0,
+                            id="call",
+                            function=ResponseFunctionCall(arguments='{"query":"ear'),
+                        ),
+                    ]
+                )
+            )
+        )
+        == []
+    )
+    assert accumulator.message.tool_calls == []
+    text_events = accumulator.add(_stream_chunk(Delta(content="Searching")))
+    events = accumulator.add(
+        _stream_chunk(
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        index=0,
+                        function=ResponseFunctionCall(name="search", arguments='ly"}'),
+                    ),
+                ]
+            )
+        )
+    )
+    events.extend(accumulator.end())
+    result = collect_generation([*text_events, *events])
+    assert result == accumulator.message
+    assert result.tool_calls[0].id == "call"
+    assert result.tool_calls[0].name == "search"
+    assert result.tool_calls[0].arguments == {"query": "early"}
+    assert all(
+        event.tool_call.name
+        for event in events
+        if isinstance(event, GenerationToolCallEvent)
+    )
+
+
+def test_unnamed_tool_calls_never_enter_content_or_events() -> None:
+    accumulator = MessageAccumulator()
+    assert (
+        accumulator.add(
+            _stream_chunk(Delta(tool_calls=[ChatCompletionDeltaToolCall(index=0)]))
+        )
+        == []
+    )
+    with patch("onyx.llm.model_response.logger.warning") as warning:
+        events = accumulator.end()
+        accumulator.finalize()
+    assert warning.call_count == 1
+    assert [event.type for event in events] == ["done"]
+    assert accumulator.message.tool_calls == []
+    assert collect_generation(events).content == []
+
+
+@pytest.mark.parametrize(
+    "schema, encoded, expected",
+    [
+        ({"anyOf": [{"type": "array"}, {"type": "null"}]}, '["x"]', ["x"]),
+        ({"type": ["array", "null"]}, '["x"]', ["x"]),
+        ({"oneOf": [{"type": "object"}, {"type": "null"}]}, '{"x":1}', {"x": 1}),
+        ({"anyOf": [{"type": "array"}, {"type": "string"}]}, '["x"]', '["x"]'),
+        ({"type": ["object", "string"]}, '{"x":1}', '{"x":1}'),
+        ({"type": ["array", "null"]}, '{"x":1}', '{"x":1}'),
+    ],
+)
+@pytest.mark.parametrize("streaming", [False, True])
+def test_optional_structured_tool_arguments(
+    schema: dict[str, JsonValue], encoded: str, expected: JsonValue, streaming: bool
+) -> None:
+    request = GenerationRequest(
+        tools=[
+            ToolDefinition(
+                name="search",
+                description="Search",
+                parameters={"properties": {"value": schema}},
+            )
+        ]
+    )
+    arguments = json.dumps({"value": encoded})
+    if streaming:
+        accumulator = MessageAccumulator(request.tools)
+        events = accumulator.add(
+            _stream_chunk(
+                Delta(
+                    tool_calls=[
+                        ChatCompletionDeltaToolCall(
+                            index=0,
+                            id="call",
+                            function=ResponseFunctionCall(
+                                name="search", arguments=arguments
+                            ),
+                        )
+                    ]
+                )
+            )
+        )
+        events.extend(accumulator.end())
+        result = collect_generation(events)
+    else:
+        result = to_assistant_message(
+            ModelResponse(
+                id="test",
+                created="1",
+                choice=Choice(
+                    message=ResponseMessage(
+                        tool_calls=[
+                            WireToolCall(
+                                id="call",
+                                function=ResponseFunctionCall(
+                                    name="search", arguments=arguments
+                                ),
+                            )
+                        ]
+                    )
+                ),
+            ),
+            request,
+        )
+    assert result.tool_calls[0].arguments == {"value": expected}
+
+
+@pytest.mark.parametrize("chunk_count", [0, 3])
+def test_empty_generation_logs_one_metadata_warning(chunk_count: int) -> None:
+    client = ScriptedLLM([])
+    chunks = [_stream_chunk(Delta()) for _ in range(chunk_count)]
+    with (
+        patch.object(client, "stream_raw", return_value=iter(chunks)),
+        patch("onyx.llm.multi_llm.logger.warning") as warning,
+    ):
+        events = list(client.stream(GenerationRequest()))
+    assert collect_generation(events).content == []
+    warning.assert_called_once_with(
+        "Empty generation: provider=%s model=%s stop_reason=%s chunks=%s",
+        client.config.model_provider,
+        client.config.model_name,
+        None,
+        chunk_count,
+    )
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_unnamed_native_call_does_not_suppress_text_recovery(streaming: bool) -> None:
+    payload = '{"name":"search","arguments":{"query":"onyx"}}'
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    if streaming:
+        accumulator = MessageAccumulator(request.tools)
+        events = list(
+            accumulator.consume(
+                iter(
+                    [
+                        _stream_chunk(Delta(content=payload)),
+                        _stream_chunk(
+                            Delta(tool_calls=[ChatCompletionDeltaToolCall(index=0)])
+                        ),
+                    ]
+                ),
+                request,
+            )
+        )
+        events.extend(accumulator.end())
+        result = collect_generation(events)
+    else:
+        result = to_assistant_message(
+            ModelResponse(
+                id="test",
+                created="1",
+                choice=Choice(
+                    message=ResponseMessage(
+                        content=payload,
+                        tool_calls=[
+                            WireToolCall(
+                                id="stray",
+                                function=ResponseFunctionCall(arguments="{}"),
+                            )
+                        ],
+                    )
+                ),
+            ),
+            request,
+        )
+    assert result.text == payload
+    assert [call.name for call in result.tool_calls] == ["search"]
+    assert result.tool_calls[0].arguments == {"query": "onyx"}

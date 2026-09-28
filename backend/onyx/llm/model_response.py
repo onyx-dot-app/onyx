@@ -368,6 +368,22 @@ _ENCODED_ARGUMENTS = TypeAdapter(dict[str, JsonValue] | str)
 _JSON_VALUE = TypeAdapter(JsonValue)
 
 
+def _schema_types(schema: dict[str, JsonValue]) -> set[str]:
+    declared = schema.get("type")
+    types: set[str] = set()
+    if isinstance(declared, str):
+        types.add(declared)
+    elif isinstance(declared, list):
+        types.update(value for value in declared if isinstance(value, str))
+    for keyword in ("anyOf", "oneOf"):
+        options = schema.get(keyword)
+        if isinstance(options, list):
+            for option in options:
+                if isinstance(option, dict):
+                    types.update(_schema_types(option))
+    return types
+
+
 def _normalize_arguments(
     arguments: dict[str, JsonValue], definition: ToolDefinition | None
 ) -> dict[str, JsonValue]:
@@ -381,8 +397,10 @@ def _normalize_arguments(
         schema = properties.get(name)
         if not isinstance(value, str) or not isinstance(schema, dict):
             continue
-        expected_type = schema.get("type")
-        if expected_type not in ("array", "object"):
+        accepted_types = _schema_types(schema)
+        if "string" in accepted_types or not accepted_types.intersection(
+            {"array", "object"}
+        ):
             continue
         # Only structured fields accept JSON strings; string fields retain literal text.
         try:
@@ -390,8 +408,8 @@ def _normalize_arguments(
         except ValidationError:
             logger.debug("Tool field %s is not encoded JSON", name, exc_info=True)
             continue
-        if (expected_type == "array" and isinstance(decoded, list)) or (
-            expected_type == "object" and isinstance(decoded, dict)
+        if ("array" in accepted_types and isinstance(decoded, list)) or (
+            "object" in accepted_types and isinstance(decoded, dict)
         ):
             normalized[name] = decoded
     return normalized
@@ -438,10 +456,15 @@ def to_assistant_message(
         message.content.append(TextContent(text=source.content))
     definitions = {tool.name: tool for tool in request.tools}
     for source_call in source.tool_calls or []:
+        if not source_call.function.name:
+            logger.warning(
+                "Discarding a tool call without a name in a completed response"
+            )
+            continue
         arguments = source_call.function.arguments or ""
         call = ToolCall(
             id=source_call.id or str(uuid4()),
-            name=source_call.function.name or "",
+            name=source_call.function.name,
             arguments={},
             raw_arguments=arguments,
             arguments_complete=False,
@@ -501,6 +524,8 @@ class MessageAccumulator:
         self.message = AssistantMessage()
         self.calls: dict[int, _PendingToolCall] = {}
         self.active_text: int | None = None
+        self._unnamed_calls: dict[int, list[ChatCompletionDeltaToolCall]] = {}
+        self.chunk_count = 0
 
     def _add_text(
         self, content: TextContent | ThinkingContent
@@ -524,6 +549,7 @@ class MessageAccumulator:
         return [event]
 
     def add(self, chunk: ModelResponseStream) -> list[GenerationEvent]:
+        self.chunk_count += 1
         delta = chunk.choice.delta
         events: list[GenerationEvent] = []
         if delta.reasoning_content or delta.thinking_blocks:
@@ -537,8 +563,14 @@ class MessageAccumulator:
         if delta.content:
             events.extend(self._add_text(TextContent(text=delta.content)))
         for call in delta.tool_calls:
-            self.active_text = None
             pending = self.calls.get(call.index)
+            if pending is None and (call.function is None or not call.function.name):
+                self._unnamed_calls.setdefault(call.index, []).append(
+                    call.model_copy(deep=True)
+                )
+                continue
+            self.active_text = None
+            fragments: dict[str, str] = {}
             if pending is None:
                 block = ToolCall(
                     id=call.id or f"fallback_{uuid4().hex}",
@@ -548,6 +580,9 @@ class MessageAccumulator:
                 )
                 pending = _PendingToolCall(len(self.message.content), block)
                 self.calls[call.index] = pending
+                for buffered in self._unnamed_calls.pop(call.index, []):
+                    for name, text in pending.update(buffered).items():
+                        fragments[name] = fragments.get(name, "") + text
                 self.message.content.append(block)
                 events.append(
                     ToolCallStartEvent(
@@ -555,7 +590,8 @@ class MessageAccumulator:
                         tool_call=block.model_copy(deep=True),
                     )
                 )
-            fragments = pending.update(call)
+            for name, text in pending.update(call).items():
+                fragments[name] = fragments.get(name, "") + text
             events.append(
                 ToolCallDeltaEvent(
                     content_index=pending.content_index,
@@ -631,10 +667,6 @@ class MessageAccumulator:
         try:
             for chunk in stream:
                 delta = chunk.choice.delta
-                if delta.tool_calls:
-                    recover = False
-                    raw_text.clear()
-                    raw_thinking.clear()
                 if recover:
                     raw_text.append(delta.content or "")
                     raw_thinking.append(delta.reasoning_content or "")
@@ -644,6 +676,10 @@ class MessageAccumulator:
                 if chunk.choice.finish_reason:
                     stop_reason = chunk.choice.finish_reason
                 yield from add_filtered(chunk)
+                if recover and self.calls:
+                    recover = False
+                    raw_text.clear()
+                    raw_thinking.clear()
 
             recovered: AssistantMessage | None = None
             if recover and not self.calls:
@@ -669,6 +705,12 @@ class MessageAccumulator:
 
     def finalize(self) -> None:
         """Finalize owned tool arguments without making a message snapshot."""
+        if self._unnamed_calls:
+            logger.warning(
+                "Discarding tool calls without names at indices %s",
+                sorted(self._unnamed_calls),
+            )
+            self._unnamed_calls.clear()
         for pending in self.calls.values():
             if pending.finalized:
                 continue
