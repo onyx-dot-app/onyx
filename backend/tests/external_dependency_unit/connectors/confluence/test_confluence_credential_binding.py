@@ -41,6 +41,7 @@ def confluence_oauth_cc_pair(
     cc_pair = make_cc_pair(db_session, source=DocumentSource.CONFLUENCE)
     backend_update_credential_json(
         cc_pair.credential,
+        DocumentSource.CONFLUENCE,
         {
             "confluence_access_token": "fake-access-token",
             "confluence_refresh_token": "fake-refresh-token",
