@@ -98,7 +98,7 @@ class XmlToolCallContentFilter:
         return remaining
 
 
-def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
+def looks_like_xml_tool_call_payload(text: str | None) -> bool:
     """Detect XML-style marshaled tool calls emitted as plain text.
 
     Intentionally does NOT require a <parameter> tag: zero-argument invocations

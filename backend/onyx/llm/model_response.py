@@ -35,8 +35,8 @@ from onyx.llm.models import (
 )
 from onyx.llm.tool_parsing import (
     XmlToolCallContentFilter,
-    _looks_like_xml_tool_call_payload,
     extract_tool_calls_from_response_text,
+    looks_like_xml_tool_call_payload,
 )
 from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
@@ -649,8 +649,8 @@ def recover_tool_calls(
     should_try = (
         request.options.tool_choice == ToolChoiceOptions.REQUIRED
         or bool(message.thinking and not message.text)
-        or _looks_like_xml_tool_call_payload(message.text)
-        or _looks_like_xml_tool_call_payload(message.thinking)
+        or looks_like_xml_tool_call_payload(message.text)
+        or looks_like_xml_tool_call_payload(message.thinking)
     )
     if not should_try:
         return message
@@ -665,7 +665,7 @@ def recover_tool_calls(
     # Preserve signed thinking for provider replay; hide only XML call payloads.
     content: list[TextContent | ThinkingContent | ToolCall] = []
     for block in message.content:
-        if isinstance(block, TextContent) and _looks_like_xml_tool_call_payload(
+        if isinstance(block, TextContent) and looks_like_xml_tool_call_payload(
             block.text
         ):
             content_filter = XmlToolCallContentFilter()
