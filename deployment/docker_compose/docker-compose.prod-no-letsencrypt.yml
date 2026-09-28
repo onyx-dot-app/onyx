@@ -529,7 +529,8 @@ services:
       retries: 12
 
   object-store-copy:
-    # Copies the files of minio into object-store while the app keeps serving.
+    # Copies the files of minio into object-store while the app keeps serving,
+    # then replays writes minio rejected so a rollback finds every file.
     # A failed copy retries every 5 minutes, and its logs show why.
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     restart: unless-stopped
@@ -558,7 +559,8 @@ services:
           echo "Legacy MinIO copy failed, retrying in 5 minutes"
           sleep 300
         done
-        # A finished copy, no legacy store and a retired store all end here, since an exit would rerun the copy.
+        # Replays writes that failed in minio until it is retired, then idles, since an exit would rerun the copy.
+        python -m onyx.file_store.legacy_copy --replay
         exec sleep infinity
 
   code-interpreter:

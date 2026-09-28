@@ -5,7 +5,7 @@ Runs beside the app, which falls back to the legacy store on a miss, so the copy
 never blocks traffic. Conditional puts let a file the app writes during the copy
 win. Each pass first replays into the legacy store the writes that failed there.
 
-Usage: python -m onyx.file_store.legacy_copy [--retire]
+Usage: python -m onyx.file_store.legacy_copy [--retire | --replay]
 """
 
 import argparse
@@ -68,6 +68,9 @@ _PASS_INTERVAL_SECONDS = 60
 # A release before the object store writes to MinIO alone, and a pass after this
 # long without such a write shows that none still runs.
 _RETIRE_QUIET_SECONDS = 60
+# A MinIO write can fail after the copy completes, and a rollback needs that
+# file in MinIO, so the marker is replayed this often until MinIO is retired.
+_REPLAY_INTERVAL_SECONDS = 300
 # A store that stops answering fails every key. Past this many failures in a
 # row the pass gives up, so the retry in a few minutes finds the store back
 # instead of timing out on every remaining object.
@@ -465,6 +468,22 @@ def copy_legacy_objects() -> None:
         time.sleep(_PASS_INTERVAL_SECONDS)
 
 
+def replay_legacy_writes() -> None:
+    """Replay the writes that failed in the legacy store every few minutes
+    until it is retired. Lists only the markers, so it costs nothing at rest."""
+    if not S3_LEGACY_ENDPOINT_URL:
+        return
+    source, target = _clients()
+    ensured: set[str] = set()
+    while not _retired(target):
+        time.sleep(_REPLAY_INTERVAL_SECONDS)
+        try:
+            for bucket in _list_and_ensure_buckets(source, target, ensured):
+                _resync_out_of_sync(source, target, bucket)
+        except Exception:
+            logger.exception("Failed to replay writes into the legacy MinIO store")
+
+
 def _copy_until_clean(
     source: "S3Client", target: "S3Client", ensured: set[str]
 ) -> PassStats:
@@ -518,14 +537,22 @@ def retire_legacy_store() -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--retire",
         action="store_true",
         help="finish the copy, then stop every process from using MinIO",
+    )
+    mode.add_argument(
+        "--replay",
+        action="store_true",
+        help="replay writes that failed in MinIO until it is retired",
     )
     args = parser.parse_args()
     SqlEngine.init_engine(pool_size=LEGACY_COPY_WORKERS, max_overflow=2)
     if args.retire:
         retire_legacy_store()
+    elif args.replay:
+        replay_legacy_writes()
     else:
         copy_legacy_objects()

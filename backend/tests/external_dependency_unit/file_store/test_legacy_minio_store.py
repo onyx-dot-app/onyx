@@ -767,6 +767,33 @@ def test_retire_refuses_while_an_older_release_still_writes(
     assert _object_exists(target, key)
 
 
+def test_replay_mirrors_a_write_that_failed_after_the_copy(
+    stores: tuple[S3BackedFileStore, S3BackedFileStore],
+    retirable: None,  # noqa: ARG001
+) -> None:
+    old_release, new_release = stores
+    file_id, key = _write_during_outage(new_release, b"MinIO was down after the copy")
+    target = new_release._get_s3_client()
+    sleeps = 0
+
+    def retire_on_the_second_pass(_seconds: float) -> None:
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 2:
+            target.put_object(
+                Bucket=BUCKET, Key=LEGACY_RETIRED_MARKER_KEY, Body=b"retired"
+            )
+        elif sleeps > 2:
+            raise AssertionError("the replay kept running after MinIO was retired")
+
+    with patch.object(legacy_copy.time, "sleep", side_effect=retire_on_the_second_pass):
+        legacy_copy.replay_legacy_writes()
+
+    assert sleeps == 2
+    assert old_release.read_file(file_id).read() == b"MinIO was down after the copy"
+    assert not _object_exists(target, LEGACY_OUT_OF_SYNC_PREFIX + key)
+
+
 def test_retire_refuses_while_a_key_stays_out_of_sync(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
     retirable: None,  # noqa: ARG001
