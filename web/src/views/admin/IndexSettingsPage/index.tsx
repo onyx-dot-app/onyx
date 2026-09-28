@@ -3,7 +3,7 @@
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
-import { cn, markdown } from "@opal/utils";
+import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
@@ -13,7 +13,7 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import type { ConnectorIndexingStatusLite } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
-import { Content, IllustrationContent, toast } from "@opal/layouts";
+import { Content, IllustrationContent, StickyBox, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -1536,13 +1536,12 @@ export default function IndexSettingsPage() {
                     (!NEXT_PUBLIC_CLOUD_ENABLED || imageOnlyChange) && (
                       // Active (staged or blocked), the banner pins 8px below
                       // the top so its actions stay in reach while the page
-                      // scrolls. The gap is transparent on purpose: the card
-                      // is opaque and rounded, and anything painted outside it
-                      // would show square corners over the content beneath.
-                      <div
-                        className={cn(
-                          bannerActive && "sticky top-2 z-sticky-banner"
-                        )}
+                      // scrolls, and casts a shadow while pinned.
+                      <StickyBox
+                        stick="top"
+                        inset={2}
+                        active={bannerActive}
+                        shadow
                       >
                         <MessageCard
                           variant={bannerVariant}
@@ -1639,7 +1638,7 @@ export default function IndexSettingsPage() {
                             ) : undefined
                           }
                         />
-                      </div>
+                      </StickyBox>
                     )
                   )}
 
