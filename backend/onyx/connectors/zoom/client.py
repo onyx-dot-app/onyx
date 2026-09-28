@@ -257,6 +257,11 @@ class ZoomClient:
             return self._fetch_access_token()
         return self._access_token
 
+    def check_credentials(self) -> None:
+        """Skips the cached token on purpose: a secret rotated an hour ago would
+        still pass otherwise."""
+        self._fetch_access_token()
+
     def _send_authorized(
         self,
         endpoint: ZoomEndpoint,
