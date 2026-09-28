@@ -175,6 +175,29 @@ class TestEscapeSequences:
         ]
         assert "".join(parts) == "A"
 
+    @pytest.mark.parametrize(
+        "chunks",
+        [
+            ['{"e": "a\\ud83d\\ude00b"}'],
+            ['{"e": "a\\ud83d', '\\ude00b"}'],
+            ['{"e": "a\\ud83d\\', 'ude00b"}'],
+            ['{"e": "a\\ud83d\\ude', '00b"}'],
+            list('{"e": "a\\ud83d\\ude00b"}'),
+        ],
+    )
+    def test_surrogate_pair_escape(self, chunks: list[str]) -> None:
+        deltas = _all_deltas(chunks)
+        parts = [
+            d["e"]
+            for d in deltas
+            if isinstance(d, dict) and "e" in d and isinstance(d["e"], str)
+        ]
+        assert "".join(parts) == "a\U0001f600b"
+
+    def test_surrogate_pair_rejects_non_ascii_hex_digits(self) -> None:
+        with pytest.raises(ValueError, match="Bad Unicode escape"):
+            _all_deltas(['{"e": "\\ud83d\\ude٠٠"}'])
+
     def test_backslash_escape(self) -> None:
         deltas = _all_deltas(['{"p": "c:\\\\dir"}'])
         parts = [
