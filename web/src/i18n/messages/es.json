@@ -4895,10 +4895,6 @@
         "title": "LLM de descripción de imágenes"
       },
       "changesBanner": {
-        "captioningModelMissing": {
-          "description": "Extraer y subtitular imágenes está activado pero no hay ningún modelo seleccionado. Elige abajo un LLM de subtitulado con capacidad de visión antes de aplicar.",
-          "title": "Selecciona un LLM de subtitulado"
-        },
         "contextualModelMissing": {
           "description": "La recuperación contextual está activada, pero no hay ningún modelo seleccionado. Elige abajo un LLM de recuperación contextual antes de reindexar: sin él, la reindexación no se puede ejecutar.",
           "title": "Selecciona un LLM de recuperación contextual"

@@ -685,7 +685,10 @@ test.describe("Index Settings — image processing @exclusive", () => {
     await indexSettings.imageProcessingSwitch.click();
 
     await expect(indexSettings.noModelSelectedWarning).toBeVisible();
-    await indexSettings.expectBannerTitle("Select a Captioning LLM");
+    // A setting warning, not an indexing prompt: the banner keeps its copy.
+    await indexSettings.expectBannerTitle(
+      "Choose how to apply these image processing settings"
+    );
     await expect(indexSettings.applyWithoutReindexButton).toBeDisabled();
 
     await indexSettings.pickCaptioningModel(

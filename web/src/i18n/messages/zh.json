@@ -4895,10 +4895,6 @@
         "title": "图像描述 LLM"
       },
       "changesBanner": {
-        "captioningModelMissing": {
-          "description": "“提取并为图片添加字幕”已开启，但尚未选择模型。请在应用前于下方选择一个支持视觉的字幕 LLM。",
-          "title": "请选择字幕 LLM"
-        },
         "contextualModelMissing": {
           "description": "上下文检索已启用，但尚未选择模型。请先在下方选择上下文检索 LLM，再重新索引——没有模型，重新索引无法运行。",
           "title": "选择上下文检索 LLM"

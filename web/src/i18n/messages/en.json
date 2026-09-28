@@ -4895,10 +4895,6 @@
         "title": "Captioning LLM"
       },
       "changesBanner": {
-        "captioningModelMissing": {
-          "description": "Extract & Caption Images is on but no model is selected. Pick a vision-capable Captioning LLM below before applying.",
-          "title": "Select a Captioning LLM"
-        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run.",
           "title": "Select a Contextual Retrieval LLM"

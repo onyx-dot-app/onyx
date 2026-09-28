@@ -4895,10 +4895,6 @@
         "title": "LLM de légendage"
       },
       "changesBanner": {
-        "captioningModelMissing": {
-          "description": "L’extraction et le légendage des images sont activés mais aucun modèle n’est sélectionné. Choisissez ci-dessous un LLM de légendage capable de vision avant d’appliquer.",
-          "title": "Sélectionnez un LLM de légendage"
-        },
         "contextualModelMissing": {
           "description": "La récupération contextuelle est activée mais aucun modèle n'est sélectionné. Choisissez un LLM de récupération contextuelle ci-dessous avant de réindexer : sans modèle, la réindexation ne peut pas démarrer.",
           "title": "Sélectionnez un LLM de récupération contextuelle"

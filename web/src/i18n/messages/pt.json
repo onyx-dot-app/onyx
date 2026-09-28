@@ -4895,10 +4895,6 @@
         "title": "LLM de legendagem"
       },
       "changesBanner": {
-        "captioningModelMissing": {
-          "description": "Extrair e legendar imagens está ativado, mas nenhum modelo está selecionado. Escolha abaixo um LLM de legendagem com capacidade de visão antes de aplicar.",
-          "title": "Selecione um LLM de legendagem"
-        },
         "contextualModelMissing": {
           "description": "A recuperação contextual está ativada, mas nenhum modelo foi selecionado. Escolha um LLM de recuperação contextual abaixo antes de reindexar — sem ele, a reindexação não pode ser executada.",
           "title": "Selecione um LLM de recuperação contextual"

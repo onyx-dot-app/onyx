@@ -4895,10 +4895,6 @@
         "title": "LLM für Bildbeschreibungen"
       },
       "changesBanner": {
-        "captioningModelMissing": {
-          "description": "„Bilder extrahieren & beschriften“ ist aktiv, aber kein Modell ist ausgewählt. Wählen Sie unten ein bildfähiges Captioning-LLM, bevor Sie anwenden.",
-          "title": "Wählen Sie ein Captioning-LLM"
-        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval ist aktiviert, aber es ist kein Modell ausgewählt. Wählen Sie unten ein LLM für Contextual Retrieval, bevor Sie neu indizieren — ohne ein solches Modell kann die Neuindizierung nicht laufen.",
           "title": "Wählen Sie ein LLM für Contextual Retrieval"

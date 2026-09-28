@@ -4895,10 +4895,6 @@
         "title": "캡션 생성 LLM"
       },
       "changesBanner": {
-        "captioningModelMissing": {
-          "description": "이미지 추출 및 캡션이 켜져 있지만 선택된 모델이 없습니다. 적용하기 전에 아래에서 비전 지원 캡션 LLM을 선택하세요.",
-          "title": "캡션 LLM을 선택하세요"
-        },
         "contextualModelMissing": {
           "description": "컨텍스트 검색이 활성화되어 있지만 선택된 모델이 없습니다. 재인덱싱 전에 아래에서 컨텍스트 검색 LLM을 선택하세요. 모델이 없으면 재인덱싱을 실행할 수 없습니다.",
           "title": "컨텍스트 검색 LLM 선택"

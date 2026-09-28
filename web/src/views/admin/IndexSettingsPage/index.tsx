@@ -1238,7 +1238,11 @@ export default function IndexSettingsPage() {
               // them. Do Not Re-index touches no index, so it reads as info
               // rather than as the warning the re-index strategies carry.
               const stagedVariant = saveOnly ? "info" : "warning";
-              const bannerVariant = applyBlocked
+              // The banner is reserved for indexing prompts: staged changes
+              // and the contextual model a re-index needs. A captioning
+              // model missing is a card-level setting warning, not a banner.
+              const bannerActive = hasChanges || contextualRagModelMissing;
+              const bannerVariant = contextualRagModelMissing
                 ? "error"
                 : hasChanges
                   ? stagedVariant
@@ -1521,8 +1525,7 @@ export default function IndexSettingsPage() {
                       // so its actions stay in reach while the page scrolls.
                       <div
                         className={cn(
-                          (hasChanges || applyBlocked) &&
-                            "sticky top-0 z-settings-banner"
+                          bannerActive && "sticky top-0 z-settings-banner"
                         )}
                       >
                         <MessageCard
@@ -1530,39 +1533,29 @@ export default function IndexSettingsPage() {
                           title={
                             contextualRagModelMissing
                               ? t("changesBanner.contextualModelMissing.title")
-                              : captioningModelMissing
-                                ? t(
-                                    "changesBanner.captioningModelMissing.title"
-                                  )
-                                : contextualModelOnlyChange
-                                  ? t("changesBanner.contextualModelOnly.title")
-                                  : imageOnlyChange
-                                    ? t(
-                                        "changesBanner.imageProcessingOnly.title"
-                                      )
-                                    : t("changesBanner.default.title")
+                              : contextualModelOnlyChange
+                                ? t("changesBanner.contextualModelOnly.title")
+                                : imageOnlyChange
+                                  ? t("changesBanner.imageProcessingOnly.title")
+                                  : t("changesBanner.default.title")
                           }
                           description={markdown(
                             contextualRagModelMissing
                               ? t(
                                   "changesBanner.contextualModelMissing.description"
                                 )
-                              : captioningModelMissing
+                              : contextualModelOnlyChange
                                 ? t(
-                                    "changesBanner.captioningModelMissing.description"
+                                    "changesBanner.contextualModelOnly.description"
                                   )
-                                : contextualModelOnlyChange
+                                : imageOnlyChange
                                   ? t(
-                                      "changesBanner.contextualModelOnly.description"
+                                      "changesBanner.imageProcessingOnly.description"
                                     )
-                                  : imageOnlyChange
-                                    ? t(
-                                        "changesBanner.imageProcessingOnly.description"
-                                      )
-                                    : t("changesBanner.default.description")
+                                  : t("changesBanner.default.description")
                           )}
                           bottomChildren={
-                            hasChanges || applyBlocked ? (
+                            bannerActive ? (
                               contextualModelOnlyChange ? (
                                 <GeneralLayouts.Section
                                   flexDirection="row"
@@ -2135,17 +2128,21 @@ export default function IndexSettingsPage() {
                                 description={t("imageExtraction.description")}
                                 withLabel
                               >
-                                <SwitchField name="image_processing_enabled" />
+                                <div className="flex flex-col items-end gap-1">
+                                  <SwitchField name="image_processing_enabled" />
+                                  {captioningModelMissing && (
+                                    <Content
+                                      icon={SvgAlertTriangle}
+                                      title={t(
+                                        "imageProcessing.noModelSelected"
+                                      )}
+                                      sizePreset="secondary"
+                                      variant="body"
+                                      color="warning"
+                                    />
+                                  )}
+                                </div>
                               </InputHorizontal>
-                              {captioningModelMissing && (
-                                <Content
-                                  icon={SvgAlertTriangle}
-                                  title={t("imageProcessing.noModelSelected")}
-                                  sizePreset="main-ui"
-                                  variant="body"
-                                  color="warning"
-                                />
-                              )}
 
                               <Disabled
                                 disabled={
