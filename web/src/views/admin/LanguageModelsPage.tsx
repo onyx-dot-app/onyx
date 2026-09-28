@@ -574,7 +574,6 @@ export default function LanguageModelsPage() {
           <MessageCard
             title={t("configurationDisabled.title")}
             description={t("configurationDisabled.description")}
-            headerPadding={1}
           />
         )}
 

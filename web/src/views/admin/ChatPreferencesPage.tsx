@@ -1721,9 +1721,10 @@ export default function ChatPreferencesPage() {
                       </Text>
                     </Section>
                     <MessageCard
+                      innerPadding={1}
                       title={t("systemPrompt.modal.caution.title")}
                       description={t("systemPrompt.modal.caution.description")}
-                      padding={1}
+                      outerPadding={1}
                     />
                   </Modal.Body>
                   <Modal.Footer>

@@ -112,6 +112,8 @@ export default function UserCredentialsModal({
 
             {error && (
               <MessageCard
+                outerPadding={1}
+                innerPadding={1}
                 variant="error"
                 title={t("errors.connectFailedTitle")}
                 description={error}
