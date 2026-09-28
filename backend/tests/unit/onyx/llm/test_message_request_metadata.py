@@ -7,7 +7,8 @@ import pytest
 from litellm.exceptions import BadRequestError
 
 from onyx.chat.chat_state import ChatStateContainer
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.request_context import (
     clear_llm_request_params,

@@ -18,14 +18,9 @@ from onyx.chat.models import ChatLoadedFile, ChatMessageSimple, ToolCallSimple
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
-from onyx.llm.models import (
-    AssistantMessage,
-    ImageContentPart,
-    TextContentPart,
-    ToolMessage,
-    UserMessage,
-)
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_request import AssistantMessage, ToolMessage, UserMessage
+from onyx.llm.models import ImageContentPart, TextContentPart, ToolChoiceOptions
 from onyx.llm.well_known_providers.constants import (
     AZURE_PROVIDER_NAME,
     OPENAI_PROVIDER_NAME,

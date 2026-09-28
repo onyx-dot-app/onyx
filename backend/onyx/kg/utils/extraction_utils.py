@@ -30,7 +30,7 @@ from onyx.kg.utils.formatting_utils import (
 )
 from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
 from onyx.llm.factory import get_default_llm
-from onyx.llm.models import UserMessage
+from onyx.llm.model_request import UserMessage
 from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.kg_prompts import (
     CALL_CHUNK_PREPROCESSING_PROMPT,

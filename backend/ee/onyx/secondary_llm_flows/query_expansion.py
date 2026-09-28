@@ -2,7 +2,8 @@ import re
 
 from ee.onyx.prompts.query_expansion import KEYWORD_EXPANSION_PROMPT
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import LanguageModelInput, ReasoningEffort, UserMessage
+from onyx.llm.model_request import LanguageModelInput, UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import llm_response_to_string
 from onyx.utils.logger import setup_logger
 

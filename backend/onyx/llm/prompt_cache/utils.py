@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from onyx.llm.models import ChatCompletionMessage, LanguageModelInput
+from onyx.llm.model_request import ChatCompletionMessage, LanguageModelInput
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

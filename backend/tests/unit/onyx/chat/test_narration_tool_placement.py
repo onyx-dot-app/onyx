@@ -16,14 +16,14 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from onyx.chat.llm_step import run_llm_step_pkt_generator
-from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
-    FunctionCall,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
+from onyx.llm.models import ToolChoiceOptions
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
@@ -45,7 +45,7 @@ def _narration_then_tool_stream() -> Iterator[ModelResponseStream]:
                 ChatCompletionDeltaToolCall(
                     id="call_1",
                     index=0,
-                    function=FunctionCall(name="internal_search", arguments=""),
+                    function=ResponseFunctionCall(name="internal_search", arguments=""),
                 )
             ]
         )
@@ -56,7 +56,9 @@ def _narration_then_tool_stream() -> Iterator[ModelResponseStream]:
                 ChatCompletionDeltaToolCall(
                     index=0,
                     id=None,
-                    function=FunctionCall(name=None, arguments='{"queries": ["x"]}'),
+                    function=ResponseFunctionCall(
+                        name=None, arguments='{"queries": ["x"]}'
+                    ),
                 )
             ]
         )

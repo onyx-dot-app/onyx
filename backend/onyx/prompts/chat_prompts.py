@@ -97,9 +97,6 @@ IMAGE_DROP_REMINDER = """
 """.strip()
 
 
-# Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
-CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
-
 # This is just for Slack context today
 ADDITIONAL_CONTEXT_PROMPT = """
 Here is some additional context which may be relevant to the user query:

@@ -92,7 +92,8 @@ from onyx.llm.factory import (
     get_default_llm_with_vision,
 )
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import MAX_CONTEXT_TOKENS, llm_response_to_string
 from onyx.natural_language_processing.utils import (

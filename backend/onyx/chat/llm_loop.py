@@ -46,9 +46,9 @@ from onyx.db.models import Persona
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
+from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,

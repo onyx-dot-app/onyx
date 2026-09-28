@@ -2,8 +2,7 @@
 
 from collections.abc import Sequence
 
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.model_request import ChatCompletionMessage, LanguageModelInput
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import (

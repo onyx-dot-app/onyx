@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ee.onyx.server.gateway import api, stream_bridge
-from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice, Usage
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
+from onyx.llm.models import ReasoningEffort, Usage
 from onyx.tracing.flows import LLMFlow
 
 

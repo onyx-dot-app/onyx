@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import LanguageModelInput, UserMessage
+from onyx.llm.model_request import LanguageModelInput, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 
 

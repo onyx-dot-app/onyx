@@ -122,38 +122,6 @@ def resolve_reasoning_effort(
     return effort
 
 
-# OpenAI reasoning effort mapping
-# Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
-OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.AUTO: "medium",  # Default to medium when auto is requested
-    ReasoningEffort.OFF: "none",
-    ReasoningEffort.LOW: "low",
-    ReasoningEffort.MEDIUM: "medium",
-    ReasoningEffort.HIGH: "high",
-    ReasoningEffort.XHIGH: "xhigh",
-}
-
-# Anthropic reasoning effort to budget tokens mapping
-# Loosely based on budgets from LiteLLM but this ensures it's not updated without our knowing from a version bump.
-ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
-    ReasoningEffort.AUTO: 2048,
-    ReasoningEffort.LOW: 1024,
-    ReasoningEffort.MEDIUM: 2048,
-    ReasoningEffort.HIGH: 4096,
-    ReasoningEffort.XHIGH: 4096,
-}
-
-# Newer Anthropic models (Claude Opus 4.7+) use adaptive thinking with
-# output_config.effort instead of thinking.type.enabled + budget_tokens.
-ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.AUTO: "medium",
-    ReasoningEffort.LOW: "low",
-    ReasoningEffort.MEDIUM: "medium",
-    ReasoningEffort.HIGH: "high",
-    ReasoningEffort.XHIGH: "xhigh",
-}
-
-
 # Content part structures for multimodal messages
 # The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
 class TextContentPart(BaseModel):
@@ -192,51 +160,9 @@ class RedactedThinkingBlock(BaseModel):
 AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
 
 
-# Tool call structures
-class FunctionCall(BaseModel):
-    name: str
-    arguments: str
-
-
-class ToolCall(BaseModel):
-    type: Literal["function"] = "function"
-    id: str
-    function: FunctionCall
-
-
-# Message types
-
-
-# Base class for all cacheable messages
-class CacheableMessage(BaseModel):
-    # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
-    cache_control: dict | None = None
-
-
-class SystemMessage(CacheableMessage):
-    role: Literal["system"] = "system"
-    content: str
-
-
-class UserMessage(CacheableMessage):
-    role: Literal["user"] = "user"
-    content: str | list[ContentPart]
-
-
-class AssistantMessage(CacheableMessage):
-    role: Literal["assistant"] = "assistant"
-    content: str | None = None
-    tool_calls: list[ToolCall] | None = None
-    thinking_blocks: list[AnyThinkingBlock] | None = None
-
-
-class ToolMessage(CacheableMessage):
-    role: Literal["tool"] = "tool"
-    content: str
-    tool_call_id: str
-
-
-# Union type for all OpenAI Chat Completions messages
-ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
-# Allows for passing in a string directly. This is provided for convenience and is wrapped as a UserMessage.
-LanguageModelInput = list[ChatCompletionMessage] | ChatCompletionMessage
+class Usage(BaseModel):
+    completion_tokens: int
+    prompt_tokens: int
+    total_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int

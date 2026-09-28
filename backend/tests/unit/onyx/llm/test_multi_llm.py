@@ -11,23 +11,21 @@ import pytest
 from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
-import onyx.llm.models
+import onyx.llm.model_request
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
-from onyx.llm.models import (
+from onyx.llm.model_request import (
     AssistantMessage,
-    FunctionCall,
     LanguageModelInput,
-    NamedToolChoice,
-    ReasoningEffort,
+    RequestFunctionCall,
     ToolCall,
-    ToolChoiceOptions,
     ToolMessage,
     UserMessage,
 )
+from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.models import NamedToolChoice, ReasoningEffort, ToolChoiceOptions, Usage
 from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMRateLimitError,
@@ -64,7 +62,7 @@ def _model_response_to_assistant_message(response: ModelResponse) -> AssistantMe
         tool_calls = [
             ToolCall(
                 id=tc.id,
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name=tc.function.name or "",
                     arguments=tc.function.arguments or "",
                 ),
@@ -122,7 +120,7 @@ def _accumulate_stream_to_assistant_message(
             ToolCall(
                 type="function",
                 id=tc_data["id"],
-                function=FunctionCall(
+                function=RequestFunctionCall(
                     name=tc_data["name"],
                     arguments=tc_data["arguments"],
                 ),
@@ -2869,7 +2867,7 @@ def test_prompt_contains_tool_call_history_true() -> None:
             tool_calls=[
                 ToolCall(
                     id="tc_1",
-                    function=FunctionCall(name="get_weather", arguments="{}"),
+                    function=RequestFunctionCall(name="get_weather", arguments="{}"),
                 )
             ],
         ),
@@ -2912,14 +2910,14 @@ def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
             tool_calls=[
                 ToolCall(
                     id="tc_1",
-                    function=FunctionCall(
+                    function=RequestFunctionCall(
                         name="get_weather",
                         arguments='{"city": "Paris"}',
                     ),
                 )
             ],
         ),
-        onyx.llm.models.ToolMessage(
+        onyx.llm.model_request.ToolMessage(
             content="22°C sunny",
             tool_call_id="tc_1",
         ),
@@ -3411,7 +3409,7 @@ def _tool_cycle_prompt() -> LanguageModelInput:
                 ToolCall(
                     type="function",
                     id="call_1",
-                    function=FunctionCall(name="get_weather", arguments="{}"),
+                    function=RequestFunctionCall(name="get_weather", arguments="{}"),
                 )
             ],
         ),

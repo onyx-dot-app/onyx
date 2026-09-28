@@ -26,6 +26,7 @@ import pytest
 
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.interfaces import LLM, LLMConfig, LLMUserIdentity
+from onyx.llm.model_request import LanguageModelInput, UserMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Choice,
@@ -34,15 +35,9 @@ from onyx.llm.model_response import (
     ModelResponse,
     ModelResponseStream,
     StreamingChoice,
-    Usage,
 )
-from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
-from onyx.llm.models import (
-    LanguageModelInput,
-    ReasoningEffort,
-    ToolChoice,
-    UserMessage,
-)
+from onyx.llm.model_response import ResponseFunctionCall as DeltaFunctionCall
+from onyx.llm.models import ReasoningEffort, ToolChoice, Usage
 from onyx.llm.tracing_wrap import (
     _ALREADY_WRAPPED_ATTR,
     _extract_prompt_and_tools,

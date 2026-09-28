@@ -19,7 +19,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tools
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import (
+from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
     SystemMessage,

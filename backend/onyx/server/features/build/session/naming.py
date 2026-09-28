@@ -12,12 +12,8 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.configs.constants import MessageType
 from onyx.llm.factory import get_default_llm
-from onyx.llm.models import (
-    LanguageModelInput,
-    ReasoningEffort,
-    SystemMessage,
-    UserMessage,
-)
+from onyx.llm.model_request import LanguageModelInput, SystemMessage, UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import llm_response_to_string
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.tracing.flows import LLMFlow

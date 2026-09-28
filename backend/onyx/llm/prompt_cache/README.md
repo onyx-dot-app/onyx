@@ -21,7 +21,7 @@ The prompt caching framework provides a unified interface for enabling prompt ca
 
 ```python
 from onyx.llm.prompt_cache import process_with_prompt_cache
-from onyx.llm.models import SystemMessage, UserMessage
+from onyx.llm.model_request import SystemMessage, UserMessage
 
 # Assume you have an LLM instance with a config property
 # llm = get_your_llm_instance()
