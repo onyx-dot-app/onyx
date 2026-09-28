@@ -1064,6 +1064,37 @@ class TestUserRecordingsSessionTypes:
 
         assert work.session_type == ZoomSessionType.WEBINAR
 
+    def test_a_meetings_only_scope_leaves_a_hosts_webinars_out(self) -> None:
+        source = GroupSource("group-1", frozenset({ZoomSessionType.MEETING}))
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[
+                _recording("uuid-meeting"),
+                _recording("uuid-webinar", recording_type="5"),
+            ],
+        )
+
+        result = source.discover_step(client, _HOST_START, _END, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-meeting"]
+        assert result.failures == []
+
+    def test_a_webinars_only_scope_leaves_a_hosts_meetings_out(self) -> None:
+        source = HostAllowlistSource(
+            ["host@example.com"], frozenset({ZoomSessionType.WEBINAR})
+        )
+        client = _client_for_hosts(
+            users=[user(id="u1", email="host@example.com")],
+            recordings=[
+                _recording("uuid-meeting"),
+                _recording("uuid-webinar", recording_type="5"),
+            ],
+        )
+
+        result = source.discover_step(client, _HOST_START, _END, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-webinar"]
+
     def test_a_portal_upload_is_not_a_session_and_is_skipped(self) -> None:
         source = GroupSource("group-1")
         client = _client_for_hosts(

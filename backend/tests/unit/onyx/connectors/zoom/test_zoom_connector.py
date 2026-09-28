@@ -26,7 +26,11 @@ from onyx.connectors.models import (
     InputType,
 )
 from onyx.connectors.zoom.client import ZoomClient, ZoomNotEntitledError
-from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
+from onyx.connectors.zoom.connector import (
+    ZoomConnector,
+    ZoomConnectorCheckpoint,
+    parse_session_types,
+)
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
     ZoomRecordingPage,
@@ -40,6 +44,7 @@ from onyx.connectors.zoom.rate_limit import (
     ZoomPlanTier,
     ZoomRateLimitSettings,
 )
+from onyx.connectors.zoom.recordings.discovery import ALL_SESSION_TYPES
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     RecordingsState,
@@ -107,6 +112,8 @@ def _make_connector(
     webinar_ids: list[str] | None = None,
     host_emails: list[str] | None = None,
     group_id: str | None = None,
+    include_meetings: bool | None = None,
+    include_webinars: bool | None = None,
 ) -> tuple[ZoomConnector, MagicMock]:
     # Don't write `meeting_ids or [...]` here: it swaps a caller's empty list
     # for the default, and the empty-allowlist tests below then pass for the
@@ -116,6 +123,8 @@ def _make_connector(
         webinar_ids=webinar_ids,
         host_emails=host_emails,
         group_id=group_id,
+        include_meetings=include_meetings,
+        include_webinars=include_webinars,
     )
     connector.load_credentials(_ZOOM_CREDS)
     mock_client = mock_zoom_client()
@@ -336,6 +345,38 @@ class TestZoomConnectorValidateSettings:
         connector = ZoomConnector(host_emails=["  "], group_id="  ")
         with pytest.raises(ConnectorValidationError):
             connector.validate_connector_settings()
+
+    def test_connectors_saved_before_the_checkboxes_keep_both_types(self) -> None:
+        assert parse_session_types(None, None) == ALL_SESSION_TYPES
+
+    def test_each_checkbox_drops_only_its_own_type(self) -> None:
+        assert parse_session_types(True, False) == {ZoomSessionType.MEETING}
+        assert parse_session_types(False, True) == {ZoomSessionType.WEBINAR}
+
+    @pytest.mark.parametrize("value", ["true", 1, ["meetings"]])
+    def test_a_checkbox_value_that_is_not_a_boolean_is_rejected(
+        self, value: Any
+    ) -> None:
+        with pytest.raises(ValueError):
+            parse_session_types(value, True)
+
+    def test_a_host_with_both_types_unticked_is_rejected_at_setup(self) -> None:
+        connector = ZoomConnector(
+            host_emails=["host@example.com"],
+            include_meetings=False,
+            include_webinars=False,
+        )
+        with pytest.raises(ConnectorValidationError) as exc:
+            connector.validate_connector_settings()
+
+        assert "meetings, webinars, or both" in str(exc.value)
+
+    def test_id_lists_do_not_need_a_type_ticked(self) -> None:
+        # An ID list already says which type each ID is.
+        connector, _ = _with_client(
+            meeting_ids=["111"], include_meetings=False, include_webinars=False
+        )
+        connector.validate_connector_settings()
 
     def test_an_unknown_plan_is_rejected_at_setup(self) -> None:
         # Without this check a typo reaches the client and crashes mid-backfill,
@@ -1142,6 +1183,25 @@ class TestDiscoveryMechanismUnion:
         assert [d.semantic_identifier for d in docs] == ["Town Hall", "Launch"]
         mock_client.get_past_meeting_details.assert_not_called()
         mock_client.get_webinar_details.assert_not_called()
+
+    def test_unticking_webinars_leaves_a_hosts_webinars_out(self) -> None:
+        connector, mock_client = _make_connector(
+            meeting_ids=[], host_emails=["host@example.com"], include_webinars=False
+        )
+        _configure_happy_path(mock_client)
+        _configure_user_recordings(
+            mock_client,
+            {
+                "host-user": [
+                    _recording("uuid-town-hall", topic="Town Hall"),
+                    _recording("uuid-webinar", topic="Launch", recording_type="5"),
+                ]
+            },
+        )
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-town-hall"]
 
     def test_a_group_indexes_every_members_sessions(self) -> None:
         connector, mock_client = _make_connector(meeting_ids=[], group_id="group-1")
