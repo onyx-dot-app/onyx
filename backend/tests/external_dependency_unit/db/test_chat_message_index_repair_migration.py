@@ -16,7 +16,9 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from sqlalchemy import Engine, create_engine, text
+import sqlalchemy as sa
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
@@ -33,6 +35,8 @@ _MIGRATION = (
     / "versions"
     / "da94f38390a5_rebuild_chat_message_chat_session_id_.py"
 )
+
+_pg_index = sa.table("pg_index", sa.column("indexrelid"), sa.column("indisvalid"))
 
 
 @pytest.fixture(scope="module")
@@ -54,29 +58,31 @@ def engine() -> Generator[Engine, None, None]:
 
 
 @pytest.fixture
-def schema(engine: Engine) -> Generator[str, None, None]:
-    name = f"index_repair_test_{uuid.uuid4().hex[:8]}"
-    create_schema(engine, name)
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                f'CREATE TABLE "{name}".chat_message '
-                "(id SERIAL PRIMARY KEY, chat_session_id UUID NOT NULL)"
-            )
-        )
-    yield name
-    drop_schema(engine, name)
+def chat_message(
+    engine: Engine, migration: ModuleType
+) -> Generator[sa.Table, None, None]:
+    """A throwaway schema holding a minimal chat_message table."""
+    schema = f"index_repair_test_{uuid.uuid4().hex[:8]}"
+    create_schema(engine, schema)
+    table = sa.Table(
+        migration.TABLE_NAME,
+        sa.MetaData(),
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column(migration.COLUMN_NAME, UUID(as_uuid=True), nullable=False),
+        schema=schema,
+    )
+    table.create(engine)
+    yield table
+    drop_schema(engine, schema)
 
 
 def _index_oid_and_validity(
     connection: Connection, schema: str, index_name: str
 ) -> tuple[int, bool] | None:
     row = connection.execute(
-        text(
-            "SELECT i.indexrelid, i.indisvalid FROM pg_index i "
-            "WHERE i.indexrelid = to_regclass(:name)"
-        ),
-        {"name": f'"{schema}"."{index_name}"'},
+        sa.select(_pg_index.c.indexrelid, _pg_index.c.indisvalid).where(
+            _pg_index.c.indexrelid == sa.func.to_regclass(f'"{schema}"."{index_name}"')
+        )
     ).one_or_none()
     return (row[0], row[1]) if row is not None else None
 
@@ -86,57 +92,61 @@ def _repair(engine: Engine, migration: ModuleType, schema: str) -> None:
         migration.repair_index(conn, schema)
 
 
-def test_missing_index_is_built(
+def _state(
     engine: Engine, migration: ModuleType, schema: str
+) -> tuple[int, bool] | None:
+    with engine.connect() as connection:
+        return _index_oid_and_validity(connection, schema, migration.INDEX_NAME)
+
+
+def test_missing_index_is_built(
+    engine: Engine, migration: ModuleType, chat_message: sa.Table
 ) -> None:
+    schema = str(chat_message.schema)
     _repair(engine, migration, schema)
 
-    with engine.connect() as connection:
-        state = _index_oid_and_validity(connection, schema, migration.INDEX_NAME)
+    state = _state(engine, migration, schema)
     assert state is not None and state[1] is True
 
 
 def test_valid_index_is_left_alone(
-    engine: Engine, migration: ModuleType, schema: str
+    engine: Engine, migration: ModuleType, chat_message: sa.Table
 ) -> None:
+    schema = str(chat_message.schema)
     _repair(engine, migration, schema)
-    with engine.connect() as connection:
-        before = _index_oid_and_validity(connection, schema, migration.INDEX_NAME)
+    before = _state(engine, migration, schema)
 
     _repair(engine, migration, schema)
 
-    with engine.connect() as connection:
-        after = _index_oid_and_validity(connection, schema, migration.INDEX_NAME)
     # Same relation: nothing was dropped or rebuilt.
-    assert before is not None and after == before
+    assert before is not None and _state(engine, migration, schema) == before
 
 
 def test_invalid_index_is_rebuilt(
-    engine: Engine, migration: ModuleType, schema: str
+    engine: Engine, migration: ModuleType, chat_message: sa.Table
 ) -> None:
+    schema = str(chat_message.schema)
     # A CONCURRENTLY build that fails leaves an INVALID index behind. Two rows
     # with one session id make a unique build under the migration's name fail.
+    session_id = uuid.uuid4()
     with engine.begin() as connection:
         connection.execute(
-            text(
-                f'INSERT INTO "{schema}".chat_message (chat_session_id) '
-                "VALUES (:sid), (:sid)"
-            ),
-            {"sid": str(uuid.uuid4())},
+            chat_message.insert(),
+            [{migration.COLUMN_NAME: session_id}, {migration.COLUMN_NAME: session_id}],
         )
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         with pytest.raises(IntegrityError):
-            conn.exec_driver_sql(
-                f'CREATE UNIQUE INDEX CONCURRENTLY "{migration.INDEX_NAME}" '
-                f'ON "{schema}".chat_message (chat_session_id)'
-            )
-    with engine.connect() as connection:
-        before = _index_oid_and_validity(connection, schema, migration.INDEX_NAME)
+            sa.Index(
+                migration.INDEX_NAME,
+                chat_message.c[migration.COLUMN_NAME],
+                unique=True,
+                postgresql_concurrently=True,
+            ).create(conn)
+    before = _state(engine, migration, schema)
     assert before is not None and before[1] is False
 
     _repair(engine, migration, schema)
 
-    with engine.connect() as connection:
-        after = _index_oid_and_validity(connection, schema, migration.INDEX_NAME)
+    after = _state(engine, migration, schema)
     assert after is not None and after[1] is True
     assert after[0] != before[0]
