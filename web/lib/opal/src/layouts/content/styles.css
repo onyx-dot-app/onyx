@@ -56,39 +56,38 @@
   color: var(--content-foreground);
 }
 
+/* Status glyph against muted body text: the icon carries the state and the
+   text stays secondary. */
 [data-content-color="success"] {
-  --content-foreground: var(--text-04);
+  --content-foreground: var(--text-03);
   --content-foreground-icon: var(--status-success-05);
-  color: var(--content-foreground);
-}
-
-[data-content-color="danger"] {
-  --content-foreground: var(--status-error-05);
-  --content-foreground-icon: var(--status-error-05);
   color: var(--content-foreground);
 }
 
 [data-content-color="warning"] {
-  --content-foreground: var(--status-warning-05);
-  --content-foreground-icon: var(--status-warning-05);
-  color: var(--content-foreground);
-}
-
-/* Status glyph against muted body text: the field-message pairing, where the
-   icon carries the state and the text stays secondary. */
-[data-content-color="muted-success"] {
-  --content-foreground: var(--text-03);
-  --content-foreground-icon: var(--status-success-05);
-  color: var(--content-foreground);
-}
-
-[data-content-color="muted-warning"] {
   --content-foreground: var(--text-03);
   --content-foreground-icon: var(--status-warning-05);
   color: var(--content-foreground);
 }
 
+[data-content-color="danger"] {
+  --content-foreground: var(--text-03);
+  --content-foreground-icon: var(--status-error-05);
+  color: var(--content-foreground);
+}
+
+/* Interactive is default plus the interactivity: outside an Interactive
+   surface it renders exactly as default. Inside one it hands the icon and
+   text to the interactive foregrounds, so hover, selected and disabled
+   reach them; the registered interactive variables never fall back on
+   their own, which is why the bare case is spelled out. */
 [data-content-color="interactive"] {
+  --content-foreground: var(--text-04);
+  --content-foreground-icon: var(--text-04);
+  color: var(--content-foreground);
+}
+
+.interactive [data-content-color="interactive"] {
   color: inherit;
   --content-foreground-icon: var(--interactive-foreground-icon);
 }

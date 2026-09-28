@@ -84,7 +84,8 @@ interface ContentBaseProps {
    *
    * - `"default"` — `text-04` for both icon and title
    * - `"muted"` — `text-03` for both
-   * - `"danger"` — `status-error-05` for both
+   * - `"success"` / `"warning"` / `"danger"` — the status colour on the icon,
+   *   `text-03` on the title: the icon carries the state
    * - `"interactive"` — inherits from the parent `.interactive` element's
    *   `--interactive-foreground` / `--interactive-foreground-icon` variables
    *
