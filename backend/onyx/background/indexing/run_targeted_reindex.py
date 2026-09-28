@@ -265,7 +265,7 @@ def process_targets_for_cc_pair(
         )
         return CCPairReindexResult(set(), target_doc_ids, unsupported=True)
 
-    include_permissions = cc_pair.access_type == AccessType.SYNC
+    include_permissions = cc_pair.access_type.is_perm_synced()
     failures = targets_to_connector_failures(targets, db_session)
 
     # Tabular sections stage their CSV via this callback; this path has no

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
-import type { CostOverride } from "@/lib/languageModels/costOverrides";
+import type { CostOverride } from "@/lib/languageModels/types";
 
 const mockMutate = jest.fn();
 const mockRefreshCostOverrides = jest.fn();
@@ -45,7 +45,7 @@ jest.mock("@/lib/languageModels/costOverrides", () => ({
 }));
 
 jest.mock("@/lib/languageModels/hooks", () => ({
-  useAdminLLMProviders: () => ({ llmProviders: [] }),
+  useAdminLanguageModels: () => ({ llmProviders: [] }),
 }));
 
 jest.mock("@/sections/model-selector/ModelSelector", () => ({

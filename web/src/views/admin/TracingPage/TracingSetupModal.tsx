@@ -55,14 +55,14 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
     [detail.secretField.name]: hasStoredKey
       ? Yup.string()
       : Yup.string().required(
-          t("field.required.error", { label: detail.secretField.label })
+          t("field.required.error", { label: t(detail.secretField.labelKey) })
         ),
   };
   for (const field of detail.configFields) {
     shape[field.name] = field.optional
       ? Yup.string()
       : Yup.string().required(
-          t("field.required.error", { label: field.label })
+          t("field.required.error", { label: t(field.labelKey) })
         );
   }
   const validationSchema = Yup.object().shape(shape);

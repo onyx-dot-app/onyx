@@ -341,7 +341,7 @@ def test_sweep_retires_a_dead_run_and_retrigger_recovers(
     # The sweep the beat schedule fires every ten minutes.
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
-        kwargs=dict(tenant_id=get_current_tenant_id()),
+        kwargs={"tenant_id": get_current_tenant_id()},
         priority=OnyxCeleryPriority.LOW,
         expires=300,
     )

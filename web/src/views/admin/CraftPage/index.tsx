@@ -7,7 +7,7 @@ import {
   Button,
   Card,
   InputTypeIn,
-  Switch,
+  InputSwitch,
   Table,
   createTableColumns,
 } from "@opal/components";
@@ -31,7 +31,7 @@ import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import type { User } from "@/lib/types";
-import type { UserRow } from "@/views/admin/UsersPage/interfaces";
+import type { UserRow } from "@/views/admin/UsersPage/types";
 import GroupsCell from "@/views/admin/UsersPage/GroupsCell";
 import AccessCell from "./AccessCell";
 
@@ -205,7 +205,7 @@ export default function CraftPage() {
               }
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={defaultEnabled}
                 disabled={isSavingDefault}
                 onCheckedChange={(checked) => setPendingDefault(checked)}

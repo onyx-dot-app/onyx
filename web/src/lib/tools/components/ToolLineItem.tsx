@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
@@ -29,7 +30,7 @@ import { useToolsPopover } from "@/lib/tools/providers";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
 import { Permission } from "@/lib/types";
-import EnabledCount from "@/refresh-components/EnabledCount";
+import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { useUser } from "@/providers/UserProvider";
 
 // Names the hover group that swaps the source count for the disable button.
@@ -153,7 +154,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const authStatus = getToolAuthStatus(tool);
   const connectorsLabel = needsConnectors
     ? t("actionLineItem.addConnectors.label")
-    : t("actionLineItem.configureConnectors.label");
+    : t("actionLineItem.selectSearchSources.label");
 
   function handleClick() {
     if (isUnavailable) {
@@ -265,7 +266,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             aria-label={connectorsLabel}
             tooltip={connectorsLabel}
             onClick={() => {
-              if (needsConnectors) router.push("/admin/add-connector");
+              if (needsConnectors) router.push(ADMIN_ROUTES.CONNECTORS.path);
               else openSources();
             }}
           />

@@ -32,7 +32,6 @@ on:
     - cron: "0 8 * * *" # 08:00 UTC nightly
   merge_group:
   pull_request:
-    branches: [main]
     # NOTE: Intentionally no `paths:` filter. We always trigger and let the
     # `changes` job below decide whether the real test job runs. This avoids
     # the dual-workflow skip pattern where a `paths-ignore`'d skip workflow can
@@ -46,7 +45,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.5"
+  GO_VERSION: "1.27.1"
   IMAGE_TAG: "latest"
   POSTGRES_USER: "postgres"
   POSTGRES_PASSWORD: "password"

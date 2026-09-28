@@ -8,6 +8,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { JsonValue } from "@/lib/json";
 import {
   TableBody,
   TableCell,
@@ -33,18 +34,18 @@ interface OAuthClaimsSnapshot {
   email: string;
   captured_at: string | null;
   oauth_name: string | null;
-  id_token_claims: Record<string, unknown> | null;
-  userinfo: Record<string, unknown> | null;
-  directory_profile: Record<string, unknown> | null;
+  id_token_claims: Record<string, JsonValue> | null;
+  userinfo: Record<string, JsonValue> | null;
+  directory_profile: Record<string, JsonValue> | null;
   directory_source: string | null;
   resolved_profile: Record<string, string> | null;
   enrichment_enabled: boolean;
-  token_meta: Record<string, unknown> | null;
+  token_meta: Record<string, JsonValue> | null;
 }
 
 // --- Components ---
 
-function formatClaimValue(value: unknown): string {
+function formatClaimValue(value: JsonValue): string {
   if (typeof value === "string") return value;
   return JSON.stringify(value);
 }
@@ -56,7 +57,7 @@ function ClaimsTable({
 }: {
   title: string;
   subtitle: string;
-  claims: Record<string, unknown>;
+  claims: Record<string, JsonValue>;
 }) {
   const t = useTranslations("admin.oauthTest");
   const entries = Object.entries(claims);

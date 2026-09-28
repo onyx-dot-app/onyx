@@ -152,7 +152,7 @@ func normalizeProjectName(name string) string {
 
 // FindAvailablePorts resolves host ports for each port spec in InfraServices.
 // For each port it first checks whether the project's container is already
-// running with a mapped host port (via ``docker port``) and reuses it. Only
+// running with a mapped host port (via `docker port`) and reuses it. Only
 // when the container is not running does it probe for a free port. A global
 // claimed set prevents cross-service collisions (e.g., inference_model_server
 // and minio both defaulting near port 9000).

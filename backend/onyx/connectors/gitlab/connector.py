@@ -106,7 +106,7 @@ def _convert_issue_to_document(issue: Any) -> Document:
         # NOTE: doc_created_at population not yet verified against live data
         doc_created_at=_gitlab_datetime_to_utc(issue.created_at),
         primary_owners=[get_author(issue.author)],
-        metadata={"state": issue.state, "type": issue.type if issue.type else "Issue"},
+        metadata={"state": issue.state, "type": issue.type or "Issue"},
     )
     return doc
 

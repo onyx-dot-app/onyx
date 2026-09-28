@@ -9,7 +9,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches: [main]
     paths:
       - "backend/onyx/sandbox_proxy/**"
       - "backend/onyx/server/features/build/configs.py"

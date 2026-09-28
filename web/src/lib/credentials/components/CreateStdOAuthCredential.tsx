@@ -6,8 +6,8 @@ import { Form, Formik, FormikHelpers } from "formik";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { OAuthAdditionalKwargDescription } from "@/lib/connectors/credentials";
-import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
+import type { OAuthAdditionalKwargDescription } from "@/lib/connectors/types";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { ValidSources } from "@/lib/types";
 import { FormikField } from "@/refresh-components/form/FormikField";
 

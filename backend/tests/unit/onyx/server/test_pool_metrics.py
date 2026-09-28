@@ -188,8 +188,9 @@ def test_checkin_event_observes_hold_duration() -> None:
     assert "_metrics_checkout_time" not in conn_record.info
 
 
-def test_checkin_with_missing_endpoint_uses_unknown() -> None:
-    """Verify checkin gracefully handles missing endpoint and tenant info."""
+def test_checkin_with_missing_endpoint_skips_held_gauge() -> None:
+    """A checkin without a checkout marker (connection checked out before the
+    listeners attached) must not decrement the held gauge below zero."""
     engine = MagicMock()
     engine.pool = MagicMock()
     listeners: dict[str, Any] = {}
@@ -220,27 +221,38 @@ def test_checkin_with_missing_endpoint_uses_unknown() -> None:
 
         listeners["checkin"](None, conn_record)
 
-        mock_gauge.labels.assert_called_with(
-            handler="unknown", engine="sync", tenant_id="unknown"
-        )
+        mock_gauge.labels.assert_not_called()
 
 
 # --- setup_postgres_connection_pool_metrics tests ---
 
 
-def test_setup_skips_null_pool_engines() -> None:
-    """Verify setup_postgres_connection_pool_metrics skips engines with NullPool."""
+def test_setup_registers_lifecycle_events_for_null_pool_engines() -> None:
+    """NullPool engines get lifecycle listeners; only the state gauges need a
+    QueuePool. External-pooler deployments rely on the lifecycle metrics."""
+    import onyx.db.engine.async_sql_engine as async_sql_engine
+    import onyx.db.engine.shard_registry as shard_registry
+    import onyx.server.metrics.postgres_connection_pool as pool_metrics
+
     with (
         patch("onyx.server.metrics.postgres_connection_pool.REGISTRY"),
         patch(
             "onyx.server.metrics.postgres_connection_pool._register_pool_events"
         ) as mock_register,
+        patch.object(pool_metrics._collector, "add_pool") as mock_add_pool,
+        # setup() subscribes to the process-global hooks; keep this test's
+        # subscriptions from leaking into later tests.
+        patch.object(shard_registry.shard_engine_hooks, "_callbacks", []),
+        patch.object(async_sql_engine.async_engine_hooks, "_callbacks", []),
+        patch.object(pool_metrics, "_registered_engines", {}),
+        patch.object(pool_metrics, "_collector_registered", False),
     ):
         null_engine = MagicMock()
         null_engine.pool = MagicMock(spec=NullPool)
 
         setup_postgres_connection_pool_metrics({"null": null_engine})
-        mock_register.assert_not_called()
+        mock_register.assert_called_once_with(null_engine, "null")
+        mock_add_pool.assert_not_called()
 
 
 # --- Route matching tests ---

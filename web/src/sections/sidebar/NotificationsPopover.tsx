@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
@@ -65,6 +65,7 @@ function NotificationItem({
   dismiss,
 }: NotificationItemProps) {
   const t = useTranslations("sidebar");
+  const locale = useLocale();
 
   return (
     <Hoverable.Root group="notifications-popover/NotificationItem">
@@ -80,7 +81,7 @@ function NotificationItem({
           <Section justifyContent="start">
             <Section height="fit" gap={2} flexDirection="row">
               <Text font="secondary-body" color="text-02">
-                {timeAgo(notification.first_shown) ?? ""}
+                {timeAgo(notification.first_shown, locale) ?? ""}
               </Text>
               {state === "new" && (
                 <div className="w-4 flex flex-col items-center justify-center">

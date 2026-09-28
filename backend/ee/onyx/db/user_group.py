@@ -435,7 +435,9 @@ def fetch_user_groups_for_documents(
             and_(
                 ConnectorCredentialPair.id
                 == UserGroup__ConnectorCredentialPair.cc_pair_id,
-                ConnectorCredentialPair.access_type != AccessType.SYNC,
+                ConnectorCredentialPair.access_type.notin_(
+                    AccessType.perm_synced_types()
+                ),
             ),
         )
         .join(
@@ -750,6 +752,15 @@ def _assert_group_update_within_scope(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Connector credential pair '{cc_pair_id}' not found.",
             )
+        # A groupless cc_pair has no current group for within_scope to judge, so it
+        # would pass on the requested group alone. Only its creator may attach it —
+        # the same fallback that makes it editable at all (see _add_user_filters).
+        if not current_groups_by_cc_pair[cc_pair_id] and cc_pair.creator_id != user.id:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Group managers can only act on private resources they created "
+                "or that already sit in a group they manage.",
+            )
         assert_within_scope(
             user,
             db_session,
@@ -830,7 +841,7 @@ def update_user_group(
         added_cc_pair_ids=added_cc_pair_ids,
     )
 
-    current_user_ids = set([user.id for user in db_user_group.users])
+    current_user_ids = {user.id for user in db_user_group.users}
     updated_user_ids = set(user_group_update.user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)

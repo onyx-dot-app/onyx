@@ -1,3 +1,4 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { ValidSources } from "@/lib/types";
 import {
   HierarchyNodesResponse,
@@ -13,7 +14,7 @@ async function extractErrorDetail(
   fallback: string
 ): Promise<string> {
   try {
-    const body = await response.json();
+    const body: ErrorResponseBody = await response.json();
     if (body.detail) return body.detail;
   } catch {
     // JSON parsing failed — fall through to fallback

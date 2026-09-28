@@ -46,26 +46,64 @@ func checkRef(ref string) error {
 
 // releaseVersionPattern matches a release version as a user would type it,
 // with or without the conventional "v" prefix. Image tags that are not git
-// refs (beta, nightly, vX.Y.Z-dev, locally built tags) deliberately don't
-// match: they are pullable but can't be looked up in the repo.
+// refs (beta, nightly, locally built tags) deliberately don't match: they are
+// pullable but can't be looked up in the repo.
 var releaseVersionPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
 
-// NormalizeVersionTag adds the conventional "v" prefix to a bare release
-// version ("4.4.6" → "v4.4.6") and reports whether the result is a release
-// version, i.e. one whose existence can be checked with RefExists.
-func NormalizeVersionTag(tag string) (string, bool) {
-	if !releaseVersionPattern.MatchString(tag) {
-		return tag, false
+// devSuffix marks the -dev twin of an image tag. CI publishes every tag set
+// twice from the same git ref — vX.Y.Z and vX.Y.Z-dev, edge and edge-dev —
+// with the twin adding a shell and debugging tools to the backend image. The
+// suffix names an image variant, never a git ref of its own.
+const devSuffix = "-dev"
+
+// releaseShapedPattern matches a whole tag that names a release, pre-release
+// forms included (v4.7.0-beta.1, v4.7.0-cloud.3), with or without the "v"
+// prefix. It bounds which -dev tags count as twins: the repo also carries
+// unrelated refs that happen to end in -dev, and a hand-built tag may start
+// with a version (v4.7.1.2-dev) without naming one.
+var releaseShapedPattern = regexp.MustCompile(`^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$`)
+
+// SplitDevSuffix separates a -dev twin into its plain tag and a flag. Only
+// twins of floating or release-shaped tags split; any other tag comes back
+// unchanged with dev=false.
+func SplitDevSuffix(tag string) (base string, dev bool) {
+	base, dev = strings.CutSuffix(tag, devSuffix)
+	if dev && (isFloating(base) || releaseShapedPattern.MatchString(base)) {
+		return base, true
 	}
-	if !strings.HasPrefix(tag, "v") {
-		return "v" + tag, true
-	}
-	return tag, true
+	return tag, false
 }
 
-// FloatingTags are rolling image tags that track main rather than a pinned
-// release.
+// NormalizeVersionTag adds the conventional "v" prefix to a bare release
+// version ("4.4.6" → "v4.4.6", "4.4.6-dev" → "v4.4.6-dev") and reports
+// whether the result can be checked with RefExists at ConfigRef(tag). That
+// holds for release versions and for every -dev twin SplitDevSuffix
+// recognizes: a twin's config ref is its plain tag, so a pre-release twin
+// (v4.7.0-beta.1-dev) is checked even though a bare pre-release is not.
+func NormalizeVersionTag(tag string) (string, bool) {
+	base, dev := SplitDevSuffix(tag)
+	checkable := releaseVersionPattern.MatchString(base) ||
+		(dev && releaseShapedPattern.MatchString(base))
+	if !checkable {
+		return tag, false
+	}
+	if !strings.HasPrefix(base, "v") {
+		base = "v" + base
+	}
+	if dev {
+		base += devSuffix
+	}
+	return base, true
+}
+
+// IsFloatingTag reports whether tag (or the plain tag of a -dev twin) is a
+// rolling image tag that tracks main rather than a pinned release.
 func IsFloatingTag(tag string) bool {
+	base, _ := SplitDevSuffix(tag)
+	return isFloating(base)
+}
+
+func isFloating(tag string) bool {
 	return tag == "edge" || tag == "latest"
 }
 
@@ -91,13 +129,15 @@ func IsImmutableTag(tag string) bool {
 }
 
 // ConfigRef maps an image tag to the git ref its deployment files ship at:
-// floating tags track main, pinned tags use their own ref (mirrors
-// install.sh's CONFIG_REF logic).
+// floating tags track main, pinned tags use their own ref, and a -dev twin
+// uses the ref of the plain tag it was built from (there is no vX.Y.Z-dev
+// ref in the repo).
 func ConfigRef(tag string) string {
-	if IsFloatingTag(tag) {
+	base, _ := SplitDevSuffix(tag)
+	if isFloating(base) {
 		return "main"
 	}
-	return tag
+	return base
 }
 
 // Client talks to GitHub. The zero-ish defaults from NewClient hit the real

@@ -1,5 +1,5 @@
 import React from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { InfoItem } from "./InfoItem";
 import { statusToDisplay, BillingInformation } from "@/lib/billing";
 import { formatDateShort } from "@/lib/dateUtils";
@@ -12,6 +12,7 @@ export function SubscriptionSummary({
   billingInformation,
 }: SubscriptionSummaryProps) {
   const t = useTranslations("admin.billing.info");
+  const locale = useLocale();
   return (
     <div className="grid grid-cols-2 gap-4">
       <InfoItem
@@ -24,11 +25,11 @@ export function SubscriptionSummary({
       />
       <InfoItem
         title={t("summary.billingStart.label")}
-        value={formatDateShort(billingInformation.current_period_start)}
+        value={formatDateShort(billingInformation.current_period_start, locale)}
       />
       <InfoItem
         title={t("summary.billingEnd.label")}
-        value={formatDateShort(billingInformation.current_period_end)}
+        value={formatDateShort(billingInformation.current_period_end, locale)}
       />
     </div>
   );

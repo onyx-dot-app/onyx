@@ -20,14 +20,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
-import { SourceMetadata } from "./search/interfaces";
+import { InputDateRangePickerValue } from "@opal/components";
+import { SourceMetadata } from "@/lib/search/types";
 import {
   getProviderOverrideForAgent,
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
-import { Credential } from "./connectors/credentials";
+import type { Credential } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
@@ -44,7 +44,10 @@ import {
   updateReasoningEffortForChatSession,
   updateTemperatureOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import {
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -467,7 +470,7 @@ export function useLlmManager(
     llmProviders: allUserProviders,
     defaultText: allUserDefaultText,
     isLoading: isLoadingAllProviders,
-  } = useLLMProviders();
+  } = useLanguageModels();
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an agent selected
   const personaId = activeAgent?.id !== undefined ? activeAgent.id : undefined;
@@ -475,7 +478,7 @@ export function useLlmManager(
     llmProviders: personaProviders,
     defaultText: personaDefaultText,
     isLoading: isLoadingPersonaProviders,
-  } = useLLMProviders(personaId);
+  } = useLanguageModelsForAgent(personaId);
 
   const llmProviders =
     personaProviders !== undefined ? personaProviders : allUserProviders;

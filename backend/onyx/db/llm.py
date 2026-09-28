@@ -26,6 +26,8 @@ from onyx.db.persona import get_raw_personas_for_user
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.constants import SOURCE_API_CONTEXT_LIMIT_PROVIDERS
+from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
@@ -311,6 +313,52 @@ def upsert_cloud_embedding_provider(
     return CloudEmbeddingProvider.from_request(existing_provider)
 
 
+def _stored_max_input_tokens(
+    provider: str,
+    model_name: str,
+    max_input_tokens: int | None,
+    existing_max_input_tokens: int | None,
+) -> int | None:
+    """Refuse to *create* an override that only echoes the live LiteLLM lookup.
+
+    `ModelConfigurationView.from_model` serves `stored or get_max_input_tokens(...)`,
+    so a client that round-trips a provider it never edited sends the *resolved*
+    number back. Persisting it freezes whatever LiteLLM knew at that moment, and
+    `get_max_input_tokens_from_llm_provider` prefers the stored value forever — so
+    a model LiteLLM has since learned stays pinned to the old fallback.
+
+    Numeric equality cannot tell a deliberate pin from that echo, so this only
+    declines to write a *new* override and never clears one that is already
+    stored. That makes this purely preventive: rows already frozen by the old
+    behaviour keep their value and need a targeted repair by an operator who can
+    check the specific rows first.
+
+    Providers that read a context limit from their own source API are exempt
+    entirely: those values are authoritative, and Ollama feeds `num_ctx` from
+    the stored value.
+    """
+    if max_input_tokens is None or provider in SOURCE_API_CONTEXT_LIMIT_PROVIDERS:
+        return max_input_tokens
+
+    if existing_max_input_tokens is not None:
+        return max_input_tokens
+
+    if max_input_tokens == get_max_input_tokens(
+        model_name=model_name, model_provider=provider
+    ):
+        logger.info(
+            "Not storing max_input_tokens=%s for %s/%s: it matches the current "
+            "LiteLLM lookup, so it resolves to the same value at read time and "
+            "would only freeze this model if LiteLLM's answer later changes.",
+            max_input_tokens,
+            provider,
+            model_name,
+        )
+        return None
+
+    return max_input_tokens
+
+
 def upsert_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
@@ -489,7 +537,12 @@ def upsert_llm_provider(
                 model_configuration_id=existing.id,
                 supported_flows=supported_flows,
                 is_visible=model_config.is_visible,
-                max_input_tokens=model_config.max_input_tokens,
+                max_input_tokens=_stored_max_input_tokens(
+                    provider=llm_provider_upsert_request.provider,
+                    model_name=model_config.name,
+                    max_input_tokens=model_config.max_input_tokens,
+                    existing_max_input_tokens=existing.max_input_tokens,
+                ),
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
                 reasoning_effort_max=merged_reasoning_max,
@@ -503,7 +556,13 @@ def upsert_llm_provider(
                 model_name=model_config.name,
                 supported_flows=supported_flows,
                 is_visible=model_config.is_visible,
-                max_input_tokens=model_config.max_input_tokens,
+                max_input_tokens=_stored_max_input_tokens(
+                    provider=llm_provider_upsert_request.provider,
+                    model_name=model_config.name,
+                    max_input_tokens=model_config.max_input_tokens,
+                    # New row, so there is no stored override to preserve.
+                    existing_max_input_tokens=None,
+                ),
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
                 reasoning_effort_max=model_config.reasoning_effort_max,

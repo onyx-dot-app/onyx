@@ -4,7 +4,6 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -12,7 +11,7 @@ import { Button, Card, Tabs, Text } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { SvgArrowLeft, SvgPlus, SvgSettings } from "@opal/icons";
-import { MCPServer, MCPServersResponse } from "@/lib/tools/types";
+import { MCPServer, MCPServersResponse } from "@/lib/mcp/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
@@ -68,8 +67,8 @@ export default function ExternalAppsPage() {
         icon={ADMIN_ROUTES.CRAFT_APPS.icon}
         title={adminRouteTitle(ADMIN_ROUTES.CRAFT_APPS)}
         description={t("page.description")}
-        rightChildren={
-          <div className="flex items-center gap-2">
+        actions={[
+          <div key="primary" className="flex items-center gap-2">
             <Button
               href="/craft/v1/apps"
               prominence="secondary"
@@ -80,8 +79,8 @@ export default function ExternalAppsPage() {
             <Button icon={SvgPlus} onClick={() => setCatalogOpen(true)}>
               {t("page.addAppButton.label")}
             </Button>
-          </div>
-        }
+          </div>,
+        ]}
       />
       <SettingsLayouts.Body>
         <AppsAdminContent
@@ -174,7 +173,7 @@ function AppsAdminContent({
     setModalState(null);
     if (deepLinkedAppId) {
       setDismissedDeepLink(deepLinkedAppId);
-      router.replace("/admin/craft/apps" as Route);
+      router.replace("/admin/craft/apps");
     }
   }
 
@@ -388,7 +387,7 @@ function AppsAdminContent({
 function LoadingCard() {
   const t = useTranslations("admin.externalApps");
   return (
-    <Card background="none" border="dashed" rounding={4}>
+    <Card color="transparent" border="dashed" rounding={4}>
       <Text font="main-content-body">{t("loading.label")}</Text>
     </Card>
   );

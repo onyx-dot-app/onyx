@@ -72,7 +72,7 @@ def reset_vespa_kg_index(
         "Resetting kg vespa index %s for tenant %s, source: %s",
         index_name,
         tenant_id,
-        source_name if source_name else "all",
+        source_name or "all",
     )
 
     last_lock_time = time.monotonic()
@@ -125,5 +125,5 @@ def reset_vespa_kg_index(
         "Finished resetting kg vespa index %s for tenant %s, source: %s",
         index_name,
         tenant_id,
-        source_name if source_name else "all",
+        source_name or "all",
     )

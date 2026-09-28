@@ -154,6 +154,12 @@
   color: var(--content-foreground-icon);
 }
 
+/* The secondary icon between two marks reads as a connector, so it takes
+   the secondary foreground (text-03 in every mode), not the icon color. */
+.opal-content-xl-more-icon-container > .opal-content-xl-icon {
+  color: var(--content-foreground-secondary);
+}
+
 /* ---------------------------------------------------------------------------
    Title row — title (or input) + edit button
    --------------------------------------------------------------------------- */

@@ -137,10 +137,10 @@ def _try_creating_hierarchy_fetching_task(
         # Send the task
         result = celery_app.send_task(
             OnyxCeleryTask.CONNECTOR_HIERARCHY_FETCHING_TASK,
-            kwargs=dict(
-                cc_pair_id=cc_pair.id,
-                tenant_id=tenant_id,
-            ),
+            kwargs={
+                "cc_pair_id": cc_pair.id,
+                "tenant_id": tenant_id,
+            },
             queue=OnyxCeleryQueues.CONNECTOR_HIERARCHY_FETCHING,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.LOW,

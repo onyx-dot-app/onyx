@@ -1,15 +1,15 @@
 import React, { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
 import { SvgEdit } from "@opal/icons";
-import {
+import type {
   ConfluenceCredentialJson,
   Credential,
-} from "@/lib/connectors/credentials";
-import { Connector } from "@/lib/connectors/connectors";
+} from "@/lib/connectors/types";
+import type { Connector } from "@/lib/connectors/types";
 import {
   SvgArrowExchange,
   SvgAlertTriangle,
@@ -36,6 +36,7 @@ function CredentialSelectionTable({
   onDeleteCredential,
 }: CredentialSelectionTableProps) {
   const t = useTranslations("admin");
+  const locale = useLocale();
   const [selectedCredentialId, setSelectedCredentialId] = useState<
     number | null
   >(null);
@@ -128,10 +129,10 @@ function CredentialSelectionTable({
                     </p>
                   </td>
                   <td className="p-2">
-                    {new Date(credential.time_created).toLocaleString()}
+                    {new Date(credential.time_created).toLocaleString(locale)}
                   </td>
                   <td className="p-2">
-                    {new Date(credential.time_updated).toLocaleString()}
+                    {new Date(credential.time_updated).toLocaleString(locale)}
                   </td>
                   <td className="p-2 flex gap-x-2 content-center mt-auto">
                     <Button

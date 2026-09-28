@@ -1,8 +1,13 @@
 package cmd
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -182,6 +187,141 @@ func TestLibNeedsBuild(t *testing.T) {
 		needs, reason := libNeedsBuild(pkgDir)
 		if needs {
 			t.Fatalf("expected node_modules churn to be ignored, got: %q", reason)
+		}
+	})
+}
+
+// devtoolFreshWebDir builds a repository whose web directory needs neither an
+// install nor a library build, and returns the web dir and a fake bun's call log.
+func devtoolFreshWebDir(t *testing.T) (string, string) {
+	t.Helper()
+	binDir := devtoolBinDir(t)
+	webDir := filepath.Join(devtoolRepo(t), "web")
+	writeFile(t, filepath.Join(webDir, "bun.lock"), "lock-v1")
+	writeFile(t, filepath.Join(webDir, "node_modules", "pkg", "index.js"), "")
+	writeLockStamp(webDir)
+	return webDir, devtoolFakeTool(t, binDir, "bun", "")
+}
+
+func TestRunWebScript_forwardsScriptArgs(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"script only", []string{"dev"}, []string{"run", "dev"}},
+		{"flags get a separator", []string{"test", "--watch"}, []string{"run", "test", "--", "--watch"}},
+		{"separator is not repeated", []string{"test", "--", "--watch"}, []string{"run", "test", "--", "--watch"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			webDir, bunCalls := devtoolFreshWebDir(t)
+
+			runWebScript(c.args)
+
+			want := []devtoolCall{{Dir: webDir, Args: c.want}}
+			if got := devtoolCalls(t, bunCalls); !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected %q, got %q", want, got)
+			}
+		})
+	}
+}
+
+func TestPrepareWebDir_installsAndBuildsLibsInOrder(t *testing.T) {
+	binDir := devtoolBinDir(t)
+	webDir := filepath.Join(devtoolRepo(t), "web")
+	writeFile(t, filepath.Join(webDir, "bun.lock"), "lock-v1")
+	if err := os.MkdirAll(filepath.Join(webDir, "node_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(webDir, "lib", "opal", "src", "index.ts"), "")
+	writeFile(t, filepath.Join(webDir, "lib", "shared", "src", "index.ts"), "")
+	bunCalls := devtoolFakeTool(t, binDir, "bun", "")
+
+	prepareWebDir(webDir)
+
+	want := []devtoolCall{
+		{Dir: webDir, Args: []string{"install", "--frozen-lockfile"}},
+		{Dir: filepath.Join(webDir, "lib", "shared"), Args: []string{"run", "build"}},
+		{Dir: filepath.Join(webDir, "lib", "opal"), Args: []string{"run", "build"}},
+	}
+	if got := devtoolCalls(t, bunCalls); !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+	sum := sha256.Sum256([]byte("lock-v1"))
+	stamp, err := os.ReadFile(filepath.Join(webDir, "node_modules", lockStampName))
+	if err != nil {
+		t.Fatalf("expected a lock stamp after install: %v", err)
+	}
+	if got, want := string(stamp), hex.EncodeToString(sum[:])+"\n"; got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestPrepareWebDir_skipsFreshInstallAndLibs(t *testing.T) {
+	webDir, bunCalls := devtoolFreshWebDir(t)
+	older := time.Now().Add(-time.Hour)
+	for _, lib := range webLibPackages {
+		pkgDir := filepath.Join(webDir, lib)
+		src := filepath.Join(pkgDir, "src", "index.ts")
+		writeFile(t, src, "")
+		writeFile(t, filepath.Join(pkgDir, "dist", "index.js"), "")
+		for _, path := range []string{src, filepath.Dir(src), pkgDir} {
+			setMtime(t, path, older)
+		}
+	}
+
+	prepareWebDir(webDir)
+
+	if got := devtoolCalls(t, bunCalls); got != nil {
+		t.Fatalf("expected no bun calls, got %q", got)
+	}
+}
+
+func TestLoadScripts_readsPackageJSON(t *testing.T) {
+	loaders := []struct {
+		dir   string
+		load  func() (map[string]string, error)
+		names func() []string
+	}{
+		{"web", loadWebScripts, webScriptNames},
+		{"desktop", loadDesktopScripts, desktopScriptNames},
+	}
+	for _, l := range loaders {
+		t.Run(l.dir, func(t *testing.T) {
+			packageJSON := filepath.Join(devtoolRepo(t), l.dir, "package.json")
+
+			if _, err := l.load(); err == nil || !strings.Contains(err.Error(), "failed to read") {
+				t.Fatalf("expected a read error without package.json, got %v", err)
+			}
+
+			writeFile(t, packageJSON, "{")
+			if _, err := l.load(); err == nil || !strings.Contains(err.Error(), "failed to parse") {
+				t.Fatalf("expected a parse error, got %v", err)
+			}
+			if got := l.names(); got != nil {
+				t.Fatalf("expected no names for an unparseable package.json, got %q", got)
+			}
+
+			writeFile(t, packageJSON, `{"name": "x"}`)
+			if scripts, err := l.load(); err != nil || scripts != nil {
+				t.Fatalf("expected no scripts and no error, got %v, %v", scripts, err)
+			}
+
+			writeFile(t, packageJSON, `{"scripts": {"lint": "eslint", "dev": "next dev"}}`)
+			if got, want := l.names(), []string{"dev", "lint"}; !slices.Equal(got, want) {
+				t.Fatalf("expected %q, got %q", want, got)
+			}
+		})
+	}
+
+	t.Run("outside a repository", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		if _, err := loadWebScripts(); err == nil {
+			t.Fatal("expected an error outside a repository")
+		}
+		if _, err := loadDesktopScripts(); err == nil {
+			t.Fatal("expected an error outside a repository")
 		}
 	})
 }

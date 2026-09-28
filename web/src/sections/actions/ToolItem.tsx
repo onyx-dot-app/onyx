@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal/types";
@@ -226,9 +226,9 @@ const ToolItem: React.FC<ToolItemProps> = ({
             </div>
           )}
 
-          {/* Switch */}
+          {/* InputSwitch */}
           <div className="flex items-center justify-center gap-1 h-5 px-0.5 py-0.5">
-            <Switch
+            <InputSwitch
               checked={isEnabled}
               onCheckedChange={onToggle}
               disabled={!isAvailable || !canToggle}

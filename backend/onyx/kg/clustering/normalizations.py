@@ -178,12 +178,10 @@ def _normalize_one_entity(
         # combine scores
         score = (1.0 - W_leven) * ngram_score + W_leven * leven_score
         candidates[i] = (candidate_id_name, candidate_name, score)
-    candidates = list(
-        sorted(
-            filter(lambda x: x[2] > KG_NORMALIZATION_RERANK_THRESHOLD, candidates),
-            key=lambda x: x[2],
-            reverse=True,
-        )
+    candidates = sorted(
+        filter(lambda x: x[2] > KG_NORMALIZATION_RERANK_THRESHOLD, candidates),
+        key=lambda x: x[2],
+        reverse=True,
     )
     if not candidates:
         return None

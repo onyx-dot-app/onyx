@@ -206,7 +206,7 @@ def validate_ccpair_for_user(
             credential=credential,
         )
         runnable_connector.validate_connector_settings()
-        if access_type == AccessType.SYNC:
+        if access_type.is_perm_synced():
             runnable_connector.validate_perm_sync()
     except ValidationError as e:
         _record_outcome(e, perm_sync_validated=False)
@@ -219,5 +219,5 @@ def validate_ccpair_for_user(
             raise ConnectorValidationError(str(e))
         return False
 
-    _record_outcome(None, perm_sync_validated=access_type == AccessType.SYNC)
+    _record_outcome(None, perm_sync_validated=access_type.is_perm_synced())
     return True

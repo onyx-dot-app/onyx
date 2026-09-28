@@ -381,9 +381,9 @@ class TestLoadAllChatFilesLazy:
             )
 
         # Replay the chat history (skip root) and call the loader.
-        chat_history = [
-            m for m in db_session.query(type(parent)).filter_by(chat_session_id=chat.id)
-        ]
+        chat_history = list(
+            db_session.query(type(parent)).filter_by(chat_session_id=chat.id)
+        )
         chat_history = [m for m in chat_history if m.id != root.id]
         assert len(chat_history) == 10
 

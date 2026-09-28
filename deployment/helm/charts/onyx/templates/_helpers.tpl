@@ -580,3 +580,24 @@ volumes:
 {{- end }}
 {{- end -}}
 {{- end }}
+
+{{/* Set = used as-is, empty = chart default, null = no probe (Helm drops null keys). */}}
+{{- define "onyx.readinessProbe" -}}
+{{- if hasKey .values "readinessProbe" }}
+{{- with (.values.readinessProbe | default (merge (dict "periodSeconds" 10 "timeoutSeconds" 5 "failureThreshold" 3) .handler)) }}
+readinessProbe:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/* Native sleep action: the web image has no shell or sleep binary. */}}
+{{- define "onyx.preStopSleep" -}}
+{{- $seconds := int (.values.preStopSleepSeconds | default 0) }}
+{{- if and (gt $seconds 0) (semverCompare ">=1.30.0-0" .ctx.Capabilities.KubeVersion.Version) }}
+lifecycle:
+  preStop:
+    sleep:
+      seconds: {{ $seconds }}
+{{- end }}
+{{- end }}

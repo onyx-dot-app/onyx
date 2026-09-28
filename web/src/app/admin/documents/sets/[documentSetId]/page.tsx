@@ -97,7 +97,7 @@ export default function Page(props: {
         icon={route.icon}
         title={t("sets.edit.header.title")}
         divider
-        backButton
+        cancel
       />
       <SettingsLayouts.Body>
         <Main documentSetId={documentSetId} />

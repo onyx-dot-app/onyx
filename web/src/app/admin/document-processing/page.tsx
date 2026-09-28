@@ -14,11 +14,13 @@ import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import { SvgLock } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_PROCESSING;
 
 function Main() {
   const t = useTranslations("admin.documentProcessing");
+  const { appName } = useSettings();
   const {
     data: isApiKeySet,
     error,
@@ -34,12 +36,11 @@ function Main() {
 
   const handleSave = async () => {
     try {
-      await fetch(
-        `/api/search-settings/upsert-unstructured-api-key?unstructured_api_key=${apiKey}`,
-        {
-          method: "PUT",
-        }
-      );
+      await fetch("/api/search-settings/upsert-unstructured-api-key", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unstructured_api_key: apiKey }),
+      });
     } catch (error) {
       console.error("Failed to save API key:", error);
     }
@@ -76,7 +77,7 @@ function Main() {
 
           <div className="flex flex-col gap-2">
             <Text as="p" mainContentBody text04 className="leading-relaxed">
-              {t("unstructured.description")}
+              {t("unstructured.description", { appName })}
             </Text>
             <Text as="p" mainContentMuted text03>
               {t.rich("unstructured.note", {
@@ -145,7 +146,11 @@ function Main() {
                   </Text>
                 </>
               ) : (
-                <Button variant="action" onClick={handleSave}>
+                <Button
+                  variant="action"
+                  onClick={handleSave}
+                  disabled={!apiKey.trim()}
+                >
                   {t("unstructured.saveButton.label")}
                 </Button>
               )}

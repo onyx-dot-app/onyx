@@ -1,14 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Onyx",
-  "version": "1.1",
+  "version": "1.2",
   "description": "Onyx lets you research, create, and automate with LLMs powered by your team's unique knowledge",
-  "permissions": [
-    "sidePanel",
-    "storage",
-    "activeTab",
-    "tabs"
-  ],
+  "permissions": ["sidePanel", "storage", "activeTab", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "service_worker.js",
@@ -28,6 +23,9 @@
     "128": "public/icon128.png"
   },
   "options_page": "src/pages/options.html",
+  "storage": {
+    "managed_schema": "managed_schema.json"
+  },
   "chrome_url_overrides": {
     "newtab": "src/pages/onyx_home.html"
   },

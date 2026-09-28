@@ -21,6 +21,7 @@ import {
   usePillIndicator,
   useHorizontalScroll,
 } from "@opal/components/tabs/hooks";
+import { useOpalStrings } from "@opal/strings";
 
 /* =============================================================================
    TABS ROOT
@@ -73,6 +74,7 @@ function TabsList({
   const scrollArrowsRef = useRef<HTMLDivElement>(null);
   const rightChildrenRef = useRef<HTMLDivElement>(null);
   const [rightOffset, setRightOffset] = useState(0);
+  const strings = useOpalStrings();
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
 
@@ -158,7 +160,7 @@ function TabsList({
             size="sm"
             icon={SvgChevronLeft}
             onClick={handleScrollLeft}
-            tooltip="Scroll tabs left"
+            tooltip={strings.scrollTabsLeft}
           />
           <Button
             disabled={!canScrollRight}
@@ -166,7 +168,7 @@ function TabsList({
             size="sm"
             icon={SvgChevronRight}
             onClick={handleScrollRight}
-            tooltip="Scroll tabs right"
+            tooltip={strings.scrollTabsRight}
           />
         </div>
       )}
@@ -228,6 +230,7 @@ function TabsTrigger({
   ...props
 }: TabsTriggerProps) {
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
+  const strings = useOpalStrings();
 
   const inner = (
     <>
@@ -246,7 +249,7 @@ function TabsTrigger({
       {isLoading && (
         <span
           className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ms-1"
-          aria-label="Loading"
+          aria-label={strings.loading}
         />
       )}
     </>
@@ -297,7 +300,7 @@ interface TabsContentProps extends WithoutStyles<
 
 function TabsContent({ padding, children, ...props }: TabsContentProps) {
   return (
-    <TabsPrimitive.Content {...props} className="w-full pt-4">
+    <TabsPrimitive.Content {...props} className="w-full">
       {padding ? (
         <div style={{ padding: spacingToRem(padding) }}>{children}</div>
       ) : (

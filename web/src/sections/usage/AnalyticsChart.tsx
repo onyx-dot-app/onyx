@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocale } from "next-intl";
 import { Card, EmptyMessageCard, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
@@ -6,17 +7,17 @@ import type { RichStr } from "@opal/types";
 import AreaChart from "@/refresh-components/AreaChart";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { getDatesList } from "@/lib/usage/utils";
-import { DateRange } from "@/refresh-components/DateRangePicker";
+import { DateRange } from "@opal/components";
 import { ChartSeries, ChartState } from "@/sections/usage/interfaces";
 
 const CHART_BODY_HEIGHT = 20;
 
-function formatDay(dateStr: string): string {
+function formatDay(dateStr: string, locale: string): string {
   const [year, month, day] = dateStr.split("-").map(Number);
   if (year === undefined || month === undefined || day === undefined) {
     return dateStr;
   }
-  return formatCalendarDay(dateStr);
+  return formatCalendarDay(dateStr, locale);
 }
 
 /** Keeps the underlying failure in the console when a chart shows its error card. */
@@ -159,9 +160,12 @@ export function AnalyticsChart({
   headerChildren,
   stacked = false,
   allowDecimals = true,
-  xAxisFormatter = formatDay,
+  xAxisFormatter,
   yAxisFormatter,
 }: AnalyticsChartProps) {
+  const locale = useLocale();
+  const formatXAxis =
+    xAxisFormatter ?? ((value: string) => formatDay(value, locale));
   return (
     <Card border="solid" rounding={4} padding={6}>
       <Section
@@ -194,7 +198,7 @@ export function AnalyticsChart({
           timeRange={timeRange}
           stacked={stacked}
           allowDecimals={allowDecimals}
-          xAxisFormatter={xAxisFormatter}
+          xAxisFormatter={formatXAxis}
           {...(yAxisFormatter && { yAxisFormatter })}
         />
       </Section>

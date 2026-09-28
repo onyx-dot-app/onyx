@@ -200,6 +200,12 @@ class FileToolMetadata(BaseModel):
     file_id: str
     filename: str
     approx_char_count: int
+    # Whether this file's bytes reached ``chat_files_for_tools``, and so are
+    # available to tools that receive the files themselves (PythonTool).
+    # Messages dropped by summary truncation are filtered out of
+    # ``chat_history`` before ``load_all_chat_files`` runs, so their files are
+    # listed for the LLM but never staged. Only ``read_file`` can fetch those.
+    staged_for_tools: bool = True
 
 
 class ChatHistoryResult(BaseModel):

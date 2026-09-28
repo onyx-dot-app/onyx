@@ -99,7 +99,7 @@ def _process_response(
                 duration_ms=duration_ms,
             )
         msg = f"External endpoint call failed: {exc}"
-        logger.exception(msg, exc_info=exc)
+        logger.error(msg, exc_info=exc)
         return ExternalEndpointOutcome(
             is_success=False,
             reachability_signal=None,  # unknown error — don't make assumptions

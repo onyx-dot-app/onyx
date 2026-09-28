@@ -22,10 +22,11 @@ import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
 import { NextIntlClientProvider } from "next-intl";
+import OpalStringsBridge from "@/i18n/OpalStringsBridge";
 import { getLocale, getMessages } from "next-intl/server";
 import { DirectionProvider } from "@radix-ui/react-direction";
 import { cookies } from "next/headers";
-import { htmlDirForLocale, type HtmlDir } from "@/i18n/config";
+import { htmlDirForLocale, messageLocale, type HtmlDir } from "@/i18n/config";
 
 // No generic at the end of either fallback list: the generic comes last in
 // the composed --font-* variables on <html> below, after the per-locale CJK
@@ -64,12 +65,16 @@ interface LayoutProps {
 }
 
 export default async function Layout({ children }: LayoutProps) {
-  // Locale comes from the NEXT_LOCALE cookie (see src/i18n/request.ts), which
-  // UserProvider keeps in sync with the user's stored language preference.
+  // The runtime tag comes from the NEXT_LOCALE cookie (see src/i18n/request.ts),
+  // which the backend sets from the stored language.
   const locale = await getLocale();
   const messages = await getMessages();
+  // <html lang> and the direction follow the stored language, not the runtime
+  // tag: UserProvider refreshes whenever <html lang> differs from the stored
+  // language, and the numbering system belongs to Intl, not the document.
+  const language = messageLocale(locale);
 
-  let dir: HtmlDir = htmlDirForLocale(locale);
+  let dir: HtmlDir = htmlDirForLocale(language);
   // Dev-only escape hatch so QA can preview either direction without
   // switching account language: set an "onyx-dir" cookie to "rtl" or
   // "ltr" (with path=/) and reload.
@@ -82,7 +87,7 @@ export default async function Layout({ children }: LayoutProps) {
 
   return (
     <html
-      lang={locale}
+      lang={language}
       dir={dir}
       // The app-wide font variables are composed here instead of with
       // next/font's `variable` option: the CJK tail (--font-cjk-sans,
@@ -148,43 +153,47 @@ export default async function Layout({ children }: LayoutProps) {
 
       <body className={`relative font-hanken`}>
         <NextIntlClientProvider locale={locale} messages={messages}>
-          {/* Radix reads direction from context, not the DOM, so popovers,
+          <OpalStringsBridge>
+            {/* Radix reads direction from context, not the DOM, so popovers,
               menus and roving focus need this alongside <html dir>. */}
-          <DirectionProvider dir={dir}>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <div className="text-text min-h-screen bg-background">
-                <TooltipProvider>
-                  <PHProvider>
-                    <SWRConfigProvider>
-                      <AppHealthBanner />
-                      <BannerQueue />
-                      <AuthenticationShell>
-                        <AppProvider>
-                          <PostHogRuntimeInitializer />
-                          <CustomAnalyticsScript />
-                          <PostHogPageTracker />
-                          <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                            <ProductGatingWrapper>
-                              {children}
-                            </ProductGatingWrapper>
-                          </div>
-                          <WebVitals />
-                          {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                            <StatsOverlayLoader />
-                          )}
-                        </AppProvider>
-                      </AuthenticationShell>
-                    </SWRConfigProvider>
-                  </PHProvider>
-                </TooltipProvider>
-              </div>
-            </ThemeProvider>
-          </DirectionProvider>
+            <DirectionProvider dir={dir}>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <div className="text-text min-h-screen bg-background">
+                  <TooltipProvider>
+                    <PHProvider>
+                      <SWRConfigProvider>
+                        <AppHealthBanner />
+                        <BannerQueue />
+                        <AuthenticationShell>
+                          <AppProvider>
+                            <PostHogRuntimeInitializer />
+                            <CustomAnalyticsScript />
+                            <PostHogPageTracker />
+                            <div
+                              id={MODAL_ROOT_ID}
+                              className="h-screen w-screen"
+                            >
+                              <ProductGatingWrapper>
+                                {children}
+                              </ProductGatingWrapper>
+                            </div>
+                            <WebVitals />
+                            {process.env.NEXT_PUBLIC_ENABLE_STATS ===
+                              "true" && <StatsOverlayLoader />}
+                          </AppProvider>
+                        </AuthenticationShell>
+                      </SWRConfigProvider>
+                    </PHProvider>
+                  </TooltipProvider>
+                </div>
+              </ThemeProvider>
+            </DirectionProvider>
+          </OpalStringsBridge>
         </NextIntlClientProvider>
       </body>
     </html>

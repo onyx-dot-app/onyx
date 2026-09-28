@@ -903,13 +903,11 @@ def _convert_drive_item_to_document(
                 ),
             },
             doc_created_at=(
-                datetime.fromisoformat(created_time.replace("Z", "+00:00"))
+                datetime.fromisoformat(created_time)
                 if (created_time := file.get("createdTime"))
                 else None
             ),
-            doc_updated_at=datetime.fromisoformat(
-                file.get("modifiedTime", "").replace("Z", "+00:00")
-            ),
+            doc_updated_at=datetime.fromisoformat(file.get("modifiedTime", "")),
             external_access=external_access,
             parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
             file_id=staged_file_id,
@@ -992,7 +990,7 @@ def build_slim_document(
         external_access=external_access,
         parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
         doc_created_at=(
-            datetime.fromisoformat(created_time.replace("Z", "+00:00"))
+            datetime.fromisoformat(created_time)
             if (created_time := file.get("createdTime"))
             else None
         ),

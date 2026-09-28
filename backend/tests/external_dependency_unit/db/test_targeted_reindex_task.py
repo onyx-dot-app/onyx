@@ -44,8 +44,7 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 
 _PROCESSOR_PATH = (
-    "onyx.background.celery.tasks.docprocessing."
-    "targeted_reindex_task.process_targets_for_cc_pair"
+    "onyx.background.indexing.run_targeted_reindex.process_targets_for_cc_pair"
 )
 
 

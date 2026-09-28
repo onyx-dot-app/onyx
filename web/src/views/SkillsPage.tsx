@@ -3,7 +3,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import {
   Button,
   InputTypeIn,
@@ -41,6 +40,7 @@ import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
+import { useSettings } from "@/lib/settings/hooks";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -48,6 +48,7 @@ import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
 export default function SkillsPage() {
   const t = useTranslations("skills");
+  const { appName } = useSettings();
   const router = useRouter();
   const externalAppIdParam = useSearchParams().get("externalAppId");
   const focusedExternalAppId =
@@ -77,7 +78,7 @@ export default function SkillsPage() {
   });
 
   function handleEdit(item: CustomSkillCardItem) {
-    router.push(`/craft/v1/skills/edit/${item.id}` as Route);
+    router.push(`/craft/v1/skills/edit/${item.id}`);
   }
 
   async function updateSkillEnabled(
@@ -290,8 +291,12 @@ export default function SkillsPage() {
         icon={SvgBlocks}
         title={t("page.header.title")}
         description={t("page.header.description")}
-        rightChildren={
-          <Popover open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
+        actions={[
+          <Popover
+            key="primary"
+            open={createMenuOpen}
+            onOpenChange={setCreateMenuOpen}
+          >
             <Popover.Trigger asChild>
               <Button icon={SvgPlus}>
                 {t("page.createMenu.trigger.label")}
@@ -303,10 +308,12 @@ export default function SkillsPage() {
                   sizePreset="main-ui"
                   rounding={2}
                   icon={SvgEdit}
-                  description={t("page.createMenu.scratch.description")}
+                  description={t("page.createMenu.scratch.description", {
+                    appName,
+                  })}
                   onClick={() => {
                     setCreateMenuOpen(false);
-                    router.push("/craft/v1/skills/new" as Route);
+                    router.push("/craft/v1/skills/new");
                   }}
                   title={t("page.createMenu.scratch.title")}
                 />
@@ -334,8 +341,8 @@ export default function SkillsPage() {
                 />
               </Popover.Menu>
             </Popover.Content>
-          </Popover>
-        }
+          </Popover>,
+        ]}
       >
         <InputTypeIn
           ref={searchInputRef}
@@ -430,7 +437,7 @@ export default function SkillsPage() {
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
-          router.push(`/craft/v1/skills/new?draft=${draftId}` as Route);
+          router.push(`/craft/v1/skills/new?draft=${draftId}`);
         }}
       />
 

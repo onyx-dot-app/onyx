@@ -27,6 +27,7 @@ from onyx.configs.app_configs import (
     POLL_CONNECTOR_OFFSET,
 )
 from onyx.configs.constants import (
+    DocumentSource,
     NotificationType,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -178,7 +179,7 @@ def _get_connector_runner(
 
         perm_sync_validated = (
             not INTEGRATION_TESTS_MODE
-            and attempt.connector_credential_pair.access_type == AccessType.SYNC
+            and attempt.connector_credential_pair.access_type.is_perm_synced()
         )
         if perm_sync_validated:
             with time_stage(IndexAttemptStage.PERMISSION_VALIDATION, attempt.id):
@@ -524,12 +525,16 @@ def connector_document_extraction(
             else 0
         )
         should_fetch_permissions_during_indexing = (
-            index_attempt.connector_credential_pair.access_type == AccessType.SYNC
+            index_attempt.connector_credential_pair.access_type.is_perm_synced()
             and source_should_fetch_permissions_during_indexing(db_connector.source)
-            and is_primary
-            # if we've already successfully indexed, let the doc_sync job
-            # take care of doc-level permissions
-            and (from_beginning or not has_successful_attempt)
+            # if we've already successfully indexed, let the doc_sync job take care
+            # of doc-level permissions. Zoom skips both halves: with no doc_sync to
+            # fall back on, anything indexing misses -- including a document the
+            # secondary crawl creates before the primary sees it -- is missed for good.
+            and (
+                db_connector.source == DocumentSource.ZOOM
+                or (is_primary and (from_beginning or not has_successful_attempt))
+            )
         )
 
         # Set up time windows for polling. A port-flow FUTURE's resume cursor comes from its

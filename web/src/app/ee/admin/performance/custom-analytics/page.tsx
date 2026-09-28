@@ -7,11 +7,13 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { Spacer } from "@opal/components";
 import CustomAnalyticsUpdateForm from "./CustomAnalyticsUpdateForm";
+import { fetchAppName } from "@/lib/app/svcSS";
 
 const route = ADMIN_ROUTES.CUSTOM_ANALYTICS;
 
 async function Main() {
   const t = await getTranslations("admin.customAnalytics");
+  const appName = await fetchAppName();
 
   if (!CUSTOM_ANALYTICS_ENABLED) {
     return (
@@ -20,6 +22,7 @@ async function Main() {
           <Callout type="danger" title={t("notEnabled.title")}>
             {t.rich("notEnabled.description", {
               i: (chunks) => <i>{chunks}</i>,
+              appName,
             })}
           </Callout>
         </div>
@@ -29,7 +32,7 @@ async function Main() {
 
   return (
     <div>
-      <Text as="p">{t("intro.description")}</Text>
+      <Text as="p">{t("intro.description", { appName })}</Text>
       <Spacer rem={2} />
 
       <CustomAnalyticsUpdateForm />

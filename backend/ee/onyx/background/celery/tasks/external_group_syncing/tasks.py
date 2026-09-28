@@ -118,7 +118,7 @@ def _get_fence_validation_block_expiration() -> int:
 def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external group sync is due."""
 
-    if cc_pair.access_type != AccessType.SYNC:
+    if not cc_pair.access_type.is_perm_synced():
         task_logger.error(
             f"Received non-sync CC Pair {cc_pair.id} for external group sync. Actual access type: {cc_pair.access_type}"
         )
@@ -319,10 +319,10 @@ def try_creating_external_group_sync_task(
 
         result = app.send_task(
             OnyxCeleryTask.CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK,
-            kwargs=dict(
-                cc_pair_id=cc_pair_id,
-                tenant_id=tenant_id,
-            ),
+            kwargs={
+                "cc_pair_id": cc_pair_id,
+                "tenant_id": tenant_id,
+            },
             queue=OnyxCeleryQueues.CONNECTOR_EXTERNAL_GROUP_SYNC,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.MEDIUM,

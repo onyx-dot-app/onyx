@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { SvgExternalLink, SvgUser, SvgUserPlus } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
@@ -10,7 +11,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
-import type { StatusFilter } from "./interfaces";
+import type { StatusFilter } from "./types";
 
 import UsersSummary from "./UsersSummary";
 import UsersTable from "./UsersTable";
@@ -72,6 +73,7 @@ function UsersContent() {
 
 export default function UsersPage() {
   const t = useTranslations("admin.users");
+  const { appName } = useSettings();
   const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
@@ -79,16 +81,20 @@ export default function UsersPage() {
       <SettingsLayouts.Header
         title={t("page.title")}
         icon={SvgUser}
-        rightChildren={
-          <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
+        actions={[
+          <Button
+            key="primary"
+            icon={SvgUserPlus}
+            onClick={() => setInviteOpen(true)}
+          >
             {t("page.inviteButton.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       >
         <MessageCard
           variant="info"
           title={t("permissionsNotice.title")}
-          description={t("permissionsNotice.description")}
+          description={t("permissionsNotice.description", { appName })}
           rightChildren={
             <Button
               icon={SvgExternalLink}

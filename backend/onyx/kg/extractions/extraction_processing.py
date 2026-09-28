@@ -403,16 +403,15 @@ def kg_extraction(
                 )
                 for arg in batch_deep_extraction_args
             ]
-            batch_deep_extractions: dict[str, KGDocumentDeepExtractionResults] = {
-                document_id: result
-                for document_id, result in zip(
+            batch_deep_extractions: dict[str, KGDocumentDeepExtractionResults] = dict(
+                zip(
                     # Only the deep-extraction documents have a result. Skipped
                     # documents are not in `batch_deep_extraction_args`.
                     [arg[0] for arg in batch_deep_extraction_args],
                     run_functions_tuples_in_parallel(batch_deep_extraction_func_calls),
                     strict=True,
                 )
-            }
+            )
 
             # Collect entities and relationships to upsert
             batch_entities: list[tuple[str | None, str]] = []

@@ -1,7 +1,14 @@
 package docker
 
 import (
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
 	"testing"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
 func TestName_usesFlag(t *testing.T) {
@@ -33,11 +40,101 @@ func TestNormalizeProjectName(t *testing.T) {
 	}
 }
 
-func TestName_defaultsWhenNoFlag(t *testing.T) {
+func TestName_usesNormalizedGitRootBasename(t *testing.T) {
 	SetProjectFlags("")
-	name := ProjectName()
-	if name == "" {
-		t.Fatal("expected non-empty project name")
+	repo := filepath.Join(t.TempDir(), "Feature.X")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Git(t, repo, "init")
+	t.Chdir(repo)
+
+	if got := ProjectName(); got != "featurex" {
+		t.Fatalf("expected %q, got %q", "featurex", got)
+	}
+}
+
+func TestName_defaultsOutsideGitRepo(t *testing.T) {
+	SetProjectFlags("")
+	dir := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
+	t.Chdir(dir)
+
+	if got := ProjectName(); got != defaultProjectName {
+		t.Fatalf("expected %q, got %q", defaultProjectName, got)
+	}
+}
+
+func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
+	SetProjectFlags("proj")
+	t.Cleanup(func() { SetProjectFlags("") })
+	// Every container reports host port 2<containerPort>, e.g. 25432.
+	calls := fakeDocker(t, `echo "0.0.0.0:2$3"`)
+
+	resolved, err := FindAvailablePorts()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := map[string]string{
+		"POSTGRES_HOST_PORT":         "25432",
+		"REDIS_HOST_PORT":            "26379",
+		"OPENSEARCH_HOST_PORT":       "29200",
+		"MODEL_SERVER_HOST_PORT":     "29000",
+		"MINIO_API_HOST_PORT":        "29000",
+		"MINIO_CONSOLE_HOST_PORT":    "29001",
+		"CODE_INTERPRETER_HOST_PORT": "28000",
+	}
+	if got := resolved.ComposeEnv(); !maps.Equal(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	wantCalls := []string{
+		"port proj-relational_db-1 5432",
+		"port proj-cache-1 6379",
+		"port proj-opensearch-1 9200",
+		"port proj-inference_model_server-1 9000",
+		"port proj-minio-1 9000",
+		"port proj-minio-1 9001",
+		"port proj-code-interpreter-1 8000",
+	}
+	if got := readCalls(t, calls); !slices.Equal(got, wantCalls) {
+		t.Fatalf("expected calls %q, got %q", wantCalls, got)
+	}
+}
+
+func TestFindAvailablePorts_probesWithoutReusingClaimedPorts(t *testing.T) {
+	SetProjectFlags("proj")
+	t.Cleanup(func() { SetProjectFlags("") })
+	// Only the model server runs, and it holds minio's default API port.
+	fakeDocker(t, `[ "$2" = proj-inference_model_server-1 ] && echo 0.0.0.0:9004 && exit 0
+exit 1`)
+
+	resolved, err := FindAvailablePorts()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	env := resolved.ComposeEnv()
+	if env["MODEL_SERVER_HOST_PORT"] != "9004" {
+		t.Fatalf("expected the running model server port 9004, got %q", env["MODEL_SERVER_HOST_PORT"])
+	}
+	seen := map[string]string{}
+	for key, port := range env {
+		if other, ok := seen[port]; ok {
+			t.Fatalf("%s and %s both got port %s", key, other, port)
+		}
+		seen[port] = key
+	}
+	for _, svc := range InfraServices {
+		for _, spec := range svc.Ports {
+			port, err := strconv.Atoi(env[spec.ComposeVar])
+			if err != nil {
+				t.Fatalf("%s: %v", spec.ComposeVar, err)
+			}
+			if spec.ComposeVar != "MODEL_SERVER_HOST_PORT" && (port < spec.DefaultHost || port >= spec.DefaultHost+maxPortScanRange) {
+				t.Errorf("%s: expected a port in [%d, %d), got %d", spec.ComposeVar, spec.DefaultHost, spec.DefaultHost+maxPortScanRange, port)
+			}
+		}
 	}
 }
 

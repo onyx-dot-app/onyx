@@ -1,6 +1,5 @@
 "use client";
 
-import type { Route } from "next";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -19,9 +18,11 @@ import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
+import { useSettings } from "@/lib/settings/hooks";
 
 function GroupsPage() {
   const t = useTranslations("admin.groups");
+  const { appName } = useSettings();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
@@ -58,7 +59,7 @@ function GroupsPage() {
           <MessageCard
             variant="info"
             title={t("permissionsChanged.title")}
-            description={t("permissionsChanged.description")}
+            description={t("permissionsChanged.description", { appName })}
             rightChildren={
               <Button
                 icon={SvgExternalLink}
@@ -86,7 +87,7 @@ function GroupsPage() {
           emptyStateText={t("list.empty.text")}
           onAction={
             canCreateGroup
-              ? () => router.push("/admin/groups/create" as Route)
+              ? () => router.push("/admin/groups/create")
               : undefined
           }
           actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}

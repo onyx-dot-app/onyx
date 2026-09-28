@@ -8,8 +8,8 @@ Use it for page and route-level loading. For an inline or section-level loader w
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
+| Prop   | Type                | Default       | Description                                                   |
+| ------ | ------------------- | ------------- | ------------------------------------------------------------- |
 | `text` | `string \| RichStr` | `"Loading …"` | Label beneath the mark. Pass `markdown()` for inline markdown |
 
 ## Usage

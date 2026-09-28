@@ -11,6 +11,7 @@ import {
   logout,
 } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
+import { loginPath } from "@/lib/auth/paths";
 import { Popover, PopoverMenu } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SidebarTab, LineItemButton } from "@opal/components";
@@ -59,12 +60,11 @@ function SettingsPopover({
   const showLogout = user && !isAnonymousUser && !LOGOUT_DISABLED;
   const showLogin = isAnonymousUser;
 
+  const query = searchParams?.toString();
+  const currentUrl = query ? `${pathname}?${query}` : pathname;
+
   const handleLogin = () => {
-    const currentUrl = `${pathname}${
-      searchParams?.toString() ? `?${searchParams.toString()}` : ""
-    }`;
-    const encodedRedirect = encodeURIComponent(currentUrl);
-    router.push(`/auth/login?next=${encodedRedirect}`);
+    router.push(loginPath({ next: currentUrl }));
   };
 
   const logoutFailedMessage = t("logoutFailed.message");
@@ -77,13 +77,9 @@ function SettingsPopover({
           return;
         }
 
-        const currentUrl = `${pathname}${
-          searchParams?.toString() ? `?${searchParams.toString()}` : ""
-        }`;
-
-        const encodedRedirect = encodeURIComponent(currentUrl);
-
-        router.push(`/auth/login?next=${encodedRedirect}`);
+        // Held on the login button: with SSO as the only way in, an auto
+        // start would sign the user straight back in through the IdP session.
+        router.push(loginPath({ next: currentUrl, autoRedirectToSso: false }));
       })
 
       .catch(() => {

@@ -9,9 +9,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches:
-      - main
-      - "release/**"
     paths:
       - "web/**"
       - ".github/workflows/pr-storybook-build.yml"

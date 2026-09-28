@@ -4,7 +4,11 @@ from ee.onyx.prompts.search_flow_classification import (
     SEARCH_CLASS,
 )
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import LanguageModelInput, ReasoningEffort, UserMessage
+from onyx.llm.models import (
+    LanguageModelInput,
+    ReasoningEffort,
+    UserMessage,
+)
 from onyx.llm.utils import llm_response_to_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
@@ -24,7 +28,7 @@ def classify_is_search_flow(
         prompt=messages,
         reasoning_effort=ReasoningEffort.OFF,
         # Nothing can happen in the UI until this call finishes so we need to be aggressive with the timeout
-        timeout_override=2,
+        total_timeout_s=2,
         # Well more than necessary but just to ensure completion and in case it succeeds with classifying but
         # ends up rambling
         max_tokens=20,

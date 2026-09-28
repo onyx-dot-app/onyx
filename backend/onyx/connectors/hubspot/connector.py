@@ -305,7 +305,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         try:
             # Search API returns ISO 8601 strings; filter values use ms epoch.
-            next_start = datetime.fromisoformat(last_ts_ms.replace("Z", "+00:00"))
+            next_start = datetime.fromisoformat(last_ts_ms)
         except (ValueError, AttributeError):
             try:
                 next_start = datetime.fromtimestamp(

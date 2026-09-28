@@ -8,24 +8,24 @@ import (
 
 // CredentialUpsert mirrors CredentialBase (backend/onyx/server/documents/models.py).
 type CredentialUpsert struct {
-	CredentialJSON map[string]any `json:"credential_json"`
-	AdminPublic    bool           `json:"admin_public"`
-	Source         string         `json:"source"`
-	Name           *string        `json:"name"`
-	CuratorPublic  bool           `json:"curator_public"`
 	Groups         []int64        `json:"groups"`
+	Source         string         `json:"source"`
+	CredentialJSON map[string]any `json:"credential_json"`
+	Name           *string        `json:"name"`
+	AdminPublic    bool           `json:"admin_public"`
+	CuratorPublic  bool           `json:"curator_public"`
 }
 
 // Credential mirrors CredentialSnapshot. CredentialJSON always comes back
 // masked, so it is never a source of truth for Terraform state.
 type Credential struct {
+	Source         string         `json:"source"`
 	ID             int64          `json:"id"`
 	CredentialJSON map[string]any `json:"credential_json"`
-	AdminPublic    bool           `json:"admin_public"`
-	Source         string         `json:"source"`
 	Name           *string        `json:"name"`
-	CuratorPublic  bool           `json:"curator_public"`
 	UserID         *string        `json:"user_id"`
+	AdminPublic    bool           `json:"admin_public"`
+	CuratorPublic  bool           `json:"curator_public"`
 }
 
 // credentialNameUpdate mirrors CredentialDataUpdateRequest.

@@ -8,7 +8,7 @@ import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
 import { planTagProps } from "@/lib/tier-badge";
 import { Section } from "@/layouts/general-layouts";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
+import { InputNumber } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 

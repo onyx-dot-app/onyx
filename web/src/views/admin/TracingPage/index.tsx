@@ -95,7 +95,7 @@ export default function TracingPage() {
                 key={providerType}
                 icon={detail.logo}
                 title={detail.label}
-                description={detail.description}
+                description={t(detail.descriptionKey)}
                 status={connected ? "selected" : "disconnected"}
                 selectedLabel={t("provider.connected.label")}
                 onConnect={() => {

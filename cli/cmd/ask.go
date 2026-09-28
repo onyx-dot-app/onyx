@@ -10,10 +10,12 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/overflow"
+	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
 	"github.com/spf13/cobra"
 )
 
@@ -21,11 +23,12 @@ const defaultMaxOutputBytes = 50000
 
 func newAskCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (
-		askAgentID int
-		askJSON    bool
-		askQuiet   bool
-		askPrompt  string
-		maxOutput  int
+		askAgentID   int
+		askAgentName string
+		askJSON      bool
+		askQuiet     bool
+		askPrompt    string
+		maxOutput    int
 	)
 
 	cmd := &cobra.Command{
@@ -43,6 +46,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 		Args: cobra.MaximumNArgs(1),
 		Example: `  onyx-cli ask "What connectors are available?"
   onyx-cli ask --agent-id 3 "Summarize our Q4 revenue"
+  onyx-cli ask --agent-name "Support Agent" "hello"
   onyx-cli ask --json "List all users" | jq '.event.content'
   cat error.log | onyx-cli ask --prompt "Find the root cause"
   echo "what is onyx?" | onyx-cli ask`,
@@ -61,13 +65,21 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				return err
 			}
 
-			agentID := cfg.DefaultAgentID
-			if cmd.Flags().Changed("agent-id") {
-				agentID = askAgentID
-			}
-
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+
+			agentID, _, err := resolveAgentSelection(
+				ctx,
+				client,
+				askAgentID,
+				cmd.Flags().Changed("agent-id"),
+				askAgentName,
+				cmd.Flags().Changed("agent-name"),
+				cfg.DefaultAgentID,
+			)
+			if err != nil {
+				return err
+			}
 
 			parentID := -1
 			ch := client.SendMessageStream(
@@ -98,8 +110,13 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			ow := &overflow.Writer{Limit: truncateAt, Quiet: askQuiet, Out: ios.Out, ErrOut: ios.ErrOut}
 
 			for event := range ch {
-				if e, ok := event.(models.SessionCreatedEvent); ok {
+				switch e := event.(type) {
+				case models.SessionCreatedEvent:
 					sessionID = e.ChatSessionID
+				case models.StopEvent:
+					// Keep draining: the server saves the turn after it sends stop,
+					// and the rename below reads the saved history.
+					gotStop = true
 				}
 
 				if askJSON {
@@ -117,20 +134,17 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					fmt.Fprintln(ios.Out, string(data))
 					if errEvt, ok := event.(models.ErrorEvent); ok {
 						if errEvt.StatusCode != 0 {
-							lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", errEvt.Error)
+							lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", sanitize.Terminal(errEvt.Error))
 						} else {
-							lastErr = exitcodes.New(exitcodes.General, errEvt.Error)
+							lastErr = exitcodes.New(exitcodes.General, sanitize.Terminal(errEvt.Error))
 						}
-					}
-					if _, ok := event.(models.StopEvent); ok {
-						gotStop = true
 					}
 					continue
 				}
 
 				switch e := event.(type) {
 				case models.MessageDeltaEvent:
-					ow.Write(e.Content)
+					ow.Write(sanitize.Terminal(e.Content))
 				case models.SearchStartEvent:
 					if isTTY && !askQuiet {
 						if e.IsInternetSearch {
@@ -142,7 +156,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				case models.SearchQueriesEvent:
 					if isTTY && !askQuiet {
 						for _, q := range e.Queries {
-							fmt.Fprintf(ios.ErrOut, "\033[2m  → %s\033[0m\n", q)
+							fmt.Fprintf(ios.ErrOut, "\033[2m  → %s\033[0m\n", sanitize.Terminal(q))
 						}
 					}
 				case models.SearchDocumentsEvent:
@@ -155,17 +169,14 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					}
 				case models.ToolStartEvent:
 					if isTTY && !askQuiet && e.ToolName != "" {
-						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", e.ToolName)
+						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", sanitize.Terminal(e.ToolName))
 					}
 				case models.ErrorEvent:
 					ow.Finish()
 					if e.StatusCode != 0 {
-						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", e.Error)
+						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", sanitize.Terminal(e.Error))
 					}
-					return exitcodes.New(exitcodes.General, e.Error)
-				case models.StopEvent:
-					ow.Finish()
-					return nil
+					return exitcodes.New(exitcodes.General, sanitize.Terminal(e.Error))
 				}
 			}
 
@@ -186,17 +197,31 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			if !gotStop {
 				return exitcodes.New(exitcodes.General, "stream ended unexpectedly")
 			}
+			nameChatSession(ctx, ios, client, sessionID)
 			return nil
 		},
 	}
 
 	cmd.Flags().IntVar(&askAgentID, "agent-id", 0, "Agent ID to use")
+	cmd.Flags().StringVar(&askAgentName, "agent-name", "", "Agent name to use (exact or unique substring)")
 	cmd.Flags().BoolVar(&askJSON, "json", false, "Output NDJSON stream events instead of plain text")
 	cmd.Flags().BoolVarP(&askQuiet, "quiet", "q", false, "Buffer output and print once at end (no streaming)")
 	cmd.Flags().StringVar(&askPrompt, "prompt", "", "Question text (use with piped stdin context)")
 	cmd.Flags().IntVar(&maxOutput, "max-output", defaultMaxOutputBytes,
 		"Max bytes to print before truncating (0 to disable, auto-enabled for non-TTY)")
 	return cmd
+}
+
+// nameChatSession asks the backend to title the session. The server only titles
+// on request, so without this a one-shot ask stays "New Chat" in the sidebar.
+// It runs after the answer is flushed so the naming LLM call never delays output.
+func nameChatSession(ctx context.Context, ios *iostreams.IOStreams, client *api.Client, sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	if _, err := client.RenameChatSession(ctx, sessionID, nil); err != nil && ctx.Err() == nil {
+		fmt.Fprintf(ios.ErrOut, "warning: could not name chat session: %s\n", sanitize.Terminal(err.Error()))
+	}
 }
 
 // resolveQuestion builds the final question string from args, --prompt, and stdin.
