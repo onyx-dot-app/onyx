@@ -207,3 +207,59 @@ def test_google_app_credential_json_string_is_accepted() -> None:
     assert to_source_credential_json(DocumentSource.GOOGLE_DRIVE, stored) == (
         source_json
     )
+
+
+def test_sharepoint_certificate_credential_maps_to_each_microsoft_source() -> None:
+    sharepoint_json = {
+        "authentication_method": "certificate",
+        "sp_client_id": "client",
+        "sp_directory_id": "tenant",
+        "sp_private_key": "pfx-base64",
+        "sp_certificate_password": "password",
+    }
+
+    stored = to_stored_credential_json(DocumentSource.SHAREPOINT, sharepoint_json, None)
+
+    assert to_source_credential_json(DocumentSource.TEAMS, stored) == {
+        "authentication_method": "certificate",
+        "teams_client_id": "client",
+        "teams_directory_id": "tenant",
+        "teams_private_key": "pfx-base64",
+        "teams_certificate_password": "password",
+    }
+    assert (
+        to_source_credential_json(DocumentSource.SHAREPOINT, stored) == sharepoint_json
+    )
+
+
+def test_onedrive_prefixed_authentication_method_is_read() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.ONEDRIVE,
+        {
+            "onedrive_client_id": "client",
+            "onedrive_directory_id": "tenant",
+            "onedrive_client_secret": "secret",
+            "onedrive_authentication_method": "client_secret",
+        },
+        None,
+    )
+
+    assert to_source_credential_json(DocumentSource.OUTLOOK, stored) == {
+        "outlook_client_id": "client",
+        "outlook_directory_id": "tenant",
+        "outlook_client_secret": "secret",
+        "authentication_method": "client_secret",
+    }
+
+
+def test_keys_of_another_microsoft_source_are_rejected() -> None:
+    with pytest.raises(ValueError, match="teams_client_id"):
+        to_stored_credential_json(
+            DocumentSource.SHAREPOINT,
+            {
+                "sp_client_id": "client",
+                "sp_directory_id": "tenant",
+                "teams_client_id": "other-client",
+            },
+            None,
+        )
