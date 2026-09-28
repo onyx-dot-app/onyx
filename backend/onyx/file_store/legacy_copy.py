@@ -416,7 +416,8 @@ def _list_and_ensure_buckets(
 def _clients() -> tuple["S3Client", "S3Client"]:
     """(legacy MinIO, object store). Short timeouts, so a hung store fails a
     pass in about a minute rather than minutes per object."""
-    assert S3_LEGACY_ENDPOINT_URL
+    if not S3_LEGACY_ENDPOINT_URL:
+        raise RuntimeError("S3_LEGACY_ENDPOINT_URL is not set")
     build = partial(
         build_s3_client,
         region_name=AWS_REGION_NAME,
