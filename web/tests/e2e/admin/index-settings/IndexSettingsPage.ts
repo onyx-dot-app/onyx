@@ -18,8 +18,14 @@ export class IndexSettingsPage {
   readonly cloudTab: Locator;
   readonly selfHostedTab: Locator;
   readonly applyReindexButton: Locator;
+  readonly applyWithoutReindexButton: Locator;
+  readonly revertButton: Locator;
   readonly applyContextualModelForwardButton: Locator;
   readonly rebuildExistingDocumentsButton: Locator;
+  /** The apply strategy dropdown in the changes banner. */
+  readonly strategySelect: Locator;
+  readonly imageProcessingSwitch: Locator;
+  readonly noModelSelectedWarning: Locator;
 
   // The provider setup modal opened via `openProviderSetup`. Held so the
   // credential / model-spec fill methods scope their fields to the right
@@ -43,6 +49,19 @@ export class IndexSettingsPage {
     this.rebuildExistingDocumentsButton = page.getByRole("button", {
       name: "Rebuild all existing documents",
     });
+    this.applyWithoutReindexButton = page.getByRole("button", {
+      name: "Apply without Re-index",
+    });
+    this.revertButton = page.getByRole("button", { name: "Revert" });
+    // Opal's select is a combobox named by its placeholder; its value is
+    // the chosen option's title.
+    this.strategySelect = page.getByRole("combobox", {
+      name: "Select a switchover strategy",
+    });
+    this.imageProcessingSwitch = page.getByRole("switch", {
+      name: /extract & caption images/i,
+    });
+    this.noModelSelectedWarning = page.getByText("No model selected");
   }
 
   // ---------------------------------------------------------------------------
@@ -161,15 +180,28 @@ export class IndexSettingsPage {
   }
 
   async stageContextualModel(displayName: string): Promise<void> {
-    const contextualModelField = this.page
+    await this.pickModelInField("Contextual Retrieval LLM", displayName);
+  }
+
+  async pickCaptioningModel(displayName: string): Promise<void> {
+    await this.pickModelInField("Captioning LLM", displayName);
+  }
+
+  /**
+   * Open the model picker in the labelled row, search, and choose the row.
+   * The list is portalled and carries its own search box, scoped here so
+   * the page's search field is not matched; a search unfolds every
+   * provider group.
+   */
+  private async pickModelInField(
+    fieldLabel: string,
+    displayName: string
+  ): Promise<void> {
+    await this.page
       .locator("label")
-      .filter({ hasText: "Contextual Retrieval LLM" });
-    await contextualModelField
+      .filter({ hasText: fieldLabel })
       .getByRole("combobox", { name: "Select model" })
       .click();
-    // The list is portalled and carries its own search box, scoped here
-    // so the page's search field is not matched; a search unfolds every
-    // provider group.
     const listbox = this.page.getByRole("listbox", { name: "Select model" });
     await listbox.getByRole("textbox", { name: "Search" }).fill(displayName);
     await listbox.getByRole("option", { name: displayName }).click();
@@ -200,6 +232,37 @@ export class IndexSettingsPage {
 
   private get modelListbox(): Locator {
     return this.page.getByRole("listbox", { name: "Select model" });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Apply strategy
+  // ---------------------------------------------------------------------------
+
+  async selectStrategy(label: string): Promise<void> {
+    await this.strategySelect.click();
+    await this.page
+      .getByRole("listbox", { name: "Select a switchover strategy" })
+      .getByRole("option", { name: label })
+      .click();
+  }
+
+  async expectStrategy(label: RegExp): Promise<void> {
+    await expect(this.strategySelect).toHaveValue(label);
+  }
+
+  /** Opens the dropdown, asserts the option is not offered, and closes it. */
+  async expectStrategyOptionAbsent(label: string): Promise<void> {
+    await this.strategySelect.click();
+    const listbox = this.page.getByRole("listbox", {
+      name: "Select a switchover strategy",
+    });
+    await expect(listbox.getByRole("option").first()).toBeVisible();
+    await expect(listbox.getByRole("option", { name: label })).toHaveCount(0);
+    await this.page.keyboard.press("Escape");
+  }
+
+  async expectBannerTitle(title: string): Promise<void> {
+    await expect(this.page.getByText(title, { exact: true })).toBeVisible();
   }
 
   async expectContextualModelActions(): Promise<void> {
