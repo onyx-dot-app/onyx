@@ -13,6 +13,7 @@ from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 _NARROWED_FIELD_TYPES: set[tuple[str, str]] = {
     ("BlobStorageConnector", "bucket_type"),
     ("LocalFileConnector", "file_locations"),
+    ("WebConnector", "web_connector_type"),
     ("ZoomConnector", "rate_limit_percent"),
 }
 

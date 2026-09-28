@@ -266,13 +266,14 @@ class TestIndexingStartAtConfigTime:
         endpoint: Callable[..., Any],
         source: DocumentSource = DocumentSource.ZOOM,
         indexing_start: datetime | None = None,
+        connector_specific_config: dict[str, Any] | None = None,
     ) -> None:
         endpoint(
             ConnectorUpdateRequest(
                 name="test",
                 source=source,
                 input_type=InputType.POLL,
-                connector_specific_config={},
+                connector_specific_config=connector_specific_config or {},
                 indexing_start=indexing_start,
                 access_type=AccessType.PUBLIC,
             ),
@@ -300,7 +301,14 @@ class TestIndexingStartAtConfigTime:
 
     def test_another_source_also_creates_without_one(self) -> None:
         with self._rows_written() as written:
-            self._post(create_connector_from_model, source=DocumentSource.CONFLUENCE)
+            self._post(
+                create_connector_from_model,
+                source=DocumentSource.CONFLUENCE,
+                connector_specific_config={
+                    "wiki_base": "https://example.atlassian.net",
+                    "is_cloud": True,
+                },
+            )
 
         assert [row.indexing_start for row in written] == [None]
 
