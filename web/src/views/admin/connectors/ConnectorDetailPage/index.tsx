@@ -50,7 +50,10 @@ import {
 } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import { IndexAttemptSnapshot } from "@/lib/types";
+import { IndexAttemptSnapshot, ValidSources } from "@/lib/types";
+import SeafileConnectorConfigEditModal from "@/lib/connectors/seafile/SeafileConnectorConfigEditModal";
+import type { SeafileConnectorConfig } from "@/lib/connectors/seafile/seafileConfig";
+import { updateSeafileConnectorConfig } from "@/lib/connectors/seafile/seafileConnectorUpdate";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
@@ -155,6 +158,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [editingRefreshFrequency, setEditingRefreshFrequency] = useState(false);
   const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
+  const [showSeafileConfigEditModal, setShowSeafileConfigEditModal] =
+    useState(false);
 
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
     useState(false);
@@ -362,6 +367,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   }
 
   const isDeleting = ccPair.status === ConnectorCredentialPairStatus.DELETING;
+  const canEditSeafileConfig =
+    ccPair.connector.source === ValidSources.Seafile &&
+    can(ccPair, "edit") &&
+    !ccPair.indexing &&
+    !isDeleting;
 
   const {
     prune_freq: pruneFreq,
@@ -373,6 +383,27 @@ function Main({ ccPairId }: { ccPairId: number }) {
     <>
       {showIsResolvingKickoffLoader && !isResolvingErrors && <Spinner />}
       {ReIndexModal}
+      {showSeafileConfigEditModal && (
+        <SeafileConnectorConfigEditModal
+          config={ccPair.connector.connector_specific_config}
+          credential={ccPair.credential}
+          onClose={() => setShowSeafileConfigEditModal(false)}
+          onSubmit={async (config: SeafileConnectorConfig) => {
+            try {
+              await updateSeafileConnectorConfig(ccPair, config);
+              await mutate(buildCCPairInfoUrl(ccPairId));
+              toast.warning(t("seafile.toasts.updated"));
+            } catch (error) {
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : t("seafile.toasts.updateFailed")
+              );
+              throw error;
+            }
+          }}
+        />
+      )}
       {ConfirmModal}
 
       {showDeleteConnectorConfirmModal && (
@@ -734,6 +765,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
                   ccPair.connector.connector_specific_config,
                   ccPair.connector.source
                 )}
+                onEdit={
+                  canEditSeafileConfig
+                    ? () => setShowSeafileConfigEditModal(true)
+                    : undefined
+                }
               />
 
               {/* Inline file management for file connectors */}

@@ -300,3 +300,6 @@ export interface TestRailCredentialJson {
   testrail_username: string;
   testrail_api_key: string;
 }
+export interface SeafileCredentialJson {
+  seafile_api_token: string;
+}
