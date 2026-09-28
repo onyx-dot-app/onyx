@@ -315,3 +315,22 @@ def test_operation_timeout_applies_to_lock_session(
             assert value == expected
     finally:
         lock.release()
+
+
+def test_control_lease_renewal_does_not_wait_for_a_locked_cache_row(
+    pg_cache: PostgresCacheBackend,
+) -> None:
+    tenant_id = POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    control = PostgresCacheBackend(tenant_id, statement_timeout_ms=1000)
+    key = _key()
+    pg_cache.set(key, b"owner", ex=60)
+    try:
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            session.execute(
+                select(CacheStore).where(CacheStore.key == key).with_for_update()
+            )
+            with pytest.raises(OperationalError, match="timeout"):
+                control.expire_if_value(key, b"owner", 60)
+        assert control.expire_if_value(key, b"owner", 60)
+    finally:
+        pg_cache.delete(key)

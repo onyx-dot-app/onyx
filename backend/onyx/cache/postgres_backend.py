@@ -305,6 +305,28 @@ class PostgresCacheBackend(CacheBackend):
             session.execute(stmt)
             session.commit()
 
+    def expire_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        """Renew a matching unexpired lease and commit the update."""
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        stmt = (
+            update(CacheStore)
+            .where(
+                CacheStore.key == key,
+                CacheStore.value == expected,
+                or_(
+                    CacheStore.expires_at.is_(None), CacheStore.expires_at > func.now()
+                ),
+            )
+            .values(expires_at=func.now() + timedelta(seconds=seconds))
+            .returning(CacheStore.key)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            renewed = session.execute(stmt).scalar_one_or_none()
+            session.commit()
+        return renewed is not None
+
     def ttl(self, key: str) -> int:
         from onyx.db.engine.sql_engine import get_session_with_tenant
 

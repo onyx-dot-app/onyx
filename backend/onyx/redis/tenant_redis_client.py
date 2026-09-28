@@ -810,6 +810,20 @@ class TenantRedisClient:
         """
         return cast(int, self._r.pttl(_prefix_key(self._prefix, name)))
 
+    def expire_if_value(self, name: KeyArg, expected: bytes, seconds: int) -> bool:
+        """Renew only the current tenant's matching lease, without a lock wait."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.expire(key, seconds)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
+
     def expire(
         self,
         name: KeyArg,

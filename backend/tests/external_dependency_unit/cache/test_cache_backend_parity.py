@@ -96,3 +96,20 @@ class TestListParity:
     def test_blpop_timeout(self, cache: CacheBackend) -> None:
         result = cache.blpop([f"parity_empty_{uuid4().hex[:8]}"], timeout=1)
         assert result is None
+
+
+def test_conditional_expiry_preserves_current_owner(cache: CacheBackend) -> None:
+    key = f"conditional-expiry:{uuid4()}"
+    try:
+        assert not cache.expire_if_value(key, b"first", 60)
+        cache.set(key, b"first", ex=10)
+        assert not cache.expire_if_value(key, b"other", 60)
+        assert cache.expire_if_value(key, b"first", 60)
+        assert cache.ttl(key) > 10
+        cache.set(key, b"replacement", ex=10)
+        assert not cache.expire_if_value(key, b"first", 60)
+        assert cache.get(key) == b"replacement"
+        cache.expire(key, 0)
+        assert not cache.expire_if_value(key, b"replacement", 60)
+    finally:
+        cache.delete(key)
