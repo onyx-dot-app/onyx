@@ -16,8 +16,6 @@ class ClickupConnectorType(StrEnum):
 
 class ClickupConnectorConfig(ConnectorConfig):
     batch_size: int = INDEX_BATCH_SIZE
-    api_token: str | None = None
-    team_id: str | None = None
     connector_type: ClickupConnectorType | None = None
     connector_ids: list[str] | None = None
     retrieve_task_comments: bool = True

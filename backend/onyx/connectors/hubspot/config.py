@@ -13,5 +13,4 @@ class HubSpotObjectType(StrEnum):
 
 class HubSpotConnectorConfig(ConnectorConfig):
     batch_size: int = INDEX_BATCH_SIZE
-    access_token: str | None = None
     object_types: list[HubSpotObjectType] | None = None
