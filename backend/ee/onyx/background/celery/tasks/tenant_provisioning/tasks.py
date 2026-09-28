@@ -43,7 +43,7 @@ _USER_PROVISION_LOCK_TIMEOUT = 60 * 10
 
 
 # Shares the monitoring queue with the refill task, which holds at most one
-# slot at a time. Cloud runs the monitoring worker at concurrency 8 on 3 pods.
+# slot at a time.
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CLOUD_PROVISION_TENANT_FOR_USER,
     queue=OnyxCeleryQueues.MONITORING,
@@ -88,7 +88,7 @@ def provision_tenant_for_user(
         )
 
     # Celery time limits do not work on thread pools, so a long migration could
-    # outlive the lock and let a retry build a second tenant. Keep it alive.
+    # outlive the lock and let a retried signup build a second tenant. Keep it alive.
     heartbeat = _LockHeartbeat(lock, _USER_PROVISION_LOCK_TIMEOUT)
     heartbeat.start()
     try:
@@ -121,13 +121,12 @@ class _LockHeartbeat(threading.Thread):
         super().__init__(daemon=True, name="user-provision-lock-heartbeat")
         self._lock = lock
         self._interval = timeout_seconds / 3
-        self._timeout = timeout_seconds
         self._stopped = threading.Event()
 
     def run(self) -> None:
         while not self._stopped.wait(self._interval):
             try:
-                self._lock.extend(self._timeout, replace_ttl=True)
+                self._lock.reacquire()
             except Exception:
                 # Keep trying: one failed extension leaves two thirds of the
                 # TTL, and a later one may still land before it runs out.

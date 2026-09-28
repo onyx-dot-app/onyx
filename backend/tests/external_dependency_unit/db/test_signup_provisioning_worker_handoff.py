@@ -10,8 +10,8 @@ before its mapping is written, and a delete that keeps failing is queued for
 the refill task to retry.
 
 Uses real PostgreSQL for the pool and mapping tables and real Redis for the
-per-user lock. Alembic and the control plane are the only mocks. Multi-tenant
-mode is patched in so the suite runs in the default CI lane.
+per-user lock. Alembic, the control plane, seat billing and the celery broker
+are mocked. Multi-tenant mode is patched in so the suite runs in the default CI lane.
 """
 
 import threading

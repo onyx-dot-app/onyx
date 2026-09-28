@@ -20,7 +20,6 @@ from ee.onyx.db.user_tenant_mapping import (
 )
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import (
-    PoolTenant,
     TenantByDomainResponse,
     TenantCreationPayload,
     TenantDeletionPayload,
@@ -162,7 +161,7 @@ async def get_or_provision_tenant(
 
     # The same lock the worker task takes. Two overlapping signups for one
     # email (a double submit, two tabs) must not each take a pool tenant.
-    # Held for the whole signup budget so a slow control plane cannot outlive it.
+    # Its TTL is the whole signup budget so a slow control plane cannot outlive it.
     deadline = time.monotonic() + TENANT_PROVISIONING_WAIT_SECONDS
     lock = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).lock(
         user_provision_lock_name(email), timeout=TENANT_PROVISIONING_WAIT_SECONDS
@@ -174,12 +173,10 @@ async def get_or_provision_tenant(
         tenant_id = resolve_tenant_id(email, oauth_name, account_id)
         if tenant_id:
             return tenant_id
-        pool_tenant = await get_available_tenant()
-        if pool_tenant is not None:
-            await _finish_tenant_assignment(
-                pool_tenant.tenant_id, email, referral_source
-            )
-            return pool_tenant.tenant_id
+        tenant_id = await get_available_tenant()
+        if tenant_id is not None:
+            await _finish_tenant_assignment(tenant_id, email, referral_source)
+            return tenant_id
         attempt_id = _enqueue_user_provisioning(email, referral_source)
     except OnyxError:
         raise
@@ -256,7 +253,8 @@ async def _remove_tenant_from_control_plane(tenant_id: str, email: str) -> None:
                 attempt,
                 _CONTROL_PLANE_DELETE_ATTEMPTS,
             )
-            await asyncio.sleep(_CONTROL_PLANE_DELETE_BACKOFF_S * attempt)
+            if attempt < _CONTROL_PLANE_DELETE_ATTEMPTS:
+                await asyncio.sleep(_CONTROL_PLANE_DELETE_BACKOFF_S * attempt)
     # Best effort: the caller still has the data plane to roll back.
     try:
         get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID).sadd(
@@ -283,7 +281,7 @@ async def reconcile_control_plane_orphans() -> int:
     redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     removed = 0
     for member in redis_client.smembers(ONYX_CLOUD_CONTROL_PLANE_ORPHANS_KEY):
-        entry = member.decode() if isinstance(member, bytes) else str(member)
+        entry = member.decode() if isinstance(member, bytes) else member
         tenant_id, email = entry.split(" ", 1)
         try:
             await delete_user_from_control_plane(tenant_id, email)
@@ -310,8 +308,9 @@ def _enqueue_user_provisioning(email: str, referral_source: str | None) -> str:
         },
         queue=OnyxCeleryQueues.MONITORING,
         priority=OnyxCeleryPriority.HIGH,
-        # Past this the request has already failed, so the user retries and
-        # enqueues again. Running the stale task too would build twice.
+        # Past this the request has already failed and the user retries, which
+        # enqueues again. Dropping the stale task keeps abandoned signups from
+        # occupying the worker.
         expires=TENANT_PROVISIONING_WAIT_SECONDS,
     )
     return attempt_id
@@ -340,18 +339,16 @@ async def _wait_for_tenant(
 async def provision_user_tenant(email: str, referral_source: str | None) -> str:
     """Worker side of a signup that found no current pool tenant.
 
-    Takes a stale pool tenant and migrates it, or builds a tenant from scratch,
-    then assigns it and tells the control plane. Returns the tenant id.
+    Takes any pool tenant and brings it to head, or builds one from scratch,
+    then tells the control plane and assigns it. Returns the tenant id.
     """
     tenant_id = resolve_tenant_id(email)
     if tenant_id:
         return tenant_id
 
-    pool_tenant = await get_available_tenant(allow_stale=True)
-    if pool_tenant is not None:
-        tenant_id = pool_tenant.tenant_id
-        if pool_tenant.alembic_version != get_alembic_head_revision():
-            await _migrate_pool_tenant(tenant_id)
+    tenant_id = await get_available_tenant(allow_stale=True)
+    if tenant_id is not None:
+        await _migrate_pool_tenant(tenant_id)
     else:
         tenant_id = await create_tenant(email, referral_source)
 
@@ -853,7 +850,7 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
                 return
             if response.status != 200:
                 error_text = await response.text()
-                logger.error("Control plane tenant creation failed: %s", error_text)
+                logger.error("Control plane tenant deletion failed: %s", error_text)
                 raise Exception(
                     f"Failed to delete tenant on control plane: {error_text}"
                 )
@@ -904,7 +901,7 @@ def get_tenant_by_domain_from_control_plane(
         return None
 
 
-async def get_available_tenant(allow_stale: bool = False) -> PoolTenant | None:
+async def get_available_tenant(allow_stale: bool = False) -> str | None:
     """
     Take the oldest pre-provisioned tenant out of the pool, or None if the pool
     is empty. Uses row-level locking to prevent race conditions when multiple
@@ -920,12 +917,10 @@ async def get_available_tenant(allow_stale: bool = False) -> PoolTenant | None:
     # A query failure raises: treating it as an empty pool would build a tenant
     # from scratch while a ready one sits in the pool.
     at_revision = None if allow_stale else get_alembic_head_revision()
-    taken = take_available_tenant(at_revision)
-    if taken is None:
-        return None
-    tenant_id, alembic_version = taken
-    logger.info("Using pre-provisioned tenant %s", tenant_id)
-    return PoolTenant(tenant_id=tenant_id, alembic_version=alembic_version)
+    tenant_id = take_available_tenant(at_revision)
+    if tenant_id is not None:
+        logger.info("Using pre-provisioned tenant %s", tenant_id)
+    return tenant_id
 
 
 async def setup_tenant(tenant_id: str) -> None:
