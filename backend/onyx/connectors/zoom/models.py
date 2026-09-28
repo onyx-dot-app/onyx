@@ -23,30 +23,17 @@ class ZoomAccessToken(BaseModel):
 
 
 class ZoomTranscript(BaseModel):
-    """Response shape of `GET /meetings/{meetingId}/transcript`."""
+    """A session's transcript. Zoom never sends this shape;
+    `ZoomRecordingEntry.transcript` builds it from the recording's file list.
+    """
 
-    meeting_id: str
-    account_id: str
-    meeting_topic: str
-    host_id: str
-    can_download: bool
-    transcript_created_time: str
-
-    auto_delete: bool | None = None
-    auto_delete_date: str | None = None
     download_url: str | None = None
-    download_restriction_reason: str | None = None
+    is_ready: bool = True
+    meeting_topic: str | None = None
 
     @property
     def is_downloadable(self) -> bool:
-        """Zoom documents these three fields as mutually exclusive, then returns
-        all three together in its own example, so all three must agree here.
-        """
-        return (
-            self.can_download
-            and self.download_restriction_reason is None
-            and bool(self.download_url)
-        )
+        return self.is_ready and bool(self.download_url)
 
 
 class ZoomSessionDetails(BaseModel):
@@ -177,10 +164,32 @@ class ZoomUserPage(BaseModel):
     next_page_token: str | None = None
 
 
+TRANSCRIPT_FILE_TYPE = "TRANSCRIPT"
+_COMPLETED_FILE_STATUS = "completed"
+
+
+class ZoomRecordingFile(BaseModel):
+    """One entry of a recording's `recording_files` array, cut to the fields
+    this connector reads."""
+
+    file_type: str
+
+    status: str | None = None
+    download_url: str | None = None
+
+    @property
+    def is_transcript(self) -> bool:
+        return self.file_type.upper() == TRANSCRIPT_FILE_TYPE
+
+    @property
+    def is_ready(self) -> bool:
+        return self.status is None or self.status.lower() == _COMPLETED_FILE_STATUS
+
+
 class ZoomRecordingEntry(BaseModel):
-    """Every scalar field of one entry in the `meetings` array of
-    `GET /users/{userId}/recordings`. The entry also carries `recording_files`,
-    thirteen more fields describing each file, which nothing here reads.
+    """One recording. Zoom sends it as an entry in the `meetings` array of
+    `GET /users/{userId}/recordings`, and as the whole body of
+    `GET /meetings/{meetingId}/recordings`.
     """
 
     uuid: str
@@ -200,10 +209,24 @@ class ZoomRecordingEntry(BaseModel):
     auto_delete: bool | None = None
     auto_delete_date: str | None = None
 
+    recording_files: list[ZoomRecordingFile] = Field(default_factory=list)
+
     @property
     def session_id(self) -> str:
         # A recording uploaded through the web portal has no meeting number.
         return str(self.id) if self.id is not None else self.uuid
+
+    @property
+    def transcript(self) -> ZoomTranscript | None:
+        """None means Zoom recorded the session without transcribing it."""
+        file = next((f for f in self.recording_files if f.is_transcript), None)
+        if file is None:
+            return None
+        return ZoomTranscript(
+            download_url=file.download_url,
+            is_ready=file.is_ready,
+            meeting_topic=self.topic,
+        )
 
 
 class ZoomRecordingPage(BaseModel):

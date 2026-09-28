@@ -66,11 +66,13 @@ class ZoomEndpoint(BaseModel):
         return self.describes.format(identifier=identifier)
 
 
-MEETING_TRANSCRIPT = ZoomEndpoint(
-    path="/meetings/{identifier}/transcript",
-    tier=ZoomRateLimitTier.MEDIUM,
-    describes="the transcript for {identifier}",
-    operation="GetMeetingTranscript",
+# Not /meetings/{id}/transcript. Against a live account that answered 404 for a
+# session whose VTT was sitting in recording_files.
+MEETING_RECORDINGS = ZoomEndpoint(
+    path="/meetings/{identifier}/recordings",
+    tier=ZoomRateLimitTier.LIGHT,
+    describes="the recording files for {identifier}",
+    operation="recordingGet",
 )
 
 PAST_MEETING_DETAILS = ZoomEndpoint(
