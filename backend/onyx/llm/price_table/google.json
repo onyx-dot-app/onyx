@@ -42,6 +42,7 @@
           "image"
         ]
       },
+      "mode": "chat",
       "name": "Deep Research Max Preview (Apr-21-2026)",
       "open_weights": false,
       "reasoning": true,
@@ -90,6 +91,7 @@
           "image"
         ]
       },
+      "mode": "chat",
       "name": "Deep Research Preview (Apr-21-2026)",
       "open_weights": false,
       "reasoning": true,
@@ -146,8 +148,8 @@
       },
       "family": "gemini-pro",
       "limit": {
-        "context": 131072,
-        "output": 65536
+        "context": 128000,
+        "output": 64000
       },
       "modalities": {
         "input": [
@@ -271,7 +273,7 @@
         "output": 2.0
       },
       "limit": {
-        "context": 1048576,
+        "context": 131072,
         "output": 8192
       },
       "mode": "realtime",
@@ -449,7 +451,7 @@
       },
       "family": "gemini-pro",
       "limit": {
-        "context": 131072,
+        "context": 65536,
         "output": 32768
       },
       "modalities": {
@@ -473,6 +475,8 @@
     "gemini-3-pro-image-preview": {
       "attachment": true,
       "cost": {
+        "image": 0.134,
+        "image_input": 0.0011,
         "input": 2,
         "output": 120
       },
@@ -491,6 +495,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana Pro",
       "open_weights": false,
       "reasoning": true,
@@ -507,8 +512,8 @@
       },
       "family": "gemini-flash",
       "limit": {
-        "context": 65536,
-        "output": 65536
+        "context": 131072,
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -533,6 +538,7 @@
     "gemini-3.1-flash-image-preview": {
       "attachment": true,
       "cost": {
+        "image": 0.045,
         "input": 0.5,
         "output": 60
       },
@@ -552,6 +558,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana 2",
       "open_weights": false,
       "reasoning": true,
@@ -604,7 +611,7 @@
       "family": "gemini-flash-lite",
       "limit": {
         "context": 65536,
-        "output": 65536
+        "output": 4096
       },
       "modalities": {
         "input": [
@@ -650,6 +657,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite Preview",
       "open_weights": false,
       "reasoning": true,
@@ -1142,6 +1150,17 @@
       "release_date": "2026-04-22",
       "temperature": false,
       "tool_call": false
+    },
+    "gemini-embedding-2-preview": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "gemini-embedding-2-preview"
     },
     "gemini-flash-latest": {
       "attachment": true,

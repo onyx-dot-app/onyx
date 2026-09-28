@@ -714,7 +714,7 @@
           "output": 3
         },
         "input": 0.4,
-        "output": 2.5,
+        "output": 2.4,
         "tiers": [
           {
             "cache_read": 0.05,
@@ -759,7 +759,7 @@
       "family": "qwen",
       "limit": {
         "context": 256000,
-        "output": 256000
+        "output": 65536
       },
       "modalities": {
         "input": [
@@ -1104,6 +1104,36 @@
       "temperature": true,
       "tool_call": true
     },
+    "alibaba/qwen3.8-max-prime": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.5,
+        "cache_write": 5,
+        "input": 4,
+        "output": 12
+      },
+      "family": "qwen3.8-max",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen 3.8 Max Prime",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "alibaba/qwen3.8-omni-flash": {
       "attachment": true,
       "cost": {
@@ -1129,6 +1159,7 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-09-17",
+      "structured_output": true,
       "tool_call": true
     },
     "alibaba/wan-v2.5-t2v-preview": {
@@ -1351,7 +1382,7 @@
       "family": "nova",
       "limit": {
         "context": 1000000,
-        "output": 1000000
+        "output": 65535
       },
       "modalities": {
         "input": [
@@ -2062,7 +2093,7 @@
       "attachment": false,
       "cost": {
         "input": 0.25,
-        "output": 0.8999999999999999
+        "output": 0.9
       },
       "family": "trinity",
       "limit": {
@@ -2385,7 +2416,7 @@
       "family": "seed",
       "limit": {
         "context": 256000,
-        "output": 64000
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -2847,7 +2878,7 @@
       "family": "deepseek",
       "limit": {
         "context": 131072,
-        "output": 65536
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -2976,9 +3007,9 @@
     "deepseek/deepseek-v4-flash-vision-exp": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.007,
-        "input": 0.22,
-        "output": 0.66
+        "cache_read": 0.0068,
+        "input": 0.2156,
+        "output": 0.6468
       },
       "family": "deepseek-flash",
       "limit": {
@@ -3085,6 +3116,32 @@
       "release_date": "2026-09-10",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "fireworks/ember-1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "input": 3,
+        "output": 15
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 1048576
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Ember-1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-23",
       "tool_call": true
     },
     "fish-audio/s1": {
@@ -4125,7 +4182,7 @@
       "family": "mercury",
       "limit": {
         "context": 128000,
-        "output": 128000
+        "output": 50000
       },
       "modalities": {
         "input": [
@@ -4223,8 +4280,9 @@
     "inclusionai/ling-3.0-flash-fin": {
       "attachment": false,
       "cost": {
-        "input": 0,
-        "output": 0
+        "cache_read": 0.012,
+        "input": 0.06,
+        "output": 0.18
       },
       "family": "ling",
       "limit": {
@@ -4240,31 +4298,6 @@
         ]
       },
       "name": "Ling 3.0 Flash Fin",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-08-27",
-      "tool_call": true
-    },
-    "inclusionai/ling-3.0-flash-fin-free": {
-      "attachment": false,
-      "cost": {
-        "input": 0,
-        "output": 0
-      },
-      "family": "ling",
-      "limit": {
-        "context": 256000,
-        "output": 32000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Ling 3.0 Flash Fin (Free)",
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-27",
@@ -4323,9 +4356,9 @@
     "inclusionai/ling-3.0-flash-vl": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.22,
+        "cache_read": 0.015,
         "input": 0.075,
-        "output": 0.015
+        "output": 0.22
       },
       "family": "ling",
       "limit": {
@@ -4599,6 +4632,33 @@
       "release_date": "2026-02-05",
       "temperature": true,
       "tool_call": false
+    },
+    "meituan/longcat-2.5-preview": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "longcat",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "LongCat 2.5 Preview",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-26",
+      "tool_call": true
     },
     "meta/llama-3.1-70b": {
       "attachment": false,
@@ -4984,7 +5044,7 @@
       "family": "minimax",
       "limit": {
         "context": 205000,
-        "output": 205000
+        "output": 196608
       },
       "modalities": {
         "input": [
@@ -5597,7 +5657,7 @@
     "moonshotai/kimi-k2.7-code": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.16,
+        "cache_read": 0.19,
         "input": 0.95,
         "output": 4
       },
@@ -6667,8 +6727,7 @@
           "pdf"
         ],
         "output": [
-          "text",
-          "image"
+          "text"
         ]
       },
       "name": "GPT 5.1 Thinking",
@@ -8675,52 +8734,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "perplexity/sonar-pro": {
-      "attachment": true,
-      "family": "sonar-pro",
-      "limit": {
-        "context": 200000,
-        "output": 8000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Sonar Pro",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-02-19",
-      "temperature": true,
-      "tool_call": true
-    },
-    "perplexity/sonar-reasoning-pro": {
-      "attachment": false,
-      "family": "sonar-reasoning",
-      "limit": {
-        "context": 127000,
-        "output": 8000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Sonar Reasoning Pro",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2025-02-19",
-      "temperature": true,
-      "tool_call": false
-    },
     "poolside/laguna-s-2.1": {
       "attachment": false,
       "cost": {
@@ -8829,7 +8842,7 @@
       },
       "limit": {
         "context": 131072,
-        "output": 131072
+        "output": 65536
       },
       "modalities": {
         "input": [
@@ -8857,7 +8870,7 @@
       },
       "limit": {
         "context": 131072,
-        "output": 131072
+        "output": 65536
       },
       "modalities": {
         "input": [
@@ -9937,6 +9950,31 @@
       "release_date": "2026-07-29",
       "tool_call": false
     },
+    "stealth/pixel-canary": {
+      "attachment": true,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Pixel Canary",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-25",
+      "tool_call": false
+    },
     "stepfun/step-3.5-flash": {
       "attachment": false,
       "cost": {
@@ -10182,7 +10220,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.1,
-        "input": 0.5,
+        "input": 0.45,
         "output": 1.2
       },
       "family": "ling",
@@ -10722,7 +10760,6 @@
     "zai/glm-4.7": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.12,
         "input": 0.6,
         "output": 2.2
       },
@@ -10835,7 +10872,7 @@
       "family": "glm",
       "limit": {
         "context": 202800,
-        "output": 131100
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -10912,9 +10949,9 @@
     "zai/glm-5.2-fast": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.21,
-        "input": 2.1,
-        "output": 6.6
+        "cache_read": 0.56,
+        "input": 2.8,
+        "output": 8.8
       },
       "family": "glm",
       "limit": {

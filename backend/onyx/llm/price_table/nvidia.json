@@ -23,6 +23,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-09-11",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -181,6 +182,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-09-04",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -209,6 +211,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -236,6 +239,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-31",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -264,6 +268,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -291,6 +296,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-08-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -317,6 +323,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-07-16",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -398,6 +405,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-06-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -425,6 +433,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-06-03",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -555,6 +564,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-07-16",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -582,6 +592,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-01-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -634,6 +645,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-09-18",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -661,6 +673,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-09-18",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": false
@@ -714,6 +727,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-11-26",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -741,6 +755,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-04-01",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -823,6 +838,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-12-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -849,6 +865,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-07-26",
+      "status": "deprecated",
       "structured_output": false,
       "tool_call": false
     },
@@ -875,6 +892,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-03-18",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -903,6 +921,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -956,6 +975,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-12-02",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1009,6 +1029,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-12-02",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1065,6 +1086,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-29",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1118,6 +1140,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-03-16",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1438,6 +1461,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-03-03",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -1490,6 +1514,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-03-18",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1517,6 +1542,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-04-10",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1595,6 +1621,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-04-07",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1621,6 +1648,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-07-25",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1760,6 +1788,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2026-04-16",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -1786,6 +1815,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2024-12",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1923,6 +1953,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-01-22",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -1949,6 +1980,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-08-21",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1977,6 +2009,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-10-28",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2088,6 +2121,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-18",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2314,6 +2348,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-04",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2476,6 +2511,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-11-06",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2503,6 +2539,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-07-23",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2529,6 +2566,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2024-12-01",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2558,6 +2596,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-02-23",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2586,6 +2625,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-02-16",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2620,6 +2660,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-07-25",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2645,6 +2686,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-02-02",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2671,6 +2713,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-05-28",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2699,6 +2742,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-15",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2724,6 +2768,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-06-05",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -2750,6 +2795,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-13",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true

@@ -75,7 +75,7 @@
       },
       "family": "minimax",
       "limit": {
-        "context": 202752,
+        "context": 196608,
         "output": 131072
       },
       "modalities": {
@@ -199,6 +199,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3 Coder 480B A35B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -226,6 +227,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3 Coder Next FP8",
       "open_weights": true,
       "reasoning": false,
@@ -255,6 +257,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3.5 397B A17B",
       "open_weights": true,
       "reasoning": true,
@@ -346,6 +349,17 @@
       "release_date": "2026-05-21",
       "temperature": true,
       "tool_call": true
+    },
+    "Salesforce/Llama-Rank-V1": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "rerank",
+      "name": "Salesforce/Llama-Rank-V1"
     },
     "baai/bge-base-en-v1.5": {
       "cost": {
@@ -475,7 +489,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 384000
       },
       "modalities": {
@@ -656,6 +670,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemma 4 31B Instruct",
       "open_weights": true,
       "reasoning": true,
@@ -767,6 +782,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
@@ -795,6 +811,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K2.7 Code",
       "open_weights": true,
       "reasoning": true,
@@ -854,6 +871,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Nemotron 3 Ultra 550B A55B",
       "open_weights": true,
       "reasoning": true,
@@ -908,6 +926,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT OSS 20B",
       "open_weights": true,
       "reasoning": true,
@@ -1008,6 +1027,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM-5",
       "open_weights": true,
       "reasoning": true,
@@ -1037,6 +1057,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM-5.1",
       "open_weights": true,
       "reasoning": true,
@@ -1055,7 +1076,7 @@
       },
       "family": "glm",
       "limit": {
-        "context": 512000,
+        "context": 1048575,
         "output": 164000
       },
       "modalities": {

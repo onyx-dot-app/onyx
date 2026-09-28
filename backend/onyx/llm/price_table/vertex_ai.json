@@ -21,6 +21,13 @@
       "mode": "audio_speech",
       "name": "chirp"
     },
+    "chirp_2": {
+      "cost": {
+        "second_input": 0.00026667
+      },
+      "mode": "audio_transcription",
+      "name": "chirp_2"
+    },
     "chirp_3": {
       "cost": {
         "second_input": 0.00026667
@@ -674,7 +681,6 @@
     "gemini-2.5-flash-image": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.03,
         "image": 0.039,
         "input": 0.3,
         "output": 30
@@ -713,7 +719,7 @@
       "family": "gemini-flash-lite",
       "limit": {
         "context": 1048576,
-        "output": 65536
+        "output": 65535
       },
       "modalities": {
         "input": [
@@ -770,6 +776,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Gemini 2.5 Flash TTS",
       "open_weights": false,
       "reasoning": false,
@@ -844,6 +851,7 @@
           "audio"
         ]
       },
+      "mode": "audio_speech",
       "name": "Gemini 2.5 Pro TTS",
       "open_weights": false,
       "reasoning": false,
@@ -919,6 +927,7 @@
     },
     "gemini-3-pro-image-preview": {
       "cost": {
+        "cache_read": 0.19999999999999998,
         "image": 0.134,
         "image_input": 0.0011,
         "input": 2.0,
@@ -967,6 +976,7 @@
     },
     "gemini-3.1-flash-image-preview": {
       "cost": {
+        "cache_read": 0.049999999999999996,
         "image": 0.0672,
         "image_input": 0.00056,
         "input": 0.5,
@@ -1381,6 +1391,18 @@
       "temperature": true,
       "tool_call": true
     },
+    "gemini-3.8-live": {
+      "cost": {
+        "input": 0.75,
+        "output": 4.5
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "mode": "realtime",
+      "name": "gemini-3.8-live"
+    },
     "gemini-embedding-001": {
       "attachment": false,
       "cost": {
@@ -1686,7 +1708,7 @@
       "family": "gpt-oss",
       "limit": {
         "context": 131072,
-        "output": 32768
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -1700,6 +1722,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-08-05",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1835,7 +1858,6 @@
     },
     "vertex_ai/gemini-2.5-flash-image": {
       "cost": {
-        "cache_read": 0.03,
         "image": 0.039,
         "input": 0.3,
         "output": 2.5
@@ -1864,6 +1886,7 @@
     },
     "vertex_ai/gemini-3-pro-image-preview": {
       "cost": {
+        "cache_read": 0.19999999999999998,
         "image": 0.134,
         "image_input": 0.0011,
         "input": 2.0,
@@ -1893,6 +1916,7 @@
     },
     "vertex_ai/gemini-3.1-flash-image-preview": {
       "cost": {
+        "cache_read": 0.049999999999999996,
         "image": 0.0672,
         "image_input": 0.00056,
         "input": 0.5,
@@ -1919,6 +1943,36 @@
       },
       "mode": "image_generation",
       "name": "vertex_ai/gemini-3.1-flash-lite-image"
+    },
+    "vertex_ai/veo-2.0-generate-001": {
+      "cost": {
+        "second": 0.5
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-2.0-generate-001"
+    },
+    "vertex_ai/veo-3.0-fast-generate-001": {
+      "cost": {
+        "second": 0.1
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.0-fast-generate-001"
+    },
+    "vertex_ai/veo-3.0-generate-001": {
+      "cost": {
+        "second": 0.4
+      },
+      "limit": {
+        "context": 1024
+      },
+      "mode": "video_generation",
+      "name": "vertex_ai/veo-3.0-generate-001"
     },
     "vertex_ai/veo-3.1-fast-generate-001": {
       "cost": {
@@ -1969,6 +2023,13 @@
       },
       "mode": "video_generation",
       "name": "vertex_ai/veo-3.1-lite-generate-001"
+    },
+    "virtual-try-on-001": {
+      "cost": {
+        "image": 0.06
+      },
+      "mode": "image_generation",
+      "name": "virtual-try-on-001"
     },
     "xai/grok-4.1-fast-non-reasoning": {
       "attachment": true,
@@ -2257,8 +2318,8 @@
       },
       "family": "glm",
       "limit": {
-        "context": 202752,
-        "output": 131072
+        "context": 200000,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -2271,7 +2332,7 @@
       "name": "GLM-5",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-11",
+      "release_date": "2026-02-12",
       "status": "deprecated",
       "temperature": true,
       "tool_call": true

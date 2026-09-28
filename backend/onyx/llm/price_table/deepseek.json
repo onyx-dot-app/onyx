@@ -13,7 +13,7 @@
       "family": "deepseek-flash",
       "limit": {
         "context": 1000000,
-        "output": 384000
+        "output": 393216
       },
       "modalities": {
         "input": [
@@ -45,7 +45,7 @@
       "family": "deepseek-flash",
       "limit": {
         "context": 1000000,
-        "output": 384000
+        "output": 393216
       },
       "modalities": {
         "input": [
@@ -78,7 +78,7 @@
       "family": "deepseek-flash",
       "limit": {
         "context": 1000000,
-        "output": 384000
+        "output": 393216
       },
       "modalities": {
         "input": [
@@ -111,7 +111,7 @@
       "family": "deepseek-thinking",
       "limit": {
         "context": 1000000,
-        "output": 384000
+        "output": 393216
       },
       "modalities": {
         "input": [

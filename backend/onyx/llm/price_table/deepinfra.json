@@ -879,6 +879,68 @@
       "temperature": true,
       "tool_call": true
     },
+    "XiaomiMiMo/MiMo-V2.6-Flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0027,
+        "input": 0.14,
+        "output": 0.28
+      },
+      "family": "mimo",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiMo-V2.6-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "XiaomiMiMo/MiMo-V2.6-Pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0036,
+        "input": 0.43,
+        "output": 0.87
+      },
+      "family": "mimo",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiMo-V2.6-Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "deepseek-ai/DeepSeek-R1-0528": {
       "attachment": false,
       "cost": {
@@ -1781,6 +1843,34 @@
       "temperature": true,
       "tool_call": true
     },
+    "tencent/Hy4-preview": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.042,
+        "input": 0.834,
+        "output": 2.501
+      },
+      "family": "Hy",
+      "limit": {
+        "context": 1048576,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Hy4 preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-28",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "thinkingmachines/Inkling": {
       "attachment": true,
       "cost": {
@@ -1808,6 +1898,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-15",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -2022,7 +2113,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.2,
-        "input": 1.2,
+        "input": 0.9,
         "output": 4
       },
       "family": "glm",
