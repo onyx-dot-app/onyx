@@ -120,6 +120,9 @@ def test_search_then_answer(admin_user: DATestUser, mock_llm: MockLLMScript) -> 
 See `tests/llm_workflows/test_mock_llm_server.py`. Tests that must patch Onyx or control the stream very finely
 belong in `tests/external_dependency_unit/` with `MockLLM`.
 
+The Playwright stack runs the same server as a compose service
+(`deployment/docker_compose/docker-compose.mock-llm-test.yml`). See `web/tests/e2e/README.md`.
+
 ## Current Testing Limitations
 
 ### Test coverage
