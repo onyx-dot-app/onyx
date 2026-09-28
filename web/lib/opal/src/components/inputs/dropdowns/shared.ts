@@ -375,9 +375,9 @@ export function useSelectOverlay() {
     placement: "bottom-start",
     middleware: [
       // 6px wider on each side than the trigger, shifted start-ward by 6px:
-      // with the dropdown's 6px inset, the rows' bounding boxes then align
-      // flush with the trigger's edges, the trigger's own border included.
-      // crossAxis is direction-aware, so RTL mirrors correctly.
+      // with the dropdown's 4px inset and its 1px border, the rows' bounding
+      // boxes then align flush with the trigger's content, inside its own
+      // border. crossAxis is direction-aware, so RTL mirrors correctly.
       offset({ mainAxis: 4, crossAxis: -6 }),
       flip(),
       shift({ padding: 8 }),
