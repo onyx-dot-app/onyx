@@ -7432,7 +7432,8 @@ class GatedApp(Base):
             if self.external_app_id is not None
             else self.mcp_server_id
         )
-        assert tid is not None  # guaranteed by ck_gated_app_single_target
+        if tid is None:
+            raise ValueError("Gated app must have a target")
         return tid
 
     @property

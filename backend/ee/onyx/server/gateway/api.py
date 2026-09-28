@@ -1183,7 +1183,8 @@ def _anthropic_stream_worker(
                     continue
                 if not ensure_block_open("thinking"):
                     return False
-                assert open_index is not None
+                if open_index is None:
+                    raise RuntimeError("Thinking block has no content index")
                 if block.thinking and not emit(
                     AnthropicContentBlockDeltaEvent.create(
                         index=open_index,
@@ -1237,7 +1238,8 @@ def _anthropic_stream_worker(
                 if delta.content:
                     if not ensure_block_open("text"):
                         break
-                    assert open_index is not None
+                    if open_index is None:
+                        raise RuntimeError("Text block has no content index")
                     if not emit(
                         AnthropicContentBlockDeltaEvent.create(
                             index=open_index,

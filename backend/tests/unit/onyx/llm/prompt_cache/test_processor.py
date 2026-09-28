@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
+from onyx.llm.models import ImageContentPart, ImageUrlDetail, TextContentPart
 from onyx.llm.prompt_cache import processor as processor_module
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 
@@ -75,3 +76,36 @@ def test_with_metadata_true_default_keeps_current_behavior() -> None:
     assert metadata.model_name == "claude-sonnet"
     assert no_metadata is None
     assert processed_with_metadata == processed_without_metadata
+
+
+def test_multimodal_continuation_preserves_input_and_cache_control() -> None:
+    prefix = UserMessage(
+        content=[
+            TextContentPart(text="Document"),
+            ImageContentPart(image_url=ImageUrlDetail(url="https://example.com/image")),
+        ]
+    )
+    suffix = UserMessage(content="Question")
+    original_prefix = prefix.model_copy(deep=True)
+    original_suffix = suffix.model_copy(deep=True)
+
+    with patch.object(processor_module, "ENABLE_PROMPT_CACHING", True):
+        processed, _ = process_with_prompt_cache(
+            llm_config=_anthropic_config(),
+            cacheable_prefix=[prefix],
+            suffix=[suffix],
+            continuation=True,
+            with_metadata=False,
+        )
+
+    assert isinstance(processed, list)
+    assert len(processed) == 1
+    assert isinstance(processed[0], UserMessage)
+    assert processed[0].content == [
+        TextContentPart(text="Document"),
+        ImageContentPart(image_url=ImageUrlDetail(url="https://example.com/image")),
+        TextContentPart(text="Question"),
+    ]
+    assert processed[0].cache_control == {"type": "ephemeral"}
+    assert prefix == original_prefix
+    assert suffix == original_suffix
