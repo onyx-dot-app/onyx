@@ -1225,7 +1225,6 @@ export default function IndexSettingsPage() {
               const changes = classifyChanges(values, initialFormValues);
               // A change undone by hand leaves Formik dirty but stages nothing.
               const hasChanges = dirty && changes.any;
-              const statusVariant = hasChanges ? "warning" : undefined;
               const bannerMode = bannerModeFor(changes);
               const contextualModelOnlyChange =
                 bannerMode === "contextualModelOnly";
@@ -1235,6 +1234,28 @@ export default function IndexSettingsPage() {
                 bannerMode
               );
               const saveOnly = effectiveStrategy === DO_NOT_REINDEX;
+              // Staged changes tint the banner and only the cards that hold
+              // them. Do Not Re-index touches no index, so it reads as info
+              // rather than as the warning the re-index strategies carry.
+              const stagedVariant = saveOnly ? "info" : "warning";
+              const bannerVariant = applyBlocked
+                ? "error"
+                : hasChanges
+                  ? stagedVariant
+                  : undefined;
+              const embeddingCardBorder = changes.embeddingChanged
+                ? "warning"
+                : undefined;
+              const contextualCardBorder =
+                changes.contextualToggleChanged ||
+                changes.contextualModelChanged
+                  ? "warning"
+                  : undefined;
+              const imageCardBorder = captioningModelMissing
+                ? "warning"
+                : changes.imageChanged
+                  ? stagedVariant
+                  : undefined;
               const wontPortConnectors = computeWontPortConnectors(
                 connectorStatuses,
                 toSwitchoverType(effectiveStrategy)
@@ -1505,7 +1526,7 @@ export default function IndexSettingsPage() {
                         )}
                       >
                         <MessageCard
-                          variant={applyBlocked ? "error" : statusVariant}
+                          variant={bannerVariant}
                           title={
                             contextualRagModelMissing
                               ? t("changesBanner.contextualModelMissing.title")
@@ -1659,7 +1680,7 @@ export default function IndexSettingsPage() {
                                 expanded={viewAllModelsOpen}
                                 expandableContentHeight="fit"
                                 border="solid"
-                                borderColor={statusVariant}
+                                borderColor={embeddingCardBorder}
                                 rounding={4}
                                 padding={viewAllModelsOpen ? 0 : 2}
                                 expandedContent={
@@ -2017,7 +2038,7 @@ export default function IndexSettingsPage() {
                         >
                           <Card
                             border="solid"
-                            borderColor={statusVariant}
+                            borderColor={contextualCardBorder}
                             rounding={4}
                           >
                             <GeneralLayouts.Section
@@ -2102,9 +2123,7 @@ export default function IndexSettingsPage() {
                         >
                           <Card
                             border="solid"
-                            borderColor={
-                              captioningModelMissing ? "warning" : statusVariant
-                            }
+                            borderColor={imageCardBorder}
                             rounding={4}
                           >
                             <GeneralLayouts.Section
@@ -2144,6 +2163,7 @@ export default function IndexSettingsPage() {
                                   withLabel
                                 >
                                   <SimpleModelSelector
+                                    nullable
                                     providers={filterModelConfigurations(
                                       llmProviders ?? [],
                                       {
