@@ -30,6 +30,7 @@ from onyx.file_processing.file_types import guess_mime_type
 from onyx.tools.models import (
     ChatFile,
     LlmPythonExecutionResult,
+    PythonExecutionDelta,
     PythonExecutionFile,
     ToolCallException,
 )
@@ -394,12 +395,13 @@ class PythonTool(Tool):
                             stderr_parts.append(event.data)
                         invocation.update(
                             ToolProgress(
-                                details=LlmPythonExecutionResult(
-                                    stdout="".join(stdout_parts),
-                                    stderr="".join(stderr_parts),
-                                    exit_code=None,
-                                    timed_out=False,
-                                    generated_files=[],
+                                details=PythonExecutionDelta(
+                                    stdout=event.data
+                                    if event.stream == "stdout"
+                                    else "",
+                                    stderr=event.data
+                                    if event.stream == "stderr"
+                                    else "",
                                 )
                             )
                         )

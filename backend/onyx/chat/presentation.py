@@ -76,6 +76,7 @@ def _saved_tool_metadata(result: ToolResultMessage) -> BaseModel | None:
             time_filter_end=data.time_filter_end,
             search_docs=[],
             citation_mapping=data.citation_mapping,
+            displayed_docs=[] if data.displayed_docs == [] else None,
         )
     return data
 
@@ -174,7 +175,7 @@ def _tool_record(
         tool_call_arguments=tool_call.arguments,
         tool_call_response=tool_response.text if tool_response else "",
         result_metadata=saved_metadata,
-        search_docs=displayed_docs or search_docs,
+        search_docs=displayed_docs if displayed_docs is not None else search_docs,
         generated_images=generated_images,
         generated_files=generated_files,
         generated_file_ids=generated_file_ids,

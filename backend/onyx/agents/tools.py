@@ -113,7 +113,7 @@ class AgentControl(Protocol):
 
 
 class ToolProgress(BaseModel):
-    """Current partial tool output; each update replaces the previous partial value."""
+    """Tool progress with typed details that define snapshot or delta semantics."""
 
     content: str = ""
     details: SerializeAsAny[BaseModel] | None = None
@@ -123,6 +123,12 @@ ToolUpdate = Callable[[ToolProgress], None]
 
 
 class ToolInvocation:
+    """Tool inputs and runtime services.
+
+    The update callback captures progress before returning; tools may then mutate
+    their local data. Callbacks that retain updates must take an isolated copy.
+    """
+
     def __init__(
         self,
         *,

@@ -9,10 +9,11 @@ import pytest
 from onyx.agents import concurrency, runtime
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.concurrency import ExecutionWork
-from onyx.agents.events import AgentEvent, AgentStartEvent
+from onyx.agents.events import AgentEvent, AgentStartEvent, ToolUpdateEvent
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tool_execution import ToolBatch
-from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
+from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
@@ -588,4 +589,54 @@ def test_child_events_use_one_queue_entry_and_reach_late_parent_listener() -> No
         release.set()
         child.close()
         parent.close()
+        dispatcher.close()
+
+
+def test_progress_delivery_isolates_producer_and_listeners() -> None:
+    dispatcher = concurrency.EventDispatcher()
+    delivery = concurrency.EventDelivery(dispatcher)
+    entered = threading.Event()
+    release = threading.Event()
+    received: list[list[str]] = []
+
+    def mutate(event: AgentEvent) -> None:
+        if isinstance(event, AgentStartEvent):
+            entered.set()
+            assert release.wait(3)
+        if isinstance(event, ToolUpdateEvent):
+            details = event.progress.details
+            assert isinstance(details, SearchDocsResponse)
+            details.queries.append("listener mutation")
+
+    def observe(event: AgentEvent) -> None:
+        if isinstance(event, ToolUpdateEvent):
+            details = event.progress.details
+            assert isinstance(details, SearchDocsResponse)
+            received.append(list(details.queries))
+
+    delivery.subscribe(mutate)
+    delivery.subscribe(observe)
+    try:
+        delivery.publish(AgentStartEvent(run_id="run"))
+        assert entered.wait(2)
+        details = SearchDocsResponse(
+            search_docs=[], citation_mapping={}, queries=["first"]
+        )
+        delivery.publish(
+            ToolUpdateEvent(
+                run_id="run",
+                message_id="message",
+                step_index=0,
+                tool_call=ToolCall(id="call", name="search", arguments={}),
+                progress=ToolProgress(details=details),
+            )
+        )
+        details.queries.append("producer mutation")
+        release.set()
+        delivery.close()
+        assert received == [["first"]]
+        assert details.queries == ["first", "producer mutation"]
+    finally:
+        release.set()
+        delivery.close()
         dispatcher.close()

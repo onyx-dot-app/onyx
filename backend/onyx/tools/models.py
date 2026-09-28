@@ -237,6 +237,13 @@ class PythonExecutionFile(BaseModel):
     file_link: str
 
 
+class PythonExecutionDelta(BaseModel):
+    """New process output from Python execution."""
+
+    stdout: str = ""
+    stderr: str = ""
+
+
 class LlmPythonExecutionResult(BaseModel):
     """Result from Python code execution"""
 

@@ -1,6 +1,7 @@
 """Saved tool output supports historical summaries and current result metadata."""
 
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -12,10 +13,12 @@ from onyx.agents.models import (
     ToolExecutionRecord,
 )
 from onyx.chat.models import ChatSearchResult
-from onyx.chat.presentation import _saved_tool_metadata
+from onyx.chat.presentation import _collect_tool_history, _saved_tool_metadata
 from onyx.chat.renderer import ToolRenderer
 from onyx.chat.response import response_record
-from onyx.context.search.models import SearchDocsResponse
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import Tool, ToolCall
 from onyx.db.tools import restore_tool_result
 from onyx.llm.models import AssistantMessage, ToolResultMessage
@@ -27,6 +30,7 @@ from onyx.server.query_and_chat.session_loading import (
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolDelta,
     OverallStop,
+    SearchToolDocumentsDelta,
 )
 from onyx.tools.models import (
     ChatFile,
@@ -243,3 +247,81 @@ def test_live_and_saved_tool_cards_share_public_content(kind: str) -> None:
             packet.obj for packet in live if isinstance(packet.obj, CustomToolDelta)
         ]
         assert errors[-1].data == "lookup failed"
+
+
+@pytest.mark.parametrize("select_none", [False, True])
+def test_empty_search_selection_survives_projection_and_reload(
+    select_none: bool,
+) -> None:
+    doc = SearchDoc(
+        document_id="retrieved",
+        chunk_ind=0,
+        semantic_identifier="Retrieved document",
+        blurb="content",
+        source_type=DocumentSource.FILE,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    details = SearchDocsResponse.model_validate_json(
+        SearchDocsResponse(
+            search_docs=[doc],
+            displayed_docs=[] if select_none else None,
+            citation_mapping={},
+        ).model_dump_json()
+    )
+    assert details.displayed_docs == ([] if select_none else None)
+    call = ModelToolCall(id="search-1", name=SearchTool.NAME, arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call.id, tool_name=call.name, content="result", details=details
+    )
+    state = RunState(
+        run_id="run",
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="message", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    call.id: ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE, result=result
+                    )
+                },
+            )
+        ],
+    )
+    history = _collect_tool_history(state, {call.name: 1})
+    assert history.tool_calls[0].search_docs == ([] if select_none else [doc])
+    assert history.all_search_docs == {doc.document_id: doc}
+    metadata = _saved_tool_metadata(result)
+    assert metadata is not None
+    record = ToolCall(
+        tool_id=1,
+        turn_number=0,
+        tab_index=0,
+        tool_call_arguments={},
+        tool_call_response=metadata.model_dump_json(),
+        search_docs=[],
+    )
+    with patch(
+        "onyx.db.tools.translate_db_search_doc_to_saved_search_doc", return_value=doc
+    ):
+        if not select_none:
+            record.search_docs = [DbSearchDoc()]
+        restored = _restored_result(
+            record, Tool(name=call.name, in_code_tool_id=SearchTool.__name__)
+        )
+    assert isinstance(restored.details, SearchDocsResponse)
+    assert restored.details.displayed_docs == ([] if select_none else None)
+    for output in [details, restored.details]:
+        packets = ToolRenderer(call, Placement(turn_index=0)).update(output)
+        docs = [
+            doc
+            for packet in packets
+            if isinstance(packet.obj, SearchToolDocumentsDelta)
+            for doc in packet.obj.documents
+        ]
+        assert [doc.document_id for doc in docs] == (
+            [] if select_none else ["retrieved"]
+        )

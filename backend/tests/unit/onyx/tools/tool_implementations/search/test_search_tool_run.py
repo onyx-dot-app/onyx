@@ -79,9 +79,11 @@ def _run(
                 call_id="search",
                 arguments={"queries": ["ticket"]},
                 cancellation=CancellationSignal(),
-                update=progress.append
-                if progress is not None
-                else lambda _progress: None,
+                update=lambda item: (
+                    progress.append(item.model_copy(deep=True))
+                    if progress is not None
+                    else None
+                ),
                 messages=[UserMessage(content="resolve the ticket")],
             ),
             context=ToolContext(skip_search_query_expansion=skip_query_expansion),

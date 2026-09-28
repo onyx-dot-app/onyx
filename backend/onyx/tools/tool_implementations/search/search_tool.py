@@ -935,7 +935,7 @@ class SearchTool(Tool):
         search_output.time_filter_start = time_filter.start if time_filter else None
         search_output.time_filter_end = time_filter.end if time_filter else None
         if update is not None:
-            update(ToolProgress(details=search_output.model_copy(deep=True)))
+            update(ToolProgress(details=search_output))
 
         queries_run = list(
             dict.fromkeys(
@@ -1022,7 +1022,7 @@ class SearchTool(Tool):
 
         search_output.queries = all_queries
         if update is not None:
-            update(ToolProgress(details=search_output.model_copy(deep=True)))
+            update(ToolProgress(details=search_output))
 
         # Run all searches in parallel with appropriate hybrid_alpha values
         # Keyword queries use hybrid_alpha=0.2 (favor keyword search)
@@ -1186,7 +1186,7 @@ class SearchTool(Tool):
         search_output.search_docs = search_docs
         search_output.displayed_docs = final_ui_docs
         if update is not None:
-            update(ToolProgress(details=search_output.model_copy(deep=True)))
+            update(ToolProgress(details=search_output))
 
         # Create wrapper function to handle errors gracefully
         def expand_section_safe(

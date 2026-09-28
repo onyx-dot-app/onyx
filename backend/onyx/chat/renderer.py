@@ -41,6 +41,7 @@ from onyx.tools.models import (
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
+    PythonExecutionDelta,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
@@ -338,8 +339,7 @@ class ToolRenderer:
         self._documents: set[str] = set()
         self._last_details: BaseModel | None = None
         self.has_child_output = False
-        self._stdout = ""
-        self._stderr = ""
+        self._has_python_output = False
         self._files: set[str] = set()
 
     def start(self) -> list[packets.Packet]:
@@ -414,8 +414,22 @@ class ToolRenderer:
         self, details: BaseModel | None, content: str = ""
     ) -> list[packets.Packet]:
         objects: list[packets.PacketObj] = []
+        if isinstance(details, PythonExecutionDelta):
+            self._has_python_output = True
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.PythonToolDelta(
+                        stdout=details.stdout, stderr=details.stderr
+                    ),
+                )
+            ]
         if isinstance(details, SearchDocsResponse):
-            docs = details.displayed_docs or details.search_docs
+            docs = (
+                details.displayed_docs
+                if details.displayed_docs is not None
+                else details.search_docs
+            )
             new_docs = [doc for doc in docs if doc.document_id not in self._documents]
             self._documents.update(doc.document_id for doc in docs)
             if self.call.name == OpenURLTool.NAME:
@@ -461,14 +475,14 @@ class ToolRenderer:
                 )
             )
         elif isinstance(details, LlmPythonExecutionResult):
+            stderr = "" if self._has_python_output else details.stderr
+            if details.exit_code == -1 and details.error:
+                stderr = details.error
             objects.append(
                 packets.PythonToolDelta(
-                    stdout=details.stdout[len(self._stdout) :]
-                    if details.stdout.startswith(self._stdout)
-                    else "",
-                    stderr=details.stderr[len(self._stderr) :]
-                    if details.stderr.startswith(self._stderr)
-                    else "",
+                    # Live output is complete; the saved result may be truncated.
+                    stdout="" if self._has_python_output else details.stdout,
+                    stderr=stderr,
                     file_ids=[
                         file.file_link.rsplit("/", 1)[-1]
                         for file in details.generated_files
@@ -476,8 +490,6 @@ class ToolRenderer:
                     ],
                 )
             )
-            self._stdout = details.stdout
-            self._stderr = details.stderr
             self._files.update(file.file_link for file in details.generated_files)
         elif isinstance(details, LlmBashExecutionResult):
             objects.append(
