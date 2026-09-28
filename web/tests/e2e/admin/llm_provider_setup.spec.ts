@@ -11,10 +11,17 @@ const PROVIDER_API_KEY =
   process.env.OPENAI_API_KEY ||
   "e2e-placeholder-api-key-not-used";
 
+type AdminModelConfiguration = {
+  name: string;
+  display_name: string | null;
+  custom_display_name: string | null;
+};
+
 type AdminLLMProvider = {
   id: number;
   name: string;
   is_auto_mode: boolean;
+  model_configurations: AdminModelConfiguration[];
 };
 
 type DefaultModelInfo = {
@@ -76,6 +83,24 @@ async function getAdminLLMProviderResponse(page: Page) {
 async function listAdminLLMProviders(page: Page): Promise<AdminLLMProvider[]> {
   const data = await getAdminLLMProviderResponse(page);
   return data.providers;
+}
+
+/**
+ * The name a model shows under in the pickers. The backend prettifies raw
+ * model names, and the picker's search matches that title, not the raw name.
+ */
+async function getModelDisplayName(
+  page: Page,
+  providerId: number,
+  modelName: string
+): Promise<string> {
+  const providers = await listAdminLLMProviders(page);
+  const provider = providers.find((p) => p.id === providerId);
+  const model = provider?.model_configurations.find(
+    (mc) => mc.name === modelName
+  );
+  expect(model).toBeTruthy();
+  return model!.custom_display_name || model!.display_name || modelName;
 }
 
 async function getDefaultTextModel(page: Page): Promise<DefaultModelInfo> {
@@ -372,21 +397,36 @@ test.describe("LLM Provider Setup @exclusive", () => {
       await page.reload();
       await page.waitForLoadState("networkidle");
 
-      // Open the Default Model dropdown
-      await page.locator('[data-testid="llm-popover-trigger"]').click();
-      const dialog = page.locator('[role="dialog"]').first();
-      await dialog.waitFor({ state: "visible", timeout: 10000 });
+      // Open the Default Model select; its list is portalled.
+      await page
+        .locator("label")
+        .filter({ hasText: "Default Model" })
+        .first()
+        .getByRole("combobox", { name: "Select model" })
+        .click();
+      const listbox = page.getByRole("listbox", { name: "Select model" });
+      await listbox.waitFor({ state: "visible", timeout: 10000 });
 
-      // Search for the target model to filter the list to just its entry
-      await dialog.getByPlaceholder("Search models...").fill(secondModelName);
+      // Search for the target model by its display name to filter the list
+      // to just its entry. The list carries its own search box; the page
+      // has one too.
+      const secondModelDisplayName = await getModelDisplayName(
+        page,
+        secondProviderId,
+        secondModelName
+      );
+      await listbox
+        .getByRole("textbox", { name: "Search" })
+        .fill(secondModelDisplayName);
 
       const defaultResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/admin/llm/default") &&
           response.request().method() === "POST"
       );
-      // After filtering, only the matching model button(s) remain — click the first
-      await dialog.getByRole("button").first().click();
+      await listbox
+        .getByRole("option", { name: secondModelDisplayName })
+        .click();
       await defaultResponsePromise;
 
       // Verify the default switched to the second provider
