@@ -76,3 +76,32 @@ def test_gmail_credential_is_listed_for_google_drive(admin_user: DATestUser) -> 
         "google_primary_admin",
         "authentication_method",
     }
+
+
+def test_sharepoint_credential_is_listed_for_teams(admin_user: DATestUser) -> None:
+    # Precondition.
+    sharepoint_credential = CredentialManager.create(
+        user_performing_action=admin_user,
+        source=DocumentSource.SHAREPOINT,
+        credential_json={
+            "authentication_method": "client_secret",
+            "sp_client_id": "fake-client-id",
+            "sp_directory_id": "fake-directory-id",
+            "sp_client_secret": "fake-client-secret",
+        },
+    )
+
+    # Under test.
+    teams_credentials = {
+        credential["id"]: credential
+        for credential in _similar_credentials(DocumentSource.TEAMS, admin_user)
+    }
+
+    # Postcondition.
+    listed = teams_credentials[sharepoint_credential.id]
+    assert set(listed["credential_json"]) == {
+        "authentication_method",
+        "teams_client_id",
+        "teams_directory_id",
+        "teams_client_secret",
+    }
