@@ -50,6 +50,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import get_current_span
 
 
 class ScriptedLLM(LitellmLLM):
@@ -471,7 +472,7 @@ def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     assert final.thinking == (payload if reasoning else "")
 
 
-def test_buffered_stream_failure_keeps_unresolved_tool_payload_out_of_events() -> None:
+def test_stream_failure_recovers_no_call_from_an_unfinished_payload() -> None:
     payload = '{"name":"search","arguments":{"query":"unfinished'
     failure = RuntimeError("provider failed")
     closed: list[bool] = []
@@ -497,9 +498,12 @@ def test_buffered_stream_failure_keeps_unresolved_tool_payload_out_of_events() -
         events.extend(client.stream(request))
     assert caught.value is failure
     assert closed == [True]
-    assert [event.type for event in events] == ["start", "error"]
-    assert collect_generation(events).content == []
-    assert payload not in str(record.call_args)
+    # Text streams as it arrives; recovery runs only after a complete response.
+    assert [event.type for event in events] == ["start", "text_delta", "error"]
+    message = collect_generation(events)
+    assert message.text == payload
+    assert message.tool_calls == []
+    assert record.call_args.kwargs["tool_calls"] is None
 
 
 def test_incremental_events_preserve_partial_content_and_snapshot_isolation() -> None:
@@ -679,3 +683,101 @@ def test_stream_records_partial_output_when_the_consumer_stops_early() -> None:
 
     record.assert_called_once()
     assert record.call_args.kwargs["output"] == "partial"
+
+
+_XML_ANSWER = (
+    'Anthropic uses <function_calls><invoke name="search"></invoke>'
+    "</function_calls> blocks."
+)
+
+
+@pytest.mark.parametrize(
+    "request_",
+    [
+        GenerationRequest(),
+        GenerationRequest(
+            tools=[ToolDefinition(name="search", description="Search", parameters={})],
+            options=GenerationOptions(tool_choice=ToolChoiceOptions.NONE),
+        ),
+    ],
+    ids=["no-tools", "tool-choice-none"],
+)
+def test_xml_text_is_kept_when_tool_recovery_is_off(
+    request_: GenerationRequest,
+) -> None:
+    accumulator = MessageAccumulator(request_.tools)
+    events = list(
+        accumulator.consume(iter([_stream_chunk(Delta(content=_XML_ANSWER))]), request_)
+    )
+
+    assert collect_generation(events).text == _XML_ANSWER
+    assert accumulator.message.tool_calls == []
+
+
+@pytest.mark.parametrize("choice", [ToolChoiceOptions.AUTO, ToolChoiceOptions.REQUIRED])
+def test_structured_answers_stream_before_the_provider_finishes(
+    choice: ToolChoiceOptions,
+) -> None:
+    """A JSON-looking answer is not held back while tools are available."""
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=choice),
+    )
+    finished: list[bool] = []
+
+    def chunks() -> Iterator[ModelResponseStream]:
+        yield _stream_chunk(Delta(content='{"answer": '))
+        yield _stream_chunk(Delta(content="42}"))
+        finished.append(True)
+
+    events = MessageAccumulator(request.tools).consume(chunks(), request)
+    first = next(events)
+
+    assert isinstance(first, TextDeltaEvent)
+    assert first.text == '{"answer": '
+    assert finished == []
+    events.close()
+
+
+def test_stream_keeps_its_span_out_of_the_caller_context() -> None:
+    before = get_current_span()
+    events = ScriptedLLM([Delta(content="hi")]).stream(
+        GenerationRequest(messages=[UserMessage(content="Hello")])
+    )
+    next(events)  # start
+    assert get_current_span() is before
+    next(events)  # first text update
+    events.close()
+
+    assert get_current_span() is before
+
+
+def test_streamed_thinking_fragments_merge_into_one_signed_block() -> None:
+    """Anthropic streams thinking text first and its signature last."""
+    accumulator = MessageAccumulator()
+    events = [
+        event
+        for delta in [
+            Delta(
+                reasoning_content="I ",
+                thinking_blocks=[ThinkingBlock(thinking="I ", signature="")],
+            ),
+            Delta(
+                reasoning_content="think",
+                thinking_blocks=[ThinkingBlock(thinking="think")],
+            ),
+            Delta(thinking_blocks=[ThinkingBlock(signature="sig-1")]),
+            Delta(
+                reasoning_content="again",
+                thinking_blocks=[ThinkingBlock(thinking="again", signature="sig-2")],
+            ),
+        ]
+        for event in accumulator.add(_stream_chunk(delta))
+    ]
+
+    expected = [
+        ThinkingBlock(thinking="I think", signature="sig-1"),
+        ThinkingBlock(thinking="again", signature="sig-2"),
+    ]
+    assert accumulator.message.thinking_blocks == expected
+    assert collect_generation(events).thinking_blocks == expected

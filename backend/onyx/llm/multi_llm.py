@@ -30,6 +30,7 @@ from onyx.llm.api_surfaces import (
     LlmApiSurface,
     resolve_api_surface,
 )
+from onyx.llm.cancellation import isolated_context
 from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
@@ -129,6 +130,7 @@ ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
 }
 
 logger = setup_logger()
+
 
 # Write-preferring reader-writer lock guarding os.environ during litellm calls.
 # Calls that inject custom_config env vars hold the write lock; all other calls
@@ -1608,6 +1610,7 @@ class LitellmLLM(LLM):
             record_llm_response(span, response)
         return to_assistant_message(response, request)
 
+    @isolated_context
     def stream(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> Generator[GenerationEvent, None, None]:

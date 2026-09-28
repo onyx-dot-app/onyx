@@ -425,7 +425,19 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
         if event.blocks:
             if content.blocks is None:
                 content.blocks = []
-            content.blocks.extend(block.model_copy(deep=True) for block in event.blocks)
+            for block in event.blocks:
+                last = content.blocks[-1] if content.blocks else None
+                # Providers stream one thinking block as text fragments and then
+                # its signature. Merge them so the block can be replayed.
+                if (
+                    isinstance(block, ThinkingBlock)
+                    and isinstance(last, ThinkingBlock)
+                    and not last.signature
+                ):
+                    last.thinking += block.thinking
+                    last.signature = block.signature
+                else:
+                    content.blocks.append(block.model_copy(deep=True))
     else:
         if not isinstance(content, TextContent):
             raise ValueError("Text update targets non-text content")
