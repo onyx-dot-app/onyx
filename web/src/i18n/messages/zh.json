@@ -4908,14 +4908,14 @@
           "title": "更改需要完整的重新索引。"
         },
         "doNotReindex": {
-          "description": "图片处理设置仅对今后索引的文档生效。除非运行完整的重新索引，否则现有文档不会更新。\n\n重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)。\n\n您可以在此页面查看重新索引的进度。",
+          "description": "图片处理设置仅对今后索引的文档生效。除非运行完整的重新索引，否则现有文档不会更新。\n\n重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)。",
           "title": "更改仅适用于新索引的内容。"
         },
         "orSeparator": {
           "label": "或"
         },
         "reindex": {
-          "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)\n\n您可以在此页面查看重新索引的进度。",
+          "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "将运行完整的重新索引。"
         }
       },

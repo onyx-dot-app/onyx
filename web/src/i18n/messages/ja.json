@@ -4908,14 +4908,14 @@
           "title": "変更には完全な再インデックスが必要です。"
         },
         "doNotReindex": {
-          "description": "画像処理設定は、今後インデックスされるドキュメントにのみ適用されます。既存のドキュメントは、完全な再インデックスを実行しない限り更新されません。\n\n再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)。\n\n再インデックスの進捗はこのページで確認できます。",
+          "description": "画像処理設定は、今後インデックスされるドキュメントにのみ適用されます。既存のドキュメントは、完全な再インデックスを実行しない限り更新されません。\n\n再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)。",
           "title": "変更は新しくインデックスされたコンテンツにのみ適用されます。"
         },
         "orSeparator": {
           "label": "または"
         },
         "reindex": {
-          "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)\n\n再インデックスの進捗はこのページで確認できます。",
+          "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "完全な再インデックスが実行されます。"
         }
       },

@@ -4908,14 +4908,14 @@
           "title": "Changes require a full re-index."
         },
         "doNotReindex": {
-          "description": "Image processing settings will take effect only for documents indexed going forward. Existing documents will not be updated unless you run a full re-index.\n\nRe-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows).\n\nYou can monitor the re-indexing progress on this page.",
+          "description": "Image processing settings will take effect only for documents indexed going forward. Existing documents will not be updated unless you run a full re-index.\n\nRe-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows).",
           "title": "Changes apply to newly indexed content only."
         },
         "orSeparator": {
           "label": "or"
         },
         "reindex": {
-          "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)\n\nYou can monitor the re-indexing progress on this page.",
+          "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "A full re-index will run."
         }
       },

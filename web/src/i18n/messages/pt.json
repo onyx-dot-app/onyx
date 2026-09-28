@@ -4908,14 +4908,14 @@
           "title": "As alterações exigem uma reindexação completa."
         },
         "doNotReindex": {
-          "description": "As configurações de processamento de imagens terão efeito apenas em documentos indexados a partir de agora. Os documentos existentes não serão atualizados a menos que você execute uma reindexação completa.\n\nA reindexação pode levar *horas ou dias* dependendo do tamanho do corpus. [Saiba mais](https://docs.onyx.app/security/architecture/data_flows).\n\nVocê pode acompanhar o progresso da reindexação nesta página.",
+          "description": "As configurações de processamento de imagens terão efeito apenas em documentos indexados a partir de agora. Os documentos existentes não serão atualizados a menos que você execute uma reindexação completa.\n\nA reindexação pode levar *horas ou dias* dependendo do tamanho do corpus. [Saiba mais](https://docs.onyx.app/security/architecture/data_flows).",
           "title": "As alterações se aplicam apenas ao conteúdo indexado a partir de agora."
         },
         "orSeparator": {
           "label": "ou"
         },
         "reindex": {
-          "description": "A reindexação pode levar *horas ou dias* dependendo do tamanho do corpus. [Saiba mais](https://docs.onyx.app/security/architecture/data_flows)\n\nVocê pode acompanhar o progresso da reindexação nesta página.",
+          "description": "A reindexação pode levar *horas ou dias* dependendo do tamanho do corpus. [Saiba mais](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Uma reindexação completa será executada."
         }
       },

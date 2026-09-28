@@ -4908,14 +4908,14 @@
           "title": "Änderungen erfordern eine vollständige Neuindizierung."
         },
         "doNotReindex": {
-          "description": "Bildverarbeitungseinstellungen wirken nur auf Dokumente, die ab jetzt indexiert werden. Vorhandene Dokumente werden nicht aktualisiert, sofern Sie keine vollständige Neuindexierung ausführen.\n\nDie Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows).\n\nDen Fortschritt der Neuindexierung können Sie auf dieser Seite verfolgen.",
+          "description": "Bildverarbeitungseinstellungen wirken nur auf Dokumente, die ab jetzt indexiert werden. Vorhandene Dokumente werden nicht aktualisiert, sofern Sie keine vollständige Neuindexierung ausführen.\n\nDie Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows).",
           "title": "Änderungen gelten nur für neu indexierte Inhalte."
         },
         "orSeparator": {
           "label": "oder"
         },
         "reindex": {
-          "description": "Die Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)\n\nDen Fortschritt der Neuindexierung können Sie auf dieser Seite verfolgen.",
+          "description": "Die Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Eine vollständige Neuindexierung wird ausgeführt."
         }
       },
