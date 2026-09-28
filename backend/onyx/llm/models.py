@@ -221,6 +221,7 @@ class AssistantMessage(BaseMessage):
     role: Literal["assistant"] = "assistant"
     content: list[AssistantContent] = Field(default_factory=list)
     stop_reason: str | None = None
+    error_message: str | None = None
     usage: Usage | None = None
 
     @property
@@ -307,3 +308,125 @@ class GenerationRequestParams(BaseModel):
     reasoning_effort: ReasoningEffort
     max_tokens: int | None
     sent_kwargs: dict[str, JsonValue]
+
+
+class _Event(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    request_params: GenerationRequestParams | None = None
+
+
+class GenerationLifecycleEvent(_Event):
+    """Generation status; content arrives through incremental content events."""
+
+
+class GenerationStartEvent(GenerationLifecycleEvent):
+    type: Literal["start"] = "start"
+
+
+class GenerationDoneEvent(GenerationLifecycleEvent):
+    type: Literal["done"] = "done"
+    usage: Usage | None = None
+    stop_reason: str | None = None
+
+
+class GenerationErrorEvent(GenerationLifecycleEvent):
+    type: Literal["error"] = "error"
+    usage: Usage | None = None
+    stop_reason: Literal["error"] = "error"
+    error_message: str
+
+
+class GenerationTextEvent(_Event):
+    content_index: int = Field(ge=0)
+    text: str = ""
+
+
+class TextDeltaEvent(GenerationTextEvent):
+    type: Literal["text_delta"] = "text_delta"
+
+
+class ThinkingDeltaEvent(GenerationTextEvent):
+    blocks: list[AnyThinkingBlock] | None = None
+    type: Literal["thinking_delta"] = "thinking_delta"
+
+
+class GenerationToolCallEvent(_Event):
+    content_index: int = Field(ge=0)
+    tool_call: ToolCall
+    argument_deltas: dict[str, str] = Field(default_factory=dict)
+
+
+class ToolCallStartEvent(GenerationToolCallEvent):
+    type: Literal["tool_call_start"] = "tool_call_start"
+
+
+class ToolCallDeltaEvent(GenerationToolCallEvent):
+    type: Literal["tool_call_delta"] = "tool_call_delta"
+
+
+class ToolCallEndEvent(GenerationToolCallEvent):
+    type: Literal["tool_call_end"] = "tool_call_end"
+
+
+GenerationEvent = Annotated[
+    GenerationStartEvent
+    | GenerationDoneEvent
+    | GenerationErrorEvent
+    | TextDeltaEvent
+    | ThinkingDeltaEvent
+    | ToolCallStartEvent
+    | ToolCallDeltaEvent
+    | ToolCallEndEvent,
+    Field(discriminator="type"),
+]
+
+
+def apply_generation_event(message: AssistantMessage, event: GenerationEvent) -> None:
+    """Mutate caller-owned output while preserving its identity and application metadata.
+
+    The caller must serialize access to the message. Mutable event payloads are
+    copied, so later message updates cannot alter the event. Copy the message
+    before exposing it as a snapshot.
+    """
+    if isinstance(event, GenerationStartEvent):
+        return
+    if isinstance(event, (GenerationDoneEvent, GenerationErrorEvent)):
+        message.stop_reason = event.stop_reason
+        message.error_message = (
+            event.error_message if isinstance(event, GenerationErrorEvent) else None
+        )
+        message.usage = event.usage.model_copy(deep=True) if event.usage else None
+        return
+    index = event.content_index
+    if index > len(message.content):
+        raise ValueError("Generation update skips a content block")
+    if isinstance(event, GenerationToolCallEvent):
+        block = event.tool_call.model_copy(deep=True)
+        if index == len(message.content):
+            if not isinstance(event, ToolCallStartEvent):
+                raise ValueError("Tool update requires a started call")
+            message.content.append(block)
+        else:
+            if not isinstance(message.content[index], ToolCall):
+                raise ValueError("Tool update targets non-tool content")
+            message.content[index] = block
+        return
+    if index == len(message.content):
+        message.content.append(
+            ThinkingContent(text="")
+            if isinstance(event, ThinkingDeltaEvent)
+            else TextContent(text="")
+        )
+    content = message.content[index]
+    if isinstance(event, ThinkingDeltaEvent):
+        if not isinstance(content, ThinkingContent):
+            raise ValueError("Thinking update targets non-thinking content")
+        content.text += event.text
+        if event.blocks:
+            if content.blocks is None:
+                content.blocks = []
+            content.blocks.extend(block.model_copy(deep=True) for block in event.blocks)
+    else:
+        if not isinstance(content, TextContent):
+            raise ValueError("Text update targets non-text content")
+        content.text += event.text

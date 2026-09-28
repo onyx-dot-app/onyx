@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List
+from collections.abc import Generator, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, List, Protocol, runtime_checkable
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
@@ -8,21 +9,30 @@ from pydantic import BaseModel, Field, JsonValue, TypeAdapter, ValidationError
 from onyx.llm.models import (
     AnyThinkingBlock,
     AssistantMessage,
+    GenerationDoneEvent,
+    GenerationEvent,
     GenerationRequest,
     RedactedThinkingBlock,
     TextContent,
+    TextDeltaEvent,
     ThinkingBlock,
     ThinkingContent,
+    ThinkingDeltaEvent,
     ToolCall,
+    ToolCallDeltaEvent,
+    ToolCallEndEvent,
+    ToolCallStartEvent,
     ToolChoiceOptions,
     ToolDefinition,
     Usage,
+    apply_generation_event,
 )
 from onyx.llm.tool_parsing import (
     XmlToolCallContentFilter,
     extract_tool_calls_from_response_text,
     looks_like_xml_tool_call_payload,
 )
+from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -348,6 +358,11 @@ def from_litellm_model_response(
     )
 
 
+@runtime_checkable
+class Closable(Protocol):
+    def close(self) -> None: ...
+
+
 _ARGUMENTS = TypeAdapter(dict[str, JsonValue])
 _ENCODED_ARGUMENTS = TypeAdapter(dict[str, JsonValue] | str)
 _JSON_VALUE = TypeAdapter(JsonValue)
@@ -436,6 +451,270 @@ def to_assistant_message(
     if request.tools:
         message = recover_tool_calls(message, request)
     return message
+
+
+class _PendingToolCall:
+    def __init__(self, content_index: int, call: ToolCall) -> None:
+        self.content_index = content_index
+        self.call = call
+        self.arguments: str | None = ""
+        self.parser: Parser | None = Parser()
+        self.finalized = False
+
+    def update(self, delta: ChatCompletionDeltaToolCall) -> dict[str, str]:
+        self.finalized = False
+        if delta.id:
+            self.call.id = delta.id
+        if delta.function is None:
+            return {}
+        if delta.function.name:
+            self.call.name = delta.function.name
+        text = delta.function.arguments or ""
+        self.arguments = (self.arguments or "") + text
+        self.call.raw_arguments = self.arguments
+        if self.parser is None or not text:
+            return {}
+        try:
+            updates = self.parser.feed(text)
+        except ValueError:
+            # Retain invalid arguments so execution can return a paired tool error.
+            logger.debug("Tool arguments cannot be parsed incrementally", exc_info=True)
+            self.parser = None
+            return {}
+        fragments: dict[str, str] = {}
+        for update in updates:
+            if isinstance(update, dict):
+                for key, value in update.items():
+                    if isinstance(value, str):
+                        fragments[key] = fragments.get(key, "") + value
+        partial = self.parser.snapshot()
+        if isinstance(partial, dict):
+            self.call.arguments = partial
+        return fragments
+
+
+class MessageAccumulator:
+    """Maintain ordered assistant content and incremental tool arguments."""
+
+    def __init__(self, tools: Sequence[ToolDefinition] = ()) -> None:
+        self.tools = {tool.name: tool for tool in tools}
+        self.message = AssistantMessage()
+        self.calls: dict[int, _PendingToolCall] = {}
+        self.active_text: int | None = None
+
+    def _add_text(
+        self, content: TextContent | ThinkingContent
+    ) -> list[GenerationEvent]:
+        if self.active_text is None or type(
+            self.message.content[self.active_text]
+        ) is not type(content):
+            self.active_text = len(self.message.content)
+        event = (
+            ThinkingDeltaEvent(
+                content_index=self.active_text,
+                text=content.text,
+                blocks=[block.model_copy(deep=True) for block in content.blocks]
+                if content.blocks
+                else None,
+            )
+            if isinstance(content, ThinkingContent)
+            else TextDeltaEvent(content_index=self.active_text, text=content.text)
+        )
+        apply_generation_event(self.message, event)
+        return [event]
+
+    def add(self, chunk: ModelResponseStream) -> list[GenerationEvent]:
+        delta = chunk.choice.delta
+        events: list[GenerationEvent] = []
+        if delta.reasoning_content or delta.thinking_blocks:
+            events.extend(
+                self._add_text(
+                    ThinkingContent(
+                        text=delta.reasoning_content or "", blocks=delta.thinking_blocks
+                    )
+                )
+            )
+        if delta.content:
+            events.extend(self._add_text(TextContent(text=delta.content)))
+        for call in delta.tool_calls:
+            self.active_text = None
+            pending = self.calls.get(call.index)
+            if pending is None:
+                block = ToolCall(
+                    id=call.id or f"fallback_{uuid4().hex}",
+                    name=call.function.name or "" if call.function else "",
+                    arguments={},
+                    arguments_complete=False,
+                )
+                pending = _PendingToolCall(len(self.message.content), block)
+                self.calls[call.index] = pending
+                self.message.content.append(block)
+                events.append(
+                    ToolCallStartEvent(
+                        content_index=pending.content_index,
+                        tool_call=block.model_copy(deep=True),
+                    )
+                )
+            fragments = pending.update(call)
+            events.append(
+                ToolCallDeltaEvent(
+                    content_index=pending.content_index,
+                    tool_call=pending.call.model_copy(deep=True),
+                    argument_deltas=fragments,
+                )
+            )
+        if chunk.choice.finish_reason:
+            self.message.stop_reason = chunk.choice.finish_reason
+        if chunk.usage is not None:
+            self.message.usage = chunk.usage
+        return events
+
+    def _add_recovered_calls(self, calls: Sequence[ToolCall]) -> list[GenerationEvent]:
+        self.active_text = None
+        events: list[GenerationEvent] = []
+        for call in calls:
+            block = ToolCall(
+                id=call.id, name=call.name, arguments={}, arguments_complete=False
+            )
+            pending = _PendingToolCall(len(self.message.content), block)
+            # Recovery already parsed and normalized these arguments.
+            pending.arguments = None
+            self.calls[len(self.calls)] = pending
+            self.message.content.append(block)
+            events.append(
+                ToolCallStartEvent(
+                    content_index=pending.content_index,
+                    tool_call=block.model_copy(deep=True),
+                )
+            )
+            block.arguments = call.arguments.copy()
+            events.append(
+                ToolCallDeltaEvent(
+                    content_index=pending.content_index,
+                    tool_call=block.model_copy(deep=True),
+                    argument_deltas={
+                        name: value
+                        for name, value in call.arguments.items()
+                        if isinstance(value, str)
+                    },
+                )
+            )
+        return events
+
+    def consume(
+        self, stream: Iterator[ModelResponseStream], request: GenerationRequest
+    ) -> Generator[GenerationEvent, None, None]:
+        """Filter provider text and recover calls before producing shared events."""
+        ids: dict[int, str] = {}
+        buffered: list[ModelResponseStream] = []
+        recover = (
+            bool(request.tools)
+            and request.options.tool_choice != ToolChoiceOptions.NONE
+        )
+        buffering = recover
+        raw_text: list[str] = []
+        raw_thinking: list[str] = []
+        content_filter = XmlToolCallContentFilter()
+        usage: Usage | None = None
+        stop_reason: str | None = None
+
+        def add_filtered(chunk: ModelResponseStream) -> list[GenerationEvent]:
+            chunk = chunk.model_copy(deep=True)
+            for call in chunk.choice.delta.tool_calls:
+                call.id = ids.setdefault(call.index, call.id or str(uuid4()))
+            if chunk.choice.delta.content:
+                chunk.choice.delta.content = content_filter.process(
+                    chunk.choice.delta.content
+                )
+            return self.add(chunk)
+
+        try:
+            for chunk in stream:
+                delta = chunk.choice.delta
+                if delta.tool_calls:
+                    recover = False
+                    raw_text.clear()
+                    raw_thinking.clear()
+                if recover:
+                    raw_text.append(delta.content or "")
+                    raw_thinking.append(delta.reasoning_content or "")
+                if chunk.usage is not None:
+                    usage = chunk.usage
+                    self.message.usage = usage
+                if chunk.choice.finish_reason:
+                    stop_reason = chunk.choice.finish_reason
+                if not buffering:
+                    yield from add_filtered(chunk)
+                    continue
+                buffered.append(chunk)
+                text = "".join(raw_text).lstrip()
+                prose = (
+                    request.options.tool_choice != ToolChoiceOptions.REQUIRED
+                    and bool(text)
+                    and not text.startswith(("<", "`", "{"))
+                )
+                if delta.tool_calls or prose:
+                    for pending_chunk in buffered:
+                        yield from add_filtered(pending_chunk)
+                    buffered.clear()
+                    buffering = False
+
+            recovered: AssistantMessage | None = None
+            if recover and not self.calls:
+                recovered = recover_tool_calls(
+                    AssistantMessage(
+                        content=[
+                            TextContent(text="".join(raw_text)),
+                            ThinkingContent(text="".join(raw_thinking)),
+                        ]
+                    ),
+                    request,
+                )
+            for pending_chunk in buffered:
+                yield from add_filtered(pending_chunk)
+            tail = content_filter.flush()
+            if tail:
+                yield from self._add_text(TextContent(text=tail))
+            if not self.calls and recovered is not None and recovered.tool_calls:
+                yield from self._add_recovered_calls(recovered.tool_calls)
+            self.message.usage = usage
+            self.message.stop_reason = stop_reason
+        finally:
+            if isinstance(stream, Closable):
+                stream.close()
+
+    def finalize(self) -> None:
+        """Finalize owned tool arguments without making a message snapshot."""
+        for pending in self.calls.values():
+            if pending.finalized:
+                continue
+            if pending.arguments is None:
+                pending.call.arguments_complete = True
+            else:
+                _finish_tool_call(
+                    pending.call, pending.arguments, self.tools.get(pending.call.name)
+                )
+            pending.finalized = True
+
+    def end(self) -> list[GenerationEvent]:
+        self.active_text = None
+        self.finalize()
+        events: list[GenerationEvent] = [
+            ToolCallEndEvent(
+                content_index=pending.content_index,
+                tool_call=pending.call.model_copy(deep=True),
+            )
+            for pending in self.calls.values()
+        ]
+        events.append(
+            GenerationDoneEvent(
+                usage=self.message.usage.model_copy(deep=True)
+                if self.message.usage
+                else None,
+                stop_reason=self.message.stop_reason,
+            )
+        )
+        return events
 
 
 def recover_tool_calls(

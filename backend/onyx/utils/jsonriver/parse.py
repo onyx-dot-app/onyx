@@ -101,6 +101,14 @@ class _Parser:
         self._progressed = False
         self._prev_snapshot: JsonValue | _Unset = _UNSET
 
+    def snapshot(self) -> JsonValue:
+        """Return the current partial value without sharing mutable parser state."""
+        return (
+            None
+            if isinstance(self._toplevel_value, _Unset)
+            else copy.deepcopy(self._toplevel_value)
+        )
+
     def feed(self, chunk: str) -> list[JsonValue]:
         """
         Feed a chunk of JSON text and return deltas from the previous state.
