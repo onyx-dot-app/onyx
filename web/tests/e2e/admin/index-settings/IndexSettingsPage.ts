@@ -167,9 +167,12 @@ export class IndexSettingsPage {
     await contextualModelField
       .getByRole("combobox", { name: "Select model" })
       .click();
-    // The list is portalled; searching unfolds every provider group.
-    await this.page.getByRole("textbox", { name: "Search" }).fill(displayName);
-    await this.page.getByRole("option", { name: displayName }).click();
+    // The list is portalled and carries its own search box, scoped here
+    // so the page's search field is not matched; a search unfolds every
+    // provider group.
+    const listbox = this.page.getByRole("listbox", { name: "Select model" });
+    await listbox.getByRole("textbox", { name: "Search" }).fill(displayName);
+    await listbox.getByRole("option", { name: displayName }).click();
   }
 
   async expectContextualModelActions(): Promise<void> {

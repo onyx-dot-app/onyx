@@ -382,15 +382,18 @@ test.describe("LLM Provider Setup @exclusive", () => {
       const listbox = page.getByRole("listbox", { name: "Select model" });
       await listbox.waitFor({ state: "visible", timeout: 10000 });
 
-      // Search for the target model to filter the list to just its entry
-      await page.getByRole("textbox", { name: "Search" }).fill(secondModelName);
+      // Search for the target model to filter the list to just its entry.
+      // The list carries its own search box; the page has one too.
+      await listbox
+        .getByRole("textbox", { name: "Search" })
+        .fill(secondModelName);
 
       const defaultResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/admin/llm/default") &&
           response.request().method() === "POST"
       );
-      await page.getByRole("option", { name: secondModelName }).click();
+      await listbox.getByRole("option", { name: secondModelName }).click();
       await defaultResponsePromise;
 
       // Verify the default switched to the second provider
