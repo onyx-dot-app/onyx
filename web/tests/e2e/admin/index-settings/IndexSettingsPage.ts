@@ -175,6 +175,33 @@ export class IndexSettingsPage {
     await listbox.getByRole("option", { name: displayName }).click();
   }
 
+  /** Open the contextual model picker and leave it open, touching nothing. */
+  async openContextualModelPicker(): Promise<void> {
+    await this.page
+      .locator("label")
+      .filter({ hasText: "Contextual Retrieval LLM" })
+      .getByRole("combobox", { name: "Select model" })
+      .click();
+    await expect(this.modelListbox).toBeVisible();
+  }
+
+  /**
+   * The open list shows its selection without help: the selected row is on
+   * screen and, when the list is long enough to scroll, its first row is not.
+   */
+  async expectPickerOpenedOnSelection(): Promise<void> {
+    await expect(
+      this.modelListbox.getByRole("option", { selected: true })
+    ).toBeInViewport();
+    await expect(
+      this.modelListbox.getByRole("option").first()
+    ).not.toBeInViewport();
+  }
+
+  private get modelListbox(): Locator {
+    return this.page.getByRole("listbox", { name: "Select model" });
+  }
+
   async expectContextualModelActions(): Promise<void> {
     await expect(this.applyContextualModelForwardButton).toBeVisible();
     await expect(this.rebuildExistingDocumentsButton).toBeVisible();

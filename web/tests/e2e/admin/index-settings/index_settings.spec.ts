@@ -304,6 +304,71 @@ test.describe("Index Settings — contextual LLM updates @exclusive", () => {
     await loginAs(page, "admin");
   });
 
+  test("opens the contextual model picker on its selection", async ({
+    page,
+  }) => {
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const llmProviderResponse = await getLlmProviderResponse(page);
+    const models = getVisibleLlmModels(llmProviderResponse);
+    test.skip(models.length === 0, "A visible LLM model is required");
+
+    // Enough rows to overflow the listbox, with the selection at the end,
+    // so an open that fails to centre leaves it out of view.
+    const baseModel = models[0]!;
+    const longTail: TestModelConfiguration[] = Array.from(
+      { length: 40 },
+      (_, i) => ({
+        ...baseModel,
+        id: baseModel.id! + 3000000 + i,
+        name: `scroll-test-model-${i}`,
+        custom_display_name: `Scroll test model ${i}`,
+      })
+    );
+    const selected = longTail[longTail.length - 1]!;
+    const mockedLlmProviderResponse: TestLlmProviderResponse = {
+      ...llmProviderResponse,
+      providers: llmProviderResponse.providers.map((provider, index) =>
+        index === 0
+          ? {
+              ...provider,
+              model_configurations: [
+                ...provider.model_configurations,
+                ...longTail,
+              ],
+            }
+          : provider
+      ),
+    };
+    const servedSettings: TestSearchSettings = {
+      ...current,
+      enable_contextual_rag: true,
+      contextual_rag_model_configuration_id: selected.id,
+    };
+
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    await page.route(LLM_PROVIDER_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(mockedLlmProviderResponse),
+      });
+    });
+
+    const indexSettingsPage = new IndexSettingsPage(page);
+    await indexSettingsPage.goto();
+    await indexSettingsPage.openContextualModelPicker();
+    await indexSettingsPage.expectPickerOpenedOnSelection();
+  });
+
   test("applies a contextual LLM only to new and updated documents", async ({
     page,
   }) => {
