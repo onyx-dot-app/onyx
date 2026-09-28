@@ -9,6 +9,11 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import KV_CRED_KEY, DocumentSource
+from onyx.connectors.credential_families import (
+    stored_credential_family,
+    to_source_credential_json,
+)
+from onyx.connectors.credential_family_base import CredentialFamily
 from onyx.connectors.google_utils.resources import get_drive_service, get_gmail_service
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
@@ -16,6 +21,7 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    GOOGLE_FAMILY_SCOPES,
     GOOGLE_SCOPES,
     MISSING_SCOPES_ERROR_STR,
     ONYX_SCOPE_INSTRUCTIONS,
@@ -140,10 +146,10 @@ def update_credential_access_tokens(
     source: DocumentSource,
     auth_method: GoogleOAuthAuthenticationMethod,
 ) -> OAuthCredentials | None:
-    app_credentials = _app_cred_on_row(credential_id, user, db_session)
+    app_credentials = _app_cred_on_row(credential_id, source, user, db_session)
     flow = InstalledAppFlow.from_client_config(
         app_credentials,
-        scopes=GOOGLE_SCOPES[source],
+        scopes=_consent_scopes(credential_id, source, user, db_session),
         redirect_uri=_build_frontend_google_drive_redirect(source),
     )
     # PKCE: the token exchange runs in a separate request from get_auth_url,
@@ -152,6 +158,11 @@ def update_credential_access_tokens(
     code_verifier = kv_payload.get("code_verifier")
     if isinstance(code_verifier, str):
         flow.code_verifier = code_verifier
+    # Accept the scopes the user granted: Google's consent screen lets them
+    # untick some, e.g. to use a shared credential for Drive only. Without this,
+    # oauthlib fails the exchange on any scope change; missing scopes surface in
+    # capability checks instead.
+    flow.oauth2session.scope = None
     flow.fetch_token(code=auth_code)
     creds = flow.credentials
     token_json_str = creds.to_json()
@@ -211,6 +222,7 @@ def build_service_account_creds(
 
 def _app_cred_on_row(
     credential_id: int,
+    source: DocumentSource,
     user: User,
     db_session: Session,
 ) -> dict[str, Any]:
@@ -219,10 +231,13 @@ def _app_cred_on_row(
     credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
     if credential is None:
         raise ValueError(f"Credential {credential_id} not found")
-    existing_json = (
-        credential.credential_json.get_value(apply_mask=False)
-        if credential.credential_json
-        else {}
+    existing_json = to_source_credential_json(
+        source,
+        (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        ),
     )
     existing = existing_json.get(DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY)
     if existing is not None:
@@ -263,16 +278,35 @@ def _app_cred_on_row(
     return reconstructed
 
 
+def _consent_scopes(
+    credential_id: int,
+    source: DocumentSource,
+    user: User,
+    db_session: Session,
+) -> list[str]:
+    """The scopes to request. The auth URL and the token exchange must agree, or
+    the exchange fails on a scope change."""
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    stored_json = (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential and credential.credential_json
+        else {}
+    )
+    if stored_credential_family(stored_json) == CredentialFamily.GOOGLE:
+        return GOOGLE_FAMILY_SCOPES
+    return GOOGLE_SCOPES[source]
+
+
 def get_auth_url(
     credential_id: int,
     source: DocumentSource,
     user: User,
     db_session: Session,
 ) -> str:
-    credential_json = _app_cred_on_row(credential_id, user, db_session)
+    credential_json = _app_cred_on_row(credential_id, source, user, db_session)
     flow = InstalledAppFlow.from_client_config(
         credential_json,
-        scopes=GOOGLE_SCOPES[source],
+        scopes=_consent_scopes(credential_id, source, user, db_session),
         redirect_uri=_build_frontend_google_drive_redirect(source),
     )
     auth_url, _ = flow.authorization_url(prompt="consent")

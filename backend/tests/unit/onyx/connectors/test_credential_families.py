@@ -138,3 +138,29 @@ def test_invalid_family_source_credential_is_rejected_without_its_values() -> No
 
     assert "jira_api_token" in str(exc_info.value)
     assert "secret@example.com" not in str(exc_info.value)
+
+
+def test_gmail_service_account_credential_is_usable_by_google_drive() -> None:
+    gmail_json = {
+        "google_service_account_key": '{"type": "service_account"}',
+        "google_primary_admin": "admin@example.com",
+        "authentication_method": "uploaded",
+    }
+
+    stored = to_stored_credential_json(DocumentSource.GMAIL, gmail_json, None)
+
+    # Absent keys stay absent: the Google auth helpers branch on key presence.
+    assert to_source_credential_json(DocumentSource.GOOGLE_DRIVE, stored) == gmail_json
+    assert is_credential_usable_for_source(
+        DocumentSource.GMAIL, stored, DocumentSource.GOOGLE_DRIVE
+    )
+
+
+def test_unknown_google_credential_keys_are_kept() -> None:
+    source_json = {"client_id": "id", "client_secret": "secret"}
+
+    stored = to_stored_credential_json(DocumentSource.GMAIL, source_json, None)
+
+    assert to_source_credential_json(DocumentSource.GOOGLE_DRIVE, stored) == (
+        source_json
+    )

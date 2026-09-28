@@ -1,5 +1,5 @@
-"""A credential created for Confluence is offered to Jira connectors, shown in
-Jira's keys."""
+"""A credential created for one source of a family is offered to the family's
+other sources, shown in their keys."""
 
 from typing import Any
 
@@ -49,3 +49,30 @@ def test_confluence_credential_is_listed_for_jira(admin_user: DATestUser) -> Non
     assert listed["source"] == DocumentSource.CONFLUENCE.value
     assert set(listed["credential_json"]) == {"jira_user_email", "jira_api_token"}
     assert listed["usages"] == []
+
+
+def test_gmail_credential_is_listed_for_google_drive(admin_user: DATestUser) -> None:
+    # Precondition.
+    gmail_credential = CredentialManager.create(
+        user_performing_action=admin_user,
+        source=DocumentSource.GMAIL,
+        credential_json={
+            "google_service_account_key": '{"type": "service_account"}',
+            "google_primary_admin": "admin@example.com",
+            "authentication_method": "uploaded",
+        },
+    )
+
+    # Under test.
+    drive_credentials = {
+        credential["id"]: credential
+        for credential in _similar_credentials(DocumentSource.GOOGLE_DRIVE, admin_user)
+    }
+
+    # Postcondition.
+    listed = drive_credentials[gmail_credential.id]
+    assert set(listed["credential_json"]) == {
+        "google_service_account_key",
+        "google_primary_admin",
+        "authentication_method",
+    }
