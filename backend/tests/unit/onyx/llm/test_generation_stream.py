@@ -978,3 +978,38 @@ def test_unnamed_native_call_does_not_suppress_text_recovery(streaming: bool) ->
     assert result.text == payload
     assert [call.name for call in result.tool_calls] == ["search"]
     assert result.tool_calls[0].arguments == {"query": "onyx"}
+
+
+def test_split_surrogate_pair_in_tool_arguments_streams_one_character() -> None:
+    accumulator = MessageAccumulator()
+    fragments = ['{"text": "hi \\ud83d', '\\ude00"}']
+    events = [
+        event
+        for index, fragment in enumerate(fragments)
+        for event in accumulator.add(
+            _stream_chunk(
+                Delta(
+                    tool_calls=[
+                        ChatCompletionDeltaToolCall(
+                            index=0,
+                            id="call" if index == 0 else None,
+                            function=ResponseFunctionCall(
+                                name="write" if index == 0 else None,
+                                arguments=fragment,
+                            ),
+                        )
+                    ]
+                )
+            )
+        )
+    ]
+    events.extend(accumulator.end())
+
+    texts = [
+        event.argument_deltas.get("text", "")
+        for event in events
+        if isinstance(event, GenerationToolCallEvent)
+    ]
+    assert "".join(texts) == "hi 😀"
+    assert all("\ud83d" not in text for text in texts)
+    assert collect_generation(events).tool_calls[0].arguments == {"text": "hi 😀"}

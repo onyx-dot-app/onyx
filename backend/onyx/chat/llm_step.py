@@ -67,9 +67,9 @@ from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
 from onyx.tracing.llm_utils import build_llm_model_config
 from onyx.utils.b64 import get_image_type_from_bytes
-from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
+from onyx.utils.streaming_json import StreamingJsonParser
 
 logger = setup_logger()
 
@@ -816,7 +816,7 @@ def run_llm_step_pkt_generator(
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
-    arg_parsers: dict[int, Parser] = {}
+    arg_parsers: dict[int, StreamingJsonParser | None] = {}
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""

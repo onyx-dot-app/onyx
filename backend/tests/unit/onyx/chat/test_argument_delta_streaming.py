@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import ToolCallArgumentDelta
-from onyx.utils.jsonriver import Parser
+from onyx.utils.streaming_json import StreamingJsonParser
 
 
 def _make_tool_call_delta(
@@ -39,7 +39,7 @@ def _collect(
     tc_map: dict[int, dict[str, Any]],
     delta: MagicMock,
     placement: Placement | None = None,
-    parsers: dict[int, Parser] | None = None,
+    parsers: dict[int, StreamingJsonParser | None] | None = None,
 ) -> list[Any]:
     """Run maybe_emit_argument_delta and return the yielded packets."""
     return list(
@@ -60,7 +60,7 @@ def _stream_fragments(
     """Feed fragments into maybe_emit_argument_delta one by one, returning
     all emitted content values concatenated per-key as a flat list."""
     pl = placement or _make_placement()
-    parsers: dict[int, Parser] = {}
+    parsers: dict[int, StreamingJsonParser | None] = {}
     emitted: list[str] = []
     for frag in fragments:
         tc_map[0]["arguments"] += frag
@@ -145,7 +145,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         fragments = ['{"code": "', "print(1)", '"}']
 
         pl = _make_placement()
-        parsers: dict[int, Parser] = {}
+        parsers: dict[int, StreamingJsonParser | None] = {}
         all_packets = []
         for frag in fragments:
             tc_map[0]["arguments"] += frag
@@ -177,7 +177,7 @@ class TestMaybeEmitArgumentDeltaBasic:
         tc_map: dict[int, dict[str, Any]] = {
             0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
-        parsers: dict[int, Parser] = {}
+        parsers: dict[int, StreamingJsonParser | None] = {}
         pl = _make_placement()
 
         # First fragment opens the string
@@ -530,7 +530,7 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
             1: {"id": "tc_2", "name": "run_python", "arguments": ""},
         }
 
-        parsers: dict[int, Parser] = {}
+        parsers: dict[int, StreamingJsonParser | None] = {}
         pl = _make_placement()
 
         # Feed full JSON to index 0
@@ -571,7 +571,7 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
             0: {"id": "tc_1", "name": "run_python", "arguments": ""}
         }
         tc_map[0]["arguments"] = full
-        parsers: dict[int, Parser] = {}
+        parsers: dict[int, StreamingJsonParser | None] = {}
         packets = _collect(
             tc_map, _make_tool_call_delta(arguments=full), parsers=parsers
         )
@@ -626,3 +626,46 @@ class TestMaybeEmitArgumentDeltaEdgeCases:
         emitted = _stream_fragments(fragments, tc_map)
         full = "".join(emitted)
         assert full == "hello"
+
+
+class TestArgumentDeltaParsing:
+    """Streamed arguments decode like a complete parse, and bad JSON is contained."""
+
+    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
+    def test_split_surrogate_pair_arrives_as_one_character(
+        self, mock_get_tool: MagicMock
+    ) -> None:
+        mock_get_tool.return_value = _mock_tool_class()
+        tc_map: dict[int, dict[str, Any]] = {
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
+        }
+
+        emitted = _stream_fragments(['{"code": "x = \\ud83d', '\\ude00"}'], tc_map)
+
+        assert "".join(emitted) == "x = 😀"
+
+    @patch("onyx.chat.tool_call_args_streaming._get_tool_class")
+    def test_invalid_arguments_stop_deltas_without_raising(
+        self, mock_get_tool: MagicMock
+    ) -> None:
+        mock_get_tool.return_value = _mock_tool_class()
+        tc_map: dict[int, dict[str, Any]] = {
+            0: {"id": "tc_1", "name": "run_python", "arguments": ""}
+        }
+        parsers: dict[int, StreamingJsonParser | None] = {}
+
+        first = _collect(
+            tc_map, _make_tool_call_delta(arguments='{"code": "a'), parsers=parsers
+        )
+        # A raw newline inside a JSON string is invalid.
+        invalid = _collect(
+            tc_map, _make_tool_call_delta(arguments="\nb"), parsers=parsers
+        )
+        later = _collect(
+            tc_map, _make_tool_call_delta(arguments='c"}'), parsers=parsers
+        )
+
+        assert len(first) == 1
+        assert invalid == []
+        assert later == []
+        assert parsers[0] is None
