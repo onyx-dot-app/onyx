@@ -30,6 +30,10 @@ import { InputSwitch } from "@opal/components";
 
 All other `<button>` attributes (except `style`, `className`, `onChange`, and `type` — the switch is always `type="button"`) are forwarded.
 
+## Layout
+
+The `<button>` is the track, 32×18px. A wrapping `<div>` pads it by 1px vertically and 2px horizontally, as in the design mocks, so the rendered footprint is 36×20px.
+
 ## Visual States
 
 | State        | Track color             | Thumb color                   |

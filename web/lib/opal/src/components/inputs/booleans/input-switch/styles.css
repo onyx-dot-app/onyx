@@ -1,3 +1,9 @@
+.opal-switch {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 1px 2px;
+}
+
 .switch-normal {
   background-color: var(--background-tint-03);
   border: 1px solid transparent;
