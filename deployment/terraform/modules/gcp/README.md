@@ -9,8 +9,10 @@ The `onyx` composition has been applied to a live project, and the Onyx Helm
 chart runs on it: GKE, Cloud SQL, Memorystore with TLS, and the GCS file store
 through Workload Identity. The Cloud Armor policy attaches only through the
 opt-in L7 load balancer. See [Serving through an L7 load balancer (Cloud
-Armor)](#serving-through-an-l7-load-balancer-cloud-armor). No live apply has
-tested that path yet.
+Armor)](#serving-through-an-l7-load-balancer-cloud-armor). That path has been
+applied to a live project too: the certificate issued through the DNS
+authorization, and Cloud Armor blocked SQL injection, XSS and path traversal
+probes.
 
 ## Overview
 
