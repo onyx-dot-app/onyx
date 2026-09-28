@@ -2027,9 +2027,6 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
-# Set to true to mock LLM responses for testing purposes
-MOCK_LLM_RESPONSE = os.environ.get("MOCK_LLM_RESPONSE") or None
-
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 
