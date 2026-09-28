@@ -79,6 +79,7 @@ function MultiDropdown(props: MultiDropdownProps) {
     dropdownRef,
     setFloatingRef,
     floatingStyles,
+    isPositioned,
   } = useSelectOverlay();
 
   // A button trigger has no input: its combobox element takes the focus.
@@ -297,6 +298,7 @@ function MultiDropdown(props: MultiDropdownProps) {
         isOpen={isOpen}
         disabled={disabled}
         floatingStyles={floatingStyles}
+        isPositioned={isPositioned}
         setFloatingRef={setFloatingRef}
         fieldId={fieldId}
         placeholder={placeholder ?? ""}

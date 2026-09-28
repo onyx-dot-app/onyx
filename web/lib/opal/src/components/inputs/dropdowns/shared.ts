@@ -26,7 +26,10 @@ export interface OptionGroup {
   options: SelectOption[];
   /** The rows fold behind the title (see `SelectDivider`). */
   foldable?: boolean;
-  /** Render-only: the group is folded, so its rows are withheld. */
+  /**
+   * Render-only: the group is folded. Its rows stay in the list so the
+   * fold can animate closed, but they leave the keyboard walk.
+   */
   folded?: boolean;
 }
 
@@ -78,6 +81,7 @@ export function buildNavItems(
     if (group.foldable && group.title !== undefined) {
       items.push({ kind: "group", group });
     }
+    if (group.folded) continue;
     for (const option of group.options) items.push({ kind: "option", option });
   }
   return items;
@@ -181,7 +185,7 @@ export function useFoldedGroups({
   const foldedSections = useMemo(
     () =>
       sections.map((group) =>
-        isGroupOpen(group) ? group : { ...group, options: [], folded: true }
+        isGroupOpen(group) ? group : { ...group, folded: true }
       ),
     [sections, isGroupOpen]
   );
@@ -366,21 +370,21 @@ export function useSelectOverlay() {
     }
   }, [isOpen]);
 
-  const { refs, floatingStyles } = useFloating({
+  const { refs, floatingStyles, isPositioned } = useFloating({
     open: isOpen,
     placement: "bottom-start",
     middleware: [
-      // 4px wider on each side than the trigger, shifted start-ward by 4px:
-      // with the dropdown's 4px inset, the rows' bounding boxes then align
-      // flush with the trigger's edges. crossAxis is direction-aware, so
-      // RTL mirrors correctly.
-      offset({ mainAxis: 4, crossAxis: -4 }),
+      // 6px wider on each side than the trigger, shifted start-ward by 6px:
+      // with the dropdown's 4px inset and its 1px border, the rows' bounding
+      // boxes then align flush with the trigger's content, inside its own
+      // border. crossAxis is direction-aware, so RTL mirrors correctly.
+      offset({ mainAxis: 4, crossAxis: -6 }),
       flip(),
       shift({ padding: 8 }),
       size({
         apply({ rects, elements }) {
           Object.assign(elements.floating.style, {
-            width: `${rects.reference.width + 8}px`,
+            width: `${rects.reference.width + 12}px`,
           });
         },
       }),
@@ -426,5 +430,6 @@ export function useSelectOverlay() {
     dropdownRef,
     setFloatingRef: refs.setFloating,
     floatingStyles,
+    isPositioned,
   };
 }

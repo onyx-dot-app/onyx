@@ -107,6 +107,7 @@ function SingleDropdown({
     dropdownRef,
     setFloatingRef,
     floatingStyles,
+    isPositioned,
   } = useSelectOverlay();
   const fieldContext = useContext(FieldContext);
 
@@ -554,6 +555,7 @@ function SingleDropdown({
           isOpen={isOpen}
           disabled={disabled}
           floatingStyles={floatingStyles}
+          isPositioned={isPositioned}
           setFloatingRef={setFloatingRef}
           fieldId={fieldId}
           placeholder={placeholder ?? ""}
