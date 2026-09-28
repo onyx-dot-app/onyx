@@ -3,11 +3,11 @@ from enum import Enum
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaItem
-from onyx.connectors.microsoft_utils.graph_env import (
+from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
+from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaItem
 from onyx.connectors.models import ConnectorCheckpoint
 
 

@@ -39,6 +39,11 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
+from onyx.connectors.microsoft_utils.config import (
+    DEFAULT_AUTHORITY_HOST,
+    DEFAULT_GRAPH_API_HOST,
+    DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
+)
 from onyx.connectors.microsoft_utils.drive_delta import (
     build_delta_start_url,
     fetch_drive_delta_checkpoint_page,
@@ -75,12 +80,7 @@ from onyx.connectors.microsoft_utils.graph_client import (
     graph_error_code,
     is_permanent_refusal,
 )
-from onyx.connectors.microsoft_utils.graph_env import (
-    DEFAULT_AUTHORITY_HOST,
-    DEFAULT_GRAPH_API_HOST,
-    DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
-    resolve_microsoft_environment,
-)
+from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,

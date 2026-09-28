@@ -10,16 +10,16 @@ from urllib.parse import quote
 import requests
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
+from onyx.connectors.microsoft_utils.config import (
+    DEFAULT_AUTHORITY_HOST,
+    DEFAULT_GRAPH_API_HOST,
+)
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
     acquire_graph_token,
     build_msal_app,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
-from onyx.connectors.microsoft_utils.graph_env import (
-    DEFAULT_AUTHORITY_HOST,
-    DEFAULT_GRAPH_API_HOST,
-)
 from tests.utils.aws_secrets import get_secrets
 from tests.utils.secret_names import TestSecret
 
