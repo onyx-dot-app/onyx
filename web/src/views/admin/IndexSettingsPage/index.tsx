@@ -1536,8 +1536,14 @@ export default function IndexSettingsPage() {
                     (!NEXT_PUBLIC_CLOUD_ENABLED || imageOnlyChange) && (
                       // Active (staged or blocked), the banner pins to the top
                       // so its actions stay in reach while the page scrolls.
+                      // The 8px above it is painted with the page background
+                      // so content does not scroll through the gap, and the
+                      // negative margin keeps the banner where it sat at rest.
                       <div
-                        className={cn(bannerActive && "sticky top-0 z-banner")}
+                        className={cn(
+                          bannerActive &&
+                            "sticky top-0 z-sticky-banner -mt-2 bg-background-tint-01 pt-2"
+                        )}
                       >
                         <MessageCard
                           variant={bannerVariant}
