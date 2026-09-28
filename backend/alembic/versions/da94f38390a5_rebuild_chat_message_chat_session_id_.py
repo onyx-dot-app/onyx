@@ -72,9 +72,12 @@ def repair_index(conn: sa.engine.Connection, schema: str) -> None:
 
 def upgrade() -> None:
     bind = op.get_bind()
-    schema = CURRENT_TENANT_ID_CONTEXTVAR.get()
-    if schema is None:
-        raise RuntimeError("env.py did not set the tenant schema for this run")
+    # env.py sets the contextvar per schema. pytest-alembic drives env.py with
+    # its own connection and no contextvar, so fall back to that connection.
+    schema = (
+        CURRENT_TENANT_ID_CONTEXTVAR.get()
+        or bind.execute(sa.select(sa.func.current_schema())).scalar_one()
+    )
     # Also required so CONCURRENTLY does not wait forever on our own snapshot.
     bind.commit()
 
