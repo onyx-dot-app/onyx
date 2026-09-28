@@ -45,7 +45,7 @@ from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
-from onyx.llm.tool_parsing import _looks_like_xml_tool_call_payload
+from onyx.llm.tool_parsing import looks_like_xml_tool_call_payload
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
@@ -243,9 +243,9 @@ def _try_fallback_tool_extraction(
         llm_step_result.reasoning and not llm_step_result.answer and no_tool_calls
     )
     xml_tool_call_text_detected = no_tool_calls and (
-        _looks_like_xml_tool_call_payload(llm_step_result.answer)
-        or _looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
-        or _looks_like_xml_tool_call_payload(llm_step_result.reasoning)
+        looks_like_xml_tool_call_payload(llm_step_result.answer)
+        or looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
+        or looks_like_xml_tool_call_payload(llm_step_result.reasoning)
     )
     should_try_fallback = (
         (tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls)

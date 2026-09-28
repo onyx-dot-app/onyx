@@ -19,6 +19,7 @@ from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
+from onyx.llm import tool_parsing
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM, LLMConfig, LLMUserIdentity
 from onyx.llm.model_capabilities import model_needs_formatting_reenabled
@@ -39,17 +40,13 @@ from onyx.llm.models import (
     ReasoningEffort,
     TextContentPart,
     ToolChoiceOptions,
+    ToolDefinition,
 )
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.tool_parsing import (
-    _XML_INVOKE_BLOCK_RE,
-    _XML_PARAMETER_RE,
     XmlToolCallContentFilter,
-    _extract_xml_attribute,
-    _looks_like_xml_tool_call_payload,
-    _parse_xml_parameter_value,
-    _resolve_tool_arguments,
+    looks_like_xml_tool_call_payload,
 )
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER, NON_VISION_IMAGE_MARKER
@@ -73,7 +70,6 @@ from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
-from onyx.utils.text_processing import find_all_json_objects
 
 logger = setup_logger()
 
@@ -309,234 +305,47 @@ def extract_tool_calls_from_response_text(
     tool_definitions: list[dict],
     placement: Placement,
 ) -> list[ToolCallKickoff]:
-    """Extract tool calls from LLM response text by matching JSON against tool definitions.
+    """Recover tool calls that the model wrote as text instead of native calls.
 
-    This is a fallback mechanism for when the LLM was expected to return tool calls
-    but didn't use the proper tool call format. It searches for tool calls embedded
-    in response text (JSON first, then XML-like invoke blocks) that match available
-    tool definitions.
-
-    Args:
-        response_text: The LLM's text response to search for tool calls
-        tool_definitions: List of tool definitions to match against
-        placement: Placement information for the tool calls
-
-    Returns:
-        List of ToolCallKickoff objects for any matched tool calls
+    Adapts the chat loop's function-tool dicts and placement to the shared
+    parser in ``onyx.llm.tool_parsing``.
     """
-    if not response_text or not tool_definitions:
+    definitions = [
+        ToolDefinition(
+            name=function["name"],
+            description=function.get("description") or "",
+            parameters=function.get("parameters") or {},
+        )
+        for tool_def in tool_definitions
+        if tool_def.get("type") == "function"
+        and isinstance(function := tool_def.get("function"), dict)
+        and function.get("name")
+    ]
+    if not response_text or not definitions:
         return []
 
-    # Build a map of tool names to their definitions
-    tool_name_to_def: dict[str, dict] = {}
-    for tool_def in tool_definitions:
-        if tool_def.get("type") == "function" and "function" in tool_def:
-            func_def = tool_def["function"]
-            tool_name = func_def.get("name")
-            if tool_name:
-                tool_name_to_def[tool_name] = func_def
-
-    if not tool_name_to_def:
-        return []
-
-    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
-    # Find all JSON objects in the response text
-    json_objects = find_all_json_objects(response_text)
-    prev_json_obj: dict[str, Any] | None = None
-    prev_tool_call: tuple[str, dict[str, Any]] | None = None
-
-    for json_obj in json_objects:
-        matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
-        if not matched_tool_call:
-            continue
-
-        # `find_all_json_objects` can return both an outer tool-call object and
-        # its nested arguments object. If both resolve to the same tool call,
-        # drop only this nested duplicate artifact.
-        if (
-            prev_json_obj is not None
-            and prev_tool_call is not None
-            and matched_tool_call == prev_tool_call
-            and _is_nested_arguments_duplicate(
-                previous_json_obj=prev_json_obj,
-                current_json_obj=json_obj,
-                tool_name_to_def=tool_name_to_def,
-            )
-        ):
-            continue
-
-        matched_tool_calls.append(matched_tool_call)
-        prev_json_obj = json_obj
-        prev_tool_call = matched_tool_call
-
-    # Some providers/models emit XML-style function calls instead of JSON objects.
-    # Keep this as a fallback behind JSON extraction to preserve current behavior.
-    if not matched_tool_calls:
-        matched_tool_calls = _extract_xml_tool_calls_from_response_text(
-            response_text=response_text,
-            tool_name_to_def=tool_name_to_def,
+    tool_calls = [
+        ToolCallKickoff(
+            tool_call_id=call.id,
+            tool_name=call.name,
+            tool_args=call.arguments,
+            placement=Placement(
+                turn_index=placement.turn_index,
+                tab_index=tab_index,
+                sub_turn_index=placement.sub_turn_index,
+            ),
         )
-
-    tool_calls: list[ToolCallKickoff] = []
-    for tab_index, (tool_name, tool_args) in enumerate(matched_tool_calls):
-        tool_calls.append(
-            ToolCallKickoff(
-                tool_call_id=f"extracted_{uuid.uuid4().hex[:8]}",
-                tool_name=tool_name,
-                tool_args=tool_args,
-                placement=Placement(
-                    turn_index=placement.turn_index,
-                    tab_index=tab_index,
-                    sub_turn_index=placement.sub_turn_index,
-                ),
+        for tab_index, call in enumerate(
+            tool_parsing.extract_tool_calls_from_response_text(
+                response_text, definitions
             )
         )
-
+    ]
     logger.info(
         "Extracted %s tool call(s) from response text as fallback",
         len(tool_calls),
     )
-
     return tool_calls
-
-
-def _extract_xml_tool_calls_from_response_text(
-    response_text: str,
-    tool_name_to_def: dict[str, dict],
-) -> list[tuple[str, dict[str, Any]]]:
-    """Extract XML-style tool calls from response text.
-
-    Supports formats such as:
-    <function_calls>
-      <invoke name="internal_search">
-        <parameter name="queries" string="false">["foo"]</parameter>
-      </invoke>
-    </function_calls>
-    """
-    matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
-
-    for invoke_match in _XML_INVOKE_BLOCK_RE.finditer(response_text):
-        invoke_attrs = invoke_match.group("attrs")
-        tool_name = _extract_xml_attribute(invoke_attrs, "name")
-        if not tool_name or tool_name not in tool_name_to_def:
-            continue
-
-        tool_args: dict[str, Any] = {}
-        invoke_body = invoke_match.group("body")
-        for parameter_match in _XML_PARAMETER_RE.finditer(invoke_body):
-            parameter_attrs = parameter_match.group("attrs")
-            parameter_name = _extract_xml_attribute(parameter_attrs, "name")
-            if not parameter_name:
-                continue
-
-            string_attr = _extract_xml_attribute(parameter_attrs, "string")
-            tool_args[parameter_name] = _parse_xml_parameter_value(
-                raw_value=parameter_match.group("value"),
-                string_attr=string_attr,
-            )
-
-        matched_tool_calls.append((tool_name, tool_args))
-
-    return matched_tool_calls
-
-
-def _try_match_json_to_tool(
-    json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, dict],
-) -> tuple[str, dict[str, Any]] | None:
-    """Try to match a JSON object to a tool definition.
-
-    Supports several formats:
-    1. Direct tool call format: {"name": "tool_name", "arguments": {...}}
-    2. Function call format: {"function": {"name": "tool_name", "arguments": {...}}}
-    3. Tool name as key: {"tool_name": {...arguments...}}
-    4. Arguments matching a tool's parameter schema
-
-    Args:
-        json_obj: The JSON object to match
-        tool_name_to_def: Map of tool names to their function definitions
-
-    Returns:
-        Tuple of (tool_name, tool_args) if matched, None otherwise
-    """
-    # Format 1: Direct tool call format {"name": "...", "arguments": {...}}
-    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
-        tool_name = json_obj["name"]
-        arguments = _resolve_tool_arguments(json_obj)
-        if arguments is not None:
-            return (tool_name, arguments)
-
-    # Format 2: Function call format {"function": {"name": "...", "arguments": {...}}}
-    if "function" in json_obj and isinstance(json_obj["function"], dict):
-        func_obj = json_obj["function"]
-        if "name" in func_obj and func_obj["name"] in tool_name_to_def:
-            tool_name = func_obj["name"]
-            arguments = _resolve_tool_arguments(func_obj)
-            if arguments is not None:
-                return (tool_name, arguments)
-
-    # Format 3: Tool name as key {"tool_name": {...arguments...}}
-    for tool_name in tool_name_to_def:
-        if tool_name in json_obj:
-            arguments = json_obj[tool_name]
-            if isinstance(arguments, dict):
-                return (tool_name, arguments)
-
-    # Format 4: Check if the JSON object matches a tool's parameter schema
-    for tool_name, func_def in tool_name_to_def.items():
-        params = func_def.get("parameters", {})
-        properties = params.get("properties", {})
-        required = params.get("required", [])
-
-        if not properties:
-            continue
-
-        # Check if all required parameters are present (empty required = all optional)
-        if all(req in json_obj for req in required):
-            # Check if any of the tool's properties are in the JSON object
-            matching_props = [prop for prop in properties if prop in json_obj]
-            if matching_props:
-                # Filter to only include known properties
-                filtered_args = {k: v for k, v in json_obj.items() if k in properties}
-                return (tool_name, filtered_args)
-
-    return None
-
-
-def _is_nested_arguments_duplicate(
-    previous_json_obj: dict[str, Any],
-    current_json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, dict],
-) -> bool:
-    """Detect when current object is the nested args object from previous tool call."""
-    extracted_args = _extract_nested_arguments_obj(previous_json_obj, tool_name_to_def)
-    return extracted_args is not None and current_json_obj == extracted_args
-
-
-def _extract_nested_arguments_obj(
-    json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, dict],
-) -> dict[str, Any] | None:
-    # Format 1: {"name": "...", "arguments": {...}} or {"name": "...", "parameters": {...}}
-    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
-        args_obj = json_obj.get("arguments", json_obj.get("parameters"))
-        if isinstance(args_obj, dict):
-            return args_obj
-
-    # Format 2: {"function": {"name": "...", "arguments": {...}}}
-    if "function" in json_obj and isinstance(json_obj["function"], dict):
-        function_obj = json_obj["function"]
-        if "name" in function_obj and function_obj["name"] in tool_name_to_def:
-            args_obj = function_obj.get("arguments", function_obj.get("parameters"))
-            if isinstance(args_obj, dict):
-                return args_obj
-
-    # Format 3: {"tool_name": {...arguments...}}
-    for tool_name in tool_name_to_def:
-        if tool_name in json_obj and isinstance(json_obj[tool_name], dict):
-            return json_obj[tool_name]
-
-    return None
 
 
 def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMessage:
@@ -1312,7 +1121,7 @@ def run_llm_step_pkt_generator(
             and not tool_calls
             and not accumulated_answer.strip()
             and accumulated_raw_answer.strip()
-            and not _looks_like_xml_tool_call_payload(accumulated_raw_answer)
+            and not looks_like_xml_tool_call_payload(accumulated_raw_answer)
         ):
             logger.warning(
                 "Answer empty after content/citation processing; recovering raw "
