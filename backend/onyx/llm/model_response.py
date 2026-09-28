@@ -32,9 +32,9 @@ from onyx.llm.tool_parsing import (
     extract_tool_calls_from_response_text,
     looks_like_xml_tool_call_payload,
 )
-from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
+from onyx.utils.streaming_json import appended_text, parse_partial_object
 
 logger = setup_logger()
 
@@ -481,7 +481,7 @@ class _PendingToolCall:
         self.content_index = content_index
         self.call = call
         self.arguments: str | None = ""
-        self.parser: Parser | None = Parser()
+        self.streaming = True
         self.finalized = False
 
     def update(self, delta: ChatCompletionDeltaToolCall) -> dict[str, str]:
@@ -495,24 +495,17 @@ class _PendingToolCall:
         text = delta.function.arguments or ""
         self.arguments = (self.arguments or "") + text
         self.call.raw_arguments = self.arguments
-        if self.parser is None or not text:
+        if not self.streaming or not text:
             return {}
         try:
-            updates = self.parser.feed(text)
+            current = parse_partial_object(self.arguments)
         except ValueError:
             # Retain invalid arguments so execution can return a paired tool error.
             logger.debug("Tool arguments cannot be parsed incrementally", exc_info=True)
-            self.parser = None
+            self.streaming = False
             return {}
-        fragments: dict[str, str] = {}
-        for update in updates:
-            if isinstance(update, dict):
-                for key, value in update.items():
-                    if isinstance(value, str):
-                        fragments[key] = fragments.get(key, "") + value
-        partial = self.parser.snapshot()
-        if isinstance(partial, dict):
-            self.call.arguments = partial
+        fragments = appended_text(self.call.arguments, current)
+        self.call.arguments = current
         return fragments
 
 

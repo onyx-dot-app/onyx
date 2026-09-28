@@ -414,7 +414,6 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/tools/tool_constructor.py" = ["C901"] # 40
 "backend/onyx/tools/tool_implementations/search/search_tool.py" = ["C901"] # 25
 "backend/onyx/tools/tool_runner.py" = ["C901"] # 21
-"backend/onyx/utils/jsonriver/tokenize.py" = ["C901"] # 22
 "backend/onyx/voice/providers/elevenlabs.py" = ["C901"] # 21
 "backend/scripts/rotate_llm_provider_keys.py" = ["C901"] # 25
 "backend/scripts/tenant_cleanup/cleanup_tenants.py" = ["C901"] # 27

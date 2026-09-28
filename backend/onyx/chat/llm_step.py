@@ -9,7 +9,10 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import current_turn_persists_content
 from onyx.chat.models import ChatMessageSimple, LlmStepResult
-from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
+from onyx.chat.tool_call_args_streaming import (
+    ParsedToolArguments,
+    maybe_emit_argument_delta,
+)
 from onyx.configs.app_configs import (
     ENABLE_AZURE_IMAGE_CAP,
     LOG_ONYX_MODEL_INTERACTIONS,
@@ -67,7 +70,6 @@ from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
 from onyx.tracing.llm_utils import build_llm_model_config
 from onyx.utils.b64 import get_image_type_from_bytes
-from onyx.utils.jsonriver import Parser
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -816,7 +818,7 @@ def run_llm_step_pkt_generator(
         )
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
-    arg_parsers: dict[int, Parser] = {}
+    parsed_tool_arguments: ParsedToolArguments = {}
     reasoning_start = False
     answer_start = False
     accumulated_reasoning = ""
@@ -1061,7 +1063,7 @@ def run_llm_step_pkt_generator(
                         tool_calls_in_progress=id_to_tool_call_map,
                         tool_call_delta=tool_call_delta,
                         placement=_current_placement(),
-                        parsers=arg_parsers,
+                        previous_arguments=parsed_tool_arguments,
                     )
 
         # Flush any tail text buffered while checking for split "<function_calls" markers.
