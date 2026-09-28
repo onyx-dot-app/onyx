@@ -467,19 +467,6 @@ def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
         return future.result()
 
 
-def run_multiple_in_background(
-    funcs: list[Callable[[], None]],
-    thread_name_prefix: str = "worker",
-) -> ThreadPoolExecutor:
-    """Submit each operation with its own context; the caller owns executor shutdown."""
-    executor = ContextThreadPoolExecutor(
-        max_workers=len(funcs), thread_name_prefix=thread_name_prefix
-    )
-    for func in funcs:
-        executor.submit(func)
-    return executor
-
-
 def start_thread_with_context(
     target: Callable[..., Any],
     *,
