@@ -80,6 +80,8 @@ export type OpalStrings = {
   selectEmptySet: string;
   selectInvalidOption: string;
   selectSearchPlaceholder: string;
+  collapsibleExpand: string;
+  collapsibleCollapse: string;
   keyValueKey: string;
   keyValueValue: string;
   keyValueAddLine: string;
@@ -180,6 +182,8 @@ export const defaultOpalStrings: OpalStrings = {
   selectEmptySet: "No items found",
   selectInvalidOption: "Please select a valid option from the list",
   selectSearchPlaceholder: "Search",
+  collapsibleExpand: "Expand",
+  collapsibleCollapse: "Collapse",
   keyValueKey: "Key",
   keyValueValue: "Value",
   keyValueAddLine: "Add Line",

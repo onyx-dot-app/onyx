@@ -124,6 +124,12 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Collapsible */
+export {
+  Collapsible,
+  type CollapsibleProps,
+} from "@opal/components/collapsible/components";
+
 /* Divider */
 export {
   Divider,
