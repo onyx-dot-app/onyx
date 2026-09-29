@@ -10,7 +10,7 @@ import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
 import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
-import { CredentialsConfigurer } from "@/lib/credentials/components";
+import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
 import { ConfigurableSources } from "@/lib/types";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import type { Credential } from "@/lib/connectors/types";
