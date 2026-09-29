@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
-"""Deploy gate for tenant schema snapshots.
-
-Runs after the tenant migration job. For every shard it clones the snapshot
-stored for the code's head revision and compares the clone with a freshly
-migrated schema. Any difference fails the deploy, so no snapshot ships that
-would build a tenant the migration chain would not.
-
-Usage:
-    python alembic/check_tenant_snapshot.py
-"""
+"""Deploy gate for tenant schema snapshots, meant to run after the migration job:
+clone each shard's snapshot for the code's head, compare it with a freshly migrated
+schema, and fail on any difference so no snapshot ships that the chain would not build."""
 
 import sys
 
@@ -37,6 +30,10 @@ def main() -> int:
             if differences:
                 print(f"{shard_name}: snapshot differs from a migrated schema:")
                 print("\n".join(differences))
+                print(
+                    "Drop the template schema on that shard and rerun the migration "
+                    "job with --snapshot-template to rebuild it from the chain."
+                )
                 failed = True
             else:
                 print(

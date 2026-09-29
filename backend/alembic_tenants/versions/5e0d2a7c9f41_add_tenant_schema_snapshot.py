@@ -1,10 +1,10 @@
 """add tenant schema snapshot
 
 One row per shard and head revision: the SQL dump of that shard's template schema,
-which provisioning clones into new tenants instead of replaying the migration chain.
+which apply_snapshot renders into a new tenant schema instead of replaying the chain.
 
 Revision ID: 5e0d2a7c9f41
-Revises: b1c4e9d72f38
+Revises: a754e4f72e60
 Create Date: 2026-09-29
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "5e0d2a7c9f41"
-down_revision = "b1c4e9d72f38"
+down_revision = "a754e4f72e60"
 branch_labels = None
 depends_on = None
 

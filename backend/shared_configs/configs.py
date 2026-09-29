@@ -212,7 +212,8 @@ async def async_return_default_schema(
 # Prefix used for all tenant ids
 TENANT_ID_PREFIX = "tenant_"
 # Schema the rollout job keeps at head and dumps into the snapshot that new tenants
-# are cloned from. Migrated like a tenant, never scheduled work or handed to a user.
+# are cloned from. Treated as a tenant everywhere except that no user is ever
+# assigned to it, so tenant-wide maintenance such as key rotation covers it.
 TENANT_TEMPLATE_SCHEMA = f"{TENANT_ID_PREFIX}template"
 
 DISALLOWED_SLACK_BOT_TENANT_IDS = os.environ.get("DISALLOWED_SLACK_BOT_TENANT_IDS")

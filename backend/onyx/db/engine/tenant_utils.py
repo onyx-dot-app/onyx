@@ -26,7 +26,7 @@ TENANT_ID_PATTERN = re.compile(
     r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"  # UUID
     r"|i-[a-f0-9]+"  # AWS instance ID
     r"|dev"  # staff dev tenant
-    r"|template"  # rollout template, cloned into new tenants
+    r"|template(_[a-f0-9]{32})?"  # rollout template, and its parity scratch copies
     r")$"
 )
 
@@ -181,11 +181,11 @@ def get_all_tenant_ids() -> list[str]:
         return [POSTGRES_DEFAULT_SCHEMA]
 
     # Deduped: a tenant mid-copy exists on two shards but is still one tenant.
-    # The template is migrated with the rest but is nobody's workspace.
+    # Parity scratch schemas live for one deploy check and are nobody's workspace.
     return sorted(
         {
             tenant_id
             for tenant_id in chain.from_iterable(get_tenant_ids_by_shard().values())
-            if tenant_id != TENANT_TEMPLATE_SCHEMA
+            if not tenant_id.startswith(f"{TENANT_TEMPLATE_SCHEMA}_")
         }
     )

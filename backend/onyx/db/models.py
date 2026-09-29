@@ -5770,13 +5770,10 @@ class AvailableTenant(PublicBase):
 
 
 class TenantSchemaSnapshot(PublicBase):
-    """SQL dump of a shard's template schema at one head revision.
-
-    The rollout job writes one per shard after migrating the template. Provisioning
-    renders the dump with the new tenant's name and applies it instead of replaying
-    the migration chain. Only the newest two per shard are kept, so the image that
-    is being replaced keeps its own snapshot until the rollout completes.
-    """
+    """SQL dump of a shard's template schema at one head revision, written by the
+    rollout job. apply_snapshot builds a tenant schema from it instead of replaying
+    the migration chain. The newest two per shard are kept so the image being
+    replaced keeps its own snapshot until the rollout completes."""
 
     __tablename__ = "tenant_schema_snapshot"
     __table_args__ = (

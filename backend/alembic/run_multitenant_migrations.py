@@ -42,6 +42,7 @@ from shared_configs.configs import TENANT_ID_PREFIX
 class Args(NamedTuple):
     jobs: int
     batch_size: int
+    snapshot_template: bool
 
 
 class Batch(NamedTuple):
@@ -247,12 +248,24 @@ def parse_args() -> Args:
         metavar="N",
         help="Schemas per alembic process (default: 50)",
     )
+    parser.add_argument(
+        "--snapshot-template",
+        action="store_true",
+        help=(
+            "Migrate the template schema on every shard with the tenants and "
+            "store its dump afterwards (cloud provisioning clones it)"
+        ),
+    )
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be >= 1")
     if args.batch_size < 1:
         parser.error("--batch-size must be >= 1")
-    return Args(jobs=args.jobs, batch_size=args.batch_size)
+    return Args(
+        jobs=args.jobs,
+        batch_size=args.batch_size,
+        snapshot_template=args.snapshot_template,
+    )
 
 
 def main() -> int:
@@ -265,9 +278,9 @@ def main() -> int:
 
     schemas_by_shard: dict[str, list[str]] = {}
     with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
-        # The template migrates with the tenants and is dumped afterwards.
-        for shard_name in sorted(get_shard_specs()):
-            ensure_template_schema(shard_name)
+        if args.snapshot_template:
+            for shard_name in sorted(get_shard_specs()):
+                ensure_template_schema(shard_name)
 
         # The prefix filter drops `public`, which enumeration reports as the sole
         # "tenant" outside multi-tenant mode. That is what makes the hint below fire.
@@ -311,8 +324,9 @@ def main() -> int:
     else:
         print(f"All {total_tenants} tenants are already at head revision ({head_rev}).")
 
-    with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
-        store_template_snapshots(head_rev)
+    if args.snapshot_template:
+        with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
+            store_template_snapshots(head_rev)
     return 0
 
 

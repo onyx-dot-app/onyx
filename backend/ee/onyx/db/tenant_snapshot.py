@@ -2,8 +2,8 @@
 
 The rollout job keeps one template schema per shard at head, dumps it after the
 migration run, and stores the dump keyed by revision. Rendering the dump with a
-new tenant's name and applying it yields exactly what an empty schema becomes
-after the whole migration chain, baseline rows included, in about a second.
+new tenant's name and applying it yields what an empty schema becomes after the
+whole migration chain, baseline rows included.
 """
 
 import os
@@ -14,25 +14,28 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from difflib import unified_diff
 from pathlib import Path
+from urllib.parse import unquote_plus
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from psycopg2 import sql
-from sqlalchemy import bindparam, delete, select, text
+from sqlalchemy import bindparam, delete, func, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.schema import CreateSchema, DropSchema
 
-from onyx.configs.app_configs import DB_READONLY_USER
+from onyx.configs.app_configs import AWS_REGION_NAME, DB_READONLY_USER, USE_IAM_AUTH
+from onyx.db.engine.iam_auth import get_iam_auth_token
+from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.shard_registry import (
     get_engine_for_shard,
     get_shard_spec,
     get_shard_specs,
 )
-from onyx.db.engine.sql_engine import build_connection_string, get_catalog_session
+from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.db.engine.tenant_utils import validate_tenant_id
 from onyx.db.models import TenantSchemaSnapshot
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import TENANT_ID_PREFIX, TENANT_TEMPLATE_SCHEMA
+from shared_configs.configs import TENANT_TEMPLATE_SCHEMA
 
 logger = setup_logger()
 
@@ -55,7 +58,13 @@ _DRIVER_UNSAFE_LINES = re.compile(
     r"^(CREATE SCHEMA .*;|\\(un)?restrict .*|SET \w+ = .*;|SELECT pg_catalog\.set_config\(.*\);)$",
     re.MULTILINE,
 )
-_DRIVER_TAG = re.compile(r"^postgresql\+\w+://")
+# libpq reads these instead of a URL, so the password never appears in argv.
+_LIBPQ_SSL_ENV = {
+    "sslmode": "PGSSLMODE",
+    "sslrootcert": "PGSSLROOTCERT",
+    "sslcert": "PGSSLCERT",
+    "sslkey": "PGSSLKEY",
+}
 # Values that legitimately differ between a clone and a fresh migration: row
 # timestamps, encrypted blobs (a random salt per write) and generated ids.
 _UNCOMPARED_COLUMN_TYPES = (
@@ -86,8 +95,14 @@ def get_head_revision() -> str | None:
     return ScriptDirectory.from_config(config).get_current_head()
 
 
+def scratch_schema_name() -> str:
+    """A short-lived schema the parity check builds and drops. The name passes the
+    tenant validator but no scheduler treats it as a workspace."""
+    return f"{TENANT_TEMPLATE_SCHEMA}_{uuid.uuid4().hex}"
+
+
 def ensure_template_schema(shard_name: str) -> None:
-    """The template joins the next migration run once it exists."""
+    """Created before enumeration so the template is migrated in this run."""
     with get_engine_for_shard(shard_name).begin() as connection:
         connection.execute(CreateSchema(TENANT_TEMPLATE_SCHEMA, if_not_exists=True))
 
@@ -98,16 +113,6 @@ def dump_schema(shard_name: str, schema: str, schema_only: bool = False) -> str:
     Rows come out as INSERTs rather than COPY blocks for that reason."""
     if not validate_tenant_id(schema):
         raise ValueError(f"Refusing to dump schema {schema!r}")
-    spec = get_shard_spec(shard_name)
-    # libpq takes the same URL the engine uses, minus the SQLAlchemy driver tag.
-    url = build_connection_string(
-        user=spec.user,
-        password=spec.password,
-        host=spec.host,
-        port=spec.port,
-        db=spec.db,
-    )
-    url = _DRIVER_TAG.sub("postgresql://", url, count=1)
     command = [
         "pg_dump",
         "--schema",
@@ -118,23 +123,47 @@ def dump_schema(shard_name: str, schema: str, schema_only: bool = False) -> str:
         "--no-tablespaces",
         "--no-security-labels",
         "--inserts",
-        "--dbname",
-        url,
     ]
     if schema_only:
         command.append("--schema-only")
     result = subprocess.run(
-        command, env=os.environ, capture_output=True, text=True, check=True
+        command,
+        env={**os.environ, **_libpq_env(shard_name)},
+        capture_output=True,
+        text=True,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"pg_dump of {schema} failed: {result.stderr.strip()}")
     return _DRIVER_UNSAFE_LINES.sub("", result.stdout)
 
 
+def _libpq_env(shard_name: str) -> dict[str, str]:
+    """The shard's connection as libpq variables, with the same auth and TLS
+    settings the engine uses for that shard."""
+    spec = get_shard_spec(shard_name)
+    # The spec carries the URL-encoded form the engine embeds in its URL.
+    password = unquote_plus(spec.password)
+    if USE_IAM_AUTH:
+        password = get_iam_auth_token(spec.host, spec.port, spec.user, AWS_REGION_NAME)
+    env = {
+        "PGHOST": spec.host,
+        "PGPORT": spec.port,
+        "PGUSER": spec.user,
+        "PGDATABASE": spec.db,
+        "PGPASSWORD": password,
+    }
+    for arg, variable in _LIBPQ_SSL_ENV.items():
+        value = pg_ssl_psycopg2_connect_args().get(arg)
+        if value:
+            env[variable] = value
+    return env
+
+
 def store_template_snapshots(alembic_revision: str) -> None:
-    """Dump each shard's template once per revision. Runs after every migration
-    run, so the first rollout after a code change fills the gap."""
+    """Dump every shard's template after a migration run. A fresh dump each run
+    keeps re-encrypted rows current and marks the running head as the newest."""
     for shard_name in sorted(get_shard_specs()):
-        if get_snapshot(shard_name, alembic_revision) is not None:
-            continue
+        _require_template_at(shard_name, alembic_revision)
         dump = dump_schema(shard_name, TENANT_TEMPLATE_SCHEMA)
         store_snapshot(shard_name, alembic_revision, dump)
         logger.info(
@@ -145,8 +174,23 @@ def store_template_snapshots(alembic_revision: str) -> None:
         )
 
 
+def _require_template_at(shard_name: str, alembic_revision: str) -> None:
+    query = sql.SQL("SELECT version_num FROM {}").format(
+        sql.Identifier(TENANT_TEMPLATE_SCHEMA, "alembic_version")
+    )
+    with get_engine_for_shard(shard_name).connect() as connection:
+        stamped = connection.exec_driver_sql(
+            query.as_string(connection.connection.dbapi_connection)
+        ).scalar()
+    if stamped != alembic_revision:
+        raise RuntimeError(
+            f"Template on shard {shard_name} is at {stamped}, not {alembic_revision}"
+        )
+
+
 def store_snapshot(shard_name: str, alembic_revision: str, dump: str) -> None:
-    """Upsert the shard's snapshot for this revision and drop all but the newest."""
+    """Upsert the shard's snapshot for this revision as the newest, and drop all
+    but the newest two."""
     with get_catalog_session() as db_session:
         existing = db_session.scalar(
             select(TenantSchemaSnapshot).where(
@@ -164,6 +208,9 @@ def store_snapshot(shard_name: str, alembic_revision: str, dump: str) -> None:
             )
         else:
             existing.dump = dump
+            # A rollback re-stores an older revision, which must then outlive
+            # the one it replaced.
+            existing.created_at = func.now()
         db_session.flush()
 
         keep = db_session.scalars(
@@ -198,19 +245,17 @@ def render_snapshot(dump: str, tenant_id: str) -> str:
 
 
 def apply_snapshot(engine: Engine, dump: str, tenant_id: str) -> None:
-    """Build the tenant schema from the dump in one transaction.
-
-    The dump carries the alembic version row, so the result is already stamped
-    at the snapshot's revision. Migration grants schema usage to the read-only
-    role, which a dump does not carry, so it is granted here."""
+    """Build the tenant schema from the dump in one transaction, stamped at the
+    snapshot's revision by the version row the dump carries. Migration grants
+    schema usage to the read-only role, which a dump lacks, so it is granted here."""
     rendered = render_snapshot(dump, tenant_id)
     with engine.connect() as connection:
         with connection.begin():
             connection.execute(CreateSchema(tenant_id, if_not_exists=True))
             _execute_verbatim(connection, rendered)
             _grant_readonly_usage(connection, tenant_id)
-        # pg_dump's session settings (search_path among them) would otherwise
-        # ride along on this pooled connection.
+        # Defensive: a session setting the strip regex let through would
+        # otherwise stay on this pooled connection.
         connection.invalidate()
 
 
@@ -225,7 +270,8 @@ def _execute_verbatim(connection: Connection, statements: str) -> None:
 
 
 def _grant_readonly_usage(connection: Connection, tenant_id: str) -> None:
-    # Both names are validated identifiers, as in the migration that grants this.
+    # tenant_id was validated in render_snapshot. The role name is trusted
+    # config, interpolated the way the migration that grants this does.
     _execute_verbatim(
         connection,
         f"""
@@ -245,8 +291,8 @@ def check_snapshot_parity(shard_name: str, dump: str) -> list[str]:
 
     Empty means the snapshot is safe to clone. Both scratch schemas are dropped."""
     engine = get_engine_for_shard(shard_name)
-    cloned = f"{TENANT_ID_PREFIX}{uuid.uuid4()}"
-    migrated = f"{TENANT_ID_PREFIX}{uuid.uuid4()}"
+    cloned = scratch_schema_name()
+    migrated = scratch_schema_name()
     with _dropped_afterwards(engine, cloned, migrated):
         apply_snapshot(engine, dump, cloned)
         _migrate_empty_schema(shard_name, migrated)
@@ -254,8 +300,9 @@ def check_snapshot_parity(shard_name: str, dump: str) -> list[str]:
 
 
 def compare_schemas(shard_name: str, left: str, right: str) -> list[str]:
-    """Structure must match byte for byte once the names are normalised. Rows
-    must match in count and, outside the uncompared column types, in content."""
+    """Structure must match line for line after name, comment and array-cast
+    normalisation. Rows must match in count and, outside the uncompared column
+    types, in content."""
     differences = _structure_differences(shard_name, left, right)
     with get_engine_for_shard(shard_name).connect() as connection:
         differences.extend(_row_differences(connection, left, right))
@@ -342,13 +389,14 @@ def _row_digest(
     if not columns:
         query = sql.SQL("SELECT count(*) FROM {}").format(source)
     else:
-        row_text = sql.SQL(", ").join(
-            sql.SQL("{}::text").format(sql.Identifier(column)) for column in columns
+        # ROW keeps NULL positions, so a NULL moving between columns still differs.
+        row_text = sql.SQL("ROW({})::text").format(
+            sql.SQL(", ").join(sql.Identifier(column) for column in columns)
         )
         query = sql.SQL(
             "SELECT count(*), "
             "md5(coalesce(string_agg(row_text, '|' ORDER BY row_text), '')) "
-            "FROM (SELECT concat_ws(',', {}) AS row_text FROM {}) rows"
+            "FROM (SELECT {} AS row_text FROM {}) rows"
         ).format(row_text, source)
     row = connection.exec_driver_sql(
         query.as_string(connection.connection.dbapi_connection)
