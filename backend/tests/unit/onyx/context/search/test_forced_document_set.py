@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 import onyx.context.search.forced_document_set as fds
 import onyx.context.search.pipeline as pipeline
-from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import IndexFilters, UserAccessFilters
 from onyx.db.models import User
 
 _DB = cast(Session, object())
@@ -77,7 +77,9 @@ def _build_filters(monkeypatch: pytest.MonkeyPatch, *, force: bool) -> IndexFilt
         persona_document_sets=None,
         persona_time_cutoff=None,
         db_session=None,
-        acl_filters=["user_email:test@example.com"],
+        acl_filters=UserAccessFilters(
+            access_control_list=["user_email:test@example.com"], cc_pair_access=None
+        ),
         force_configured_document_set_scope=force,
     )
 

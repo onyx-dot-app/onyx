@@ -20,7 +20,6 @@ from onyx.background.celery.tasks.cc_pair_ids_backfill import (
 )
 from onyx.background.celery.tasks.shared.tasks import document_by_cc_pair_cleanup_task
 from onyx.background.celery.tasks.vespa.tasks import document_index_metadata_sync_task
-from onyx.configs.constants import KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_non_deleting_cc_pair_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
@@ -46,10 +45,7 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 )
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.models import IndexChunk
-from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.utils.special_types import JSON_ro
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.document_index.conftest import (
     EMBEDDING_DIM,
@@ -98,29 +94,6 @@ def pairs(
         db_session.rollback()
         for pair in (first, second, deleting):
             cleanup_cc_pair(db_session, pair)
-
-
-@pytest.fixture
-def kv_progress_restored(
-    tenant_context: None,  # noqa: ARG001
-) -> Generator[None, None, None]:
-    """Keeps the developer's stored backfill progress unchanged."""
-    kv_store = get_kv_store()
-    saved: JSON_ro | None
-    try:
-        saved = kv_store.load(KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY)
-    except KvKeyNotFoundError:
-        saved = None
-    try:
-        yield
-    finally:
-        if saved is None:
-            try:
-                kv_store.delete(KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY)
-            except KvKeyNotFoundError:
-                pass
-        else:
-            kv_store.store(KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY, saved)
 
 
 def _add_document(

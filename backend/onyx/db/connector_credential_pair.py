@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from pydantic import BaseModel
-from sqlalchemy import Select, and_, delete, desc, func, or_, select, update
+from sqlalchemy import Select, and_, delete, desc, false, func, or_, select, update
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -42,7 +42,10 @@ from onyx.db.scoped_permissions import (
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
+    fetch_versioned_implementation,
+)
 
 logger = setup_logger()
 
@@ -50,8 +53,21 @@ R = TypeVarTuple("R")
 _CONNECTOR_STATE_QUERY_TIMEOUT = "7s"
 
 
+def _build_user_group_cc_pair_access_clause(
+    user_id: UUID,  # noqa: ARG001
+) -> ColumnElement[bool]:
+    """CE has no user groups. The EE version grants pairs of the user's groups.
+
+    NOTE: EE version in ee.onyx.db.connector_credential_pair."""
+    return false()
+
+
 def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
-    """Grant public, credential-owner, or current user-group connector access."""
+    """Pairs whose documents the user may see with no document ACL match
+    ("open" pairs): PUBLIC pairs, and non-perm-synced pairs where the user owns
+    the credential or is in a current group of the pair. Perm-synced pairs are
+    never open; their documents need an ACL match. Does not exclude DELETING
+    pairs."""
     credential_owner = (
         select(1)
         .select_from(Credential)
@@ -62,30 +78,55 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
         .correlate(ConnectorCredentialPair)
         .exists()
     )
-    current_group_member = (
-        select(1)
-        .select_from(User__UserGroup)
-        .join(
-            UserGroup__ConnectorCredentialPair,
-            and_(
-                UserGroup__ConnectorCredentialPair.user_group_id
-                == User__UserGroup.user_group_id,
-                UserGroup__ConnectorCredentialPair.cc_pair_id
-                == ConnectorCredentialPair.id,
-                UserGroup__ConnectorCredentialPair.is_current.is_(True),
-            ),
-        )
-        .where(User__UserGroup.user_id == user_id)
-        .correlate(ConnectorCredentialPair)
-        .exists()
+    group_access_clause_fn = fetch_versioned_implementation(
+        "onyx.db.connector_credential_pair", "_build_user_group_cc_pair_access_clause"
     )
     return or_(
         ConnectorCredentialPair.access_type == AccessType.PUBLIC,
         and_(
-            ConnectorCredentialPair.access_type != AccessType.SYNC,
-            or_(credential_owner, current_group_member),
+            ConnectorCredentialPair.access_type.notin_(AccessType.perm_synced_types()),
+            or_(credential_owner, group_access_clause_fn(user_id)),
         ),
     )
+
+
+class CCPairAccessSets(BaseModel):
+    # Documents of these pairs are visible with no document ACL match.
+    open_cc_pair_ids: set[int]
+    # Documents of these pairs are visible if public or matching the user's ACL.
+    acl_cc_pair_ids: set[int]
+
+
+def get_cc_pair_access_sets_for_user(
+    db_session: Session, user: User
+) -> CCPairAccessSets:
+    """The query-time access rule for a user, as sets of cc-pair ids.
+
+    Open pairs follow build_user_cc_pair_access_filter; anonymous users get
+    only PUBLIC pairs. Every user gets all perm-synced (SYNC, SYNC_RESTRICTED)
+    pairs as ACL pairs, matching the chunk ACLs written today. DELETING pairs
+    are left out of both sets."""
+    open_clause = (
+        ConnectorCredentialPair.access_type == AccessType.PUBLIC
+        if user.is_anonymous
+        else build_user_cc_pair_access_filter(user.id)
+    )
+    is_acl_pair = ConnectorCredentialPair.access_type.in_(
+        AccessType.perm_synced_types()
+    )
+    rows = db_session.execute(
+        select(ConnectorCredentialPair.id, is_acl_pair).where(
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+            or_(open_clause, is_acl_pair),
+        )
+    ).tuples()
+    access_sets = CCPairAccessSets(open_cc_pair_ids=set(), acl_cc_pair_ids=set())
+    for cc_pair_id, is_acl in rows:
+        if is_acl:
+            access_sets.acl_cc_pair_ids.add(cc_pair_id)
+        else:
+            access_sets.open_cc_pair_ids.add(cc_pair_id)
+    return access_sets
 
 
 class ConnectorType(str, Enum):

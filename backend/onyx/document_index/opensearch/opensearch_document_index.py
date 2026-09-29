@@ -16,6 +16,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import (
+    CCPairAccessMode,
     IndexFilters,
     InferenceChunk,
     InferenceChunkUncleaned,
@@ -85,6 +86,10 @@ VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 # Batch size for the orphan sweep's delete-by-query terms filter — well under the
 # OpenSearch terms cap (65536) so a large mid-port purge can't build an oversized query.
 _PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
+
+# Chunk IDs logged per direction when the cc-pair access shadow comparison
+# finds a disagreement.
+CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE = 5
 
 
 # Per-process cache of indices we've already verified/created/applied the
@@ -864,6 +869,42 @@ class OpenSearchDocumentIndex(DocumentIndex):
             results.extend(inference_chunks)
         return results
 
+    def _log_cc_pair_access_shadow_disagreement(self, filters: IndexFilters) -> None:
+        """In shadow mode, logs sample chunks where the old ACL filter and the
+        cc-pair access filter disagree, within this search's other filters.
+        Costs two filter-only ID queries per search. Results never depend on
+        it, so errors are logged and not raised."""
+        cc_pair_access = filters.cc_pair_access
+        if (
+            cc_pair_access is None
+            or cc_pair_access.mode != CCPairAccessMode.SHADOW
+            or filters.access_control_list is None
+        ):
+            return
+        try:
+            for visible_to_old_filter_only in (True, False):
+                chunk_ids = self._client.search_for_document_ids(
+                    body=DocumentQuery.get_cc_pair_access_shadow_query(
+                        tenant_state=self._tenant_state,
+                        index_filters=filters,
+                        cc_pair_access=cc_pair_access,
+                        visible_to_old_filter_only=visible_to_old_filter_only,
+                        num_hits=CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE,
+                    ),
+                    search_type=OpenSearchSearchType.CC_PAIR_ACCESS_SHADOW,
+                )
+                if chunk_ids:
+                    logger.warning(
+                        "cc-pair access shadow: tenant=%s chunks visible only to the "
+                        "%s filter (sample of up to %d): %s",
+                        self._tenant_state.tenant_id,
+                        "old" if visible_to_old_filter_only else "cc-pair",
+                        CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE,
+                        chunk_ids,
+                    )
+        except Exception:
+            logger.exception("cc-pair access shadow comparison failed")
+
     def hybrid_retrieval(
         self,
         query: str,
@@ -881,6 +922,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_to_retrieve,
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(filters)
         # TODO(andrei): This could be better, the caller should just make this
         # decision when passing in the query param. See the above comment in the
         # function signature.
@@ -935,6 +977,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_to_retrieve,
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(filters)
         query_body = DocumentQuery.get_keyword_search_query(
             query_text=query,
             num_hits=num_to_retrieve,
@@ -979,6 +1022,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_to_retrieve,
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(filters)
         query_body = DocumentQuery.get_semantic_search_query(
             query_embedding=query_embedding,
             num_hits=num_to_retrieve,

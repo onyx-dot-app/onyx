@@ -7,6 +7,7 @@ from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
 from onyx.configs.app_configs import (
+    ENABLE_CC_PAIR_ACCESS_FILTER,
     ENABLE_TENANT_WORK_GATING,
     TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS,
     TENANT_WORK_GATING_TTL_SECONDS,
@@ -143,13 +144,12 @@ class OnyxRuntime:
         return value
 
     @staticmethod
-    def _read_tenant_work_gating_flag(axis: str, default: bool) -> bool:
-        """Read `runtime:tenant_work_gating:{axis}` from Redis and interpret
-        it as a bool. Returns `default` if the key is absent or unparseable.
-        `axis` is either `enabled` (compute the gate) or `enforce` (actually
-        skip)."""
+    def _read_runtime_bool_flag(feature: str, axis: str, default: bool) -> bool:
+        """Read `runtime:{feature}:{axis}` from Redis and interpret it as a
+        bool. Returns `default` if the key is absent or unparseable. `axis` is
+        either `enabled` (shadow mode) or `enforce`."""
         r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-        raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:tenant_work_gating:{axis}")
+        raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:{feature}:{axis}")
         if raw is None:
             return default
 
@@ -164,8 +164,8 @@ class OnyxRuntime:
         many tenants would be skipped). Env-var `ENABLE_TENANT_WORK_GATING`
         is the fallback default when no Redis override is set — it acts as
         the master switch that turns the feature on in shadow mode."""
-        return OnyxRuntime._read_tenant_work_gating_flag(
-            "enabled", default=ENABLE_TENANT_WORK_GATING
+        return OnyxRuntime._read_runtime_bool_flag(
+            "tenant_work_gating", "enabled", default=ENABLE_TENANT_WORK_GATING
         )
 
     @staticmethod
@@ -179,7 +179,29 @@ class OnyxRuntime:
         accidentally skip real tenant traffic by flipping an env flag. Only
         meaningful when `get_tenant_work_gating_enabled()` is also True.
         """
-        return OnyxRuntime._read_tenant_work_gating_flag("enforce", default=False)
+        return OnyxRuntime._read_runtime_bool_flag(
+            "tenant_work_gating", "enforce", default=False
+        )
+
+    @staticmethod
+    def get_cc_pair_access_filter_enabled() -> bool:
+        """Should search compute the cc-pair access filter? On its own this is
+        shadow mode: results still use the old ACL filter, and disagreements
+        are logged. Env-var `ENABLE_CC_PAIR_ACCESS_FILTER` is the fallback
+        default when no Redis override is set."""
+        return OnyxRuntime._read_runtime_bool_flag(
+            "cc_pair_access_filter", "enabled", default=ENABLE_CC_PAIR_ACCESS_FILTER
+        )
+
+    @staticmethod
+    def get_cc_pair_access_filter_enforce() -> bool:
+        """Should search use the cc-pair access filter for results, in tenants
+        whose index is ready for it? Redis-only with a hard-coded default of
+        False, like `get_tenant_work_gating_enforce`. Only meaningful when
+        `get_cc_pair_access_filter_enabled()` is also True."""
+        return OnyxRuntime._read_runtime_bool_flag(
+            "cc_pair_access_filter", "enforce", default=False
+        )
 
     @staticmethod
     def get_tenant_work_gating_ttl_seconds() -> int:

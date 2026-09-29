@@ -54,6 +54,7 @@ from onyx.context.search.models import (
     InferenceSection,
     PersonaSearchInfo,
     SearchDocsResponse,
+    UserAccessFilters,
 )
 from onyx.context.search.pipeline import merge_individual_chunks, search_pipeline
 from onyx.context.search.preprocessing.access_filters import (
@@ -476,7 +477,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         query: str,
         hybrid_alpha: float | None,
         num_hits: int,
-        acl_filters: list[str],
+        acl_filters: UserAccessFilters,
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
         effective_filters: BaseFilters | None,
@@ -712,7 +713,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # parallel search workers need zero DB connections.
         with get_session_with_current_tenant() as db_session:
             # ACL filters
-            acl_filters: list[str] = build_access_filters_for_user(
+            acl_filters: UserAccessFilters = build_access_filters_for_user(
                 self.user, db_session
             )
 
