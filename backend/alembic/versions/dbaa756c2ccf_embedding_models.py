@@ -18,6 +18,7 @@ from onyx.configs.model_configs import NORMALIZE_EMBEDDINGS
 from onyx.configs.model_configs import OLD_DEFAULT_DOCUMENT_ENCODER_MODEL
 from onyx.configs.model_configs import OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
 from onyx.configs.model_configs import OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
+from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import user_has_overridden_embedding_model
 from onyx.indexing.models import IndexingSetting
@@ -41,6 +42,7 @@ def _get_old_default_embedding_model() -> IndexingSetting:
         model_dim=(
             DOC_EMBEDDING_DIM if is_overridden else OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
         ),
+        embedding_precision=(EmbeddingPrecision.FLOAT),
         normalize=(
             NORMALIZE_EMBEDDINGS
             if is_overridden
@@ -59,6 +61,7 @@ def _get_new_default_embedding_model() -> IndexingSetting:
     return IndexingSetting(
         model_name=DOCUMENT_ENCODER_MODEL,
         model_dim=DOC_EMBEDDING_DIM,
+        embedding_precision=(EmbeddingPrecision.BFLOAT16),
         normalize=NORMALIZE_EMBEDDINGS,
         query_prefix=ASYM_QUERY_PREFIX,
         passage_prefix=ASYM_PASSAGE_PREFIX,

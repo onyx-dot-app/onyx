@@ -6,17 +6,10 @@ Create Date: 2024-03-26 12:34:56.789012
 
 """
 
-from enum import Enum
-
 from alembic import op
 import sqlalchemy as sa
 
-
-# Local copy: the app enum was removed along with the column.
-class EmbeddingPrecision(str, Enum):
-    BFLOAT16 = "bfloat16"
-    FLOAT = "float"
-
+from onyx.db.enums import EmbeddingPrecision
 
 # revision identifiers, used by Alembic.
 revision = "b7c2b63c4a03"

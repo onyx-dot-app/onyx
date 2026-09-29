@@ -301,6 +301,13 @@ class AccessType(str, PyEnum):
         return [cls.SYNC, cls.SYNC_RESTRICTED]
 
 
+class EmbeddingPrecision(str, PyEnum):
+    """Unused. Kept only because old Alembic migrations import it."""
+
+    BFLOAT16 = "bfloat16"
+    FLOAT = "float"
+
+
 class VectorQuantization(str, PyEnum):
     """Scalar quantization of the stored vectors in the OpenSearch index.
 
