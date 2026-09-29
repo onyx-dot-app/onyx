@@ -78,6 +78,20 @@ def test_parity_catches_a_missing_column(shard: str, clone: str) -> None:
     assert differences and differences[0] == "structure differs:"
 
 
+def test_parity_ignores_the_migration_date_seed(shard: str, clone: str) -> None:
+    # The knowledge graph config is seeded with the migration's run date.
+    with get_engine_for_shard(shard).begin() as connection:
+        connection.execute(
+            text(
+                f'UPDATE "{clone}".key_value_store '
+                "SET value = jsonb_set(value, '{KG_COVERAGE_START}', '\"2000-01-01\"') "
+                "WHERE key = 'kg_config'"
+            )
+        )
+
+    assert tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA) == []
+
+
 def test_parity_catches_a_missing_row(shard: str, clone: str) -> None:
     with get_engine_for_shard(shard).begin() as connection:
         connection.execute(
@@ -109,9 +123,9 @@ def test_rollout_stores_the_template_only_at_head(shard: str) -> None:
             db_session.execute(
                 text(
                     "DELETE FROM public.tenant_schema_snapshot "
-                    "WHERE alembic_revision = :head"
+                    "WHERE shard_name = :shard AND alembic_revision = :head"
                 ),
-                {"head": head},
+                {"shard": shard, "head": head},
             )
             db_session.commit()
 
@@ -123,19 +137,26 @@ def test_render_refuses_names_that_are_not_tenants(dump: str) -> None:
         tenant_snapshot.render_snapshot(dump, TENANT_TEMPLATE_SCHEMA)
 
 
-def test_store_keeps_the_newest_two(shard: str) -> None:
+@pytest.mark.usefixtures("shard")
+def test_store_keeps_the_newest_two() -> None:
+    # Retention is per shard, so a made-up shard cannot evict real rows.
+    fake_shard = f"test-shard-{uuid.uuid4().hex[:8]}"
     revisions = [f"test-{uuid.uuid4().hex[:8]}" for _ in range(3)]
     try:
         for revision in revisions:
-            tenant_snapshot.store_snapshot(shard, revision, f"-- {revision}")
-        assert tenant_snapshot.get_snapshot(shard, revisions[0]) is None
-        assert tenant_snapshot.get_snapshot(shard, revisions[2]) == f"-- {revisions[2]}"
+            tenant_snapshot.store_snapshot(fake_shard, revision, f"-- {revision}")
+        assert tenant_snapshot.get_snapshot(fake_shard, revisions[0]) is None
+        assert (
+            tenant_snapshot.get_snapshot(fake_shard, revisions[2])
+            == f"-- {revisions[2]}"
+        )
     finally:
         with tenant_snapshot.get_catalog_session() as db_session:
             db_session.execute(
                 text(
                     "DELETE FROM public.tenant_schema_snapshot "
-                    "WHERE alembic_revision LIKE 'test-%'"
-                )
+                    "WHERE shard_name = :shard"
+                ),
+                {"shard": fake_shard},
             )
             db_session.commit()

@@ -74,6 +74,10 @@ _UNCOMPARED_COLUMN_TYPES = (
     "uuid",
 )
 _DIFF_LINES_REPORTED = 60
+# Seeded rows whose value is the migration's run date, so a clone and a schema
+# migrated on another day differ without either being wrong: table to (key
+# column, key value).
+_RUN_DATE_SEEDED_ROWS = {"key_value_store": ("key", "kg_config")}
 # Postgres deparses a varchar list in a CHECK or partial index either as an array
 # of casts or as a cast of an array, flipping form on every re-parse. Same
 # constraint, so both spellings compare as one.
@@ -152,8 +156,12 @@ def _libpq_env(shard_name: str) -> dict[str, str]:
         "PGDATABASE": spec.db,
         "PGPASSWORD": password,
     }
+    ssl_args = pg_ssl_psycopg2_connect_args()
+    if "sslpassword" in ssl_args:
+        # libpq has no variable for it and argv would expose it.
+        raise RuntimeError("pg_dump cannot use a passphrase-protected client key")
     for arg, variable in _LIBPQ_SSL_ENV.items():
-        value = pg_ssl_psycopg2_connect_args().get(arg)
+        value = ssl_args.get(arg)
         if value:
             env[variable] = value
     return env
@@ -386,8 +394,14 @@ def _row_digest(
     connection: Connection, schema: str, table: str, columns: list[str]
 ) -> tuple[int, str]:
     source = sql.Identifier(schema, table)
+    where = sql.SQL("")
+    if table in _RUN_DATE_SEEDED_ROWS:
+        key_column, key_value = _RUN_DATE_SEEDED_ROWS[table]
+        where = sql.SQL(" WHERE {} <> {}").format(
+            sql.Identifier(key_column), sql.Literal(key_value)
+        )
     if not columns:
-        query = sql.SQL("SELECT count(*) FROM {}").format(source)
+        query = sql.SQL("SELECT count(*) FROM {}{}").format(source, where)
     else:
         # ROW keeps NULL positions, so a NULL moving between columns still differs.
         row_text = sql.SQL("ROW({})::text").format(
@@ -396,8 +410,8 @@ def _row_digest(
         query = sql.SQL(
             "SELECT count(*), "
             "md5(coalesce(string_agg(row_text, '|' ORDER BY row_text), '')) "
-            "FROM (SELECT {} AS row_text FROM {}) rows"
-        ).format(row_text, source)
+            "FROM (SELECT {} AS row_text FROM {}{}) rows"
+        ).format(row_text, source, where)
     row = connection.exec_driver_sql(
         query.as_string(connection.connection.dbapi_connection)
     ).one()
