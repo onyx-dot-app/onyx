@@ -85,11 +85,10 @@ class HubSpotConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        access_token: str | None = None,
         object_types: list[str] | None = None,
     ) -> None:
         self.batch_size = batch_size
-        self._access_token = access_token
+        self._access_token: str | None = None
         self._portal_id: str | None = None
         self._rate_limiter = HubSpotRateLimiter()
 
