@@ -2604,6 +2604,9 @@
           "label": "Autoriser avec {source}",
           "pendingLabel": "Autorisation en cours..."
         },
+        "collapseButton": {
+          "ariaLabel": "Replier"
+        },
         "createCredentialButton": {
           "label": "Créer"
         },
@@ -2621,6 +2624,9 @@
         },
         "error": {
           "toast": "Erreur : {detail}"
+        },
+        "expandButton": {
+          "ariaLabel": "Déplier"
         },
         "federated": {
           "tooltip": {
@@ -2644,6 +2650,9 @@
         },
         "retryButton": {
           "label": "Réessayer"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}"
         },
         "timeout": {
           "toast": "L'opération a expiré après {seconds} secondes. Vérifiez si votre configuration contient des erreurs ?"

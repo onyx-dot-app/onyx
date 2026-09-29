@@ -2604,6 +2604,9 @@
           "label": "Autorizar con {source}",
           "pendingLabel": "Autorizando..."
         },
+        "collapseButton": {
+          "ariaLabel": "Contraer"
+        },
         "createCredentialButton": {
           "label": "Crear una nueva"
         },
@@ -2621,6 +2624,9 @@
         },
         "error": {
           "toast": "Error: {detail}"
+        },
+        "expandButton": {
+          "ariaLabel": "Expandir"
         },
         "federated": {
           "tooltip": {
@@ -2644,6 +2650,9 @@
         },
         "retryButton": {
           "label": "Reintentar"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}"
         },
         "timeout": {
           "toast": "La operación agotó el tiempo de espera tras {seconds} segundos. ¿Quieres revisar tu configuración por si hay errores?"

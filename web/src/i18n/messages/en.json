@@ -2604,6 +2604,9 @@
           "label": "Authorize with {source}",
           "pendingLabel": "Authorizing..."
         },
+        "collapseButton": {
+          "ariaLabel": "Collapse"
+        },
         "createCredentialButton": {
           "label": "Create New"
         },
@@ -2621,6 +2624,9 @@
         },
         "error": {
           "toast": "Error: {detail}"
+        },
+        "expandButton": {
+          "ariaLabel": "Expand"
         },
         "federated": {
           "tooltip": {
@@ -2644,6 +2650,9 @@
         },
         "retryButton": {
           "label": "Retry"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
         },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"

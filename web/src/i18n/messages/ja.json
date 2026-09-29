@@ -2604,6 +2604,9 @@
           "label": "{source} で認可",
           "pendingLabel": "認可しています..."
         },
+        "collapseButton": {
+          "ariaLabel": "折りたたむ"
+        },
         "createCredentialButton": {
           "label": "新規作成"
         },
@@ -2621,6 +2624,9 @@
         },
         "error": {
           "toast": "エラー: {detail}"
+        },
+        "expandButton": {
+          "ariaLabel": "展開"
         },
         "federated": {
           "tooltip": {
@@ -2644,6 +2650,9 @@
         },
         "retryButton": {
           "label": "再試行"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
         },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"

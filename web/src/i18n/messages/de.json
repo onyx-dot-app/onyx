@@ -2604,6 +2604,9 @@
           "label": "Mit {source} autorisieren",
           "pendingLabel": "Wird autorisiert..."
         },
+        "collapseButton": {
+          "ariaLabel": "Einklappen"
+        },
         "createCredentialButton": {
           "label": "Neu erstellen"
         },
@@ -2621,6 +2624,9 @@
         },
         "error": {
           "toast": "Fehler: {detail}"
+        },
+        "expandButton": {
+          "ariaLabel": "Ausklappen"
         },
         "federated": {
           "tooltip": {
@@ -2644,6 +2650,9 @@
         },
         "retryButton": {
           "label": "Erneut versuchen"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}"
         },
         "timeout": {
           "toast": "Zeitüberschreitung des Vorgangs nach {seconds} Sekunden. Prüfen Sie Ihre Konfiguration auf Fehler."

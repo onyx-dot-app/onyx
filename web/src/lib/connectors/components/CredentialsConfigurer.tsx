@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
 import { Button, Card, Modal, Text } from "@opal/components";
-import { Content, Section, toast } from "@opal/layouts";
-import { SvgKey } from "@opal/icons";
+import { ContentAction, Section, toast } from "@opal/layouts";
+import { SvgExpand, SvgFold, SvgKey } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
 import type { Credential } from "@/lib/connectors/types";
@@ -72,6 +72,8 @@ export function CredentialsConfigurer({
 
   const [credentialCreationMethod, setCredentialCreationMethod] =
     useState<CredentialCreationMethod | null>(null);
+  // Wiring only: the fold button has no handler yet.
+  const [isOpen] = useState(true);
   const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isAuthorizeVisible, setIsAuthorizeVisible] = useState(false);
@@ -177,10 +179,29 @@ export function CredentialsConfigurer({
   return (
     <Card border="solid" rounding={4} padding={6}>
       <Section gap={4} alignItems="start" width="full">
-        <Content
+        <ContentAction
           title={t("add.credentialStep.title")}
           sizePreset="main-content"
           variant="section"
+          padding={0}
+          rightChildren={
+            <>
+              <Button prominence="tertiary">
+                {t("add.savedAccountsButton.label", {
+                  count: credentials.length,
+                })}
+              </Button>
+              <Button
+                icon={isOpen ? SvgFold : SvgExpand}
+                prominence="tertiary"
+                aria-label={
+                  isOpen
+                    ? t("add.collapseButton.ariaLabel")
+                    : t("add.expandButton.ariaLabel")
+                }
+              />
+            </>
+          }
         />
 
         <ModifyCredential
