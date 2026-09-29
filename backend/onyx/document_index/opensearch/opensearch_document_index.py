@@ -53,6 +53,7 @@ from onyx.document_index.opensearch.schema import (
     GLOBAL_BOOST_FIELD_NAME,
     HIDDEN_FIELD_NAME,
     PERSONAS_FIELD_NAME,
+    PUBLIC_FIELD_NAME,
     USER_PROJECTS_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
@@ -633,6 +634,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # we don't have to think about passing in the appropriate types into
             # this dict.
             if update_request.access is not None:
+                properties_to_update[PUBLIC_FIELD_NAME] = (
+                    update_request.access.is_public
+                )
                 properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = (
                     generate_opensearch_filtered_access_control_list(
                         update_request.access
