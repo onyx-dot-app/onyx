@@ -6,6 +6,7 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
 )
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.configs.app_configs import SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -23,7 +24,9 @@ def sharepoint_group_sync(
     connector_config = cc_pair.connector.connector_specific_config
 
     # Create SharePoint connector instance and load credentials
-    connector = SharepointConnector(**connector_config)
+    connector = SharepointConnector(
+        **build_connector_kwargs(cc_pair.connector.source, connector_config)
+    )
     connector.load_credentials(credential_json(cc_pair))
 
     if not connector.msal_app:

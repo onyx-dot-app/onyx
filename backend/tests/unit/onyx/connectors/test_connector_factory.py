@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.blob.config import BlobStorageConnectorConfig
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
@@ -87,6 +88,7 @@ class TestConnectorMappingValidation:
         expected_mapping = ConnectorMapping(
             module_path="onyx.connectors.blob.connector",
             class_name="BlobStorageConnector",
+            config_class=BlobStorageConnectorConfig,
         )
 
         for source in blob_sources:

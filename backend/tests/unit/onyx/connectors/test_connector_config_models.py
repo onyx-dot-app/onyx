@@ -11,6 +11,8 @@ from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 # (connector class, field) pairs whose model type is intentionally narrower than
 # the ``__init__`` annotation, e.g. a str Enum for a closed set of values.
 _NARROWED_FIELD_TYPES: set[tuple[str, str]] = {
+    ("BlobStorageConnector", "bucket_type"),
+    ("LocalFileConnector", "file_locations"),
     ("ZoomConnector", "rate_limit_percent"),
 }
 
