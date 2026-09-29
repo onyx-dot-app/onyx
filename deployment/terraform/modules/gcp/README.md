@@ -352,8 +352,11 @@ and the Helm install happens afterwards. So the release joins that namespace
 and does not create one:
 
 ```bash
-helm install onyx onyx/onyx --namespace onyx -f values.yaml
+helm install onyx onyx/onyx --namespace onyx --version <chart version> -f values.yaml
 ```
+
+Always set `--version`, and set `global.version` in the values to the Onyx
+release. Both default to the newest release.
 
 Set `create_workload_namespace = false` if something else already creates it.
 
@@ -409,13 +412,26 @@ configMap:
   POSTGRES_DB: "onyx"            # postgres_db_name output
   REDIS_HOST: "<redis_host output>"
   REDIS_PORT: "6378"             # redis_port output; 6378 is the TLS port
+  WEB_DOMAIN: "https://onyx.example.com"   # the address users open
 
 auth:
   postgresql:
     existingSecret: "onyx-postgresql"   # keys: username, password
   redis:
     existingSecret: "onyx-redis"        # key: redis_password = redis_auth_string output
+  opensearch:
+    existingSecret: "onyx-opensearch"   # keys: opensearch_admin_username, opensearch_admin_password
+  userauth:
+    enabled: true
+    existingSecret: "onyx-userauth"     # key: user_auth_secret (openssl rand -hex 32)
+  objectstorage:
+    enabled: false                      # GCS uses Workload Identity, not S3 keys
 ```
+
+Without the last three entries, `helm install` fails. The chart requires an
+OpenSearch admin password and S3 keys, and Onyx needs `USER_AUTH_SECRET`. The
+OpenSearch password needs uppercase, lowercase, a digit and a special
+character.
 
 Set `POSTGRES_DB`. Without it, Onyx uses the `postgres` database that Cloud SQL
 ships, and the `onyx` database stays empty.
@@ -459,6 +475,10 @@ postgresTls:
   caConfigMapName: onyx-postgres-ca
   caKey: ca.crt
 ```
+
+Do not turn on `postgresTls` with Onyx v4.8.x or earlier. Those versions reject
+the Cloud SQL server certificate (`Missing Authority Key Identifier`), and the
+API server crash-loops.
 
 ### 4. Send the document index to its own node pool
 
