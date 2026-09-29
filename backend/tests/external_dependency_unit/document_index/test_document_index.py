@@ -10,6 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.access.models import DocumentAccess
+from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
@@ -451,6 +453,76 @@ class TestDocumentIndexNew:
             for chunk in retrieved_doc1:
                 assert chunk.boost == 3
             assert retrieved_doc2[0].boost == 9
+
+    def test_update_access_revokes_public(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that an access update which makes a public document private
+        removes it from public results. The document stays visible to the
+        users in its new ACL.
+        """
+        # Precondition.
+        for document_index in document_indices:
+            doc_id = f"test_update_revoke_public_{uuid.uuid4().hex[:8]}"
+            user_email = "revoke_public_user@example.com"
+            chunks = [make_chunk(doc_id, chunk_id=0), make_chunk(doc_id, chunk_id=1)]
+            metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[2])
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            public_filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            )
+            _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc_id,
+                expected_chunk_count=2,
+                expected_boost=0,
+                filters=public_filters,
+            )
+
+            # Under test.
+            private_access = DocumentAccess.build(
+                user_emails=[user_email],
+                user_groups=[],
+                external_user_emails=[],
+                external_user_group_ids=[],
+                is_public=False,
+            )
+            document_index.update(
+                [
+                    MetadataUpdateRequest(
+                        document_ids=[doc_id],
+                        doc_id_to_chunk_cnt={doc_id: 2},
+                        access=private_access,
+                    )
+                ]
+            )
+
+            # Postcondition.
+            deadline = time.time() + 10.0
+            public_retrieved: list[InferenceChunk] = []
+            while time.time() < deadline:
+                public_retrieved = document_index.id_based_retrieval(
+                    chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
+                    filters=public_filters,
+                )
+                if not public_retrieved:
+                    break
+                time.sleep(0.25)
+            assert public_retrieved == []
+
+            user_retrieved = document_index.id_based_retrieval(
+                chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
+                filters=IndexFilters(
+                    access_control_list=[PUBLIC_DOC_PAT, prefix_user_email(user_email)],
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                ),
+            )
+            assert len(user_retrieved) == 2
 
     def test_update_with_no_fields_does_not_modify_chunks(
         self,
