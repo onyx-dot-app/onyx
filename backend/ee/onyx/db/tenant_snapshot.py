@@ -22,6 +22,7 @@ from alembic.script import ScriptDirectory
 from psycopg2 import sql
 from sqlalchemy import bindparam, delete, func, select, text
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from onyx.configs.app_configs import AWS_REGION_NAME, DB_READONLY_USER, USE_IAM_AUTH
@@ -107,6 +108,24 @@ def scratch_schema_name() -> str:
     """A short-lived schema the parity check builds and drops. The name passes the
     tenant validator but no scheduler treats it as a workspace."""
     return f"{TENANT_TEMPLATE_SCHEMA}_{uuid.uuid4().hex}"
+
+
+@contextmanager
+def template_session(shard_name: str) -> Iterator[Session]:
+    """Session on one shard's template. Tenant routing cannot reach it, since
+    every shard holds a template under the same name."""
+    with (
+        get_engine_for_shard(shard_name)
+        .connect()
+        .execution_options(
+            schema_translate_map={None: TENANT_TEMPLATE_SCHEMA}
+        ) as connection
+    ):
+        session = Session(bind=connection, expire_on_commit=False)
+        try:
+            yield session
+        finally:
+            session.close()
 
 
 def ensure_template_schema(shard_name: str) -> None:

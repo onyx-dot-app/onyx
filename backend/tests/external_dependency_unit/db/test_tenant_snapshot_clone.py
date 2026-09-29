@@ -6,14 +6,17 @@ import os
 import uuid
 from collections.abc import Generator
 from typing import cast
+from unittest.mock import patch
 
 import pytest
-from sqlalchemy import Table, text
+from sqlalchemy import Table, func, select, text
 
 from ee.onyx.db import tenant_snapshot
+from onyx.db.engine import tenant_utils
 from onyx.db.engine.shard_registry import get_default_shard_name, get_engine_for_shard
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.models import PublicBase, TenantSchemaSnapshot
+from onyx.db.engine.tenant_utils import get_template_shards
+from onyx.db.models import PublicBase, TenantSchemaSnapshot, Tool
 from shared_configs.configs import TENANT_TEMPLATE_SCHEMA
 
 
@@ -140,6 +143,16 @@ def test_rollout_stores_the_template_only_at_head(shard: str) -> None:
                 {"shard": shard, "head": head},
             )
             db_session.commit()
+
+
+def test_template_is_rotated_by_shard(shard: str) -> None:
+    # Enumeration only looks past the default schema in multi-tenant mode.
+    with patch.object(tenant_utils, "MULTI_TENANT", True):
+        assert get_template_shards() == [shard]
+    # The session binds model tables to the template, which is what rotation reads.
+    with tenant_snapshot.template_session(shard) as db_session:
+        seeded_tools = db_session.scalar(select(func.count()).select_from(Tool))
+    assert seeded_tools and seeded_tools > 0
 
 
 def test_render_refuses_names_that_are_not_tenants(dump: str) -> None:
