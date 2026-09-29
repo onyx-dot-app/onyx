@@ -4855,6 +4855,9 @@
           "statusesLoading": "Chargement de l'état des connecteurs…",
           "statusesFailed": "Impossible de charger l'état des connecteurs — réessayez avant de réindexer."
         },
+        "applyWithoutReindex": {
+          "label": "Appliquer sans réindexer"
+        },
         "rebuildAll": {
           "label": "Reconstruire tous les documents existants"
         },
@@ -4888,7 +4891,7 @@
         "title": "Annuler la réindexation"
       },
       "captioningModel": {
-        "description": "Ce modèle servira à analyser les images pendant l'indexation. Seuls les modèles capables de traiter les images peuvent être sélectionnés. Les mises à jour s'appliquent aux documents indexés à partir de maintenant : les légendes existantes sont figées dans les embeddings précédents.",
+        "description": "Ce modèle sera utilisé pour analyser les images lors de l’indexation.",
         "title": "LLM de légendage"
       },
       "changesBanner": {
@@ -4904,8 +4907,16 @@
           "description": "La modification des paramètres d'embedding ou de récupération exige une réindexation complète de tous les documents pour prendre effet. Cela peut prendre **des heures ou des jours** selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Les modifications exigent une réindexation complète."
         },
+        "doNotReindex": {
+          "description": "Les paramètres de traitement d’images ne prendront effet que pour les documents indexés à partir de maintenant. Les documents existants ne seront pas mis à jour sauf si vous lancez une réindexation complète.\n\nLa réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows).",
+          "title": "Les modifications s’appliquent uniquement au contenu nouvellement indexé."
+        },
         "orSeparator": {
           "label": "ou"
+        },
+        "reindex": {
+          "description": "La réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "Une réindexation complète va s’exécuter."
         }
       },
       "cloudDisabled": {
@@ -5002,12 +5013,13 @@
         "description": "Configurez la façon dont les documents sont indexés, encodés et préparés pour la recherche et la récupération."
       },
       "imageExtraction": {
-        "description": "Extrayez les images intégrées aux fichiers téléversés (PDF, DOCX, etc.) et résumez-les avec un LLM capable de traiter les images, afin que les documents composés uniquement d'images deviennent consultables. Nécessite un LLM par défaut capable de traiter les images.",
+        "description": "Extrait les images lors de l’indexation des documents et génère des descriptions consultables.",
         "title": "Extraire et légender les images"
       },
       "imageProcessing": {
         "description": "Utilisez un LLM pour analyser les images et leur ajouter des descriptions pendant l'indexation.",
         "enableFirstTooltip": "Activez Extraire et légender les images pour configurer cette option.",
+        "noModelSelected": "Aucun modèle sélectionné",
         "noVisionModelsTooltip": "Le traitement des images est désactivé car aucun modèle capable de traiter les images n'est configuré. Configurez d'abord un [modèle de langage]({link}) capable de traiter les images.",
         "title": "Traitement des images"
       },
@@ -5021,7 +5033,7 @@
         }
       },
       "maxImageSize": {
-        "description": "Les images qui dépassent cette taille seront ignorées afin de limiter l'utilisation des ressources.",
+        "description": "Les images dépassant cette taille seront ignorées pour limiter l’utilisation des ressources.",
         "suffix": "(Mo)",
         "title": "Taille maximale des images à analyser"
       },
@@ -5188,24 +5200,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Continuez d'utiliser l'index de documents actuel avec les paramètres existants jusqu'à ce que tous les connecteurs actifs (ni en pause ni en cours de suppression) aient terminé une indexation réussie.",
+          "description": "Continue d’utiliser l’index de documents actuel avec les paramètres existants jusqu’à ce que tous les connecteurs **actifs** (non suspendus/en suppression) aient terminé une indexation réussie.",
           "label": "Réindexer les connecteurs actifs puis basculer"
         },
+        "doNotReindex": {
+          "description": "**Option la plus sûre.** Applique les modifications uniquement au contenu nouvellement indexé.",
+          "label": "Ne pas réindexer"
+        },
         "instant": {
-          "description": "Videz immédiatement l'index de documents actuel et passez aux nouveaux paramètres. Nécessite de réindexer tous les connecteurs avant que l'index soit de nouveau disponible pour la recherche.",
+          "description": "**Vide immédiatement l’index de documents actuel** et bascule vers les nouveaux paramètres. Nécessite de réindexer tous les connecteurs avant que l’index soit de nouveau disponible pour la recherche.",
           "label": "Basculer avant la réindexation"
         },
         "placeholder": "Sélectionnez une stratégie de bascule",
         "reindexAll": {
-          "description": "Option la plus sûre. Continuez d'utiliser l'index de documents actuel avec les paramètres existants jusqu'à ce que tous les connecteurs aient terminé une indexation réussie.",
+          "description": "Continue d’utiliser l’index de documents actuel avec les paramètres existants jusqu’à ce que tous les connecteurs aient terminé une indexation réussie.",
           "label": "Réindexer tous les connecteurs puis basculer"
+        },
+        "reindexOptions": {
+          "label": "Options de réindexation"
         }
       },
       "toasts": {
         "applyFailed": "Échec de l'application des paramètres",
         "cancelReindexFailed": "Échec de l'annulation de la réindexation",
-        "captioningUpdateFailed": "Échec de la mise à jour du LLM de légendage",
-        "captioningUpdated": "LLM de légendage mis à jour",
+        "captioningModelRequired": "Sélectionnez un LLM de légendage avant d’appliquer.",
         "contextualModelRequired": "Sélectionnez un LLM de récupération contextuelle avant de réindexer.",
         "contextualModelUpdateFailed": "Échec de la mise à jour du LLM de récupération contextuelle",
         "contextualModelUpdated": "LLM de récupération contextuelle mis à jour",

@@ -31,6 +31,13 @@ export {
   type InputPadderProps,
 } from "@opal/layouts/inputs/components";
 
+/* StickyBox */
+export {
+  StickyBox,
+  type StickyBoxProps,
+  type StickyEdge,
+} from "@opal/layouts/sticky-box/components";
+
 /* IllustrationContent */
 export {
   IllustrationContent,

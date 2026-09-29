@@ -4855,6 +4855,9 @@
           "statusesLoading": "Cargando el estado de los conectores…",
           "statusesFailed": "No se pudo cargar el estado de los conectores: inténtalo de nuevo antes de reindexar."
         },
+        "applyWithoutReindex": {
+          "label": "Aplicar sin reindexar"
+        },
         "rebuildAll": {
           "label": "Reconstruir todos los documentos existentes"
         },
@@ -4888,7 +4891,7 @@
         "title": "Cancelar la reindexación"
       },
       "captioningModel": {
-        "description": "Este modelo se usará para analizar las imágenes durante la indexación. Solo se pueden seleccionar modelos con capacidad de visión. Las actualizaciones se aplican a los documentos indexados a partir de ahora: las descripciones existentes ya están integradas en los embeddings anteriores.",
+        "description": "Este modelo se usará para analizar imágenes durante la indexación.",
         "title": "LLM de descripción de imágenes"
       },
       "changesBanner": {
@@ -4904,8 +4907,16 @@
           "description": "Modificar la configuración de embeddings o de recuperación requiere una reindexación completa de todos los documentos para que surta efecto, lo que puede tardar **horas o días** según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Los cambios requieren una reindexación completa."
         },
+        "doNotReindex": {
+          "description": "La configuración de procesamiento de imágenes solo tendrá efecto en los documentos indexados a partir de ahora. Los documentos existentes no se actualizarán a menos que ejecutes una reindexación completa.\n\nLa reindexación puede tardar *horas o días* según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows).",
+          "title": "Los cambios se aplican solo al contenido indexado a partir de ahora."
+        },
         "orSeparator": {
           "label": "o"
+        },
+        "reindex": {
+          "description": "La reindexación puede tardar *horas o días* según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "Se ejecutará una reindexación completa."
         }
       },
       "cloudDisabled": {
@@ -5002,12 +5013,13 @@
         "description": "Configura cómo se indexan y se preparan los documentos, y cómo se generan sus embeddings para la búsqueda y la recuperación."
       },
       "imageExtraction": {
-        "description": "Extrae las imágenes incrustadas en los archivos subidos (PDF, DOCX, etc.) y resúmelas con un LLM con capacidad de visión para que los documentos que solo tienen imágenes se puedan buscar y responder. Requiere un LLM predeterminado con capacidad de visión.",
+        "description": "Extrae imágenes durante la indexación de documentos y genera descripciones buscables.",
         "title": "Extraer y describir imágenes"
       },
       "imageProcessing": {
         "description": "Usa un modelo LLM para analizar las imágenes y añadirles descripciones durante la indexación.",
         "enableFirstTooltip": "Activa Extraer y describir imágenes para configurar esto.",
+        "noModelSelected": "Ningún modelo seleccionado",
         "noVisionModelsTooltip": "El procesamiento de imágenes está desactivado porque no tienes modelos con capacidad de visión configurados. Configura primero un [modelo de lenguaje]({link}) con capacidad de visión.",
         "title": "Procesamiento de imágenes"
       },
@@ -5188,24 +5200,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores activos (no pausados ni en eliminación) hayan completado un intento de indexación correcto.",
+          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores **activos** (no pausados/en eliminación) completen un intento de indexación correcto.",
           "label": "Reindexar los conectores activos y luego cambiar"
         },
+        "doNotReindex": {
+          "description": "**Opción más segura.** Aplica los cambios solo al contenido indexado a partir de ahora.",
+          "label": "No reindexar"
+        },
         "instant": {
-          "description": "Vacía de inmediato el índice de documentos actual y cambia a la nueva configuración. Requiere reindexar todos los conectores antes de que el índice se vuelva a llenar para la búsqueda.",
+          "description": "**Borra de inmediato el índice de documentos actual** y cambia a la nueva configuración. Requiere reindexar todos los conectores antes de que el índice vuelva a estar disponible para la búsqueda.",
           "label": "Cambiar antes de reindexar"
         },
         "placeholder": "Selecciona una estrategia de cambio",
         "reindexAll": {
-          "description": "La opción más segura. Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores hayan completado un intento de indexación correcto.",
+          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores completen un intento de indexación correcto.",
           "label": "Reindexar todos los conectores y luego cambiar"
+        },
+        "reindexOptions": {
+          "label": "Opciones de reindexación"
         }
       },
       "toasts": {
         "applyFailed": "No se pudo aplicar la configuración",
         "cancelReindexFailed": "No se pudo cancelar la reindexación",
-        "captioningUpdateFailed": "No se pudo actualizar el LLM de descripción de imágenes",
-        "captioningUpdated": "LLM de descripción de imágenes actualizado",
+        "captioningModelRequired": "Selecciona un LLM de subtitulado antes de aplicar.",
         "contextualModelRequired": "Selecciona un LLM de recuperación contextual antes de reindexar.",
         "contextualModelUpdateFailed": "No se pudo actualizar el LLM de recuperación contextual",
         "contextualModelUpdated": "LLM de recuperación contextual actualizado",
