@@ -1,6 +1,7 @@
 import importlib
 from typing import Any, Type
 
+import pydantic
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
@@ -27,6 +28,9 @@ from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class ConnectorMissingException(Exception):
@@ -105,6 +109,42 @@ def identify_connector_class(
     return connector
 
 
+def validate_connector_config(
+    source: DocumentSource, connector_specific_config: dict[str, Any]
+) -> None:
+    """Raises ``pydantic.ValidationError`` (a ``ValueError``) if the config does
+    not match the source's typed config. Sources without one are not checked."""
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    if mapping is None or mapping.config_class is None:
+        return
+    mapping.config_class.model_validate(connector_specific_config)
+
+
+def build_connector_kwargs(
+    source: DocumentSource, connector_specific_config: dict[str, Any]
+) -> dict[str, Any]:
+    """Validates a stored config into the ``__init__`` kwargs of the connector.
+
+    Only keys present in the stored config are passed, so constructor defaults
+    still apply. A stored config that fails validation is passed through as-is,
+    since rows written before typed configs existed may not conform.
+    """
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    if mapping is None or mapping.config_class is None:
+        return connector_specific_config
+    try:
+        config = mapping.config_class.model_validate(connector_specific_config)
+    except pydantic.ValidationError as e:
+        # TODO(evan-onyx): raise here once no stored config fails validation.
+        logger.warning(
+            "Stored connector config does not match its typed config; using it as-is: source=%s errors=%s",
+            source,
+            e,
+        )
+        return connector_specific_config
+    return config.model_dump(exclude_unset=True)
+
+
 def instantiate_connector(
     db_session: Session,
     source: DocumentSource,
@@ -115,7 +155,9 @@ def instantiate_connector(
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
-    connector = connector_class(**connector_specific_config)
+    connector = connector_class(
+        **build_connector_kwargs(source, connector_specific_config)
+    )
 
     if isinstance(connector, CredentialsConnector):
         provider = build_db_credentials_provider(source, credential.id)
