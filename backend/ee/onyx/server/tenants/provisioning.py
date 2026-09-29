@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
+from ee.onyx.db.tenant_snapshot import build_tenant_schema
 from ee.onyx.db.user_tenant_mapping import (
     add_users_to_tenant,
     resolve_tenant_id,
@@ -737,11 +738,9 @@ async def setup_tenant(tenant_id: str) -> None:
     try:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Run Alembic migrations in a way that isolates it from the current event loop
-        # Create a new event loop for this synchronous operation
+        # Off the event loop: a clone is about a second, the fallback replay far more.
         loop = asyncio.get_event_loop()
-        # Use run_in_executor which properly isolates the thread execution
-        await loop.run_in_executor(None, lambda: run_alembic_migrations(tenant_id))
+        await loop.run_in_executor(None, lambda: build_tenant_schema(tenant_id))
 
         # Configure the tenant with default settings
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
