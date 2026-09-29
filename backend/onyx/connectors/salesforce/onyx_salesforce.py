@@ -17,7 +17,10 @@ from onyx.connectors.salesforce.blacklist import (
     SALESFORCE_BLACKLISTED_PREFIXES,
     SALESFORCE_BLACKLISTED_SUFFIXES,
 )
-from onyx.connectors.salesforce.models import SalesforceSessionCredentials
+from onyx.connectors.salesforce.models import (
+    SalesforceChildFields,
+    SalesforceSessionCredentials,
+)
 from onyx.connectors.salesforce.salesforce_calls import (
     get_object_by_id_queries,
     pinned_child_queries,
@@ -264,7 +267,7 @@ class OnyxSalesforce(Salesforce):
         object_id: str,
         sf_type: str,
         child_relationships: list[str],
-        relationships_to_fields: dict[str, set[str]],
+        relationships_to_fields: dict[str, SalesforceChildFields],
     ) -> dict[str, dict[str, Any]]:
         child_records: dict[str, dict[str, Any]] = {}
         chunks_seen: dict[str, int] = {}
@@ -371,6 +374,14 @@ class OnyxSalesforce(Salesforce):
                 valid_fields.add(field_name)
 
         return valid_fields - field_names_to_remove
+
+    def get_sortable_fields_by_type(self, name: str) -> set[str]:
+        object_description = self.describe_type(name)
+        if object_description is None:
+            return set()
+
+        fields: list[dict[str, Any]] = object_description["fields"]
+        return {field["name"] for field in fields if field.get("sortable")}
 
     def get_children_of_sf_type(self, sf_type: str) -> dict[str, str]:
         """Returns a dict of child object names to relationship names.

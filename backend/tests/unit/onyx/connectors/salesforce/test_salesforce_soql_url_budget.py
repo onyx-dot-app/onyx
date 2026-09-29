@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.connectors.salesforce.models import SalesforceChildFields
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import (
     SOQL_FIELD_SEPARATOR,
@@ -34,6 +35,14 @@ _SUBQUERY = re.compile(
 def _wide_fields(count: int, prefix: str = "Field") -> set[str]:
     # ~30 chars each, like the custom fields of a heavily customized org
     return {f"{prefix}_{i:04d}_Long_Custom_Name__c" for i in range(count)}
+
+
+def _child(
+    queryable: set[str], sortable: set[str] | None = None
+) -> SalesforceChildFields:
+    return SalesforceChildFields(
+        queryable=queryable, sortable=queryable if sortable is None else sortable
+    )
 
 
 def _client() -> OnyxSalesforce:
@@ -122,9 +131,9 @@ class TestGetObjectByIdQueries:
 class TestChildQueryPlanning:
     # 1000 fields need three chunks, 400 need two, so both have pinned rounds
     _RELATIONSHIPS = {
-        "Opportunities": _wide_fields(1000, "Opp") | {ID_FIELD},
-        "Contacts": {ID_FIELD, "Email"},
-        "Cases": _wide_fields(400, "Case"),
+        "Opportunities": _child(_wide_fields(1000, "Opp") | {ID_FIELD}),
+        "Contacts": _child({ID_FIELD, "Email"}),
+        "Cases": _child(_wide_fields(400, "Case")),
     }
 
     def test_window_queries_cover_each_relationship_once(self) -> None:
@@ -140,13 +149,13 @@ class TestChildQueryPlanning:
                 )
         assert set(windowed) == set(self._RELATIONSHIPS)
         assert set(plan.remaining_chunks) == {"Opportunities", "Cases"}
-        for relationship, fields in self._RELATIONSHIPS.items():
+        for relationship, child in self._RELATIONSHIPS.items():
             remaining = {
                 f
                 for chunk in plan.remaining_chunks.get(relationship, [])
                 for f in chunk
             }
-            assert windowed[relationship] | remaining == fields | {ID_FIELD}
+            assert windowed[relationship] | remaining == child.queryable | {ID_FIELD}
 
     def test_pinned_queries_pin_the_window_ids(self) -> None:
         plan = plan_child_queries(
@@ -171,7 +180,7 @@ class TestChildQueryPlanning:
 
     def test_id_only_relationship(self) -> None:
         plan = plan_child_queries(
-            _ACCOUNT_ID, "Account", ["Notes"], {"Notes": {ID_FIELD}}
+            _ACCOUNT_ID, "Account", ["Notes"], {"Notes": _child({ID_FIELD})}
         )
         assert plan.window_queries == [
             "SELECT (SELECT Id FROM Notes ORDER BY Id DESC LIMIT 10) "
@@ -179,25 +188,28 @@ class TestChildQueryPlanning:
         ]
         assert plan.remaining_chunks == {}
 
+    _DATED = {ID_FIELD, "Name", CREATED_FIELD, MODIFIED_FIELD}
+
     @pytest.mark.parametrize(
-        ("fields", "selection"),
+        ("sortable", "selection"),
         [
-            (
-                {ID_FIELD, "Name", CREATED_FIELD, MODIFIED_FIELD},
-                f"ORDER BY {MODIFIED_FIELD} DESC, {ID_FIELD} DESC LIMIT 10",
-            ),
+            (_DATED, f"ORDER BY {MODIFIED_FIELD} DESC, {ID_FIELD} DESC LIMIT 10"),
             (
                 {ID_FIELD, CREATED_FIELD},
                 f"ORDER BY {CREATED_FIELD} DESC, {ID_FIELD} DESC LIMIT 10",
             ),
+            # queryable but unsortable date fields never reach ORDER BY
             ({ID_FIELD, "Name"}, f"ORDER BY {ID_FIELD} DESC LIMIT 10"),
         ],
     )
-    def test_window_orders_by_recency_with_id_tiebreaker(
-        self, fields: set[str], selection: str
+    def test_window_orders_by_sortable_recency_with_id_tiebreaker(
+        self, sortable: set[str], selection: str
     ) -> None:
         plan = plan_child_queries(
-            _ACCOUNT_ID, "Account", ["Contacts"], {"Contacts": fields}
+            _ACCOUNT_ID,
+            "Account",
+            ["Contacts"],
+            {"Contacts": _child(self._DATED, sortable)},
         )
         match = _SUBQUERY.search(plan.window_queries[0])
         assert match, plan.window_queries[0]
@@ -232,9 +244,9 @@ class TestGetChildObjectsById:
     _WIDE = _wide_fields(600, "Opp") | {ID_FIELD}
     _NARROW = {ID_FIELD, "Email"}
     _RELATIONSHIPS = {
-        "Opportunities": _WIDE,
-        "Contacts": _NARROW,
-        "Attachments": {ID_FIELD, "Body"},
+        "Opportunities": _child(_WIDE),
+        "Contacts": _child(_NARROW),
+        "Attachments": _child({ID_FIELD, "Body"}),
     }
 
     def _fetch(self, side_effect: Any) -> tuple[dict[str, dict[str, Any]], list[str]]:
@@ -297,3 +309,16 @@ class TestGetChildObjectsById:
 
         with pytest.raises(RuntimeError):
             self._fetch(fail_pinned)
+
+
+class TestGetSortableFieldsByType:
+    def test_only_sortable_fields(self) -> None:
+        description = {
+            "fields": [
+                {"name": ID_FIELD, "sortable": True},
+                {"name": CREATED_FIELD, "sortable": False},
+                {"name": "Body", "sortable": False},
+            ]
+        }
+        with patch.object(OnyxSalesforce, "describe_type", return_value=description):
+            assert _client().get_sortable_fields_by_type("Note") == {ID_FIELD}

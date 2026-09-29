@@ -53,7 +53,10 @@ from onyx.connectors.salesforce.doc_conversion import (
     convert_sf_object_to_doc,
     convert_sf_query_result_to_doc,
 )
-from onyx.connectors.salesforce.models import SalesforceMyDomainUrl
+from onyx.connectors.salesforce.models import (
+    SalesforceChildFields,
+    SalesforceMyDomainUrl,
+)
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
@@ -130,9 +133,9 @@ class SalesforceConnectorContext:
     parent_to_child_relationships: dict[
         str, set[str]
     ] = {}  # map from parent to child relationships
-    parent_to_relationship_queryable_fields: dict[
-        str, dict[str, set[str]]
-    ] = {}  # map from relationship to queryable fields
+    parent_to_relationship_fields: dict[
+        str, dict[str, SalesforceChildFields]
+    ] = {}  # parent -> relationship -> child fields
 
     parent_child_names_to_relationships: dict[str, str] = {}
 
@@ -896,14 +899,11 @@ class SalesforceConnector(
                 child_relationships = ctx.parent_to_child_relationships[
                     actual_parent_type
                 ]
-                relationship_to_queryable_fields = (
-                    ctx.parent_to_relationship_queryable_fields[actual_parent_type]
-                )
                 child_records = self.sf_client.get_child_objects_by_id(
                     parent_id,
                     actual_parent_type,
                     list(child_relationships),
-                    relationship_to_queryable_fields,
+                    ctx.parent_to_relationship_fields[actual_parent_type],
                 )
 
                 # NOTE(rkuo): does using the parent last modified make sense if the update
@@ -1040,10 +1040,8 @@ class SalesforceConnector(
             str, set[str]
         ] = {}  # map from parent to child relationships
 
-        # relationship keys are formatted as "parent__relationship"
-        # we have to do this because relationship names are not unique!
-        # values are a dict of relationship names to a list of queryable fields
-        parent_to_relationship_queryable_fields: dict[str, dict[str, set[str]]] = {}
+        # keyed by parent then relationship: relationship names repeat across parents
+        parent_to_relationship_fields: dict[str, dict[str, SalesforceChildFields]] = {}
 
         parent_child_names_to_relationships: dict[str, str] = {}
 
@@ -1135,7 +1133,7 @@ class SalesforceConnector(
 
             parent_to_child_relationships[parent_type] = set()
             parent_to_child_types[parent_type] = set()
-            parent_to_relationship_queryable_fields[parent_type] = {}
+            parent_to_relationship_fields[parent_type] = {}
 
             for child_type, child_relationship in child_types_working.items():
                 # onyx_sf_type = OnyxSalesforceType(child_type, sf_client)
@@ -1151,7 +1149,7 @@ class SalesforceConnector(
                 # map parent name to child relationship
                 parent_to_child_relationships[parent_type].add(child_relationship)
 
-                # map relationship to queryable fields of the target table
+                # map relationship to the child's queryable and sortable fields
                 if config_fields := (
                     associations_config and associations_config.get(child_type)
                 ):
@@ -1166,12 +1164,15 @@ class SalesforceConnector(
                         child_type
                     )
 
-                if child_relationship in parent_to_relationship_queryable_fields:
+                if child_relationship in parent_to_relationship_fields:
                     raise RuntimeError(f"{child_relationship=} already exists")
 
-                parent_to_relationship_queryable_fields[parent_type][
-                    child_relationship
-                ] = queryable_fields
+                parent_to_relationship_fields[parent_type][child_relationship] = (
+                    SalesforceChildFields(
+                        queryable=queryable_fields,
+                        sortable=sf_client.get_sortable_fields_by_type(child_type),
+                    )
+                )
 
                 type_to_queryable_fields[child_type] = queryable_fields
 
@@ -1250,9 +1251,7 @@ class SalesforceConnector(
         return_context.prefix_to_type = prefix_to_type
 
         return_context.parent_to_child_relationships = parent_to_child_relationships
-        return_context.parent_to_relationship_queryable_fields = (
-            parent_to_relationship_queryable_fields
-        )
+        return_context.parent_to_relationship_fields = parent_to_relationship_fields
 
         return_context.parent_child_names_to_relationships = (
             parent_child_names_to_relationships
