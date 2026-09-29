@@ -7,8 +7,8 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # no extra registry access. CI overrides both with the matching Docker Hardened Images from
 # dhi.io, which need a Docker account with DHI catalog access.
 # Refresh a digest with: docker buildx imagetools inspect <image reference>
-ARG NODE_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0
-ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0
+ARG NODE_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
+ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
 
 # bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
 # not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc node images.
