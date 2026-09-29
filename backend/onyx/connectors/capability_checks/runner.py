@@ -1,5 +1,5 @@
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -60,6 +60,10 @@ _SKIP_NEEDS_CONFIG_MESSAGE = (
 _TIMEOUT_MESSAGE = (
     "Check timed out; the source may be slow -- try re-running the checks."
 )
+
+# Receives the results recorded so far, after each result row is appended. The
+# runner calls it on its own thread, never on an abandoned probe thread.
+CapabilityCheckProgressCallback = Callable[[Sequence[CapabilityCheckResult]], None]
 
 
 class _CheckOutcome(BaseModel):
@@ -215,6 +219,7 @@ def capability_check_run_stale_after(source: DocumentSource) -> timedelta:
 def run_capability_checks(
     checks: Sequence[CapabilityCheck],
     context: CapabilityCheckContext,
+    on_result: CapabilityCheckProgressCallback | None = None,
 ) -> list[CapabilityCheckResult]:
     """Runs checks sequentially and maps their outcomes to statuses.
 
@@ -226,6 +231,10 @@ def run_capability_checks(
     sync capabilities) are one check surfaced per capability: they execute once
     and the outcome mirrors onto each result. Distinct check_ids always execute
     independently, even when they share an implementation.
+
+    ``on_result`` is called after every result row, skips included, with the
+    rows recorded so far in run order. It is how a caller publishes per-check
+    progress before the run completes; an exception from it propagates.
     """
     # A check_id may repeat only as one check mirrored across capabilities;
     # anything else is a registration bug, caught before it silently collapses
@@ -247,6 +256,13 @@ def run_capability_checks(
 
     results: list[CapabilityCheckResult] = []
     outcome_by_check_id: dict[str, _CheckOutcome] = {}
+
+    def record(check: CapabilityCheck, outcome: _CheckOutcome) -> None:
+        results.append(_build_result(check, outcome))
+        if on_result is not None:
+            # A snapshot: the callback must not observe later appends.
+            on_result(tuple(results))
+
     for check in checks:
         unrunnable_outcome: _CheckOutcome | None = None
         if (
@@ -260,12 +276,12 @@ def run_capability_checks(
         elif check.requires_connector_instance and context.connector is None:
             unrunnable_outcome = _missing_instance_outcome(context.instantiation_error)
         if unrunnable_outcome is not None:
-            results.append(_build_result(check, unrunnable_outcome))
+            record(check, unrunnable_outcome)
             continue
 
         if check.check_id not in outcome_by_check_id:
             outcome_by_check_id[check.check_id] = _execute_check(check, context)
-        results.append(_build_result(check, outcome_by_check_id[check.check_id]))
+        record(check, outcome_by_check_id[check.check_id])
     return results
 
 
@@ -318,6 +334,7 @@ def generate_capability_report(
     connector_id: int | None = None,
     input_type: InputType | None = None,
     trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.MANUAL,
+    on_result: CapabilityCheckProgressCallback | None = None,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -332,7 +349,8 @@ def generate_capability_report(
     may be a detached instance; only loaded columns are read. ``source`` picks
     the checks: the connector's source for a connector-scoped run, which for a
     family credential may not be the credential's own source. It defaults to the
-    credential's source.
+    credential's source. ``on_result`` is forwarded to ``run_capability_checks``
+    for per-check progress.
     """
     source = source or credential.source
     checks = get_capability_checks(source)
@@ -420,7 +438,7 @@ def generate_capability_report(
         instantiation_error=instantiation_error,
         source_operations=source_operations,
     )
-    results = run_capability_checks(checks, context)
+    results = run_capability_checks(checks, context, on_result=on_result)
     return CredentialCapabilityReport(
         credential_id=credential.id,
         source=source,

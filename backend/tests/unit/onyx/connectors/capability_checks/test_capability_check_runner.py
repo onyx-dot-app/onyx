@@ -1,5 +1,5 @@
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -9,6 +9,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapability,
 )
@@ -380,3 +381,62 @@ def test_is_fallback_propagates_to_result() -> None:
 
     # Postcondition.
     assert results[0].is_fallback is True
+
+
+def test_on_result_receives_a_growing_snapshot_after_every_row() -> None:
+    """
+    Verifies the progress contract: one call per result row, skips and mirrored
+    rows included, each carrying every row recorded so far in run order.
+    """
+    # Precondition.
+    # An executed check, a skipped check, and a mirrored pair: four rows from
+    # three executions' worth of checks.
+    checks = [
+        _CallableCheck(lambda _context: None, check_id="passing_check"),
+        _CallableCheck(
+            MagicMock(), check_id="skipped_check", requires_connector_instance=True
+        ),
+        _CallableCheck(
+            lambda _context: None,
+            check_id="perm_sync",
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+        ),
+        _CallableCheck(
+            lambda _context: None,
+            check_id="perm_sync",
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
+    ]
+    snapshots: list[list[str]] = []
+
+    def on_result(results_so_far: Sequence[CapabilityCheckResult]) -> None:
+        snapshots.append([result.check_id for result in results_so_far])
+
+    # Under test.
+    results = run_capability_checks(checks, _context(), on_result=on_result)
+
+    # Postcondition.
+    assert snapshots == [
+        ["passing_check"],
+        ["passing_check", "skipped_check"],
+        ["passing_check", "skipped_check", "perm_sync"],
+        ["passing_check", "skipped_check", "perm_sync", "perm_sync"],
+    ]
+    assert snapshots[-1] == [result.check_id for result in results]
+
+
+def test_on_result_snapshots_are_isolated_from_later_rows() -> None:
+    """Verifies a snapshot handed to the callback never grows afterwards."""
+    # Precondition.
+    checks = [
+        _CallableCheck(lambda _context: None, check_id="first_check"),
+        _CallableCheck(lambda _context: None, check_id="second_check"),
+    ]
+    snapshots: list[Sequence[CapabilityCheckResult]] = []
+
+    # Under test.
+    run_capability_checks(checks, _context(), on_result=snapshots.append)
+
+    # Postcondition.
+    assert len(snapshots[0]) == 1
+    assert len(snapshots[1]) == 2
