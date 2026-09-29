@@ -195,6 +195,9 @@ large an org-wide deployment. Node counts are for the whole pool, not per zone.
 The index pool is memory-optimised at every tier because on GCP it carries the
 document index itself.
 
+The tiers size the infrastructure only. For the pod resources at each tier, see
+the chart's [SIZING.md](../../../helm/charts/onyx/SIZING.md).
+
 ### Using an existing network
 
 ```hcl
