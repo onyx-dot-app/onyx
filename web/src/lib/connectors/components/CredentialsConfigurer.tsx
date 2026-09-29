@@ -305,7 +305,7 @@ export function CredentialsConfigurer({
               expandable
               expanded={open}
               expandableContentHeight="full"
-              state="empty"
+              state={open ? "filled" : "empty"}
               rounding={4}
               padding={2}
               onClick={() =>
@@ -318,8 +318,9 @@ export function CredentialsConfigurer({
               }
             >
               <Button
-                icon={open ? SvgFold : SvgPlusCircle}
+                icon={SvgPlusCircle}
                 prominence="tertiary"
+                interaction={open ? "active" : "rest"}
                 tabIndex={-1}
               >
                 {showExplicitCredentialMethods
