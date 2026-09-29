@@ -1,7 +1,9 @@
+import functools
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, NoReturn, cast
+from typing import Any, NoReturn, TypeVar, cast
 
 from pydantic import BaseModel, Field
 from typing_extensions import override
@@ -49,8 +51,13 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
+_F = TypeVar("_F", bound=Callable[..., list[Any]])
+
 _SLIM_DOC_SYNC_LABEL = "canvas_retrieve_all_slim_docs_perm_sync"
 _ACTIVE_ENROLLMENT_STATES = {"active", "invited"}
+# Canvas answers 404 on a course stage endpoint when that tool is disabled for
+# the course (e.g. "That page has been disabled for this course").
+_TOOL_DISABLED_STATUS_CODE = 404
 
 
 CANVAS_COURSE_GROUP_ID_PREFIX = "canvas-course"
@@ -99,6 +106,35 @@ class CanvasStage(StrEnum):
     PAGES = "pages"
     ASSIGNMENTS = "assignments"
     ANNOUNCEMENTS = "announcements"
+
+
+def _empty_if_tool_disabled(stage: CanvasStage) -> Callable[[_F], _F]:
+    """Make a per-course listing return [] when Canvas says the tool is
+    disabled for the course.
+
+    Apply it below ``retry_builder`` so the 404 is handled before the retry
+    logic sees it. Any other error still propagates: returning [] for a
+    transient error would make pruning delete documents that still exist.
+    """
+
+    def decorator(fn: _F) -> _F:
+        @functools.wraps(fn)
+        def wrapper(self: Any, course_id: int, *args: Any, **kwargs: Any) -> list[Any]:
+            try:
+                return fn(self, course_id, *args, **kwargs)
+            except OnyxError as e:
+                if e.status_code != _TOOL_DISABLED_STATUS_CODE:
+                    raise
+                logger.warning(
+                    "Canvas %s is disabled for course %s. Skipping stage.",
+                    stage,
+                    course_id,
+                )
+                return []
+
+        return cast(_F, wrapper)
+
+    return decorator
 
 
 _STAGE_CONFIG: dict[CanvasStage, dict[str, Any]] = {
@@ -385,6 +421,7 @@ class CanvasConnector(
         return courses
 
     @retry_builder(tries=3, delay=1, backoff=2)
+    @_empty_if_tool_disabled(CanvasStage.PAGES)
     def _list_pages(self, course_id: int) -> list[CanvasPage]:
         """Fetch all pages for a given course."""
         logger.debug("Fetching pages for course %s", course_id)
@@ -399,6 +436,7 @@ class CanvasConnector(
         return pages
 
     @retry_builder(tries=3, delay=1, backoff=2)
+    @_empty_if_tool_disabled(CanvasStage.ASSIGNMENTS)
     def _list_assignments(self, course_id: int) -> list[CanvasAssignment]:
         """Fetch all assignments for a given course."""
         logger.debug("Fetching assignments for course %s", course_id)
@@ -415,6 +453,7 @@ class CanvasConnector(
         return assignments
 
     @retry_builder(tries=3, delay=1, backoff=2)
+    @_empty_if_tool_disabled(CanvasStage.ANNOUNCEMENTS)
     def _list_announcements(
         self,
         course_id: int,
@@ -800,23 +839,19 @@ class CanvasConnector(
             if oe.status_code in (401, 403):
                 _handle_canvas_api_error(oe)  # NoReturn — always raises
 
-            # 404 means the course itself is gone or inaccessible. The
-            # other stages on this course will hit the same 404, so skip
-            # the whole course rather than burning API calls on each stage.
-            if oe.status_code == 404:
+            # 404 on a stage means that tool is disabled for the course. The
+            # other stages of the course are unaffected, so skip only this
+            # one and record no failure: counting it as one trips the
+            # failure threshold and aborts the run for accounts where the
+            # tool is disabled in several courses.
+            if oe.status_code == _TOOL_DISABLED_STATUS_CODE:
                 logger.warning(
-                    "Canvas course %s not found while fetching %s (HTTP 404). Skipping course.",
-                    course_id,
+                    "Canvas %s is disabled for course %s (HTTP 404: %s). Skipping stage.",
                     stage,
+                    course_id,
+                    oe,
                 )
-                yield ConnectorFailure(
-                    failed_entity=EntityFailure(
-                        entity_id=f"canvas-course-{course_id}",
-                    ),
-                    failure_message=(f"Canvas course {course_id} not found: {oe}"),
-                    exception=oe,
-                )
-                new_checkpoint.advance_course()
+                new_checkpoint.advance_stage()
             else:
                 logger.warning(
                     "Failed to fetch %s for course %s: %s. Skipping remainder of this stage.",
