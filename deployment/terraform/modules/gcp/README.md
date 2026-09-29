@@ -144,6 +144,17 @@ output "redis_server_ca_certs" {
 output "postgres_server_ca_cert" {
   value = module.onyx.postgres_server_ca_cert
 }
+
+# Credentials for the chart secrets.
+output "postgres_username" {
+  value     = module.onyx.postgres_username
+  sensitive = true
+}
+
+output "redis_auth_string" {
+  value     = module.onyx.redis_auth_string
+  sensitive = true
+}
 ```
 
 On a new project, enable two APIs before the first plan. The `gke` module
@@ -196,7 +207,9 @@ The index pool is memory-optimised at every tier because on GCP it carries the
 document index itself.
 
 The tiers size the infrastructure only. For the pod resources at each tier, see
-the chart's [SIZING.md](../../../helm/charts/onyx/SIZING.md).
+the chart's [SIZING.md](../../../helm/charts/onyx/SIZING.md). Copy only the
+`resources` values. Its OpenSearch `nodeSelector` is for EKS; on GKE use the one
+in [step 4](#4-send-the-document-index-to-its-own-node-pool).
 
 ### Using an existing network
 
@@ -403,6 +416,9 @@ identity from step 1.
 ### 3. Point Onyx at Cloud SQL and Memorystore
 
 ```yaml
+global:
+  version: "v4.8.1"              # the Onyx release; the default is latest
+
 postgresql:
   enabled: false
 
@@ -439,8 +455,25 @@ character.
 Set `POSTGRES_DB`. Without it, Onyx uses the `postgres` database that Cloud SQL
 ships, and the `onyx` database stays empty.
 
-Create the two secrets in the `onyx` namespace from the Terraform outputs.
-Do not put the passwords in `values.yaml`.
+Create the secrets in the `onyx` namespace. Do not put the passwords in
+`values.yaml`. Terraform supplies the database and Redis credentials. Generate
+the OpenSearch and user-auth secrets:
+
+```bash
+kubectl -n onyx create secret generic onyx-postgresql \
+  --from-literal=username="$(terraform output -raw postgres_username)" \
+  --from-literal=password='<postgres_password>'
+kubectl -n onyx create secret generic onyx-redis \
+  --from-literal=redis_password="$(terraform output -raw redis_auth_string)"
+kubectl -n onyx create secret generic onyx-opensearch \
+  --from-literal=opensearch_admin_username=admin \
+  --from-literal=opensearch_admin_password='Os1!'"$(openssl rand -hex 16)"
+kubectl -n onyx create secret generic onyx-userauth \
+  --from-literal=user_auth_secret="$(openssl rand -hex 32)"
+```
+
+OpenSearch reads its admin password one time, at first start. A later change
+to the secret does not change the password.
 
 **Redis uses TLS by default.** `redis_transit_encryption_enabled` is `true`, so
 Memorystore serves TLS on port 6378 only. Turn on the chart's `redisTls`. It
