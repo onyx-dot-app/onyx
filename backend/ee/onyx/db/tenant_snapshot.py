@@ -119,6 +119,18 @@ def get_head_revision() -> str | None:
     return ScriptDirectory.from_config(config).get_current_head()
 
 
+def schema_has_tables(engine: Engine, schema: str) -> bool:
+    with engine.connect() as connection:
+        count = connection.scalar(
+            text(
+                "SELECT count(*) FROM information_schema.tables "
+                "WHERE table_schema = :schema"
+            ),
+            {"schema": schema},
+        )
+    return bool(count)
+
+
 def scratch_schema_name() -> str:
     """A short-lived schema the parity check builds and drops. The name passes the
     tenant validator but no scheduler treats it as a workspace."""

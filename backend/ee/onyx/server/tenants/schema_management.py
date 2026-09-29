@@ -5,11 +5,15 @@ from types import SimpleNamespace
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
-from ee.onyx.db.tenant_snapshot import apply_snapshot, get_head_revision, get_snapshot
+from ee.onyx.db.tenant_snapshot import (
+    apply_snapshot,
+    get_head_revision,
+    get_snapshot,
+    schema_has_tables,
+)
 from onyx.db.engine.shard_registry import (
     ALEMBIC_TARGET_URL_ATTRIBUTE,
     get_engine_for_shard,
@@ -89,7 +93,7 @@ def build_tenant_schema(tenant_id: str) -> None:
     engine = get_engine_for_shard(shard_name)
     head = get_head_revision()
     dump = get_snapshot(shard_name, head) if head else None
-    if dump is None or _has_tables(engine, tenant_id):
+    if dump is None or schema_has_tables(engine, tenant_id):
         logger.warning(
             "Migrating tenant %s through the chain (snapshot for %s on shard %s: %s)",
             tenant_id,
@@ -103,18 +107,6 @@ def build_tenant_schema(tenant_id: str) -> None:
     logger.info(
         "Cloned tenant %s from the shard %s snapshot at %s", tenant_id, shard_name, head
     )
-
-
-def _has_tables(engine: Engine, tenant_id: str) -> bool:
-    with engine.connect() as connection:
-        count = connection.scalar(
-            text(
-                "SELECT count(*) FROM information_schema.tables "
-                "WHERE table_schema = :schema"
-            ),
-            {"schema": tenant_id},
-        )
-    return bool(count)
 
 
 def create_schema_if_not_exists(tenant_id: str) -> bool:
