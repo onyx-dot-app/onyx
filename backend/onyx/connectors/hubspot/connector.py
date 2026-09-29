@@ -30,6 +30,7 @@ from hubspot.crm.tickets.models import SimplePublicObjectId as TicketObjectId
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.hubspot.config import HubSpotObjectType
 from onyx.connectors.hubspot.rate_limit import HubSpotRateLimiter
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -49,7 +50,7 @@ from onyx.utils.logger import setup_logger
 HUBSPOT_BASE_URL = "https://app.hubspot.com"
 HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 
-AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
+AVAILABLE_OBJECT_TYPES = {object_type.value for object_type in HubSpotObjectType}
 
 HUBSPOT_PAGE_SIZE = 100
 # HubSpot Search API rejects cursors beyond this offset.
