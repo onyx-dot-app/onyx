@@ -286,16 +286,26 @@ export function CredentialsConfigurer({
         </Section>
       </Card>
 
-      {/* One card per way of creating a credential. The button is the whole
-          control: the card around it is a plain container, so a click in the
-          open form cannot fold it away. While the OAuth details are still
+      {/* One card per way of creating a credential. The fold button is the
+          only control: the card around it is a plain container, so a click in
+          the open form cannot fold it away. While the OAuth details are still
           loading we do not yet know how many cards there are, so a single
           disabled one holds the place. */}
       {oauthDetailsLoading ? (
-        <Card border="solid" color="transparent" rounding={4} padding={2}>
-          <Button icon={SvgPlusCircle} prominence="tertiary" disabled>
-            {newAccountLabel}
-          </Button>
+        <Card
+          border="solid"
+          color="transparent"
+          rounding={4}
+          padding={4}
+          disabled
+        >
+          <ContentAction
+            icon={SvgPlusCircle}
+            title={newAccountLabel}
+            sizePreset="main-ui"
+            variant="section"
+            padding={0}
+          />
         </Card>
       ) : (
         credentialCreationMethods.map((method) => {
@@ -309,25 +319,43 @@ export function CredentialsConfigurer({
               border="solid"
               color={open ? "background-tint-00" : "transparent"}
               rounding={4}
-              padding={2}
+              padding={4}
               expandedContent={
                 <div className="p-4">{renderCredentialForm(method)}</div>
               }
             >
-              <Button
+              <ContentAction
                 icon={SvgPlusCircle}
-                prominence="tertiary"
-                interaction={open ? "active" : "rest"}
-                onClick={() =>
-                  open
-                    ? closeCredentialForm()
-                    : openCredentialCreationMethod(method)
+                title={
+                  showExplicitCredentialMethods
+                    ? getCredentialCreationActionLabel(
+                        method,
+                        displayName,
+                        true
+                      )
+                    : newAccountLabel
                 }
-              >
-                {showExplicitCredentialMethods
-                  ? getCredentialCreationActionLabel(method, displayName, true)
-                  : newAccountLabel}
-              </Button>
+                sizePreset="main-ui"
+                variant="section"
+                padding={0}
+                rightChildren={
+                  <Button
+                    icon={open ? SvgFold : SvgExpand}
+                    prominence="tertiary"
+                    interaction={open ? "active" : "rest"}
+                    aria-label={
+                      open
+                        ? t("add.collapseButton.ariaLabel")
+                        : t("add.expandButton.ariaLabel")
+                    }
+                    onClick={() =>
+                      open
+                        ? closeCredentialForm()
+                        : openCredentialCreationMethod(method)
+                    }
+                  />
+                }
+              />
             </Card>
           );
         })
