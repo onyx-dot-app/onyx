@@ -16,7 +16,9 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    GOOGLE_AUTH_URI,
     GOOGLE_SCOPES,
+    GOOGLE_TOKEN_URI,
     MISSING_SCOPES_ERROR_STR,
     ONYX_SCOPE_INSTRUCTIONS,
     GoogleOAuthAuthenticationMethod,
@@ -209,6 +211,19 @@ def build_service_account_creds(
     )
 
 
+def _pin_google_endpoints(app_cred: dict[str, Any]) -> dict[str, Any]:
+    pinned = dict(app_cred)
+    for section in ("web", "installed"):
+        client_config = pinned.get(section)
+        if isinstance(client_config, dict):
+            pinned[section] = {
+                **client_config,
+                "auth_uri": GOOGLE_AUTH_URI,
+                "token_uri": GOOGLE_TOKEN_URI,
+            }
+    return pinned
+
+
 def _app_cred_on_row(
     credential_id: int,
     user: User,
@@ -226,7 +241,7 @@ def _app_cred_on_row(
     )
     existing = existing_json.get(DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY)
     if existing is not None:
-        return _load_google_json(existing)
+        return _pin_google_endpoints(_load_google_json(existing))
 
     token_raw = existing_json.get(DB_CREDENTIALS_DICT_TOKEN_KEY)
     if token_raw is None:
@@ -244,10 +259,8 @@ def _app_cred_on_row(
         "web": {
             "client_id": token_dict["client_id"],
             "client_secret": token_dict["client_secret"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": token_dict.get(
-                "token_uri", "https://oauth2.googleapis.com/token"
-            ),
+            "auth_uri": GOOGLE_AUTH_URI,
+            "token_uri": GOOGLE_TOKEN_URI,
         }
     }
     # get_value returns SensitiveValue's cached dict, so build a new one rather

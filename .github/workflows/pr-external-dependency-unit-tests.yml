@@ -112,6 +112,10 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
+      - name: Install Chromium for browser request tests
+        if: matrix.test-dir == 'utils'
+        run: python -m playwright install --with-deps chromium
+
       - name: Setup Helm
         if: matrix.test-dir == 'craft_helm'
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
