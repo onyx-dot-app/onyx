@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
-import { Button, Card, Text } from "@opal/components";
-import { ContentAction, Section, toast } from "@opal/layouts";
+import { Button, Card, SelectCard, Text } from "@opal/components";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
@@ -18,7 +18,6 @@ import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStd
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 import {
   CredentialCreationMethod,
-  getCredentialCreationActionLabel,
   getCredentialCreationMethods,
   shouldRedirectToOAuth,
 } from "@/lib/credentials/credentialCreation";
@@ -311,52 +310,34 @@ export function CredentialsConfigurer({
         credentialCreationMethods.map((method) => {
           const open = credentialCreationMethod === method;
           return (
-            <Card
+            <SelectCard
               key={method}
               expandable
               expanded={open}
               expandableContentHeight="full"
               border="solid"
-              color={open ? "background-tint-00" : "transparent"}
+              state={open ? "filled" : "empty"}
               rounding={4}
-              padding={4}
+              padding={2}
               expandedContent={
                 <div className="p-4">{renderCredentialForm(method)}</div>
               }
+              onClick={() =>
+                open
+                  ? closeCredentialForm()
+                  : openCredentialCreationMethod(method)
+              }
             >
-              <ContentAction
-                icon={SvgPlusCircle}
-                title={
-                  showExplicitCredentialMethods
-                    ? getCredentialCreationActionLabel(
-                        method,
-                        displayName,
-                        true
-                      )
-                    : newAccountLabel
-                }
-                sizePreset="main-ui"
-                variant="section"
-                padding={0}
-                rightChildren={
-                  <Button
-                    icon={open ? SvgFold : SvgExpand}
-                    prominence="tertiary"
-                    interaction={open ? "active" : "rest"}
-                    aria-label={
-                      open
-                        ? t("add.collapseButton.ariaLabel")
-                        : t("add.expandButton.ariaLabel")
-                    }
-                    onClick={() =>
-                      open
-                        ? closeCredentialForm()
-                        : openCredentialCreationMethod(method)
-                    }
-                  />
-                }
-              />
-            </Card>
+              <Section padding={2} width="full">
+                <Content
+                  icon={SvgPlusCircle}
+                  title={newAccountLabel}
+                  sizePreset="main-ui"
+                  variant="body"
+                  color={open ? "interactive" : "muted"}
+                />
+              </Section>
+            </SelectCard>
           );
         })
       )}
