@@ -2640,6 +2640,9 @@
         "fileUploadFailed": {
           "toast": "خطأ في رفع الملفات"
         },
+        "newAccountButton": {
+          "label": "حساب {source} جديد"
+        },
         "oauthRedirectFailed": {
           "message": "تعذّر تحويلك لتسجيل الدخول عبر {source}. يرجى المحاولة مرة أخرى."
         },

@@ -2640,6 +2640,9 @@
         "fileUploadFailed": {
           "toast": "Fehler beim Hochladen der Dateien"
         },
+        "newAccountButton": {
+          "label": "Neues {source}-Konto"
+        },
         "oauthRedirectFailed": {
           "message": "Wir konnten Sie nicht zur Anmeldung bei {source} weiterleiten. Bitte versuchen Sie es erneut."
         },

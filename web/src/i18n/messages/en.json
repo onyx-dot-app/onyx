@@ -2640,6 +2640,9 @@
         "fileUploadFailed": {
           "toast": "Error uploading files"
         },
+        "newAccountButton": {
+          "label": "New {source} Account"
+        },
         "oauthRedirectFailed": {
           "message": "We couldn't redirect you to sign in with {source}. Please try again."
         },

@@ -2640,6 +2640,9 @@
         "fileUploadFailed": {
           "toast": "上传文件出错"
         },
+        "newAccountButton": {
+          "label": "新建 {source} 账户"
+        },
         "oauthRedirectFailed": {
           "message": "无法将您重定向到 {source} 登录页面。请重试。"
         },

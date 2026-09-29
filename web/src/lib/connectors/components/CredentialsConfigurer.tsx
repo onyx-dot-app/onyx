@@ -100,6 +100,11 @@ export function CredentialsConfigurer({
   }, []);
 
   const displayName = getSourceDisplayName(connector) || connector;
+  // A source with one way in says what the card makes; a source with two
+  // names each way instead, so the two cards stay distinguishable.
+  const newAccountLabel = t("add.newAccountButton.label", {
+    source: displayName,
+  });
   const showAuthorize =
     oauthSupportedSources.includes(connector) &&
     (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV);
@@ -253,16 +258,13 @@ export function CredentialsConfigurer({
 
       {/* One card per way of creating a credential. While the OAuth details
           are still loading we do not yet know how many there are, so a single
-          disabled card holds the place. */}
+          disabled card holds the place. The button repeats the card's action
+          for pointer users; the card itself is the tab stop. */}
       {oauthDetailsLoading ? (
-        <SelectCard state="empty" rounding={4} padding={4} disabled>
-          <ContentAction
-            icon={SvgPlusCircle}
-            title={t("add.createCredentialButton.label")}
-            sizePreset="main-content"
-            variant="section"
-            padding={0}
-          />
+        <SelectCard state="empty" rounding={4} padding={2} disabled>
+          <Button icon={SvgPlusCircle} prominence="tertiary" tabIndex={-1}>
+            {newAccountLabel}
+          </Button>
         </SelectCard>
       ) : (
         credentialCreationMethods.map((method) => (
@@ -270,20 +272,14 @@ export function CredentialsConfigurer({
             key={method}
             state="empty"
             rounding={4}
-            padding={4}
+            padding={2}
             onClick={() => openCredentialCreationMethod(method)}
           >
-            <ContentAction
-              icon={SvgPlusCircle}
-              title={getCredentialCreationActionLabel(
-                method,
-                displayName,
-                showExplicitCredentialMethods
-              )}
-              sizePreset="main-content"
-              variant="section"
-              padding={0}
-            />
+            <Button icon={SvgPlusCircle} prominence="tertiary" tabIndex={-1}>
+              {showExplicitCredentialMethods
+                ? getCredentialCreationActionLabel(method, displayName, true)
+                : newAccountLabel}
+            </Button>
           </SelectCard>
         ))
       )}

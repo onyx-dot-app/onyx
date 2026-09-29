@@ -2640,6 +2640,9 @@
         "fileUploadFailed": {
           "toast": "Erreur lors du téléversement des fichiers"
         },
+        "newAccountButton": {
+          "label": "Nouveau compte {source}"
+        },
         "oauthRedirectFailed": {
           "message": "Nous n'avons pas pu vous rediriger pour vous connecter avec {source}. Veuillez réessayer."
         },

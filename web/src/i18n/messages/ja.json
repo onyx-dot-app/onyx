@@ -2640,6 +2640,9 @@
         "fileUploadFailed": {
           "toast": "ファイルのアップロード中にエラーが発生しました"
         },
+        "newAccountButton": {
+          "label": "新しい {source} アカウント"
+        },
         "oauthRedirectFailed": {
           "message": "{source} でのサインイン画面にリダイレクトできませんでした。もう一度お試しください。"
         },
