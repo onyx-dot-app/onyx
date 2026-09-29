@@ -474,14 +474,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
         <div className="ms-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 me-4">
           <EditableStringFieldDisplay
             value={ccPair.name}
-            isEditable={can(ccPair, "edit")}
+            isEditable={can(ccPair, "operate")}
             onUpdate={handleUpdateName}
             scale={2.1}
           />
         </div>
 
         <div className="ms-auto flex gap-x-2">
-          {can(ccPair, "edit") && (
+          {can(ccPair, "operate") && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button prominence="secondary" icon={SvgSettings}>
@@ -772,10 +772,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
                       refreshFreq={refreshFreq}
                       // No handler => no pencil, matching the rest of this page's edits.
                       onRefreshEdit={
-                        can(ccPair, "edit") ? handleRefreshEdit : undefined
+                        can(ccPair, "operate") ? handleRefreshEdit : undefined
                       }
                       onPruningEdit={
-                        can(ccPair, "edit") ? handlePruningEdit : undefined
+                        can(ccPair, "operate") ? handlePruningEdit : undefined
                       }
                     />
                   </div>

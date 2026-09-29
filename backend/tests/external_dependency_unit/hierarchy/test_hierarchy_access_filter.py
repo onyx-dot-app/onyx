@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.hierarchy import _get_accessible_hierarchy_nodes_for_source
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginated
-from onyx.db.enums import AccessType, AccountType, HierarchyNodeType
+from onyx.db.enums import (
+    AccessType,
+    AccountType,
+    ConnectorManageRole,
+    HierarchyNodeType,
+)
 from onyx.db.hierarchy import get_source_hierarchy_node
 from onyx.db.models import (
     Credential,
@@ -192,6 +197,7 @@ def connector_access_seed(
             UserGroup__ConnectorCredentialPair(
                 user_group_id=group.id,
                 cc_pair_id=cc_pair.id,
+                role=ConnectorManageRole.EDITOR,
                 is_current=True,
             ),
             UserGroup__CCPairDataAccess(

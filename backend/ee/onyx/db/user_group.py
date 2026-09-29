@@ -29,16 +29,18 @@ from onyx.auth.permissions import (
 from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_cc_pair_groups_for_ids,
     get_connector_credential_pair_from_id,
-    get_editable_cc_pair_ids,
-    verify_user_can_edit_all_cc_pairs,
+    get_managed_cc_pair_ids,
+    verify_user_can_manage_all_cc_pairs,
 )
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
     AccountType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     GrantSource,
     Permission,
     PermissionAuthority,
@@ -545,7 +547,9 @@ def _add_user_group__cc_pair_relationships__no_commit(
     """NOTE: does not commit the transaction."""
     relationships = [
         UserGroup__ConnectorCredentialPair(
-            user_group_id=user_group_id, cc_pair_id=cc_pair_id
+            user_group_id=user_group_id,
+            cc_pair_id=cc_pair_id,
+            role=ConnectorManageRole.EDITOR,
         )
         for cc_pair_id in cc_pair_ids
     ]
@@ -1013,8 +1017,8 @@ def set_user_group_data_access_cc_pairs(
     )
     added_cc_pair_ids = cc_pair_ids - current_cc_pair_ids
     # Like the pair-side setter, the caller changes only what they can manage.
-    removed_cc_pair_ids = get_editable_cc_pair_ids(
-        current_cc_pair_ids - cc_pair_ids, db_session, user
+    removed_cc_pair_ids = get_managed_cc_pair_ids(
+        current_cc_pair_ids - cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
     )
     final_cc_pair_ids = (current_cc_pair_ids - removed_cc_pair_ids) | added_cc_pair_ids
     _assert_default_group_update_allowed(
@@ -1027,7 +1031,9 @@ def set_user_group_data_access_cc_pairs(
     _assert_group_update_within_scope(
         db_session, user, user_group_id, added_cc_pair_ids=added_cc_pair_ids
     )
-    if not verify_user_can_edit_all_cc_pairs(changed_cc_pair_ids, db_session, user):
+    if not verify_user_can_manage_all_cc_pairs(
+        changed_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
+    ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can only change data access of connectors you can edit.",

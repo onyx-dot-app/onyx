@@ -22,7 +22,7 @@ import pytest
 
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, ConnectorManageRole
 from onyx.db.models import (
     ConnectorCredentialPair,
     User__UserGroup,
@@ -204,7 +204,10 @@ def _insert_stale_cc_pair_junction(group_id: int, cc_pair_id: int) -> None:
     with get_session_with_current_tenant() as db_session:
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=group_id, cc_pair_id=cc_pair_id, is_current=False
+                user_group_id=group_id,
+                cc_pair_id=cc_pair_id,
+                role=ConnectorManageRole.EDITOR,
+                is_current=False,
             )
         )
         db_session.commit()

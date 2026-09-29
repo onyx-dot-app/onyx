@@ -487,9 +487,10 @@ class CCPairFullInfo(BaseModel):
     last_index_attempt_status: IndexingStatus | None
     latest_deletion_attempt: DeletionAttemptSnapshot | None
     access_type: AccessType
+    # True when the caller may operate the pair (the OPERATE access level)
     is_editable_for_current_user: bool
-    # per-action affordance map for the requesting user, from the same editable-scope
-    # decision the write guard enforces
+    # per-action affordance map for the requesting user, from the same access
+    # decisions the write guards enforce
     permissions: dict[str, bool]
     deletion_failure_message: str | None
     indexing: bool
@@ -570,8 +571,8 @@ class CCPairFullInfo(BaseModel):
         indexing: bool,
         *,
         mask_credential_prefix: bool,
+        can_edit: bool,
         is_connectors_admin: bool = False,
-        owns_groupless: bool = False,
         groups: list[int] | None = None,
         last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
@@ -623,9 +624,9 @@ class CCPairFullInfo(BaseModel):
             access_type=cc_pair_model.access_type,
             is_editable_for_current_user=is_editable_for_current_user,
             permissions=cc_pair_permissions(
-                is_editable=is_editable_for_current_user,
+                can_operate=is_editable_for_current_user,
+                can_edit=can_edit,
                 is_connectors_admin=is_connectors_admin,
-                owns_groupless=owns_groupless,
             ),
             deletion_failure_message=cc_pair_model.deletion_failure_message,
             indexing=indexing,
@@ -715,9 +716,10 @@ class ConnectorIndexingStatusLite(BaseModel):
     last_finished_status: IndexingStatus | None
     last_status: IndexingStatus | None
     last_success: datetime | None
+    # True when the caller may operate the pair (the OPERATE access level)
     is_editable: bool
-    # per-action affordance map for the requesting user, from the same editable-scope
-    # decision the write guard enforces
+    # per-action affordance map for the requesting user, from the same access
+    # decisions the write guards enforce
     permissions: dict[str, bool]
     docs_indexed: int
     latest_index_attempt_docs_indexed: int | None

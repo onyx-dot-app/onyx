@@ -30,6 +30,7 @@ from onyx.connectors.credential_families import is_credential_usable_for_source
 from onyx.connectors.factory import validate_connector_config
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pair_for_user,
     get_connector_credential_pairs_for_user,
 )
@@ -99,8 +100,8 @@ def _connector_pairing_visible(
 
     Global managers see every pairing, including failed-creation orphans whose
     cc-pair was never created (a support surface). Scoped managers see only
-    pairings within their managed scope: the read filter
-    (``get_editable=False``) would admit every public and sync pair, and is
+    pairings they may operate: the read filter
+    (``CCPairAccessLevel.READ``) would admit every public and sync pair, and is
     skipped outright for READ_CONNECTORS holders, so it must not authorize
     report internals.
     """
@@ -110,7 +111,7 @@ def _connector_pairing_visible(
             connector_id=connector_id,
             credential_id=credential_id,
             user=user,
-            get_editable=True,
+            access_level=CCPairAccessLevel.OPERATE,
         )
         is not None
     )
@@ -356,7 +357,7 @@ def list_capability_reports_for_source(
             for pair in get_connector_credential_pairs_for_user(
                 db_session=db_session,
                 user=user,
-                get_editable=True,
+                access_level=CCPairAccessLevel.OPERATE,
                 source=source,
                 # Every pairing counts as visibility truth, whatever its mode.
                 processing_mode=None,

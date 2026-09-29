@@ -22,6 +22,7 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import get_visible_user_group_ids
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pair_from_id_for_user,
 )
 from onyx.db.engine.sql_engine import get_session
@@ -51,7 +52,7 @@ def get_cc_pair_latest_sync(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=False,
+        access_level=CCPairAccessLevel.READ,
     )
     if not cc_pair:
         raise OnyxError(
@@ -77,7 +78,7 @@ def sync_cc_pair(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
     if not cc_pair:
         raise OnyxError(
@@ -130,7 +131,7 @@ def get_cc_pair_latest_group_sync(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=False,
+        access_level=CCPairAccessLevel.READ,
     )
     if not cc_pair:
         raise OnyxError(
@@ -156,7 +157,7 @@ def sync_cc_pair_groups(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
     if not cc_pair:
         raise OnyxError(
@@ -222,7 +223,7 @@ def get_cc_pair_data_access(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=False,
+        access_level=CCPairAccessLevel.READ,
     )
     if not cc_pair:
         raise OnyxError(
@@ -250,7 +251,7 @@ def set_cc_pair_data_access(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.EDIT,
     )
     if not cc_pair:
         raise OnyxError(

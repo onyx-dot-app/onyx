@@ -80,6 +80,7 @@ from onyx.db.connector import (
     update_connector,
 )
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     add_credential_to_connector,
     fetch_connector_credential_pair_for_connector,
     get_cc_pair_groups_for_ids,
@@ -87,6 +88,8 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_for_user,
     get_connector_credential_pairs_for_user,
     get_connector_credential_pairs_for_user_parallel,
+    get_managed_cc_pair_ids,
+    verify_user_can_edit_connector,
     verify_user_has_access_to_cc_pair,
 )
 from onyx.db.credentials import (
@@ -450,7 +453,7 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
     connector_id: int,
     user: User,
     db_session: Session,
-    require_editable: bool,
+    access_level: CCPairAccessLevel,
 ) -> ConnectorCredentialPair:
     cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
     if cc_pair is None:
@@ -459,29 +462,17 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
             detail="No Connector-Credential Pair found for this connector",
         )
 
-    has_requested_access = verify_user_has_access_to_cc_pair(
+    if not verify_user_has_access_to_cc_pair(
         cc_pair_id=cc_pair.id,
         db_session=db_session,
         user=user,
-        get_editable=require_editable,
-    )
-    if has_requested_access:
-        return cc_pair
-
-    # Special case: users with MANAGE_CONNECTORS should be able to manage files
-    # for public file connectors even when they are not the creator.
-    if (
-        require_editable
-        and Permission.MANAGE_CONNECTORS in get_effective_permissions(user)
-        and cc_pair.access_type == AccessType.PUBLIC
+        access_level=access_level,
     ):
-        return cc_pair
-
-    raise OnyxError(
-        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-        "Group managers can only act on private resources "
-        "within the groups they manage.",
-    )
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
+    return cc_pair
 
 
 @router.post("/admin/connector/file/upload", tags=PUBLIC_API_TAGS)
@@ -515,13 +506,13 @@ def list_connector_files(
             status_code=400, detail="This endpoint only works with file connectors"
         )
 
-    # require_editable=False is the obvious choice for a read, but its filter passes
-    # any public connector, which would hand a manager file names outside their groups.
+    # READ is the obvious choice for a read, but its filter passes any public
+    # connector, which would hand a manager file names outside their groups.
     _ = _fetch_and_check_file_connector_cc_pair_permissions(
         connector_id=connector_id,
         user=user,
         db_session=db_session,
-        require_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
 
     file_locations = connector.connector_specific_config.get("file_locations", [])
@@ -642,13 +633,13 @@ def update_connector_files(
             status_code=400, detail="This endpoint only works with file connectors"
         )
 
-    # Get the connector-credential pair for indexing/pruning triggers
-    # and validate user permissions for file management.
+    # Get the connector-credential pair for indexing/pruning triggers and validate
+    # user permissions for file management. The file list is the connector's config.
     cc_pair = _fetch_and_check_file_connector_cc_pair_permissions(
         connector_id=connector_id,
         user=user,
         db_session=db_session,
-        require_editable=True,
+        access_level=CCPairAccessLevel.EDIT,
     )
 
     # Parse file IDs to remove
@@ -904,7 +895,9 @@ def get_currently_failed_indexing_status(
     cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         user=user,
-        get_editable=get_editable,
+        access_level=(
+            CCPairAccessLevel.OPERATE if get_editable else CCPairAccessLevel.READ
+        ),
     )
 
     # Filter out failed attempts that have a more recent successful attempt
@@ -980,7 +973,7 @@ def get_connector_status(
         eager_load_connector=True,
         eager_load_credential=True,
         eager_load_user=True,
-        get_editable=False,
+        access_level=CCPairAccessLevel.READ,
     )
 
     group_cc_pair_relationships = get_cc_pair_groups_for_ids(
@@ -1077,7 +1070,14 @@ def get_connector_indexing_status(
         # Get editable connector/credential pairs
         (
             lambda: get_connector_credential_pairs_for_user_parallel(
-                user, True, None, True, True, False, True, request.source
+                user,
+                CCPairAccessLevel.OPERATE,
+                None,
+                True,
+                True,
+                False,
+                True,
+                request.source,
             ),
             (),
         ),
@@ -1119,7 +1119,14 @@ def get_connector_indexing_status(
         parallel_functions.append(
             (
                 lambda: get_connector_credential_pairs_for_user_parallel(
-                    user, False, None, True, True, False, True, request.source
+                    user,
+                    CCPairAccessLevel.READ,
+                    None,
+                    True,
+                    True,
+                    False,
+                    True,
+                    request.source,
                 ),
                 (),
             ),
@@ -1177,25 +1184,14 @@ def get_connector_indexing_status(
 
     is_connectors_admin = has_global_permission(user, Permission.MANAGE_CONNECTORS)
 
-    # a pair shared with nobody stays deletable by its creator; only the editable set
-    # can qualify, and an admin already has delete on everything
-    groupless_owned_ids: set[int] = set()
-    if not is_connectors_admin:
-        grouped_ids = {
-            relationship.cc_pair_id
-            for relationship in get_cc_pair_groups_for_ids(
-                db_session=db_session,
-                cc_pair_ids=[cc_pair.id for cc_pair in editable_cc_pairs],
-            )
-            if relationship.is_current
-        }
-        groupless_owned_ids = {
-            cc_pair.id
-            for cc_pair in editable_cc_pairs
-            if cc_pair.id not in grouped_ids
-            and cc_pair.creator_id == user.id
-            and cc_pair.access_type != AccessType.PUBLIC
-        }
+    # EDIT implies OPERATE, so only the operable (editable) set can hold Editor pairs
+    edit_ids = (
+        editable_ids
+        if is_connectors_admin
+        else get_managed_cc_pair_ids(
+            editable_ids, db_session, user, CCPairAccessLevel.EDIT
+        )
+    )
 
     def build_connector_indexing_status(
         cc_pair: ConnectorCredentialPair,
@@ -1226,8 +1222,8 @@ def get_connector_indexing_status(
             ),
             is_editable,
             doc_count,
+            can_edit=cc_pair.id in edit_ids,
             is_connectors_admin=is_connectors_admin,
-            owns_groupless=cc_pair.id in groupless_owned_ids,
         )
 
     # Process editable cc_pairs
@@ -1394,8 +1390,8 @@ def _get_connector_indexing_status_lite(
     is_editable: bool,
     document_cnt: int,
     *,
+    can_edit: bool,
     is_connectors_admin: bool,
-    owns_groupless: bool = False,
 ) -> ConnectorIndexingStatusLite | None:
     # TODO remove this to enable ingestion API
     if cc_pair.name == "DefaultCCPair":
@@ -1420,9 +1416,9 @@ def _get_connector_indexing_status_lite(
         cc_pair_status=cc_pair.status,
         is_editable=is_editable,
         permissions=cc_pair_permissions(
-            is_editable=is_editable,
+            can_operate=is_editable,
+            can_edit=can_edit,
             is_connectors_admin=is_connectors_admin,
-            owns_groupless=owns_groupless,
         ),
         in_progress=in_progress,
         in_repeated_error_state=cc_pair.in_repeated_error_state,
@@ -1691,13 +1687,26 @@ def _discard_unpaired_creation(
         discard_credential_if_unpaired(db_session, credential_id)
 
 
+def _assert_can_edit_connector(
+    connector_id: int, db_session: Session, user: User
+) -> None:
+    if not verify_user_can_edit_connector(connector_id, db_session, user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
+
+
 @router.patch("/admin/connector/{connector_id}", tags=PUBLIC_API_TAGS)
 def update_connector_from_model(
     connector_id: int,
     connector_data: ConnectorUpdateRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
+    _assert_can_edit_connector(connector_id, db_session, user)
     try:
         _validate_connector_request(connector_data)
         validate_connector_credential_bindings(
@@ -1751,9 +1760,12 @@ def update_connector_from_model(
 )
 def delete_connector_by_id(
     connector_id: int,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
+    _assert_can_edit_connector(connector_id, db_session, user)
     try:
         with db_session.begin():
             result = delete_connector(
@@ -1823,6 +1835,7 @@ def connector_run_once(
                 connector_id=connector_id,
                 credential_id=credential_id,
                 user=user,
+                access_level=CCPairAccessLevel.OPERATE,
             )
             is None
         ):
@@ -2109,7 +2122,7 @@ def get_basic_connector_indexing_status(
     cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         eager_load_connector=True,
-        get_editable=False,
+        access_level=CCPairAccessLevel.READ,
         user=user,
     )
 
