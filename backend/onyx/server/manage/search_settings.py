@@ -228,7 +228,6 @@ def set_new_search_settings(
         # the factory; only the primary embedding info needs to be passed in.
         document_index.verify_and_create_index_if_necessary(
             embedding_dim=search_settings.final_embedding_dim,
-            embedding_precision=search_settings.embedding_precision,
         )
 
     # Pause index attempts for the currently in-use index to preserve resources.
@@ -500,7 +499,6 @@ def cancel_new_embedding(
     )
     document_index.verify_and_create_index_if_necessary(
         embedding_dim=primary_search_settings.final_embedding_dim,
-        embedding_precision=primary_search_settings.embedding_precision,
     )
 
     # Kick off reclamation now instead of waiting for the reclaim beat. Safe no-op if the

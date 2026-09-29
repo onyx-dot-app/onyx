@@ -64,7 +64,6 @@ def create_search_settings(
         index_name=search_settings.index_name,
         provider_type=search_settings.provider_type,
         multipass_indexing=search_settings.multipass_indexing,
-        embedding_precision=search_settings.embedding_precision,
         reduced_dimension=search_settings.reduced_dimension,
         vector_quantization=search_settings.vector_quantization,
         enable_contextual_rag=search_settings.enable_contextual_rag,

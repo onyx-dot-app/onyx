@@ -301,14 +301,6 @@ class AccessType(str, PyEnum):
         return [cls.SYNC, cls.SYNC_RESTRICTED]
 
 
-class EmbeddingPrecision(str, PyEnum):
-    # matches vespa tensor type
-    # only support float / bfloat16 for now, since there's not a
-    # good reason to specify anything else
-    BFLOAT16 = "bfloat16"
-    FLOAT = "float"
-
-
 class VectorQuantization(str, PyEnum):
     """Scalar quantization of the stored vectors in the OpenSearch index.
 

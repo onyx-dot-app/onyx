@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.context.search.models import SearchSettingsCreationRequest
-from onyx.db.enums import EmbeddingPrecision, VectorQuantization
+from onyx.db.enums import VectorQuantization
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.search_settings import set_new_search_settings
@@ -28,7 +28,6 @@ def _request(vector_quantization: VectorQuantization) -> SearchSettingsCreationR
         provider_type=None,
         index_name=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         vector_quantization=vector_quantization,
         enable_contextual_rag=False,

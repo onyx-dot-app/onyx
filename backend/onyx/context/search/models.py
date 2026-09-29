@@ -51,7 +51,6 @@ class SavedSearchSettings(IndexingSetting):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
-            embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             vector_quantization=search_settings.vector_quantization,
             switchover_type=search_settings.switchover_type,

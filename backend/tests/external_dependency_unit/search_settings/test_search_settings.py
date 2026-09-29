@@ -10,7 +10,7 @@ from onyx.context.search.models import (
     SavedSearchSettings,
     SearchSettingsCreationRequest,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.llm import (
     fetch_default_contextual_rag_model,
     update_default_contextual_model,
@@ -98,7 +98,6 @@ def _make_creation_request(
         provider_type=None,
         index_name=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=model_configuration_id,
@@ -119,7 +118,6 @@ def _make_saved_search_settings(
         provider_type=None,
         index_name="test_index",
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=model_configuration_id,
@@ -620,7 +618,6 @@ def test_creation_request_defaults_blank_prefixes() -> None:
         provider_type=None,
         index_name=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=False,
         contextual_rag_model_configuration_id=None,

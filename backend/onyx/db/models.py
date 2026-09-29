@@ -77,7 +77,6 @@ from onyx.db.enums import (
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
     DefaultAppMode,
-    EmbeddingPrecision,
     EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
@@ -2324,15 +2323,6 @@ class SearchSettings(Base):
     # at fire time (only those still INVALID/PAUSED are deleted).
     pending_cc_pair_deletions: Mapped[list[int] | None] = mapped_column(
         postgresql.ARRAY(Integer), nullable=True
-    )
-
-    # allows for quantization -> less memory usage for a small performance hit.
-    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
-    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa. For
-    # OpenSearch, see vector_quantization.
-    embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False),
-        default=EmbeddingPrecision.FLOAT,
     )
 
     # OpenSearch scalar quantization of the vector fields. Part of the index

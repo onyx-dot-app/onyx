@@ -104,7 +104,6 @@ def main() -> None:
         tenant_state=tenant_state,
         index_name=search_settings.index_name,
         embedding_dim=indexing_setting.final_embedding_dim,
-        embedding_precision=indexing_setting.embedding_precision,
         vector_quantization=indexing_setting.vector_quantization,
     )
     filters = IndexFilters(

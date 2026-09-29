@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.db.enums import EmbeddingPrecision, SwitchoverType, VectorQuantization
+from onyx.db.enums import SwitchoverType, VectorQuantization
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.enums import EmbeddingProvider
@@ -189,11 +189,6 @@ class IndexingSetting(EmbeddingModelDetail):
     model_dim: int
     index_name: str | None
     multipass_indexing: bool
-    # Defaults to FLOAT (float32). OpenSearch ignores embedding_precision and
-    # stores vectors as float32 regardless — see
-    # onyx/document_index/opensearch/opensearch_document_index.py. BFLOAT16
-    # still works for existing Vespa deployments.
-    embedding_precision: EmbeddingPrecision = EmbeddingPrecision.FLOAT
     reduced_dimension: int | None = None
     vector_quantization: VectorQuantization = VectorQuantization.NONE
 
@@ -226,7 +221,6 @@ class IndexingSetting(EmbeddingModelDetail):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
-            embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             vector_quantization=search_settings.vector_quantization,
             switchover_type=search_settings.switchover_type,

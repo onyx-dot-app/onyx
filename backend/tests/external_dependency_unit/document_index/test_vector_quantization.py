@@ -14,7 +14,7 @@ import pytest
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
-from onyx.db.enums import EmbeddingPrecision, VectorQuantization
+from onyx.db.enums import VectorQuantization
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import (
     OpenSearchIndexClient,
@@ -93,14 +93,12 @@ def test_vector_quantization_mapping_and_retrieval(
         ),
         index_name=index_name,
         embedding_dim=EMBEDDING_DIM,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         vector_quantization=vector_quantization,
     )
     with OpenSearchIndexClient(index_name=index_name) as client:
         try:
             document_index.verify_and_create_index_if_necessary(
                 embedding_dim=EMBEDDING_DIM,
-                embedding_precision=EmbeddingPrecision.FLOAT,
             )
 
             mapping_properties = client._client.indices.get_mapping(index=index_name)[
@@ -128,7 +126,6 @@ def test_vector_quantization_mapping_and_retrieval(
             # rejects a changed encoder, so this also checks nothing drifted.
             document_index.verify_and_create_index_if_necessary(
                 embedding_dim=EMBEDDING_DIM,
-                embedding_precision=EmbeddingPrecision.FLOAT,
             )
 
             rng = random.Random(42)
