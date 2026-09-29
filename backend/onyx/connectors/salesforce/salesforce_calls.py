@@ -176,11 +176,15 @@ def get_object_by_id_queries(
 
 def _child_window_selection(sortable_fields: set[str]) -> str:
     # newest children first so a recently changed child makes the window, with
-    # Id as tiebreaker so the order is total
+    # Id as tiebreaker so the order is total. SOQL sorts nulls first by default
+    # and some entities reject DESC NULLS FIRST (UNSUPPORTED_QUERY).
+    order_fields = [ID_FIELD]
     for field in (MODIFIED_FIELD, CREATED_FIELD):
         if field in sortable_fields:
-            return f"ORDER BY {field} DESC, {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
-    return f"ORDER BY {ID_FIELD} DESC LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
+            order_fields.insert(0, field)
+            break
+    order_by = SOQL_FIELD_SEPARATOR.join(f"{f} DESC NULLS LAST" for f in order_fields)
+    return f"ORDER BY {order_by} LIMIT {SOQL_SUBQUERY_ROW_LIMIT}"
 
 
 def _child_ids_selection(ids: list[str]) -> str:

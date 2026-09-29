@@ -183,7 +183,7 @@ class TestChildQueryPlanning:
             _ACCOUNT_ID, "Account", ["Notes"], {"Notes": _child({ID_FIELD})}
         )
         assert plan.window_queries == [
-            "SELECT (SELECT Id FROM Notes ORDER BY Id DESC LIMIT 10) "
+            "SELECT (SELECT Id FROM Notes ORDER BY Id DESC NULLS LAST LIMIT 10) "
             f"FROM Account WHERE Id = '{_ACCOUNT_ID}'"
         ]
         assert plan.remaining_chunks == {}
@@ -193,13 +193,18 @@ class TestChildQueryPlanning:
     @pytest.mark.parametrize(
         ("sortable", "selection"),
         [
-            (_DATED, f"ORDER BY {MODIFIED_FIELD} DESC, {ID_FIELD} DESC LIMIT 10"),
+            (
+                _DATED,
+                f"ORDER BY {MODIFIED_FIELD} DESC NULLS LAST, "
+                f"{ID_FIELD} DESC NULLS LAST LIMIT 10",
+            ),
             (
                 {ID_FIELD, CREATED_FIELD},
-                f"ORDER BY {CREATED_FIELD} DESC, {ID_FIELD} DESC LIMIT 10",
+                f"ORDER BY {CREATED_FIELD} DESC NULLS LAST, "
+                f"{ID_FIELD} DESC NULLS LAST LIMIT 10",
             ),
             # queryable but unsortable date fields never reach ORDER BY
-            ({ID_FIELD, "Name"}, f"ORDER BY {ID_FIELD} DESC LIMIT 10"),
+            ({ID_FIELD, "Name"}, f"ORDER BY {ID_FIELD} DESC NULLS LAST LIMIT 10"),
         ],
     )
     def test_window_orders_by_sortable_recency_with_id_tiebreaker(
