@@ -28,7 +28,10 @@ from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
     get_session_with_tenant,
 )
-from onyx.db.engine.tenant_utils import get_all_tenant_ids  # noqa: E402
+from onyx.db.engine.tenant_utils import (  # noqa: E402
+    get_all_tenant_ids,
+    get_template_tenant_ids,
+)
 from onyx.db.rotate_encryption_key import rotate_encryption_key  # noqa: E402
 from onyx.utils.variable_functionality import global_version  # noqa: E402
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA  # noqa: E402
@@ -86,7 +89,8 @@ def main() -> None:
         print("DRY RUN — no changes will be made")
 
     if args.all_tenants:
-        tenant_ids = get_all_tenant_ids()
+        # The template is nobody's workspace but its rows are cloned into new ones.
+        tenant_ids = get_all_tenant_ids() + get_template_tenant_ids()
         print(f"Found {len(tenant_ids)} tenant(s)")
         failed_tenants: list[str] = []
         for tid in tenant_ids:

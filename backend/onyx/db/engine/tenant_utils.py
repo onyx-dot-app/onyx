@@ -181,11 +181,22 @@ def get_all_tenant_ids() -> list[str]:
         return [POSTGRES_DEFAULT_SCHEMA]
 
     # Deduped: a tenant mid-copy exists on two shards but is still one tenant.
-    # Parity scratch schemas live for one deploy check and are nobody's workspace.
+    # The template and the parity scratch schemas are nobody's workspace, so
+    # no scheduled work runs against them.
     return sorted(
         {
             tenant_id
             for tenant_id in chain.from_iterable(get_tenant_ids_by_shard().values())
-            if not tenant_id.startswith(f"{TENANT_TEMPLATE_SCHEMA}_")
+            if not tenant_id.startswith(TENANT_TEMPLATE_SCHEMA)
         }
     )
+
+
+def get_template_tenant_ids() -> list[str]:
+    """The rollout template when it exists, for maintenance such as key rotation
+    that must reach every schema the snapshot is built from."""
+    on_some_shard = any(
+        TENANT_TEMPLATE_SCHEMA in tenant_ids
+        for tenant_ids in get_tenant_ids_by_shard().values()
+    )
+    return [TENANT_TEMPLATE_SCHEMA] if on_some_shard else []

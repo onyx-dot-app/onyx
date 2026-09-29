@@ -8,6 +8,7 @@ whole migration chain, baseline rows included.
 
 import os
 import re
+import shutil
 import subprocess
 import uuid
 from collections.abc import Iterator
@@ -24,6 +25,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from onyx.configs.app_configs import AWS_REGION_NAME, DB_READONLY_USER, USE_IAM_AUTH
+from onyx.configs.constants import SSL_CERT_FILE
 from onyx.db.engine.iam_auth import get_iam_auth_token
 from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.db.engine.shard_registry import (
@@ -74,10 +76,12 @@ _UNCOMPARED_COLUMN_TYPES = (
     "uuid",
 )
 _DIFF_LINES_REPORTED = 60
-# Seeded rows whose value carries the migration's run date, so clone and fresh
-# schema differ by day. The row still counts, only the value column is masked.
-# Table to (key column, key value, masked column).
-_RUN_DATE_SEEDED_ROWS = {"key_value_store": ("key", "kg_config", "value")}
+# Seeded rows with one JSON field set to the migration's run date, so clone and
+# fresh schema differ by day. Only that field is dropped before comparing.
+# Table to (key column, key value, JSON column, dated field).
+_RUN_DATE_SEEDED_FIELDS = {
+    "key_value_store": ("key", "kg_config", "value", "KG_COVERAGE_START")
+}
 # Postgres deparses a varchar list in a CHECK or partial index either as an array
 # of casts or as a cast of an array, flipping form on every re-parse. Same
 # constraint, so both spellings compare as one.
@@ -117,6 +121,8 @@ def dump_schema(shard_name: str, schema: str, schema_only: bool = False) -> str:
     Rows come out as INSERTs rather than COPY blocks for that reason."""
     if not validate_tenant_id(schema):
         raise ValueError(f"Refusing to dump schema {schema!r}")
+    if shutil.which("pg_dump") is None:
+        raise RuntimeError("pg_dump is not installed, run from an image that has it")
     command = [
         "pg_dump",
         "--schema",
@@ -146,16 +152,21 @@ def _libpq_env(shard_name: str) -> dict[str, str]:
     settings the engine uses for that shard."""
     spec = get_shard_spec(shard_name)
     # The spec carries the URL-encoded form the engine embeds in its URL.
-    password = unquote_plus(spec.password)
-    if USE_IAM_AUTH:
-        password = get_iam_auth_token(spec.host, spec.port, spec.user, AWS_REGION_NAME)
     env = {
         "PGHOST": spec.host,
         "PGPORT": spec.port,
         "PGUSER": spec.user,
         "PGDATABASE": spec.db,
-        "PGPASSWORD": password,
+        "PGPASSWORD": unquote_plus(spec.password),
     }
+    if USE_IAM_AUTH:
+        # Same token and TLS the engine's IAM connect handler applies.
+        env["PGPASSWORD"] = get_iam_auth_token(
+            spec.host, spec.port, spec.user, AWS_REGION_NAME
+        )
+        env["PGSSLMODE"] = "require"
+        env["PGSSLROOTCERT"] = SSL_CERT_FILE
+        return env
     ssl_args = pg_ssl_psycopg2_connect_args()
     if "sslpassword" in ssl_args:
         # libpq has no variable for it and argv would expose it.
@@ -413,12 +424,16 @@ def _row_digest(
 
 
 def _compared_value(table: str, column: str) -> sql.Composable:
-    seeded = _RUN_DATE_SEEDED_ROWS.get(table)
+    seeded = _RUN_DATE_SEEDED_FIELDS.get(table)
     if seeded is None or column != seeded[2]:
         return sql.Identifier(column)
-    key_column, key_value, _ = seeded
-    return sql.SQL("CASE WHEN {} = {} THEN NULL ELSE {} END").format(
-        sql.Identifier(key_column), sql.Literal(key_value), sql.Identifier(column)
+    key_column, key_value, json_column, dated_field = seeded
+    return sql.SQL("CASE WHEN {} = {} THEN {} - {} ELSE {} END").format(
+        sql.Identifier(key_column),
+        sql.Literal(key_value),
+        sql.Identifier(json_column),
+        sql.Literal(dated_field),
+        sql.Identifier(json_column),
     )
 
 
