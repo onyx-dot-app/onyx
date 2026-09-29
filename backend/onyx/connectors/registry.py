@@ -4,7 +4,17 @@ from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.discord.config import DiscordConnectorConfig
+from onyx.connectors.fireflies.config import FirefliesConnectorConfig
+from onyx.connectors.gmail.config import GmailConnectorConfig
+from onyx.connectors.gong.config import GongConnectorConfig
+from onyx.connectors.imap.config import ImapConnectorConfig
 from onyx.connectors.mock_connector.config import MockConnectorConfig
+from onyx.connectors.outlook.config import OutlookConnectorConfig
+from onyx.connectors.slack.config import SlackConnectorConfig
+from onyx.connectors.teams.config import TeamsConnectorConfig
+from onyx.connectors.zoom.config import ZoomConnectorConfig
+from onyx.connectors.zulip.config import ZulipConnectorConfig
 
 
 class ConnectorMapping(BaseModel):
@@ -27,6 +37,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.SLACK: ConnectorMapping(
         module_path="onyx.connectors.slack.connector",
         class_name="SlackConnector",
+        config_class=SlackConnectorConfig,
     ),
     DocumentSource.GITHUB: ConnectorMapping(
         module_path="onyx.connectors.github.connector",
@@ -35,6 +46,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.GMAIL: ConnectorMapping(
         module_path="onyx.connectors.gmail.connector",
         class_name="GmailConnector",
+        config_class=GmailConnectorConfig,
     ),
     DocumentSource.GITLAB: ConnectorMapping(
         module_path="onyx.connectors.gitlab.connector",
@@ -87,6 +99,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.ZULIP: ConnectorMapping(
         module_path="onyx.connectors.zulip.connector",
         class_name="ZulipConnector",
+        config_class=ZulipConnectorConfig,
     ),
     DocumentSource.GURU: ConnectorMapping(
         module_path="onyx.connectors.guru.connector",
@@ -107,6 +120,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.GONG: ConnectorMapping(
         module_path="onyx.connectors.gong.connector",
         class_name="GongConnector",
+        config_class=GongConnectorConfig,
     ),
     DocumentSource.GOOGLE_SITES: ConnectorMapping(
         module_path="onyx.connectors.google_site.connector",
@@ -139,10 +153,12 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.TEAMS: ConnectorMapping(
         module_path="onyx.connectors.teams.connector",
         class_name="TeamsConnector",
+        config_class=TeamsConnectorConfig,
     ),
     DocumentSource.OUTLOOK: ConnectorMapping(
         module_path="onyx.connectors.outlook.connector",
         class_name="OutlookConnector",
+        config_class=OutlookConnectorConfig,
     ),
     DocumentSource.SALESFORCE: ConnectorMapping(
         module_path="onyx.connectors.salesforce.connector",
@@ -195,6 +211,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.DISCORD: ConnectorMapping(
         module_path="onyx.connectors.discord.connector",
         class_name="DiscordConnector",
+        config_class=DiscordConnectorConfig,
     ),
     DocumentSource.FRESHDESK: ConnectorMapping(
         module_path="onyx.connectors.freshdesk.connector",
@@ -203,10 +220,12 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.FIREFLIES: ConnectorMapping(
         module_path="onyx.connectors.fireflies.connector",
         class_name="FirefliesConnector",
+        config_class=FirefliesConnectorConfig,
     ),
     DocumentSource.ZOOM: ConnectorMapping(
         module_path="onyx.connectors.zoom.connector",
         class_name="ZoomConnector",
+        config_class=ZoomConnectorConfig,
     ),
     DocumentSource.EGNYTE: ConnectorMapping(
         module_path="onyx.connectors.egnyte.connector",
@@ -227,6 +246,7 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.IMAP: ConnectorMapping(
         module_path="onyx.connectors.imap.connector",
         class_name="ImapConnector",
+        config_class=ImapConnectorConfig,
     ),
     DocumentSource.BITBUCKET: ConnectorMapping(
         module_path="onyx.connectors.bitbucket.connector",
