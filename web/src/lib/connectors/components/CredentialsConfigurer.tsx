@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
-import { Button, Card, SelectCard, Text } from "@opal/components";
+import { Button, Card, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -286,33 +286,30 @@ export function CredentialsConfigurer({
         </Section>
       </Card>
 
-      {/* One card per way of creating a credential. While the OAuth details
-          are still loading we do not yet know how many there are, so a single
-          disabled card holds the place. The button repeats the card's action
-          for pointer users; the card itself is the tab stop. */}
+      {/* One card per way of creating a credential. The button is the whole
+          control: the card around it is a plain container, so a click in the
+          open form cannot fold it away. While the OAuth details are still
+          loading we do not yet know how many cards there are, so a single
+          disabled one holds the place. */}
       {oauthDetailsLoading ? (
-        <SelectCard state="empty" rounding={4} padding={2} disabled>
-          <Button icon={SvgPlusCircle} prominence="tertiary" tabIndex={-1}>
+        <Card border="solid" color="transparent" rounding={4} padding={2}>
+          <Button icon={SvgPlusCircle} prominence="tertiary" disabled>
             {newAccountLabel}
           </Button>
-        </SelectCard>
+        </Card>
       ) : (
         credentialCreationMethods.map((method) => {
           const open = credentialCreationMethod === method;
           return (
-            <SelectCard
+            <Card
               key={method}
               expandable
               expanded={open}
               expandableContentHeight="full"
-              state={open ? "filled" : "empty"}
+              border="solid"
+              color={open ? "background-tint-00" : "transparent"}
               rounding={4}
               padding={2}
-              onClick={() =>
-                open
-                  ? closeCredentialForm()
-                  : openCredentialCreationMethod(method)
-              }
               expandedContent={
                 <div className="p-4">{renderCredentialForm(method)}</div>
               }
@@ -321,13 +318,17 @@ export function CredentialsConfigurer({
                 icon={SvgPlusCircle}
                 prominence="tertiary"
                 interaction={open ? "active" : "rest"}
-                tabIndex={-1}
+                onClick={() =>
+                  open
+                    ? closeCredentialForm()
+                    : openCredentialCreationMethod(method)
+                }
               >
                 {showExplicitCredentialMethods
                   ? getCredentialCreationActionLabel(method, displayName, true)
                   : newAccountLabel}
               </Button>
-            </SelectCard>
+            </Card>
           );
         })
       )}
