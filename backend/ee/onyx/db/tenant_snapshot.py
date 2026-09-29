@@ -43,7 +43,6 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import TableClause
 
-from ee.onyx.server.tenants.schema_management import run_alembic_migrations
 from onyx.configs.app_configs import AWS_REGION_NAME, DB_READONLY_USER, USE_IAM_AUTH
 from onyx.configs.constants import SSL_CERT_FILE
 from onyx.db.engine.iam_auth import get_iam_auth_token
@@ -53,7 +52,6 @@ from onyx.db.engine.shard_registry import (
     get_shard_spec,
     get_shard_specs,
 )
-from onyx.db.engine.shard_routing import get_shard_for_tenant
 from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.db.engine.tenant_utils import validate_tenant_id
 from onyx.db.models import TenantSchemaSnapshot
@@ -119,28 +117,6 @@ def get_head_revision() -> str | None:
     # The ini names the scripts folder relative to the working directory.
     config.set_main_option("script_location", str(_BACKEND_DIR / "alembic"))
     return ScriptDirectory.from_config(config).get_current_head()
-
-
-def build_tenant_schema(tenant_id: str) -> None:
-    """Clone the shard's snapshot for the code's head into a new tenant, or
-    replay the migration chain when no snapshot matches, which only happens
-    before the first rollout that stored one."""
-    shard_name = get_shard_for_tenant(tenant_id)
-    head = get_head_revision()
-    dump = get_snapshot(shard_name, head) if head else None
-    if dump is None:
-        logger.warning(
-            "No snapshot on shard %s for %s, migrating tenant %s through the chain",
-            shard_name,
-            head,
-            tenant_id,
-        )
-        run_alembic_migrations(tenant_id)
-        return
-    apply_snapshot(get_engine_for_shard(shard_name), dump, tenant_id)
-    logger.info(
-        "Cloned tenant %s from the shard %s snapshot at %s", tenant_id, shard_name, head
-    )
 
 
 def scratch_schema_name() -> str:

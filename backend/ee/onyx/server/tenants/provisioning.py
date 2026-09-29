@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
-from ee.onyx.db.tenant_snapshot import build_tenant_schema
 from ee.onyx.db.user_tenant_mapping import (
     add_users_to_tenant,
     resolve_tenant_id,
@@ -22,6 +21,7 @@ from ee.onyx.server.tenants.models import (
     TenantDeletionPayload,
 )
 from ee.onyx.server.tenants.schema_management import (
+    build_tenant_schema,
     create_schema_if_not_exists,
     drop_schema,
     run_alembic_migrations,
@@ -738,7 +738,7 @@ async def setup_tenant(tenant_id: str) -> None:
     try:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Off the event loop: a clone is about a second, the fallback replay far more.
+        # Both paths block on Postgres, so they run off the event loop.
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, lambda: build_tenant_schema(tenant_id))
 
