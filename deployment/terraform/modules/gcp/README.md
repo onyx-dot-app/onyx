@@ -478,7 +478,8 @@ postgresTls:
 
 Do not turn on `postgresTls` with Onyx v4.8.x or earlier. Those versions reject
 the Cloud SQL server certificate (`Missing Authority Key Identifier`), and the
-API server crash-loops.
+API server crash-loops. Use `verify-ca`: `verify-full` fails, because the
+Cloud SQL certificate does not name the private IP address.
 
 ### 4. Send the document index to its own node pool
 
