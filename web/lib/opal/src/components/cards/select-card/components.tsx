@@ -1,7 +1,11 @@
 import "@opal/components/cards/select-card/styles.css";
 import type { BorderVariants, Rounding, Spacing } from "@opal/types";
 import { roundingToRem, spacingToRem } from "@opal/shared";
-import { Interactive, type InteractiveStatefulProps } from "@opal/core";
+import {
+  Interactive,
+  type InteractiveStatefulProps,
+  type InteractiveStatefulState,
+} from "@opal/core";
 import {
   CardFold,
   type CardFoldHeight,
@@ -108,6 +112,20 @@ type SelectCardExpandableProps = SelectCardBaseProps & {
    * @default 80
    */
   expandableContentHeight?: CardFoldHeight;
+
+  /**
+   * What `state="selected"` paints while the fold is open.
+   *
+   * An open card already shows that it is the chosen one, so the selection
+   * blue is redundant on top of it and fights the form inside the fold. The
+   * card drops to this state instead, for as long as it stays open.
+   *
+   * Only `"selected"` is remapped: `"empty"` and `"filled"` carry no
+   * selection styling, so they are left alone.
+   *
+   * @default "filled"
+   */
+  expandedState?: Exclude<InteractiveStatefulState, "selected">;
 };
 
 type SelectCardProps = SelectCardPlainProps | SelectCardExpandableProps;
@@ -138,7 +156,8 @@ type SelectCardProps = SelectCardPlainProps | SelectCardExpandableProps;
  * - **Expandable** (`expandable: true`): `children` become the interactive
  *   header and `expandedContent` an animating body below it, sharing the
  *   fold that `Card` uses. Only the header is interactive, so a form in the
- *   body keeps its own clicks.
+ *   body keeps its own clicks, and an open card drops its selection blue
+ *   (see `expandedState`).
  *
  * @example Plain
  * ```tsx
@@ -167,13 +186,17 @@ function SelectCard(props: SelectCardProps) {
       expanded = false,
       expandedContent,
       expandableContentHeight = 80,
+      expandedState = "filled",
+      state,
       ...base
     } = props;
+    const open = expanded && expandedContent !== undefined;
     return (
       <SelectCardShell
         {...base}
+        state={open && state === "selected" ? expandedState : state}
         fold={expandedContent}
-        foldOpen={expanded && expandedContent !== undefined}
+        foldOpen={open}
         foldHeight={expandableContentHeight}
       />
     );
