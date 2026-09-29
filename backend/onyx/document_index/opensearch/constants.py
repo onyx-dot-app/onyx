@@ -73,15 +73,17 @@ class LuceneScalarQuantization(BaseModel):
     # queries must ask for it. The values are the OpenSearch defaults for 4x
     # (7-bit) and Lucene 32x (1-bit) compression.
     rescore_oversample_factor: float
+    # The first (major, minor) OpenSearch version that accepts these bits.
+    min_opensearch_version: tuple[int, int]
 
 
 # VectorQuantization.NONE has no entry.
 LUCENE_SCALAR_QUANTIZATION: dict[VectorQuantization, LuceneScalarQuantization] = {
     VectorQuantization.SCALAR_7_BIT: LuceneScalarQuantization(
-        bits=7, rescore_oversample_factor=1.0
+        bits=7, rescore_oversample_factor=1.0, min_opensearch_version=(2, 16)
     ),
     VectorQuantization.SCALAR_1_BIT: LuceneScalarQuantization(
-        bits=1, rescore_oversample_factor=2.0
+        bits=1, rescore_oversample_factor=2.0, min_opensearch_version=(3, 6)
     ),
 }
 

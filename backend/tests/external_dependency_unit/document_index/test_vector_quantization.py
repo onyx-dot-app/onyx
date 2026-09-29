@@ -6,6 +6,8 @@ These tests assume OpenSearch 3.6 or later is running (1-bit quantization needs
 
 import random
 import uuid
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -42,6 +44,20 @@ def _random_vector(rng: random.Random) -> list[float]:
     return [rng.gauss(0.0, 1.0) for _ in range(EMBEDDING_DIM)]
 
 
+def _get_knn_field_queries(search_body: dict[str, Any]) -> list[dict[str, Any]]:
+    """Returns the per-field body of every knn clause in a search request."""
+    query: dict[str, Any] = search_body["query"]
+    clauses: list[dict[str, Any]] = (
+        query["hybrid"]["queries"] if "hybrid" in query else [query]
+    )
+    return [
+        knn_field_query
+        for clause in clauses
+        if "knn" in clause
+        for knn_field_query in clause["knn"].values()
+    ]
+
+
 def _make_chunk_with_embedding(
     doc_id: str, embedding: list[float]
 ) -> DocMetadataAwareIndexChunk:
@@ -63,8 +79,9 @@ def test_vector_quantization_mapping_and_retrieval(
     """Creates an index with each quantization level.
 
     Checks the vector field mappings, that the mapping refresh on startup
-    accepts the existing index, and that semantic and hybrid retrieval (with
-    rescoring when quantized) return the nearest chunk first.
+    accepts the existing index, that semantic and hybrid retrieval return the
+    nearest chunk first, and that their knn clauses ask for rescoring exactly
+    when the index is quantized.
     """
     if not wait_for_opensearch_with_timeout():
         pytest.fail("OpenSearch is not available.")
@@ -139,23 +156,45 @@ def test_vector_quantization_mapping_and_retrieval(
                 tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
 
-            semantic_results = document_index.semantic_retrieval(
-                query_embedding=query_embedding,
-                filters=filters,
-                num_to_retrieve=5,
-            )
+            # Spy on the search bodies; the real queries still run.
+            with patch.object(
+                OpenSearchIndexClient,
+                "search",
+                autospec=True,
+                side_effect=OpenSearchIndexClient.search,
+            ) as search_spy:
+                semantic_results = document_index.semantic_retrieval(
+                    query_embedding=query_embedding,
+                    filters=filters,
+                    num_to_retrieve=5,
+                )
+                # The query text matches no chunk, so the vector subquery sets
+                # the rank.
+                hybrid_results = document_index.hybrid_retrieval(
+                    query="unmatched",
+                    query_embedding=query_embedding,
+                    final_keywords=None,
+                    query_type=QueryType.SEMANTIC,
+                    filters=filters,
+                    num_to_retrieve=5,
+                )
             assert semantic_results[0].document_id == target_doc_id
-
-            # The query text matches no chunk, so the vector subquery sets
-            # the rank.
-            hybrid_results = document_index.hybrid_retrieval(
-                query="unmatched",
-                query_embedding=query_embedding,
-                final_keywords=None,
-                query_type=QueryType.SEMANTIC,
-                filters=filters,
-                num_to_retrieve=5,
-            )
             assert hybrid_results[0].document_id == target_doc_id
+
+            # With few documents the target ranks first even without
+            # rescoring, so check the rescore clause in each sent query.
+            expected_rescore = (
+                None
+                if lucene_scalar_quantization is None
+                else {
+                    "oversample_factor": lucene_scalar_quantization.rescore_oversample_factor
+                }
+            )
+            assert search_spy.call_count == 2
+            for search_call in search_spy.call_args_list:
+                knn_field_queries = _get_knn_field_queries(search_call.kwargs["body"])
+                assert knn_field_queries
+                for knn_field_query in knn_field_queries:
+                    assert knn_field_query.get("rescore") == expected_rescore
         finally:
             client.delete_index()
