@@ -175,9 +175,10 @@ async def get_or_provision_tenant(
         tenant_id = resolve_tenant_id(email, oauth_name, account_id)
         if tenant_id:
             return tenant_id
-        tenant_id = await get_available_tenant()
+        tenant_id = await asyncio.shield(
+            _claim_and_assign_pool_tenant(email, referral_source)
+        )
         if tenant_id is not None:
-            await _finish_tenant_assignment(tenant_id, email, referral_source)
             return tenant_id
         attempt_id = _enqueue_user_provisioning(email, referral_source)
     except OnyxError:
@@ -191,6 +192,18 @@ async def get_or_provision_tenant(
     return await _wait_for_tenant(
         email, oauth_name, account_id, referral_source, attempt_id, deadline, lock
     )
+
+
+async def _claim_and_assign_pool_tenant(
+    email: str, referral_source: str | None
+) -> str | None:
+    """Callers shield this from request cancellation: once the row leaves the
+    pool nothing else can recover it, so assignment or rollback must finish."""
+    tenant_id = await get_available_tenant()
+    if tenant_id is None:
+        return None
+    await _finish_tenant_assignment(tenant_id, email, referral_source)
+    return tenant_id
 
 
 def _release_signup_lock(lock: RedisLock) -> None:
@@ -375,11 +388,9 @@ async def _take_pool_tenant_while_waiting(
         )
         if tenant_id:
             return tenant_id
-        tenant_id = await get_available_tenant()
-        if tenant_id is None:
-            return None
-        await _finish_tenant_assignment(tenant_id, email, referral_source)
-        return tenant_id
+        return await asyncio.shield(
+            _claim_and_assign_pool_tenant(email, referral_source)
+        )
     except Exception as e:
         logger.error("Failed to provision tenant", exc_info=e)
         raise _provisioning_failed_error()
