@@ -36,7 +36,7 @@ class Document360Connector(LoadConnector, PollConnector):
     def __init__(
         self,
         workspace: str,
-        categories: List[str] | None = None,
+        categories: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         portal_id: Optional[str] = None,
         api_token: Optional[str] = None,
