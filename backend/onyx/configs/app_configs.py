@@ -2141,6 +2141,10 @@ S3_LEGACY_AWS_ACCESS_KEY_ID = (
 S3_LEGACY_AWS_SECRET_ACCESS_KEY = (
     os.environ.get("S3_LEGACY_AWS_SECRET_ACCESS_KEY") or S3_AWS_SECRET_ACCESS_KEY
 )
+# The legacy copy stops once a pass copies nothing and this long has passed,
+# so writes from app pods still on the old release are picked up too.
+LEGACY_COPY_SETTLE_SECONDS = int(os.environ.get("LEGACY_COPY_SETTLE_SECONDS") or 600)
+LEGACY_COPY_WORKERS = int(os.environ.get("LEGACY_COPY_WORKERS") or 16)
 
 # GCS (Google Cloud Storage) Configuration
 GCS_FILE_STORE_BUCKET_NAME = os.environ.get("GCS_FILE_STORE_BUCKET_NAME") or None

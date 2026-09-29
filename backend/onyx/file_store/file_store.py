@@ -136,6 +136,7 @@ def build_s3_client(
     region_name: str,
     verify_ssl: bool,
     fail_fast: bool = False,
+    max_pool_connections: int | None = None,
 ) -> "S3Client":
     try:
         # Imported here: boto3 costs ~16 MB and most workers never build an S3 client.
@@ -148,6 +149,10 @@ def build_s3_client(
         }
         # AWS keeps boto3's defaults, so a Config is passed only when one applies.
         configs: list[Config] = []
+        # One connection per concurrent caller, or the pool opens and drops a
+        # connection for every request beyond boto3's default of ten.
+        if max_pool_connections is not None:
+            configs.append(Config(max_pool_connections=max_pool_connections))
         # An endpoint URL means a self-hosted store, which needs path-style addressing.
         if endpoint_url:
             client_kwargs["endpoint_url"] = endpoint_url
