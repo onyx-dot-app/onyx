@@ -171,12 +171,10 @@ async def get_or_provision_tenant(
     await _acquire_signup_lock(lock, deadline)
 
     try:
-        # The holder this waited on may have finished the job.
-        tenant_id = resolve_tenant_id(email, oauth_name, account_id)
-        if tenant_id:
-            return tenant_id
         tenant_id = await asyncio.shield(
-            _claim_and_assign_pool_tenant(email, referral_source)
+            _claim_pool_tenant_under_lock(
+                lock, email, oauth_name, account_id, referral_source
+            )
         )
         if tenant_id is not None:
             return tenant_id
@@ -186,24 +184,37 @@ async def get_or_provision_tenant(
     except Exception as e:
         logger.error("Failed to provision tenant", exc_info=e)
         raise _provisioning_failed_error()
-    finally:
-        _release_signup_lock(lock)
 
     return await _wait_for_tenant(
         email, oauth_name, account_id, referral_source, attempt_id, deadline, lock
     )
 
 
-async def _claim_and_assign_pool_tenant(
-    email: str, referral_source: str | None
+async def _claim_pool_tenant_under_lock(
+    lock: RedisLock,
+    email: str,
+    oauth_name: str | None,
+    account_id: str | None,
+    referral_source: str | None,
 ) -> str | None:
-    """Callers shield this from request cancellation: once the row leaves the
-    pool nothing else can recover it, so assignment or rollback must finish."""
-    tenant_id = await get_available_tenant()
-    if tenant_id is None:
-        return None
-    await _finish_tenant_assignment(tenant_id, email, referral_source)
-    return tenant_id
+    """Runs with the per-email lock held and releases it when done. Callers
+    shield it from request cancellation: once a row leaves the pool only this
+    coroutine can assign or roll it back, and the lock must last that long or
+    a retried signup could take a second tenant meanwhile."""
+    try:
+        # The holder this waited on may have finished the job.
+        tenant_id = await asyncio.to_thread(
+            resolve_tenant_id, email, oauth_name, account_id
+        )
+        if tenant_id:
+            return tenant_id
+        tenant_id = await get_available_tenant()
+        if tenant_id is None:
+            return None
+        await _finish_tenant_assignment(tenant_id, email, referral_source)
+        return tenant_id
+    finally:
+        _release_signup_lock(lock)
 
 
 def _release_signup_lock(lock: RedisLock) -> None:
@@ -383,19 +394,14 @@ async def _take_pool_tenant_while_waiting(
     if not lock.acquire(blocking=False):
         return None
     try:
-        tenant_id = await asyncio.to_thread(
-            resolve_tenant_id, email, oauth_name, account_id
-        )
-        if tenant_id:
-            return tenant_id
         return await asyncio.shield(
-            _claim_and_assign_pool_tenant(email, referral_source)
+            _claim_pool_tenant_under_lock(
+                lock, email, oauth_name, account_id, referral_source
+            )
         )
     except Exception as e:
         logger.error("Failed to provision tenant", exc_info=e)
         raise _provisioning_failed_error()
-    finally:
-        _release_signup_lock(lock)
 
 
 async def provision_user_tenant(
