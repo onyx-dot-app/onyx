@@ -3198,12 +3198,9 @@
         }
       },
       "configurer": {
-        "closeButton": {
-          "ariaLabel": "إخفاء بيانات الاعتماد"
-        },
         "description": "استخدم حساب خدمة مشتركًا. يقوم {appName} بفهرسة المحتوى بصفة هذا الحساب.",
-        "openButton": {
-          "ariaLabel": "إظهار بيانات الاعتماد"
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# حساب محفوظ} other {# حسابات محفوظة}}"
         },
         "title": "حساب المصادقة"
       },
@@ -13073,6 +13070,10 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "collapse": "طي",
+      "expand": "توسيع"
+    },
     "comboBox": {
       "close": "إغلاق القائمة المنسدلة",
       "create": "إنشاء",

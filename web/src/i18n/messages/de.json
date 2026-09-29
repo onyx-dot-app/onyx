@@ -3198,12 +3198,9 @@
         }
       },
       "configurer": {
-        "closeButton": {
-          "ariaLabel": "Anmeldedaten ausblenden"
-        },
         "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
-        "openButton": {
-          "ariaLabel": "Anmeldedaten anzeigen"
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}"
         },
         "title": "Authentifizierungskonto"
       },
@@ -13073,6 +13070,10 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "collapse": "Einklappen",
+      "expand": "Ausklappen"
+    },
     "comboBox": {
       "close": "Dropdown schließen",
       "create": "Erstellen",

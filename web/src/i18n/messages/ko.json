@@ -3198,12 +3198,9 @@
         }
       },
       "configurer": {
-        "closeButton": {
-          "ariaLabel": "자격 증명 숨기기"
-        },
         "description": "공유 서비스 계정을 사용합니다. {appName}은(는) 이 계정으로 콘텐츠를 색인합니다.",
-        "openButton": {
-          "ariaLabel": "자격 증명 표시"
+        "savedAccountsButton": {
+          "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}"
         },
         "title": "인증 계정"
       },
@@ -13073,6 +13070,10 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "collapse": "접기",
+      "expand": "펼치기"
+    },
     "comboBox": {
       "close": "드롭다운 닫기",
       "create": "만들기",

@@ -3198,12 +3198,9 @@
         }
       },
       "configurer": {
-        "closeButton": {
-          "ariaLabel": "Ocultar credenciais"
-        },
         "description": "Use uma conta de serviço compartilhada. O {appName} indexa o conteúdo como esta conta.",
-        "openButton": {
-          "ariaLabel": "Mostrar credenciais"
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# conta salva} other {# contas salvas}}"
         },
         "title": "Conta de autenticação"
       },
@@ -13073,6 +13070,10 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "collapse": "Recolher",
+      "expand": "Expandir"
+    },
     "comboBox": {
       "close": "Fechar lista suspensa",
       "create": "Criar",

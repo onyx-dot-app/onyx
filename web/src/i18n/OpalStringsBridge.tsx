@@ -94,6 +94,8 @@ export default function OpalStringsBridge({
       selectEmptySet: t("select.emptySet"),
       selectInvalidOption: t("select.invalidOption"),
       selectSearchPlaceholder: t("select.searchPlaceholder"),
+      collapsibleExpand: t("collapsible.expand"),
+      collapsibleCollapse: t("collapsible.collapse"),
       keyValueKey: t("keyValue.key"),
       keyValueValue: t("keyValue.value"),
       keyValueAddLine: t("keyValue.addLine"),

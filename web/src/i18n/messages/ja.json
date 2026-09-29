@@ -3198,12 +3198,9 @@
         }
       },
       "configurer": {
-        "closeButton": {
-          "ariaLabel": "認証情報を非表示"
-        },
         "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
-        "openButton": {
-          "ariaLabel": "認証情報を表示"
+        "savedAccountsButton": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
         },
         "title": "認証アカウント"
       },
@@ -13073,6 +13070,10 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "collapse": "折りたたむ",
+      "expand": "展開"
+    },
     "comboBox": {
       "close": "ドロップダウンを閉じる",
       "create": "作成",

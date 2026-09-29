@@ -3198,12 +3198,9 @@
         }
       },
       "configurer": {
-        "closeButton": {
-          "ariaLabel": "Hide credentials"
-        },
         "description": "Use a shared service account. {appName} indexes content as this account.",
-        "openButton": {
-          "ariaLabel": "Show credentials"
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
         },
         "title": "Authentication Account"
       },
@@ -13073,6 +13070,10 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "collapse": "Collapse",
+      "expand": "Expand"
+    },
     "comboBox": {
       "close": "Close dropdown",
       "create": "Create",

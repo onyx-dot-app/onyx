@@ -3198,12 +3198,9 @@
         }
       },
       "configurer": {
-        "closeButton": {
-          "ariaLabel": "Masquer les identifiants"
-        },
         "description": "Utilisez un compte de service partagé. {appName} indexe le contenu en tant que ce compte.",
-        "openButton": {
-          "ariaLabel": "Afficher les identifiants"
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}"
         },
         "title": "Compte d'authentification"
       },
@@ -13073,6 +13070,10 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "collapse": "Replier",
+      "expand": "Déplier"
+    },
     "comboBox": {
       "close": "Fermer la liste déroulante",
       "create": "Créer",
