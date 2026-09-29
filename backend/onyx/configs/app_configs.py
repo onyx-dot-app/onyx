@@ -1406,8 +1406,8 @@ TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
 
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
 # When False (default), only groups found in site role assignments are synced.
-# Can be overridden per-connector via the "exhaustive_ad_enumeration" key in
-# connector_specific_config.
+# This is the default; the SharePoint connector's "exhaustive_ad_enumeration"
+# config field overrides it per connector.
 SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
     os.environ.get("SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION", "").lower() == "true"
 )

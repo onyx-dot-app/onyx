@@ -26,6 +26,7 @@ from typing_extensions import override
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+    SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -655,6 +656,7 @@ class SharepointConnector(
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         sharepoint_domain_suffix: str = DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
+        exhaustive_ad_enumeration: bool = SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
     ) -> None:
         if excluded_paths is None:
             excluded_paths = []
@@ -667,6 +669,8 @@ class SharepointConnector(
         self.excluded_sites = [s for p in excluded_sites if (s := p.strip())]
         self.excluded_paths = [s for p in excluded_paths if (s := p.strip())]
         self.treat_sharing_link_as_public = treat_sharing_link_as_public
+        # Read by EE group sync: also enumerate every Entra group in the tenant.
+        self.exhaustive_ad_enumeration = exhaustive_ad_enumeration
         self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
             sites
         )
