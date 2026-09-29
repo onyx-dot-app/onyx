@@ -988,11 +988,9 @@ def rename_user_group(
     db_user_group.name = new_name
     db_user_group.time_last_modified_by_user = func.now()
 
-    # CC pair documents in Vespa contain the group name, so we need to
-    # trigger a sync to update them with the new name.
-    _mark_user_group__cc_pair_relationships_outdated__no_commit(
-        db_session=db_session, user_group_id=user_group_id
-    )
+    # Documents in the index carry the group name, so re-sync them. The group's
+    # cc_pair rows stay current: the sync reaches every document of the group's
+    # cc_pairs, and marking the rows outdated would make the sync delete them.
     if not DISABLE_VECTOR_DB:
         db_user_group.is_up_to_date = False
 
