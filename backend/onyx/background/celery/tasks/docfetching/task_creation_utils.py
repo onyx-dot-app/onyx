@@ -85,12 +85,12 @@ def try_creating_docfetching_task(
         # Send the task to Celery
         result = celery_app.send_task(
             OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK,
-            kwargs=dict(
-                index_attempt_id=index_attempt_id,
-                cc_pair_id=cc_pair.id,
-                search_settings_id=search_settings.id,
-                tenant_id=tenant_id,
-            ),
+            kwargs={
+                "index_attempt_id": index_attempt_id,
+                "cc_pair_id": cc_pair.id,
+                "search_settings_id": search_settings.id,
+                "tenant_id": tenant_id,
+            },
             queue=OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
             task_id=custom_task_id,
             priority=priority,

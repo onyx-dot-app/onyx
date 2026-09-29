@@ -177,9 +177,6 @@ class ChunkSearchRequest(BasicChunkRequest):
     # Final filters are calculated from these
     user_selected_filters: BaseFilters | None = None
 
-    # Use with caution!
-    bypass_acl: bool = False
-
 
 # From the Chat Session we know what project (if any) this search should include
 # From the user uploads and persona uploaded files, we know which of those to include
@@ -216,6 +213,7 @@ class InferenceChunk(BaseChunk):
     match_highlights: list[str]
     doc_summary: str
     chunk_context: str
+    source_types: tuple[DocumentSource, ...] | None = None
 
     # when the doc was last updated
     updated_at: datetime | None
@@ -287,8 +285,7 @@ class InferenceChunkUncleaned(InferenceChunk):
         inference_chunk_data = {
             k: v
             for k, v in self.model_dump().items()
-            if k
-            not in ["metadata_suffix"]  # May be other fields to throw out in the future
+            if k != "metadata_suffix"  # May be other fields to throw out in the future
         }
         return InferenceChunk(**inference_chunk_data)
 
@@ -322,6 +319,7 @@ class SearchDoc(BaseModel):
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "the answer is <hi>42</hi>""]
     match_highlights: list[str]
+    source_types: tuple[DocumentSource, ...] | None = None
     # when the doc was last updated
     updated_at: datetime | None = None
     primary_owners: list[str] | None = None
@@ -355,6 +353,7 @@ class SearchDoc(BaseModel):
                 link=chunk.source_links[0] if chunk.source_links else None,
                 blurb=chunk.blurb,
                 source_type=chunk.source_type,
+                source_types=chunk.source_types,
                 boost=chunk.boost,
                 hidden=chunk.hidden,
                 metadata=chunk.metadata,

@@ -70,7 +70,7 @@ export default function Page() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={t("editPage.title")}
-        backButton
+        cancel
         divider
       />
       <SettingsLayouts.Body>

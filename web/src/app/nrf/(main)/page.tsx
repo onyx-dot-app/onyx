@@ -1,7 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import NRFPage from "@/app/nrf/NRFPage";
-import { SearchFiltersProvider } from "@/lib/searchFilters/providers";
 import { NRFPreferencesProvider } from "@/components/context/NRFPreferencesContext";
 import NRFChrome from "../NRFChrome";
 
@@ -24,9 +23,7 @@ export default async function Page() {
     <div className="relative w-full h-full">
       <InstantSSRAutoRefresh />
       <NRFPreferencesProvider>
-        <SearchFiltersProvider>
-          <NRFPage />
-        </SearchFiltersProvider>
+        <NRFPage />
       </NRFPreferencesProvider>
       <NRFChrome />
     </div>

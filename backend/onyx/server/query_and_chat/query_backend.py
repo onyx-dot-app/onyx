@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.permissions import require_permission
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
@@ -28,6 +29,8 @@ logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin")
 basic_router = APIRouter(prefix="/query")
+
+MAX_VALID_TAGS_LIMIT = 100
 
 
 @admin_router.post("/search", dependencies=[Depends(require_vector_db)])
@@ -86,11 +89,13 @@ def get_tags(
     sources: list[DocumentSource] | None = None,
     allow_prefix: bool = True,  # This is currently the only option
     limit: int = 50,
-    _: User = Depends(require_permission(Permission.READ_SEARCH)),
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> TagResponse:
     if not allow_prefix:
         raise NotImplementedError("Cannot disable prefix match for now")
+
+    limit = min(max(limit, 1), MAX_VALID_TAGS_LIMIT)
 
     key_prefix = match_pattern
     value_prefix = match_pattern
@@ -110,6 +115,10 @@ def get_tags(
         sources=sources,
         limit=limit,
         db_session=db_session,
+        user_email=user.email,
+        prior_emails=user.prior_emails,
+        external_group_ids=get_user_external_group_ids(db_session, user),
+        user_id=user.id,
         require_both_to_match=require_both_to_match,
     )
     server_tags = [

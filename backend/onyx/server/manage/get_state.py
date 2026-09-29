@@ -318,8 +318,8 @@ def get_versions() -> AllVersions:
             parts = clean_version.split(".")
             return (int(parts[0]), int(parts[1]), int(parts[2]), 0)
 
-    latest_dev_version = sorted(dev_tags, key=version_key, reverse=True)[0]
-    latest_stable_version = sorted(stable_tags, key=version_key, reverse=True)[0]
+    latest_dev_version = max(dev_tags, key=version_key)
+    latest_stable_version = max(stable_tags, key=version_key)
 
     return AllVersions(
         stable=ContainerVersions(

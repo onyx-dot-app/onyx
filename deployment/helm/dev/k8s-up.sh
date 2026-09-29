@@ -15,6 +15,7 @@
 #                                  (default: generated, printed at the end)
 #   --skip-cluster-create          skip kind create (use an existing cluster)
 #   --skip-helm                    only create the cluster, don't install Onyx
+#
 
 set -euo pipefail
 
@@ -27,7 +28,7 @@ KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.33.1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
-VALUES_OVERLAY="$CHART_DIR/values-localdev.yaml"
+VALUES_OVERLAY="$SCRIPT_DIR/values-localdev.yaml"
 
 require() {
   local bin="$1"
@@ -197,7 +198,11 @@ if command -v telepresence >/dev/null 2>&1; then
   fi
 else
   echo "note: telepresence CLI not found; skipping traffic-manager install."
-  echo "  install with: brew install datawire/blackbird/telepresence-oss"
+  echo "  install the OSS binary:"
+  echo "    curl -fLo /opt/homebrew/bin/telepresence \\"
+  echo "      https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64"
+  echo "    chmod +x /opt/homebrew/bin/telepresence"
+  echo "  see docs/craft/dev/local-kubernetes.md for the full setup"
 fi
 
 # ---- 4. next steps ----

@@ -85,6 +85,18 @@ func DefaultLazyImportModules() map[string]LazyImportSettings {
 		"trafilatura":         NewLazyImportSettings(),
 		"pypdf":               NewLazyImportSettings(),
 		"unstructured_client": NewLazyImportSettings(),
+		"braintrust": NewLazyImportSettings(
+			"onyx/evals/providers/braintrust.py",
+			"onyx/tracing/braintrust_tracing_processor.py",
+		),
+		"exa_py": NewLazyImportSettings(
+			"onyx/tools/tool_implementations/web_search/clients/exa_client.py",
+		),
+		"playwright": NewLazyImportSettings(
+			"onyx/connectors/highspot/utils.py",
+			"onyx/connectors/web/connector.py",
+			"onyx/utils/playwright_fetch.py",
+		),
 	}
 }
 

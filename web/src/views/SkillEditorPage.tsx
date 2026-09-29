@@ -10,7 +10,6 @@ import {
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import {
   Button,
   Card,
@@ -239,9 +238,7 @@ export default function SkillEditorPage({
 
   function leaveEditor() {
     router.push(
-      hasAppContext
-        ? externalAppAdminUrl(externalAppId)
-        : ("/craft/v1/skills" as Route)
+      hasAppContext ? externalAppAdminUrl(externalAppId) : "/craft/v1/skills"
     );
   }
 
@@ -270,9 +267,7 @@ export default function SkillEditorPage({
             description,
             instructions_markdown: instructionsMarkdown,
             auto_enable: isCreatingForApp ? false : !createDisabled,
-            ...(externalAppId !== undefined
-              ? { external_app_id: externalAppId }
-              : {}),
+            external_app_id: externalAppId,
           },
           pendingFilesUpload?.file
         );
@@ -297,7 +292,7 @@ export default function SkillEditorPage({
         router.replace(
           isCreatingForApp
             ? externalAppAdminUrl(externalAppId)
-            : ("/craft/v1/skills" as Route)
+            : "/craft/v1/skills"
         );
         return;
       }
@@ -522,26 +517,16 @@ export default function SkillEditorPage({
                 : t("editor.header.createDescription")
               : t("editor.header.editDescription")
           }
-          rightChildren={
-            <div className="flex items-center gap-2">
-              <Button
-                prominence="secondary"
-                type="button"
-                disabled={isSaving || isPreparingFiles || isUploadingFiles}
-                onClick={handleCancel}
-              >
-                {t("editor.header.cancel.label")}
+          cancel={handleCancel}
+          actions={[
+            <Tooltip key="save" tooltip={saveTooltip} side="bottom">
+              <Button disabled={!canSave} type="submit">
+                {isSaving
+                  ? t("editor.header.save.pendingLabel")
+                  : t("editor.header.save.label")}
               </Button>
-              <Tooltip tooltip={saveTooltip} side="bottom">
-                <Button disabled={!canSave} type="submit">
-                  {isSaving
-                    ? t("editor.header.save.pendingLabel")
-                    : t("editor.header.save.label")}
-                </Button>
-              </Tooltip>
-            </div>
-          }
-          backButton={handleCancel}
+            </Tooltip>,
+          ]}
           divider
         />
 

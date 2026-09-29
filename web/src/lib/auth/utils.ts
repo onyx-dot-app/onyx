@@ -1,3 +1,5 @@
+import type { AuthTypeMetadata } from "@/lib/auth/types";
+
 // ---------------------------------------------------------------------------
 // Auth URL helpers
 // ---------------------------------------------------------------------------
@@ -63,6 +65,15 @@ export function validateInternalRedirect(
 
   const trimmedUrl = url.trim();
 
+  // The URL parser strips interior tab/CR/LF, so "/\t/evil.example" would slip
+  // past the "//" check below and resolve to "//evil.example".
+  for (let i = 0; i < trimmedUrl.length; i++) {
+    const code = trimmedUrl.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      return null;
+    }
+  }
+
   if (!trimmedUrl.startsWith("/")) {
     return null;
   }
@@ -82,4 +93,22 @@ export function validateInternalRedirect(
   }
 
   return trimmedUrl;
+}
+
+// ---------------------------------------------------------------------------
+// SSO auto-start
+// ---------------------------------------------------------------------------
+
+/** True when the login page should start SSO on load: single-tenant, password
+ * login off, exactly one provider, and the `autoRedirectToSso` flag not off. */
+export function shouldAutoStartSso(
+  authTypeMetadata: AuthTypeMetadata | null,
+  autoRedirectToSso: boolean
+): boolean {
+  if (!autoRedirectToSso || !authTypeMetadata) return false;
+  return (
+    !authTypeMetadata.multiTenant &&
+    !authTypeMetadata.passwordAuthEnabled &&
+    (authTypeMetadata.ssoProviders ?? []).length === 1
+  );
 }

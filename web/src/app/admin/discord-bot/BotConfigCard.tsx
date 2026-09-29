@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import { Button, Card, PasswordInputTypeIn } from "@opal/components";
+import { Button, Card, InputPasswordTypeIn } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { Tooltip } from "@opal/components";
@@ -170,7 +170,7 @@ export function BotConfigCard() {
                 {t("botToken.enterInstructions.text")}
               </Text>
               <Section flexDirection="row" alignItems="end" gap={2}>
-                <PasswordInputTypeIn
+                <InputPasswordTypeIn
                   value={botToken}
                   onChange={(e) => setBotToken(e.target.value)}
                   placeholder={t("botToken.input.placeholder")}

@@ -57,8 +57,6 @@ from tests.external_dependency_unit.indexing_helpers import (
 class _MockCheckpoint(ConnectorCheckpoint):
     """Minimal checkpoint type for the mock connector."""
 
-    pass
-
 
 # Module-level config so the connector instance (constructed by the factory
 # with empty kwargs) can pick up test-specific behavior.

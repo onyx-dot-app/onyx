@@ -35,6 +35,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm, get_llm_for_persona, llm_from_provider
+from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     SearchRequest,
     SearchResponse,
@@ -42,6 +43,7 @@ from onyx.server.features.search.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
@@ -53,7 +55,16 @@ from shared_configs.contextvars import get_current_tenant_id
 router = APIRouter(prefix="/search")
 
 
-@router.post("", dependencies=[Depends(require_vector_db)], tags=PUBLIC_API_TAGS)
+@router.post(
+    "",
+    # Budgets run before check_api_key_usage so rejected calls aren't counted.
+    dependencies=[
+        Depends(require_vector_db),
+        Depends(check_token_rate_limits),
+        Depends(check_api_key_usage),
+    ],
+    tags=PUBLIC_API_TAGS,
+)
 def search(
     request: SearchRequest,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
@@ -170,7 +181,6 @@ def search(
         user_selected_filters=base_filters,
         project_id_filter=None,
         persona_id_filter=None,
-        bypass_acl=False,
         slack_context=None,
         enable_slack_search=True,
         auto_detect_filters=load_settings().auto_detect_search_filters is not False,

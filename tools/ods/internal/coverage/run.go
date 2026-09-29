@@ -11,14 +11,14 @@ import (
 	"strings"
 )
 
-// ExitError reports that the test run itself failed, carrying the exit code so
-// the caller can hand the underlying tool's result back to the shell.
+// ExitError reports that the measuring tool itself failed, carrying the exit
+// code so the caller can hand the tool's result back to the shell.
 type ExitError struct {
 	Code int
 }
 
 func (e *ExitError) Error() string {
-	return fmt.Sprintf("go test exited with code %d", e.Code)
+	return fmt.Sprintf("the measurement exited with code %d", e.Code)
 }
 
 // RunOptions configures a coverage run.

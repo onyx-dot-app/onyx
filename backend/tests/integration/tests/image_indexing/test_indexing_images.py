@@ -35,9 +35,15 @@ def test_image_indexing(
         file_path=test_file_path, file_name=FILE_NAME, user_performing_action=admin_user
     )
 
-    LLMProviderManager.create(
+    llm_provider = LLMProviderManager.create(
         name="test_llm",
         user_performing_action=admin_user,
+    )
+    assert llm_provider.default_model_name is not None
+    LLMProviderManager.set_default_vision(
+        llm_provider.id,
+        user_performing_action=admin_user,
+        model_name=llm_provider.default_model_name,
     )
 
     SettingsManager.update_settings(
@@ -108,8 +114,9 @@ def test_image_indexing(
         assert len(documents) == 2
         for document in documents:
             # Whitespace-normalize: PDF text extractors differ in inter-word spacing.
-            normalized = " ".join(document.content.split())
-            if "These are Johns dogs" in normalized:
+            # The PDF uses a curly apostrophe, which indexing preserves.
+            normalized = " ".join(document.content.split()).replace("\u2019", "'")
+            if "These are John's dogs" in normalized:
                 assert document.image_file_id is None
             else:
                 assert document.image_file_id is not None
@@ -132,9 +139,15 @@ def test_docx_image_indexing(
         user_performing_action=admin_user,
     )
 
-    LLMProviderManager.create(
+    llm_provider = LLMProviderManager.create(
         name="test_llm_docx",
         user_performing_action=admin_user,
+    )
+    assert llm_provider.default_model_name is not None
+    LLMProviderManager.set_default_vision(
+        llm_provider.id,
+        user_performing_action=admin_user,
+        model_name=llm_provider.default_model_name,
     )
 
     SettingsManager.update_settings(

@@ -26,6 +26,15 @@ class AccountType(str, PyEnum):
             AccountType.EXT_PERM_USER,
         )
 
+    def allows_password_login(self) -> bool:
+        """Whether this account type may sign in or reset with a password.
+
+        Service accounts authenticate only with their API key."""
+        return self.is_web_login() and self not in (
+            AccountType.SERVICE_ACCOUNT,
+            AccountType.ANONYMOUS,
+        )
+
 
 class GrantSource(str, PyEnum):
     """How a permission grant was created."""
@@ -281,6 +290,15 @@ class AccessType(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
     SYNC = "sync"
+    # Perm sync, narrowed to members of the connector's data-access groups.
+    SYNC_RESTRICTED = "sync_restricted"
+
+    def is_perm_synced(self) -> bool:
+        return self in (AccessType.SYNC, AccessType.SYNC_RESTRICTED)
+
+    @classmethod
+    def perm_synced_types(cls) -> list["AccessType"]:
+        return [cls.SYNC, cls.SYNC_RESTRICTED]
 
 
 class EmbeddingPrecision(str, PyEnum):
@@ -317,6 +335,20 @@ class SupportedLanguage(str, PyEnum):
     ZH = "zh"
     KO = "ko"
     AR = "ar"
+
+
+# Prompts name the language in English so the model gets a word, not a code.
+SUPPORTED_LANGUAGE_ENGLISH_NAMES: dict[SupportedLanguage, str] = {
+    SupportedLanguage.EN: "English",
+    SupportedLanguage.ES: "Spanish",
+    SupportedLanguage.PT: "Portuguese",
+    SupportedLanguage.FR: "French",
+    SupportedLanguage.DE: "German",
+    SupportedLanguage.JA: "Japanese",
+    SupportedLanguage.ZH: "Simplified Chinese",
+    SupportedLanguage.KO: "Korean",
+    SupportedLanguage.AR: "Arabic",
+}
 
 
 class DefaultAppMode(str, PyEnum):
@@ -602,6 +634,9 @@ class HierarchyNodeType(str, PyEnum):
     # Slack
     CHANNEL = "channel"
 
+    # Outlook
+    MAILBOX = "mailbox"
+
 
 class LLMModelFlowType(str, PyEnum):
     CHAT = "chat"
@@ -763,6 +798,16 @@ class SSOProviderType(str, PyEnum):
     GOOGLE_OAUTH = "GOOGLE_OAUTH"
     OIDC = "OIDC"
     SAML = "SAML"
+
+
+class SystemUsageAttribution(str, PyEnum):
+    ATTRIBUTED = "ATTRIBUTED"
+    UNATTRIBUTED = "UNATTRIBUTED"
+
+
+class UsageActorKind(str, PyEnum):
+    USER = "USER"
+    SYSTEM = "SYSTEM"
 
 
 class IncognitoRecordMode(str, PyEnum):

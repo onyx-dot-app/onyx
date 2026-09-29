@@ -341,7 +341,7 @@ def test_sweep_retires_a_dead_run_and_retrigger_recovers(
     # The sweep the beat schedule fires every ten minutes.
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
-        kwargs=dict(tenant_id=get_current_tenant_id()),
+        kwargs={"tenant_id": get_current_tenant_id()},
         priority=OnyxCeleryPriority.LOW,
         expires=300,
     )
@@ -366,3 +366,30 @@ def test_sweep_retires_a_dead_run_and_retrigger_recovers(
     _poll_until_run_status(
         credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
     )
+
+
+def test_config_override_is_validated(admin_user: DATestUser) -> None:
+    # Precondition.
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
+    )
+    connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+
+    # Under test.
+    response = client.post(
+        _check_url(credential.id),
+        json={
+            "connector_id": connector.id,
+            "connector_specific_config": {"mock_server_host": "localhost"},
+        },
+        headers=admin_user.headers,
+    )
+
+    # Postcondition.
+    assert response.status_code == 400
+    assert "mock_server_port" in response.text

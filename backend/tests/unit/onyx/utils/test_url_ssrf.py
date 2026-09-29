@@ -242,7 +242,7 @@ class TestSsrfSafeGet:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
 
-            with patch("onyx.utils.url.requests.get") as mock_get:
+            with patch("onyx.utils.url._NoRedirectSession.get") as mock_get:
                 mock_get.return_value = mock_response
 
                 response = ssrf_safe_get("http://example.com/path")
@@ -265,7 +265,7 @@ class TestSsrfSafeGet:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
 
-            with patch("onyx.utils.url.requests.Session") as mock_session_cls:
+            with patch("onyx.utils.url._NoRedirectSession") as mock_session_cls:
                 session = mock_session_cls.return_value.__enter__.return_value
                 session.get.return_value = mock_response
 
@@ -287,7 +287,7 @@ class TestSsrfSafeGet:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
 
-            with patch("onyx.utils.url.requests.get") as mock_get:
+            with patch("onyx.utils.url._NoRedirectSession.get") as mock_get:
                 mock_get.return_value = mock_response
 
                 custom_headers = {"User-Agent": "TestBot/1.0"}
@@ -304,7 +304,7 @@ class TestSsrfSafeGet:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
 
-            with patch("onyx.utils.url.requests.get") as mock_get:
+            with patch("onyx.utils.url._NoRedirectSession.get") as mock_get:
                 mock_get.return_value = mock_response
 
                 ssrf_safe_get("http://example.com/", timeout=(5, 15))
@@ -320,7 +320,7 @@ class TestSsrfSafeGetAllowPrivateNetwork:
         mock_response = MagicMock()
         mock_response.is_redirect = False
 
-        with patch("onyx.utils.url.requests.get") as mock_get:
+        with patch("onyx.utils.url._NoRedirectSession.get") as mock_get:
             mock_get.return_value = mock_response
 
             response = ssrf_safe_get("http://192.168.1.1/", allow_private_network=True)
@@ -344,7 +344,7 @@ class TestSsrfSafeGetAllowPrivateNetwork:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("10.0.0.1", 443))]
 
-            with patch("onyx.utils.url.requests.Session") as mock_session_cls:
+            with patch("onyx.utils.url._NoRedirectSession") as mock_session_cls:
                 session = mock_session_cls.return_value.__enter__.return_value
                 session.get.return_value = mock_response
 
@@ -393,7 +393,7 @@ class TestSsrfSafeGetAllowPrivateNetwork:
         final_response = MagicMock()
         final_response.is_redirect = False
 
-        with patch("onyx.utils.url.requests.get") as mock_get:
+        with patch("onyx.utils.url._NoRedirectSession.get") as mock_get:
             mock_get.side_effect = [redirect_response, final_response]
 
             response = ssrf_safe_get(
@@ -413,7 +413,7 @@ class TestSsrfSafeGetAllowPrivateNetwork:
             "Location": "http://metadata.google.internal/latest"
         }
 
-        with patch("onyx.utils.url.requests.get") as mock_get:
+        with patch("onyx.utils.url._NoRedirectSession.get") as mock_get:
             mock_get.return_value = redirect_response
 
             with pytest.raises(SSRFException, match="not allowed"):
@@ -426,7 +426,7 @@ class TestSsrfSafeGetAllowPrivateNetwork:
         redirect_response.is_redirect = True
         redirect_response.headers = {"Location": "http://127.0.0.1:8080/admin"}
 
-        with patch("onyx.utils.url.requests.get") as mock_get:
+        with patch("onyx.utils.url._NoRedirectSession.get") as mock_get:
             mock_get.return_value = redirect_response
 
             with pytest.raises(SSRFException, match="loopback/unspecified"):
@@ -608,6 +608,70 @@ class TestValidateOutboundHttpUrl:
             )
             assert validated == "https://internal-only.company.com/"
 
+    @pytest.mark.parametrize(
+        "floor",
+        [
+            {"block_loopback_and_link_local": True},
+            {"block_link_local_only": True},
+        ],
+    )
+    @pytest.mark.parametrize(
+        "host", ["[fd00:ec2:0:0:0:0:0:254]", "[fd00:0ec2::254]", "[FD00:EC2::254]"]
+    )
+    def test_blocks_ipv6_imds_literal_spellings(
+        self, host: str, floor: dict[str, bool]
+    ) -> None:
+        with pytest.raises(SSRFException):
+            validate_outbound_http_url(
+                f"http://{host}/latest/meta-data/",
+                allow_private_network=True,
+                **floor,
+            )
+
+    @pytest.mark.parametrize(
+        "floor",
+        [
+            {"block_loopback_and_link_local": True},
+            {"block_link_local_only": True},
+        ],
+    )
+    def test_blocks_dns_name_resolving_to_ipv6_imds(
+        self, floor: dict[str, bool]
+    ) -> None:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [
+                (10, 1, 6, "", ("fd00:ec2::254", 80, 0, 0))
+            ]
+            with pytest.raises(SSRFException):
+                validate_outbound_http_url(
+                    "http://imds6.attacker.com/latest/meta-data/",
+                    allow_private_network=True,
+                    **floor,
+                )
+
+    def test_ssrf_safe_get_never_connects_to_ipv6_imds(self) -> None:
+        with (
+            patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo,
+            patch("onyx.utils.url._NoRedirectSession.get") as mock_get,
+        ):
+            mock_getaddrinfo.return_value = [
+                (10, 1, 6, "", ("fd00:ec2::254", 80, 0, 0))
+            ]
+            mock_get.side_effect = AssertionError("connected to IPv6 IMDS")
+            with pytest.raises(SSRFException):
+                ssrf_safe_get(
+                    "http://imds6.attacker.com/latest/meta-data/",
+                    allow_private_network=True,
+                )
+
+    def test_allows_other_ula_with_floor(self) -> None:
+        validated = validate_outbound_http_url(
+            "http://[fd00::1]/",
+            allow_private_network=True,
+            block_loopback_and_link_local=True,
+        )
+        assert validated == "http://[fd00::1]/"
+
 
 class TestSsrfSafeGetHttpsOnly:
     def test_redirect_cannot_downgrade_to_http(self) -> None:
@@ -619,7 +683,7 @@ class TestSsrfSafeGetHttpsOnly:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
 
-            with patch("onyx.utils.url.requests.Session") as mock_session_cls:
+            with patch("onyx.utils.url._NoRedirectSession") as mock_session_cls:
                 session = mock_session_cls.return_value.__enter__.return_value
                 session.get.return_value = redirect
 

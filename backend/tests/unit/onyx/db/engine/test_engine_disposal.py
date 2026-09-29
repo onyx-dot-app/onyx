@@ -98,11 +98,10 @@ async def test_reset_async_engine_is_a_noop_when_uninitialized() -> None:
     assert async_sql_engine._ASYNC_ENGINES == {}
 
 
-@pytest.mark.asyncio
-async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
-    """End-to-end check: the FastAPI lifespan's shutdown phase must dispose
-    each engine. The lifespan touches a lot of other startup machinery; we
-    patch it out so this test is hermetic and only asserts the disposal calls.
+def _stub_lifespan(stack: ExitStack) -> tuple[MagicMock, MagicMock, AsyncMock]:
+    """Stub every lifespan startup side effect so the test reaches shutdown.
+
+    Returns the mocks for the sync, readonly, and async engine resets.
     """
     from onyx import main as onyx_main
 
@@ -111,59 +110,65 @@ async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
     async_engine_mock = MagicMock()
     async_engine_mock.dispose = AsyncMock()
 
-    # Replace the engines with mocks and stub out every other startup side
-    # effect so we can reach the shutdown phase quickly.
+    stack.enter_context(patch.object(SqlEngine, "set_app_name"))
+    stack.enter_context(patch.object(SqlEngine, "init_engine"))
+    stack.enter_context(patch.object(SqlEngine, "init_readonly_engine"))
+    stack.enter_context(patch.object(SqlEngine, "get_engine", return_value=sync_engine))
+    stack.enter_context(
+        patch.object(SqlEngine, "get_readonly_engine", return_value=readonly_engine)
+    )
+    reset_sync = stack.enter_context(patch.object(SqlEngine, "reset_engine"))
+    reset_ro = stack.enter_context(patch.object(SqlEngine, "reset_readonly_engine"))
+    reset_async = stack.enter_context(
+        patch.object(onyx_main, "reset_sqlalchemy_async_engine", new=AsyncMock())
+    )
+    stack.enter_context(
+        patch.object(
+            onyx_main,
+            "get_sqlalchemy_async_engine",
+            return_value=async_engine_mock,
+        )
+    )
+    stack.enter_context(
+        patch.object(onyx_main, "setup_postgres_connection_pool_metrics")
+    )
+    stack.enter_context(patch.object(onyx_main, "validate_no_vector_db_settings"))
+    stack.enter_context(patch.object(onyx_main, "validate_cache_backend_settings"))
+    stack.enter_context(patch.object(onyx_main, "validate_registry"))
+    stack.enter_context(patch.object(onyx_main, "verify_user_auth_secret"))
+    stack.enter_context(
+        patch.object(
+            onyx_main,
+            "fetch_versioned_implementation",
+            return_value=lambda: None,
+        )
+    )
+    stack.enter_context(patch.object(onyx_main, "setup_tracing"))
+    stack.enter_context(patch.object(onyx_main, "warm_up_connections", new=AsyncMock()))
+    stack.enter_context(patch.object(onyx_main, "get_session_with_current_tenant"))
+    stack.enter_context(patch.object(onyx_main, "setup_onyx"))
+    stack.enter_context(patch.object(onyx_main, "get_default_file_store"))
+    stack.enter_context(patch.object(onyx_main, "get_or_generate_uuid"))
+    stack.enter_context(patch.object(onyx_main, "optional_telemetry"))
+    stack.enter_context(patch.object(onyx_main, "MULTI_TENANT", False))
+    stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", False))
+    stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", False))
+    stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_ID", ""))
+    stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_SECRET", ""))
+    stack.enter_context(patch.object(onyx_main, "SYSTEM_RECURSION_LIMIT", None))
+    return reset_sync, reset_ro, reset_async
+
+
+@pytest.mark.asyncio
+async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
+    """End-to-end check: the FastAPI lifespan's shutdown phase must dispose
+    each engine. The lifespan touches a lot of other startup machinery; we
+    patch it out so this test is hermetic and only asserts the disposal calls.
+    """
+    from onyx import main as onyx_main
+
     with ExitStack() as stack:
-        stack.enter_context(patch.object(SqlEngine, "set_app_name"))
-        stack.enter_context(patch.object(SqlEngine, "init_engine"))
-        stack.enter_context(patch.object(SqlEngine, "init_readonly_engine"))
-        stack.enter_context(
-            patch.object(SqlEngine, "get_engine", return_value=sync_engine)
-        )
-        stack.enter_context(
-            patch.object(SqlEngine, "get_readonly_engine", return_value=readonly_engine)
-        )
-        reset_sync = stack.enter_context(patch.object(SqlEngine, "reset_engine"))
-        reset_ro = stack.enter_context(patch.object(SqlEngine, "reset_readonly_engine"))
-        reset_async = stack.enter_context(
-            patch.object(onyx_main, "reset_sqlalchemy_async_engine", new=AsyncMock())
-        )
-        stack.enter_context(
-            patch.object(
-                onyx_main,
-                "get_sqlalchemy_async_engine",
-                return_value=async_engine_mock,
-            )
-        )
-        stack.enter_context(
-            patch.object(onyx_main, "setup_postgres_connection_pool_metrics")
-        )
-        stack.enter_context(patch.object(onyx_main, "validate_no_vector_db_settings"))
-        stack.enter_context(patch.object(onyx_main, "validate_cache_backend_settings"))
-        stack.enter_context(patch.object(onyx_main, "validate_registry"))
-        stack.enter_context(patch.object(onyx_main, "verify_user_auth_secret"))
-        stack.enter_context(
-            patch.object(
-                onyx_main,
-                "fetch_versioned_implementation",
-                return_value=lambda: None,
-            )
-        )
-        stack.enter_context(patch.object(onyx_main, "setup_tracing"))
-        stack.enter_context(
-            patch.object(onyx_main, "warm_up_connections", new=AsyncMock())
-        )
-        stack.enter_context(patch.object(onyx_main, "get_session_with_current_tenant"))
-        stack.enter_context(patch.object(onyx_main, "setup_onyx"))
-        stack.enter_context(patch.object(onyx_main, "get_default_file_store"))
-        stack.enter_context(patch.object(onyx_main, "get_or_generate_uuid"))
-        stack.enter_context(patch.object(onyx_main, "optional_telemetry"))
-        stack.enter_context(patch.object(onyx_main, "MULTI_TENANT", False))
-        stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", False))
-        stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", False))
-        stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_ID", ""))
-        stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_SECRET", ""))
-        stack.enter_context(patch.object(onyx_main, "SYSTEM_RECURSION_LIMIT", None))
+        reset_sync, reset_ro, reset_async = _stub_lifespan(stack)
 
         async with onyx_main.lifespan(MagicMock()):
             # Inside the lifespan body: startup ran, shutdown not yet.
@@ -172,6 +177,33 @@ async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
             reset_async.assert_not_called()
 
         # After exiting the context manager: shutdown ran.
+        reset_async.assert_awaited_once_with()
+        reset_sync.assert_called_once_with()
+        reset_ro.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_shutdown_runs_every_step_after_errors() -> None:
+    """Shutdown must run when the app exits with an error, and a failing
+    shutdown step must not skip the steps after it.
+    """
+    from onyx import main as onyx_main
+
+    with ExitStack() as stack:
+        reset_sync, reset_ro, reset_async = _stub_lifespan(stack)
+        stack.enter_context(
+            patch(
+                "onyx.tracing.setup.shutdown_tracing",
+                side_effect=RuntimeError("tracing failed"),
+            )
+        )
+        reset_async.side_effect = RuntimeError("async dispose failed")
+        reset_sync.side_effect = RuntimeError("sync dispose failed")
+
+        with pytest.raises(ValueError, match="app failed"):
+            async with onyx_main.lifespan(MagicMock()):
+                raise ValueError("app failed")
+
         reset_async.assert_awaited_once_with()
         reset_sync.assert_called_once_with()
         reset_ro.assert_called_once_with()

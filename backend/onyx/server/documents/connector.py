@@ -48,7 +48,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.factory import validate_ccpair_for_user, validate_connector_config
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
@@ -112,6 +112,12 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_limits import (
+    MAX_ZIP_MEMBER_DECOMPRESSED_BYTES,
+    ZipSizeLimitError,
+    assert_zip_within_limits,
+    read_zip_member,
+)
 from onyx.file_store.file_store import (
     FILE_SIZE_MISSING_SENTINEL,
     FileStore,
@@ -126,6 +132,7 @@ from onyx.server.documents.models import (
     ConnectorCredentialPairIdentifier,
     ConnectorFileInfo,
     ConnectorFilesResponse,
+    ConnectorGroupRestrictionsStatus,
     ConnectorIndexingStatusLite,
     ConnectorIndexingStatusLiteResponse,
     ConnectorRequestSubmission,
@@ -173,6 +180,8 @@ _INDEXING_STATUS_PAGE_SIZE = 10
 SEEN_ZIP_DETAIL = "Only one zip file is allowed per file connector, \
 use the ingestion APIs for multiple files"
 
+MAX_UNZIPPED_BYTES = 500 * 1024 * 1024
+
 router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
@@ -218,6 +227,19 @@ def upsert_gmail_service_account_credential(
     return ObjectCreationIdResponse(id=credential.id)
 
 
+@router.get("/connector-group-restrictions")
+def get_connector_group_restrictions_status(
+    _: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+) -> ConnectorGroupRestrictionsStatus:
+    """Whether connector forms offer the data-access group restriction. Scoped
+    managers read it here because the security settings API is admin-only."""
+    return ConnectorGroupRestrictionsStatus(
+        enabled=get_security_settings().allow_connector_group_restrictions
+    )
+
+
 @router.get("/admin/connector/google-drive/check-auth/{credential_id}")
 def check_drive_tokens(
     credential_id: int,
@@ -243,37 +265,37 @@ def check_drive_tokens(
 
 def save_zip_metadata_to_file_store(
     zf: zipfile.ZipFile, file_store: FileStore
-) -> str | None:
+) -> tuple[str | None, int]:
     """
     Extract .onyx_metadata.json from zip and save to file store.
-    Returns the file_id or None if no metadata file exists.
+    Return the file ID and decompressed size, or (None, 0) if absent.
     """
     try:
         metadata_file_info = zf.getinfo(ONYX_METADATA_FILENAME)
-        with zf.open(metadata_file_info, "r") as metadata_file:
-            metadata_bytes = metadata_file.read()
-
-            # Validate that it's valid JSON before saving
-            try:
-                json.loads(metadata_bytes)
-            except json.JSONDecodeError as e:
-                logger.warning("Unable to load %s: %s", ONYX_METADATA_FILENAME, e)
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
-                )
-
-            # Save to file store
-            file_id = file_store.save_file(
-                content=BytesIO(metadata_bytes),
-                display_name=ONYX_METADATA_FILENAME,
-                file_origin=FileOrigin.CONNECTOR_METADATA,
-                file_type="application/json",
+        metadata_bytes: bytes = read_zip_member(
+            zf,
+            metadata_file_info,
+            max_bytes=min(MAX_ZIP_MEMBER_DECOMPRESSED_BYTES, MAX_UNZIPPED_BYTES),
+        )
+        try:
+            json.loads(metadata_bytes)
+        except json.JSONDecodeError as e:
+            logger.warning("Unable to load %s: %s", ONYX_METADATA_FILENAME, e)
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
             )
-            return file_id
+
+        file_id = file_store.save_file(
+            content=BytesIO(metadata_bytes),
+            display_name=ONYX_METADATA_FILENAME,
+            file_origin=FileOrigin.CONNECTOR_METADATA,
+            file_type="application/json",
+        )
+        return file_id, len(metadata_bytes)
     except KeyError:
         logger.info("No %s file", ONYX_METADATA_FILENAME)
-        return None
+        return None, 0
 
 
 def is_zip_file(file: UploadFile) -> bool:
@@ -325,8 +347,10 @@ def upload_files(
                 # Validate the zip by opening it (catches corrupt/non-zip files)
                 with zipfile.ZipFile(file.file, "r") as zf:
                     if unzip:
-                        zip_metadata_file_id = save_zip_metadata_to_file_store(
-                            zf, file_store
+                        assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
+                        unzipped_bytes: int
+                        zip_metadata_file_id, unzipped_bytes = (
+                            save_zip_metadata_to_file_store(zf, file_store)
                         )
                         for file_info in zf.namelist():
                             if zf.getinfo(file_info).is_dir():
@@ -335,7 +359,15 @@ def upload_files(
                             if not should_process_file(file_info):
                                 continue
 
-                            sub_file_bytes = zf.read(file_info)
+                            sub_file_bytes: bytes = read_zip_member(
+                                zf,
+                                zf.getinfo(file_info),
+                                max_bytes=min(
+                                    MAX_ZIP_MEMBER_DECOMPRESSED_BYTES,
+                                    MAX_UNZIPPED_BYTES - unzipped_bytes,
+                                ),
+                            )
+                            unzipped_bytes += len(sub_file_bytes)
 
                             mime_type, __ = mimetypes.guess_type(file_info)
                             if mime_type is None:
@@ -372,6 +404,8 @@ def upload_files(
             deduped_file_paths.append(file_id)
             deduped_file_names.append(file.filename)
 
+    except ZipSizeLimitError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return FileUploadResponse(
@@ -423,9 +457,10 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
     ):
         return cc_pair
 
-    raise HTTPException(
-        status_code=403,
-        detail="Access denied. User cannot manage files for this connector.",
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "Group managers can only act on private resources "
+        "within the groups they manage.",
     )
 
 
@@ -433,15 +468,21 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
 def upload_files_api(
     files: list[UploadFile],
     unzip: bool = True,
-    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    _: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
 ) -> FileUploadResponse:
+    # No GATE 2: there is no resource to scope yet, since this only stores bytes and
+    # returns ids. The manager is held to their groups when the credential is associated.
     return upload_files(files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip)
 
 
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
 def list_connector_files(
     connector_id: int,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ConnectorFilesResponse:
     """List all files in a file connector."""
@@ -454,11 +495,13 @@ def list_connector_files(
             status_code=400, detail="This endpoint only works with file connectors"
         )
 
+    # require_editable=False is the obvious choice for a read, but its filter passes
+    # any public connector, which would hand a manager file names outside their groups.
     _ = _fetch_and_check_file_connector_cc_pair_permissions(
         connector_id=connector_id,
         user=user,
         db_session=db_session,
-        require_editable=False,
+        require_editable=True,
     )
 
     file_locations = connector.connector_specific_config.get("file_locations", [])
@@ -560,7 +603,9 @@ def update_connector_files(
     connector_id: int,
     files: list[UploadFile] | None = File(None),
     file_ids_to_remove: str = Form("[]"),
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
     """
@@ -1385,6 +1430,9 @@ def _apply_connector_status_filters(
 ) -> list[ConnectorIndexingStatusLite]:
     """Apply filters to a list of ConnectorIndexingStatusLite objects"""
     filtered_statuses: list[ConnectorIndexingStatusLite] = []
+    # The "sync" filter covers restricted perm-synced pairs too.
+    if AccessType.SYNC in access_type_filters:
+        access_type_filters = [*access_type_filters, AccessType.SYNC_RESTRICTED]
 
     for status in statuses:
         # Filter by access type
@@ -1454,6 +1502,15 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
     )
 
 
+def _validate_connector_request(connector_data: ConnectorBase) -> None:
+    """Raises ``ValueError`` if the connector type is disabled or the config does
+    not match the source's typed config."""
+    _validate_connector_allowed(connector_data.source)
+    validate_connector_config(
+        connector_data.source, connector_data.connector_specific_config
+    )
+
+
 @router.post("/admin/connector", tags=PUBLIC_API_TAGS)
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
@@ -1467,7 +1524,7 @@ def create_connector_from_model(
     tenant_id = get_current_tenant_id()
 
     try:
-        _validate_connector_allowed(connector_data.source)
+        _validate_connector_request(connector_data)
 
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
@@ -1505,6 +1562,14 @@ def create_connector_with_mock_credential(
 ) -> StatusResponse:
     tenant_id = get_current_tenant_id()
 
+    if connector_data.access_type == AccessType.SYNC_RESTRICTED:
+        # Perm sync needs a real credential; the restriction's groups are only
+        # accepted where the pair is associated with one.
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Restricted perm-synced connectors must be created with a credential.",
+        )
+
     # GATE 2 write authorization (see assert_within_scope).
     assert_within_scope(
         user,
@@ -1516,7 +1581,7 @@ def create_connector_with_mock_credential(
     )
 
     try:
-        _validate_connector_allowed(connector_data.source)
+        _validate_connector_request(connector_data)
         connector_response = create_connector(
             db_session=db_session,
             connector_data=connector_data,
@@ -1592,7 +1657,7 @@ def update_connector_from_model(
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     try:
-        _validate_connector_allowed(connector_data.source)
+        _validate_connector_request(connector_data)
         connector_base = connector_data.to_connector_base()
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
@@ -1861,7 +1926,9 @@ def get_connectors(
 
 @router.get("/indexed-sources", tags=PUBLIC_API_TAGS)
 def get_indexed_sources(
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    # Filter vocabulary for search, not the admin connector surface — hence
+    # READ_SEARCH rather than READ_CONNECTORS.
+    _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> IndexedSourcesResponse:
     sources = sorted(

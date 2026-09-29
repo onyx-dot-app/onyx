@@ -6,7 +6,7 @@ import type { Route } from "next";
 import {
   Button,
   Card,
-  Checkbox,
+  InputCheckbox,
   InputTypeIn,
   MessageCard,
   Modal,
@@ -236,6 +236,8 @@ export function ImportSkillsFromGitHubModalView({
           {result ? (
             <div className="flex w-full flex-col gap-3">
               <MessageCard
+                outerPadding={1}
+                innerPadding={1}
                 variant={
                   result.imported.length === 0
                     ? "error"
@@ -374,6 +376,8 @@ export function ImportSkillsFromGitHubModalView({
 
               {error && (
                 <MessageCard
+                  outerPadding={1}
+                  innerPadding={1}
                   variant="error"
                   title={
                     preview
@@ -387,7 +391,7 @@ export function ImportSkillsFromGitHubModalView({
               {preview && (
                 <div className="flex min-h-0 flex-col gap-2">
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <InputCheckbox
                       checked={allImportableSelected}
                       indeterminate={
                         selectedPaths.length > 0 && !allImportableSelected
@@ -418,7 +422,7 @@ export function ImportSkillsFromGitHubModalView({
                               unavailable && "opacity-50"
                             )}
                           >
-                            <Checkbox
+                            <InputCheckbox
                               checked={checked}
                               disabled={loading || unavailable}
                               aria-label={t(

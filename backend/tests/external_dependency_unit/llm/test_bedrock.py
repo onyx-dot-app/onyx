@@ -15,7 +15,7 @@ The auth-error path lives at the API surface in
 import pytest
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import ChatCompletionMessage, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from tests.utils.secret_names import TestSecret
 
@@ -53,7 +53,6 @@ def test_nova_streaming_does_not_leak_thinking_tags(
         model_provider=LlmProviderNames.BEDROCK,
         model_name=_NOVA_THINKING_MODEL,
         max_input_tokens=128_000,
-        timeout=60,
         custom_config={"AWS_REGION_NAME": _BEDROCK_REGION},
     )
 
@@ -70,7 +69,7 @@ def test_nova_streaming_does_not_leak_thinking_tags(
 
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
-    for chunk in llm.stream(prompt=prompt):
+    for chunk in llm.stream_raw(prompt=prompt):
         delta = chunk.choice.delta
         if delta.content:
             content_parts.append(delta.content)

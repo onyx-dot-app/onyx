@@ -1050,14 +1050,15 @@ def save_user_credentials(
     if mcp_server.auth_type != MCPAuthenticationType.OAUTH:
         validation_headers = config_data["headers"]
         if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
-            if not user.oauth_accounts:
+            live_oauth_token: str | None = user.live_oauth_token
+            if live_oauth_token is None:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
                     "Pass-through OAuth requires an OAuth login.",
                 )
             validation_headers = merge_mcp_headers(
                 validation_headers,
-                {"Authorization": f"Bearer {user.oauth_accounts[0].access_token}"},
+                {"Authorization": f"Bearer {live_oauth_token}"},
             )
         is_valid, test_message = test_mcp_server_credentials(
             mcp_server.server_url,

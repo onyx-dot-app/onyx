@@ -9,20 +9,22 @@ import {
   Button,
   Divider,
   MessageCard,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
 } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { FormField } from "@/refresh-components/form/FormField";
 import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
-import KeyValueInput, {
-  KeyValue,
-} from "@/refresh-components/inputs/InputKeyValue";
+import {
+  InputKeyValue as KeyValueInput,
+  type KeyValue,
+} from "@opal/components";
 import { OAuthConfig } from "@/lib/tools/types";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 
 export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
 
@@ -83,6 +85,7 @@ export default function OpenAPIAuthenticationModal({
   entityName = null,
 }: OpenAPIAuthenticationModalProps) {
   const t = useTranslations("actions");
+  const { appName } = useSettings();
   const isOAuthEnabled = useOAuthPassThroughEnabled();
   const [existingOAuthConfig, setExistingOAuthConfig] =
     useState<OAuthConfig | null>(null);
@@ -382,50 +385,50 @@ export default function OpenAPIAuthenticationModal({
                           {t("openApiAuthModal.authMethod.label")}
                         </FormField.Label>
                         <FormField.Control asChild>
-                          <InputSelect
+                          <InputSingleSelect
                             value={values.authMethod}
                             onValueChange={(value) =>
                               setFieldValue("authMethod", value)
                             }
-                          >
-                            <InputSelect.Trigger
-                              placeholder={t(
-                                "openApiAuthModal.authMethod.placeholder"
-                              )}
-                            />
-                            <InputSelect.Content>
-                              <InputSelect.Item
-                                value="oauth"
-                                description={t(
+                            defaultOption="oauth"
+                            placeholder={t(
+                              "openApiAuthModal.authMethod.placeholder"
+                            )}
+                            options={[
+                              {
+                                value: "oauth",
+                                title: t(
+                                  "openApiAuthModal.authMethod.oauth.label"
+                                ),
+                                description: t(
                                   "openApiAuthModal.authMethod.oauth.description"
-                                )}
-                              >
-                                {t("openApiAuthModal.authMethod.oauth.label")}
-                              </InputSelect.Item>
-                              {isOAuthEnabled && (
-                                <InputSelect.Item
-                                  value="pt-oauth"
-                                  description={t(
-                                    "openApiAuthModal.authMethod.ptOauth.description"
-                                  )}
-                                >
-                                  {t(
-                                    "openApiAuthModal.authMethod.ptOauth.label"
-                                  )}
-                                </InputSelect.Item>
-                              )}
-                              <InputSelect.Item
-                                value="custom-header"
-                                description={t(
-                                  "openApiAuthModal.authMethod.customHeader.description"
-                                )}
-                              >
-                                {t(
+                                ),
+                              },
+                              ...(isOAuthEnabled
+                                ? [
+                                    {
+                                      value: "pt-oauth",
+                                      title: t(
+                                        "openApiAuthModal.authMethod.ptOauth.label"
+                                      ),
+                                      description: t(
+                                        "openApiAuthModal.authMethod.ptOauth.description",
+                                        { appName }
+                                      ),
+                                    },
+                                  ]
+                                : []),
+                              {
+                                value: "custom-header",
+                                title: t(
                                   "openApiAuthModal.authMethod.customHeader.label"
-                                )}
-                              </InputSelect.Item>
-                            </InputSelect.Content>
-                          </InputSelect>
+                                ),
+                                description: t(
+                                  "openApiAuthModal.authMethod.customHeader.description"
+                                ),
+                              },
+                            ]}
+                          />
                         </FormField.Control>
                         <FormField.Message
                           messages={{
@@ -542,7 +545,7 @@ export default function OpenAPIAuthenticationModal({
                             {t("openApiAuthModal.clientSecret.label")}
                           </FormField.Label>
                           <FormField.Control asChild>
-                            <PasswordInputTypeIn
+                            <InputPasswordTypeIn
                               name="clientSecret"
                               value={values.clientSecret}
                               onChange={handleChange}
@@ -684,9 +687,12 @@ export default function OpenAPIAuthenticationModal({
                     )}
                     {values.authMethod === "pt-oauth" && (
                       <MessageCard
+                        outerPadding={1}
+                        innerPadding={1}
                         title={t("openApiAuthModal.passThroughNotice.title")}
                         description={t(
-                          "openApiAuthModal.passThroughNotice.description"
+                          "openApiAuthModal.passThroughNotice.description",
+                          { appName }
                         )}
                       />
                     )}

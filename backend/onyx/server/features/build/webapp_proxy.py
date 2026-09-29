@@ -16,25 +16,15 @@ from fastapi import (
     WebSocketException,
 )
 from fastapi.responses import RedirectResponse, StreamingResponse
-from fastapi_users.authentication.strategy.base import Strategy
-from fastapi_users.manager import BaseUserManager
 from starlette.websockets import WebSocketState
 from websockets.asyncio.client import ClientConnection
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed
 
-from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.users import (
-    auth_backend,
-    get_user_manager,
-    is_same_origin,
-    optional_user,
-)
+from onyx.auth.users import current_user_from_websocket_cookie, optional_user
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.enums import Permission, SharingScope
+from onyx.db.enums import SharingScope
 from onyx.db.models import User
 from onyx.server.features.build.db.build_session import (
     get_webapp_access_async,
@@ -193,8 +183,7 @@ async def _proxy_request(
         for key, value in request.headers.items()
         if not (
             (lowered := key.lower()) in EXCLUDED_REQUEST_HEADERS
-            or lowered.startswith("x-onyx-")
-            or lowered.startswith("sec-fetch-")
+            or lowered.startswith(("x-onyx-", "sec-fetch-"))
         )
     }
 
@@ -266,29 +255,6 @@ def _webapp_hmr_websocket_url(
     if hmr_query_string:
         target_url = f"{target_url}?{hmr_query_string}"
     return target_url
-
-
-async def _current_webapp_websocket_user(
-    websocket: WebSocket,
-    user_manager: BaseUserManager[User, UUID] = Depends(get_user_manager),
-    strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
-) -> User:
-    # CSWSH guard: WebSockets are exempt from the same-origin policy and
-    # cookie auth is attached automatically. Browsers always send Origin on
-    # WebSocket upgrades, so a missing header is rejected too.
-    origin = websocket.headers.get("origin")
-    if origin is None or not is_same_origin(origin, WEB_DOMAIN):
-        raise WebSocketException(code=1008)
-    token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
-    user = await strategy.read_token(token, user_manager)
-    if user is None or not user.is_active:
-        raise WebSocketException(code=1008)
-    if Permission.BASIC_ACCESS not in get_effective_permissions(user):
-        raise WebSocketException(code=1008)
-    return user
-
-
-_current_webapp_websocket_user._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
 
 
 async def _pump_webapp_to_upstream(
@@ -422,7 +388,7 @@ async def get_webapp(
 async def websocket_webapp_hmr(
     session_id: UUID,
     websocket: WebSocket,
-    user: User = Depends(_current_webapp_websocket_user),
+    user: User = Depends(current_user_from_websocket_cookie),
 ) -> None:
     try:
         await _check_webapp_access(session_id, user)

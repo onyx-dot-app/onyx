@@ -38,34 +38,34 @@ type llmProviderResource struct {
 }
 
 type llmProviderResourceModel struct {
+	Groups                types.Set    `tfsdk:"groups"`
+	Agents                types.Set    `tfsdk:"agents"`
+	ModelConfigurations   types.Set    `tfsdk:"model_configurations"`
+	CustomConfig          types.Map    `tfsdk:"custom_config"`
+	CustomConfigWO        types.Map    `tfsdk:"custom_config_wo"`
 	ID                    types.String `tfsdk:"id"`
 	Name                  types.String `tfsdk:"name"`
 	ProviderType          types.String `tfsdk:"provider_type"`
 	APIKey                types.String `tfsdk:"api_key"`
 	APIKeyWO              types.String `tfsdk:"api_key_wo"`
-	APIKeyWOVersion       types.Int64  `tfsdk:"api_key_wo_version"`
 	APIBase               types.String `tfsdk:"api_base"`
 	APIVersion            types.String `tfsdk:"api_version"`
 	DeploymentName        types.String `tfsdk:"deployment_name"`
-	CustomConfig          types.Map    `tfsdk:"custom_config"`
-	CustomConfigWO        types.Map    `tfsdk:"custom_config_wo"`
+	APIKeyWOVersion       types.Int64  `tfsdk:"api_key_wo_version"`
 	CustomConfigWOVersion types.Int64  `tfsdk:"custom_config_wo_version"`
 	IsPublic              types.Bool   `tfsdk:"is_public"`
 	IsAutoMode            types.Bool   `tfsdk:"is_auto_mode"`
-	Groups                types.Set    `tfsdk:"groups"`
-	Personas              types.Set    `tfsdk:"personas"`
 	ForceDelete           types.Bool   `tfsdk:"force_delete"`
-	ModelConfigurations   types.Set    `tfsdk:"model_configurations"`
 }
 
 type modelConfigurationModel struct {
 	Name               types.String `tfsdk:"name"`
-	IsVisible          types.Bool   `tfsdk:"is_visible"`
-	MaxInputTokens     types.Int64  `tfsdk:"max_input_tokens"`
-	SupportsImageInput types.Bool   `tfsdk:"supports_image_input"`
-	SupportsReasoning  types.Bool   `tfsdk:"supports_reasoning"`
 	DisplayName        types.String `tfsdk:"display_name"`
 	CustomDisplayName  types.String `tfsdk:"custom_display_name"`
+	MaxInputTokens     types.Int64  `tfsdk:"max_input_tokens"`
+	IsVisible          types.Bool   `tfsdk:"is_visible"`
+	SupportsImageInput types.Bool   `tfsdk:"supports_image_input"`
+	SupportsReasoning  types.Bool   `tfsdk:"supports_reasoning"`
 }
 
 var modelConfigurationAttrTypes = map[string]attr.Type{
@@ -188,12 +188,12 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Default:             setdefault.StaticValue(emptyInt64Set),
 				MarkdownDescription: "User group ids the provider is restricted to (EE).",
 			},
-			"personas": schema.SetAttribute{
+			"agents": schema.SetAttribute{
 				ElementType:         types.Int64Type,
 				Optional:            true,
 				Computed:            true,
 				Default:             setdefault.StaticValue(emptyInt64Set),
-				MarkdownDescription: "Persona ids the provider is restricted to.",
+				MarkdownDescription: "Agent ids the provider is restricted to.",
 			},
 			"force_delete": schema.BoolAttribute{
 				Optional: true,
@@ -285,7 +285,7 @@ func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmPr
 		upsert.CustomConfig = customConfig
 	}
 	diags.Append(plan.Groups.ElementsAs(ctx, &upsert.Groups, false)...)
-	diags.Append(plan.Personas.ElementsAs(ctx, &upsert.Personas, false)...)
+	diags.Append(plan.Agents.ElementsAs(ctx, &upsert.Agents, false)...)
 
 	var modelConfigs []modelConfigurationModel
 	diags.Append(plan.ModelConfigurations.ElementsAs(ctx, &modelConfigs, false)...)
@@ -366,9 +366,9 @@ func (r *llmProviderResource) Read(ctx context.Context, req resource.ReadRequest
 	groups, diags := types.SetValueFrom(ctx, types.Int64Type, view.Groups)
 	resp.Diagnostics.Append(diags...)
 	state.Groups = groups
-	personas, diags := types.SetValueFrom(ctx, types.Int64Type, view.Personas)
+	agents, diags := types.SetValueFrom(ctx, types.Int64Type, view.Agents)
 	resp.Diagnostics.Append(diags...)
-	state.Personas = personas
+	state.Agents = agents
 
 	// api_key/custom_config are masked in responses; carry the real values
 	// forward from prior state and never let a masked placeholder in.

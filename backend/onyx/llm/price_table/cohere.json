@@ -1,0 +1,478 @@
+{
+  "aliases": {},
+  "models": {
+    "c4ai-aya-expanse-32b": {
+      "attachment": false,
+      "limit": {
+        "context": 128000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Aya Expanse 32B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-10-24",
+      "temperature": true,
+      "tool_call": false
+    },
+    "c4ai-aya-expanse-8b": {
+      "attachment": false,
+      "limit": {
+        "context": 8000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Aya Expanse 8B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-10-24",
+      "temperature": true,
+      "tool_call": false
+    },
+    "c4ai-aya-vision-32b": {
+      "attachment": true,
+      "limit": {
+        "context": 16000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Aya Vision 32B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-04",
+      "temperature": true,
+      "tool_call": false
+    },
+    "c4ai-aya-vision-8b": {
+      "attachment": true,
+      "limit": {
+        "context": 16000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Aya Vision 8B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-04",
+      "temperature": true,
+      "tool_call": false
+    },
+    "command-a-03-2025": {
+      "attachment": false,
+      "cost": {
+        "input": 2.5,
+        "output": 10
+      },
+      "family": "command-a",
+      "limit": {
+        "context": 256000,
+        "output": 8000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command A",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-03-13",
+      "temperature": true,
+      "tool_call": true
+    },
+    "command-a-plus-05-2026": {
+      "attachment": true,
+      "cost": {
+        "input": 2.5,
+        "output": 10
+      },
+      "family": "command-a",
+      "limit": {
+        "context": 128000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command A Plus",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-05-20",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "command-a-reasoning-08-2025": {
+      "attachment": false,
+      "cost": {
+        "input": 2.5,
+        "output": 10
+      },
+      "family": "command-a",
+      "limit": {
+        "context": 256000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command A Reasoning",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2025-08-21",
+      "temperature": true,
+      "tool_call": true
+    },
+    "command-a-translate-08-2025": {
+      "attachment": false,
+      "cost": {
+        "input": 2.5,
+        "output": 10
+      },
+      "family": "command-a",
+      "limit": {
+        "context": 8000,
+        "output": 8000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command A Translate",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-08-28",
+      "temperature": true,
+      "tool_call": true
+    },
+    "command-a-vision-07-2025": {
+      "attachment": true,
+      "cost": {
+        "input": 2.5,
+        "output": 10
+      },
+      "family": "command-a",
+      "limit": {
+        "context": 128000,
+        "output": 8000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command A Vision",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-07-31",
+      "temperature": true,
+      "tool_call": false
+    },
+    "command-r-08-2024": {
+      "attachment": false,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "command-r",
+      "limit": {
+        "context": 128000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command R",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-08-30",
+      "temperature": true,
+      "tool_call": true
+    },
+    "command-r-plus-08-2024": {
+      "attachment": false,
+      "cost": {
+        "input": 2.5,
+        "output": 10
+      },
+      "family": "command-r",
+      "limit": {
+        "context": 128000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command R+",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-08-30",
+      "temperature": true,
+      "tool_call": true
+    },
+    "command-r7b-12-2024": {
+      "attachment": false,
+      "cost": {
+        "input": 0.0375,
+        "output": 0.15
+      },
+      "family": "command-r",
+      "limit": {
+        "context": 128000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command R7B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-12-02",
+      "temperature": true,
+      "tool_call": true
+    },
+    "command-r7b-arabic-02-2025": {
+      "attachment": false,
+      "cost": {
+        "input": 0.0375,
+        "output": 0.15
+      },
+      "family": "command-r",
+      "limit": {
+        "context": 128000,
+        "output": 4000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Command R7B Arabic",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-02-27",
+      "temperature": true,
+      "tool_call": true
+    },
+    "embed-english-light-v3.0": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "embed-english-light-v3.0"
+    },
+    "embed-english-v3.0": {
+      "cost": {
+        "image_input": 0.0001,
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "embed-english-v3.0"
+    },
+    "embed-multilingual-light-v3.0": {
+      "cost": {
+        "input": 100.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "embed-multilingual-light-v3.0"
+    },
+    "embed-multilingual-v3.0": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 512
+      },
+      "mode": "embedding",
+      "name": "embed-multilingual-v3.0"
+    },
+    "embed-v4.0": {
+      "cost": {
+        "input": 0.12,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 128000
+      },
+      "mode": "embedding",
+      "name": "embed-v4.0"
+    },
+    "north-mini-code-1-0": {
+      "attachment": false,
+      "cost": {
+        "input": 0,
+        "output": 0
+      },
+      "family": "north",
+      "limit": {
+        "context": 256000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "North Mini Code",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "parse-v5.0": {
+      "mode": "ocr",
+      "name": "parse-v5.0"
+    },
+    "rerank-english-v3.0": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "rerank",
+      "name": "rerank-english-v3.0"
+    },
+    "rerank-multilingual-v3.0": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "rerank",
+      "name": "rerank-multilingual-v3.0"
+    },
+    "rerank-v3.5": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 4096,
+        "output": 4096
+      },
+      "mode": "rerank",
+      "name": "rerank-v3.5"
+    },
+    "rerank-v4.0-fast": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "rerank",
+      "name": "rerank-v4.0-fast"
+    },
+    "rerank-v4.0-pro": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "mode": "rerank",
+      "name": "rerank-v4.0-pro"
+    }
+  },
+  "models_dev_providers": [
+    "cohere"
+  ]
+}

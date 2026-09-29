@@ -48,5 +48,8 @@ release:
     - glob: terraform-registry-manifest.json
       name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
 
-changelog:
-  disable: true
+# No changelog block. `changelog.disable: true` skips the whole pipe, and that
+# pipe is what reads --release-notes, so disabling it silently discards the
+# notes Publish extracts from CHANGELOG.md and the release body comes out empty.
+# Nothing generates a commit-derived changelog either: the pipe returns as soon
+# as --release-notes is set, which Publish always passes on the tag path.

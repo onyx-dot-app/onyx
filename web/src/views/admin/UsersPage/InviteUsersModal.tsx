@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   BasicModalFooter,
   Button,
-  InputTags,
+  InputTypeInTag,
   Modal,
   type TagItem,
 } from "@opal/components";
@@ -66,20 +66,20 @@ function buildMessage(
   if (tags.some((tag) => tag.error)) {
     return {
       icon: SvgAlertTriangle,
-      color: "muted-warning",
+      color: "warning",
       text: copy.someInvalid,
     };
   }
   if (validCount === 0) {
     return {
       icon: SvgAlertTriangle,
-      color: "muted-warning",
+      color: "warning",
       text: copy.needsValidEmail,
     };
   }
   return {
     icon: SvgCheckCircle,
-    color: "muted-success",
+    color: "success",
     text: copy.readyCount,
   };
 }
@@ -231,7 +231,7 @@ export default function InviteUsersModal({
         />
 
         <Modal.Body alignItems="stretch" gap={1}>
-          <InputTags
+          <InputTypeInTag
             tags={tags}
             onRemoveTag={removeTag}
             onAdd={handleAdd}

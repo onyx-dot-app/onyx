@@ -28,7 +28,7 @@ import {
   DeleteUserModal,
   ResetPasswordModal,
 } from "./UserActionModals";
-import type { UserRow } from "./interfaces";
+import type { UserRow } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types

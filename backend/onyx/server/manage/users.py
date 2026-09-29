@@ -19,7 +19,11 @@ from onyx.auth.invited_users import (
     remove_user_from_invited_users,
     write_invited_users,
 )
-from onyx.auth.permissions import get_effective_permissions, require_permission
+from onyx.auth.permissions import (
+    get_effective_permissions,
+    has_global_permission,
+    require_permission,
+)
 from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.auth.session_tokens import (
     SessionRejection,
@@ -37,6 +41,7 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     EMAIL_CONFIGURED,
     ENABLE_EMAIL_INVITES,
+    INTEGRATION_TESTS_MODE,
     NUM_FREE_TRIAL_USER_INVITES,
     REDIS_AUTH_KEY_PREFIX,
     SESSION_EXPIRE_TIME_SECONDS,
@@ -79,6 +84,7 @@ from onyx.db.user_preferences import (
     update_users_craft_enabled,
 )
 from onyx.db.users import (
+    batch_get_last_active,
     batch_get_user_groups,
     delete_user_from_db,
     get_all_accepted_users,
@@ -242,6 +248,9 @@ async def test_upsert_user(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None | FullUserSnapshot:
     """Test endpoint for upsert_saml_user. Only used for integration testing."""
+    if not INTEGRATION_TESTS_MODE:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND)
+
     user = await fetch_ee_implementation_or_noop(
         "onyx.server.saml", "upsert_saml_user", None
     )(email=request.email)
@@ -302,6 +311,7 @@ def list_accepted_users(
 
     user_ids = [user.id for user in filtered_accepted_users]
     groups_by_user = batch_get_user_groups(db_session, user_ids, include_default=True)
+    last_active_by_user = batch_get_last_active(db_session, user_ids)
 
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
@@ -328,6 +338,7 @@ def list_accepted_users(
                 ],
                 is_scim_synced=user.id in scim_synced_ids,
                 is_admin=user_is_admin(user),
+                last_active=last_active_by_user.get(user.id),
             )
             for user in filtered_accepted_users
         ],
@@ -349,6 +360,7 @@ def list_all_accepted_users(
 
     user_ids = [user.id for user in users]
     groups_by_user = batch_get_user_groups(db_session, user_ids, include_default=True)
+    last_active_by_user = batch_get_last_active(db_session, user_ids)
 
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
@@ -374,6 +386,7 @@ def list_all_accepted_users(
             ],
             is_scim_synced=user.id in scim_synced_ids,
             is_admin=user_is_admin(user),
+            last_active=last_active_by_user.get(user.id),
         )
         for user in users
     ]
@@ -404,7 +417,10 @@ def list_invited_users(
 
 
 def _snapshots_with_groups(
-    db_session: Session, accepted: list[User], slack: list[User]
+    db_session: Session,
+    accepted: list[User],
+    slack: list[User],
+    visible_group_ids: set[int] | None = None,
 ) -> tuple[list[FullUserSnapshot], list[FullUserSnapshot]]:
     """One membership lookup for both lists. Slack users are included because bot
     memberships predating the join gate can still exist."""
@@ -413,6 +429,7 @@ def _snapshots_with_groups(
         [user.id for user in (*accepted, *slack)],
         include_default=True,
     )
+    is_scoped = visible_group_ids is not None
 
     def to_snapshot(user: User) -> FullUserSnapshot:
         return FullUserSnapshot.from_user_model(
@@ -420,8 +437,9 @@ def _snapshots_with_groups(
             groups=[
                 UserGroupInfo(id=gid, name=gname)
                 for gid, gname in groups_by_user.get(user.id, [])
+                if visible_group_ids is None or gid in visible_group_ids
             ],
-            is_admin=user_is_admin(user),
+            is_admin=False if is_scoped else user_is_admin(user),
         )
 
     return [to_snapshot(user) for user in accepted], [
@@ -436,9 +454,20 @@ def list_all_users(
     slack_users_page: int | None = None,
     invited_page: int | None = None,
     include_api_keys: bool = False,
-    _: User = Depends(require_permission(Permission.READ_USERS, allow_scope=True)),
+    current_user: User = Depends(
+        require_permission(Permission.READ_USERS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
+    is_global = has_global_permission(current_user, Permission.READ_USERS)
+    visible_group_ids = (
+        None
+        if is_global
+        else get_scoped_groups(current_user, db_session, Permission.MANAGE_USER_GROUPS)
+    )
+    if not is_global:
+        include_api_keys = False
+
     users = get_all_users(
         db_session,
         email_filter_string=q,
@@ -455,9 +484,11 @@ def list_all_users(
 
     # Filter out users who are already active (either accepted or slack users)
     all_active_emails = {user.email for user in users}
-    invited_emails = [
-        email for email in get_invited_users() if email not in all_active_emails
-    ]
+    invited_emails = (
+        [email for email in get_invited_users() if email not in all_active_emails]
+        if is_global
+        else []
+    )
 
     if q:
         # Plain case-insensitive substring match (mirrors the ilike used for
@@ -473,7 +504,7 @@ def list_all_users(
     # If any of q, accepted_page, or invited_page is None, return all users
     if accepted_page is None or invited_page is None or slack_users_page is None:
         accepted_snapshots, slack_snapshots = _snapshots_with_groups(
-            db_session, accepted_users, slack_users
+            db_session, accepted_users, slack_users, visible_group_ids
         )
         return AllUsersResponse(
             accepted=accepted_snapshots,
@@ -495,6 +526,7 @@ def list_all_users(
             slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
             * USERS_PAGE_SIZE
         ],
+        visible_group_ids,
     )
     return AllUsersResponse(
         accepted=accepted_snapshots,

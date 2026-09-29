@@ -7,19 +7,19 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 
 ## Props
 
-| Prop       | Type                                            | Default          | Description                                                                                    |
-| ---------- | ----------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------- |
-| `font`     | `TextFont`                                      | `"main-ui-body"` | Font preset (size, weight, line-height)                                                        |
-| `color`    | `TextColor`                                     | `"text-04"`      | Text color                                                                                     |
-| `as`       | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"`         | HTML tag to render                                                                             |
-| `nowrap`   | `boolean`                                       | `false`          | Prevent text wrapping                                                                          |
-| `wordWrap` | `"wrap-normal" \| "wrap-break-word" \| "wrap-anywhere" \| "break-all" \| "break-keep"` | — | How a run of characters with nowhere to wrap behaves; unset leaves normal CSS wrapping |
-| `maxLines` | `number`                                        | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`) |
-| `children` | `string \| RichStr \| RichNodes`                | —                | Plain string, `markdown()` for inline markdown, or `richNodes()` for inline React nodes        |
+| Prop           | Type                                                                                                          | Default          | Description                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `font`         | `TextFont`                                                                                                    | `"main-ui-body"` | Font preset (size, weight, line-height)                                                                               |
+| `color`        | `TextColor`                                                                                                   | `"text-04"`      | Text color                                                                                                            |
+| `as`           | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"`                                                               | `"span"`         | HTML tag to render                                                                                                    |
+| `wordWrap`     | `"whitespace-nowrap" \| "wrap-normal" \| "wrap-break-word" \| "wrap-anywhere" \| "break-all" \| "break-keep"` | —                | How a run of characters with nowhere to wrap behaves; unset leaves normal CSS wrapping                                |
+| `textPosition` | `"text-start" \| "text-center" \| "text-end" \| "text-justify"`                                               | —                | How the text sits within its own box; logical, so it follows reading direction. Only offered when `as` is a block tag |
+| `maxLines`     | `number`                                                                                                      | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`)                        |
+| `children`     | `string \| RichStr \| RichNodes`                                                                              | —                | Plain string, `markdown()` for inline markdown, or `richNodes()` for inline React nodes                               |
 
 > **No `className` or `style`.** `Text` strips both (its props extend `WithoutStyles`); every
-> aspect of its appearance is driven by `font`, `color`, `nowrap`, `wordWrap`, and `maxLines`. For layout
-> concerns (margin, flex, width, alignment) wrap `Text` in a container or move the utility class
+> aspect of its appearance is driven by `font`, `color`, `wordWrap`, `textPosition`, and `maxLines`. For layout
+> concerns (margin, flex, width, and where the element itself sits) wrap `Text` in a container or move the utility class
 > to the parent — don't reach for `className`. All other HTML attributes (`id`, `onClick`,
 > `title`, `aria-*`, `data-*`) pass straight through to the rendered element.
 
@@ -137,7 +137,7 @@ components. The decision to use markdown lives at the call site.
 
 ## Inline React nodes via `RichNodes`
 
-Some sentences must embed an inline *component* — most often i18n rich text, where a translated
+Some sentences must embed an inline _component_ — most often i18n rich text, where a translated
 sentence wraps part of itself in a link or button (next-intl `t.rich`). Markdown cannot express
 an element with an event handler, so for this case `richNodes()` brands a `ReactNode` as
 deliberate `Text` children:
@@ -150,11 +150,13 @@ import { richNodes } from "@opal/utils";
   {richNodes(
     t.rich("waitingOnVerification.helpPrompt.text", {
       link: (chunks) => (
-        <RequestNewVerificationEmail email={email}>{chunks}</RequestNewVerificationEmail>
+        <RequestNewVerificationEmail email={email}>
+          {chunks}
+        </RequestNewVerificationEmail>
       ),
     })
   )}
-</Text>
+</Text>;
 ```
 
 The nodes render verbatim and inherit the `font` and `color` presets. The brand keeps the same

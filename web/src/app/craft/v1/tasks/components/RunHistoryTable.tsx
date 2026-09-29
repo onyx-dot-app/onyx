@@ -133,7 +133,11 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
           <div className="flex flex-col gap-0.5">
-            <Text font="main-ui-body" color="text-05" nowrap>
+            <Text
+              font="main-ui-body"
+              color="text-05"
+              wordWrap="whitespace-nowrap"
+            >
               {formatAbsolute(value)}
             </Text>
             <Text font="secondary-body" color="text-03">
@@ -176,7 +180,11 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
       width: { weight: 12 },
       cell: (row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
-          <Text font="main-ui-body" color="text-03" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {formatRunDuration(row.started_at, row.finished_at)}
           </Text>
         </NonClickableCell>
@@ -194,7 +202,11 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
       enableSorting: false,
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
-          <Text font="main-ui-body" color="text-03" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {value === "MANUAL_RUN_NOW"
               ? t("trigger.runNow")
               : t("trigger.schedule")}

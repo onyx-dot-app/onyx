@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle } from "@opal/icons";
 interface MoveCustomAgentChatModalProps {
@@ -37,7 +37,7 @@ export function MoveCustomAgentChatModal({
           })}
         </Text>
         <div className="flex items-center gap-1">
-          <Checkbox
+          <InputCheckbox
             id="move-custom-agent-do-not-show"
             checked={doNotShowAgain}
             onCheckedChange={(checked) => setDoNotShowAgain(Boolean(checked))}

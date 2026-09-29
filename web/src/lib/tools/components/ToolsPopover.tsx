@@ -16,7 +16,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { MinimalAgent } from "@/lib/agents/types";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { hasPermission } from "@/lib/permissions";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
@@ -26,21 +26,21 @@ import {
   type ToolConfigurationHandle,
 } from "@/lib/tools/hooks";
 import { ToolsPopoverProvider } from "@/lib/tools/providers";
-import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
+import { MCPLineItem, type MCPServer } from "@/lib/mcp/components";
 import SourcesView from "@/lib/tools/components/SourcesView";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import ToolLineItem from "@/lib/tools/components/ToolLineItem";
+import { SecondaryViewState } from "@/lib/tools/types";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
-  SecondaryViewState,
-} from "@/lib/tools/types";
+} from "@/lib/mcp/types";
 import { Permission } from "@/lib/types";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
   startMCPUserOAuth,
-} from "@/lib/tools/svc";
+} from "@/lib/mcp/svc";
 import { useUser } from "@/providers/UserProvider";
 
 /**
@@ -78,7 +78,9 @@ export default function ToolsPopover({
   const [searchTerm, setSearchTerm] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(agent.id);
+  const { llmProviders, isLoading: isLLMLoading } = useLanguageModelsForAgent(
+    agent.id
+  );
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Store MCP server auth/loading state (tools are part of agent.tools)
@@ -181,9 +183,9 @@ export default function ToolsPopover({
           setMcpServers(servers);
           // Seed auth/loading state based on response
           setMcpServerData((prev) => {
-            const next = { ...prev } as any;
-            servers.forEach((s: any) => {
-              next[s.id as number] = {
+            const next: typeof prev = { ...prev };
+            servers.forEach((s: MCPServer) => {
+              next[s.id] = {
                 isAuthenticated: !!s.user_can_authenticate,
                 isLoading: false,
               };

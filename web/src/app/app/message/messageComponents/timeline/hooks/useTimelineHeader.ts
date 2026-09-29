@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { TurnGroup } from "../transformers";
 import {
   PacketType,
@@ -28,6 +28,7 @@ export function useTimelineHeader(
   isGeneratingImage?: boolean
 ): TimelineHeaderResult {
   const t = useTranslations("chat.messages.timeline");
+  const locale = useLocale();
 
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
@@ -78,7 +79,9 @@ export function useTimelineHeader(
       } else {
         headerText = formatSearchHeader(
           searchState.sourceFilters,
-          searchState.timeFilter
+          searchState.timeFilter,
+          t,
+          locale
         );
       }
       return { headerText, hasPackets, userStopped };
@@ -159,5 +162,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: thinkingHeader, hasPackets, userStopped };
-  }, [turnGroups, stopReason, isGeneratingImage, t]);
+  }, [turnGroups, stopReason, isGeneratingImage, t, locale]);
 }

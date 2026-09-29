@@ -67,6 +67,8 @@ export interface CreateAgentOptions {
  * - `createFileConnector(name)` - Creates a file connector with mock credentials
  * - `findCCPairByName(source, name)` - Looks up a connector-credential pair ID by source + name
  * - `deleteCCPair(ccPairId)` - Deletes a connector-credential pair (with polling until complete)
+ * - `createCredential(source, name, credentialJson)` - Creates an admin-public credential for a source
+ * - `deleteCredential(credentialId)` - Deletes an unlinked credential
  *
  * **Document Sets:**
  * - `createDocumentSet(name, ccPairIds)` - Creates a document set from connector pairs
@@ -389,6 +391,53 @@ export class OnyxApiClient {
   }
 
   /**
+   * Creates an admin-public credential for a source. The endpoint stores the
+   * JSON without contacting the source, so placeholder values are fine for
+   * tests that only need a credential to exist.
+   *
+   * @param source - The connector source (e.g. "confluence")
+   * @param name - Display name for the credential
+   * @param credentialJson - The credential fields the source's template expects
+   * @returns The new credential's ID
+   * @throws Error if the credential creation fails
+   */
+  async createCredential(
+    source: string,
+    name: string,
+    credentialJson: Record<string, string>
+  ): Promise<number> {
+    const response = await this.post("/manage/credential", {
+      credential_json: credentialJson,
+      admin_public: true,
+      curator_public: true,
+      groups: [],
+      source,
+      name,
+    });
+
+    const { id } = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create credential"
+    );
+    this.log(`Created credential: ${name} (ID: ${id})`);
+    return id;
+  }
+
+  /**
+   * Deletes a credential that is not linked to any connector.
+   *
+   * @param credentialId - The credential ID to delete
+   */
+  async deleteCredential(credentialId: number): Promise<void> {
+    const response = await this.delete(`/manage/credential/${credentialId}`);
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete credential ${credentialId}`
+    );
+    this.log(`Deleted credential: ${credentialId}`);
+  }
+
+  /**
    * Creates a document set from connector-credential pairs.
    *
    * @param documentSetName - Name for the document set
@@ -535,6 +584,41 @@ export class OnyxApiClient {
 
     this.log(
       `Created restricted LLM provider: ${providerName} (ID: ${responseData.id}, Group: ${groupId})`
+    );
+    return responseData.id;
+  }
+
+  async createAgentRestrictedProvider(
+    providerName: string,
+    agentIds: number[]
+  ): Promise<number> {
+    const response = await this.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name: providerName,
+          provider: "openai",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
+          is_public: false,
+          groups: [],
+          personas: agentIds,
+          model_configurations: [
+            {
+              name: "gpt-4o",
+              custom_display_name: providerName,
+              is_visible: true,
+            },
+          ],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create agent-restricted provider"
+    );
+    this.log(
+      `Created agent-restricted LLM provider: ${providerName} (ID: ${responseData.id}, Agents: ${agentIds.join(", ")})`
     );
     return responseData.id;
   }

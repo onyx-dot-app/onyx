@@ -14,7 +14,7 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!response.ok) {
     return null;
   }
-  const user = await response.json();
+  const user: User = await response.json();
   return user;
 }
 

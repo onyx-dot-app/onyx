@@ -9,8 +9,9 @@ export interface SourceIconProps {
 }
 
 export function SourceIcon({ sourceType, iconSize }: SourceIconProps) {
+  // shrink-0: when a flex row overflows, the icon must not be the item that gives way.
   return getSourceMetadata(sourceType).icon({
     size: iconSize,
-    className: "text-text-04",
+    className: "text-text-04 shrink-0",
   });
 }

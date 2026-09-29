@@ -4,7 +4,7 @@ import { toast } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import type { DateRange } from "@/refresh-components/DateRangePicker";
+import type { DateRange } from "@opal/components";
 import { withRequestId, withDateRange } from "./utils";
 import {
   CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,
@@ -70,8 +70,8 @@ export default function KickoffCSVExport({
       return;
     }
 
-    const { request_id } =
-      (await response.json()) as StartQueryHistoryExportResponse;
+    const { request_id }: StartQueryHistoryExportResponse =
+      await response.json();
     // `window.setInterval` returns a number; the bare global resolves to the
     // Node overload, which returns a `Timeout` object.
     const timer = window.setInterval(
@@ -102,8 +102,8 @@ export default function KickoffCSVExport({
       return;
     }
 
-    const { status } =
-      (await response.json()) as CheckQueryHistoryExportStatusResponse;
+    const { status }: CheckQueryHistoryExportStatusResponse =
+      await response.json();
 
     if (status === "SUCCESS") {
       reset();

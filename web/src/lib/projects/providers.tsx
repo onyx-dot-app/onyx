@@ -661,7 +661,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
                 latest.name !== f.name ||
                 latest.file_type !== f.file_type
               ) {
-                next.push({ ...f, ...latest } as ProjectFile);
+                next.push({ ...f, ...latest });
                 changed = true;
                 continue;
               }
@@ -678,7 +678,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         setCurrentProjectDetails((prev) => {
           if (!prev || !prev.files || prev.files.length === 0) return prev;
           let changed = false;
-          const nextFiles = prev.files.map((f) => {
+          const nextFiles = prev.files.map((f): ProjectFile => {
             const latest = statusById.get(f.id);
             if (latest) {
               if (
@@ -687,13 +687,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
                 latest.file_type !== f.file_type
               ) {
                 changed = true;
-                return { ...f, ...latest } as ProjectFile;
+                return { ...f, ...latest };
               }
             }
             return f;
           });
           return changed
-            ? ({ ...prev, files: nextFiles } as ProjectDetails)
+            ? ({ ...prev, files: nextFiles } satisfies ProjectDetails)
             : prev;
         });
 

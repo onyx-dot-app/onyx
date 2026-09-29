@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -34,24 +35,30 @@ Examples:
   ods check-getattr onyx/chat/        # Check only files in onyx/chat/
   ods check-getattr --annotate        # Append ignore markers to violating lines`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runCheckGetattr(args, annotate)
+			clean, err := runCheckGetattr(args, annotate, os.Stderr)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if !clean {
+				os.Exit(1)
+			}
 		},
 	}
 	cmd.Flags().BoolVar(&annotate, "annotate", false, "append ignore markers to violating lines (baseline maintenance)")
 	return cmd
 }
 
-func runCheckGetattr(providedPaths []string, annotate bool) {
+// runCheckGetattr reports whether no violation is left for the user to fix.
+func runCheckGetattr(providedPaths []string, annotate bool, stderr io.Writer) (bool, error) {
 	rule := pycheck.NewBannedName("getattr")
 
 	if annotate {
-		runAnnotateGetattr(rule, providedPaths)
-		return
+		return runAnnotateGetattr(rule, providedPaths, stderr)
 	}
 
 	violations, err := pycheck.Check(rule, providedPaths)
 	if err != nil {
-		log.Fatalf("Error checking getattr references: %v", err)
+		return false, fatalErrorf("Error checking getattr references: %v", err)
 	}
 
 	if len(violations) > 0 {
@@ -64,17 +71,18 @@ func runCheckGetattr(providedPaths []string, annotate bool) {
 			total += len(v.ViolationLines)
 		}
 		log.Errorf("\n💡 getattr hides attribute access from the type checker. Use plain attribute access when the name is statically known; if it is genuinely dynamic, add '# ods: ignore[getattr]' with a brief justification.")
-		fmt.Fprintf(os.Stderr, "\nFound %d getattr reference(s) in %d file(s).\n", total, len(violations))
-		os.Exit(1)
+		_, _ = fmt.Fprintf(stderr, "\nFound %d getattr reference(s) in %d file(s).\n", total, len(violations))
+		return false, nil
 	}
 
 	log.Info("✅ No getattr references found!")
+	return true, nil
 }
 
-func runAnnotateGetattr(rule pycheck.BannedName, providedPaths []string) {
+func runAnnotateGetattr(rule pycheck.BannedName, providedPaths []string, stderr io.Writer) (bool, error) {
 	result, err := pycheck.Annotate(rule, providedPaths)
 	if err != nil {
-		log.Fatalf("Error annotating getattr references: %v", err)
+		return false, fatalErrorf("Error annotating getattr references: %v", err)
 	}
 
 	log.Infof("Annotated %d line(s) in %d file(s)", result.AnnotatedLines, result.AnnotatedFiles)
@@ -86,7 +94,8 @@ func runAnnotateGetattr(rule pycheck.BannedName, providedPaths []string) {
 				log.Errorf("  Line %d: %s", line.LineNum, line.Content)
 			}
 		}
-		fmt.Fprintf(os.Stderr, "\nSome lines need a manual 'ods: ignore[getattr]' marker.\n")
-		os.Exit(1)
+		_, _ = fmt.Fprintf(stderr, "\nSome lines need a manual 'ods: ignore[getattr]' marker.\n")
+		return false, nil
 	}
+	return true, nil
 }

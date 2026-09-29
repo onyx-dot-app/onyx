@@ -82,7 +82,7 @@ export async function toggleToolDisabled(row: Locator): Promise<void> {
  */
 export async function openSourceManagement(page: Page): Promise<void> {
   await toolOption(page, TOOL_NAMES.internalSearch)
-    .locator('button[aria-label="Configure Connectors"]')
+    .locator('button[aria-label="Select Search Sources"]')
     .click();
   // Wait for the source list Back button (indicates secondary view is open)
   await page.locator('button[aria-label="Back"]').waitFor({ timeout: 5000 });

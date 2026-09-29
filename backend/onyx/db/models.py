@@ -117,8 +117,10 @@ from onyx.db.enums import (
     SwitchoverType,
     SyncStatus,
     SyncType,
+    SystemUsageAttribution,
     TaskStatus,
     ThemePreference,
+    UsageActorKind,
     UserFileStatus,
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
@@ -520,6 +522,22 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     def is_anonymous(self) -> bool:
         """Returns True if this is the anonymous user."""
         return str(self.id) == ANONYMOUS_USER_UUID
+
+    @property
+    def live_oauth_token(self) -> str | None:
+        """Access token of the link with the latest expiry, across providers.
+
+        A row can hold several links for one provider, one per re-issued
+        subject. The relationship has no order, so row position cannot pick
+        the live one. A link with no expiry ranks lowest. Ties keep row order.
+        Needs fully loaded links: a `load_only` collection lazy-loads each row.
+        """
+        if not self.oauth_accounts:
+            return None
+        live: OAuthAccount = max(
+            self.oauth_accounts, key=lambda link: link.expires_at or 0
+        )
+        return live.access_token
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -3796,7 +3814,7 @@ class VoiceProvider(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
     provider_type: Mapped[str] = mapped_column(
         String
-    )  # "openai", "azure", "elevenlabs"
+    )  # "openai", "azure", "elevenlabs", "zoom"
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
@@ -4177,9 +4195,8 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Owner user. SET NULL (not CASCADE) so deleting a user orphans shared
-    # personas instead of destroying them; the delete flow soft-deletes the
-    # private ones first.
+    # Owner user. SET NULL (not CASCADE) so deleting a user orphans their
+    # personas for the admins instead of destroying them.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
@@ -4793,6 +4810,10 @@ class SecuritySettings(Base):
     llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # Lets synced connectors narrow document access to chosen user groups.
+    allow_connector_group_restrictions: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )
@@ -5091,6 +5112,24 @@ class UserGroup__ConnectorCredentialPair(Base):
 
     cc_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair",
+    )
+
+
+class UserGroup__CCPairDataAccess(Base):
+    """Data-access groups of a SYNC_RESTRICTED cc-pair: only their members may
+    read its documents, on top of the source's own permissions. Separate from
+    UserGroup__ConnectorCredentialPair, which scopes who may manage the pair."""
+
+    __tablename__ = "user_group__cc_pair_data_access"
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
     )
 
 
@@ -6186,11 +6225,9 @@ class TenantUsage(Base):
 
 
 class UserUsage(Base):
-    """
-    Daily per-user LLM usage rollup for cost/token attribution and budget checks.
-
-    One accumulating row per (user, window, model, flow, provider, incognito),
-    not per call.
+    """Daily user and system LLM usage rollup. ``user_usage`` is a legacy
+    physical name retained for deployment compatibility; partial indexes
+    provide each actor kind's accumulation key.
     """
 
     __tablename__ = "user_usage"
@@ -6200,6 +6237,15 @@ class UserUsage(Base):
     # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    actor_kind: Mapped[UsageActorKind] = mapped_column(
+        Enum(UsageActorKind, native_enum=False),
+        nullable=False,
+        default=UsageActorKind.USER,
+        server_default=UsageActorKind.USER.value,
+    )
+    system_attribution: Mapped[SystemUsageAttribution | None] = mapped_column(
+        Enum(SystemUsageAttribution, native_enum=False), nullable=True
     )
 
     window_start: Mapped[datetime.datetime] = mapped_column(
@@ -6241,9 +6287,14 @@ class UserUsage(Base):
     )
 
     __table_args__ = (
-        # Upsert key: accumulate into one row per dimension tuple per window.
-        # provider is non-null ('' when absent), so a plain unique index dedups
-        # correctly on every Postgres version (no NULLS NOT DISTINCT needed).
+        CheckConstraint(
+            "(actor_kind = 'USER' AND system_attribution IS NULL) OR "
+            "(actor_kind = 'SYSTEM' AND user_id IS NULL "
+            f"AND system_attribution IN ('{SystemUsageAttribution.ATTRIBUTED.value}', "
+            f"'{SystemUsageAttribution.UNATTRIBUTED.value}') "
+            "AND incognito = false)",
+            name="ck_user_usage_actor",
+        ),
         Index(
             "uq_user_usage_dims",
             "user_id",
@@ -6253,6 +6304,17 @@ class UserUsage(Base):
             "provider",
             "incognito",
             unique=True,
+            postgresql_where=text("actor_kind = 'USER'"),
+        ),
+        Index(
+            "uq_system_usage_dims",
+            "system_attribution",
+            "window_start",
+            "model",
+            "flow",
+            "provider",
+            unique=True,
+            postgresql_where=text("actor_kind = 'SYSTEM'"),
         ),
     )
 
@@ -7370,7 +7432,8 @@ class GatedApp(Base):
             if self.external_app_id is not None
             else self.mcp_server_id
         )
-        assert tid is not None  # guaranteed by ck_gated_app_single_target
+        if tid is None:
+            raise ValueError("Gated app must have a target")
         return tid
 
     @property

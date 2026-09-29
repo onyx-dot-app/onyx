@@ -455,9 +455,10 @@ func (in *installer) runInstall(ctx context.Context) error {
 // exists BEFORE anything is written, so a typo fails here instead of
 // surfacing minutes later as a pull error with the bad version already in
 // .env. Only release versions are looked up: floating and hand-built image
-// tags are pullable without a matching git ref. Verification is best-effort
-// by design — an unreachable (or lying) GitHub must never be able to block
-// an install that would otherwise work.
+// tags are pullable without a matching git ref. A -dev twin is looked up
+// through the release it was built from. Verification is best-effort by
+// design — an unreachable (or lying) GitHub must never be able to block an
+// install that would otherwise work.
 func (in *installer) validateTag(ctx context.Context, tag string) (string, error) {
 	tag = strings.TrimSpace(tag)
 	if tag == "" {
@@ -472,7 +473,8 @@ func (in *installer) validateTag(ctx context.Context, tag string) (string, error
 		return normalized, nil
 	}
 
-	exists, err := in.deps.Release.RefExists(ctx, normalized)
+	// A -dev twin has no ref of its own: its plain tag is what must exist.
+	exists, err := in.deps.Release.RefExists(ctx, release.ConfigRef(normalized))
 	if err != nil {
 		in.warnf("Could not verify that version %s exists (%v) — continuing", normalized, err)
 		return normalized, nil
@@ -1163,7 +1165,80 @@ func (in *installer) startServices(ctx context.Context, tag, prevTag string, hos
 		in.infof("If the issue persists, please contact: founders@onyx.app")
 		return exitcodes.Newf(exitcodes.General, "docker compose up failed: %v", err)
 	}
+	if prevTag != "" {
+		// Only after an upgrade: a fresh install starts the proxy alongside
+		// everything else, so it already resolved the containers it serves.
+		in.reloadProxy(ctx, dir, env, files)
+	}
 	return nil
+}
+
+// proxyService is the compose service that fronts the deployment. Every mode
+// layers its overlay onto a base file that defines it, so it is present
+// whatever the mode — but it is not necessarily running.
+const proxyService = "nginx"
+
+// reloadProxy makes nginx re-read its config after an upgrade replaced the app
+// containers.
+//
+// nginx resolves an upstream named in an `upstream` block once, when it loads
+// its config, and the generated config sets no `resolver`. `up` replaces
+// api_server with a container on a new address but leaves the proxy running,
+// so nginx keeps sending traffic to the address the old container had and
+// answers 502. The proxy's own config reload runs every six hours, so a
+// deployment can serve 502s long after an otherwise clean upgrade.
+//
+// Best effort: `up` has already succeeded by this point, so a proxy that will
+// not reload is reported and the upgrade still counts as done.
+func (in *installer) reloadProxy(ctx context.Context, dir string, env map[string]string, files []string) {
+	// Built up front so the two failure paths can print it as the command to
+	// run by hand.
+	reloadCmd := in.compose.Command(dir, env, files, "exec", "-T", proxyService, "nginx", "-s", "reload")
+
+	idCmd := in.compose.Command(dir, env, files, "ps", "-q", proxyService)
+	res, err := in.deps.Runner.Run(ctx, idCmd)
+	if err != nil {
+		// Not the same as an absent proxy: the state is unknown, so say so
+		// rather than let a running proxy keep a stale address unreported.
+		in.warnf("Could not tell whether %s is running: %v", proxyService, err)
+		in.infof("If it is, it may still route to the replaced containers and answer 502.")
+		in.cmdf("%s", displayCommand(reloadCmd))
+		return
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
+		// Not running, so it holds no address to re-resolve.
+		return
+	}
+
+	// nginx refuses a reload that would load a broken config and keeps the
+	// running workers, which looks the same from here as a reload that worked.
+	// Testing first separates the two.
+	testCmd := in.compose.Command(dir, env, files, "exec", "-T", proxyService, "nginx", "-t")
+	if _, err := in.deps.Runner.Run(ctx, testCmd); err != nil {
+		in.warnf("Did not reload %s: its config does not pass `nginx -t` (%v).", proxyService, err)
+		in.infof("It may still route to the replaced containers and answer 502.")
+		return
+	}
+
+	if _, err := in.deps.Runner.Run(ctx, reloadCmd); err != nil {
+		in.warnf("Could not reload %s: %v", proxyService, err)
+		in.infof("It may still route to the replaced containers and answer 502.")
+		in.cmdf("%s", displayCommand(reloadCmd))
+		return
+	}
+	in.successf("Reloaded %s onto the new containers", proxyService)
+}
+
+// displayCommand renders a built command the way an operator would retype it.
+// The compose invocation carries the project name, the -f list and the
+// standalone-vs-plugin choice, so a hand-written approximation would target
+// the wrong stack on any deployment that is not the default one.
+func displayCommand(c dockercmd.Command) string {
+	line := strings.Join(append([]string{c.Name}, c.Args...), " ")
+	if c.Dir == "" {
+		return line
+	}
+	return fmt.Sprintf("cd %s && %s", c.Dir, line)
 }
 
 // explainIncompleteStart says what a half-finished `up` left behind. Unlike a

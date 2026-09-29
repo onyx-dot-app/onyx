@@ -6,6 +6,7 @@ import {
   DiscordChannelConfig,
   DiscordChannelConfigUpdate,
 } from "@/app/admin/discord-bot/types";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 const BASE_URL = "/api/manage/admin/discord-bot";
 
@@ -28,7 +29,7 @@ export async function createBotConfig(
     body: JSON.stringify({ bot_token: botToken }),
   });
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to create bot config");
   }
   return response.json();
@@ -54,7 +55,7 @@ export async function fetchGuildConfigs(): Promise<DiscordGuildConfig[]> {
 export async function createGuildConfig(): Promise<DiscordGuildConfigCreateResponse> {
   const response = await fetch(`${BASE_URL}/guilds`, { method: "POST" });
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to create guild config");
   }
   return response.json();
@@ -80,7 +81,7 @@ export async function updateGuildConfig(
     body: JSON.stringify(update),
   });
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to update guild config");
   }
   return response.json();
@@ -121,7 +122,7 @@ export async function updateChannelConfig(
     }
   );
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to update channel config");
   }
   return response.json();

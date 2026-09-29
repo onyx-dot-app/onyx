@@ -24,6 +24,12 @@ func Select(title string, options []string, defaultIndex int) (int, error) {
 	}
 	defer screen.Fini()
 
+	return runSelect(screen, title, options, defaultIndex)
+}
+
+// runSelect drives the list on an already-initialized screen. Split out from
+// Select so it can be exercised with a tcell SimulationScreen in tests.
+func runSelect(screen tcell.Screen, title string, options []string, defaultIndex int) (int, error) {
 	cursor := defaultIndex
 	if cursor < 0 || cursor >= len(options) {
 		cursor = 0

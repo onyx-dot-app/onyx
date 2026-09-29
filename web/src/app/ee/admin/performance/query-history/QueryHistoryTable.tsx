@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -10,17 +10,16 @@ import {
   TableHeader,
 } from "@/components/ui/table";
 import Text from "@/refresh-components/texts/Text";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import { Dispatch, SetStateAction, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
-import { DateRange } from "@/refresh-components/DateRangePicker";
+import { DateRange } from "@opal/components";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
-import type { Route } from "next";
 import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
 import KickoffCSVExport from "@/app/ee/admin/performance/query-history/KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
@@ -37,7 +36,10 @@ import {
   ITEMS_PER_PAGE,
   PAGES_PER_BATCH,
 } from "@/app/ee/admin/performance/query-history/constants";
-import { humanReadableFormatWithTime } from "@opal/time";
+import {
+  humanReadableFormatShort,
+  humanReadableFormatWithTime,
+} from "@opal/time";
 import { Modal } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
@@ -86,9 +88,7 @@ function QueryHistoryTableRow({
       {/* Wrapping in <td> to avoid console warnings */}
       <td className="w-0 p-0">
         <Link
-          href={
-            `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
-          }
+          href={`/ee/admin/performance/query-history/${chatSessionMinimal.id}`}
           className="absolute w-full h-full start-0 top-0"
         ></Link>
       </td>
@@ -104,32 +104,28 @@ function SelectFeedbackType({
   onValueChange: (value: Feedback | "all") => void;
 }) {
   const t = useTranslations("admin.queryHistory");
+  const tInputSelect = useTranslations("common.inputSelect");
   return (
     <Section alignItems="start" gap={1}>
       <Text as="p" className="font-medium">
         {t("filters.feedbackType.label")}
       </Text>
-      <InputSelect
+      <InputSingleSelect
         value={value}
         onValueChange={onValueChange as (value: string) => void}
-      >
-        <InputSelect.Trigger />
-
-        <InputSelect.Content>
-          <InputSelect.Item value="all" icon={SvgMinusCircle}>
-            {t("filters.any.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="like" icon={SvgThumbsUp}>
-            {t("feedback.like.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
-            {t("feedback.dislike.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="mixed" icon={SvgMinus}>
-            {t("feedback.mixed.label")}
-          </InputSelect.Item>
-        </InputSelect.Content>
-      </InputSelect>
+        defaultOption="all"
+        placeholder={tInputSelect("placeholder.fallback")}
+        options={[
+          { value: "all", title: t("filters.any.label"), icon: SvgMinusCircle },
+          { value: "like", title: t("feedback.like.label"), icon: SvgThumbsUp },
+          {
+            value: "dislike",
+            title: t("feedback.dislike.label"),
+            icon: SvgThumbsDown,
+          },
+          { value: "mixed", title: t("feedback.mixed.label"), icon: SvgMinus },
+        ]}
+      />
     </Section>
   );
 }
@@ -155,6 +151,7 @@ function PreviousQueryHistoryExportsModal({
   setShowModal: Dispatch<SetStateAction<boolean>>;
 }) {
   const t = useTranslations("admin.queryHistory");
+  const locale = useLocale();
   const { data: queryHistoryTasks } = useSWR<TaskQueueState[]>(
     LIST_QUERY_HISTORY_URL,
     errorHandlingFetcher,
@@ -208,10 +205,14 @@ function PreviousQueryHistoryExportsModal({
               {paginatedTasks.map((task, index) => (
                 <TableRow key={index}>
                   <TableCell>
-                    {humanReadableFormatWithTime(task.startTime)}
+                    {humanReadableFormatWithTime(task.startTime, locale)}
                   </TableCell>
-                  <TableCell>{task.start.toDateString()}</TableCell>
-                  <TableCell>{task.end.toDateString()}</TableCell>
+                  <TableCell>
+                    {humanReadableFormatShort(task.start, locale)}
+                  </TableCell>
+                  <TableCell>
+                    {humanReadableFormatShort(task.end, locale)}
+                  </TableCell>
                   <TableCell>
                     <ExportBadge status={task.status} />
                   </TableCell>

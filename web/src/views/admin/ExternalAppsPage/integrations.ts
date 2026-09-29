@@ -1,5 +1,5 @@
-import { MCPServer } from "@/lib/tools/types";
-import { updateMCPServer } from "@/lib/tools/svc";
+import { MCPServer } from "@/lib/mcp/types";
+import { updateMCPServer } from "@/lib/mcp/svc";
 import { getActionIcon } from "@/lib/tools/utils";
 import {
   BuiltInExternalAppDescriptor,

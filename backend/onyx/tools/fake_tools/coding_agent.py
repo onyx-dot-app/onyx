@@ -302,7 +302,6 @@ def run_coding_agent_call(
                 cycle_count = 0
                 llm_cycle_count = 0
                 reasoning_cycles = 0
-                most_recent_reasoning: str | None = None
 
                 while cycle_count < MAX_CODING_AGENT_CYCLES:
                     elapsed = time.monotonic() - start_time
@@ -369,6 +368,7 @@ def run_coding_agent_call(
                         max_tokens=2048,
                     )
 
+                    rendered_text: bool = False
                     while True:
                         try:
                             packet = next(step_generator)
@@ -377,9 +377,10 @@ def run_coding_agent_call(
                                 (AgentResponseStart, AgentResponseDelta),
                             ):
                                 if isinstance(packet.obj, AgentResponseDelta):
+                                    rendered_text = True
                                     emitter.emit(
                                         Packet(
-                                            placement=step_placement,
+                                            placement=packet.placement,
                                             obj=CodingAgentThinkingDelta(
                                                 content=packet.obj.content
                                             ),
@@ -435,8 +436,11 @@ def run_coding_agent_call(
                                 image_files=None,
                             )
                         )
-                        most_recent_reasoning = llm_step_result.reasoning
                         cycle_count += 1
+                        # Think arguments render only as reasoning, which is
+                        # counted above; narration needs its own sub-turn.
+                        if rendered_text:
+                            llm_cycle_count += 1
                         continue
 
                     # Otherwise: dispatch all bash tool calls sequentially.
@@ -485,7 +489,6 @@ def run_coding_agent_call(
                             )
                         )
 
-                    most_recent_reasoning = None
                     cycle_count += 1
                     llm_cycle_count += 1
 
@@ -500,7 +503,6 @@ def run_coding_agent_call(
                     emitter=emitter,
                     placement=Placement(turn_index=turn_index, tab_index=tab_index),
                 )
-                _ = most_recent_reasoning  # currently unused; kept for parity
                 span.span_data.output = final_answer
                 emitter.emit(
                     Packet(

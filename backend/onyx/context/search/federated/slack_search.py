@@ -273,7 +273,7 @@ def get_cached_user_profile(
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
             )
             # Empty string means user was not found previously
-            return cached_str if cached_str else None
+            return cached_str or None
     except Exception as e:
         logger.debug("Error reading user profile cache: %s", e)
 

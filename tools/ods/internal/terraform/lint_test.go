@@ -81,6 +81,15 @@ func TestLintBytesRules(t *testing.T) {
 			src:  "a = \"ops@onyx.app 123456789012 8.8.8.8/32\"\n",
 			want: []string{"email ops@onyx.app", "account_id 123456789012", "cidr 8.8.8.8/32"},
 		},
+		{
+			name: "values that only look like cidrs are ignored",
+			src:  "a = \"300.1.1.1/8\"\nb = \"8.8.8.8/40\"\n",
+		},
+		{
+			name: "last line without a newline",
+			src:  "a = \"ops@onyx.app\"",
+			want: []string{"email ops@onyx.app"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -134,5 +143,11 @@ func TestLintFile(t *testing.T) {
 	}
 	if len(findings) != 1 || findings[0].Rule != RuleCIDR {
 		t.Fatalf("got %v, want one cidr finding", findings)
+	}
+}
+
+func TestLintFileMissing(t *testing.T) {
+	if _, err := LintFile(filepath.Join(t.TempDir(), "missing.tf"), "missing.tf"); err == nil {
+		t.Fatal("expected an error for a missing file")
 	}
 }

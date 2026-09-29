@@ -35,16 +35,16 @@ describe("Card data attributes", () => {
 
   it("keeps its own styling attributes authoritative", () => {
     render(
-      <Card background="heavy" data-background="spoofed">
+      <Card color="background-tint-01" data-color="spoofed">
         <p>Body</p>
       </Card>
     );
 
-    // The card's own `data-background` is written after the spread, so a caller
+    // The card's own `data-color` is written after the spread, so a caller
     // cannot repurpose it to drive the stylesheet.
     expect(screen.getByText("Body").parentElement).toHaveAttribute(
-      "data-background",
-      "heavy"
+      "data-color",
+      "background-tint-01"
     );
   });
 
@@ -87,15 +87,15 @@ describe("Card disabled", () => {
     );
   });
 
-  it("stacks with background and border rather than replacing them", () => {
+  it("stacks with color and border rather than replacing them", () => {
     render(
-      <Card disabled background="none" border="dashed">
+      <Card disabled color="transparent" border="dashed">
         <p>Body</p>
       </Card>
     );
     const card = screen.getByText("Body").parentElement;
     expect(card).toHaveAttribute("data-disabled");
-    expect(card).toHaveAttribute("data-background", "none");
+    expect(card).toHaveAttribute("data-color", "transparent");
     expect(card).toHaveAttribute("data-border", "dashed");
   });
 

@@ -54,6 +54,7 @@ export const SWR_KEYS = {
   userUsage: "/api/user/usage",
   costOverrides: "/api/admin/cost-overrides",
   adminUsageExport: "/api/admin/usage/export",
+  adminSystemUsage: "/api/admin/usage/system",
   adminUsageReset: "/api/admin/usage/reset",
 
   // ── Image Generation ──────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ export const SWR_KEYS = {
   indexingStatus: "/api/manage/admin/connector/indexing-status",
   adminConnectorStatus: "/api/manage/admin/connector/status",
   federatedConnectors: "/api/federated",
+  connectorGroupRestrictions: "/api/manage/connector-group-restrictions",
 
   // ── Google Connectors ─────────────────────────────────────────────────────
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
@@ -237,6 +239,16 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+  connectorOAuthDetails: (source: string) =>
+    `/api/connector/oauth/details/${source}`,
+  // Credentials of one source the caller may attach; `editable` narrows to
+  // the ones the caller may also edit.
+  similarCredentials: (source: string, editable: boolean = false) =>
+    `/api/manage/admin/similar-credentials/${source}${editable ? "?get_editable=True" : ""}`,
+
+  // ── CC-Pairs ──────────────────────────────────────────────────────────────
+  ccPair: (ccPairId: string | number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}`,
 
   // ── Index Attempts ────────────────────────────────────────────────────────
   indexAttemptStageMetrics: (indexAttemptId: number) =>

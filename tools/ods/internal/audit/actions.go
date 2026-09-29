@@ -62,9 +62,10 @@ type actionRef struct {
 }
 
 // scanActions discovers the actions used across the repo's workflows and
-// composite actions and matches them against OSV.dev advisories. Returns nil when
-// nothing is referenced or no advisories affect any used action.
-func scanActions() ([]Finding, error) {
+// composite actions and matches them against the advisories served at queryURL
+// (OSV.dev in production). Returns nil when nothing is referenced or no
+// advisories affect any used action.
+func scanActions(queryURL string) ([]Finding, error) {
 	root, err := paths.GitRoot()
 	if err != nil {
 		return nil, err
@@ -85,7 +86,7 @@ func scanActions() ([]Finding, error) {
 	names := uniqueActionNames(refs)
 	failed := 0
 	for _, name := range names {
-		vulns, err := queryActionAdvisories(client, name)
+		vulns, err := queryActionAdvisories(client, queryURL, name)
 		if err != nil {
 			// A single flaky query shouldn't sink the whole audit; the lockfile
 			// scan is the primary gate. Warn and treat the action as clean.
@@ -383,14 +384,14 @@ type osvRange struct {
 // queryActionAdvisories asks OSV.dev for advisories affecting an action, querying
 // by name only. GitHub Actions advisories use ECOSYSTEM ranges OSV cannot match
 // against a supplied version, so we fetch all of them and evaluate ranges locally.
-func queryActionAdvisories(client *http.Client, name string) ([]osvVuln, error) {
+func queryActionAdvisories(client *http.Client, queryURL, name string) ([]osvVuln, error) {
 	payload, err := json.Marshal(map[string]any{
 		"package": osvPackage{Ecosystem: actionsEcosystem, Name: name},
 	})
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(http.MethodPost, osvQueryURL, bytes.NewReader(payload))
+	req, err := http.NewRequest(http.MethodPost, queryURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}

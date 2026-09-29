@@ -15,7 +15,7 @@ import {
 import {
   ConnectorCredentialPairStatus,
   PermissionSyncStatusEnum,
-} from "@/app/admin/connector/[ccPairId]/types";
+} from "@/lib/connectors/types";
 import { Tooltip } from "@opal/components";
 
 // Wrap a status badge in a hover tooltip carrying its error/reason text, or

@@ -1432,6 +1432,11 @@ def mark_persona_as_deleted(
     db_session: Session,
 ) -> None:
     persona = get_persona_by_id(persona_id=persona_id, user=user, db_session=db_session)
+    # Built-ins are ownerless and readable by everyone, so the ownership check above
+    # always admits them — guard the delete itself or any caller can tombstone the
+    # default assistant.
+    if persona.builtin_persona:
+        raise ValueError("Built-in agents cannot be deleted")
     persona.deleted = True
     affected_file_ids = [uf.id for uf in persona.user_files]
     if affected_file_ids:
@@ -2148,11 +2153,10 @@ def update_default_assistant_configuration(
             if not should_expose_tool_to_fe(tool):
                 raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
 
-            if not tool.enabled:
-                raise ValueError(
-                    f"Enable tool {tool.display_name or tool.name} before assigning it"
-                )
-
+            # A disabled tool stays attached, because disabling one does not detach
+            # it. Callers resend the whole list, so rejecting a disabled id here
+            # failed every update rather than just the tool being toggled.
+            # construct_tools keeps a disabled tool out of chat.
             persona.tools.append(tool)
 
     db_session.commit()

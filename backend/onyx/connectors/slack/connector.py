@@ -1267,7 +1267,7 @@ class SlackConnector(
             # calculate a percentage progress for the current channel by determining
             # how much of the time range we've processed so far
             new_oldest_seconds_epoch = SecondsSinceUnixEpoch(new_oldest)
-            range_start = start if start else max(0, channel_created)
+            range_start = start or max(0, channel_created)
             if new_oldest_seconds_epoch < range_start:
                 range_complete = 0.0
             else:

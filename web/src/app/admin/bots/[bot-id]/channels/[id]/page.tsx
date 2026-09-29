@@ -59,12 +59,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header
-        icon={SvgSlack}
-        title={title}
-        divider
-        backButton
-      />
+      <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
       <SettingsLayouts.Body>
         {isLoading ? (
           <SvgSimpleLoader />
@@ -104,9 +99,9 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
                 ? {
                     paidEnterpriseFeaturesEnabled: true,
                     categories: standardAnswerCategories ?? [],
-                    ...(stdAnswerError
-                      ? { error: { message: String(stdAnswerError) } }
-                      : {}),
+                    error: stdAnswerError
+                      ? { message: String(stdAnswerError) }
+                      : undefined,
                   }
                 : { paidEnterpriseFeaturesEnabled: false }
             }

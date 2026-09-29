@@ -41,7 +41,6 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
@@ -689,6 +688,11 @@ def wait_for_document_index_or_shutdown() -> None:
             raise WorkerShutdown(msg)
 
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+        # Imported here: opensearchpy costs ~18 MB and not every worker needs it.
+        from onyx.document_index.opensearch.client import (
+            wait_for_opensearch_with_timeout,
+        )
+
         if not wait_for_opensearch_with_timeout():
             msg = "[OpenSearch] Readiness probe did not succeed within the timeout. Exiting..."
             logger.error(msg)

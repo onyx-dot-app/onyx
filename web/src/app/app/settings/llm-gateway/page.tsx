@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { EmptyMessageCard } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
@@ -16,7 +16,7 @@ export default function LLMGatewayPage() {
   const router = useRouter();
   const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const settings = useSettings();
-  const { llmProviders, isLoading, error } = useLLMProviders();
+  const { llmProviders, isLoading, error } = useLanguageModels();
   const hasAccessibleGatewayModel = hasVisibleLLMModel(llmProviders);
   const hasAccess = gatewayTier && hasAccessibleGatewayModel;
   const isLoadingAccess = settings.isLoading || isLoading;

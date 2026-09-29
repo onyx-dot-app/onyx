@@ -4,7 +4,7 @@ page_title: "onyx_custom_tool Resource - terraform-provider-onyx"
 subcategory: ""
 description: |-
   A custom action: an external HTTP API, described by an OpenAPI schema, that assistants can call.
-  Attach one to an assistant through tool_ids on onyx_persona.
+  Attach one to an assistant through tool_ids on onyx_agent.
   ~> Deleting an action detaches it from every agent that uses it, including agents Terraform does not manage. Onyx does not refuse the delete or warn about it.
   ~> custom_headers holds secrets. Onyx masks the values on reads, but they are stored in Terraform state in clear text. Supply them from a secret store rather than literals, or use custom_headers_wo to keep them out of state entirely. Masked reads also mean a rotation made outside Terraform is only visible when its mask differs, so rotate values through Terraform, ideally custom_headers_wo with its version attribute.
 ---
@@ -13,7 +13,7 @@ description: |-
 
 A custom action: an external HTTP API, described by an OpenAPI schema, that assistants can call.
 
-Attach one to an assistant through `tool_ids` on `onyx_persona`.
+Attach one to an assistant through `tool_ids` on `onyx_agent`.
 
 ~> **Deleting an action detaches it from every agent that uses it**, including agents Terraform does not manage. Onyx does not refuse the delete or warn about it.
 

@@ -55,8 +55,8 @@ from onyx.llm.factory import (
     get_max_input_tokens_from_llm_provider,
 )
 from onyx.llm.model_capabilities import (
+    catalog_model_supports_image_input,
     get_bedrock_token_limit,
-    litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
 )
 from onyx.llm.utils import (
@@ -69,6 +69,7 @@ from onyx.llm.well_known_providers.auto_update_service import (
 )
 from onyx.llm.well_known_providers.constants import (
     LM_STUDIO_API_KEY_CONFIG_KEY,
+    VERCEL_AI_GATEWAY_DEFAULT_API_BASE,
     VERTEX_AUTH_METHOD_KWARG,
     VERTEX_AUTH_METHOD_SERVICE_ACCOUNT,
     VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
@@ -111,6 +112,8 @@ from onyx.server.manage.llm.models import (
     PortkeyModelsRequest,
     SyncModelEntry,
     TestLLMRequest,
+    VercelAIGatewayFinalModelResponse,
+    VercelAIGatewayModelsRequest,
     VisionProviderResponse,
 )
 from onyx.server.manage.llm.provider_cache import (
@@ -406,6 +409,8 @@ def fetch_custom_provider_names(
     covered by a well-known provider modal)."""
     import litellm
 
+    # models_by_provider is the litellm *call-path* provider registry — which
+    # providers litellm can route a completion to — not the model price table.
     well_known = {p.value for p in WELL_KNOWN_PROVIDER_NAMES}
     return sorted(
         (
@@ -1335,7 +1340,7 @@ def get_bedrock_available_models(
                                 else generate_bedrock_display_name(profile_id)
                             ),
                             "supports_image_input": (
-                                litellm_thinks_model_supports_image_input(
+                                catalog_model_supports_image_input(
                                     profile_id, LlmProviderNames.BEDROCK
                                 )
                             ),
@@ -1957,11 +1962,11 @@ def get_bifrost_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    # Vision support from the LiteLLM cost map, not a hardcoded list
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    # Vision support from the model catalog, not a hardcoded list
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.BIFROST
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.BIFROST
@@ -2207,10 +2212,10 @@ def get_openai_compatible_server_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
@@ -2269,6 +2274,95 @@ def _get_openai_compatible_server_response(
         source_name="OpenAI-Compatible",
         api_key=api_key,
     )
+
+
+@admin_router.post("/vercel-ai-gateway/available-models")
+def get_vercel_ai_gateway_available_models(
+    request: VercelAIGatewayModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[VercelAIGatewayFinalModelResponse]:
+    """Fetch available models from the Vercel AI Gateway catalog.
+
+    The catalog needs no credentials and carries richer metadata than LiteLLM's
+    static map, so it drives every field here.
+    """
+    api_base = (
+        (request.api_base or VERCEL_AI_GATEWAY_DEFAULT_API_BASE).strip().rstrip("/")
+    )
+    url = f"{api_base}/models" if api_base.endswith("/v1") else f"{api_base}/v1/models"
+
+    # On edit the form sends a masked key, so resolve the stored one.
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, api_base, db_session
+    )
+
+    response_json = _get_openai_compatible_models_response(
+        url=url,
+        source_name="Vercel AI Gateway",
+        api_key=api_key,
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found in the Vercel AI Gateway catalog",
+        )
+
+    results: list[VercelAIGatewayFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            # The catalog mixes language, embedding, and media models.
+            if not model_id or model.get("type") != "language":
+                continue
+
+            modalities = model.get("modalities") or {}
+            input_modalities = modalities.get("input") or []
+            supported_parameters = model.get("supported_parameters") or []
+
+            results.append(
+                VercelAIGatewayFinalModelResponse(
+                    name=model_id,
+                    display_name=model.get("name") or model_id,
+                    max_input_tokens=model.get("context_window"),
+                    supports_image_input="image" in input_modalities,
+                    supports_reasoning="reasoning" in supported_parameters,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Vercel AI Gateway model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found in the Vercel AI Gateway catalog",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Vercel AI Gateway",
+        )
+
+    return sorted_results
 
 
 def _get_portkey_models_response(api_base: str, api_key: str | None = None) -> dict:
@@ -2331,10 +2425,10 @@ def get_portkey_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.PORTKEY
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.PORTKEY

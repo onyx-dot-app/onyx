@@ -418,7 +418,7 @@ class LangfuseTracingProcessor(TracingProcessor):
         ]:
             if key in data.model_config:
                 params[key] = data.model_config[key]
-        return params if params else None
+        return params or None
 
     def _get_usage_details(self, data: GenerationSpanData) -> Optional[dict[str, int]]:
         """Extract usage details from generation span data."""
@@ -446,7 +446,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 usage["cache_creation_input_tokens"]
             )
 
-        return details if details else None
+        return details or None
 
     def force_flush(self) -> None:
         """Forces an immediate flush of all queued spans/traces."""

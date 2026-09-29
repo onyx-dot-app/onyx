@@ -4,7 +4,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, Card, MessageCard, Switch } from "@opal/components";
+import { Button, Card, MessageCard, InputSwitch } from "@opal/components";
 import { SvgCopy, SvgPlus, SvgSettings } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
@@ -46,16 +46,17 @@ function Shell({ children, onAddProvider, addGated }: ShellProps) {
         title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
-        rightChildren={
+        actions={[
           <Button
+            key="primary"
             icon={SvgPlus}
             onClick={onAddProvider}
             disabled={addGated}
             tooltip={addGated ? t("addProvider.gatedTooltip") : undefined}
           >
             {t("addProvider.button.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
     </SettingsLayouts.Root>
@@ -178,10 +179,10 @@ export default function SSOProvidersPage() {
                           tooltip={t("copyRedirectUri.tooltip")}
                           disabled={isPending}
                           onClick={() => {
-                            void copyRedirectUri(provider.redirect_uri);
+                            void copyRedirectUri(provider.redirect_uri, t);
                           }}
                         />
-                        <Switch
+                        <InputSwitch
                           checked={provider.enabled}
                           disabled={isPending}
                           onCheckedChange={(enabled) => {

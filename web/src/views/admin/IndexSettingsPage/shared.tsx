@@ -3,21 +3,19 @@
 import { useState } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
 import { Divider, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
-import type { EmbeddingProvider } from "@/lib/indexing/types";
+import type {
+  EmbeddingProvider,
+  IndexSettingsTranslator,
+} from "@/lib/searchSettings/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-
-/** Translator for the `admin.indexSettings` namespace, threaded into helpers
- *  that live outside a component and so cannot call the hook themselves. */
-export type IndexSettingsTranslator = ReturnType<
-  typeof useTranslations<"admin.indexSettings">
->;
 
 // ---------------------------------------------------------------------------
 // Formik-aware field components
@@ -178,6 +176,7 @@ export function ModelSpecFields({
   modelNameSubDescription,
 }: ModelSpecFieldsProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
 
   return (
     <>
@@ -186,7 +185,8 @@ export function ModelSpecFields({
         title={t("fields.modelName.title")}
         placeholder={t("fields.modelName.placeholder")}
         subDescription={
-          modelNameSubDescription ?? t("fields.modelName.selfHostedDescription")
+          modelNameSubDescription ??
+          t("fields.modelName.selfHostedDescription", { appName })
         }
       />
 

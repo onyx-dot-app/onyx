@@ -56,7 +56,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
   return (
     <Card
       ref={ref}
-      background="none"
+      color="transparent"
       border="dashed"
       padding={padding}
       rounding={3}

@@ -9,13 +9,13 @@ import {
   Button,
   Card,
   Divider,
-  InputTypeIn,
   LineItemButton,
   MessageCard,
   Popover,
   PopoverMenu,
   Tooltip,
   useCreateModal,
+  InputTypeInTag,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
@@ -27,15 +27,17 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InsertUserVariableMenu from "@/sections/agents/InsertUserVariableMenu";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
-import {
-  Card as CardLayout,
-  Content,
-  ContentAction,
-  InputHorizontal,
-  InputVertical,
-} from "@opal/layouts";
+import { Content, InputHorizontal, InputVertical } from "@opal/layouts";
 import { useFormikContext } from "formik";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
+import {
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
+import {
+  filterModelConfigurations,
+  findDefaultModelDisplayName,
+} from "@/lib/languageModels/options";
 import {
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
@@ -58,36 +60,31 @@ import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/interfaces";
 import {
   SvgActions,
-  SvgExpand,
   SvgEye,
   SvgEyeOff,
-  SvgFold,
   SvgImage,
   SvgLock,
   SvgOnyxOctagon,
   SvgOrganization,
-  SvgSliders,
   SvgTag,
   SvgUsers,
   SvgTrash,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
 } from "@/refresh-components/avatars/CustomAgentAvatar";
-import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import { InputAvatar } from "@opal/components";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
 import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
-import { useMcpServersForAgent } from "@/lib/tools/hooks";
+import { useMcpServersForAgent } from "@/lib/mcp/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
-import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
-import useFilter from "@/hooks/useFilter";
-import EnabledCount from "@/refresh-components/EnabledCount";
+import { ToolSnapshot } from "@/lib/tools/types";
+import { MCPTool } from "@/lib/mcp/types";
+import { MCPServerCard } from "@/lib/mcp/components";
 import { useAppPosition } from "@/lib/position/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
@@ -107,6 +104,7 @@ import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
+import type { Agent } from "@/lib/agents/types";
 
 // Length of the translated starterExamples array, which is local to
 // AgentStarterMessages, shared here so the editor can size against it.
@@ -181,7 +179,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         return;
       }
 
-      const { file_id } = await response.json();
+      const { file_id }: { file_id: string } = await response.json();
       setFieldValue("uploaded_image_id", file_id);
       setPopoverOpen(false);
     } catch (error) {
@@ -309,155 +307,6 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   );
 }
 
-interface MCPServerCardProps {
-  server: AgentEditorMCPServer;
-  tools: MCPTool[];
-  isLoading: boolean;
-}
-
-function MCPServerCard({
-  server,
-  tools: enabledTools,
-  isLoading,
-}: MCPServerCardProps) {
-  const t = useTranslations("agents");
-  const [isFolded, setIsFolded] = useState(false);
-  const { values, setFieldValue, getFieldMeta } = useFormikContext<any>();
-  const serverFieldName = `mcp_server_${server.id}`;
-  const isServerEnabled = values[serverFieldName]?.enabled ?? false;
-  const {
-    query,
-    setQuery,
-    filtered: filteredTools,
-  } = useFilter(enabledTools, (tool) => `${tool.name} ${tool.description}`);
-
-  // Calculate enabled and total tool counts
-  const enabledCount = enabledTools.filter((tool) => {
-    const toolFieldValue = values[serverFieldName]?.[`tool_${tool.id}`];
-    return toolFieldValue === true;
-  }).length;
-
-  const hasTools = enabledTools.length > 0 && filteredTools.length > 0;
-
-  let cardContent: React.ReactNode | undefined;
-  if (isLoading) {
-    cardContent = (
-      <div className="flex flex-col gap-2 p-2">
-        <GeneralLayouts.Section padding={4}>
-          <SvgSimpleLoader />
-        </GeneralLayouts.Section>
-      </div>
-    );
-  } else if (hasTools) {
-    cardContent = (
-      <GeneralLayouts.Section gap={2} padding={2} alignItems="stretch">
-        {filteredTools.map((tool) => {
-          const toolDisabled =
-            !tool.isAvailable ||
-            !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
-          return (
-            <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding={3} padding={2}>
-                <ContentAction
-                  icon={tool.icon ?? SvgSliders}
-                  title={tool.name}
-                  description={tool.description}
-                  sizePreset="main-ui"
-                  variant="section"
-                  padding={0}
-                  rightChildren={
-                    <SwitchField
-                      name={`${serverFieldName}.tool_${tool.id}`}
-                      disabled={!isServerEnabled}
-                    />
-                  }
-                />
-              </Card>
-            </Disabled>
-          );
-        })}
-      </GeneralLayouts.Section>
-    );
-  }
-
-  return (
-    <Disabled
-      disabled={!server.can_attach}
-      tooltip={t("editor.mcp.noAccess.tooltip")}
-    >
-      <Card
-        expandable
-        expanded={!isFolded}
-        border="solid"
-        rounding={4}
-        padding={2}
-        expandedContent={cardContent}
-      >
-        <CardLayout.Header
-          bottomChildren={
-            <GeneralLayouts.Section flexDirection="row" gap={2}>
-              <InputTypeIn
-                placeholder={t("editor.mcp.searchTools.placeholder")}
-                variant="internal"
-                searchIcon
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              {enabledTools.length > 0 && (
-                <Button
-                  prominence="internal"
-                  rightIcon={isFolded ? SvgExpand : SvgFold}
-                  onClick={() => setIsFolded((prev) => !prev)}
-                >
-                  {isFolded
-                    ? t("modals.viewer.mcpCard.expand.label")
-                    : t("modals.viewer.mcpCard.fold.label")}
-                </Button>
-              )}
-            </GeneralLayouts.Section>
-          }
-        >
-          <div className="p-2">
-            <ContentAction
-              icon={getActionIcon(server.server_url, server.name)}
-              title={server.name}
-              description={server.description}
-              sizePreset="main-ui"
-              variant="section"
-              padding={0}
-              rightChildren={
-                <GeneralLayouts.Section
-                  flexDirection="row"
-                  gap={2}
-                  alignItems="start"
-                >
-                  <EnabledCount
-                    enabledCount={enabledCount}
-                    totalCount={enabledTools.length}
-                  />
-                  <SwitchField
-                    name={`${serverFieldName}.enabled`}
-                    onCheckedChange={(checked) => {
-                      enabledTools.forEach((tool) => {
-                        setFieldValue(
-                          `${serverFieldName}.tool_${tool.id}`,
-                          checked
-                        );
-                      });
-                      if (!checked) return;
-                      setIsFolded(false);
-                    }}
-                  />
-                </GeneralLayouts.Section>
-              }
-            />
-          </div>
-        </CardLayout.Header>
-      </Card>
-    </Disabled>
-  );
-}
-
 function AgentStarterMessages() {
   const t = useTranslations("agents");
   const starterExamples = [
@@ -579,8 +428,19 @@ export default function AgentEditorPage({
   const canUpdateFeaturedStatus = existingAgent
     ? can(existingAgent, "feature")
     : hasPermission(permissions, Permission.MANAGE_AGENTS);
-  const { vectorDbEnabled } = useSettings();
+  const {
+    vectorDbEnabled,
+    appName,
+    hide_provider_grouping: hideProviderGrouping,
+  } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+  // The providers this agent may use; a new agent gets the unscoped list.
+  const { llmProviders: agentLlmProviders } = useLanguageModelsForAgent(
+    existingAgent?.id
+  );
+  // The Global Default row names the workspace default, which only the
+  // unscoped list is sure to carry.
+  const { llmProviders: globalLlmProviders, defaultText } = useLanguageModels();
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
@@ -976,15 +836,11 @@ export default function AgentEditorPage({
         // Sharing on saved agents is managed by the share dialog — omitting
         // the fields here keeps form saves from clobbering it. Creates carry
         // the draft share state captured before the agent existed.
-        ...(existingAgent
-          ? {}
-          : {
-              is_public: values.is_public,
-              users: values.shared_user_ids,
-              groups: values.shared_group_ids,
-            }),
+        is_public: existingAgent ? undefined : values.is_public,
+        users: existingAgent ? undefined : values.shared_user_ids,
+        groups: existingAgent ? undefined : values.shared_group_ids,
         default_model_configuration_id:
-          (values as any).default_model_configuration_id ?? null,
+          values.default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately
@@ -1036,7 +892,8 @@ export default function AgentEditorPage({
       }
 
       // Success
-      const agent = await personaResponse.json();
+      const agent: Omit<Agent, "user_permission"> =
+        await personaResponse.json();
 
       // clear() (not clearDraft) so an in-flight debounced write is cancelled too.
       clearAgentDraftRef.current?.();
@@ -1110,7 +967,7 @@ export default function AgentEditorPage({
   function handlePickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     if (!currentFileIds.includes(file.id)) {
       setFieldValue("user_file_ids", [...currentFileIds, file.id]);
@@ -1120,7 +977,7 @@ export default function AgentEditorPage({
   function handleUnpickRecentFile(
     file: ProjectFile,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     setFieldValue(
       "user_file_ids",
@@ -1138,7 +995,7 @@ export default function AgentEditorPage({
   async function handleUploadChange(
     e: React.ChangeEvent<HTMLInputElement>,
     currentFileIds: string[],
-    setFieldValue: (field: string, value: unknown) => void
+    setFieldValue: (field: string, value: string[]) => void
   ) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -1372,46 +1229,38 @@ export default function AgentEditorPage({
                           ? t("editor.header.editTitle")
                           : t("editor.header.createTitle")
                       }
-                      rightChildren={
-                        <div className="flex gap-2">
+                      cancel
+                      actions={[
+                        <Tooltip
+                          key="save"
+                          tooltip={
+                            isSubmitting
+                              ? t("editor.saveTooltip.saving")
+                              : !isValid
+                                ? t("editor.saveTooltip.fixErrors")
+                                : !dirty
+                                  ? t("editor.saveTooltip.noChanges")
+                                  : hasUploadingFiles
+                                    ? t("editor.saveTooltip.uploading")
+                                    : undefined
+                          }
+                          side="bottom"
+                        >
                           <Button
-                            prominence="secondary"
-                            type="button"
-                            onClick={() => router.back()}
-                          >
-                            {t("editor.header.cancel.label")}
-                          </Button>
-                          <Tooltip
-                            tooltip={
-                              isSubmitting
-                                ? t("editor.saveTooltip.saving")
-                                : !isValid
-                                  ? t("editor.saveTooltip.fixErrors")
-                                  : !dirty
-                                    ? t("editor.saveTooltip.noChanges")
-                                    : hasUploadingFiles
-                                      ? t("editor.saveTooltip.uploading")
-                                      : undefined
+                            disabled={
+                              isSubmitting ||
+                              !isValid ||
+                              !dirty ||
+                              hasUploadingFiles
                             }
-                            side="bottom"
+                            type="submit"
                           >
-                            <Button
-                              disabled={
-                                isSubmitting ||
-                                !isValid ||
-                                !dirty ||
-                                hasUploadingFiles
-                              }
-                              type="submit"
-                            >
-                              {existingAgent
-                                ? t("editor.header.save.label")
-                                : t("editor.header.create.label")}
-                            </Button>
-                          </Tooltip>
-                        </div>
-                      }
-                      backButton
+                            {existingAgent
+                              ? t("editor.header.save.label")
+                              : t("editor.header.create.label")}
+                          </Button>
+                        </Tooltip>,
+                      ]}
                       divider
                     />
 
@@ -1608,8 +1457,8 @@ export default function AgentEditorPage({
                               gap={1}
                               alignItems="stretch"
                             >
-                              <InputChipField
-                                chips={(allLabels ?? [])
+                              <InputTypeInTag
+                                tags={(allLabels ?? [])
                                   .filter((label) =>
                                     values.label_ids.includes(label.id)
                                   )
@@ -1617,7 +1466,7 @@ export default function AgentEditorPage({
                                     id: String(label.id),
                                     label: label.name,
                                   }))}
-                                onRemoveChip={(id) =>
+                                onRemoveTag={(id) =>
                                   setFieldValue(
                                     "label_ids",
                                     values.label_ids.filter(
@@ -1814,22 +1663,39 @@ export default function AgentEditorPage({
                                   withLabel="llm_model"
                                   title={t("modals.viewer.defaultModel.title")}
                                   description={t(
-                                    "modals.viewer.defaultModel.description"
+                                    "modals.viewer.defaultModel.description",
+                                    { appName }
                                   )}
                                 >
-                                  <ModelSelector
+                                  <SimpleModelSelector
+                                    nullable
+                                    globalDefault={{
+                                      description: findDefaultModelDisplayName(
+                                        globalLlmProviders,
+                                        defaultText
+                                      ),
+                                    }}
+                                    providers={filterModelConfigurations(
+                                      agentLlmProviders ?? [],
+                                      {
+                                        keep:
+                                          (values.default_model_configuration_id as
+                                            | number
+                                            | null) ?? null,
+                                      }
+                                    )}
                                     value={
                                       (values.default_model_configuration_id as
                                         | number
                                         | null) ?? null
                                     }
-                                    onChange={(opt) =>
+                                    grouped={!hideProviderGrouping}
+                                    onChange={(modelConfigurationId) =>
                                       setFieldValue(
                                         "default_model_configuration_id",
-                                        opt.modelConfigurationId ?? null
+                                        modelConfigurationId
                                       )
                                     }
-                                    includeGlobalDefault
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal

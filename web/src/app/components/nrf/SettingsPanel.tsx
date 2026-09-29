@@ -1,6 +1,6 @@
 "use client";
 
-import { Switch } from "@opal/components";
+import { InputSwitch } from "@opal/components";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/constants/chatBackgrounds";
 import { ThemePreference } from "@/lib/types";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface SettingRowProps {
   label: string;
@@ -114,6 +115,7 @@ export const SettingsPanel = ({
     night: tBg("night.label"),
   };
   const t = useTranslations("chat");
+  const { appName } = useSettings();
   const { useOnyxAsNewTab } = useNRFPreferences();
   const { theme, setTheme } = useTheme();
   const { user, updateUserChatBackground, updateUserThemePreference } =
@@ -213,8 +215,10 @@ export const SettingsPanel = ({
               {t("nrf.settingsPanel.generalSection.title")}
             </Text>
             <div className="flex flex-col gap-1 bg-background-tint-01 rounded-2xl px-4">
-              <SettingRow label={t("nrf.settingsPanel.newTabToggle.label")}>
-                <Switch
+              <SettingRow
+                label={t("nrf.settingsPanel.newTabToggle.label", { appName })}
+              >
+                <InputSwitch
                   checked={useOnyxAsNewTab}
                   onCheckedChange={handleUseOnyxToggle}
                 />

@@ -7,6 +7,7 @@ from ee.onyx.external_permissions.perm_sync_types import (
 from ee.onyx.external_permissions.utils import credential_json, generic_doc_sync
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -24,7 +25,9 @@ def jira_doc_sync(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[ElementExternalAccess, None, None]:
     jira_connector = JiraConnector(
-        **cc_pair.connector.connector_specific_config,
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        ),
     )
     jira_connector.load_credentials(credential_json(cc_pair))
 

@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import struct
 from collections.abc import Callable, Sequence
@@ -22,6 +23,8 @@ from onyx.configs.constants import (
 )
 from onyx.db.enums import AccountType, Permission
 from onyx.db.models import (
+    ChatMessage,
+    ChatSession,
     DocumentSet,
     DocumentSet__User,
     MCPConnectionConfig,
@@ -906,6 +909,23 @@ def assign_user_to_default_groups__no_commit(
     )
 
 
+def promote_placeholder_to_web_login__no_commit(
+    db_session: Session, user: User, is_verified: bool
+) -> None:
+    """Turn a placeholder row (EXT_PERM_USER, BOT) into a real web login.
+
+    Does NOT commit. The caller holds the ``"user"`` row lock and commits this
+    with the rest of its transaction, so the seat check it ran stays valid.
+
+    A placeholder is deactivated until its owner shows up, so this reactivates
+    the row rather than turning the owner away.
+    """
+    user.is_verified = is_verified
+    user.account_type = AccountType.STANDARD
+    user.is_active = True
+    assign_user_to_default_groups__no_commit(db_session, user)
+
+
 def get_active_admin_count(db_session: Session) -> int:
     """Count for the share dialog's Admins row — same filter set as
     get_active_admin_users (no API-key dummies or system placeholders).
@@ -913,6 +933,18 @@ def get_active_admin_count(db_session: Session) -> int:
     materializing every admin row."""
     stmt = select(func.count()).select_from(_active_admin_user_stmt().subquery())
     return db_session.execute(stmt).scalar_one()
+
+
+def release_personas_owned_by_user__no_commit(
+    db_session: Session, user_id: UUID
+) -> None:
+    """Clear the user's ownership so the personas become vacant (managed by
+    admins until transferred away or deleted). Nothing is soft-deleted, even a
+    private persona, so admins can still recover it. Ownership is not restored
+    on reactivation."""
+    db_session.query(Persona).filter(Persona.user_id == user_id).update(
+        {Persona.user_id: None}, synchronize_session="fetch"
+    )
 
 
 def delete_user_from_db__no_commit(
@@ -937,25 +969,7 @@ def delete_user_from_db__no_commit(
     db_session.query(DocumentSet).filter(
         DocumentSet.user_id == user_to_delete.id
     ).update({DocumentSet.user_id: None})
-    # Personas: private ones die with their owner; shared/public ones are
-    # orphaned (ownerless ⇒ managed by admins until transferred away)
-    owned_personas = (
-        db_session.query(Persona)
-        .options(
-            selectinload(Persona.user_shares),
-            selectinload(Persona.group_shares),
-        )
-        .filter(Persona.user_id == user_to_delete.id)
-        .all()
-    )
-    for persona in owned_personas:
-        if (
-            not persona.is_public
-            and not persona.user_shares
-            and not persona.group_shares
-        ):
-            persona.deleted = True
-        persona.user_id = None
+    release_personas_owned_by_user__no_commit(db_session, user_to_delete.id)
 
     db_session.query(DocumentSet__User).filter(
         DocumentSet__User.user_id == user_to_delete.id
@@ -1009,6 +1023,47 @@ def batch_get_user_groups(
     for user_id, group_id, group_name in rows:
         result[user_id].append((group_id, group_name))
     return result
+
+
+def batch_get_last_active(
+    db_session: Session,
+    user_ids: list[UUID],
+) -> dict[UUID, datetime.datetime | None]:
+    """Fetch the most recent chat activity for a batch of users in a single query.
+
+    `User.updated_at` only moves when the user row itself is written — a profile or
+    role change — so it is not a measure of activity.
+
+    `ChatSession.time_updated` alone is not either. It has `onupdate=func.now()`, so
+    it advances when the session row is written — creation, and auto-naming on the
+    first turn — but sending a follow-up message only inserts a `ChatMessage`.
+    (`update_chat_session_updated_at_timestamp` exists for this and has no callers.)
+    Measured against production, that left 65% of users with a stale value, the worst
+    understated by 174 days.
+
+    Taking the greatest of the two per session covers both: message traffic, and a
+    session that has been created or renamed but carries no messages yet.
+
+    Returns user_id -> last activity, or None for a user who has never chatted.
+    """
+    if not user_ids:
+        return {}
+
+    rows = db_session.execute(
+        select(
+            ChatSession.user_id,
+            func.max(func.greatest(ChatSession.time_updated, ChatMessage.time_sent)),
+        )
+        .select_from(ChatSession)
+        .outerjoin(ChatMessage, ChatMessage.chat_session_id == ChatSession.id)
+        .where(ChatSession.user_id.in_(user_ids))
+        .group_by(ChatSession.user_id)
+    ).all()
+
+    # Every requested id gets a key, so a user who has never chatted reads as
+    # None rather than going missing from the mapping.
+    last_active_by_user = {user_id: last_active for user_id, last_active in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
+    return {uid: last_active_by_user.get(uid) for uid in user_ids}
 
 
 def get_user_groups(

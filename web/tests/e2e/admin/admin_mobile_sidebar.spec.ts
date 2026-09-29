@@ -10,7 +10,7 @@ test.describe.configure({ mode: "parallel" });
 // The create-connector page renders its own sidebar instead of the default one.
 // It must still offer the same way back to it as every other admin page.
 const ADMIN_PAGES = [
-  { name: "an admin page", path: "/admin/indexing/status" },
+  { name: "an admin page", path: "/admin/indexing-status" },
   { name: "the create-connector page", path: "/admin/connectors/web" },
 ];
 

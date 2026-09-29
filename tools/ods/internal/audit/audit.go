@@ -174,7 +174,7 @@ func Run(opts Options) (*Result, error) {
 	}
 
 	if scanActionsSrc {
-		fs, err := scanActions()
+		fs, err := scanActions(osvQueryURL)
 		if err != nil {
 			if !lockfileGate {
 				return nil, fmt.Errorf("github actions audit failed: %w", err)

@@ -4,10 +4,10 @@ from unittest.mock import patch
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document, TextSection
+from onyx.connectors.web.config import UrlRewriteRule
 from onyx.connectors.web.connector import (
     _URL_REWRITES_ADAPTER,
     ScrapeResult,
-    UrlRewriteRule,
     WebConnector,
     _parse_url_rewrites,
     _rewrite_url,
