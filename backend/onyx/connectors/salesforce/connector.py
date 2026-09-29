@@ -1121,14 +1121,9 @@ class SalesforceConnector(
                         any_not_found = True
                         logger.warning("Association %s not found in %s", k, parent_type)
                 if any_not_found:
-                    queryable_fields = sf_client.get_queryable_fields_by_type(
-                        parent_type
-                    )
                     raise RuntimeError(
                         f"Associations {associations_config} not found in {parent_type} "
                         "make sure your parent-child associations are in the right order"
-                        # f"with child objects {child_types_all}"
-                        # f" and fields {queryable_fields}"
                     )
 
             parent_to_child_relationships[parent_type] = set()
@@ -1150,6 +1145,7 @@ class SalesforceConnector(
                 parent_to_child_relationships[parent_type].add(child_relationship)
 
                 # map relationship to the child's queryable and sortable fields
+                child_fields = sf_client.get_child_fields_by_type(child_type)
                 if config_fields := (
                     associations_config and associations_config.get(child_type)
                 ):
@@ -1158,23 +1154,18 @@ class SalesforceConnector(
                     # field_set.add(NAME_FIELD) # does not always exist
                     field_set.add(ID_FIELD)
                     field_set.add(MODIFIED_FIELD)
-                    queryable_fields = field_set
-                else:
-                    queryable_fields = sf_client.get_queryable_fields_by_type(
-                        child_type
+                    child_fields = SalesforceChildFields(
+                        queryable=field_set, sortable=child_fields.sortable
                     )
 
                 if child_relationship in parent_to_relationship_fields:
                     raise RuntimeError(f"{child_relationship=} already exists")
 
                 parent_to_relationship_fields[parent_type][child_relationship] = (
-                    SalesforceChildFields(
-                        queryable=queryable_fields,
-                        sortable=sf_client.get_sortable_fields_by_type(child_type),
-                    )
+                    child_fields
                 )
 
-                type_to_queryable_fields[child_type] = queryable_fields
+                type_to_queryable_fields[child_type] = child_fields.queryable
 
                 parent_child_names_to_relationships[f"{parent_type}__{child_type}"] = (
                     child_relationship

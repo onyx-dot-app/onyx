@@ -64,6 +64,26 @@ def is_salesforce_rate_limit_error(exception: Exception) -> bool:
     ) and "REQUEST_LIMIT_EXCEEDED" in str(exception)
 
 
+def _queryable_fields(fields: list[dict[str, Any]]) -> set[str]:
+    valid_fields: set[str] = set()
+    field_names_to_remove: set[str] = set()
+    for field in fields:
+        if compound_field_name := field.get("compoundFieldName"):
+            # We do want to get name fields even if they are compound
+            if not field.get("nameField"):
+                field_names_to_remove.add(compound_field_name)
+
+        field_name = field.get("name")
+        field_type = field.get("type")
+        if field_type in ["base64", "blob", "encryptedstring"]:
+            continue
+
+        if field_name:
+            valid_fields.add(field_name)
+
+    return valid_fields - field_names_to_remove
+
+
 class OnyxSalesforce(Salesforce):
     def __init__(
         self,
@@ -351,37 +371,22 @@ class OnyxSalesforce(Salesforce):
                 time.sleep(3)
             raise
 
+    def _describe_fields(self, name: str) -> list[dict[str, Any]]:
+        object_description = self.describe_type(name)
+        if object_description is None:
+            return []
+        return object_description["fields"]
+
     def get_queryable_fields_by_type(self, name: str) -> set[str]:
-        object_description = self.describe_type(name)
-        if object_description is None:
-            return set()
+        return _queryable_fields(self._describe_fields(name))
 
-        fields: list[dict[str, Any]] = object_description["fields"]
-        valid_fields: set[str] = set()
-        field_names_to_remove: set[str] = set()
-        for field in fields:
-            if compound_field_name := field.get("compoundFieldName"):
-                # We do want to get name fields even if they are compound
-                if not field.get("nameField"):
-                    field_names_to_remove.add(compound_field_name)
-
-            field_name = field.get("name")
-            field_type = field.get("type")
-            if field_type in ["base64", "blob", "encryptedstring"]:
-                continue
-
-            if field_name:
-                valid_fields.add(field_name)
-
-        return valid_fields - field_names_to_remove
-
-    def get_sortable_fields_by_type(self, name: str) -> set[str]:
-        object_description = self.describe_type(name)
-        if object_description is None:
-            return set()
-
-        fields: list[dict[str, Any]] = object_description["fields"]
-        return {field["name"] for field in fields if field.get("sortable")}
+    def get_child_fields_by_type(self, name: str) -> SalesforceChildFields:
+        """Both field sets from one describe call."""
+        fields = self._describe_fields(name)
+        return SalesforceChildFields(
+            queryable=_queryable_fields(fields),
+            sortable={field["name"] for field in fields if field.get("sortable")},
+        )
 
     def get_children_of_sf_type(self, sf_type: str) -> dict[str, str]:
         """Returns a dict of child object names to relationship names.

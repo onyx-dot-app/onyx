@@ -316,14 +316,18 @@ class TestGetChildObjectsById:
             self._fetch(fail_pinned)
 
 
-class TestGetSortableFieldsByType:
-    def test_only_sortable_fields(self) -> None:
+class TestGetChildFieldsByType:
+    def test_one_describe_splits_queryable_and_sortable(self) -> None:
         description = {
             "fields": [
-                {"name": ID_FIELD, "sortable": True},
-                {"name": CREATED_FIELD, "sortable": False},
-                {"name": "Body", "sortable": False},
+                {"name": ID_FIELD, "type": "id", "sortable": True},
+                {"name": CREATED_FIELD, "type": "datetime", "sortable": False},
+                {"name": "Body", "type": "base64", "sortable": False},
             ]
         }
-        with patch.object(OnyxSalesforce, "describe_type", return_value=description):
-            assert _client().get_sortable_fields_by_type("Note") == {ID_FIELD}
+        with patch.object(
+            OnyxSalesforce, "describe_type", return_value=description
+        ) as mocked:
+            child = _client().get_child_fields_by_type("Note")
+        assert mocked.call_count == 1
+        assert child == _child({ID_FIELD, CREATED_FIELD}, {ID_FIELD})
