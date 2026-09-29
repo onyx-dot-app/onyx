@@ -1138,7 +1138,11 @@ export default function IndexSettingsPage() {
                 toast.error(t("toasts.contextualModelRequired"));
                 return;
               }
+              // Only a staged image change needs its captioning model; a
+              // fresh install starts on with none, and that is not this
+              // apply's business.
               if (
+                classifyChanges(values, initialFormValues).imageChanged &&
                 values.image_processing_enabled &&
                 values.image_processing_model_configuration_id === null
               ) {
@@ -1216,13 +1220,18 @@ export default function IndexSettingsPage() {
               const contextualRagModelMissing =
                 values.enable_contextual_rag &&
                 values.contextual_rag_model_configuration_id === null;
-              // Same for image processing: on with no captioning model.
+              const changes = classifyChanges(values, initialFormValues);
+              // Image processing on with no captioning model: the card warns
+              // whenever it holds, but it blocks apply only while the image
+              // section is what is being saved. A fresh install starts in
+              // this state, and an embedding change must not be held hostage
+              // to a setting it does not touch.
               const captioningModelMissing =
                 values.image_processing_enabled &&
                 values.image_processing_model_configuration_id === null;
               const applyBlocked =
-                contextualRagModelMissing || captioningModelMissing;
-              const changes = classifyChanges(values, initialFormValues);
+                contextualRagModelMissing ||
+                (captioningModelMissing && changes.imageChanged);
               // A change undone by hand leaves Formik dirty but stages nothing.
               const hasChanges = dirty && changes.any;
               const bannerMode = bannerModeFor(changes);
