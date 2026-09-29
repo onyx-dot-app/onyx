@@ -91,6 +91,14 @@ def test_parity_ignores_the_migration_date_seed(shard: str, clone: str) -> None:
 
     assert tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA) == []
 
+    # Only the value is masked: the row itself must still be there.
+    with get_engine_for_shard(shard).begin() as connection:
+        connection.execute(
+            text(f"DELETE FROM \"{clone}\".key_value_store WHERE key = 'kg_config'")
+        )
+    differences = tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA)
+    assert any(difference.startswith("key_value_store: ") for difference in differences)
+
 
 def test_parity_catches_a_missing_row(shard: str, clone: str) -> None:
     with get_engine_for_shard(shard).begin() as connection:

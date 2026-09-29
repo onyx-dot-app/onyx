@@ -74,10 +74,10 @@ _UNCOMPARED_COLUMN_TYPES = (
     "uuid",
 )
 _DIFF_LINES_REPORTED = 60
-# Seeded rows whose value is the migration's run date, so a clone and a schema
-# migrated on another day differ without either being wrong: table to (key
-# column, key value).
-_RUN_DATE_SEEDED_ROWS = {"key_value_store": ("key", "kg_config")}
+# Seeded rows whose value carries the migration's run date, so clone and fresh
+# schema differ by day. The row still counts, only the value column is masked.
+# Table to (key column, key value, masked column).
+_RUN_DATE_SEEDED_ROWS = {"key_value_store": ("key", "kg_config", "value")}
 # Postgres deparses a varchar list in a CHECK or partial index either as an array
 # of casts or as a cast of an array, flipping form on every re-parse. Same
 # constraint, so both spellings compare as one.
@@ -394,28 +394,32 @@ def _row_digest(
     connection: Connection, schema: str, table: str, columns: list[str]
 ) -> tuple[int, str]:
     source = sql.Identifier(schema, table)
-    where = sql.SQL("")
-    if table in _RUN_DATE_SEEDED_ROWS:
-        key_column, key_value = _RUN_DATE_SEEDED_ROWS[table]
-        where = sql.SQL(" WHERE {} <> {}").format(
-            sql.Identifier(key_column), sql.Literal(key_value)
-        )
     if not columns:
-        query = sql.SQL("SELECT count(*) FROM {}{}").format(source, where)
+        query = sql.SQL("SELECT count(*) FROM {}").format(source)
     else:
         # ROW keeps NULL positions, so a NULL moving between columns still differs.
         row_text = sql.SQL("ROW({})::text").format(
-            sql.SQL(", ").join(sql.Identifier(column) for column in columns)
+            sql.SQL(", ").join(_compared_value(table, column) for column in columns)
         )
         query = sql.SQL(
             "SELECT count(*), "
             "md5(coalesce(string_agg(row_text, '|' ORDER BY row_text), '')) "
-            "FROM (SELECT {} AS row_text FROM {}{}) rows"
-        ).format(row_text, source, where)
+            "FROM (SELECT {} AS row_text FROM {}) rows"
+        ).format(row_text, source)
     row = connection.exec_driver_sql(
         query.as_string(connection.connection.dbapi_connection)
     ).one()
     return int(row[0]), "" if not columns else str(row[1])
+
+
+def _compared_value(table: str, column: str) -> sql.Composable:
+    seeded = _RUN_DATE_SEEDED_ROWS.get(table)
+    if seeded is None or column != seeded[2]:
+        return sql.Identifier(column)
+    key_column, key_value, _ = seeded
+    return sql.SQL("CASE WHEN {} = {} THEN NULL ELSE {} END").format(
+        sql.Identifier(key_column), sql.Literal(key_value), sql.Identifier(column)
+    )
 
 
 def _migrate_empty_schema(shard_name: str, schema: str) -> None:
