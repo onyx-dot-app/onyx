@@ -424,6 +424,27 @@ def test_worker_migrates_a_stale_pool_tenant_and_assigns_it(
     assert not _pool_has(pool_tenant_id)
 
 
+@pytest.mark.asyncio
+async def test_worker_rolls_back_a_build_that_outlived_its_lock(
+    email: str,
+    pool_tenant_id: str,
+    no_alembic: MagicMock,
+    control_plane: MagicMock,
+) -> None:
+    _add_pool_tenant(pool_tenant_id, "stale-revision")
+
+    with (
+        patch.object(provisioning, "rollback_tenant_provisioning") as rollback,
+        pytest.raises(RuntimeError),
+    ):
+        await provisioning.provision_user_tenant(email, None, lock_owned=lambda: False)
+
+    no_alembic.assert_called_once_with(pool_tenant_id)
+    rollback.assert_called_once_with(pool_tenant_id)
+    control_plane.assert_not_called()
+    assert _mapped_tenant(email) is None
+
+
 def test_worker_waits_for_the_per_email_lock(email: str, no_alembic: MagicMock) -> None:
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     lock = r.lock(provisioning.user_provision_lock_name(email), timeout=30)

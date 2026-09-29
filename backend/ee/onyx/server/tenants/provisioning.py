@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import time
 import uuid
+from collections.abc import Callable
 
 import aiohttp  # Async HTTP client
 import httpx
@@ -369,7 +370,9 @@ async def _take_pool_tenant_while_waiting(
     if not lock.acquire(blocking=False):
         return None
     try:
-        tenant_id = resolve_tenant_id(email, oauth_name, account_id)
+        tenant_id = await asyncio.to_thread(
+            resolve_tenant_id, email, oauth_name, account_id
+        )
         if tenant_id:
             return tenant_id
         tenant_id = await get_available_tenant()
@@ -384,11 +387,19 @@ async def _take_pool_tenant_while_waiting(
         _release_signup_lock(lock)
 
 
-async def provision_user_tenant(email: str, referral_source: str | None) -> str:
+async def provision_user_tenant(
+    email: str,
+    referral_source: str | None,
+    lock_owned: Callable[[], bool] = lambda: True,
+) -> str:
     """Worker side of a signup that found no current pool tenant.
 
     Takes any pool tenant and brings it to head, or builds one from scratch,
     then tells the control plane and assigns it. Returns the tenant id.
+
+    ``lock_owned`` is checked once the build is done: a build that outlived
+    the per-email lock may race a retried signup, so it is rolled back instead
+    of assigned.
     """
     tenant_id = resolve_tenant_id(email)
     if tenant_id:
@@ -399,6 +410,15 @@ async def provision_user_tenant(email: str, referral_source: str | None) -> str:
         await _migrate_pool_tenant(tenant_id)
     else:
         tenant_id = await create_tenant(email, referral_source)
+
+    if not lock_owned():
+        logger.error(
+            "Provisioning for %s outlived its lock, rolling back tenant %s",
+            email,
+            tenant_id,
+        )
+        await rollback_tenant_provisioning(tenant_id)
+        raise RuntimeError("tenant build outlived the per-user lock")
 
     await _finish_tenant_assignment(tenant_id, email, referral_source)
     return tenant_id
@@ -965,7 +985,8 @@ async def get_available_tenant(allow_stale: bool = False) -> str | None:
     # A query failure raises: treating it as an empty pool would build a tenant
     # from scratch while a ready one sits in the pool.
     at_revision = None if allow_stale else get_alembic_head_revision()
-    tenant_id = take_available_tenant(at_revision)
+    # Off the event loop: the api server calls this while a signup waits.
+    tenant_id = await asyncio.to_thread(take_available_tenant, at_revision)
     if tenant_id is not None:
         logger.info("Using pre-provisioned tenant %s", tenant_id)
     return tenant_id

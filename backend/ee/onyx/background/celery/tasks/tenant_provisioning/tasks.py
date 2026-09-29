@@ -93,7 +93,9 @@ def provision_tenant_for_user(
     heartbeat = _LockHeartbeat(lock, _USER_PROVISION_LOCK_TIMEOUT)
     heartbeat.start()
     try:
-        new_tenant_id = asyncio.run(provision_user_tenant(email, referral_source))
+        new_tenant_id = asyncio.run(
+            provision_user_tenant(email, referral_source, lock_owned=lock.owned)
+        )
         task_logger.info("Provisioned tenant %s for a signup", new_tenant_id)
         return True
     except Exception:
@@ -183,10 +185,6 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         return
 
     try:
-        # First, so a billing record left by a failed signup is retried even
-        # when the refill below fails or runs long.
-        _reconcile_control_plane_orphans()
-
         # Get the current count of available tenants
         with get_session_with_shared_schema() as db_session:
             num_available_tenants = db_session.query(AvailableTenant).count()
@@ -232,6 +230,9 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
         task_logger.exception("Error in check_available_tenants task")
 
     finally:
+        # After the refill so slow control plane deletes never hold up the
+        # pool, and in finally so a failed refill cannot skip them.
+        _reconcile_control_plane_orphans()
         try:
             lock_check.release()
         except Exception:
