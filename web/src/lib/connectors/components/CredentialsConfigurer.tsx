@@ -3,9 +3,15 @@
 import { useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
-import { Button, Card, Modal, Text } from "@opal/components";
+import { Button, Card, Modal, SelectCard, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
-import { SvgExpand, SvgFold, SvgKey, SvgListTree } from "@opal/icons";
+import {
+  SvgExpand,
+  SvgFold,
+  SvgKey,
+  SvgListTree,
+  SvgPlusCircle,
+} from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
 import type { Credential } from "@/lib/connectors/types";
@@ -94,6 +100,9 @@ export function CredentialsConfigurer({
   }, []);
 
   const displayName = getSourceDisplayName(connector) || connector;
+  const showAuthorize =
+    oauthSupportedSources.includes(connector) &&
+    (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV);
   const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
   const showExplicitCredentialMethods = credentialCreationMethods.length > 1;
 
@@ -220,48 +229,64 @@ export function CredentialsConfigurer({
             onSwitch={onSwap}
           />
 
-          {credentialCreationMethod === null && (
+          {showAuthorize && credentialCreationMethod === null && (
             <Section
               flexDirection="row"
               justifyContent="start"
               gap={1}
               className="mt-6"
             >
-              {oauthDetailsLoading ? (
-                <Button disabled>
-                  {t("add.createCredentialButton.label")}
-                </Button>
-              ) : (
-                credentialCreationMethods.map((method) => (
-                  <Button
-                    key={method}
-                    onClick={() => openCredentialCreationMethod(method)}
-                  >
-                    {getCredentialCreationActionLabel(
-                      method,
-                      displayName,
-                      showExplicitCredentialMethods
-                    )}
-                  </Button>
-                ))
-              )}
-              {oauthSupportedSources.includes(connector) &&
-                (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
-                  <Button
-                    disabled={isAuthorizing}
-                    variant="action"
-                    onClick={handleAuthorize}
-                    hidden={!isAuthorizeVisible}
-                  >
-                    {isAuthorizing
-                      ? t("add.authorizeButton.pendingLabel")
-                      : t("add.authorizeButton.label", { source: displayName })}
-                  </Button>
-                )}
+              <Button
+                disabled={isAuthorizing}
+                variant="action"
+                onClick={handleAuthorize}
+                hidden={!isAuthorizeVisible}
+              >
+                {isAuthorizing
+                  ? t("add.authorizeButton.pendingLabel")
+                  : t("add.authorizeButton.label", { source: displayName })}
+              </Button>
             </Section>
           )}
         </Section>
       </Card>
+
+      {/* One card per way of creating a credential. While the OAuth details
+          are still loading we do not yet know how many there are, so a single
+          disabled card holds the place. */}
+      {oauthDetailsLoading ? (
+        <SelectCard state="empty" rounding={4} padding={4} disabled>
+          <ContentAction
+            icon={SvgPlusCircle}
+            title={t("add.createCredentialButton.label")}
+            sizePreset="main-content"
+            variant="section"
+            padding={0}
+          />
+        </SelectCard>
+      ) : (
+        credentialCreationMethods.map((method) => (
+          <SelectCard
+            key={method}
+            state="empty"
+            rounding={4}
+            padding={4}
+            onClick={() => openCredentialCreationMethod(method)}
+          >
+            <ContentAction
+              icon={SvgPlusCircle}
+              title={getCredentialCreationActionLabel(
+                method,
+                displayName,
+                showExplicitCredentialMethods
+              )}
+              sizePreset="main-content"
+              variant="section"
+              padding={0}
+            />
+          </SelectCard>
+        ))
+      )}
 
       {credentialCreationMethod !== null && (
         <Modal open onOpenChange={closeCredentialModal}>
