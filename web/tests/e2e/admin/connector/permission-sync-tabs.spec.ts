@@ -82,7 +82,6 @@ function syncCCPairFixture() {
       time_updated: now,
       source: MOCK_SOURCE,
       user_id: null,
-      curator_public: true,
     },
     number_of_index_attempts: 0,
     last_index_attempt_status: null,

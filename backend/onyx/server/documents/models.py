@@ -139,7 +139,6 @@ class CredentialBase(BaseModel):
     admin_public: bool
     source: DocumentSource
     name: str | None = None
-    curator_public: bool = False
     groups: list[int] = Field(default_factory=list)
 
 
@@ -149,6 +148,9 @@ class CredentialSnapshot(CredentialBase):
     user_email: str | None = None
     time_created: datetime
     time_updated: datetime
+    # Deprecated shim: the flag was removed and nothing reads it. Kept so the
+    # published /manage/credential response stays additive; always false.
+    curator_public: bool = Field(default=False, deprecated=True)
 
     @classmethod
     def from_credential_db_model(
@@ -175,7 +177,6 @@ class CredentialSnapshot(CredentialBase):
             time_updated=credential.time_updated,
             source=credential.source or DocumentSource.NOT_APPLICABLE,
             name=credential.name,
-            curator_public=credential.curator_public,
         )
 
 
