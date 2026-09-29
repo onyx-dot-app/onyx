@@ -52,6 +52,9 @@ interface CardFoldProps {
  * The fold carries the border and the bottom rounding that join it to the
  * header above it. It never paints a background, so the page shows through
  * and the two regions stay visually distinct.
+ *
+ * Closed, it is inert and hidden from assistive tech, so a form inside it
+ * cannot be tabbed into while it is out of sight.
  */
 function CardFold({
   expanded,
@@ -62,7 +65,14 @@ function CardFold({
   children,
 }: CardFoldProps) {
   return (
-    <div className="opal-card-fold" data-expanded={expanded ? "true" : "false"}>
+    <div
+      className="opal-card-fold"
+      data-expanded={expanded ? "true" : "false"}
+      // A closed fold is zero-height but still in the DOM, so without these
+      // its children stay tabbable and readable to assistive tech.
+      aria-hidden={!expanded || undefined}
+      inert={!expanded || undefined}
+    >
       <div className="opal-card-fold-inner">
         <div
           className="opal-card-fold-body"

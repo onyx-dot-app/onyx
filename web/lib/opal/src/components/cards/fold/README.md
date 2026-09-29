@@ -29,6 +29,9 @@ are never unmounted.
 
 ## Notes
 
+- **Closed means inert.** A closed fold keeps its children mounted at zero
+  height, so it sets `inert` and `aria-hidden` to keep them out of the tab
+  order and the accessibility tree.
 - **No background.** The body is transparent, so the page shows through and
   the fold stays visually distinct from the header above it.
 - **No top border.** The header's bottom border is the seam between the two.

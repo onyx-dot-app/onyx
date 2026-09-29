@@ -3,15 +3,9 @@
 import { useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
-import { Button, Card, Modal, SelectCard, Text } from "@opal/components";
+import { Button, Card, SelectCard, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
-import {
-  SvgExpand,
-  SvgFold,
-  SvgKey,
-  SvgListTree,
-  SvgPlusCircle,
-} from "@opal/icons";
+import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
 import type { Credential } from "@/lib/connectors/types";
@@ -131,7 +125,43 @@ export function CredentialsConfigurer({
     refresh();
   };
 
-  const closeCredentialModal = () => setCredentialCreationMethod(null);
+  const closeCredentialForm = () => setCredentialCreationMethod(null);
+
+  /**
+   * The creation form for one method, rendered inside that method's card.
+   * The OAuth branch only reaches its redirect message if the details
+   * changed under us: `openCredentialCreationMethod` redirects instead of
+   * opening the card when a redirect is all the source needs.
+   */
+  function renderCredentialForm(method: CredentialCreationMethod) {
+    if (method === CredentialCreationMethod.OAuth && oauthDetails) {
+      return shouldRedirectToOAuth(oauthDetails) ? (
+        <Section alignItems="start">
+          <Text as="p" font="main-ui-body" color="text-03">
+            {t("add.oauthRedirectFailed.message", { source: displayName })}
+          </Text>
+          <Button onClick={attemptOauthRedirect}>
+            {t("add.retryButton.label")}
+          </Button>
+        </Section>
+      ) : (
+        <CreateStdOAuthCredential
+          sourceType={connector}
+          additionalFields={oauthDetails.additional_kwargs}
+        />
+      );
+    }
+    return (
+      <CreateCredential
+        close
+        refresh={refresh}
+        sourceType={connector}
+        accessType={accessType}
+        onSwitch={onSwap}
+        onClose={closeCredentialForm}
+      />
+    );
+  }
 
   const attemptOauthRedirect = async () => {
     try {
@@ -234,7 +264,7 @@ export function CredentialsConfigurer({
             onSwitch={onSwap}
           />
 
-          {showAuthorize && credentialCreationMethod === null && (
+          {showAuthorize && (
             <Section
               flexDirection="row"
               justifyContent="start"
@@ -267,64 +297,38 @@ export function CredentialsConfigurer({
           </Button>
         </SelectCard>
       ) : (
-        credentialCreationMethods.map((method) => (
-          <SelectCard
-            key={method}
-            state="empty"
-            rounding={4}
-            padding={2}
-            onClick={() => openCredentialCreationMethod(method)}
-          >
-            <Button icon={SvgPlusCircle} prominence="tertiary" tabIndex={-1}>
-              {showExplicitCredentialMethods
-                ? getCredentialCreationActionLabel(method, displayName, true)
-                : newAccountLabel}
-            </Button>
-          </SelectCard>
-        ))
-      )}
-
-      {credentialCreationMethod !== null && (
-        <Modal open onOpenChange={closeCredentialModal}>
-          <Modal.Content>
-            <Modal.Header
-              icon={SvgKey}
-              title={t("add.credentialModal.title", { source: displayName })}
-              onClose={closeCredentialModal}
-            />
-            <Modal.Body alignItems="stretch">
-              {oauthDetailsLoading ? null : credentialCreationMethod ===
-                  CredentialCreationMethod.OAuth && oauthDetails ? (
-                shouldRedirectToOAuth(oauthDetails) ? (
-                  <Section alignItems="start">
-                    <Text as="p" font="main-ui-body" color="text-03">
-                      {t("add.oauthRedirectFailed.message", {
-                        source: displayName,
-                      })}
-                    </Text>
-                    <Button onClick={attemptOauthRedirect}>
-                      {t("add.retryButton.label")}
-                    </Button>
-                  </Section>
-                ) : (
-                  <CreateStdOAuthCredential
-                    sourceType={connector}
-                    additionalFields={oauthDetails.additional_kwargs}
-                  />
-                )
-              ) : (
-                <CreateCredential
-                  close
-                  refresh={refresh}
-                  sourceType={connector}
-                  accessType={accessType}
-                  onSwitch={onSwap}
-                  onClose={closeCredentialModal}
-                />
-              )}
-            </Modal.Body>
-          </Modal.Content>
-        </Modal>
+        credentialCreationMethods.map((method) => {
+          const open = credentialCreationMethod === method;
+          return (
+            <SelectCard
+              key={method}
+              expandable
+              expanded={open}
+              expandableContentHeight="full"
+              state="empty"
+              rounding={4}
+              padding={2}
+              onClick={() =>
+                open
+                  ? closeCredentialForm()
+                  : openCredentialCreationMethod(method)
+              }
+              expandedContent={
+                <div className="p-4">{renderCredentialForm(method)}</div>
+              }
+            >
+              <Button
+                icon={open ? SvgFold : SvgPlusCircle}
+                prominence="tertiary"
+                tabIndex={-1}
+              >
+                {showExplicitCredentialMethods
+                  ? getCredentialCreationActionLabel(method, displayName, true)
+                  : newAccountLabel}
+              </Button>
+            </SelectCard>
+          );
+        })
       )}
     </Section>
   );
