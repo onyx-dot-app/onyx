@@ -32,7 +32,11 @@ from onyx.db.document import (
     mark_document_as_synced,
     mark_document_synced_secondary_pending,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    EmbeddingPrecision,
+    VectorQuantization,
+)
 from onyx.db.models import (
     ConnectorCredentialPair,
     DocumentByConnectorCredentialPair,
@@ -153,6 +157,7 @@ def _index(index_name: str) -> OpenSearchDocumentIndex:
         index_name=index_name,
         embedding_dim=_VECTOR_DIM,
         embedding_precision=EmbeddingPrecision.FLOAT,
+        vector_quantization=VectorQuantization.NONE,
     )
 
 

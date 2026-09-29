@@ -33,6 +33,7 @@ from onyx.db.enums import (
     IndexModelStatus,
     PortAttemptStatus,
     SwitchoverType,
+    VectorQuantization,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -430,6 +431,7 @@ def test_delete_port_written_chunks_only_marked(
             index_name=index_name,
             embedding_dim=_VECTOR_DIM,
             embedding_precision=EmbeddingPrecision.FLOAT,
+            vector_quantization=VectorQuantization.NONE,
         )
         deleted = index.delete_port_written_chunks([marked_doc, unmarked_doc])
         client.refresh_index()

@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import EmbeddingPrecision, VectorQuantization
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch import (
     opensearch_document_index as opensearch_document_index_module,
@@ -106,6 +106,7 @@ def test_mt_init_survives_write_block_and_is_not_cached(
                 index_name=test_index_name,
                 embedding_dim=EMBEDDING_DIM,
                 embedding_precision=EmbeddingPrecision.FLOAT,
+                vector_quantization=VectorQuantization.NONE,
             )
             assert test_index_name not in verified_names
 
@@ -117,6 +118,7 @@ def test_mt_init_survives_write_block_and_is_not_cached(
                 index_name=test_index_name,
                 embedding_dim=EMBEDDING_DIM,
                 embedding_precision=EmbeddingPrecision.FLOAT,
+                vector_quantization=VectorQuantization.NONE,
             )
             assert test_index_name in verified_names
     finally:

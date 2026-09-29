@@ -50,12 +50,14 @@ import {
 } from "@opal/icons";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { InputSingleSelect } from "@opal/components";
+import { InputSingleSelectField } from "@opal/form";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import {
   EmbeddingProviderName,
   SwitchoverType,
+  VectorQuantization,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingModelRequest,
@@ -611,6 +613,7 @@ function EmbeddingModelCard({
 interface IndexSettingsFormValues extends EmbeddingModelSelection {
   enable_contextual_rag: boolean;
   contextual_rag_model_configuration_id: number | null;
+  vector_quantization: VectorQuantization;
 }
 
 function isContextualModelOnlyChange(
@@ -623,6 +626,7 @@ function isContextualModelOnlyChange(
     values.contextual_rag_model_configuration_id !== null &&
     values.contextual_rag_model_configuration_id !==
       initialValues.contextual_rag_model_configuration_id &&
+    values.vector_quantization === initialValues.vector_quantization &&
     isSameModelSelection(values, initialValues)
   );
 }
@@ -883,6 +887,8 @@ export default function IndexSettingsPage() {
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
       contextual_rag_model_configuration_id:
         searchSettings?.contextual_rag_model_configuration_id ?? null,
+      vector_quantization:
+        searchSettings?.vector_quantization ?? VectorQuantization.NONE,
     }),
     [savedSelection, searchSettings]
   );
@@ -1025,6 +1031,7 @@ export default function IndexSettingsPage() {
                 contextualRagModelConfigurationId: values.enable_contextual_rag
                   ? values.contextual_rag_model_configuration_id
                   : null,
+                vectorQuantization: values.vector_quantization,
                 acknowledgedWontPortCcPairIds: frozenWontPortRef.current.map(
                   (c) => c.cc_pair_id
                 ),
@@ -1736,6 +1743,55 @@ export default function IndexSettingsPage() {
                               </Card>
                             </Tabs>
                           )
+                        )}
+
+                        {!NEXT_PUBLIC_CLOUD_ENABLED && (
+                          <Card
+                            border="solid"
+                            borderColor={statusVariant}
+                            rounding={4}
+                          >
+                            <InputHorizontal
+                              title={t("vectorQuantization.title")}
+                              description={t("vectorQuantization.description")}
+                              withLabel
+                            >
+                              <InputSingleSelectField
+                                name="vector_quantization"
+                                defaultOption={VectorQuantization.NONE}
+                                placeholder={tInputSelect(
+                                  "placeholder.fallback"
+                                )}
+                                options={[
+                                  {
+                                    value: VectorQuantization.NONE,
+                                    title: t("vectorQuantization.none.label"),
+                                    description: t(
+                                      "vectorQuantization.none.description"
+                                    ),
+                                  },
+                                  {
+                                    value: VectorQuantization.SCALAR_7_BIT,
+                                    title: t(
+                                      "vectorQuantization.scalar7Bit.label"
+                                    ),
+                                    description: t(
+                                      "vectorQuantization.scalar7Bit.description"
+                                    ),
+                                  },
+                                  {
+                                    value: VectorQuantization.SCALAR_1_BIT,
+                                    title: t(
+                                      "vectorQuantization.scalar1Bit.label"
+                                    ),
+                                    description: t(
+                                      "vectorQuantization.scalar1Bit.description"
+                                    ),
+                                  },
+                                ]}
+                              />
+                            </InputHorizontal>
+                          </Card>
                         )}
                       </GeneralLayouts.Section>
 

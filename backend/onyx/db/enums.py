@@ -309,6 +309,20 @@ class EmbeddingPrecision(str, PyEnum):
     FLOAT = "float"
 
 
+class VectorQuantization(str, PyEnum):
+    """Scalar quantization of the stored vectors in the OpenSearch index.
+
+    Fewer bits per dimension use less memory but lower recall. It is part of
+    the index mapping, so a change needs a reindex into a new index.
+    """
+
+    NONE = "none"
+    # 4x less vector memory.
+    SCALAR_7_BIT = "scalar_7_bit"
+    # 32x less vector memory. Needs OpenSearch 3.6 or later.
+    SCALAR_1_BIT = "scalar_1_bit"
+
+
 class UserFileStatus(str, PyEnum):
     PROCESSING = "PROCESSING"
     INDEXING = "INDEXING"

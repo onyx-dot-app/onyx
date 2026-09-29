@@ -20,11 +20,13 @@ from onyx.configs.app_configs import (
     OPENSEARCH_TEXT_ANALYZER,
     USING_AWS_MANAGED_OPENSEARCH,
 )
+from onyx.db.enums import VectorQuantization
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     EF_CONSTRUCTION,
     EF_SEARCH,
+    LUCENE_SCALAR_QUANTIZATION,
     M,
 )
 from onyx.document_index.opensearch.string_filtering import (
@@ -402,7 +404,34 @@ class DocumentSchema:
     """
 
     @staticmethod
-    def get_document_schema(vector_dimension: int, multitenant: bool) -> dict[str, Any]:
+    def _get_knn_vector_method(
+        vector_quantization: VectorQuantization,
+    ) -> dict[str, Any]:
+        """Returns the HNSW method of the vector fields.
+
+        With quantization, Lucene keeps the full-precision vectors on disk next
+        to the quantized ones. Query-time rescoring reads them.
+        """
+        parameters: dict[str, Any] = {"ef_construction": EF_CONSTRUCTION, "m": M}
+        lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
+        if lucene_scalar_quantization is not None:
+            parameters["encoder"] = {
+                "name": "sq",
+                "parameters": {"bits": lucene_scalar_quantization.bits},
+            }
+        return {
+            "name": "hnsw",
+            "space_type": "cosinesimil",
+            "engine": OPENSEARCH_KNN_ENGINE,
+            "parameters": parameters,
+        }
+
+    @staticmethod
+    def get_document_schema(
+        vector_dimension: int,
+        multitenant: bool,
+        vector_quantization: VectorQuantization = VectorQuantization.NONE,
+    ) -> dict[str, Any]:
         """Returns the document schema for the OpenSearch index.
 
         WARNING: Changes / additions to field names here require changes to the
@@ -430,6 +459,8 @@ class DocumentSchema:
             vector_dimension: The dimension of vector embeddings. Must be a
                 positive integer.
             multitenant: Whether the index is multitenant.
+            vector_quantization: Scalar quantization of the vector fields.
+                OpenSearch cannot change it on an existing index.
 
         Returns:
             A dictionary representing the document schema, to be supplied to the
@@ -470,24 +501,18 @@ class DocumentSchema:
                 TITLE_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
                     "dimension": vector_dimension,
-                    "method": {
-                        "name": "hnsw",
-                        "space_type": "cosinesimil",
-                        "engine": OPENSEARCH_KNN_ENGINE,
-                        "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
-                    },
+                    "method": DocumentSchema._get_knn_vector_method(
+                        vector_quantization
+                    ),
                 },
                 # TODO(andrei): This is a tensor in Vespa. Also look at feature
                 # parity for these other method fields.
                 CONTENT_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
                     "dimension": vector_dimension,
-                    "method": {
-                        "name": "hnsw",
-                        "space_type": "cosinesimil",
-                        "engine": OPENSEARCH_KNN_ENGINE,
-                        "parameters": {"ef_construction": EF_CONSTRUCTION, "m": M},
-                    },
+                    "method": DocumentSchema._get_knn_vector_method(
+                        vector_quantization
+                    ),
                 },
                 SOURCE_TYPE_FIELD_NAME: {"type": "keyword"},
                 METADATA_LIST_FIELD_NAME: {"type": "keyword"},

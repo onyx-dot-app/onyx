@@ -20,7 +20,7 @@ from onyx.context.search.models import (
     InferenceChunk,
     InferenceChunkUncleaned,
 )
-from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import EmbeddingPrecision, VectorQuantization
 from onyx.db.models import DocumentSource
 from onyx.document_index.chunk_content_enrichment import (
     cleanup_content_for_chunks,
@@ -296,6 +296,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         index_name: The name of the index to interact with.
         embedding_dim: The dimensionality of the embeddings used for the index.
         embedding_precision: The precision of the embeddings used for the index.
+        vector_quantization: The scalar quantization of the index vector
+            fields. Used when the index is created and when it is searched.
     """
 
     def __init__(
@@ -304,9 +306,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
         index_name: str,
         embedding_dim: int,
         embedding_precision: EmbeddingPrecision,
+        vector_quantization: VectorQuantization,
     ) -> None:
         self._index_name: str = index_name
         self._tenant_state: TenantState = tenant_state
+        self._vector_quantization: VectorQuantization = vector_quantization
         self._client = OpenSearchIndexClient(index_name=self._index_name)
 
         if (
@@ -376,7 +380,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 set_cluster_state(self._client)
 
             expected_mappings = DocumentSchema.get_document_schema(
-                embedding_dim, self._tenant_state.multitenant
+                embedding_dim,
+                self._tenant_state.multitenant,
+                vector_quantization=self._vector_quantization,
             )
 
             if not self._client.index_exists():
@@ -880,6 +886,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=False,
+            vector_quantization=self._vector_quantization,
         )
         normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
@@ -972,6 +979,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=False,
+            vector_quantization=self._vector_quantization,
         )
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,

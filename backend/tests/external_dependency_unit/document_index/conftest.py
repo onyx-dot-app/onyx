@@ -11,7 +11,7 @@ import pytest
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import EmbeddingPrecision, VectorQuantization
 from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -139,6 +139,7 @@ def opensearch_index(
         index_name=test_index_name,
         embedding_dim=EMBEDDING_DIM,
         embedding_precision=EmbeddingPrecision.FLOAT,
+        vector_quantization=VectorQuantization.NONE,
     )
     opensearch_idx.verify_and_create_index_if_necessary(
         embedding_dim=EMBEDDING_DIM,

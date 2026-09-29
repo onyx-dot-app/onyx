@@ -5230,6 +5230,22 @@
         "targetUrlRequired": "대상 URL은 필수입니다",
         "urlInvalid": "유효한 URL이어야 합니다"
       },
+      "vectorQuantization": {
+        "description": "문서 벡터를 더 적은 비트로 저장하여 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다.",
+        "none": {
+          "description": "32비트 전체 정밀도.",
+          "label": "없음"
+        },
+        "scalar1Bit": {
+          "description": "메모리 사용량 32배 감소. OpenSearch 3.6 이상이 필요합니다.",
+          "label": "1비트"
+        },
+        "scalar7Bit": {
+          "description": "메모리 사용량 4배 감소. 검색 품질 저하가 거의 없습니다.",
+          "label": "7비트"
+        },
+        "title": "벡터 양자화"
+      },
       "wontPortConsentModal": {
         "title": "{count, plural, one {이 커넥터는 삭제됩니다} other {이 # 개의 커넥터는 삭제됩니다}}",
         "submit": "삭제 후 재인덱싱",

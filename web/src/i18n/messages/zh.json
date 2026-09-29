@@ -5230,6 +5230,22 @@
         "targetUrlRequired": "目标 URL 为必填项",
         "urlInvalid": "必须是有效的 URL"
       },
+      "vectorQuantization": {
+        "description": "使用更少的位存储文档向量，以减少内存占用。位数越少，搜索质量可能越低。",
+        "none": {
+          "description": "完整的 32 位精度。",
+          "label": "无"
+        },
+        "scalar1Bit": {
+          "description": "内存占用降至 1/32。需要 OpenSearch 3.6 或更高版本。",
+          "label": "1 位"
+        },
+        "scalar7Bit": {
+          "description": "内存占用降至 1/4，搜索质量几乎无损。",
+          "label": "7 位"
+        },
+        "title": "向量量化"
+      },
       "wontPortConsentModal": {
         "title": "{count, plural, one {该连接器将被删除} other {这 # 个连接器将被删除}}",
         "submit": "删除并重新索引",

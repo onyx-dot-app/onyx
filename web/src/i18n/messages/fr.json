@@ -5230,6 +5230,22 @@
         "targetUrlRequired": "L'URL cible est obligatoire",
         "urlInvalid": "Doit être une URL valide"
       },
+      "vectorQuantization": {
+        "description": "Stockez les vecteurs des documents avec moins de bits pour utiliser moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche.",
+        "none": {
+          "description": "Précision complète sur 32 bits.",
+          "label": "Aucune"
+        },
+        "scalar1Bit": {
+          "description": "32 fois moins de mémoire. Nécessite OpenSearch 3.6 ou une version ultérieure.",
+          "label": "1 bit"
+        },
+        "scalar7Bit": {
+          "description": "4 fois moins de mémoire. Presque aucune perte de qualité de recherche.",
+          "label": "7 bits"
+        },
+        "title": "Quantification des vecteurs"
+      },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Ce connecteur sera supprimé} other {Ces # connecteurs seront supprimés}}",
         "submit": "Supprimer et réindexer",

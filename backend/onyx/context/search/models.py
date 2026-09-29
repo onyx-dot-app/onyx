@@ -53,6 +53,7 @@ class SavedSearchSettings(IndexingSetting):
             multipass_indexing=search_settings.multipass_indexing,
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
+            vector_quantization=search_settings.vector_quantization,
             switchover_type=search_settings.switchover_type,
             use_port_flow=search_settings.use_port_flow,
             enable_contextual_rag=search_settings.enable_contextual_rag,
