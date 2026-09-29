@@ -15,7 +15,11 @@ from sqlalchemy import Table, delete, func, select, text
 from ee.onyx.db import tenant_snapshot
 from ee.onyx.server.tenants import schema_management
 from onyx.db.engine import tenant_utils
-from onyx.db.engine.shard_registry import get_default_shard_name, get_engine_for_shard
+from onyx.db.engine.shard_registry import (
+    get_default_shard_name,
+    get_engine_for_shard,
+    get_shard_specs,
+)
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.tenant_utils import get_template_shards
 from onyx.db.models import PublicBase, TenantSchemaSnapshot, Tool
@@ -130,7 +134,7 @@ def test_deploy_gate_passes_for_the_template_snapshot(shard: str, dump: str) -> 
 def test_rollout_stores_the_template_only_at_head(shard: str) -> None:
     head = tenant_snapshot.get_head_revision()
     assert head is not None
-    with _snapshot_row_restored(shard, head):
+    with _snapshot_rows_restored(head):
         tenant_snapshot.store_template_snapshots(head)
         assert tenant_snapshot.get_snapshot(shard, head)
         with pytest.raises(RuntimeError):
@@ -148,24 +152,28 @@ def test_template_is_rotated_by_shard(shard: str) -> None:
 
 
 @contextmanager
-def _snapshot_row_restored(shard: str, head: str) -> Iterator[None]:
-    """Whatever the catalog held for this shard and head is put back afterwards."""
-    before = tenant_snapshot.get_snapshot(shard, head)
+def _snapshot_rows_restored(head: str) -> Iterator[None]:
+    """Whatever the catalog held for this head, on every shard, is put back."""
+    before = {
+        shard_name: tenant_snapshot.get_snapshot(shard_name, head)
+        for shard_name in get_shard_specs()
+    }
     try:
         yield
     finally:
-        if before is not None:
-            tenant_snapshot.store_snapshot(shard, head, before)
-        else:
-            _delete_snapshot_rows(shard, head)
+        for shard_name, dump in before.items():
+            if dump is not None:
+                tenant_snapshot.store_snapshot(shard_name, head, dump)
+            else:
+                _delete_snapshot_rows(shard_name, head)
 
 
 @pytest.fixture
-def stored_snapshot(shard: str) -> Generator[str, None, None]:
+def stored_snapshot(shard: str, dump: str) -> Generator[str, None, None]:
     head = tenant_snapshot.get_head_revision()
     assert head is not None
-    with _snapshot_row_restored(shard, head):
-        tenant_snapshot.store_template_snapshots(head)
+    with _snapshot_rows_restored(head):
+        tenant_snapshot.store_snapshot(shard, head, dump)
         yield head
 
 
