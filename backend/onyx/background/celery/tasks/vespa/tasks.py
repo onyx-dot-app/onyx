@@ -31,6 +31,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.document import (
     document_has_indexable_cc_pair,
+    get_cc_pair_ids_for_documents,
     get_document,
     get_document_source_types,
     mark_document_as_synced,
@@ -525,6 +526,11 @@ def document_index_metadata_sync_task(
                         )
                     },
                     access=doc_access,
+                    cc_pair_ids=set(
+                        get_cc_pair_ids_for_documents(
+                            db_session=db_session, document_ids=[document_id]
+                        ).get(document_id, [])
+                    ),
                     document_sets=update_doc_sets,
                     boost=doc.boost,
                     hidden=doc.hidden,

@@ -1,5 +1,6 @@
 import contextlib
 import time
+from collections import defaultdict
 from collections.abc import Generator, Iterable, Sequence
 from datetime import datetime, timezone
 from typing import Any, NamedTuple
@@ -939,6 +940,50 @@ def get_access_info_for_documents(
         .group_by(DocumentByConnectorCredentialPair.id)
     )
     return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
+
+
+def get_cc_pair_ids_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, list[int]]:
+    """Maps each document to the sorted IDs of the cc-pairs it belongs to.
+
+    Uses the same DocumentByConnectorCredentialPair rows that document access is
+    built from (get_access_info_for_documents, fetch_user_groups_for_documents):
+    rows with has_been_indexed=False count, rows whose cc-pair is DELETING do
+    not. Documents with no such row are left out.
+    """
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id, ConnectorCredentialPair.id)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
+    )
+    doc_id_to_cc_pair_ids: dict[str, list[int]] = defaultdict(list)
+    for document_id, cc_pair_id in db_session.execute(stmt):
+        doc_id_to_cc_pair_ids[document_id].append(cc_pair_id)
+    return {
+        document_id: sorted(cc_pair_ids)
+        for document_id, cc_pair_ids in doc_id_to_cc_pair_ids.items()
+    }
+
+
+def get_last_modified_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, datetime | None]:
+    stmt = select(DbDocument.id, DbDocument.last_modified).where(
+        DbDocument.id.in_(document_ids)
+    )
+    return dict(db_session.execute(stmt).tuples().all())
 
 
 def upsert_documents(

@@ -1246,6 +1246,34 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         return num_deleted
 
+    def update_by_query(self, query_body: dict[str, Any]) -> int:
+        """Runs a scripted update on every document matching a query.
+
+        Version conflicts (a chunk rewritten while the update ran) abort the
+        request and raise, so the caller can retry the whole batch. The index
+        is refreshed afterwards, so a following update-by-query on the same
+        chunks does not conflict with this one.
+
+        Raises:
+            Exception: There was an error updating the documents.
+
+        Returns:
+            The number of documents updated.
+        """
+        result = self._client.update_by_query(
+            index=self._index_name, body=query_body, refresh=True
+        )
+        if result.get("timed_out", False):
+            raise RuntimeError(
+                f"Update by query timed out for index {self._index_name}."
+            )
+        if result.get("failures"):
+            raise RuntimeError(
+                f"Failed to update some or all of the documents for index {self._index_name}: "
+                f"{result['failures']}"
+            )
+        return int(result.get("updated", 0))
+
     def count_by_query(self, query_body: dict[str, Any]) -> int:
         """Counts documents matching a query for this index (the _count API).
 
