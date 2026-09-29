@@ -2617,7 +2617,8 @@
           "title": "Anmeldedaten für {source} erstellen"
         },
         "credentialStep": {
-          "title": "Anmeldedaten auswählen"
+          "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
+          "title": "Authentifizierungskonto"
         },
         "credentialSwapped": {
           "toast": "Anmeldedaten erfolgreich gewechselt!"

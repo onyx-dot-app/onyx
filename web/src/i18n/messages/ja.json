@@ -2617,7 +2617,8 @@
           "title": "{source} の認証情報を作成"
         },
         "credentialStep": {
-          "title": "認証情報を選択"
+          "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
+          "title": "認証アカウント"
         },
         "credentialSwapped": {
           "toast": "認証情報を切り替えました！"

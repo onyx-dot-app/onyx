@@ -2617,7 +2617,8 @@
           "title": "Crear una credencial de {source}"
         },
         "credentialStep": {
-          "title": "Selecciona una credencial"
+          "description": "Usa una cuenta de servicio compartida. {appName} indexa el contenido como esta cuenta.",
+          "title": "Cuenta de autenticación"
         },
         "credentialSwapped": {
           "toast": "¡Credencial cambiada!"

@@ -2617,7 +2617,8 @@
           "title": "{source} 자격 증명 만들기"
         },
         "credentialStep": {
-          "title": "자격 증명 선택"
+          "description": "공유 서비스 계정을 사용합니다. {appName}이(가) 이 계정으로 콘텐츠를 인덱싱합니다.",
+          "title": "인증 계정"
         },
         "credentialSwapped": {
           "toast": "자격 증명을 교체했습니다!"

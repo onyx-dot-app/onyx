@@ -2617,7 +2617,8 @@
           "title": "Create a {source} credential"
         },
         "credentialStep": {
-          "title": "Select a credential"
+          "description": "Use a shared service account. {appName} indexes content as this account.",
+          "title": "Authentication Account"
         },
         "credentialSwapped": {
           "toast": "Swapped credential successfully!"

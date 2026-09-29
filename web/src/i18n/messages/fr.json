@@ -2617,7 +2617,8 @@
           "title": "Créer un identifiant pour {source}"
         },
         "credentialStep": {
-          "title": "Sélectionnez un identifiant"
+          "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",
+          "title": "Compte d'authentification"
         },
         "credentialSwapped": {
           "toast": "Identifiant remplacé avec succès !"

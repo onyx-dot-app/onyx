@@ -2617,7 +2617,8 @@
           "title": "创建 {source} 凭据"
         },
         "credentialStep": {
-          "title": "选择凭据"
+          "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
+          "title": "身份验证账户"
         },
         "credentialSwapped": {
           "toast": "已成功更换凭据！"

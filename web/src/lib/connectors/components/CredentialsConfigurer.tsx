@@ -5,11 +5,12 @@ import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
 import { Button, Card, Modal, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
-import { SvgExpand, SvgFold, SvgKey } from "@opal/icons";
+import { SvgExpand, SvgFold, SvgKey, SvgListTree } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
 import type { Credential } from "@/lib/connectors/types";
 import { useOAuthDetails } from "@/lib/connectors/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { deleteCredential } from "@/lib/credential";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
@@ -56,6 +57,7 @@ export function CredentialsConfigurer({
   onCredentialChange,
 }: CredentialsConfigurerProps) {
   const t = useTranslations("admin.connectorsList");
+  const settings = useSettings();
 
   const { data: credentials } = useSWR<Credential<any>[]>(
     buildSimilarCredentialInfoURL(connector),
@@ -177,125 +179,132 @@ export function CredentialsConfigurer({
   }
 
   return (
-    <Card border="solid" rounding={4} padding={6}>
-      <Section gap={4} alignItems="start" width="full">
-        <ContentAction
-          title={t("add.credentialStep.title")}
-          sizePreset="main-content"
-          variant="section"
-          padding={0}
-          rightChildren={
-            <>
-              <Button prominence="tertiary">
-                {t("add.savedAccountsButton.label", {
-                  count: credentials.length,
-                })}
-              </Button>
-              <Button
-                icon={isOpen ? SvgFold : SvgExpand}
-                prominence="tertiary"
-                aria-label={
-                  isOpen
-                    ? t("add.collapseButton.ariaLabel")
-                    : t("add.expandButton.ariaLabel")
-                }
-              />
-            </>
-          }
-        />
+    <Section gap={4} alignItems="stretch" width="full">
+      <ContentAction
+        title={t("add.credentialStep.title")}
+        description={t("add.credentialStep.description", {
+          appName: settings.appName,
+        })}
+        sizePreset="main-content"
+        variant="section"
+        padding={0}
+        rightChildren={
+          <>
+            <Button icon={SvgListTree} prominence="tertiary">
+              {t("add.savedAccountsButton.label", {
+                count: credentials.length,
+              })}
+            </Button>
+            <Button
+              icon={isOpen ? SvgFold : SvgExpand}
+              prominence="tertiary"
+              aria-label={
+                isOpen
+                  ? t("add.collapseButton.ariaLabel")
+                  : t("add.expandButton.ariaLabel")
+              }
+            />
+          </>
+        }
+      />
 
-        <ModifyCredential
-          showIfEmpty
-          accessType={accessType}
-          defaultedCredential={currentCredential!}
-          credentials={credentials}
-          editableCredentials={editableCredentials}
-          onDeleteCredential={onDeleteCredential}
-          onSwitch={onSwap}
-        />
+      <Card border="solid" rounding={4} padding={6}>
+        <Section gap={4} alignItems="start" width="full">
+          <ModifyCredential
+            showIfEmpty
+            accessType={accessType}
+            defaultedCredential={currentCredential!}
+            credentials={credentials}
+            editableCredentials={editableCredentials}
+            onDeleteCredential={onDeleteCredential}
+            onSwitch={onSwap}
+          />
 
-        {credentialCreationMethod === null && (
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            gap={1}
-            className="mt-6"
-          >
-            {oauthDetailsLoading ? (
-              <Button disabled>{t("add.createCredentialButton.label")}</Button>
-            ) : (
-              credentialCreationMethods.map((method) => (
-                <Button
-                  key={method}
-                  onClick={() => openCredentialCreationMethod(method)}
-                >
-                  {getCredentialCreationActionLabel(
-                    method,
-                    displayName,
-                    showExplicitCredentialMethods
-                  )}
+          {credentialCreationMethod === null && (
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              gap={1}
+              className="mt-6"
+            >
+              {oauthDetailsLoading ? (
+                <Button disabled>
+                  {t("add.createCredentialButton.label")}
                 </Button>
-              ))
-            )}
-            {oauthSupportedSources.includes(connector) &&
-              (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
-                <Button
-                  disabled={isAuthorizing}
-                  variant="action"
-                  onClick={handleAuthorize}
-                  hidden={!isAuthorizeVisible}
-                >
-                  {isAuthorizing
-                    ? t("add.authorizeButton.pendingLabel")
-                    : t("add.authorizeButton.label", { source: displayName })}
-                </Button>
+              ) : (
+                credentialCreationMethods.map((method) => (
+                  <Button
+                    key={method}
+                    onClick={() => openCredentialCreationMethod(method)}
+                  >
+                    {getCredentialCreationActionLabel(
+                      method,
+                      displayName,
+                      showExplicitCredentialMethods
+                    )}
+                  </Button>
+                ))
               )}
-          </Section>
-        )}
-
-        {credentialCreationMethod !== null && (
-          <Modal open onOpenChange={closeCredentialModal}>
-            <Modal.Content>
-              <Modal.Header
-                icon={SvgKey}
-                title={t("add.credentialModal.title", { source: displayName })}
-                onClose={closeCredentialModal}
-              />
-              <Modal.Body alignItems="stretch">
-                {oauthDetailsLoading ? null : credentialCreationMethod ===
-                    CredentialCreationMethod.OAuth && oauthDetails ? (
-                  shouldRedirectToOAuth(oauthDetails) ? (
-                    <Section alignItems="start">
-                      <Text as="p" font="main-ui-body" color="text-03">
-                        {t("add.oauthRedirectFailed.message", {
-                          source: displayName,
-                        })}
-                      </Text>
-                      <Button onClick={attemptOauthRedirect}>
-                        {t("add.retryButton.label")}
-                      </Button>
-                    </Section>
-                  ) : (
-                    <CreateStdOAuthCredential
-                      sourceType={connector}
-                      additionalFields={oauthDetails.additional_kwargs}
-                    />
-                  )
-                ) : (
-                  <CreateCredential
-                    close
-                    refresh={refresh}
-                    sourceType={connector}
-                    accessType={accessType}
-                    onSwitch={onSwap}
-                    onClose={closeCredentialModal}
-                  />
+              {oauthSupportedSources.includes(connector) &&
+                (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
+                  <Button
+                    disabled={isAuthorizing}
+                    variant="action"
+                    onClick={handleAuthorize}
+                    hidden={!isAuthorizeVisible}
+                  >
+                    {isAuthorizing
+                      ? t("add.authorizeButton.pendingLabel")
+                      : t("add.authorizeButton.label", { source: displayName })}
+                  </Button>
                 )}
-              </Modal.Body>
-            </Modal.Content>
-          </Modal>
-        )}
-      </Section>
-    </Card>
+            </Section>
+          )}
+        </Section>
+      </Card>
+
+      {credentialCreationMethod !== null && (
+        <Modal open onOpenChange={closeCredentialModal}>
+          <Modal.Content>
+            <Modal.Header
+              icon={SvgKey}
+              title={t("add.credentialModal.title", { source: displayName })}
+              onClose={closeCredentialModal}
+            />
+            <Modal.Body alignItems="stretch">
+              {oauthDetailsLoading ? null : credentialCreationMethod ===
+                  CredentialCreationMethod.OAuth && oauthDetails ? (
+                shouldRedirectToOAuth(oauthDetails) ? (
+                  <Section alignItems="start">
+                    <Text as="p" font="main-ui-body" color="text-03">
+                      {t("add.oauthRedirectFailed.message", {
+                        source: displayName,
+                      })}
+                    </Text>
+                    <Button onClick={attemptOauthRedirect}>
+                      {t("add.retryButton.label")}
+                    </Button>
+                  </Section>
+                ) : (
+                  <CreateStdOAuthCredential
+                    sourceType={connector}
+                    additionalFields={oauthDetails.additional_kwargs}
+                  />
+                )
+              ) : (
+                <CreateCredential
+                  close
+                  refresh={refresh}
+                  sourceType={connector}
+                  accessType={accessType}
+                  onSwitch={onSwap}
+                  onClose={closeCredentialModal}
+                />
+              )}
+            </Modal.Body>
+          </Modal.Content>
+        </Modal>
+      )}
+    </Section>
   );
 }
