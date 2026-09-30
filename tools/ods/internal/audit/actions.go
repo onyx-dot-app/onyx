@@ -150,7 +150,7 @@ func scanActions(queryURL string, strict bool) ([]Finding, error) {
 
 // extractActions discovers the actions referenced across the repo's reusable
 // workflows (.github/workflows) and composite actions (.github/actions). Returns
-// nil when neither exists. An unparseable composite action is skipped with a
+// nil when neither exists. A file the extractor rejects is skipped with a
 // warning, or fails the extraction when strict.
 func extractActions(root string, strict bool) ([]actionRef, error) {
 	ext, err := githubactions.New(&cpb.PluginConfig{})
@@ -158,7 +158,7 @@ func extractActions(root string, strict bool) ([]actionRef, error) {
 		return nil, err
 	}
 
-	workflowRefs, err := extractWorkflowActions(ext, root)
+	workflowRefs, err := extractWorkflowActions(ext, root, strict)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func extractActions(root string, strict bool) ([]actionRef, error) {
 
 // extractWorkflowActions runs the github/actions extractor over each
 // .github/workflows/*.{yml,yaml} file.
-func extractWorkflowActions(ext filesystem.Extractor, root string) ([]actionRef, error) {
+func extractWorkflowActions(ext filesystem.Extractor, root string, strict bool) ([]actionRef, error) {
 	dir := filepath.Join(root, ".github", "workflows")
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
@@ -197,6 +197,9 @@ func extractWorkflowActions(ext filesystem.Extractor, root string) ([]actionRef,
 		manifest := filepath.ToSlash(filepath.Join(".github", "workflows", e.Name()))
 		rs, err := usesFromReader(ext, path, f, manifest)
 		_ = f.Close()
+		if err != nil && strict {
+			return nil, fmt.Errorf("unparseable workflow %s: %w", manifest, err)
+		}
 		if err != nil {
 			log.Warnf("Skipping workflow %s: %v", e.Name(), err)
 			continue
@@ -257,6 +260,9 @@ func extractCompositeActions(ext filesystem.Extractor, root string, strict bool)
 			return err
 		}
 		rs, err := usesFromReader(ext, path, bytes.NewReader(wrapped), manifest)
+		if err != nil && strict {
+			return fmt.Errorf("unparseable composite action %s: %w", manifest, err)
+		}
 		if err != nil {
 			log.Warnf("Skipping composite action %s: %v", manifest, err)
 			return nil

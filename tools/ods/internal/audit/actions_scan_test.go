@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/google/osv-scalibr/extractor/filesystem"
+	"github.com/google/osv-scalibr/inventory"
 )
 
 const (
@@ -497,5 +501,35 @@ func TestExtractCompositeActions_manifestsAreRepoRelative(t *testing.T) {
 	}
 	if !reflect.DeepEqual(refs, want) {
 		t.Fatalf("expected %+v, got %+v", want, refs)
+	}
+}
+
+// rejectingExtractor stands in for the github/actions extractor, which never
+// rejects content on its own, so the strict error paths can be exercised.
+type rejectingExtractor struct{ filesystem.Extractor }
+
+func (rejectingExtractor) Extract(context.Context, *filesystem.ScanInput) (inventory.Inventory, error) {
+	return inventory.Inventory{}, errors.New("extractor rejected the file")
+}
+
+func TestExtractActions_strictFailsWhenTheExtractorRejectsAFile(t *testing.T) {
+	root := chdirNewRepo(t)
+	writeActionsRepo(t, root)
+	if err := os.Remove(filepath.Join(root, ".github/actions/broken/action.yml")); err != nil {
+		t.Fatal(err)
+	}
+	ext := rejectingExtractor{}
+
+	if _, err := extractWorkflowActions(ext, root, false); err != nil {
+		t.Fatalf("expected rejected workflows skipped without strict, got %v", err)
+	}
+	if _, err := extractWorkflowActions(ext, root, true); err == nil || !strings.Contains(err.Error(), "unparseable workflow .github/workflows/ci.yml") {
+		t.Fatalf("expected the rejected workflow to fail the strict extraction, got %v", err)
+	}
+	if _, err := extractCompositeActions(ext, root, false); err != nil {
+		t.Fatalf("expected rejected composite actions skipped without strict, got %v", err)
+	}
+	if _, err := extractCompositeActions(ext, root, true); err == nil || !strings.Contains(err.Error(), "unparseable composite action .github/actions/setup/action.yml") {
+		t.Fatalf("expected the rejected composite action to fail the strict extraction, got %v", err)
 	}
 }
