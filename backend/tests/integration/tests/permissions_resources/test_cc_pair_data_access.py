@@ -27,6 +27,7 @@ pytestmark = pytest.mark.skipif(
 
 _FORBIDDEN = 403
 _BAD_REQUEST = 400
+_MISSING_GROUP_ID = 999_999_999
 
 
 def _private_pair(
@@ -64,6 +65,10 @@ def test_create_data_access_defaults_to_manage_groups(
             data_access=[scoped_other_group.id],
             user_performing_action=admin,
         )
+    assert error.value.response.status_code == _BAD_REQUEST
+
+    with pytest.raises(httpx.HTTPStatusError) as error:
+        _private_pair(admin, groups=[], data_access=[_MISSING_GROUP_ID])
     assert error.value.response.status_code == _BAD_REQUEST
 
 
@@ -168,6 +173,19 @@ def test_group_side_data_access(
     assert CCPairManager.get_data_access_group_ids(pair.id, admin) == {
         scoped_managed_group.id,
         scoped_other_group.id,
+    }
+
+    # A pair the manager can't edit stays when their request leaves it out.
+    UserGroupManager.set_data_access_cc_pairs(
+        scoped_managed_group, [pair.id, unmanaged_pair.id], admin
+    ).raise_for_status()
+    response = UserGroupManager.set_data_access_cc_pairs(
+        scoped_managed_group, [], scoped_manager_user
+    )
+    response.raise_for_status()
+    assert response.json()["cc_pair_ids"] == [unmanaged_pair.id]
+    assert CCPairManager.get_data_access_group_ids(pair.id, admin) == {
+        scoped_other_group.id
     }
 
 

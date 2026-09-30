@@ -31,6 +31,7 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import (
     get_cc_pair_groups_for_ids,
     get_connector_credential_pair_from_id,
+    get_editable_cc_pair_ids,
     verify_user_can_edit_all_cc_pairs,
 )
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
@@ -998,8 +999,8 @@ def set_user_group_data_access_cc_pairs(
     cc_pair_ids: set[int],
 ) -> set[int]:
     """Sets the PRIVATE pairs whose documents the group's members may read.
-    Every added or removed pair must be one the user may edit. Returns the
-    group's data-access pair ids."""
+    Every added pair must be one the user may edit. Current pairs the user
+    cannot edit stay. Returns the group's data-access pair ids."""
     assert_manages_group(user, db_session, group_id=user_group_id)
 
     db_user_group = fetch_user_group(db_session, user_group_id)
@@ -1011,7 +1012,11 @@ def set_user_group_data_access_cc_pairs(
         db_session, user_group_id
     )
     added_cc_pair_ids = cc_pair_ids - current_cc_pair_ids
-    removed_cc_pair_ids = current_cc_pair_ids - cc_pair_ids
+    # Like the pair-side setter, the caller changes only what they can manage.
+    removed_cc_pair_ids = get_editable_cc_pair_ids(
+        current_cc_pair_ids - cc_pair_ids, db_session, user
+    )
+    final_cc_pair_ids = (current_cc_pair_ids - removed_cc_pair_ids) | added_cc_pair_ids
     _assert_default_group_update_allowed(
         user, db_user_group, attaching_cc_pairs=bool(added_cc_pair_ids)
     )
@@ -1043,7 +1048,7 @@ def set_user_group_data_access_cc_pairs(
     )
     mark_cc_pair_documents_for_sync__no_commit(db_session, changed_cc_pair_ids)
     db_session.commit()
-    return cc_pair_ids
+    return final_cc_pair_ids
 
 
 def _set_group_manager__no_commit(

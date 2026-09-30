@@ -33,6 +33,7 @@ from onyx.db.models import (
     SearchSettings,
     User,
     User__UserGroup,
+    UserGroup,
     UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
 )
@@ -41,6 +42,8 @@ from onyx.db.scoped_permissions import (
     within_managed_scope_clause,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
@@ -558,11 +561,19 @@ def verify_user_can_edit_all_cc_pairs(
     # guard: issubset is vacuously true for an empty set, which would authorize anything
     if not cc_pair_ids:
         return False
+    return cc_pair_ids.issubset(get_editable_cc_pair_ids(cc_pair_ids, db_session, user))
+
+
+def get_editable_cc_pair_ids(
+    cc_pair_ids: set[int],
+    db_session: Session,
+    user: User,
+) -> set[int]:
+    """The subset of ``cc_pair_ids`` the user may edit."""
     stmt = select(ConnectorCredentialPair.id)
     stmt = _add_user_filters(stmt, user, get_editable=True)
     stmt = stmt.where(ConnectorCredentialPair.id.in_(cc_pair_ids))
-    editable = set(db_session.scalars(stmt))
-    return cc_pair_ids.issubset(editable)
+    return set(db_session.scalars(stmt))
 
 
 def get_connector_credential_pair_from_id(
@@ -811,6 +822,19 @@ def _relate_data_access_groups_to_cc_pair__no_commit(
         return
 
     assert_not_shared_with_default_group(db_session, user_group_ids)
+    found_group_ids = set(
+        db_session.scalars(
+            select(UserGroup.id).where(
+                UserGroup.id.in_(user_group_ids),
+                UserGroup.is_up_for_deletion.is_(False),
+            )
+        )
+    )
+    if missing_group_ids := set(user_group_ids) - found_group_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"User group(s) not found: {sorted(missing_group_ids)}",
+        )
 
     for group_id in set(user_group_ids):
         db_session.add(
