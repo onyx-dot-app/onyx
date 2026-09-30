@@ -81,7 +81,6 @@ func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
 		"REDIS_HOST_PORT":            "26379",
 		"OPENSEARCH_HOST_PORT":       "29200",
 		"MODEL_SERVER_HOST_PORT":     "29000",
-		"MINIO_API_HOST_PORT":        "29000",
 		"OBJECT_STORE_HOST_PORT":     "28333",
 		"CODE_INTERPRETER_HOST_PORT": "28000",
 	}
@@ -94,7 +93,6 @@ func TestFindAvailablePorts_reusesRunningContainerPorts(t *testing.T) {
 		"port proj-opensearch-1 9200",
 		"port proj-inference_model_server-1 9000",
 		"port proj-object-store-1 8333",
-		"port proj-minio-1 9000",
 		"port proj-code-interpreter-1 8000",
 	}
 	if got := readCalls(t, calls); !slices.Equal(got, wantCalls) {
@@ -166,7 +164,6 @@ func TestResolvedPorts_ComposeEnv(t *testing.T) {
 		"OPENSEARCH_HOST_PORT":       "9200",
 		"MODEL_SERVER_HOST_PORT":     "9000",
 		"OBJECT_STORE_HOST_PORT":     "9004",
-		"MINIO_API_HOST_PORT":        "9005",
 		"CODE_INTERPRETER_HOST_PORT": "8000",
 	}
 
@@ -196,7 +193,6 @@ func TestResolvedPorts_AppEnv(t *testing.T) {
 		"OPENSEARCH_REST_API_PORT":  "9200",
 		"MODEL_SERVER_PORT":         "9000",
 		"S3_ENDPOINT_URL":           "http://localhost:9004",
-		"S3_LEGACY_ENDPOINT_URL":    "http://localhost:9005",
 		"CODE_INTERPRETER_BASE_URL": "http://localhost:8000",
 	}
 
