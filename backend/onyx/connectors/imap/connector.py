@@ -360,7 +360,7 @@ def _convert_email_headers_and_body_into_document(
         )
         for recipient_name, recipient_addr in parsed_recipients
     }
-    if sender_addr not in expert_info_map:
+    if sender_addr and sender_addr not in expert_info_map:
         expert_info_map[sender_addr] = BasicExpertInfo(
             display_name=sender_name, email=sender_addr
         )
@@ -444,14 +444,25 @@ def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
 
 
 def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
+    """Best-effort parse of a From-style header into (name, addr).
+
+    Real-world headers are frequently malformed: bare display names
+    without any address, or outright garbage like a lone '"'. Never
+    raise here — return the first usable address, or treat the header
+    as a bare display name with an empty address.
+    """
     addrs = _parse_addrs(raw_header=raw_header)
     if not addrs:
-        raise RuntimeError(
-            f"Parsing email header resulted in no addresses being found; {raw_header=}"
+        logger.warning(
+            "No address found in header; using header as display name: %r",
+            raw_header,
         )
-    elif len(addrs) >= 2:
-        raise RuntimeError(
-            f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
+        return raw_header.strip(), ""
+    if len(addrs) >= 2:
+        logger.warning(
+            "Multiple addresses in singular header; using the first: %r %r",
+            raw_header,
+            addrs,
         )
 
     return addrs[0]
