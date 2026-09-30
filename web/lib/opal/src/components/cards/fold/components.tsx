@@ -1,6 +1,10 @@
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/fold/styles.css";
+import { useEffect, useState } from "react";
 import type { BorderVariants, StatusVariants } from "@opal/types";
+
+/** Matches the fold transition in `styles.css`. */
+const FOLD_DURATION_MS = 200;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,14 +51,18 @@ interface CardFoldProps {
  *
  * A grid row moves between `0fr` and `1fr` with an opacity fade, so the fold
  * opens and closes on a pure CSS clock: no measured height, no state machine,
- * and the children are never unmounted.
+
  *
  * The fold carries the border and the bottom rounding that join it to the
  * header above it. It never paints a background, so the page shows through
  * and the two regions stay visually distinct.
  *
- * Closed, it is inert and hidden from assistive tech, so a form inside it
- * cannot be tabbed into while it is out of sight.
+ * A closed fold holds nothing. Children linger through the closing
+ * animation, so it has something to collapse, and are dropped once it
+ * finishes. Anything else leaves a hidden copy of the content on the page:
+ * still fetching, still matching a query by test id or by field name, and
+ * still counted by anything that walks the DOM rather than the
+ * accessibility tree.
  */
 function CardFold({
   expanded,
@@ -64,12 +72,27 @@ function CardFold({
   contentHeight = 80,
   children,
 }: CardFoldProps) {
+  // True from the moment the fold opens until its closing animation ends,
+  // which is the window where the children must stay mounted even though
+  // `expanded` has already gone false.
+  const [closing, setClosing] = useState(false);
+  const mounted = expanded || closing;
+
+  useEffect(() => {
+    if (expanded) {
+      setClosing(true);
+      return;
+    }
+    const timeout = setTimeout(() => setClosing(false), FOLD_DURATION_MS);
+    return () => clearTimeout(timeout);
+  }, [expanded]);
+
   return (
     <div
       className="opal-card-fold"
       data-expanded={expanded ? "true" : "false"}
-      // A closed fold is zero-height but still in the DOM, so without these
-      // its children stay tabbable and readable to assistive tech.
+      // The fold itself stays, so the grid row has something to animate.
+      // While it closes it must not be reachable either.
       aria-hidden={!expanded || undefined}
       inert={!expanded || undefined}
     >
@@ -84,7 +107,7 @@ function CardFold({
           data-opal-status-border={borderColor}
           data-content-height={contentHeight}
         >
-          {children}
+          {mounted ? children : null}
         </div>
       </div>
     </div>

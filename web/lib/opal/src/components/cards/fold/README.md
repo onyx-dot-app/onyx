@@ -6,7 +6,7 @@
 The animating body of an expandable card. A grid row moves between `0fr` and
 `1fr` with an opacity fade over 200ms, so the fold opens and closes on a pure
 CSS clock: no measured height, no state machine, no Radix, and the children
-are never unmounted.
+are dropped once it closes.
 
 ## Structure
 
@@ -29,9 +29,14 @@ are never unmounted.
 
 ## Notes
 
-- **Closed means inert.** A closed fold keeps its children mounted at zero
-  height, so it sets `inert` and `aria-hidden` to keep them out of the tab
-  order and the accessibility tree.
+- **A closed fold holds nothing.** Children linger through the closing
+  animation, so it has something to collapse, then unmount. Anything else
+  leaves a hidden copy of the content on the page: still fetching, still
+  matching a query by test id or field name, and still counted by anything
+  that walks the DOM rather than the accessibility tree.
+- **Closing means inert.** During that window the fold sets `inert` and
+  `aria-hidden`, so its children leave the tab order and the accessibility
+  tree the moment it starts to close.
 - **No background.** The body is transparent, so the page shows through and
   the fold stays visually distinct from the header above it.
 - **No top border.** The header's bottom border is the seam between the two.

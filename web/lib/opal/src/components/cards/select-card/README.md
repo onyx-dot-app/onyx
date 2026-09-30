@@ -74,7 +74,7 @@ Everything above, **plus**:
 - **`state` is the caller's, open or closed.** The card paints whatever state it is given and never rewrites it. A card that should stop looking selected once it opens does that at the call site, with `state={open ? "filled" : "selected"}` — which is also what decides whether a `Content` inside it, set to `color="interactive"`, picks up the selection colour.
 - **The separator keeps its resting colour.** The header's bottom border stays `border-01` while expanded, even on a selected card, so it reads as a divider rather than an edge. The fold's own border does follow the selection.
 - **`padding` applies to the header only.** The fold has no intrinsic padding; pad whatever you pass to `expandedContent`.
-- **The fold is shared with `Card`.** Both render `CardFold` from `cards/fold/`, a grid `0fr ↔ 1fr` animation with an opacity fade. No Radix, and the children are never unmounted.
+- **The fold is shared with `Card`.** Both render `CardFold` from `cards/fold/`, a grid `0fr ↔ 1fr` animation with an opacity fade. No Radix. A closed fold unmounts its children, so nothing inside it fetches or answers a query while it is shut.
 
 ```tsx
 const [open, setOpen] = useState(false);
