@@ -1,16 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, SelectCard, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/connectors/types";
 import { useCredentialSetup } from "@/lib/connectors/hooks";
-import {
-  Collapsible,
-  CollapsibleContent,
-} from "@/refresh-components/Collapsible";
 import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
@@ -60,9 +55,8 @@ export function CredentialsConfigurer({
     isAuthorizing,
   } = useCredentialSetup(connector);
 
-  // The fold button hides the whole body: the saved accounts and every way
-  // of creating a new one.
-  const [isOpen, setIsOpen] = useState(true);
+  // The fold button closes whichever create card is open.
+  const isOpen = openMethod !== null;
 
   // A source with one way in says what the card makes; a source with two
   // names each way instead, so the two cards stay distinguishable.
@@ -173,108 +167,102 @@ export function CredentialsConfigurer({
                   ? t("add.collapseButton.ariaLabel")
                   : t("add.expandButton.ariaLabel")
               }
-              onClick={() => setIsOpen((value) => !value)}
+              onClick={close}
             />
           </>
         }
       />
 
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleContent>
-          <Section gap={4} alignItems="stretch" width="full">
-            <Card border="solid" rounding={4} padding={6}>
-              <Section gap={4} alignItems="start" width="full">
-                <ModifyCredential
-                  showIfEmpty
-                  accessType={accessType}
-                  defaultedCredential={currentCredential!}
-                  credentials={credentials}
-                  onDeleteCredential={onDeleteCredential}
-                  onSwitch={onSwap}
-                />
+      <Section gap={4} alignItems="stretch" width="full">
+        <Card border="solid" rounding={4} padding={6}>
+          <Section gap={4} alignItems="start" width="full">
+            <ModifyCredential
+              showIfEmpty
+              accessType={accessType}
+              defaultedCredential={currentCredential!}
+              credentials={credentials}
+              onDeleteCredential={onDeleteCredential}
+              onSwitch={onSwap}
+            />
 
-                {canAuthorize && (
-                  <Section
-                    flexDirection="row"
-                    justifyContent="start"
-                    gap={1}
-                    className="mt-6"
-                  >
-                    <Button
-                      disabled={isAuthorizing}
-                      variant="action"
-                      onClick={handleAuthorize}
-                    >
-                      {isAuthorizing
-                        ? t("add.authorizeButton.pendingLabel")
-                        : t("add.authorizeButton.label", {
-                            source: displayName,
-                          })}
-                    </Button>
-                  </Section>
-                )}
-              </Section>
-            </Card>
-
-            {/* One card per way of creating a credential. The fold button is the
-          only control: the card around it is a plain container, so a click in
-          the open form cannot fold it away. While the OAuth details are still
-          loading we do not yet know how many cards there are, so a single
-          disabled one holds the place. */}
-            {isLoading ? (
-              <Card
-                border="solid"
-                color="transparent"
-                rounding={4}
-                padding={4}
-                disabled
+            {canAuthorize && (
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                gap={1}
+                className="mt-6"
               >
-                <ContentAction
-                  icon={SvgPlusCircle}
-                  title={newAccountLabel}
-                  sizePreset="main-ui"
-                  variant="section"
-                  padding={0}
-                />
-              </Card>
-            ) : (
-              methods.map((method) => {
-                const isExpanded = openMethod === method;
-                return (
-                  <SelectCard
-                    key={method}
-                    expandable
-                    expanded={isExpanded}
-                    expandableContentHeight="full"
-                    border="solid"
-                    state={isExpanded ? "filled" : "empty"}
-                    rounding={4}
-                    padding={2}
-                    expandedContent={
-                      <div className="p-4">{renderCredentialForm(method)}</div>
-                    }
-                    onClick={() =>
-                      isExpanded
-                        ? close()
-                        : openCredentialCreationMethod(method)
-                    }
-                  >
-                    <Section padding={2} width="full">
-                      <Content
-                        icon={SvgPlusCircle}
-                        title={newAccountLabel}
-                        sizePreset="main-ui"
-                        variant="body"
-                        color={isExpanded ? "interactive" : "muted"}
-                      />
-                    </Section>
-                  </SelectCard>
-                );
-              })
+                <Button
+                  disabled={isAuthorizing}
+                  variant="action"
+                  onClick={handleAuthorize}
+                >
+                  {isAuthorizing
+                    ? t("add.authorizeButton.pendingLabel")
+                    : t("add.authorizeButton.label", {
+                        source: displayName,
+                      })}
+                </Button>
+              </Section>
             )}
           </Section>
-        </CollapsibleContent>
-      </Collapsible>
+        </Card>
+
+        {/* One card per way of creating a credential. The fold button is the
+      only control: the card around it is a plain container, so a click in
+      the open form cannot fold it away. While the OAuth details are still
+      loading we do not yet know how many cards there are, so a single
+      disabled one holds the place. */}
+        {isLoading ? (
+          <Card
+            border="solid"
+            color="transparent"
+            rounding={4}
+            padding={4}
+            disabled
+          >
+            <ContentAction
+              icon={SvgPlusCircle}
+              title={newAccountLabel}
+              sizePreset="main-ui"
+              variant="section"
+              padding={0}
+            />
+          </Card>
+        ) : (
+          methods.map((method) => {
+            const isExpanded = openMethod === method;
+            return (
+              <SelectCard
+                key={method}
+                expandable
+                expanded={isExpanded}
+                expandableContentHeight="full"
+                border="solid"
+                state={isExpanded ? "filled" : "empty"}
+                rounding={4}
+                padding={2}
+                expandedContent={
+                  <div className="p-4">{renderCredentialForm(method)}</div>
+                }
+                onClick={() =>
+                  isExpanded ? close() : openCredentialCreationMethod(method)
+                }
+              >
+                <Section padding={2} width="full">
+                  <Content
+                    icon={SvgPlusCircle}
+                    title={newAccountLabel}
+                    sizePreset="main-ui"
+                    variant="body"
+                    color={isExpanded ? "interactive" : "muted"}
+                  />
+                </Section>
+              </SelectCard>
+            );
+          })
+        )}
+      </Section>
     </Section>
   );
 }
