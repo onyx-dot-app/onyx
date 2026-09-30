@@ -1516,7 +1516,8 @@ def run_llm_loop(
                 def response_order(
                     response: ToolResponse, call_order: dict[str, int] = tool_call_order
                 ) -> int:
-                    assert response.tool_call is not None
+                    if response.tool_call is None:
+                        raise ValueError("Tool response must reference a tool call")
                     return call_order[response.tool_call.tool_call_id]
 
                 valid_tool_responses.sort(key=response_order)
