@@ -1,9 +1,10 @@
 """Data-access groups of cc-pairs (UserGroup__CCPairDataAccess).
 
 For a PRIVATE pair, members of its data-access groups may read all its
-documents. The rows are read at query time (the cc-pair access filter) and at
-index time (the group: ACL entries). A write marks the pair's documents for
-metadata sync, so the group: entries stay current.
+documents. For a SYNC_RESTRICTED pair, they may read the documents their source
+ACL allows. The rows are read at query time (the cc-pair access filter) and,
+for PRIVATE pairs, at index time (the group: ACL entries). A write marks the
+pair's documents for metadata sync, so the group: entries stay current.
 """
 
 from collections.abc import Collection
@@ -65,6 +66,52 @@ def fetch_private_cc_pair_ids(
             )
         )
     )
+
+
+def fetch_cc_pair_ids_with_data_access(
+    db_session: Session, cc_pair_ids: Collection[int]
+) -> set[int]:
+    """The pairs of cc_pair_ids whose data-access groups decide who may read
+    them (PRIVATE and SYNC_RESTRICTED)."""
+    if not cc_pair_ids:
+        return set()
+    return set(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id).where(
+                ConnectorCredentialPair.id.in_(cc_pair_ids),
+                ConnectorCredentialPair.access_type.in_(AccessType.data_access_types()),
+            )
+        )
+    )
+
+
+def assert_restricted_cc_pairs_keep_a_group(
+    db_session: Session, cc_pair_ids: Collection[int]
+) -> None:
+    """A SYNC_RESTRICTED pair with no data-access group is visible to nobody,
+    so a write must not remove its last group."""
+    if not cc_pair_ids:
+        return
+    has_group = (
+        select(UserGroup__CCPairDataAccess.cc_pair_id)
+        .where(UserGroup__CCPairDataAccess.cc_pair_id == ConnectorCredentialPair.id)
+        .exists()
+    )
+    ungrouped_ids = sorted(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id).where(
+                ConnectorCredentialPair.id.in_(cc_pair_ids),
+                ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+                ~has_group,
+            )
+        )
+    )
+    if ungrouped_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "A restricted connector needs at least one data-access group: "
+            f"{ungrouped_ids}",
+        )
 
 
 def add_cc_pair_data_access__no_commit(

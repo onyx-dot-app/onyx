@@ -10,6 +10,7 @@ from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
     try_creating_external_group_sync_task,
 )
 from ee.onyx.db.cc_pair_data_access import (
+    assert_restricted_cc_pairs_keep_a_group,
     fetch_data_access_groups_for_cc_pair,
     set_cc_pair_data_access_groups__no_commit,
 )
@@ -278,10 +279,10 @@ def set_cc_pair_data_access(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
-    if cc_pair.access_type != AccessType.PRIVATE:
+    if cc_pair.access_type not in AccessType.data_access_types():
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Data-access groups can only be set on private connectors.",
+            "Data-access groups can only be set on private or restricted connectors.",
         )
 
     visible_group_ids = get_visible_user_group_ids(user, db_session)
@@ -291,6 +292,7 @@ def set_cc_pair_data_access(
         requested_group_ids=set(request.group_ids),
         visible_group_ids=visible_group_ids,
     )
+    assert_restricted_cc_pairs_keep_a_group(db_session, [cc_pair_id])
     db_session.commit()
     return _to_cc_pair_data_access(db_session, cc_pair_id, visible_group_ids)
 

@@ -7,11 +7,20 @@ because these tests cannot turn on the enforce flag.
 """
 
 import os
+from collections.abc import Generator
 
 import httpx
 import pytest
 
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType, ConnectorManageRole
+from tests.integration.common_utils.constants import (
+    API_SERVER_URL,
+    MOCK_CONNECTOR_SERVER_HOST,
+    MOCK_CONNECTOR_SERVER_PORT,
+)
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import (
@@ -28,6 +37,7 @@ pytestmark = pytest.mark.skipif(
 _FORBIDDEN = 403
 _BAD_REQUEST = 400
 _MISSING_GROUP_ID = 999_999_999
+_FEATURE_NOT_AVAILABLE = 402
 
 
 def _private_pair(
@@ -226,3 +236,95 @@ def test_legacy_group_patch_writes_manage_and_data_access(
     group.cc_pair_ids = []
     UserGroupManager.edit(group, user_performing_action=admin)
     assert CCPairManager.get_data_access_group_ids(pair.id, admin) == set()
+
+
+# --- SYNC_RESTRICTED --------------------------------------------------------
+
+
+def _set_group_restrictions(enabled: bool | None, admin: DATestUser) -> None:
+    client.put(
+        f"{API_SERVER_URL}/admin/security",
+        json={"allow_connector_group_restrictions": enabled},
+        headers=admin.headers,
+    ).raise_for_status()
+
+
+@pytest.fixture
+def group_restrictions_on(
+    permission_admin_user: DATestUser,
+) -> Generator[None, None, None]:
+    _set_group_restrictions(True, permission_admin_user)
+    yield
+    _set_group_restrictions(None, permission_admin_user)
+
+
+def _restricted_pair(admin: DATestUser, data_access: list[int]) -> DATestCCPair:
+    return CCPairManager.create_from_scratch(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config={
+            "mock_server_host": MOCK_CONNECTOR_SERVER_HOST,
+            "mock_server_port": MOCK_CONNECTOR_SERVER_PORT,
+        },
+        access_type=AccessType.SYNC_RESTRICTED,
+        data_access=data_access,
+        user_performing_action=admin,
+    )
+
+
+def test_restricted_create_needs_workspace_toggle_and_a_group(
+    permission_admin_user: DATestUser,
+    scoped_managed_group: DATestUserGroup,
+) -> None:
+    admin = permission_admin_user
+    with pytest.raises(httpx.HTTPStatusError) as error:
+        _restricted_pair(admin, data_access=[scoped_managed_group.id])
+    assert error.value.response.status_code == _FEATURE_NOT_AVAILABLE
+
+    _set_group_restrictions(True, admin)
+    try:
+        # With no data-access group the connector would be visible to nobody.
+        with pytest.raises(httpx.HTTPStatusError) as error:
+            _restricted_pair(admin, data_access=[])
+        assert error.value.response.status_code == _BAD_REQUEST
+
+        pair = _restricted_pair(admin, data_access=[scoped_managed_group.id])
+        assert CCPairManager.get_data_access_group_ids(pair.id, admin) == {
+            scoped_managed_group.id
+        }
+    finally:
+        _set_group_restrictions(None, admin)
+
+
+@pytest.mark.usefixtures("group_restrictions_on")
+def test_restricted_data_access_keeps_a_group(
+    permission_admin_user: DATestUser,
+    scoped_managed_group: DATestUserGroup,
+    scoped_other_group: DATestUserGroup,
+) -> None:
+    admin = permission_admin_user
+    pair = _restricted_pair(admin, data_access=[scoped_managed_group.id])
+
+    CCPairManager.set_data_access(
+        pair.id, [scoped_managed_group.id, scoped_other_group.id], admin
+    ).raise_for_status()
+    CCPairManager.set_data_access(
+        pair.id, [scoped_other_group.id], admin
+    ).raise_for_status()
+
+    response = CCPairManager.set_data_access(pair.id, [], admin)
+    assert response.status_code == _BAD_REQUEST
+    response = UserGroupManager.set_data_access_cc_pairs(scoped_other_group, [], admin)
+    assert response.status_code == _BAD_REQUEST
+    assert CCPairManager.get_data_access_group_ids(pair.id, admin) == {
+        scoped_other_group.id
+    }
+
+    # The group side can add a restricted pair too.
+    UserGroupManager.set_data_access_cc_pairs(
+        scoped_managed_group, [pair.id], admin
+    ).raise_for_status()
+    assert CCPairManager.get_data_access_group_ids(pair.id, admin) == {
+        scoped_managed_group.id,
+        scoped_other_group.id,
+    }

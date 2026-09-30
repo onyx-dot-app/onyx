@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session, selectinload
 from ee.onyx.db.cc_pair_data_access import (
     add_cc_pair_data_access__no_commit,
     apply_group_cc_pair_change_to_data_access__no_commit,
+    assert_restricted_cc_pairs_keep_a_group,
+    fetch_cc_pair_ids_with_data_access,
     fetch_data_access_cc_pair_ids_for_user_group,
-    fetch_private_cc_pair_ids,
     remove_cc_pair_data_access__no_commit,
 )
 from ee.onyx.server.user_group.models import (
@@ -1024,9 +1025,9 @@ def set_user_group_data_access_cc_pairs(
     user_group_id: int,
     cc_pair_ids: set[int],
 ) -> set[int]:
-    """Sets the PRIVATE pairs whose documents the group's members may read.
-    Every added pair must be one the user may edit. Current pairs the user
-    cannot edit stay. Returns the group's data-access pair ids."""
+    """Sets the PRIVATE and SYNC_RESTRICTED pairs whose documents the group's
+    members may read. Every added pair must be one the user may edit. Current
+    pairs the user cannot edit stay. Returns the group's data-access pair ids."""
     assert_manages_group(user, db_session, group_id=user_group_id)
 
     db_user_group = fetch_user_group(db_session, user_group_id)
@@ -1064,12 +1065,13 @@ def set_user_group_data_access_cc_pairs(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can only change data access of connectors you can edit.",
         )
-    if non_private_ids := added_cc_pair_ids - fetch_private_cc_pair_ids(
+    if invalid_ids := added_cc_pair_ids - fetch_cc_pair_ids_with_data_access(
         db_session, added_cc_pair_ids
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Data access can only be set on private connectors: {sorted(non_private_ids)}",
+            "Data access can only be set on private or restricted connectors: "
+            f"{sorted(invalid_ids)}",
         )
 
     add_cc_pair_data_access__no_commit(
@@ -1078,6 +1080,7 @@ def set_user_group_data_access_cc_pairs(
     remove_cc_pair_data_access__no_commit(
         db_session, cc_pair_ids=removed_cc_pair_ids, user_group_ids=[user_group_id]
     )
+    assert_restricted_cc_pairs_keep_a_group(db_session, removed_cc_pair_ids)
     mark_cc_pair_documents_for_sync__no_commit(db_session, changed_cc_pair_ids)
     db_session.commit()
     return final_cc_pair_ids

@@ -951,7 +951,8 @@ def get_cc_pair_ids_for_documents(
     Uses the same DocumentByConnectorCredentialPair rows that document access is
     built from (get_access_info_for_documents, fetch_user_groups_for_documents):
     rows with has_been_indexed=False count, rows whose cc-pair is DELETING do
-    not. Documents with no such row are left out.
+    not. DELETING SYNC_RESTRICTED pairs stay, so their documents stay hidden
+    until they are deleted. Documents with no such row are left out.
     """
     stmt = (
         select(DocumentByConnectorCredentialPair.id, ConnectorCredentialPair.id)
@@ -965,7 +966,13 @@ def get_cc_pair_ids_for_documents(
             ),
         )
         .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
-        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
+        .where(
+            or_(
+                ConnectorCredentialPair.status
+                != ConnectorCredentialPairStatus.DELETING,
+                ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+            )
+        )
     )
     doc_id_to_cc_pair_ids: dict[str, list[int]] = defaultdict(list)
     for document_id, cc_pair_id in db_session.execute(stmt):

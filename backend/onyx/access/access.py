@@ -21,7 +21,10 @@ from onyx.configs.constants import (
     FileOrigin,
 )
 from onyx.context.search.models import CCPairAccessMode
-from onyx.db.connector_credential_pair import get_cc_pair_access_sets_for_user
+from onyx.db.connector_credential_pair import (
+    get_cc_pair_access_sets_for_user,
+    has_sync_restricted_cc_pairs,
+)
 from onyx.db.document import (
     get_access_info_for_document,
     get_access_info_for_documents,
@@ -396,9 +399,27 @@ def _user_can_access_connector_file(
     user_acl = get_acl_for_user(user, db_session)
     doc_access = get_access_for_documents(document_ids, db_session)
     if get_cc_pair_access_mode(db_session) != CCPairAccessMode.ENFORCE:
-        return any(
-            not user_acl.isdisjoint(access.to_acl()) for access in doc_access.values()
+        if not has_sync_restricted_cc_pairs(db_session):
+            return any(
+                not user_acl.isdisjoint(access.to_acl())
+                for access in doc_access.values()
+            )
+        # The old ACL rule, without SYNC_RESTRICTED pairs that grant the user
+        # nothing (see the OpenSearch restricted cc-pair guard).
+        access_sets = get_cc_pair_access_sets_for_user(db_session, user)
+        granting_cc_pair_ids = (
+            access_sets.open_cc_pair_ids | access_sets.acl_cc_pair_ids
         )
+        doc_id_to_cc_pair_ids = get_cc_pair_ids_for_documents(db_session, document_ids)
+        for document_id, access in doc_access.items():
+            cc_pair_ids = set(doc_id_to_cc_pair_ids.get(document_id, []))
+            if not access_sets.hidden_restricted_cc_pair_ids.isdisjoint(
+                cc_pair_ids
+            ) and granting_cc_pair_ids.isdisjoint(cc_pair_ids):
+                continue
+            if not user_acl.isdisjoint(access.to_acl()):
+                return True
+        return False
 
     # The query-time cc-pair rule of the OpenSearch filter, applied in Python.
     access_sets = get_cc_pair_access_sets_for_user(db_session, user)

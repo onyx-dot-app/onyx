@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.connector_credential_pair import build_user_cc_pair_access_filter
+from onyx.db.connector_credential_pair import (
+    build_restricted_acl_guard,
+    build_user_cc_pair_access_filter,
+)
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     HierarchyNodeType,
@@ -51,21 +54,43 @@ def _build_hierarchy_access_filter(
     user_id: UUID | None = None,
 ) -> ColumnElement[bool]:
     """Grant access through the node ACL or an associated connector."""
-    access_filters: list[ColumnElement[bool]] = [
-        HierarchyNode.node_type == HierarchyNodeType.SOURCE,
-        HierarchyNode.is_public.is_(True),
-    ]
+    acl_filters: list[ColumnElement[bool]] = [HierarchyNode.is_public.is_(True)]
     if user_email:
-        access_filters.append(any_(HierarchyNode.external_user_emails) == user_email)
+        acl_filters.append(any_(HierarchyNode.external_user_emails) == user_email)
     if external_group_ids:
-        access_filters.append(
+        acl_filters.append(
             HierarchyNode.external_user_group_ids.overlap(
                 cast(postgresql.array(external_group_ids), postgresql.ARRAY(String))
             )
         )
+    access_filters: list[ColumnElement[bool]] = [
+        HierarchyNode.node_type == HierarchyNodeType.SOURCE,
+        and_(
+            or_(*acl_filters),
+            build_restricted_acl_guard(user_id, _node_has_cc_pair),
+        ),
+    ]
     if user_id:
         access_filters.append(_build_connector_access_filter(user_id))
     return or_(*access_filters)
+
+
+def _node_has_cc_pair(clause: ColumnElement[bool]) -> ColumnElement[bool]:
+    node_cc_pair = HierarchyNodeByConnectorCredentialPair
+    return (
+        select(1)
+        .select_from(node_cc_pair)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id == node_cc_pair.connector_id,
+                ConnectorCredentialPair.credential_id == node_cc_pair.credential_id,
+            ),
+        )
+        .where(node_cc_pair.hierarchy_node_id == HierarchyNode.id, clause)
+        .correlate(HierarchyNode)
+        .exists()
+    )
 
 
 def _get_accessible_hierarchy_nodes_for_source(

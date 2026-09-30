@@ -238,6 +238,7 @@ class DocumentQuery:
             include_hidden=include_hidden,
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -411,6 +412,7 @@ class DocumentQuery:
                 include_hidden=False,
                 access_control_list=index_filters.access_control_list,
                 cc_pair_access=filter_cc_pair_access,
+                restricted_cc_pair_guard=cc_pair_access,
                 source_types=index_filters.source_type or [],
                 tags=index_filters.tags or [],
                 document_sets=index_filters.document_set or [],
@@ -509,6 +511,7 @@ class DocumentQuery:
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -607,6 +610,7 @@ class DocumentQuery:
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -695,6 +699,7 @@ class DocumentQuery:
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -760,6 +765,7 @@ class DocumentQuery:
             include_hidden=False,
             access_control_list=index_filters.access_control_list,
             cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -1034,6 +1040,7 @@ class DocumentQuery:
         hierarchy_node_ids: list[int] | None = None,
         # Operator-forced document-set scope (NAMES), applied as a standalone AND clause.
         forced_document_sets: list[str] | None = None,
+        restricted_cc_pair_guard: CCPairAccessFilter | None = None,
     ) -> list[dict[str, Any]]:
         """Returns filters to be passed into the "filter" key of a search query.
 
@@ -1060,6 +1067,9 @@ class DocumentQuery:
             cc_pair_access: If not None (and access_control_list is not None),
                 replaces the access control list filter above with the
                 cc-pair access filter.
+            restricted_cc_pair_guard: Read only when the access control list
+                filter is used. Its hidden SYNC_RESTRICTED pairs are removed
+                from that filter; see _get_restricted_cc_pair_guard.
             source_types: If supplied, only documents of one of these source
                 types will be retrieved.
             tags: If supplied, only documents with an entry in their metadata
@@ -1218,6 +1228,49 @@ class DocumentQuery:
                     }
                 )
             return {"bool": {"should": visibility_clauses, "minimum_should_match": 1}}
+
+        def _get_restricted_cc_pair_guard(
+            guard: CCPairAccessFilter,
+        ) -> dict[str, Any]:
+            """The access control list filter cannot require a data-access
+            group, so it would show a SYNC_RESTRICTED pair's chunks to anyone
+            matching the source ACL. This clause hides chunks of the pairs
+            that grant the user nothing, unless an open or ACL pair of the
+            chunk grants access.
+
+            Raises:
+                ValueError: A term list is longer than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+            """
+            granting_cc_pair_ids = sorted(
+                {*guard.open_cc_pair_ids, *guard.acl_cc_pair_ids}
+            )
+            for name, terms in (
+                ("hidden restricted cc-pair ids", guard.hidden_restricted_cc_pair_ids),
+                ("granting cc-pair ids", granting_cc_pair_ids),
+            ):
+                if len(terms) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                    raise ValueError(
+                        f"Too many {name}: {len(terms)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                    )
+            guard_clauses: list[dict[str, Any]] = [
+                {
+                    "bool": {
+                        "must_not": [
+                            {
+                                "terms": {
+                                    CC_PAIR_IDS_FIELD_NAME: guard.hidden_restricted_cc_pair_ids
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+            if granting_cc_pair_ids:
+                guard_clauses.append(
+                    {"terms": {CC_PAIR_IDS_FIELD_NAME: granting_cc_pair_ids}}
+                )
+            return {"bool": {"should": guard_clauses, "minimum_should_match": 1}}
 
         def _get_source_type_filter(
             source_types: list[DocumentSource],
@@ -1493,13 +1546,21 @@ class DocumentQuery:
             # one acl provided here is present in the document's acl list. If
             # there is explicitly no list provided, we make no restrictions on
             # the documents that can be retrieved.
-            filter_clauses.append(
-                _get_acl_visibility_filter(access_control_list)
-                if cc_pair_access is None
-                else _get_cc_pair_access_visibility_filter(
-                    cc_pair_access, access_control_list
+            if cc_pair_access is not None:
+                filter_clauses.append(
+                    _get_cc_pair_access_visibility_filter(
+                        cc_pair_access, access_control_list
+                    )
                 )
-            )
+            else:
+                filter_clauses.append(_get_acl_visibility_filter(access_control_list))
+                if (
+                    restricted_cc_pair_guard is not None
+                    and restricted_cc_pair_guard.hidden_restricted_cc_pair_ids
+                ):
+                    filter_clauses.append(
+                        _get_restricted_cc_pair_guard(restricted_cc_pair_guard)
+                    )
 
         if forced_document_sets:
             # Its own top-level AND clause (not merged into the OR-based

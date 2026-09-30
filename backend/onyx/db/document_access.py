@@ -4,10 +4,13 @@ from uuid import UUID
 
 from sqlalchemy import Select, String, and_, any_, cast, or_, select
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.db.connector_credential_pair import build_user_cc_pair_access_filter
+from onyx.db.connector_credential_pair import (
+    build_restricted_acl_guard,
+    build_user_cc_pair_access_filter,
+)
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -41,28 +44,50 @@ def apply_document_access_filter(
         ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
     )
 
-    access_filters: list[ColumnElement[bool]] = [
-        ConnectorCredentialPair.access_type == AccessType.PUBLIC,
-        Document.is_public.is_(True),
-    ]
+    acl_filters: list[ColumnElement[bool]] = [Document.is_public.is_(True)]
     if user_email:
-        access_filters.append(any_(Document.external_user_emails) == user_email)
+        acl_filters.append(any_(Document.external_user_emails) == user_email)
     if prior_emails:
-        access_filters.append(
+        acl_filters.append(
             Document.external_user_emails.overlap(
                 cast(postgresql.array(prior_emails), postgresql.ARRAY(String))
             )
         )
     if external_group_ids:
-        access_filters.append(
+        acl_filters.append(
             Document.external_user_group_ids.overlap(
                 cast(postgresql.array(external_group_ids), postgresql.ARRAY(String))
             )
         )
+    access_filters: list[ColumnElement[bool]] = [
+        ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+        and_(
+            or_(*acl_filters),
+            build_restricted_acl_guard(user_id, _document_has_cc_pair),
+        ),
+    ]
     if user_id:
         access_filters.append(build_user_cc_pair_access_filter(user_id))
 
     return stmt.where(or_(*access_filters))
+
+
+def _document_has_cc_pair(clause: ColumnElement[bool]) -> ColumnElement[bool]:
+    doc_cc_pair = aliased(DocumentByConnectorCredentialPair)
+    return (
+        select(1)
+        .select_from(doc_cc_pair)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                doc_cc_pair.connector_id == ConnectorCredentialPair.connector_id,
+                doc_cc_pair.credential_id == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(doc_cc_pair.id == Document.id, clause)
+        .correlate(Document)
+        .exists()
+    )
 
 
 def get_accessible_documents_by_ids(

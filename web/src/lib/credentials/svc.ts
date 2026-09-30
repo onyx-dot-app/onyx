@@ -92,7 +92,8 @@ export function linkCredential(
   accessType?: AccessType,
   groups?: number[],
   autoSyncOptions?: Record<string, any>,
-  processingMode?: ProcessingMode
+  processingMode?: ProcessingMode,
+  dataAccess?: number[]
 ) {
   return fetch(
     `/api/manage/connector/${connectorId}/credential/${credentialId}`,
@@ -107,6 +108,8 @@ export function linkCredential(
         groups: groups || null,
         auto_sync_options: autoSyncOptions || null,
         processing_mode: processingMode || "REGULAR",
+        // Left out, a private connector gives data access to its groups.
+        ...(dataAccess !== undefined && { data_access: dataAccess }),
       }),
     }
   );
