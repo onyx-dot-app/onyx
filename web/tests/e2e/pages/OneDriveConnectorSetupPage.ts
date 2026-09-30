@@ -199,14 +199,22 @@ export class OneDriveConnectorSetupPage {
     await expect(this.page).toHaveURL(/\/admin\/indexing-status/);
   }
 
+  /** The creation form, once its card is expanded. */
+  private get credentialForm() {
+    return this.page.getByTestId("credential-form");
+  }
+
   private async openCredentialForm() {
-    await this.page.getByRole("button", { name: "Create New" }).click();
+    await this.page
+      .getByRole("button", { name: "New OneDrive Account" })
+      .click();
     await expect(this.page.getByTestId("onedrive_client_id")).toBeVisible();
   }
 
   private async fillCredentialIdentity() {
-    await this.page
-      .getByRole("dialog")
+    // Scoped to the credential form: the connector's own name field is on
+    // the same page.
+    await this.credentialForm
       .getByTestId("name")
       .fill("OneDrive test credential");
     await this.page.getByTestId("onedrive_client_id").fill("client-id");
@@ -222,13 +230,16 @@ export class OneDriveConnectorSetupPage {
           "/api/manage/credential/private-key",
         ].includes(new URL(response.url()).pathname)
     );
-    await this.page
-      .getByRole("dialog")
+    await this.credentialForm
       .getByRole("button", { name: "Create", exact: true })
       .click();
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
-    await expect(this.page.getByRole("dialog")).toBeHidden();
+    // The card folds itself away on success. The fold is hidden from the
+    // accessibility tree, so the form's own button stops resolving.
+    await expect(
+      this.page.getByRole("button", { name: "Create", exact: true })
+    ).toBeHidden();
   }
 
   private credentialResponse(id: number) {

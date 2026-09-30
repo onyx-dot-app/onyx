@@ -243,8 +243,16 @@ export function CredentialsConfigurer({
                 state={isExpanded ? "filled" : "empty"}
                 rounding={4}
                 padding={2}
+                // The card is one action, so it names itself. Nothing inside
+                // the interactive half is focusable, so a role here folds no
+                // other control into that name.
+                role="button"
+                aria-label={newAccountLabel}
+                tabIndex={0}
                 expandedContent={
-                  <div className="p-4">{renderCredentialForm(method)}</div>
+                  <div className="p-4" data-testid="credential-form">
+                    {renderCredentialForm(method)}
+                  </div>
                 }
                 onClick={() =>
                   isExpanded ? close() : openCredentialCreationMethod(method)
