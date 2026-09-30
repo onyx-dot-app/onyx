@@ -507,7 +507,7 @@ services:
       retries: 12
 
   minio:
-    # Earlier releases' store. While S3_LEGACY_ENDPOINT_URL names it, writes reach it too.
+    # Earlier releases' store, which object-store-copy moves into object-store.
     # MinIO no longer publishes images, so this is our digest-pinned mirror of the last multi-arch build.
     # -cpuv1 also runs on x86-64-v1 CPUs.
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/onyxdotapp/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
@@ -516,6 +516,9 @@ services:
       # A .env without MINIO_ROOT_* falls back to the S3_AWS_* pair.
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}}
+    # 0 stops MinIO once it is retired, without touching the app.
+    deploy:
+      replicas: ${MINIO_REPLICAS:-1}
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -524,6 +527,44 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+  object-store-copy:
+    # Copies the files of minio into object-store while the app keeps serving,
+    # then replays writes minio rejected so a rollback finds every file.
+    # A failed copy retries every 5 minutes, and its logs show why.
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      object-store:
+        condition: service_healthy
+        required: false
+      minio:
+        condition: service_started
+        required: false
+    env_file:
+      - path: .env
+        required: false
+    # Takes the app's endpoints, so it copies only when S3_LEGACY_ENDPOINT_URL is set.
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:?set a strong value in .env, not minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:?set a strong value in .env, not minioadmin}
+      - S3_LEGACY_ENDPOINT_URL=${S3_LEGACY_ENDPOINT_URL:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until python -m onyx.file_store.legacy_copy; do
+          echo "Legacy MinIO copy failed, retrying in 5 minutes"
+          sleep 300
+        done
+        # Replays writes that failed in minio until it is retired, then idles, since an exit would rerun the copy.
+        until python -m onyx.file_store.legacy_copy --replay; do
+          echo "Legacy MinIO replay failed, retrying in 5 minutes"
+          sleep 300
+        done
+        exec sleep infinity
 
   code-interpreter:
     # The sandbox ships on its own release line, so IMAGE_TAG does not cover it.

@@ -28,7 +28,7 @@
 #   --profile background        Background worker (Celery) — also needs redis
 #   --profile redis             Redis cache
 #   --profile opensearch        OpenSearch
-#   --profile s3-filestore      Object store and the legacy MinIO
+#   --profile s3-filestore      Object store, legacy MinIO and the copy between them
 # =============================================================================
 
 name: onyx
@@ -91,4 +91,7 @@ services:
     profiles: ["s3-filestore"]
 
   minio:
+    profiles: ["s3-filestore"]
+
+  object-store-copy:
     profiles: ["s3-filestore"]

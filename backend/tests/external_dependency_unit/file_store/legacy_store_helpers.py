@@ -1,4 +1,4 @@
-"""Helpers for the legacy MinIO store tests."""
+"""Helpers for the legacy MinIO store tests and the legacy copy tests."""
 
 from io import BytesIO
 from typing import TYPE_CHECKING
