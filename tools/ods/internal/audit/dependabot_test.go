@@ -126,7 +126,7 @@ func TestAuditDependabot_failures(t *testing.T) {
 		{
 			name:   "alerts disabled",
 			script: "echo 'gh: Not Found (HTTP 404)' >&2\nexit 1",
-			want:   "returned 404: ensure Dependabot alerts are enabled and the token has 'security_events: read' (or repo admin) access: gh: Not Found (HTTP 404)",
+			want:   "returned 404: ensure Dependabot alerts are enabled and the token can read them ('vulnerability-alerts: read' for GITHUB_TOKEN, the security_events scope for a classic PAT): gh: Not Found (HTTP 404)",
 		},
 		{
 			name:   "other gh failure",
