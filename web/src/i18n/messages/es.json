@@ -2832,7 +2832,7 @@
         },
         "description": "Conéctate a {source} y configura el conector para {appName}.",
         "docsLink": {
-          "label": "Ver documentación"
+          "text": "Ver [documentación]({url})"
         }
       },
       "invalidConnector": {

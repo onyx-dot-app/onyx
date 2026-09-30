@@ -2832,7 +2832,7 @@
         },
         "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein.",
         "docsLink": {
-          "label": "Doku ansehen"
+          "text": "[Doku]({url}) ansehen"
         }
       },
       "invalidConnector": {

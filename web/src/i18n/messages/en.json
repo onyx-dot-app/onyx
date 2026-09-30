@@ -2832,7 +2832,7 @@
         },
         "description": "Connect to {source} and set up the connector for {appName}.",
         "docsLink": {
-          "label": "View docs"
+          "text": "View [docs]({url})"
         }
       },
       "invalidConnector": {

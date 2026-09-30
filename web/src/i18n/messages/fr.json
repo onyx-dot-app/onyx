@@ -2832,7 +2832,7 @@
         },
         "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}.",
         "docsLink": {
-          "label": "Voir la documentation"
+          "text": "Voir la [documentation]({url})"
         }
       },
       "invalidConnector": {

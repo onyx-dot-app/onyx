@@ -191,7 +191,9 @@ export default function AddConnector({
     appName: settings.appName,
   });
   const headerDescription = docsLink
-    ? markdown(`${headerSentence} [${t("header.docsLink.label")}](${docsLink})`)
+    ? markdown(
+        `${headerSentence} ${t("header.docsLink.text", { url: docsLink })}`
+      )
     : headerSentence;
   const sourceMetadata = getSourceMetadata(connector);
   const hasFederatedOption = sourceMetadata.federated === true;

@@ -2832,7 +2832,7 @@
         },
         "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다.",
         "docsLink": {
-          "label": "문서 보기"
+          "text": "[문서]({url}) 보기"
         }
       },
       "invalidConnector": {

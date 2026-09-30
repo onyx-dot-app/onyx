@@ -2832,7 +2832,7 @@
         },
         "description": "{source} に接続し、{appName} 用のコネクタを設定します。",
         "docsLink": {
-          "label": "ドキュメントを見る"
+          "text": "[ドキュメント]({url})を見る"
         }
       },
       "invalidConnector": {

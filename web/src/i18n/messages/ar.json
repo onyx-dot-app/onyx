@@ -2832,7 +2832,7 @@
         },
         "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}.",
         "docsLink": {
-          "label": "عرض الوثائق"
+          "text": "عرض [الوثائق]({url})"
         }
       },
       "invalidConnector": {

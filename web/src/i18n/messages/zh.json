@@ -2832,7 +2832,7 @@
         },
         "description": "连接到 {source} 并为 {appName} 设置连接器。",
         "docsLink": {
-          "label": "查看文档"
+          "text": "查看[文档]({url})"
         }
       },
       "invalidConnector": {
