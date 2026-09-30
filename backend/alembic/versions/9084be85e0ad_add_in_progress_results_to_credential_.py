@@ -7,7 +7,7 @@ records a result; cleared by the next RUNNING mark and by every completion
 write.
 
 Revision ID: 9084be85e0ad
-Revises: ad99acb9be41
+Revises: b3e7c1d9a4f2
 Create Date: 2026-09-22 17:09:57.663881
 
 """
@@ -18,7 +18,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "9084be85e0ad"
-down_revision = "ad99acb9be41"
+down_revision = "b3e7c1d9a4f2"
 branch_labels = None
 depends_on = None
 
