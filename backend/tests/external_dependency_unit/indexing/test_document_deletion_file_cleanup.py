@@ -324,3 +324,52 @@ class TestDocumentByCcPairCleanupTask:
             )
 
         assert result.successful(), result.traceback
+
+    def test_index_failure_hands_the_doc_to_reconciliation_on_last_retry(
+        self,
+        db_session: Session,
+        cc_pair: ConnectorCredentialPair,
+        attempt_metadata: IndexAttemptMetadata,
+        full_deployment_setup: None,  # noqa: ARG002
+    ) -> None:
+        """When the index delete keeps failing, the task retries, and on the
+        last attempt it drops the cc_pair link and marks the doc modified so
+        stale-document reconciliation removes it later. The file stays, because
+        the document row still exists."""
+        file_id = stage_file()
+        doc = make_doc(f"doc-{uuid4().hex[:8]}", file_id=file_id)
+        _index_doc(db_session, doc, attempt_metadata)
+        indexed_doc = get_doc_row(db_session, doc.id)
+        assert indexed_doc is not None
+        assert indexed_doc.last_modified is not None
+        indexed_at = indexed_doc.last_modified
+
+        with patch(
+            "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
+        ) as mock_get_document_index:
+            mock_get_document_index.return_value.delete.side_effect = RuntimeError(
+                "document index unavailable"
+            )
+            result = document_by_cc_pair_cleanup_task.apply(
+                args=(
+                    doc.id,
+                    cc_pair.connector_id,
+                    cc_pair.credential_id,
+                    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                ),
+            )
+            delete_calls = mock_get_document_index.return_value.delete.call_count
+
+        assert result.successful(), result.traceback
+        assert result.result is False
+        max_retries = document_by_cc_pair_cleanup_task.max_retries
+        assert max_retries is not None
+        assert delete_calls == max_retries + 1
+
+        db_session.expire_all()
+        assert get_document_connector_count(db_session, doc.id) == 0
+        stored_doc = get_doc_row(db_session, doc.id)
+        assert stored_doc is not None
+        assert stored_doc.last_modified is not None
+        assert stored_doc.last_modified > indexed_at
+        assert get_filerecord(db_session, file_id) is not None

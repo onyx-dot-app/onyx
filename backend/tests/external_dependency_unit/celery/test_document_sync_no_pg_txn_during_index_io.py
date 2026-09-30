@@ -152,3 +152,31 @@ def test_port_missing_doc_still_marked_synced_in_fresh_session(
     assert row is not None
     assert row.last_synced == _LAST_MODIFIED
     assert row.secondary_only_sync_pending is False
+
+
+def test_index_failure_retries_then_fails_and_leaves_doc_stale(
+    stale_document: str, db_session: Session
+) -> None:
+    """Any index error is retryable: the task retries up to max_retries, then
+    fails without marking the doc synced, so the next beat pass re-syncs it."""
+    index_update_calls: list[object] = []
+
+    def _fail(update_requests: object) -> None:
+        index_update_calls.append(update_requests)
+        raise RuntimeError("document index unavailable")
+
+    with patch.object(OpenSearchIndexPair, "update", side_effect=_fail):
+        eager_result = vespa_tasks.document_index_metadata_sync_task.apply(
+            args=(stale_document,), kwargs={"tenant_id": TEST_TENANT_ID}
+        )
+
+    assert eager_result.failed()
+    assert isinstance(eager_result.result, RuntimeError)
+    max_retries = vespa_tasks.document_index_metadata_sync_task.max_retries
+    assert max_retries is not None
+    assert len(index_update_calls) == max_retries + 1
+
+    db_session.expire_all()
+    row = db_session.get(DbDocument, stale_document)
+    assert row is not None
+    assert row.last_synced is None

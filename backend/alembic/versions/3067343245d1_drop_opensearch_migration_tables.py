@@ -14,6 +14,7 @@ import time
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.exc import DBAPIError
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -44,7 +45,7 @@ def _drop_table_with_bounded_lock_wait(table_name: str) -> None:
                 bind.execute(sa.text(f"SET LOCAL lock_timeout = '{_LOCK_TIMEOUT}'"))
                 op.drop_table(table_name)
             break
-        except sa.exc.DBAPIError:
+        except DBAPIError:
             if attempt == _DROP_ATTEMPTS:
                 raise
             logger.warning(
