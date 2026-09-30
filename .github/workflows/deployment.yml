@@ -161,7 +161,7 @@ jobs:
     permissions:
       contents: read # checkout + read lockfiles
       id-token: write # OIDC for fetching the S3 allowlist
-      security-events: read # read Dependabot alerts
+      vulnerability-alerts: read # read Dependabot alerts
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -2112,6 +2112,22 @@ jobs:
           category: image-audit-${{ matrix.component }}
           ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
           sha: ${{ github.sha }}
+
+  # A failed audit usually means a new advisory, so start the CVE Alerts run
+  # that opens its tracking issue, fix PR, and Slack post.
+  dispatch-cve-alerts:
+    needs: [determine-builds, audit-gate, image-audit]
+    if: always() && (needs.audit-gate.result == 'failure' || needs.image-audit.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write # dispatch cve-alerts.yml
+    steps:
+      - name: Dispatch CVE Alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: gh workflow run cve-alerts.yml --repo "${REPO}" --ref main
 
   notify-slack-on-failure:
     needs:
