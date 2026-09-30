@@ -6,6 +6,23 @@ import { useTranslations } from "next-intl";
 import { useFederatedConnectors, usePublicCredentials } from "@/lib/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
+import { credentialTemplates } from "@/lib/connectors/credentials";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
+import { deleteCredential } from "@/lib/credential";
+import {
+  CredentialCreationMethod,
+  getCredentialCreationMethods,
+  shouldRedirectToOAuth,
+} from "@/lib/credentials/credentialCreation";
+import type { CredentialFieldValues } from "@/lib/credentials/types";
+import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
+import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
+import {
+  EE_ENABLED,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+  NEXT_PUBLIC_TEST_ENV,
+} from "@/lib/constants";
+import { oauthSupportedSources } from "@/lib/types";
 import type {
   AnyCredential,
   Credential,
@@ -13,6 +30,7 @@ import type {
   GmailServiceAccountCredentialJson,
   GoogleDriveCredentialJson,
   GoogleDriveServiceAccountCredentialJson,
+  CredentialSetup,
   OAuthDetails,
   SourceCredentialsResult,
 } from "@/lib/connectors/types";
@@ -54,6 +72,125 @@ export function useSourceCredentials(
     errorHandlingFetcher,
     { refreshInterval: CREDENTIALS_REFRESH_INTERVAL_MS }
   );
+}
+
+/**
+ * Everything one source needs in order to be authenticated against: its
+ * saved credentials, the ways it accepts a new one, the fields each way
+ * asks for, and the actions that open, create, delete or authorize.
+ *
+ * It replaces the set of fetches, lookups and half-duplicated handlers that
+ * every screen touching credentials used to assemble for itself.
+ *
+ * It renders nothing and says nothing. Actions resolve to an error message
+ * or `null`, so each screen keeps its own copy and decides whether a failure
+ * is a toast, a banner or inline text.
+ */
+export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
+  const { data: credentials } = useSourceCredentials(sourceType);
+  const { data: oauthDetails, isLoading } = useOAuthDetails(sourceType);
+  const [openMethod, setOpenMethod] = useState<CredentialCreationMethod | null>(
+    null
+  );
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
+
+  const displayName = getSourceDisplayName(sourceType) || sourceType;
+  const methods = getCredentialCreationMethods(oauthDetails);
+  const template = credentialTemplates[sourceType] as
+    | CredentialFieldValues
+    | undefined;
+
+  // Two gates used to be kept apart and could disagree: the source list and
+  // the source's own metadata flag. A source has to pass both.
+  const canAuthorize =
+    EE_ENABLED &&
+    (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) &&
+    oauthSupportedSources.some((source) => source === sourceType) &&
+    getSourceMetadata(sourceType).oauthSupported === true;
+
+  function close() {
+    setOpenMethod(null);
+  }
+
+  function refresh() {
+    refreshSourceCredentials(sourceType);
+  }
+
+  async function open(
+    method: CredentialCreationMethod
+  ): Promise<string | null> {
+    // A source that asks for nothing extra has no form to show: the whole
+    // flow is the trip to the provider.
+    if (method === CredentialCreationMethod.OAuth && oauthDetails) {
+      if (shouldRedirectToOAuth(oauthDetails)) {
+        try {
+          window.location.href = await getConnectorOauthRedirectUrl(
+            sourceType,
+            {}
+          );
+        } catch (error) {
+          return errorMessage(error);
+        }
+        return null;
+      }
+    } else if (method === CredentialCreationMethod.OAuth) {
+      // The details have not landed, so there is nothing to build a form from.
+      return null;
+    }
+    setOpenMethod(method);
+    return null;
+  }
+
+  async function remove(credential: AnyCredential): Promise<string | null> {
+    const response = await deleteCredential(credential.id, true);
+    refresh();
+    if (response.ok) return null;
+    const body = await response.json();
+    return body.detail || body.message || null;
+  }
+
+  async function authorize(invalidUrlMessage: string): Promise<string | null> {
+    setIsAuthorizing(true);
+    try {
+      // Read at call time: the page can change its own query string, and a
+      // click only ever happens in the browser.
+      const response = await prepareOAuthAuthorizationRequest(
+        sourceType,
+        window.location.href,
+        invalidUrlMessage
+      );
+      if (!response.url) return invalidUrlMessage;
+      window.open(response.url, "_blank", "noopener,noreferrer");
+      return null;
+    } catch (error) {
+      return errorMessage(error);
+    } finally {
+      setIsAuthorizing(false);
+    }
+  }
+
+  return {
+    displayName,
+    credentials,
+    oauthDetails,
+    isLoading,
+    methods,
+    namesMethods: methods.length > 1,
+    template,
+    canAuthorize,
+    openMethod,
+    open,
+    close,
+    remove,
+    refresh,
+    authorize,
+    isAuthorizing,
+  };
+}
+
+/** The message on a thrown error, or `""` when it carried none. */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "";
 }
 
 /** Re-fetches what {@link useSourceCredentials} holds for one source. */

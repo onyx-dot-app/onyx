@@ -21,11 +21,7 @@ import type {
   Credential,
 } from "@/lib/connectors/types";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import {
-  refreshSourceCredentials,
-  useOAuthDetails,
-  useSourceCredentials,
-} from "@/lib/connectors/hooks";
+import { useCredentialSetup } from "@/lib/connectors/hooks";
 import { Spinner } from "@/components/Spinner";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { isTypedFileField } from "@/lib/connectors/utils";
@@ -55,34 +51,30 @@ export default function CredentialSection({
 }: CredentialSectionProps) {
   const t = useTranslations("admin");
   const tCommon = useTranslations("common");
-  const { data: credentials } = useSourceCredentials(sourceType);
-  const { data: oauthDetails, isLoading: oauthDetailsLoading } =
-    useOAuthDetails(sourceType);
-
-  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
-  const sourceDisplayName = getSourceDisplayName(sourceType) || sourceType;
+  const {
+    displayName: sourceDisplayName,
+    credentials,
+    oauthDetails,
+    isLoading: oauthDetailsLoading,
+    methods: credentialCreationMethods,
+    open,
+    refresh: refreshCredentials,
+  } = useCredentialSetup(sourceType);
 
   const openCredentialCreationMethod = async (
     method: CredentialCreationMethod
   ) => {
+    const error = await open(method);
+    if (error !== null) {
+      toast.error(error || t("credentials.oauth.startError.message"));
+      return;
+    }
+    // A redirect leaves the page, so there is nothing left to show.
     if (
       method === CredentialCreationMethod.OAuth &&
       oauthDetails &&
       shouldRedirectToOAuth(oauthDetails)
     ) {
-      try {
-        const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
-        window.location.href = redirectUrl;
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t("credentials.oauth.startError.message")
-        );
-      }
-      return;
-    }
-    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
       return;
     }
 
@@ -120,7 +112,7 @@ export default function CredentialSection({
       accessType
     );
     if (response.ok) {
-      refreshSourceCredentials(sourceType);
+      refreshCredentials();
       refresh();
 
       toast.success(t("credentials.swap.success.toast"));

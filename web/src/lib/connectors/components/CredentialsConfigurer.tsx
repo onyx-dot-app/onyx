@@ -1,39 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, SelectCard, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/connectors/types";
-import {
-  refreshSourceCredentials,
-  useOAuthDetails,
-  useSourceCredentials,
-} from "@/lib/connectors/hooks";
+import { useCredentialSetup } from "@/lib/connectors/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { deleteCredential } from "@/lib/credential";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 import {
   CredentialCreationMethod,
-  getCredentialCreationMethods,
   shouldRedirectToOAuth,
 } from "@/lib/credentials/credentialCreation";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
-import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
-import {
-  EE_ENABLED,
-  NEXT_PUBLIC_CLOUD_ENABLED,
-  NEXT_PUBLIC_TEST_ENV,
-} from "@/lib/constants";
-import {
-  oauthSupportedSources,
-  type AccessType,
-  type ConfigurableSources,
-} from "@/lib/types";
+import type { AccessType, ConfigurableSources } from "@/lib/types";
 
 export interface CredentialsConfigurerProps {
   /** The source being set up. */
@@ -58,49 +40,36 @@ export function CredentialsConfigurer({
 }: CredentialsConfigurerProps) {
   const t = useTranslations("admin.connectorsList");
   const settings = useSettings();
+  const {
+    displayName,
+    credentials,
+    oauthDetails,
+    isLoading,
+    methods,
+    canAuthorize,
+    openMethod,
+    open,
+    close,
+    remove,
+    refresh,
+    authorize,
+    isAuthorizing,
+  } = useCredentialSetup(connector);
 
-  const { data: credentials } = useSourceCredentials(connector);
-  const { data: oauthDetails, isLoading: oauthDetailsLoading } =
-    useOAuthDetails(connector);
-
-  const [credentialCreationMethod, setCredentialCreationMethod] =
-    useState<CredentialCreationMethod | null>(null);
   // Wiring only: the fold button has no handler yet.
   const [isOpen] = useState(true);
-  const [isAuthorizing, setIsAuthorizing] = useState(false);
-  const [isAuthorizeVisible, setIsAuthorizeVisible] = useState(false);
 
-  useEffect(() => {
-    if (EE_ENABLED && (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV)) {
-      const sourceMetadata = getSourceMetadata(connector);
-      if (sourceMetadata?.oauthSupported == true) {
-        setIsAuthorizeVisible(true);
-      }
-    }
-  }, []);
-
-  const displayName = getSourceDisplayName(connector) || connector;
   // A source with one way in says what the card makes; a source with two
   // names each way instead, so the two cards stay distinguishable.
   const newAccountLabel = t("add.newAccountButton.label", {
     source: displayName,
   });
-  const showAuthorize =
-    oauthSupportedSources.includes(connector) &&
-    (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV);
-  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
-
-  function refresh() {
-    refreshSourceCredentials(connector);
-  }
-
   async function onDeleteCredential(credential: Credential<any | null>) {
-    const response = await deleteCredential(credential.id, true);
-    if (response.ok) {
+    const error = await remove(credential);
+    if (error === null) {
       toast.success(t("add.credentialDeleted.toast"));
     } else {
-      const errorData = await response.json();
-      toast.error(errorData.detail || errorData.message);
+      toast.error(error);
     }
   }
 
@@ -108,10 +77,6 @@ export function CredentialsConfigurer({
     onCredentialChange(selectedCredential);
     toast.success(t("add.credentialSwapped.toast"));
     refresh();
-  }
-
-  function closeCredentialForm() {
-    setCredentialCreationMethod(null);
   }
 
   /**
@@ -145,63 +110,32 @@ export function CredentialsConfigurer({
         sourceType={connector}
         accessType={accessType}
         onSwitch={onSwap}
-        onClose={closeCredentialForm}
+        onClose={close}
       />
     );
   }
 
   async function attemptOauthRedirect() {
-    try {
-      const redirectUrl = await getConnectorOauthRedirectUrl(connector, {});
-      window.location.href = redirectUrl;
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("add.oauthStartFailed.toast")
-      );
+    const error = await open(CredentialCreationMethod.OAuth);
+    if (error !== null) {
+      toast.error(error || t("add.oauthStartFailed.toast"));
     }
   }
 
   async function openCredentialCreationMethod(
     method: CredentialCreationMethod
   ) {
-    if (
-      method === CredentialCreationMethod.OAuth &&
-      oauthDetails &&
-      shouldRedirectToOAuth(oauthDetails)
-    ) {
-      await attemptOauthRedirect();
-      return;
+    const error = await open(method);
+    if (error !== null) {
+      toast.error(error || t("add.oauthStartFailed.toast"));
     }
-    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
-      return;
-    }
-    setCredentialCreationMethod(method);
   }
 
   // Gets an auth url from the server and sends the user to it in a popup.
   async function handleAuthorize() {
-    setIsAuthorizing(true);
-    try {
-      // Read at click time: the handler only ever runs in the browser, and
-      // the page can change its own query string after mount.
-      const response = await prepareOAuthAuthorizationRequest(
-        connector,
-        window.location.href,
-        t("add.oauthStartFailed.toast")
-      );
-      if (response.url) {
-        window.open(response.url, "_blank", "noopener,noreferrer");
-      } else {
-        toast.error(t("add.oauthUrlFailed.toast"));
-      }
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        toast.error(t("add.error.toast", { detail: error.message }));
-      } else {
-        toast.error(t("add.unknownError.toast"));
-      }
-    } finally {
-      setIsAuthorizing(false);
+    const error = await authorize(t("add.oauthStartFailed.toast"));
+    if (error !== null) {
+      toast.error(error || t("add.unknownError.toast"));
     }
   }
 
@@ -250,7 +184,7 @@ export function CredentialsConfigurer({
             onSwitch={onSwap}
           />
 
-          {showAuthorize && (
+          {canAuthorize && (
             <Section
               flexDirection="row"
               justifyContent="start"
@@ -261,7 +195,6 @@ export function CredentialsConfigurer({
                 disabled={isAuthorizing}
                 variant="action"
                 onClick={handleAuthorize}
-                hidden={!isAuthorizeVisible}
               >
                 {isAuthorizing
                   ? t("add.authorizeButton.pendingLabel")
@@ -277,7 +210,7 @@ export function CredentialsConfigurer({
           the open form cannot fold it away. While the OAuth details are still
           loading we do not yet know how many cards there are, so a single
           disabled one holds the place. */}
-      {oauthDetailsLoading ? (
+      {isLoading ? (
         <Card
           border="solid"
           color="transparent"
@@ -294,25 +227,23 @@ export function CredentialsConfigurer({
           />
         </Card>
       ) : (
-        credentialCreationMethods.map((method) => {
-          const open = credentialCreationMethod === method;
+        methods.map((method) => {
+          const isExpanded = openMethod === method;
           return (
             <SelectCard
               key={method}
               expandable
-              expanded={open}
+              expanded={isExpanded}
               expandableContentHeight="full"
               border="solid"
-              state={open ? "filled" : "empty"}
+              state={isExpanded ? "filled" : "empty"}
               rounding={4}
               padding={2}
               expandedContent={
                 <div className="p-4">{renderCredentialForm(method)}</div>
               }
               onClick={() =>
-                open
-                  ? closeCredentialForm()
-                  : openCredentialCreationMethod(method)
+                isExpanded ? close() : openCredentialCreationMethod(method)
               }
             >
               <Section padding={2} width="full">
@@ -321,7 +252,7 @@ export function CredentialsConfigurer({
                   title={newAccountLabel}
                   sizePreset="main-ui"
                   variant="body"
-                  color={open ? "interactive" : "muted"}
+                  color={isExpanded ? "interactive" : "muted"}
                 />
               </Section>
             </SelectCard>
