@@ -95,13 +95,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   const [isAuthorizing, setIsAuthorizing] = useState(false);
 
   const displayName = getSourceDisplayName(sourceType) || sourceType;
-  // TEMP, do not commit: forces the two-method case so the duplicate card
-  // labels are visible on any connector. Revert to the line below.
-  // const methods = getCredentialCreationMethods(oauthDetails);
-  const methods = [
-    CredentialCreationMethod.OAuth,
-    CredentialCreationMethod.Manual,
-  ];
+  const methods = getCredentialCreationMethods(oauthDetails);
   const template = credentialTemplates[sourceType] as
     | CredentialFieldValues
     | undefined;
