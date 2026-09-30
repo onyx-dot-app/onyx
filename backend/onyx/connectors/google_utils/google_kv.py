@@ -146,10 +146,13 @@ def update_credential_access_tokens(
     source: DocumentSource,
     auth_method: GoogleOAuthAuthenticationMethod,
 ) -> OAuthCredentials | None:
-    app_credentials = _app_cred_on_row(credential_id, source, user, db_session)
+    stored_json = _stored_credential_json(credential_id, user, db_session)
+    app_credentials = _app_cred_on_row(
+        credential_id, source, stored_json, user, db_session
+    )
     flow = InstalledAppFlow.from_client_config(
         app_credentials,
-        scopes=_consent_scopes(credential_id, source, user, db_session),
+        scopes=_consent_scopes(source, stored_json),
         redirect_uri=_build_frontend_google_drive_redirect(source),
     )
     # PKCE: the token exchange runs in a separate request from get_auth_url,
@@ -220,25 +223,29 @@ def build_service_account_creds(
     )
 
 
+def _stored_credential_json(
+    credential_id: int, user: User, db_session: Session
+) -> dict[str, Any]:
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    if credential is None:
+        raise ValueError(f"Credential {credential_id} not found")
+    return (
+        credential.credential_json.get_value(apply_mask=False)
+        if credential.credential_json
+        else {}
+    )
+
+
 def _app_cred_on_row(
     credential_id: int,
     source: DocumentSource,
+    stored_json: dict[str, Any],
     user: User,
     db_session: Session,
 ) -> dict[str, Any]:
     """App cred from the credential row. If absent, rebuild it from the token
     blob (which embeds the client id/secret) and stamp it onto the row."""
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    if credential is None:
-        raise ValueError(f"Credential {credential_id} not found")
-    existing_json = to_source_credential_json(
-        source,
-        (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
-        ),
-    )
+    existing_json = to_source_credential_json(source, stored_json)
     existing = existing_json.get(DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY)
     if existing is not None:
         return _load_google_json(existing)
@@ -278,20 +285,9 @@ def _app_cred_on_row(
     return reconstructed
 
 
-def _consent_scopes(
-    credential_id: int,
-    source: DocumentSource,
-    user: User,
-    db_session: Session,
-) -> list[str]:
+def _consent_scopes(source: DocumentSource, stored_json: dict[str, Any]) -> list[str]:
     """The scopes to request. The auth URL and the token exchange must agree, or
     the exchange fails on a scope change."""
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    stored_json = (
-        credential.credential_json.get_value(apply_mask=False)
-        if credential and credential.credential_json
-        else {}
-    )
     if stored_credential_family(stored_json) == CredentialFamily.GOOGLE:
         return GOOGLE_FAMILY_SCOPES
     return GOOGLE_SCOPES[source]
@@ -303,10 +299,13 @@ def get_auth_url(
     user: User,
     db_session: Session,
 ) -> str:
-    credential_json = _app_cred_on_row(credential_id, source, user, db_session)
+    stored_json = _stored_credential_json(credential_id, user, db_session)
+    credential_json = _app_cred_on_row(
+        credential_id, source, stored_json, user, db_session
+    )
     flow = InstalledAppFlow.from_client_config(
         credential_json,
-        scopes=_consent_scopes(credential_id, source, user, db_session),
+        scopes=_consent_scopes(source, stored_json),
         redirect_uri=_build_frontend_google_drive_redirect(source),
     )
     auth_url, _ = flow.authorization_url(prompt="consent")

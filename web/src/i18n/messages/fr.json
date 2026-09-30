@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer le Drive.",
-          "title": "Option 1 : application OAuth"
+          "title": "Option 1 : application OAuth",
+          "sharedScopesNote": "Google demande l'accès à Google Drive et à Gmail en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Google Drive, décochez les autorisations Gmail sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer la messagerie Gmail.",
-          "title": "Option 1 : application OAuth"
+          "title": "Option 1 : application OAuth",
+          "sharedScopesNote": "Google demande l'accès à Gmail et à Google Drive en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Gmail, décochez les autorisations Google Drive sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"

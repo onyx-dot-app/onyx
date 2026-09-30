@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Drive 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用"
+          "title": "选项 1：OAuth 应用",
+          "sharedScopesNote": "Google 会同时请求 Google Drive 和 Gmail 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Google Drive，请在同意屏幕上取消勾选 Gmail 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Gmail 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用"
+          "title": "选项 1：OAuth 应用",
+          "sharedScopesNote": "Google 会同时请求 Gmail 和 Google Drive 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Gmail，请在同意屏幕上取消勾选 Google Drive 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"

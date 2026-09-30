@@ -196,3 +196,14 @@ def test_unknown_google_credential_keys_are_kept() -> None:
     assert to_source_credential_json(DocumentSource.GOOGLE_DRIVE, stored) == (
         source_json
     )
+
+
+def test_google_app_credential_json_string_is_accepted() -> None:
+    app_credential = '{"web": {"client_id": "id"}}'
+    source_json = {"google_app_credential": app_credential}
+
+    stored = to_stored_credential_json(DocumentSource.GMAIL, source_json, None)
+
+    assert to_source_credential_json(DocumentSource.GOOGLE_DRIVE, stored) == (
+        source_json
+    )

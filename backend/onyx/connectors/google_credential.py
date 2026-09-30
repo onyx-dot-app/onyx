@@ -26,8 +26,9 @@ class GoogleCredential(FamilyCredential):
     # JSON strings, as the Google auth helpers read them.
     google_tokens: str | None = None
     google_service_account_key: str | None = None
-    # The OAuth app credential, {"web": {...}}.
-    google_app_credential: dict[str, Any] | None = None
+    # The OAuth app credential, {"web": {...}}, or that dict as a JSON string
+    # (the legacy form, which _load_google_json still reads).
+    google_app_credential: dict[str, Any] | str | None = None
     google_primary_admin: str | None = None
     authentication_method: GoogleOAuthAuthenticationMethod | None = None
 

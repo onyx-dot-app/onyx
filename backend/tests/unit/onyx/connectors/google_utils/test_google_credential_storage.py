@@ -564,20 +564,11 @@ def test_verify_csrf_rejects_missing_state(monkeypatch: Any) -> None:
     ],
 )
 def test_consent_scopes_cover_every_source_of_a_shared_credential(
-    monkeypatch: pytest.MonkeyPatch,
-    stored_json: dict[str, object],
+    stored_json: dict[str, Any],
     expected_scopes: list[str],
 ) -> None:
-    # Precondition.
-    monkeypatch.setattr(
-        "onyx.connectors.google_utils.google_kv.fetch_credential_by_id_for_user",
-        lambda *_args, **_kwargs: _StubCredential(stored_json),
-    )
-
     # Under test.
-    scopes = _consent_scopes(
-        1, DocumentSource.GMAIL, cast(User, object()), cast(Session, object())
-    )
+    scopes = _consent_scopes(DocumentSource.GMAIL, stored_json)
 
     # Postcondition.
     assert scopes == expected_scopes

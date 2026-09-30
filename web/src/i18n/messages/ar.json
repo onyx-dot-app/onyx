@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Drive الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth"
+          "title": "الخيار 1: تطبيق OAuth",
+          "sharedScopesNote": "يطلب Google الوصول إلى Google Drive وGmail معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Google Drive فقط، ألغِ تحديد نطاقات Gmail في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Gmail الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth"
+          "title": "الخيار 1: تطبيق OAuth",
+          "sharedScopesNote": "يطلب Google الوصول إلى Gmail وGoogle Drive معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Gmail فقط، ألغِ تحديد نطاقات Google Drive في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
