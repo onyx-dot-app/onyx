@@ -229,8 +229,7 @@ export const RoundingVariants: Story = {
   ),
 };
 
-/** Expandable: the header toggles, the fold holds the body. Selected while
- * open paints as `expandedState`, so no blue survives the expansion. */
+/** Expandable: the header toggles, the fold holds the body. */
 export const Expandable: Story = {
   render: function ExpandableStory() {
     const [open, setOpen] = useState(false);
@@ -303,16 +302,15 @@ export const ExpandableFitHeight: Story = {
   },
 };
 
-/** `expandedState="empty"` keeps an open card transparent instead of filled. */
-export const ExpandableStaysEmpty: Story = {
-  render: function ExpandableStaysEmptyStory() {
+/** The caller decides what an open card paints: this one stays selected. */
+export const ExpandableStaysSelected: Story = {
+  render: function ExpandableStaysSelectedStory() {
     const [open, setOpen] = useState(true);
     return (
       <div className="w-96">
         <SelectCard
           expandable
           expanded={open}
-          expandedState="empty"
           state="selected"
           onClick={() => setOpen((value) => !value)}
           expandedContent={
@@ -320,8 +318,8 @@ export const ExpandableStaysEmpty: Story = {
               <Content
                 sizePreset="main-ui"
                 variant="body"
-                title="Transparent while open"
-                description="Collapse it to see the selection blue come back."
+                title="Selected while open"
+                description="The fold carries the selection border too."
               />
             </div>
           }
@@ -330,8 +328,8 @@ export const ExpandableStaysEmpty: Story = {
             sizePreset="main-ui"
             variant="section"
             icon={SvgGlobe}
-            title="Selected, but open"
-            description="No blue while the fold shows."
+            title="Still selected"
+            description="state is the caller's, open or closed."
           />
         </SelectCard>
       </div>

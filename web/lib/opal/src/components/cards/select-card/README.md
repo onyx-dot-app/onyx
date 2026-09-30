@@ -59,21 +59,20 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 
 Everything above, **plus**:
 
-| Prop                      | Type                | Default | Description                                                    |
-| ------------------------- | ------------------- | ------- | -------------------------------------------------------------- |
-| `expandable`              | `true`              | —       | Required to enable the expandable variant                      |
-| `expanded`                | `boolean`           | `false` | Controlled expanded state. SelectCard never mutates this.      |
-| `expandedContent`         | `React.ReactNode`   | —       | The body that animates open and closed below the header        |
-| `expandableContentHeight` | `80 \| "full"`      | `80`    | `80` caps the body at 20rem with scroll; `"full"` does not cap  |
-| `expandedState`           | `"empty" \| "filled"` | `"filled"` | What `state="selected"` paints while the fold is open        |
+| Prop                      | Type              | Default | Description                                                    |
+| ------------------------- | ----------------- | ------- | -------------------------------------------------------------- |
+| `expandable`              | `true`            | —       | Required to enable the expandable variant                      |
+| `expanded`                | `boolean`         | `false` | Controlled expanded state. SelectCard never mutates this.      |
+| `expandedContent`         | `React.ReactNode` | —       | The body that animates open and closed below the header        |
+| `expandableContentHeight` | `80 \| "full"`    | `80`    | `80` caps the body at 20rem with scroll; `"full"` does not cap |
 
 ### Expandable behaviour
 
 - **Only the header is interactive.** `Interactive.Stateful` wraps the header alone, so `onClick`, hover and the state colours stay there. A form inside `expandedContent` keeps its own clicks instead of toggling the card.
 - **Always controlled.** `expanded` is a one-way visual prop. There is no `defaultExpanded` and no `onExpandChange` — the caller owns the state and the trigger, exactly as with [`Card`](../card/README.md).
 - **Rounding adapts.** Expanded, the header rounds only at the top and the fold only at the bottom, so they read as one card. The corners animate over 200ms.
-- **An open card drops its selection blue.** While the fold is showing, `state="selected"` paints as `expandedState` instead, `"filled"` by default. An open card already shows that it is the chosen one, so the blue background, border and text are redundant on top of it and fight whatever the fold contains. Only `"selected"` is remapped — `"empty"` and `"filled"` carry no selection styling, so they are left alone. Set `expandedState="empty"` for a card that should stay transparent when it opens.
-- **The separator keeps its resting colour.** The header's bottom border stays `border-01` while expanded, so it reads as a divider rather than an edge.
+- **`state` is the caller's, open or closed.** The card paints whatever state it is given and never rewrites it. A card that should stop looking selected once it opens does that at the call site, with `state={open ? "filled" : "selected"}` — which is also what decides whether a `Content` inside it, set to `color="interactive"`, picks up the selection colour.
+- **The separator keeps its resting colour.** The header's bottom border stays `border-01` while expanded, even on a selected card, so it reads as a divider rather than an edge. The fold's own border does follow the selection.
 - **`padding` applies to the header only.** The fold has no intrinsic padding; pad whatever you pass to `expandedContent`.
 - **The fold is shared with `Card`.** Both render `CardFold` from `cards/fold/`, a grid `0fr ↔ 1fr` animation with an opacity fade. No Radix, and the children are never unmounted.
 

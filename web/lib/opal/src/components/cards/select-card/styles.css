@@ -60,11 +60,17 @@
 }
 
 /* Expanded, the header's bottom border is the separator between the two
-   halves, so it keeps the resting colour.
-
-   The fold below needs no colour rule of its own: an open card is never in
-   the selected state (see `expandedState`), so neither half is ever blue
-   while the fold is showing. */
+   halves, so it keeps the resting colour whatever state the card is in. */
 .opal-select-card:has(+ .opal-card-fold[data-expanded="true"]) {
   @apply border-b-border-01;
+}
+
+/* The fold is the header's sibling, not its child, so it cannot inherit
+   `--interactive-foreground`. A selected card restates that border colour
+   here, so both halves carry the same edge. */
+.opal-select-card-expandable:has(
+    > .opal-select-card[data-interactive-state="selected"]
+  )
+  .opal-card-fold-body {
+  border-color: var(--action-selection-05);
 }
