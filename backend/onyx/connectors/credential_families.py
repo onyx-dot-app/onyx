@@ -13,6 +13,10 @@ from typing import Any
 import pydantic
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.atlassian_credential import (
+    ConfluenceCredentialCodec,
+    JiraCredentialCodec,
+)
 from onyx.connectors.credential_family_base import (
     CREDENTIAL_FAMILY_KEY,
     CredentialFamily,
@@ -20,8 +24,10 @@ from onyx.connectors.credential_family_base import (
     FamilyCredentialCodec,
 )
 
-# Family PRs register each member source here.
-FAMILY_CREDENTIAL_CODECS: dict[DocumentSource, FamilyCredentialCodec[Any]] = {}
+FAMILY_CREDENTIAL_CODECS: dict[DocumentSource, FamilyCredentialCodec[Any]] = {
+    DocumentSource.CONFLUENCE: ConfluenceCredentialCodec(),
+    DocumentSource.JIRA: JiraCredentialCodec(),
+}
 
 
 def credential_family_for_source(source: DocumentSource) -> CredentialFamily | None:
@@ -119,7 +125,12 @@ def to_stored_credential_json(
             )
     elif codec is None or current_stored_json is not None:
         return source_json
-    family_credential = codec.to_family(source_json)
+    try:
+        family_credential = codec.to_family(source_json)
+    except (KeyError, pydantic.ValidationError) as e:
+        # A KeyError names the missing key only, and family models hide input
+        # values, so no secret reaches the message.
+        raise ValueError(f"This is not a valid {source.value} credential: {e}") from e
     _reject_dropped_keys(source, source_json, codec.from_family(family_credential))
     return {
         **family_credential.model_dump(mode="json"),
