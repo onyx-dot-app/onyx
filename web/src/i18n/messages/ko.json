@@ -2608,7 +2608,7 @@
           "ariaLabel": "접기"
         },
         "connectWithTab": {
-          "label": "{source}(으)로 연결"
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "새로 만들기"
@@ -2644,7 +2644,7 @@
           "toast": "파일 업로드 중 오류가 발생했습니다"
         },
         "manualTab": {
-          "label": "자격 증명 직접 입력"
+          "label": "API Token"
         },
         "newAccountButton": {
           "label": "새 {source} 계정"

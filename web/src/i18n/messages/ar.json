@@ -2608,7 +2608,7 @@
           "ariaLabel": "طي"
         },
         "connectWithTab": {
-          "label": "الاتصال بـ {source}"
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "إنشاء جديد"
@@ -2644,7 +2644,7 @@
           "toast": "خطأ في رفع الملفات"
         },
         "manualTab": {
-          "label": "إدخال بيانات الاعتماد يدويًا"
+          "label": "API Token"
         },
         "newAccountButton": {
           "label": "حساب {source} جديد"

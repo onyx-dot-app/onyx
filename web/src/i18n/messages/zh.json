@@ -2608,7 +2608,7 @@
           "ariaLabel": "折叠"
         },
         "connectWithTab": {
-          "label": "连接 {source}"
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "新建"
@@ -2644,7 +2644,7 @@
           "toast": "上传文件出错"
         },
         "manualTab": {
-          "label": "手动输入凭据"
+          "label": "API Token"
         },
         "newAccountButton": {
           "label": "新建 {source} 账户"

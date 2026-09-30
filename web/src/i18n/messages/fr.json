@@ -2608,7 +2608,7 @@
           "ariaLabel": "Replier"
         },
         "connectWithTab": {
-          "label": "Se connecter avec {source}"
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Créer"
@@ -2644,7 +2644,7 @@
           "toast": "Erreur lors du téléversement des fichiers"
         },
         "manualTab": {
-          "label": "Saisir les identifiants manuellement"
+          "label": "API Token"
         },
         "newAccountButton": {
           "label": "Nouveau compte {source}"

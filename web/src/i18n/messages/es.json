@@ -2608,7 +2608,7 @@
           "ariaLabel": "Contraer"
         },
         "connectWithTab": {
-          "label": "Conectar con {source}"
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Crear una nueva"
@@ -2644,7 +2644,7 @@
           "toast": "Error al subir los archivos"
         },
         "manualTab": {
-          "label": "Introducir credenciales manualmente"
+          "label": "API Token"
         },
         "newAccountButton": {
           "label": "Nueva cuenta de {source}"

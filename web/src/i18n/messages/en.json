@@ -2608,7 +2608,7 @@
           "ariaLabel": "Collapse"
         },
         "connectWithTab": {
-          "label": "Connect with {source}"
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Create New"
@@ -2644,7 +2644,7 @@
           "toast": "Error uploading files"
         },
         "manualTab": {
-          "label": "Enter credentials manually"
+          "label": "API Token"
         },
         "newAccountButton": {
           "label": "New {source} Account"

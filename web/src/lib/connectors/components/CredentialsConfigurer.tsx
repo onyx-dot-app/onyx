@@ -89,7 +89,7 @@ export function CredentialsConfigurer({
       return shouldRedirectToOAuth(oauthDetails) ? (
         <Section alignItems="start">
           <Button onClick={attemptOauthRedirect}>
-            {t("add.connectWithTab.label", { source: displayName })}
+            {t("add.authorizeButton.label", { source: displayName })}
           </Button>
         </Section>
       ) : (
@@ -135,7 +135,7 @@ export function CredentialsConfigurer({
         {
           name:
             method === CredentialCreationMethod.OAuth
-              ? t("add.connectWithTab.label", { source: displayName })
+              ? t("add.connectWithTab.label")
               : t("add.manualTab.label"),
           content: renderCredentialForm(method),
         },

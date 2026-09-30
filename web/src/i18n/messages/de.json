@@ -2608,7 +2608,7 @@
           "ariaLabel": "Einklappen"
         },
         "connectWithTab": {
-          "label": "Mit {source} verbinden"
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Neu erstellen"
@@ -2644,7 +2644,7 @@
           "toast": "Fehler beim Hochladen der Dateien"
         },
         "manualTab": {
-          "label": "Anmeldedaten manuell eingeben"
+          "label": "API Token"
         },
         "newAccountButton": {
           "label": "Neues {source}-Konto"

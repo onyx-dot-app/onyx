@@ -2608,7 +2608,7 @@
           "ariaLabel": "折りたたむ"
         },
         "connectWithTab": {
-          "label": "{source} と接続"
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "新規作成"
@@ -2644,7 +2644,7 @@
           "toast": "ファイルのアップロード中にエラーが発生しました"
         },
         "manualTab": {
-          "label": "認証情報を手動で入力"
+          "label": "API Token"
         },
         "newAccountButton": {
           "label": "新しい {source} アカウント"
