@@ -364,8 +364,8 @@ def test_fixed_rows_survive_an_empty_put(env: _RolesEnv) -> None:
 
 
 def test_editor_changes_only_groups_they_can_see(env: _RolesEnv) -> None:
-    """The editor sees only the group they manage. They may re-role or drop it, and
-    must echo the other groups' rows unchanged."""
+    """The editor sees only the group they manage. They may re-role or drop it. Rows
+    of groups they cannot see stay when the request leaves them out."""
     cc_pair = _pair(env, AccessType.PRIVATE)
     path = f"/manage/admin/cc-pair/{cc_pair.id}/manage-access"
 
@@ -382,9 +382,9 @@ def test_editor_changes_only_groups_they_can_see(env: _RolesEnv) -> None:
             },
         )
 
-    # removing a group they cannot see
+    # leaving out a group they cannot see keeps its row
     resp = put({env.editor_group.id: ConnectorManageRole.EDITOR})
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 200, resp.text
     # adding a group they cannot see
     resp = put(
         {

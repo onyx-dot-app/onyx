@@ -2,7 +2,8 @@
 
 A change replaces the pair's (group, cc-pair) rows. Every row the change adds,
 re-roles or removes needs a group the caller can see and a pair the caller is an
-Editor of. Groups with a global MANAGE_CONNECTORS grant are not stored: they manage
+Editor of. Rows of groups the caller cannot see are kept when the request leaves
+them out, like the data-access PUT. Groups with a global MANAGE_CONNECTORS grant are not stored: they manage
 every pair, so they show as fixed rows that no write can remove. The group-side route
 keeps the group-edit authorization instead (see set_group_managed_cc_pairs).
 """
@@ -62,15 +63,19 @@ def apply_manage_access_change__no_commit(
     requested: dict[ManageRowKey, ConnectorManageRole],
 ) -> None:
     """Replace ``current`` with ``requested``. The caller locks the pairs first."""
+    visible_group_ids = get_visible_user_group_ids(user, db_session)
     upserts = {
         key: role for key, role in requested.items() if current.get(key) is not role
     }
-    deletes = current.keys() - requested.keys()
+    deletes = {
+        key
+        for key in current.keys() - requested.keys()
+        if visible_group_ids is None or key[0] in visible_group_ids
+    }
     touched = upserts.keys() | deletes
     if not touched:
         return
 
-    visible_group_ids = get_visible_user_group_ids(user, db_session)
     touched_group_ids = {group_id for group_id, _ in touched}
     if visible_group_ids is not None and not touched_group_ids <= visible_group_ids:
         raise OnyxError(

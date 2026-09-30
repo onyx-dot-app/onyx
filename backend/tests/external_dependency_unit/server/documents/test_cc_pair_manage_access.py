@@ -144,13 +144,19 @@ def test_put_limits_a_scoped_editor_to_visible_groups(db_session: Session) -> No
     cc_pair = _pair(db_session, {mine: EDITOR, other: OPERATOR})
 
     for rows in (
-        {mine: EDITOR},  # removes other
         {mine: EDITOR, other: EDITOR},  # re-roles other
         {mine: EDITOR, other: OPERATOR, _group(db_session): OPERATOR},  # adds one
     ):
         with pytest.raises(OnyxError):
             _put(db_session, cc_pair.id, editor, rows)
         db_session.rollback()
+
+    # leaving out a group the editor cannot see keeps its row
+    _put(db_session, cc_pair.id, editor, {mine: EDITOR})
+    assert _stored(db_session, cc_pair.id, admin) == {
+        mine.id: "editor",
+        other.id: "operator",
+    }
 
     _put(db_session, cc_pair.id, editor, {mine: OPERATOR, other: OPERATOR})
     assert _stored(db_session, cc_pair.id, admin) == {
