@@ -747,7 +747,11 @@ class ConnectorCredentialPairMetadata(BaseModel):
     name: str
     access_type: AccessType
     auto_sync_options: dict[str, Any] | None = None
+    # Groups that manage the pair.
     groups: list[int] = Field(default_factory=list)
+    # Groups whose members may read a PRIVATE pair's documents. None means
+    # the same groups as `groups`.
+    data_access: list[int] | None = None
     processing_mode: ProcessingMode = ProcessingMode.REGULAR
 
 

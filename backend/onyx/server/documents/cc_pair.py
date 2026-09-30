@@ -8,7 +8,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.auth.scoped_permissions import (
+    assert_within_scope,
+    get_visible_user_group_ids,
+)
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
@@ -839,6 +842,21 @@ def associate_credential_to_connector(
             "Restricted perm-synced connectors are not available yet.",
         )
 
+    if metadata.data_access:
+        if metadata.access_type != AccessType.PRIVATE:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Data-access groups can only be set on private connectors.",
+            )
+        visible_group_ids = get_visible_user_group_ids(user, db_session)
+        if visible_group_ids is not None and not visible_group_ids.issuperset(
+            metadata.data_access
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "You can't give data access to groups you can't see.",
+            )
+
     # GATE 2 write authorization (see assert_within_scope).
     #
     # A permission-synced connector carrying no groups is exempt: its ACLs are
@@ -893,6 +911,7 @@ def associate_credential_to_connector(
             access_type=metadata.access_type,
             auto_sync_options=metadata.auto_sync_options,
             groups=metadata.groups,
+            data_access_group_ids=metadata.data_access,
             processing_mode=metadata.processing_mode,
         )
 

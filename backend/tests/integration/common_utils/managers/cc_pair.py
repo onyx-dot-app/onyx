@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+import httpx
+
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.server.documents.models import (
@@ -27,6 +29,7 @@ def _cc_pair_creator(
     name: str | None = None,
     access_type: AccessType = AccessType.PUBLIC,
     groups: list[int] | None = None,
+    data_access: list[int] | None = None,
 ) -> DATestCCPair:
     name = f"{name}-cc-pair" if name else f"test-cc-pair-{uuid4()}"
 
@@ -36,6 +39,7 @@ def _cc_pair_creator(
             "name": name,
             "access_type": access_type.value,
             "groups": groups or [],
+            "data_access": data_access,
         },
         headers=user_performing_action.headers,
     )
@@ -64,6 +68,7 @@ class CCPairManager:
         connector_specific_config: dict[str, Any] | None = None,
         credential_json: dict[str, Any] | None = None,
         refresh_freq: int | None = None,
+        data_access: list[int] | None = None,
     ) -> DATestCCPair:
         connector = ConnectorManager.create(
             user_performing_action=user_performing_action,
@@ -89,6 +94,7 @@ class CCPairManager:
             name=name,
             access_type=access_type,
             groups=groups,
+            data_access=data_access,
             user_performing_action=user_performing_action,
         )
         return cc_pair
@@ -164,6 +170,31 @@ class CCPairManager:
         response.raise_for_status()
         cc_pair_json = response.json()
         return CCPairFullInfo(**cc_pair_json)
+
+    @staticmethod
+    def get_data_access_group_ids(
+        cc_pair_id: int,
+        user_performing_action: DATestUser,
+    ) -> set[int]:
+        """The pair's data-access groups that the caller can see."""
+        response = client.get(
+            f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/data-access",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return {group["id"] for group in response.json()["groups"]}
+
+    @staticmethod
+    def set_data_access(
+        cc_pair_id: int,
+        group_ids: list[int],
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        return client.put(
+            f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}/data-access",
+            json={"group_ids": group_ids},
+            headers=user_performing_action.headers,
+        )
 
     @staticmethod
     def get_indexing_status_by_id(

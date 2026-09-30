@@ -5009,9 +5009,11 @@ class UserGroup__ConnectorCredentialPair(Base):
 
 
 class UserGroup__CCPairDataAccess(Base):
-    """Data-access groups of a SYNC_RESTRICTED cc-pair: only their members may
-    read its documents, on top of the source's own permissions. Separate from
-    UserGroup__ConnectorCredentialPair, which scopes who may manage the pair."""
+    """Data-access groups of a cc-pair: groups whose members may read its
+    documents. For a PRIVATE pair, members see every document. For a
+    SYNC_RESTRICTED pair, members see only what the source's own permissions
+    allow. Separate from UserGroup__ConnectorCredentialPair, which scopes who
+    may manage the pair."""
 
     __tablename__ = "user_group__cc_pair_data_access"
 

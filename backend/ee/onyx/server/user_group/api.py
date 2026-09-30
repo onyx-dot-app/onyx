@@ -17,6 +17,7 @@ from ee.onyx.db.user_group import (
     rename_user_group,
     revoke_group_manager,
     set_group_permissions_bulk__no_commit,
+    set_user_group_data_access_cc_pairs,
     set_user_group_incognito,
     update_user_group,
 )
@@ -30,6 +31,7 @@ from ee.onyx.server.user_group.models import (
     UpdateGroupDocumentSetsRequest,
     UserGroup,
     UserGroupCreate,
+    UserGroupDataAccessCCPairs,
     UserGroupIncognitoUpdate,
     UserGroupRename,
     UserGroupUpdate,
@@ -48,6 +50,7 @@ from onyx.auth.scoped_permissions import (
     assert_manages_group,
     assert_within_scope,
     get_scoped_groups,
+    get_visible_user_group_ids,
     manages_group,
 )
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
@@ -100,17 +103,12 @@ def list_user_groups(
     )
     is_user_groups_admin = has_global_permission(user, Permission.MANAGE_USER_GROUPS)
     is_full_admin = has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
-    restrict_to_group_ids = (
-        None
-        if has_global_permission(user, Permission.READ_USER_GROUPS)
-        else managed_group_ids
-    )
     user_groups = fetch_user_groups(
         db_session,
         only_up_to_date=False,
         eager_load_for_snapshot=True,
         include_default=include_default,
-        restrict_to_group_ids=restrict_to_group_ids,
+        restrict_to_group_ids=get_visible_user_group_ids(user, db_session),
     )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
@@ -390,6 +388,28 @@ def patch_user_group(
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+
+
+@router.put("/admin/user-group/{user_group_id}/data-access-cc-pairs")
+def set_user_group_data_access_cc_pairs_endpoint(
+    user_group_id: int,
+    request: UserGroupDataAccessCCPairs,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> UserGroupDataAccessCCPairs:
+    """Sets the private connectors whose documents the group's members may read."""
+    try:
+        cc_pair_ids = set_user_group_data_access_cc_pairs(
+            db_session=db_session,
+            user=user,
+            user_group_id=user_group_id,
+            cc_pair_ids=set(request.cc_pair_ids),
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    return UserGroupDataAccessCCPairs(cc_pair_ids=sorted(cc_pair_ids))
 
 
 @router.post("/admin/user-group/{user_group_id}/add-users")

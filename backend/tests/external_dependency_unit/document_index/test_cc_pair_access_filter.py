@@ -14,6 +14,11 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.cc_pair_data_access import (
+    fetch_data_access_cc_pair_ids_for_user_group,
+    set_cc_pair_data_access_groups__no_commit,
+)
+from ee.onyx.db.user_group import prepare_user_group_for_deletion
 from onyx.access.access import get_access_for_documents, user_can_access_chat_file
 from onyx.access.cc_pair_access import get_cc_pair_access_mode
 from onyx.access.models import DocumentAccess
@@ -36,6 +41,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     User,
     UserGroup,
+    UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.models import Document as DbDocument
@@ -76,11 +82,13 @@ class _World(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     owner: User  # owns the private pair's credential
-    member: User  # in the private pair's group
+    member: User  # in the private pair's data-access group
+    manager: User  # in a group that only manages the private pair
     outsider: User
     external_user: User  # named in a synced document's external ACL
     anonymous: User
     group: UserGroup
+    manage_group: UserGroup
     public_pair: ConnectorCredentialPair
     private_pair: ConnectorCredentialPair
     sync_pair: ConnectorCredentialPair
@@ -125,9 +133,11 @@ def world(
 ) -> Generator[_World, None, None]:
     owner = create_test_user(db_session, "cc_access_owner")
     member = create_test_user(db_session, "cc_access_member")
+    manager = create_test_user(db_session, "cc_access_manager")
     outsider = create_test_user(db_session, "cc_access_outsider")
     external_user = create_test_user(db_session, "cc_access_external")
     group = create_test_user_group(db_session, members=[member])
+    manage_group = create_test_user_group(db_session, members=[manager])
 
     public_pair = _make_pair(db_session, AccessType.PUBLIC)
     private_pair = _make_pair(db_session, AccessType.PRIVATE)
@@ -138,20 +148,26 @@ def world(
     )
     for pair in (private_pair, deleting_pair):
         db_session.add(
-            UserGroup__ConnectorCredentialPair(
-                user_group_id=group.id, cc_pair_id=pair.id, is_current=True
-            )
+            UserGroup__CCPairDataAccess(user_group_id=group.id, cc_pair_id=pair.id)
         )
+    # Manage rows grant no data access.
+    db_session.add(
+        UserGroup__ConnectorCredentialPair(
+            user_group_id=manage_group.id, cc_pair_id=private_pair.id, is_current=True
+        )
+    )
     db_session.commit()
 
     try:
         yield _World(
             owner=owner,
             member=member,
+            manager=manager,
             outsider=outsider,
             external_user=external_user,
             anonymous=User(id=UUID(ANONYMOUS_USER_UUID), email=ANONYMOUS_USER_EMAIL),
             group=group,
+            manage_group=manage_group,
             public_pair=public_pair,
             private_pair=private_pair,
             sync_pair=sync_pair,
@@ -161,14 +177,16 @@ def world(
         db_session.rollback()
         db_session.execute(
             delete(UserGroup__ConnectorCredentialPair).where(
-                UserGroup__ConnectorCredentialPair.user_group_id == group.id
+                UserGroup__ConnectorCredentialPair.user_group_id == manage_group.id
             )
         )
         db_session.commit()
         for pair in (public_pair, private_pair, sync_pair, deleting_pair):
             cleanup_cc_pair(db_session, pair)
-        delete_test_user(db_session, owner, member, outsider, external_user)
-        db_session.execute(delete(UserGroup).where(UserGroup.id == group.id))
+        delete_test_user(db_session, owner, member, manager, outsider, external_user)
+        db_session.execute(
+            delete(UserGroup).where(UserGroup.id.in_([group.id, manage_group.id]))
+        )
         db_session.commit()
 
 
@@ -196,6 +214,7 @@ def test_access_sets_ee(db_session: Session, world: _World) -> None:
     # DELETING pairs are in neither set, even for a member of their group.
     assert sets(world.member) == ({public, private}, sync_only)
     assert sets(world.owner) == ({public, private}, sync_only)
+    assert sets(world.manager) == ({public}, sync_only)
     assert sets(world.outsider) == ({public}, sync_only)
     assert sets(world.anonymous) == ({public}, sync_only)
 
@@ -388,6 +407,8 @@ def test_cc_pair_filter_visibility(
     expected_new: list[tuple[User, set[str]]] = [
         (world.member, everyone | in_private_pair),
         (world.owner, everyone | in_private_pair | {docs.user_file}),
+        # The old filter too: group: entries come from data-access groups.
+        (world.manager, everyone),
         (world.outsider, everyone),
         (world.external_user, everyone | {docs.private_and_sync}),
         (world.anonymous, everyone),
@@ -492,6 +513,71 @@ def test_public_pair_made_private_hides_doc_after_metadata_sync(
         db_session, opensearch_index, world.outsider, CCPairAccessMode.ENFORCE, docs
     )
     assert docs.public_and_sync not in visible
+
+
+@pytest.mark.usefixtures("ee")
+def test_data_access_change_applies_to_new_filter_at_once_and_old_after_sync(
+    db_session: Session,
+    world: _World,
+    docs: _Docs,
+    opensearch_index: OpenSearchDocumentIndex,
+    test_index_name: str,
+) -> None:
+    doc_id = docs.private_and_sync
+    doc = db_session.get(DbDocument, doc_id)
+    assert doc is not None
+    last_modified_before = doc.last_modified
+
+    set_cc_pair_data_access_groups__no_commit(
+        db_session,
+        cc_pair_id=world.private_pair.id,
+        requested_group_ids={world.group.id, world.manage_group.id},
+        visible_group_ids=None,
+    )
+    db_session.commit()
+    db_session.refresh(doc)
+    assert doc.last_modified != last_modified_before
+
+    def manager_sees(mode: CCPairAccessMode | None) -> bool:
+        return doc_id in _visible_docs(
+            db_session, opensearch_index, world.manager, mode, docs
+        )
+
+    assert manager_sees(CCPairAccessMode.ENFORCE)
+    # The old filter reads the chunk's group: entries, which metadata sync writes.
+    assert not manager_sees(None)
+    with patch(
+        "onyx.background.celery.tasks.vespa.tasks.get_default_document_index",
+        return_value=opensearch_index,
+    ):
+        result = document_index_metadata_sync_task.apply(
+            args=(doc_id,),
+            kwargs={"tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE},
+        )
+        assert result.successful(), result.traceback
+    OpenSearchIndexClient(index_name=test_index_name).refresh_index()
+    assert manager_sees(None)
+
+
+@pytest.mark.usefixtures("ee")
+def test_group_deletion_drops_data_access_and_marks_documents(
+    db_session: Session, world: _World, docs: _Docs
+) -> None:
+    doc = db_session.get(DbDocument, docs.private_and_sync)
+    assert doc is not None
+    last_modified_before = doc.last_modified
+    world.group.is_up_to_date = True
+    db_session.commit()
+
+    prepare_user_group_for_deletion(db_session, world.group.id)
+
+    # Gone before the group row, so metadata sync drops the group: entry.
+    assert (
+        fetch_data_access_cc_pair_ids_for_user_group(db_session, world.group.id)
+        == set()
+    )
+    db_session.refresh(doc)
+    assert doc.last_modified != last_modified_before
 
 
 # --- Enforce gate -----------------------------------------------------------

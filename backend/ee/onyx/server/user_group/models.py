@@ -157,3 +157,7 @@ class SetGroupManagerRequest(BaseModel):
 
 class BulkSetPermissionsRequest(BaseModel):
     permissions: list[Permission]
+
+
+class UserGroupDataAccessCCPairs(BaseModel):
+    cc_pair_ids: list[int]

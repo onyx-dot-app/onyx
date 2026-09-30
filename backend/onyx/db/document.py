@@ -1,7 +1,7 @@
 import contextlib
 import time
 from collections import defaultdict
-from collections.abc import Generator, Iterable, Sequence
+from collections.abc import Collection, Generator, Iterable, Sequence
 from datetime import datetime, timezone
 from typing import Any, NamedTuple
 from uuid import UUID
@@ -1254,6 +1254,36 @@ def update_docs_last_modified__no_commit(
     now = datetime.now(timezone.utc)
     for doc in documents_to_update:
         doc.last_modified = now
+
+
+def mark_cc_pair_documents_for_sync__no_commit(
+    db_session: Session, cc_pair_ids: Collection[int]
+) -> None:
+    """Marks the indexed documents of these pairs as modified, so metadata sync
+    rewrites their chunk access."""
+    if not cc_pair_ids:
+        return
+    cc_pair_document_ids = (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+    )
+    db_session.execute(
+        update(DbDocument)
+        .where(
+            DbDocument.id.in_(cc_pair_document_ids),
+            DbDocument.chunk_count.is_not(None),
+        )
+        .values(last_modified=datetime.now(timezone.utc))
+    )
 
 
 def update_docs_chunk_count__no_commit(
