@@ -10,8 +10,12 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.user_group import update_user_group
+from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_cc_pair_access_sets_for_user,
@@ -20,7 +24,11 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_manage_all_cc_pairs,
     verify_user_has_access_to_cc_pair,
 )
-from onyx.db.enums import AccessType, ConnectorManageRole
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    ConnectorManageRole,
+)
 from onyx.db.feedback import (
     fetch_docs_ranked_by_boost_for_user,
     update_document_boost_for_user,
@@ -28,12 +36,17 @@ from onyx.db.feedback import (
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
+    Credential,
     DocumentByConnectorCredentialPair,
     User,
     User__UserGroup,
     UserGroup,
     UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
+)
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.connector import (
+    _fetch_and_check_file_connector_cc_pair_permissions,
 )
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
@@ -333,3 +346,114 @@ def test_feedback_needs_operate_on_every_pair_of_the_document(
             update_document_boost_for_user(db_session, doc_id, 3, operator)
         with pytest.raises(HTTPException):
             update_document_hidden_for_user(db_session, doc_id, True, operator)
+
+
+@pytest.mark.usefixtures("ee")
+def test_legacy_group_update_keeps_roles_and_needs_editor_to_attach(
+    db_session: Session,
+) -> None:
+    operator_group = _group(db_session)
+    other_group = _group(db_session)
+    operator_group.is_up_to_date = other_group.is_up_to_date = True
+    manager = _manager_of(db_session, "roles-legacy", operator_group)
+    db_session.add(
+        User__UserGroup(
+            user_id=manager.id, user_group_id=other_group.id, is_manager=True
+        )
+    )
+    db_session.commit()
+    operated = _pair(
+        db_session, AccessType.PRIVATE, [(operator_group, ConnectorManageRole.OPERATOR)]
+    )
+    own = _pair(db_session, AccessType.PRIVATE, [])
+    own.creator_id = manager.id
+    db_session.commit()
+
+    # A kept pair keeps its role, and a newly attached pair gets EDITOR.
+    update_user_group(
+        db_session,
+        manager,
+        operator_group.id,
+        UserGroupUpdate(user_ids=[manager.id], cc_pair_ids=[operated.id, own.id]),
+    )
+    roles = dict(
+        db_session.execute(
+            select(
+                UserGroup__ConnectorCredentialPair.cc_pair_id,
+                UserGroup__ConnectorCredentialPair.role,
+            ).where(
+                UserGroup__ConnectorCredentialPair.user_group_id == operator_group.id,
+                UserGroup__ConnectorCredentialPair.is_current.is_(True),
+            )
+        )
+        .tuples()
+        .all()
+    )
+    assert roles == {
+        operated.id: ConnectorManageRole.OPERATOR,
+        own.id: ConnectorManageRole.EDITOR,
+    }
+
+    # Attaching the operated pair to another group would make its manager an Editor.
+    with pytest.raises(OnyxError):
+        update_user_group(
+            db_session,
+            manager,
+            other_group.id,
+            UserGroupUpdate(user_ids=[manager.id], cc_pair_ids=[operated.id]),
+        )
+
+
+def test_file_connector_needs_the_level_on_every_pair(db_session: Session) -> None:
+    group = _group(db_session)
+    other_group = _group(db_session)
+    editor = _manager_of(db_session, "roles-file", group)
+    first = make_cc_pair(db_session, DocumentSource.FILE)
+    first.access_type = AccessType.PRIVATE
+    credential = Credential(source=DocumentSource.FILE, credential_json={})
+    db_session.add(credential)
+    db_session.flush()
+    second = ConnectorCredentialPair(
+        connector_id=first.connector_id,
+        credential_id=credential.id,
+        name=f"roles-file-{uuid4().hex[:8]}",
+        status=ConnectorCredentialPairStatus.ACTIVE,
+        access_type=AccessType.PRIVATE,
+    )
+    db_session.add(second)
+    db_session.flush()
+    db_session.add_all(
+        [
+            UserGroup__ConnectorCredentialPair(
+                user_group_id=group.id,
+                cc_pair_id=first.id,
+                role=ConnectorManageRole.EDITOR,
+            ),
+            UserGroup__ConnectorCredentialPair(
+                user_group_id=other_group.id,
+                cc_pair_id=second.id,
+                role=ConnectorManageRole.EDITOR,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    # The file list is shared config, so an Editor of one pair is not enough.
+    for level in _MANAGE_LEVELS:
+        with pytest.raises(OnyxError):
+            _fetch_and_check_file_connector_cc_pair_permissions(
+                first.connector_id, editor, db_session, level
+            )
+
+    db_session.add(
+        UserGroup__ConnectorCredentialPair(
+            user_group_id=group.id,
+            cc_pair_id=second.id,
+            role=ConnectorManageRole.EDITOR,
+        )
+    )
+    db_session.commit()
+    for level in _MANAGE_LEVELS:
+        _fetch_and_check_file_connector_cc_pair_permissions(
+            first.connector_id, editor, db_session, level
+        )

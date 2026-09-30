@@ -84,13 +84,14 @@ from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     fetch_connector_credential_pair_for_connector,
     get_cc_pair_groups_for_ids,
+    get_cc_pair_ids_for_connector,
     get_connector_credential_pair,
     get_connector_credential_pair_for_user,
     get_connector_credential_pairs_for_user,
     get_connector_credential_pairs_for_user_parallel,
     get_managed_cc_pair_ids,
     verify_user_can_edit_connector,
-    verify_user_has_access_to_cc_pair,
+    verify_user_can_manage_all_cc_pairs,
 )
 from onyx.db.credentials import (
     create_credential,
@@ -462,11 +463,12 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
             detail="No Connector-Credential Pair found for this connector",
         )
 
-    if not verify_user_has_access_to_cc_pair(
-        cc_pair_id=cc_pair.id,
-        db_session=db_session,
-        user=user,
-        access_level=access_level,
+    # The file list is connector config shared by every pair on the connector.
+    if not verify_user_can_manage_all_cc_pairs(
+        get_cc_pair_ids_for_connector(db_session, connector_id),
+        db_session,
+        user,
+        access_level,
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
