@@ -65,7 +65,7 @@ from onyx.db.search_settings import (
     update_search_settings_status,
 )
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.constants import LUCENE_SCALAR_QUANTIZATION
 from onyx.document_index.opensearch.index_reclaim import (

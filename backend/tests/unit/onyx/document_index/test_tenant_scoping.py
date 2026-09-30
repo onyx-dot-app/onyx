@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 from opensearchpy import NotFoundError
 
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.schema import TENANT_ID_FIELD_NAME
 

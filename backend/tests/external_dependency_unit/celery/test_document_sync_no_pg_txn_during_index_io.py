@@ -28,7 +28,7 @@ from sqlalchemy.pool import QueuePool
 from onyx.background.celery.tasks.vespa import tasks as vespa_tasks
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import Document as DbDocument
-from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
+from onyx.document_index.interfaces import SecondaryIndexDocumentMissingError
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchIndexPair,
 )

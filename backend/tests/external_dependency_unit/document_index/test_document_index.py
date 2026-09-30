@@ -15,7 +15,7 @@ from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import VectorQuantization
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentSectionRequest,
     MetadataUpdateRequest,

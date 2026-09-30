@@ -1,7 +1,7 @@
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.models import SearchSettings
 from onyx.document_index.disabled import DisabledDocumentIndex
-from onyx.document_index.interfaces_new import DocumentIndex, TenantState
+from onyx.document_index.interfaces import DocumentIndex, TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
     OpenSearchIndexPair,

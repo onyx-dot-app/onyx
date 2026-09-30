@@ -6,7 +6,7 @@ COMPLETE. Driven by the reclaim beat task (background/celery/tasks/index_reclaim
 from enum import Enum
 
 from onyx.configs.app_configs import OLD_INDEX_RECLAIM_DELETE_BATCH_SIZE
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.schema import TENANT_ID_FIELD_NAME
 from onyx.utils.logger import setup_logger

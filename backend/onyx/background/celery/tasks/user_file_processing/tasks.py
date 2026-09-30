@@ -53,7 +53,7 @@ from onyx.db.user_file import (
     mark_user_file_reconcile_pending,
 )
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,

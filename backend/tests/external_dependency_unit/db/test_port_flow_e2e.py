@@ -42,7 +42,7 @@ from onyx.db.models import (
 )
 from onyx.db.port_attempt import get_port_attempt
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.opensearch_document_index import (

@@ -36,7 +36,7 @@ from onyx.db.search_settings import (
 )
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.opensearch.client import (
     OpenSearchClient,
     OpenSearchIndexWriteBlockedError,

@@ -12,7 +12,7 @@ from onyx.db.models import Document, KGEntityType, KGRelationshipType
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import get_structured_tags_for_document
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.kg.models import (
     KGAttributeEntityOption,
     KGAttributeTrackInfo,

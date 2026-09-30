@@ -32,7 +32,7 @@ from onyx.db.port_orphan_candidate import (
 from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces import MetadataUpdateRequest
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 

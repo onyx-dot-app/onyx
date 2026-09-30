@@ -54,7 +54,7 @@ from onyx.db.sync_record import (
     update_sync_record_status,
 )
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
 )

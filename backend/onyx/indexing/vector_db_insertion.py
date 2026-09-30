@@ -5,7 +5,7 @@ from itertools import chain, groupby
 import sentry_sdk
 
 from onyx.connectors.models import ConnectorFailure, DocumentFailure
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     IndexingMetadata,

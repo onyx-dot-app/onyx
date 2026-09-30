@@ -20,7 +20,7 @@ from onyx.context.search.pipeline import merge_individual_chunks, search_pipelin
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_default_llm
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.tools.tool_implementations.search.search_utils import (

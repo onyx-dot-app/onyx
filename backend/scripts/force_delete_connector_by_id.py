@@ -41,7 +41,7 @@ from onyx.db.permission_sync_attempt import (
     delete_external_group_permission_sync_attempts__no_commit,
 )
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 

@@ -23,7 +23,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import Document, FederatedConnector
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.utils.logger import setup_logger
 from tests.regression.search_quality.models import (

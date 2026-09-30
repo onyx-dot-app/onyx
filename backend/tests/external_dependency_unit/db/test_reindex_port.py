@@ -100,7 +100,7 @@ from onyx.db.port_orphan_candidate import (
 )
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
@@ -1656,7 +1656,7 @@ def test_port_target_settings_id() -> None:
 def test_delete_port_written_chunks_query() -> None:
     """Filters written_by_port + doc-ids; adds the tenant term only in multitenant mode
     (single-tenant has no tenant_id field, so it would match zero docs)."""
-    from onyx.document_index.interfaces_new import TenantState
+    from onyx.document_index.interfaces import TenantState
     from onyx.document_index.opensearch.schema import (
         DOCUMENT_ID_FIELD_NAME,
         TENANT_ID_FIELD_NAME,

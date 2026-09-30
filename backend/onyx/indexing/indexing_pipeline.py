@@ -54,7 +54,7 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import upsert_document_tags
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     IndexingMetadata,

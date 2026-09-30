@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.db.enums import VectorQuantization
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch import (
     opensearch_document_index as opensearch_document_index_module,
 )

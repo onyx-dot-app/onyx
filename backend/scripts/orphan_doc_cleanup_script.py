@@ -18,7 +18,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.db.tag import delete_orphan_tags_batched  # noqa: E402
 from onyx.document_index.factory import get_default_document_index  # noqa: E402
-from onyx.document_index.interfaces_new import (  # noqa: E402
+from onyx.document_index.interfaces import (  # noqa: E402
     DocumentIndex,
     DocumentSectionRequest,
 )

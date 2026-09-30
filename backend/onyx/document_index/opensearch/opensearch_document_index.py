@@ -26,7 +26,7 @@ from onyx.document_index.chunk_content_enrichment import (
     cleanup_content_for_chunks,
     generate_enriched_content_for_chunk_text,
 )
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     DocumentSectionRequest,
@@ -797,7 +797,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self,
         chunk_requests: list[DocumentSectionRequest],
         filters: IndexFilters,
-        # TODO(andrei): Remove this from the new interface at some point; we
+        # TODO(andrei): Remove this from the interface at some point; we
         # should not be exposing this.
         batch_retrieval: bool = False,  # noqa: ARG002
         # TODO(andrei): Add a param for whether to retrieve hidden docs.

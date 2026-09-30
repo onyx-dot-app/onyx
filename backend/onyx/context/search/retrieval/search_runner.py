@@ -12,7 +12,7 @@ from onyx.context.search.models import (
     InferenceSection,
 )
 from onyx.context.search.utils import get_query_embedding, inference_section_from_chunks
-from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.federated_connectors.federated_retrieval import (
     FederatedRetrievalInfo,
     get_federated_retrieval_functions,

@@ -21,7 +21,7 @@ from onyx.configs.app_configs import (
     USING_AWS_MANAGED_OPENSEARCH,
 )
 from onyx.db.enums import VectorQuantization
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     EF_CONSTRUCTION,

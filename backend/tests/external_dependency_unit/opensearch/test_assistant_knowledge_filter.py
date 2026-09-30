@@ -9,7 +9,7 @@ hierarchy nodes, document sets, and persona/project user files.
 from typing import Any
 
 from onyx.configs.constants import DocumentSource
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.schema import (
     ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME,
     DOCUMENT_ID_FIELD_NAME,

@@ -11,7 +11,7 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
 from onyx.context.search.models import IndexFilters, Tag, TimeRange
 from onyx.db.enums import VectorQuantization
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     ASSUMED_DOCUMENT_AGE_DAYS,
     DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,

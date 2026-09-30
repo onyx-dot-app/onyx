@@ -15,7 +15,7 @@ from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.db.enums import VectorQuantization
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import (
     OpenSearchIndexClient,
     wait_for_opensearch_with_timeout,

@@ -36,7 +36,7 @@ from onyx.background.celery.tasks.user_file_processing.tasks import (
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, Persona__UserFile, User, UserFile
 from onyx.db.persona import upsert_persona
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
 )
