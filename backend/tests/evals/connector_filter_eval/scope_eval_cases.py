@@ -161,6 +161,15 @@ SCOPE_EVAL_CASES: list[ScopeEvalCase] = [
         expected={CONFLUENCE},
     ),
     ScopeEvalCase(
+        # One source is where to look, the other is only the subject.
+        name="where-source-with-subject-source",
+        category="combined",
+        user_turns=["Search Confluence for our policy on sending emails from Gmail."],
+        connected_sources=[CONFLUENCE, GMAIL, SLACK],
+        current_queries=["email sending policy Gmail"],
+        expected={CONFLUENCE},
+    ),
+    ScopeEvalCase(
         name="two-sources-combined",
         category="combined",
         user_turns=["Search both Zendesk and Asana for the deploy runbook."],
