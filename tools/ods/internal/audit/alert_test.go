@@ -385,6 +385,32 @@ func TestSyncAlerts_dryRunLogsEveryPlannedChange(t *testing.T) {
 	}
 }
 
+func TestSyncAlerts_keepOpenClosesNothing(t *testing.T) {
+	bin := fakeBinDir(t)
+	chdirNewRepo(t)
+	gone := Alert{Key: "npm/left-pad", Advisories: []Advisory{{ID: "GHSA-gone"}}}
+	ghArgs := fakeIssueGH(t, bin, []map[string]any{
+		{"number": 3, "url": "u3", "body": renderAlertBody(gone)},
+	})
+	// An npm finding covers npm, which would close #3 on a complete run.
+	deps := writeResultFile(t, t.TempDir(), "deps.json",
+		Finding{ID: "GHSA-new", Ecosystem: "npm", Package: "next", Severity: SeverityCritical},
+	)
+
+	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, KeepOpen: true})
+	if err != nil {
+		t.Fatalf("SyncAlerts: %v", err)
+	}
+	if len(alerts) != 1 || alerts[0].Key != "npm/next" {
+		t.Fatalf("expected the new alert, got %+v", alerts)
+	}
+	for _, call := range ghArgs() {
+		if call[1] == "close" {
+			t.Fatalf("expected no issue closed with a scan skipped, got gh %q", call)
+		}
+	}
+}
+
 func TestSyncAlerts_appliesTheAllowlist(t *testing.T) {
 	bin := fakeBinDir(t)
 	chdirNewRepo(t)

@@ -758,7 +758,8 @@ ods audit alert --results deps.json --results backend.json --dry-run
 ```
 
 Pass the results of every scan: a package missing from all of them counts as
-resolved and has its issue closed. `--scope <branch>` (default `main`) labels
+resolved and has its issue closed. When a scan was skipped, pass `--keep-open`
+so no issue closes. `--scope <branch>` (default `main`) labels
 the issues with the branch the results came from, so a package's issues on
 `main` and on a release branch stay apart.
 

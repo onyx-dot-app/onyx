@@ -122,8 +122,11 @@ type SyncAlertsOptions struct {
 	// Scope is the branch the results came from, such as main or
 	// release/v4.8, and defaults to main. Issues, labels, and fix branches
 	// are keyed by it.
-	Scope  string
-	DryRun bool
+	Scope string
+	// KeepOpen closes no issue, for a run that skipped a scan and so cannot
+	// tell a fixed package from an unscanned one.
+	KeepOpen bool
+	DryRun   bool
 }
 
 // SyncAlerts keeps one open issue per package with an unsuppressed blocking
@@ -152,7 +155,11 @@ func SyncAlerts(opts SyncAlertsOptions) ([]Alert, error) {
 	if err != nil {
 		return nil, err
 	}
-	plan := planAlerts(alerts, open, coveredEcosystems(scanned))
+	covered := map[string]bool{}
+	if !opts.KeepOpen {
+		covered = coveredEcosystems(scanned)
+	}
+	plan := planAlerts(alerts, open, covered)
 
 	if opts.DryRun {
 		logPlan(plan)
