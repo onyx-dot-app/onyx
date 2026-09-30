@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
@@ -13,6 +13,17 @@ from ee.onyx.db.cc_pair_data_access import (
     fetch_data_access_groups_for_cc_pair,
     set_cc_pair_data_access_groups__no_commit,
 )
+from ee.onyx.db.connector_manage_access import (
+    fetch_manage_roles_for_cc_pair,
+    lock_cc_pairs_for_manage_access__no_commit,
+)
+from ee.onyx.db.user_group import fetch_user_groups
+from ee.onyx.server.documents.manage_access import (
+    CCPairManageAccessRow,
+    CCPairManageAccessUpdateRequest,
+    apply_manage_access_change__no_commit,
+    fixed_manage_access_rows,
+)
 from ee.onyx.server.documents.models import (
     CCPairDataAccess,
     CCPairDataAccessUpdateRequest,
@@ -24,15 +35,23 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pair_from_id_for_user,
+    verify_user_has_access_to_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccessType, Permission
+from onyx.db.enums import AccessType, ConnectorManageRole, Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.documents.models import manage_access_by_group
 from onyx.server.models import StatusResponse
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -273,3 +292,129 @@ def set_cc_pair_data_access(
     )
     db_session.commit()
     return _to_cc_pair_data_access(db_session, cc_pair_id, visible_group_ids)
+
+
+def _manage_access_rows(
+    db_session: Session, cc_pair_id: int
+) -> list[CCPairManageAccessRow]:
+    roles = fetch_manage_roles_for_cc_pair(db_session, cc_pair_id)
+    groups = fetch_user_groups(
+        db_session, only_up_to_date=False, restrict_to_group_ids=set(roles)
+    )
+    return fixed_manage_access_rows(db_session) + [
+        CCPairManageAccessRow(
+            group_id=group.id,
+            group_name=group.name,
+            role=roles[group.id],
+            is_fixed=False,
+        )
+        for group in sorted(groups, key=lambda group: group.id)
+    ]
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/manage-access")
+def get_cc_pair_manage_access(
+    cc_pair_id: int,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> list[CCPairManageAccessRow]:
+    """The fixed rows (global MANAGE_CONNECTORS groups) first, then the stored ones."""
+    # GATE 2: who manages a pair is management data, so the caller must operate it.
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user's permissions",
+        )
+    return _manage_access_rows(db_session, cc_pair_id)
+
+
+@router.put("/admin/cc-pair/{cc_pair_id}/manage-access")
+def set_cc_pair_manage_access(
+    cc_pair_id: int,
+    request: CCPairManageAccessUpdateRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> list[CCPairManageAccessRow]:
+    """Replace the pair's stored rows. Fixed rows are not stored, so they stay."""
+    if not lock_cc_pairs_for_manage_access__no_commit(db_session, [cc_pair_id]):
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "CC Pair not found")
+    # GATE 2: only an Editor changes who manages the pair.
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.EDIT
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers can only act on connectors where they are an Editor.",
+        )
+
+    requested = manage_access_by_group(request.manage_access)
+    apply_manage_access_change__no_commit(
+        db_session,
+        user,
+        current={
+            (group_id, cc_pair_id): role
+            for group_id, role in fetch_manage_roles_for_cc_pair(
+                db_session, cc_pair_id
+            ).items()
+        },
+        requested={
+            (group_id, cc_pair_id): role for group_id, role in requested.items()
+        },
+    )
+    db_session.commit()
+
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={
+            "manage_access": {
+                str(group_id): role.value for group_id, role in requested.items()
+            }
+        },
+    )
+    return _manage_access_rows(db_session, cc_pair_id)
+
+
+@router.get("/admin/manage-access-prefill")
+def get_manage_access_prefill(
+    data_access: list[int] = Query(default=[]),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> list[CCPairManageAccessRow]:
+    """Starting manage access for the create form: groups with global Manage Connectors
+    are fixed Editors, and the chosen data-access groups become Operators."""
+    fixed_rows = fixed_manage_access_rows(db_session)
+    fixed_group_ids = {row.group_id for row in fixed_rows}
+    visible_group_ids = get_visible_user_group_ids(user, db_session)
+    operator_group_ids = {
+        group_id
+        for group_id in data_access
+        if group_id not in fixed_group_ids
+        and (visible_group_ids is None or group_id in visible_group_ids)
+    }
+    operator_groups = fetch_user_groups(
+        db_session,
+        only_up_to_date=False,
+        include_default=False,
+        restrict_to_group_ids=operator_group_ids,
+    )
+    return fixed_rows + [
+        CCPairManageAccessRow(
+            group_id=group.id,
+            group_name=group.name,
+            role=ConnectorManageRole.OPERATOR,
+            is_fixed=False,
+        )
+        for group in sorted(operator_groups, key=lambda group: group.id)
+    ]

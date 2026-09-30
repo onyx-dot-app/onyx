@@ -840,19 +840,17 @@ def associate_default_cc_pair(db_session: Session) -> None:
 def _relate_groups_to_cc_pair__no_commit(
     db_session: Session,
     cc_pair_id: int,
-    user_group_ids: list[int] | None = None,
+    manage_access: dict[int, ConnectorManageRole],
 ) -> None:
-    if not user_group_ids:
+    if not manage_access:
         return
 
-    assert_not_shared_with_default_group(db_session, user_group_ids)
+    assert_not_shared_with_default_group(db_session, manage_access.keys())
 
-    for group_id in user_group_ids:
+    for group_id, role in manage_access.items():
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=group_id,
-                cc_pair_id=cc_pair_id,
-                role=ConnectorManageRole.EDITOR,
+                user_group_id=group_id, cc_pair_id=cc_pair_id, role=role
             )
         )
 
@@ -893,7 +891,7 @@ def add_credential_to_connector(
     credential_id: int,
     cc_pair_name: str,
     access_type: AccessType,
-    groups: list[int] | None,
+    manage_access: dict[int, ConnectorManageRole],
     data_access_group_ids: list[int] | None = None,
     auto_sync_options: dict | None = None,
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.SCHEDULED,
@@ -978,7 +976,7 @@ def add_credential_to_connector(
     _relate_groups_to_cc_pair__no_commit(
         db_session=db_session,
         cc_pair_id=association.id,
-        user_group_ids=groups,
+        manage_access=manage_access,
     )
     if access_type == AccessType.PRIVATE:
         # Callers that set only manage groups keep today's meaning: the
@@ -989,7 +987,7 @@ def add_credential_to_connector(
             user_group_ids=(
                 data_access_group_ids
                 if data_access_group_ids is not None
-                else groups or []
+                else list(manage_access)
             ),
         )
 

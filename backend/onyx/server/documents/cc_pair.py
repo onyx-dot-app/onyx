@@ -871,16 +871,15 @@ def associate_credential_to_connector(
     # and requiring one would attach a group that does not affect access at all.
     # Groups may still be supplied to scope who may *manage* it, and those are
     # checked normally below.
-    is_groupless_perm_sync = (
-        metadata.access_type.is_perm_synced() and not metadata.groups
-    )
+    manage_access = metadata.manage_roles_by_group()
+    is_groupless_perm_sync = metadata.access_type.is_perm_synced() and not manage_access
     if not is_groupless_perm_sync:
         assert_within_scope(
             user,
             db_session,
             permission=Permission.MANAGE_CONNECTORS,
             current_group_ids=[],
-            requested_group_ids=metadata.groups or [],
+            requested_group_ids=manage_access.keys(),
             is_non_public=metadata.access_type != AccessType.PUBLIC,
         )
 
@@ -916,7 +915,7 @@ def associate_credential_to_connector(
             cc_pair_name=metadata.name,
             access_type=metadata.access_type,
             auto_sync_options=metadata.auto_sync_options,
-            groups=metadata.groups,
+            manage_access=manage_access,
             data_access_group_ids=metadata.data_access,
             processing_mode=metadata.processing_mode,
         )

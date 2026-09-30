@@ -762,22 +762,18 @@ def _assert_default_group_update_allowed(
         )
 
 
-def _assert_group_update_within_scope(
+def assert_cc_pairs_attachable_to_group(
     db_session: Session,
     user: User,
     user_group_id: int,
-    added_cc_pair_ids: set[int],
+    cc_pair_ids: set[int],
 ) -> None:
-    """GATE 2 for a scoped manager editing a group: the group must be one they
-    manage, and every newly-attached cc_pair must be a private one within their
-    managed scope — otherwise the junction rewrite could attach a public or
-    out-of-scope connector to the group, granting its members access. The
-    manager must also be an Editor of each attached pair. Admins / global
-    holders bypass these checks."""
-    assert_manages_group(user, db_session, group_id=user_group_id)
-
-    # The cc_pair re-attach vector only applies to scoped managers; a global
-    # MANAGE_USER_GROUPS holder keeps today's unrestricted attach behavior.
+    """GATE 2 for attaching cc_pairs to a group, or changing the group's role on
+    them: for a scoped manager, every pair must be a private one within their
+    managed scope, or a groupless one they created. Otherwise the write could
+    attach a public or out-of-scope connector to the group. The manager must
+    also be an Editor of each pair. A global MANAGE_USER_GROUPS holder is not
+    restricted. The caller checks that it manages the group."""
     if (
         has_permission(user, Permission.MANAGE_USER_GROUPS)
         is not PermissionAuthority.SCOPED
@@ -785,7 +781,7 @@ def _assert_group_update_within_scope(
         return
 
     current_groups_by_cc_pair: dict[int, list[int]] = defaultdict(list)
-    for row in get_cc_pair_groups_for_ids(db_session, list(added_cc_pair_ids)):
+    for row in get_cc_pair_groups_for_ids(db_session, list(cc_pair_ids)):
         if row.is_current and row.cc_pair_id is not None:
             current_groups_by_cc_pair[row.cc_pair_id].append(row.user_group_id)
 
@@ -793,12 +789,12 @@ def _assert_group_update_within_scope(
         cc_pair.id: cc_pair
         for cc_pair in db_session.scalars(
             select(ConnectorCredentialPair).where(
-                ConnectorCredentialPair.id.in_(added_cc_pair_ids)
+                ConnectorCredentialPair.id.in_(cc_pair_ids)
             )
         )
     }
 
-    for cc_pair_id in added_cc_pair_ids:
+    for cc_pair_id in cc_pair_ids:
         cc_pair = cc_pairs_by_id.get(cc_pair_id)
         if cc_pair is None:
             raise OnyxError(
@@ -807,7 +803,7 @@ def _assert_group_update_within_scope(
             )
         # A groupless cc_pair has no current group for within_scope to judge, so it
         # would pass on the requested group alone. Only its creator may attach it —
-        # the same fallback that makes it editable at all (see _add_user_filters).
+        # the same fallback that makes it manageable at all (_manage_access_clause).
         if not current_groups_by_cc_pair[cc_pair_id] and cc_pair.creator_id != user.id:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -825,8 +821,8 @@ def _assert_group_update_within_scope(
 
     # An attached pair gets EDITOR, so an Operator can't use this to make
     # themselves an Editor through another group they manage.
-    if added_cc_pair_ids and not verify_user_can_manage_all_cc_pairs(
-        added_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
+    if cc_pair_ids and not verify_user_can_manage_all_cc_pairs(
+        cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -897,11 +893,8 @@ def update_user_group(
         db_user_group,
         attaching_cc_pairs=bool(added_cc_pair_ids),
     )
-    _assert_group_update_within_scope(
-        db_session,
-        user,
-        user_group_id,
-        added_cc_pair_ids=added_cc_pair_ids,
+    assert_cc_pairs_attachable_to_group(
+        db_session, user, user_group_id, cc_pair_ids=added_cc_pair_ids
     )
 
     current_user_ids = {user.id for user in db_user_group.users}
@@ -1051,8 +1044,8 @@ def set_user_group_data_access_cc_pairs(
     if not changed_cc_pair_ids:
         return current_cc_pair_ids
 
-    _assert_group_update_within_scope(
-        db_session, user, user_group_id, added_cc_pair_ids=added_cc_pair_ids
+    assert_cc_pairs_attachable_to_group(
+        db_session, user, user_group_id, cc_pair_ids=added_cc_pair_ids
     )
     if not verify_user_can_manage_all_cc_pairs(
         changed_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
