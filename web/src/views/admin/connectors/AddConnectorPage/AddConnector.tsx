@@ -2,7 +2,11 @@
 
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
+import {
+  getSourceDisplayName,
+  getSourceDocLink,
+  getSourceMetadata,
+} from "@/lib/sources";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/lib/app/components";
 import { linkCredential } from "@/lib/credential";
@@ -39,6 +43,7 @@ import { Formik } from "formik";
 import { useRouter } from "next/navigation";
 import { Button } from "@opal/components";
 import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
@@ -177,6 +182,17 @@ export default function AddConnector({
   };
 
   const displayName = getSourceDisplayName(connector) || connector;
+
+  // The docs sit at the end of the header sentence, so the whole page has
+  // one pointer to them rather than one per form.
+  const docsLink = getSourceDocLink(connector);
+  const headerSentence = t("header.description", {
+    source: displayName,
+    appName: settings.appName,
+  });
+  const headerDescription = docsLink
+    ? markdown(`${headerSentence} [${t("header.docsLink.label")}](${docsLink})`)
+    : headerSentence;
   const sourceMetadata = getSourceMetadata(connector);
   const hasFederatedOption = sourceMetadata.federated === true;
   const onSuccess = () => {
@@ -414,10 +430,7 @@ export default function AddConnector({
               moreIcon1={SvgArrowExchange}
               moreIcon2={Logo}
               title={displayName}
-              description={t("header.description", {
-                source: displayName,
-                appName: settings.appName,
-              })}
+              description={headerDescription}
               divider
               actions={[
                 <Button

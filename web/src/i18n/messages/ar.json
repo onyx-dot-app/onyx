@@ -2830,7 +2830,10 @@
         "connectButton": {
           "label": "اتصال"
         },
-        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}."
+        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}.",
+        "docsLink": {
+          "label": "عرض الوثائق"
+        }
       },
       "invalidConnector": {
         "homeButton": {
