@@ -132,6 +132,8 @@ CONNECTOR_CLASS_MAP = {
     DocumentSource.JIRA_SERVICE_MANAGEMENT: ConnectorMapping(
         module_path="onyx.connectors.jira_service_management.connector",
         class_name="JiraServiceManagementConnector",
+        # Same constructor as JiraConnector, so the same config shape.
+        config_class=JiraConnectorConfig,
     ),
     DocumentSource.PRODUCTBOARD: ConnectorMapping(
         module_path="onyx.connectors.productboard.connector",
