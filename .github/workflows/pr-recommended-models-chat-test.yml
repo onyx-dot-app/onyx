@@ -1,5 +1,5 @@
-# Pre-merge check that every model in recommended-models.json works end-to-end,
-# via the nightly provider chat pipeline. Production deployments fetch that JSON
+# Pre-merge check that every model in recommended-models.json, minus SKIPPED_MODELS,
+# works end-to-end via the nightly provider chat pipeline. Production deployments fetch that JSON
 # live from `main` (AUTO_LLM_CONFIG_URL), so broken recommendations ship immediately.
 #
 # `strict: false` lets providers absent from the JSON skip cleanly; genuine chat
@@ -47,13 +47,18 @@ jobs:
 
           RECOMMENDED_MODELS_FILE="backend/onyx/llm/well_known_providers/recommended-models.json"
 
-          # default_model + additional_visible_models names, deduped, comma-joined.
+          # Onyx sends kimi-k3's catalog max_tokens (943,718), so OpenRouter rejects the
+          # request unless the key holds ~$14, more than the CI key's balance.
+          SKIPPED_MODELS='["moonshotai/kimi-k3"]'
+
+          # default_model + additional_visible_models names minus SKIPPED_MODELS, deduped, comma-joined.
           # A missing provider key yields "" → clean pytest.skip under strict=false.
           derive() {
-            jq -r --arg p "$1" '
+            jq -r --arg p "$1" --argjson skipped "$SKIPPED_MODELS" '
               (.providers[$p] // {})
               | ([.default_model // empty] + [(.additional_visible_models // [])[].name])
               | map(select(type == "string" and length > 0))
+              | . - $skipped
               | unique
               | join(",")
             ' "$RECOMMENDED_MODELS_FILE"
