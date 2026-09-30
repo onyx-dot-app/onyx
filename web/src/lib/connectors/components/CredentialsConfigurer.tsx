@@ -7,6 +7,7 @@ import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/connectors/types";
 import { useCredentialSetup } from "@/lib/connectors/hooks";
+import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
@@ -48,7 +49,9 @@ export function CredentialsConfigurer({
     methods,
     canAuthorize,
     openMethod,
+    namesMethods,
     open,
+    selectMethod,
     close,
     remove,
     refresh,
@@ -77,20 +80,16 @@ export function CredentialsConfigurer({
   }
 
   /**
-   * The creation form for one method, rendered inside that method's card.
-   * The OAuth branch only reaches its redirect message if the details
-   * changed under us: `openCredentialCreationMethod` redirects instead of
-   * opening the card when a redirect is all the source needs.
+   * One route into the source, rendered inside the card. A source that
+   * takes no extra OAuth fields is a plain hand-off, so its route is the
+   * button alone.
    */
   function renderCredentialForm(method: CredentialCreationMethod) {
     if (method === CredentialCreationMethod.OAuth && oauthDetails) {
       return shouldRedirectToOAuth(oauthDetails) ? (
         <Section alignItems="start">
-          <Text as="p" font="main-ui-body" color="text-03">
-            {t("add.oauthRedirectFailed.message", { source: displayName })}
-          </Text>
           <Button onClick={attemptOauthRedirect}>
-            {t("add.retryButton.label")}
+            {t("add.connectWithTab.label", { source: displayName })}
           </Button>
         </Section>
       ) : (
@@ -119,13 +118,29 @@ export function CredentialsConfigurer({
     }
   }
 
-  async function openCredentialCreationMethod(
-    method: CredentialCreationMethod
-  ) {
-    const error = await open(method);
-    if (error !== null) {
-      toast.error(error || t("add.oauthStartFailed.toast"));
-    }
+  /** The card is open while a route is chosen; the route is the open tab. */
+  const isCreating = openMethod !== null;
+
+  /** The route the card opens on: typing one in, when the source allows it. */
+  const defaultMethod =
+    methods.find((method) => method === CredentialCreationMethod.Manual) ??
+    methods[0] ??
+    CredentialCreationMethod.Manual;
+
+  /** One panel per route, keyed by method, for the card's tab strip. */
+  function credentialTabs() {
+    return Object.fromEntries(
+      methods.map((method) => [
+        method,
+        {
+          name:
+            method === CredentialCreationMethod.OAuth
+              ? t("add.connectWithTab.label", { source: displayName })
+              : t("add.manualTab.label"),
+          content: renderCredentialForm(method),
+        },
+      ])
+    );
   }
 
   // Gets an auth url from the server and sends the user to it in a popup.
@@ -231,45 +246,50 @@ export function CredentialsConfigurer({
             />
           </Card>
         ) : (
-          methods.map((method) => {
-            const isExpanded = openMethod === method;
-            return (
-              <SelectCard
-                key={method}
-                expandable
-                expanded={isExpanded}
-                expandableContentHeight="full"
-                border="solid"
-                state={isExpanded ? "filled" : "empty"}
-                rounding={4}
-                padding={2}
-                // The card is one action, so it names itself. Nothing inside
-                // the interactive half is focusable, so a role here folds no
-                // other control into that name.
-                role="button"
-                aria-label={newAccountLabel}
-                tabIndex={0}
-                expandedContent={
-                  <div className="p-4" data-testid="credential-form">
-                    {renderCredentialForm(method)}
-                  </div>
-                }
-                onClick={() =>
-                  isExpanded ? close() : openCredentialCreationMethod(method)
-                }
-              >
-                <Section padding={2} width="full">
-                  <Content
-                    icon={SvgPlusCircle}
-                    title={newAccountLabel}
-                    sizePreset="main-ui"
-                    variant="body"
-                    color={isExpanded ? "interactive" : "muted"}
+          <SelectCard
+            expandable
+            expanded={isCreating}
+            expandableContentHeight="full"
+            border="solid"
+            state={isCreating ? "filled" : "empty"}
+            rounding={4}
+            padding={2}
+            // The card is one action, so it names itself. Nothing inside the
+            // interactive half is focusable, so a role here folds no other
+            // control into that name.
+            role="button"
+            aria-label={newAccountLabel}
+            tabIndex={0}
+            expandedContent={
+              <div className="p-4" data-testid="credential-form">
+                {namesMethods ? (
+                  <SimpleTabs
+                    tabs={credentialTabs()}
+                    value={openMethod ?? defaultMethod}
+                    onValueChange={(value) => {
+                      // Matched against the real methods rather than cast:
+                      // the tab strip hands back a plain string.
+                      const picked = methods.find((method) => method === value);
+                      if (picked) selectMethod(picked);
+                    }}
                   />
-                </Section>
-              </SelectCard>
-            );
-          })
+                ) : (
+                  renderCredentialForm(defaultMethod)
+                )}
+              </div>
+            }
+            onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
+          >
+            <Section padding={2} width="full">
+              <Content
+                icon={SvgPlusCircle}
+                title={newAccountLabel}
+                sizePreset="main-ui"
+                variant="body"
+                color={isCreating ? "interactive" : "muted"}
+              />
+            </Section>
+          </SelectCard>
         )}
       </Section>
     </Section>

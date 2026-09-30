@@ -2607,6 +2607,9 @@
         "collapseButton": {
           "ariaLabel": "折りたたむ"
         },
+        "connectWithTab": {
+          "label": "{source} と接続"
+        },
         "createCredentialButton": {
           "label": "新規作成"
         },
@@ -2639,6 +2642,9 @@
         },
         "fileUploadFailed": {
           "toast": "ファイルのアップロード中にエラーが発生しました"
+        },
+        "manualTab": {
+          "label": "認証情報を手動で入力"
         },
         "newAccountButton": {
           "label": "新しい {source} アカウント"

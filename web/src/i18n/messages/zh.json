@@ -2607,6 +2607,9 @@
         "collapseButton": {
           "ariaLabel": "折叠"
         },
+        "connectWithTab": {
+          "label": "连接 {source}"
+        },
         "createCredentialButton": {
           "label": "新建"
         },
@@ -2639,6 +2642,9 @@
         },
         "fileUploadFailed": {
           "toast": "上传文件出错"
+        },
+        "manualTab": {
+          "label": "手动输入凭据"
         },
         "newAccountButton": {
           "label": "新建 {source} 账户"

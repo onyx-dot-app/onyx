@@ -2607,6 +2607,9 @@
         "collapseButton": {
           "ariaLabel": "طي"
         },
+        "connectWithTab": {
+          "label": "الاتصال بـ {source}"
+        },
         "createCredentialButton": {
           "label": "إنشاء جديد"
         },
@@ -2639,6 +2642,9 @@
         },
         "fileUploadFailed": {
           "toast": "خطأ في رفع الملفات"
+        },
+        "manualTab": {
+          "label": "إدخال بيانات الاعتماد يدويًا"
         },
         "newAccountButton": {
           "label": "حساب {source} جديد"

@@ -2607,6 +2607,9 @@
         "collapseButton": {
           "ariaLabel": "Replier"
         },
+        "connectWithTab": {
+          "label": "Se connecter avec {source}"
+        },
         "createCredentialButton": {
           "label": "Créer"
         },
@@ -2639,6 +2642,9 @@
         },
         "fileUploadFailed": {
           "toast": "Erreur lors du téléversement des fichiers"
+        },
+        "manualTab": {
+          "label": "Saisir les identifiants manuellement"
         },
         "newAccountButton": {
           "label": "Nouveau compte {source}"

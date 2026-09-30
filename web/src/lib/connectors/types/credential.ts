@@ -105,6 +105,11 @@ export interface CredentialSetup {
    * flow, leaves for the provider instead of opening anything.
    */
   open: (method: CredentialCreationMethod) => Promise<string | null>;
+  /**
+   * Shows one method's form without starting anything. `open` may leave for
+   * the provider instead; this never does, so it is what a tab switch uses.
+   */
+  selectMethod: (method: CredentialCreationMethod) => void;
   /** Hides whichever creation form is showing. */
   close: () => void;
   /**

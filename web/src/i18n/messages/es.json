@@ -2607,6 +2607,9 @@
         "collapseButton": {
           "ariaLabel": "Contraer"
         },
+        "connectWithTab": {
+          "label": "Conectar con {source}"
+        },
         "createCredentialButton": {
           "label": "Crear una nueva"
         },
@@ -2639,6 +2642,9 @@
         },
         "fileUploadFailed": {
           "toast": "Error al subir los archivos"
+        },
+        "manualTab": {
+          "label": "Introducir credenciales manualmente"
         },
         "newAccountButton": {
           "label": "Nueva cuenta de {source}"
