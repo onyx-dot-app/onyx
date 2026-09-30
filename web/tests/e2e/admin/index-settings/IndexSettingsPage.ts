@@ -235,6 +235,23 @@ export class IndexSettingsPage {
   }
 
   // ---------------------------------------------------------------------------
+  // Vector quantization
+  // ---------------------------------------------------------------------------
+
+  /** Pick a Vector Quantization level by its option title, e.g. "1-bit". */
+  async selectVectorQuantization(label: string): Promise<void> {
+    await this.page
+      .locator("label")
+      .filter({ hasText: "Vector Quantization" })
+      .getByRole("combobox")
+      .click();
+    await this.page
+      .getByRole("listbox", { name: "Select an option" })
+      .getByRole("option", { name: label })
+      .click();
+  }
+
+  // ---------------------------------------------------------------------------
   // Apply strategy
   // ---------------------------------------------------------------------------
 

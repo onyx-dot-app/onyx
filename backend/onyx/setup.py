@@ -26,7 +26,6 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.credentials import create_initial_public_credential
 from onyx.db.document import check_docs_exist
-from onyx.db.enums import EmbeddingPrecision
 from onyx.db.index_attempt import (
     cancel_indexing_attempts_past_model,
     expire_index_attempts,
@@ -227,7 +226,6 @@ def setup_document_indices(
                 )
                 document_index.verify_and_create_index_if_necessary(
                     embedding_dim=index_setting.final_embedding_dim,
-                    embedding_precision=index_setting.embedding_precision,
                 )
 
                 logger.notice(
@@ -384,11 +382,6 @@ def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) ->
                 ],
                 embedding_dims=[index.dim for index in supported_indices]
                 + [index.dim for index in supported_indices],
-                # on the cloud, just use float for all indices, the option to change this
-                # is not exposed to the user
-                embedding_precisions=[
-                    EmbeddingPrecision.FLOAT for _ in range(len(supported_indices) * 2)
-                ],
             )
 
             logger.notice("Vespa setup complete.")

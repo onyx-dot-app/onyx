@@ -5248,6 +5248,22 @@
         "targetUrlRequired": "Target URL is required",
         "urlInvalid": "Must be a valid URL"
       },
+      "vectorQuantization": {
+        "description": "Store document vectors with fewer bits to use less memory. Fewer bits can lower search quality.",
+        "none": {
+          "description": "Full 32-bit precision.",
+          "label": "None"
+        },
+        "scalar1Bit": {
+          "description": "32x less memory. Needs OpenSearch 3.6 or later.",
+          "label": "1-bit"
+        },
+        "scalar7Bit": {
+          "description": "4x less memory. Almost no loss in search quality.",
+          "label": "7-bit"
+        },
+        "title": "Vector Quantization"
+      },
       "wontPortConsentModal": {
         "title": "{count, plural, one {This connector will be deleted} other {These # connectors will be deleted}}",
         "submit": "Delete & Re-index",

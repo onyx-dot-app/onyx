@@ -526,6 +526,20 @@ class OpenSearchClient(AbstractContextManager):
         """
         return self._client.ping()
 
+    @log_function_time(print_only=True, debug_only=True)
+    def get_opensearch_version(self) -> tuple[int, int] | None:
+        """Returns the (major, minor) OpenSearch version of the cluster.
+
+        Returns:
+            None if the cluster does not report an OpenSearch version, for
+                example an AWS domain in Elasticsearch compatibility mode.
+        """
+        version_info: dict[str, Any] = self._client.info()["version"]
+        if version_info.get("distribution") != "opensearch":
+            return None
+        major, minor = version_info["number"].split(".")[:2]
+        return int(major), int(minor)
+
     def close(self) -> None:
         """Closes the client.
 

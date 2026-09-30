@@ -5248,6 +5248,22 @@
         "targetUrlRequired": "ターゲット URL は必須です",
         "urlInvalid": "有効な URL を入力してください"
       },
+      "vectorQuantization": {
+        "description": "ドキュメントのベクトルを少ないビット数で保存し、メモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。",
+        "none": {
+          "description": "32 ビットの完全な精度。",
+          "label": "なし"
+        },
+        "scalar1Bit": {
+          "description": "メモリ使用量が 32 分の 1。OpenSearch 3.6 以降が必要です。",
+          "label": "1 ビット"
+        },
+        "scalar7Bit": {
+          "description": "メモリ使用量が 4 分の 1。検索品質はほぼ低下しません。",
+          "label": "7 ビット"
+        },
+        "title": "ベクトル量子化"
+      },
       "wontPortConsentModal": {
         "title": "{count, plural, one {このコネクタは削除されます} other {これら # 個のコネクタは削除されます}}",
         "submit": "削除して再インデックス",

@@ -153,7 +153,7 @@ opensearch:
 
   image:
     repository: "opensearchproject/opensearch"
-    tag: ""  # Empty uses chart's appVersion (3.4.0).
+    tag: ""  # Empty uses chart's appVersion (3.6.0).
 
   # The security plugin requires OPENSEARCH_INITIAL_ADMIN_PASSWORD for
   # OpenSearch 2.12+.

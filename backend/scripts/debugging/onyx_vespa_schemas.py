@@ -17,7 +17,6 @@ from pathlib import Path
 import jinja2
 
 from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
-from onyx.db.enums import EmbeddingPrecision
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -26,7 +25,6 @@ logger = setup_logger()
 def write_schema(
     index_name: str,
     dim: int,
-    embedding_precision: EmbeddingPrecision,
     template: jinja2.Template,
     output_path: Path,
 ) -> None:
@@ -40,7 +38,6 @@ def write_schema(
         multi_tenant=True,
         schema_name=index_name,
         dim=dim,
-        embedding_precision=embedding_precision.value,
     )
 
     with open(index_filename, "w", encoding="utf-8") as f:
@@ -125,14 +122,12 @@ def main() -> None:
         write_schema(
             model.index_name,
             model.dim,
-            model.embedding_precision,
             template,
             output_path,
         )
         write_schema(
             model.index_name + "__danswer_alt_index",
             model.dim,
-            model.embedding_precision,
             template,
             output_path,
         )

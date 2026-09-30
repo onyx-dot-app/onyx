@@ -54,7 +54,6 @@ from onyx.db.document import (
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
@@ -364,7 +363,6 @@ def test_use_port_flow_default_and_round_trip(
             passage_prefix="",
             provider_type=None,
             multipass_indexing=False,
-            embedding_precision=EmbeddingPrecision.FLOAT,
             index_name=f"test_port_flow_{uuid4().hex[:8]}",
             enable_contextual_rag=False,
         )
