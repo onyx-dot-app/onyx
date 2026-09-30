@@ -26,6 +26,7 @@ from onyx.connectors.capability_checks.runner import (
     capability_check_run_ceiling_seconds,
     capability_check_run_stale_after,
 )
+from onyx.connectors.factory import validate_connector_config
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_for_user,
@@ -188,6 +189,13 @@ def trigger_capability_check(
                 f"{connector.source.value} connector; credential "
                 f"{credential_id} is for {credential.source.value}.",
             )
+        if request.connector_specific_config is not None:
+            try:
+                validate_connector_config(
+                    connector.source, request.connector_specific_config
+                )
+            except ValueError as e:
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     row = mark_capability_report_running(
         db_session,
         credential_id=credential_id,

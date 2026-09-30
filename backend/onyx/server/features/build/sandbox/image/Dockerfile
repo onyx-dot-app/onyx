@@ -17,7 +17,7 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb
 
 # Node.js source. The final image is Python-based, but the sandbox still needs
 # Node/npm/npx for MCP commands and skill-runtime packages.
-FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:50c3b2f6988dfc307b86e5301d69611af31f4789bdf232863b07d3b02fe55ae0 AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS node_source
 ARG NPM_VERSION=11.17.0
 RUN npm install -g "npm@${NPM_VERSION}" && \
     npm cache clean --force && \
@@ -41,7 +41,7 @@ RUN set -eux; \
     tar -xzf "${tarball}"; \
     install -m 0755 "gh_${GH_CLI_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh
 
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
 # poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by

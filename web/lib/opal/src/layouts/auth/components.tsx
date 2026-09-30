@@ -170,6 +170,8 @@ function Message({
 }: MessageProps) {
   return (
     <MessageCard
+      outerPadding={1}
+      innerPadding={1}
       variant={messageType}
       title={title}
       description={description}

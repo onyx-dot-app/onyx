@@ -63,7 +63,7 @@ variable "size" {
 # this false and nothing is left guarded by a flag someone forgot.
 variable "deletion_protection" {
   type        = bool
-  description = "Refuse to destroy the cluster, database, cache, bucket and Cloud Armor policy. Set false and apply before a destroy."
+  description = "Refuse to destroy the cluster, database, cache, bucket, Cloud Armor policy, and the L7 address and DNS authorizations. Set false and apply before a destroy."
   default     = true
 }
 
@@ -432,6 +432,27 @@ variable "cloud_armor_adaptive_protection_enabled" {
   type        = bool
   description = "Enable Adaptive Protection layer 7 DDoS detection"
   default     = true
+}
+
+# --- L7 ingress --------------------------------------------------------------
+
+# Off by default: the chart's ingress-nginx LoadBalancer keeps serving until
+# the Gateway objects in the README exist and DNS moves.
+variable "enable_l7_ingress" {
+  type        = bool
+  description = "Create the address, certificates and certificate map for a Gateway-built L7 load balancer, which the Cloud Armor policy can attach to"
+  default     = false
+}
+
+variable "l7_domains" {
+  type        = list(string)
+  description = "Hostnames the L7 load balancer serves, for example [\"onyx.example.com\"]. Required when enable_l7_ingress is true."
+  default     = []
+
+  validation {
+    condition     = !var.enable_l7_ingress || length(var.l7_domains) > 0
+    error_message = "enable_l7_ingress needs at least one hostname in l7_domains for the certificate."
+  }
 }
 
 # --- Alerts ------------------------------------------------------------------

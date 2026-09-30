@@ -333,6 +333,8 @@ export default function NotificationsPopover({
       {pinnedAnnouncement && (
         <div className="px-1 pb-1">
           <MessageCard
+            outerPadding={1}
+            innerPadding={1}
             variant="info"
             icon={getNotificationIcon(pinnedAnnouncement.notif_type)}
             title={pinnedAnnouncement.title}

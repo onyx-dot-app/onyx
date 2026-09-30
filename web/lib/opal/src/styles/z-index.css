@@ -8,7 +8,11 @@
 :root {
   /* Must sit above sticky table headers so the settings page header scrolls
      over pinned columns without being obscured. */
-  --z-settings-header: 11;
+  --z-settings-header: 12;
+  /* A StickyBox: above the content it scrolls over, including Tailwind's
+     z-10 that tab underlines and pinned table headers use, and below the
+     settings header so a sticky header still covers it. */
+  --z-sticky: 11;
 
   /* Modal scrim and card. Below popovers/tooltips so pickers opened from
      inside a modal stack above it. */
@@ -24,6 +28,9 @@
 
 .z-settings-header {
   z-index: var(--z-settings-header);
+}
+.z-sticky {
+  z-index: var(--z-sticky);
 }
 .z-modal-overlay {
   z-index: var(--z-modal-overlay);

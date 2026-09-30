@@ -12,12 +12,16 @@ import requests
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import (
     ZoomInvitee,
+    ZoomMeetingSettings,
     ZoomPanelist,
     ZoomParticipant,
     ZoomRegistrant,
 )
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
-from tests.unit.onyx.connectors.zoom.zoom_api_shapes import transcript
+from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
+    meeting_details,
+    recording_with_transcript,
+)
 
 SAMPLE_VTT = """WEBVTT
 
@@ -76,7 +80,9 @@ def with_transcript(
         client = mock_zoom_client()
     # No topic makes the caller fall back to the details endpoint, which is
     # what most of these tests are about.
-    client.get_transcript.return_value = transcript(download_url=TRANSCRIPT_URL)
+    client.get_recording.return_value = recording_with_transcript(
+        download_url=TRANSCRIPT_URL
+    )
     client.download_transcript_vtt.return_value = vtt
     return client
 
@@ -97,6 +103,8 @@ def with_access(
     client.list_past_webinar_participants.return_value = participants or []
     client.list_meeting_registrants.return_value = registrants or []
     client.list_webinar_registrants.return_value = registrants or []
-    client.list_meeting_invitees.return_value = invitees or []
+    client.get_meeting_details.return_value = meeting_details(
+        settings=ZoomMeetingSettings(meeting_invitees=invitees or [])
+    )
     client.list_webinar_panelists.return_value = panelists or []
     return client

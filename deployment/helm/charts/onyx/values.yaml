@@ -117,6 +117,11 @@ postgresql:
     enableSuperuserAccess: true
     superuserSecret:
       name: onyx-postgresql  # keep in sync with auth.postgresql
+    # Keep the CNPG Cluster and its PVCs on `helm uninstall`. The bundled operator is still
+    # removed; reinstall with the same release name to adopt the Cluster again. To delete it
+    # without the operator, `kubectl delete` it, then clear its finalizers with
+    # `kubectl patch clusters.postgresql.cnpg.io <release>-pg -n <ns> --type merge -p '{"metadata":{"finalizers":null}}'`.
+    retainOnUninstall: false
 
 # -- Master toggle for vector database support. When false:
 #   - Sets DISABLE_VECTOR_DB=true on all backend pods
@@ -242,6 +247,8 @@ inferenceCapability:
     runAsNonRoot: true
     runAsUser: 1001
     fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     capabilities:
       drop:
@@ -321,6 +328,8 @@ indexCapability:
     runAsNonRoot: true
     runAsUser: 1001
     fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     capabilities:
       drop:
@@ -452,12 +461,14 @@ webserver:
   podAnnotations: {}
   podLabels:
     scope: onyx-frontend
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
     # fsGroup: 2000
 
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
     # capabilities:
     #   drop:
     #   - ALL
@@ -569,12 +580,14 @@ api:
   # real, so size against CPU/memory.
   threadpoolSize: 0
 
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
     # fsGroup: 2000
 
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
     # capabilities:
     #   drop:
     #   - ALL
@@ -722,13 +735,18 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
-  podSecurityContext: {}
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  # allowPrivilegeEscalation is dropped automatically if you set privileged.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     # `privileged` is not needed by this workload and is intentionally omitted.
     # root is kept only so the optional customCACerts feature can run
     # update-ca-certificates; to run non-root, override this and
     # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
+    allowPrivilegeEscalation: false
 
 celery_beat:
   extraEnv: []
@@ -1086,10 +1104,12 @@ discordbot:
     scope: onyx-backend
   deploymentLabels:
     app: discord-bot
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "500m"
@@ -1115,10 +1135,12 @@ slackbot:
     scope: onyx-backend
   deploymentLabels:
     app: slack-bot
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "500m"
@@ -1154,8 +1176,12 @@ mcpServer:
     servicePort: 8090
     targetPort: mcp-server-port
     portName: mcp-server-port
-  podSecurityContext: {}
-  securityContext: {}
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "250m"
@@ -1229,6 +1255,14 @@ celery_worker_docfetching:
 # End background workers section
 #
 ######################################################################
+
+# Pre-delete hook that deletes this release's CNPG Cluster and Redis CRs while
+# their operators still run.
+preDeleteCleanup:
+  image:
+    repository: registry.k8s.io/kubectl
+    tag: v1.34.12
+    pullPolicy: IfNotPresent
 
 # Uncomment to skip the bundled redis-operator and let an existing cluster-wide
 # operator reconcile the Redis CR below (keep redis.enabled: true). Your operator

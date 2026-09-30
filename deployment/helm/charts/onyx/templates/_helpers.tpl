@@ -85,6 +85,20 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+Render a container securityContext. Kubernetes rejects
+allowPrivilegeEscalation=false alongside privileged or CAP_SYS_ADMIN, so the
+default is dropped when an override asks for either.
+*/}}
+{{- define "onyx.containerSecurityContext" -}}
+{{- $sc := deepCopy (. | default dict) -}}
+{{- $added := (get ($sc.capabilities | default dict) "add") | default list -}}
+{{- if or $sc.privileged (has "SYS_ADMIN" $added) (has "CAP_SYS_ADMIN" $added) -}}
+{{- $_ := unset $sc "allowPrivilegeEscalation" -}}
+{{- end -}}
+{{- toYaml $sc -}}
+{{- end }}
+
+{{/*
 Set secret name
 */}}
 {{- define "onyx.secretName" -}}

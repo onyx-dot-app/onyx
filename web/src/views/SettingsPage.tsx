@@ -42,7 +42,7 @@ import {
   type Locale,
 } from "@/i18n/config";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useLlmManager } from "@/lib/hooks";
@@ -94,7 +94,12 @@ import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { hasPermission } from "@/lib/permissions";
-import { findModelConfigId } from "@/lib/languageModels/options";
+import {
+  filterModelConfigurations,
+  findDefaultModelDisplayName,
+  findLlmOptionById,
+  findModelConfigId,
+} from "@/lib/languageModels/options";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -1241,6 +1246,15 @@ function ChatPreferencesSettings() {
   );
 
   const settings = useSettings();
+  const { defaultText } = useLanguageModels();
+  // The user's default as a configuration id; null means the global default.
+  const defaultModelConfigId = user?.preferences?.default_model
+    ? findModelConfigId(
+        llmManager.llmProviders,
+        llmManager.currentLlm.provider,
+        llmManager.currentLlm.modelName
+      )
+    : null;
   const userTemperatureDefault = user?.preferences.temperature_default ?? null;
   const userEffortDefault = user?.preferences.reasoning_effort_default ?? null;
   // 0 mirrors the backend GEN_AI_TEMPERATURE fallback an untouched chat
@@ -1333,39 +1347,44 @@ function ChatPreferencesSettings() {
               })}
               withLabel
             >
-              <ModelSelector
-                value={
-                  user?.preferences?.default_model
-                    ? findModelConfigId(
-                        llmManager.llmProviders,
-                        llmManager.currentLlm.provider,
-                        llmManager.currentLlm.modelName
-                      )
-                    : null
-                }
-                onChange={(opt) => {
-                  if (opt.modelConfigurationId === null) {
-                    void updateUserDefaultModel(null);
-                  } else {
-                    llmManager.updateCurrentLlm({
-                      name: opt.name,
-                      provider: opt.provider,
-                      modelName: opt.modelName,
-                      modelConfigurationId: opt.modelConfigurationId,
-                    });
-                    void updateUserDefaultModel(
-                      structureValue(
-                        opt.name,
-                        opt.provider,
-                        opt.modelName,
-                        opt.modelConfigurationId
-                      )
-                    );
-                  }
+              <SimpleModelSelector
+                nullable
+                globalDefault={{
+                  description: findDefaultModelDisplayName(
+                    llmManager.llmProviders,
+                    defaultText
+                  ),
                 }}
-                temperatureManager={llmManager}
-                includeGlobalDefault
-                side="bottom"
+                providers={filterModelConfigurations(
+                  llmManager.llmProviders ?? [],
+                  { keep: defaultModelConfigId }
+                )}
+                value={defaultModelConfigId}
+                grouped={!settings.hide_provider_grouping}
+                onChange={(modelConfigurationId) => {
+                  const opt = findLlmOptionById(
+                    llmManager.llmProviders,
+                    modelConfigurationId
+                  );
+                  if (modelConfigurationId === null || opt === null) {
+                    void updateUserDefaultModel(null);
+                    return;
+                  }
+                  llmManager.updateCurrentLlm({
+                    name: opt.name,
+                    provider: opt.provider,
+                    modelName: opt.modelName,
+                    modelConfigurationId,
+                  });
+                  void updateUserDefaultModel(
+                    structureValue(
+                      opt.name,
+                      opt.provider,
+                      opt.modelName,
+                      modelConfigurationId
+                    )
+                  );
+                }}
               />
             </InputHorizontal>
 

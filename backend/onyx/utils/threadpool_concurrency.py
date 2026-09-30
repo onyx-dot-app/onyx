@@ -452,27 +452,6 @@ def run_async_sync_no_cancel(coro: Coroutine[Any, Any, T]) -> T:
         return future.result()
 
 
-def run_multiple_in_background(
-    funcs: list[Callable[[], None]],
-    thread_name_prefix: str = "worker",
-) -> ThreadPoolExecutor:
-    """Submit multiple callables to a ``ThreadPoolExecutor`` with context propagation.
-
-    Copies the current ``contextvars`` context once and runs every callable
-    inside that copy, which is important for preserving tenant IDs and other
-    context-local state across threads.
-
-    Returns the executor so the caller can ``shutdown()`` when done.
-    """
-    ctx = contextvars.copy_context()
-    executor = ThreadPoolExecutor(
-        max_workers=len(funcs), thread_name_prefix=thread_name_prefix
-    )
-    for func in funcs:
-        executor.submit(ctx.run, func)
-    return executor
-
-
 def start_thread_with_context(
     target: Callable[..., Any],
     *,
@@ -486,8 +465,8 @@ def start_thread_with_context(
     with an empty context, so tenant-scoped DB access inside the thread would
     raise "Tenant ID is not set".
 
-    Unlike ``run_in_background`` / ``run_multiple_in_background``, this is for
-    daemon producer threads that are never joined.
+    Unlike ``run_in_background``, this is for daemon producer threads that are
+    never joined.
     """
     ctx = contextvars.copy_context()
     thread = threading.Thread(

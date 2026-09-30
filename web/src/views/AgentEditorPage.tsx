@@ -29,7 +29,15 @@ import InputTypeInElementField from "@/refresh-components/form/InputTypeInElemen
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
 import { Content, InputHorizontal, InputVertical } from "@opal/layouts";
 import { useFormikContext } from "formik";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
+import {
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
+import {
+  filterModelConfigurations,
+  findDefaultModelDisplayName,
+} from "@/lib/languageModels/options";
 import {
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
@@ -420,8 +428,19 @@ export default function AgentEditorPage({
   const canUpdateFeaturedStatus = existingAgent
     ? can(existingAgent, "feature")
     : hasPermission(permissions, Permission.MANAGE_AGENTS);
-  const { vectorDbEnabled, appName } = useSettings();
+  const {
+    vectorDbEnabled,
+    appName,
+    hide_provider_grouping: hideProviderGrouping,
+  } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+  // The providers this agent may use; a new agent gets the unscoped list.
+  const { llmProviders: agentLlmProviders } = useLanguageModelsForAgent(
+    existingAgent?.id
+  );
+  // The Global Default row names the workspace default, which only the
+  // unscoped list is sure to carry.
+  const { llmProviders: globalLlmProviders, defaultText } = useLanguageModels();
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
@@ -1648,20 +1667,35 @@ export default function AgentEditorPage({
                                     { appName }
                                   )}
                                 >
-                                  <ModelSelector
-                                    agentId={existingAgent?.id}
+                                  <SimpleModelSelector
+                                    nullable
+                                    globalDefault={{
+                                      description: findDefaultModelDisplayName(
+                                        globalLlmProviders,
+                                        defaultText
+                                      ),
+                                    }}
+                                    providers={filterModelConfigurations(
+                                      agentLlmProviders ?? [],
+                                      {
+                                        keep:
+                                          (values.default_model_configuration_id as
+                                            | number
+                                            | null) ?? null,
+                                      }
+                                    )}
                                     value={
                                       (values.default_model_configuration_id as
                                         | number
                                         | null) ?? null
                                     }
-                                    onChange={(opt) =>
+                                    grouped={!hideProviderGrouping}
+                                    onChange={(modelConfigurationId) =>
                                       setFieldValue(
                                         "default_model_configuration_id",
-                                        opt.modelConfigurationId ?? null
+                                        modelConfigurationId
                                       )
                                     }
-                                    includeGlobalDefault
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal

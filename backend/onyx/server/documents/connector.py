@@ -48,7 +48,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.factory import validate_ccpair_for_user, validate_connector_config
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
@@ -1503,6 +1503,15 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
     )
 
 
+def _validate_connector_request(connector_data: ConnectorBase) -> None:
+    """Raises ``ValueError`` if the connector type is disabled or the config does
+    not match the source's typed config."""
+    _validate_connector_allowed(connector_data.source)
+    validate_connector_config(
+        connector_data.source, connector_data.connector_specific_config
+    )
+
+
 @router.post("/admin/connector", tags=PUBLIC_API_TAGS)
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
@@ -1516,7 +1525,7 @@ def create_connector_from_model(
     tenant_id = get_current_tenant_id()
 
     try:
-        _validate_connector_allowed(connector_data.source)
+        _validate_connector_request(connector_data)
 
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
@@ -1573,7 +1582,7 @@ def create_connector_with_mock_credential(
     )
 
     try:
-        _validate_connector_allowed(connector_data.source)
+        _validate_connector_request(connector_data)
         connector_response = create_connector(
             db_session=db_session,
             connector_data=connector_data,
@@ -1651,7 +1660,7 @@ def update_connector_from_model(
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     try:
-        _validate_connector_allowed(connector_data.source)
+        _validate_connector_request(connector_data)
         connector_base = connector_data.to_connector_base()
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
