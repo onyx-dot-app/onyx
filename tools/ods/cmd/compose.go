@@ -126,9 +126,10 @@ func composeFiles(profile string) []string {
 	}
 }
 
-// composeProfiles returns Docker Compose profile names to activate. Minio is
-// defined with profiles: ["s3-filestore"] in docker-compose.yml, so it must be
-// activated explicitly for commands like "down" that don't name services.
+// composeProfiles returns Docker Compose profile names to activate. The object
+// store and MinIO are defined with profiles: ["s3-filestore"] in
+// docker-compose.yml, so it must be activated explicitly for commands like
+// "down" that don't name services.
 func composeProfiles(profile string) []string {
 	switch profile {
 	case "dev", "multitenant":
@@ -306,6 +307,11 @@ func runCompose(profile string, opts *ComposeOptions) error {
 		}
 
 		if profile == "dev" || profile == "multitenant" {
+			// Dev runs the object store only; `ods object-store migrate` is
+			// the one command that starts MinIO.
+			if err := setEnvValue("MINIO_REPLICAS", "0"); err != nil {
+				return err
+			}
 			ports, err := docker.FindAvailablePorts()
 			if err != nil {
 				return fatalErrorf("Failed to find available ports: %w", err)
