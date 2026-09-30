@@ -30,8 +30,7 @@ env:
 jobs:
   connector-filter-eval:
     # Informative, not a merge gate: a single failing eval case fails the run,
-    # but some cases document behaviors the prompt does not handle yet, so a
-    # red eval must never block the PR.
+    # and the backoff advance-vs-re-search cases can flake with cheap models.
     continue-on-error: true
     runs-on:
       - runs-on
