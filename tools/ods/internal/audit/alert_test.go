@@ -34,7 +34,7 @@ func TestGroupAlerts_mergesSourcesPerPackage(t *testing.T) {
 		{ID: "GHSA-a", Ecosystem: "npm", Package: "lodash", Severity: SeverityLow},
 	}
 
-	got := groupAlerts(findings, scanned)
+	got := groupAlerts(findings, scanned, "main")
 
 	want := []Alert{
 		{
@@ -42,12 +42,12 @@ func TestGroupAlerts_mergesSourcesPerPackage(t *testing.T) {
 			// The merged-in finding's own id becomes an alias.
 			Advisories: []Advisory{{ID: "GHSA-req", Aliases: []string{"PYSEC-1"}, Severity: SeverityCritical, FixedIn: "2.32.0"}},
 			Versions:   []string{"2.31.0"},
-			Branch:     "cve-alerts/PyPI/requests-4238921e",
+			Branch:     "cve-alerts/main/PyPI/requests-4238921e",
 		},
 		{
 			Key: "npm/lodash", Ecosystem: "npm", Package: "lodash",
 			Advisories: []Advisory{{ID: "GHSA-a", Aliases: []string{"PYSEC-c", "CVE-b"}, Severity: SeverityCritical}},
-			Branch:     "cve-alerts/npm/lodash-ce6919c5",
+			Branch:     "cve-alerts/main/npm/lodash-ce6919c5",
 		},
 		{
 			Key: "npm/next", Ecosystem: "npm", Package: "next",
@@ -57,7 +57,7 @@ func TestGroupAlerts_mergesSourcesPerPackage(t *testing.T) {
 			},
 			Versions:  []string{"16.2.9", "16.3.3"},
 			Manifests: []string{"sandbox/bun.lock", "sandbox/package.json", "web/bun.lock"},
-			Branch:    "cve-alerts/npm/next-df6d942f",
+			Branch:    "cve-alerts/main/npm/next-df6d942f",
 		},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -67,11 +67,11 @@ func TestGroupAlerts_mergesSourcesPerPackage(t *testing.T) {
 
 func TestAlertBranch_keepsKeysGitSafe(t *testing.T) {
 	for key, want := range map[string]string{
-		"npm/@radix-ui/react-slider": "cve-alerts/npm/radix-ui/react-slider-2b362228",
-		"Debian:13/libc6":            "cve-alerts/Debian-13/libc6-51735b0c",
-		"GitHub Actions/actions/foo": "cve-alerts/GitHub-Actions/actions/foo-6e197ae6",
+		"npm/@radix-ui/react-slider": "cve-alerts/release/v4.8/npm/radix-ui/react-slider-2b362228",
+		"Debian:13/libc6":            "cve-alerts/release/v4.8/Debian-13/libc6-51735b0c",
+		"GitHub Actions/actions/foo": "cve-alerts/release/v4.8/GitHub-Actions/actions/foo-6e197ae6",
 	} {
-		if got := alertBranch(key); got != want {
+		if got := alertBranch("release/v4.8", key); got != want {
 			t.Errorf("alertBranch(%q) = %q, want %q", key, got, want)
 		}
 	}
@@ -152,7 +152,7 @@ case "$1 $2" in
   "issue list") cat "$dir/issues.json" ;;
   "issue create") cat > "$dir/body-create"; echo "https://github.com/onyx-dot-app/onyx/issues/42" ;;
   "issue edit") cat > "$dir/body-edit-$3" ;;
-  "pr list") [ "$6" = "cve-alerts/PyPI/requests-4238921e" ] && echo 55 ;;
+  "pr list") [ "$6" = "cve-alerts/main/PyPI/requests-4238921e" ] && echo 55 ;;
 esac
 exit 0`)
 }
@@ -196,7 +196,7 @@ func TestSyncAlerts_opensUpdatesAndClosesIssues(t *testing.T) {
 		Finding{ID: "DEBIAN-CVE-1", Ecosystem: "Debian:13", Package: "libc6", Version: "2.41-12", Severity: SeverityCritical, Manifest: "docker.io/onyxdotapp/onyx-backend:edge"},
 	)
 
-	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps, image}})
+	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps, image}, Scope: "main"})
 	if err != nil {
 		t.Fatalf("SyncAlerts: %v", err)
 	}
@@ -216,13 +216,14 @@ func TestSyncAlerts_opensUpdatesAndClosesIssues(t *testing.T) {
 	}
 
 	wantGH := [][]string{
-		{"issue", "list", "--label", AlertLabel, "--state", "open", "--limit", "500", "--json", "number,url,body,labels"},
+		{"issue", "list", "--label", AlertLabel, "--label", "cve-alert:main", "--state", "open", "--limit", "500", "--json", "number,url,body,labels"},
 		{"label", "create", AlertLabel, "--color", "B60205", "--description", "Tracks a blocking dependency vulnerability; opened and closed by the CVE alerts workflow", "--force"},
 		{"label", "create", AlertPendingLabel, "--color", "B60205", "--description", "The CVE alerts workflow has not announced this alert yet", "--force"},
-		{"issue", "create", "--title", "Vulnerable dependency: libc6 (Debian:13)", "--label", AlertLabel, "--label", AlertPendingLabel, "--body-file", "-"},
+		{"label", "create", "cve-alert:main", "--color", "B60205", "--description", "CVE alert on the main branch", "--force"},
+		{"issue", "create", "--title", "Vulnerable dependency: libc6 (Debian:13)", "--label", AlertLabel, "--label", "cve-alert:main", "--label", AlertPendingLabel, "--body-file", "-"},
 		{"issue", "edit", "7", "--add-label", AlertPendingLabel},
 		{"issue", "edit", "7", "--body-file", "-"},
-		{"pr", "list", "--state", "open", "--head", "cve-alerts/PyPI/requests-4238921e", "--json", "number", "--jq", ".[].number"},
+		{"pr", "list", "--state", "open", "--head", "cve-alerts/main/PyPI/requests-4238921e", "--json", "number", "--jq", ".[].number"},
 		{"pr", "close", "55", "--comment", "This package no longer has a blocking finding: it was fixed or suppressed in the audit allowlist."},
 		{"issue", "close", "8", "--comment", "This package no longer has a blocking finding: it was fixed or suppressed in the audit allowlist."},
 	}
@@ -305,7 +306,7 @@ case "$1 $2" in
   "issue list") cat "$dir/issues.json" ;;
   "issue create") cat > /dev/null; echo "https://github.com/onyx-dot-app/onyx/issues/42" ;;
   "issue edit") cat > /dev/null ;;
-  "pr list") [ "$6" = "cve-alerts/PyPI/requests-4238921e" ] && echo 55 ;;
+  "pr list") [ "$6" = "cve-alerts/main/PyPI/requests-4238921e" ] && echo 55 ;;
 esac
 exit 0`)
 			deps := writeResult(t, t.TempDir(), "deps.json", Result{
