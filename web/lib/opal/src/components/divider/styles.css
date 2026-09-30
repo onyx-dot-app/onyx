@@ -56,3 +56,30 @@
 .opal-divider-chevron[data-open="true"] {
   transform: rotate(90deg);
 }
+
+/* ── Fold ───────────────────────────────────────────────────────────────────── */
+
+/* Grid rows animate between 0fr and 1fr without a measured height, so the
+   fold closes as smoothly as it opens and never needs a mount or unmount.
+   The chevron above turns on the same clock. */
+.opal-divider-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 200ms ease-in-out,
+    opacity 200ms ease-in-out;
+}
+.opal-divider-fold[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.opal-divider-fold-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .opal-divider-fold {
+    transition: none;
+  }
+}

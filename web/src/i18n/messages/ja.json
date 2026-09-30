@@ -912,6 +912,12 @@
         "sharepoint": {
           "description": "Microsoft のイントラネット"
         },
+        "onedrive": {
+          "description": "Microsoft クラウド ストレージ"
+        },
+        "zoom": {
+          "description": "会議とウェビナーの録画"
+        },
         "teams": {
           "description": "Microsoft のチームチャット"
         },
@@ -2053,7 +2059,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "ドキュメント ID",
+          "documentId": "失敗 ID",
           "errorMessage": "エラーメッセージ",
           "status": "ステータス",
           "time": "時刻"
@@ -2562,6 +2568,40 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "OneDrive コネクタを設定",
+        "indexingScope": {
+          "label": "Onyx でインデックスを作成する OneDrive ファイルの所有者",
+          "general": {
+            "label": "一般",
+            "description": "Microsoft アプリケーションがアクセスできるすべての対象ユーザーをインデックス化します。"
+          },
+          "specific": {
+            "label": "指定",
+            "users": {
+              "label": "ユーザー",
+              "description": "インデックスを作成する各ユーザーのユーザープリンシパル名またはプライマリメールアドレスを追加します。",
+              "required": "指定範囲には少なくとも 1 人のユーザーを追加してください"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "除外するパス",
+          "description": "各ファイルパスとファイル名に照合する glob パターン（例: '*.tmp'、'Archive/*'）。"
+        },
+        "organizationLinks": {
+          "label": "組織リンクを公開として扱う",
+          "description": "組織全体のリンクで共有されたファイルをすべての Onyx ユーザーに表示します。"
+        },
+        "authorityHost": {
+          "label": "機関ホスト",
+          "description": "Microsoft ID 機関ホスト。GCC High または DoD では https://login.microsoftonline.us を使用してください。"
+        },
+        "graphApiHost": {
+          "label": "Graph API ホスト",
+          "description": "Microsoft Graph ホスト。GCC High または DoD では https://graph.microsoft.us を使用してください。"
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "{source} で認可",
@@ -4818,6 +4858,9 @@
           "statusesLoading": "コネクタの状態を読み込んでいます…",
           "statusesFailed": "コネクタの状態を読み込めませんでした。再インデックスの前にもう一度お試しください。"
         },
+        "applyWithoutReindex": {
+          "label": "再インデックスせずに適用"
+        },
         "rebuildAll": {
           "label": "既存のすべてのドキュメントを再構築"
         },
@@ -4851,7 +4894,7 @@
         "title": "再インデックスをキャンセル"
       },
       "captioningModel": {
-        "description": "このモデルはインデックス作成時に画像を解析するために使用します。選択できるのは画像認識に対応したモデルのみです。変更は以降にインデックスされるドキュメントに適用されます。既存のキャプションは以前の embedding に埋め込まれたままです。",
+        "description": "このモデルはインデックス作成時に画像を分析するために使用されます。",
         "title": "キャプション生成 LLM"
       },
       "changesBanner": {
@@ -4867,8 +4910,16 @@
           "description": "embedding または検索の設定を変更すると、反映するためにすべてのドキュメントの完全な再インデックスが必要です。コーパスの規模によっては **数時間から数日** かかることがあります。[詳細を見る](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "変更には完全な再インデックスが必要です。"
         },
+        "doNotReindex": {
+          "description": "画像処理設定は、今後インデックスされるドキュメントにのみ適用されます。既存のドキュメントは、完全な再インデックスを実行しない限り更新されません。\n\n再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)。",
+          "title": "変更は新しくインデックスされたコンテンツにのみ適用されます。"
+        },
         "orSeparator": {
           "label": "または"
+        },
+        "reindex": {
+          "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "完全な再インデックスが実行されます。"
         }
       },
       "cloudDisabled": {
@@ -4965,12 +5016,13 @@
         "description": "ドキュメントのインデックス作成、embedding の生成、検索と取得に向けた準備の方法を設定します。"
       },
       "imageExtraction": {
-        "description": "アップロードされたファイル (PDF、DOCX など) に含まれる画像を抽出し、画像認識に対応した LLM で要約します。これにより、画像だけのドキュメントも検索や回答に使用できます。画像認識に対応したデフォルト LLM が必要です。",
+        "description": "ドキュメントのインデックス作成時に画像を抽出し、検索可能な説明を生成します。",
         "title": "画像の抽出とキャプション生成"
       },
       "imageProcessing": {
         "description": "インデックス作成時に LLM を使用して画像を解析し、説明を追加します。",
         "enableFirstTooltip": "設定するには「画像の抽出とキャプション生成」を有効にしてください。",
+        "noModelSelected": "モデルが選択されていません",
         "noVisionModelsTooltip": "画像認識に対応したモデルが設定されていないため、画像処理は無効です。先に画像認識に対応した [言語モデル]({link}) を設定してください。",
         "title": "画像処理"
       },
@@ -4984,7 +5036,7 @@
         }
       },
       "maxImageSize": {
-        "description": "リソース使用量を抑えるため、このサイズを超える画像はスキップされます。",
+        "description": "このサイズを超える画像はリソース使用を抑えるためスキップされます。",
         "suffix": "(MB)",
         "title": "解析する画像の最大サイズ"
       },
@@ -5151,24 +5203,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "アクティブな (一時停止中でも削除中でもない) すべてのコネクターがインデックス作成に成功するまで、既存の設定の現在のドキュメントインデックスを使い続けます。",
+          "description": "すべての**アクティブな**（一時停止中/削除中でない）コネクタがインデックス作成を正常に完了するまで、既存の設定で現在のドキュメントインデックスを使い続けます。",
           "label": "アクティブなコネクターを再インデックスしてから切り替え"
         },
+        "doNotReindex": {
+          "description": "**最も安全なオプション。** 新しくインデックスされたコンテンツにのみ変更を適用します。",
+          "label": "再インデックスしない"
+        },
         "instant": {
-          "description": "現在のドキュメントインデックスをすぐに消去し、新しい設定に切り替えます。検索用のインデックスが再び揃うまで、すべてのコネクターの再インデックスが必要です。",
+          "description": "直ちに**現在のドキュメントインデックスを消去**して新しい設定に切り替えます。検索用にインデックスが再構築されるまで、すべてのコネクタの再インデックスが必要です。",
           "label": "再インデックスの前に切り替え"
         },
         "placeholder": "切り替え方法を選択",
         "reindexAll": {
-          "description": "最も安全な方法です。すべてのコネクターがインデックス作成に成功するまで、既存の設定の現在のドキュメントインデックスを使い続けます。",
+          "description": "すべてのコネクタがインデックス作成を正常に完了するまで、既存の設定で現在のドキュメントインデックスを使い続けます。",
           "label": "すべてのコネクターを再インデックスしてから切り替え"
+        },
+        "reindexOptions": {
+          "label": "再インデックスのオプション"
         }
       },
       "toasts": {
         "applyFailed": "設定を適用できませんでした",
         "cancelReindexFailed": "再インデックスをキャンセルできませんでした",
-        "captioningUpdateFailed": "キャプション生成 LLM を更新できませんでした",
-        "captioningUpdated": "キャプション生成 LLM を更新しました",
+        "captioningModelRequired": "適用する前にキャプション用LLMを選択してください。",
         "contextualModelRequired": "再インデックスの前にコンテキスト検索 LLM を選択してください。",
         "contextualModelUpdateFailed": "コンテキスト検索 LLM を更新できませんでした",
         "contextualModelUpdated": "コンテキスト検索 LLM を更新しました",
@@ -11495,6 +11553,12 @@
       },
       "poweredBy": {
         "label": "Powered by Onyx"
+      }
+    },
+    "modelSelectors": {
+      "placeholder": "モデルを選択",
+      "globalDefault": {
+        "label": "グローバルデフォルト"
       }
     },
     "nonSelectableConnectors": {

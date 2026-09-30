@@ -1019,12 +1019,16 @@ export default function MCPAuthenticationModal({
                   )}
                   {values.auth_type === MCPAuthenticationType.NONE && (
                     <MessageCard
+                      outerPadding={1}
+                      innerPadding={1}
                       title={t("mcpAuthModal.noAuthNotice.title")}
                       description={t("mcpAuthModal.noAuthNotice.description")}
                     />
                   )}
                   {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
                     <MessageCard
+                      outerPadding={1}
+                      innerPadding={1}
                       title={t("mcpAuthModal.passThroughNotice.title")}
                       description={t(
                         "mcpAuthModal.passThroughNotice.description",

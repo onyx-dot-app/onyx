@@ -13,7 +13,7 @@ protocol drift.
 import pytest
 
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.models import ChatCompletionMessage, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
 from tests.utils.secret_names import TestSecret
 
@@ -61,7 +61,7 @@ def test_streaming_separates_reasoning_content_from_visible_content(
 
     reasoning_parts: list[str] = []
     content_parts: list[str] = []
-    for chunk in llm.stream(prompt=prompt, stall_timeout_s=120):
+    for chunk in llm.stream_raw(prompt=prompt, stall_timeout_s=120):
         delta = chunk.choice.delta
         rc = delta.reasoning_content
         content = delta.content

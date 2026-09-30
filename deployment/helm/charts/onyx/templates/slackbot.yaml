@@ -53,7 +53,7 @@ spec:
       containers:
         - name: slackbot
           securityContext:
-            {{- toYaml .Values.slackbot.securityContext | nindent 12 }}
+            {{- include "onyx.containerSecurityContext" .Values.slackbot.securityContext | nindent 12 }}
           image: "{{ .Values.slackbot.image.repository }}:{{ .Values.slackbot.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command: [{{ include "onyx.customCACerts.commandPrefix" . }}"python", "onyx/onyxbot/slack/listener.py"]

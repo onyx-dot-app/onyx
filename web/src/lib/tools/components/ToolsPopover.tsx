@@ -16,7 +16,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { MinimalAgent } from "@/lib/agents/types";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { hasPermission } from "@/lib/permissions";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
@@ -78,7 +78,9 @@ export default function ToolsPopover({
   const [searchTerm, setSearchTerm] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(agent.id);
+  const { llmProviders, isLoading: isLLMLoading } = useLanguageModelsForAgent(
+    agent.id
+  );
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Store MCP server auth/loading state (tools are part of agent.tools)

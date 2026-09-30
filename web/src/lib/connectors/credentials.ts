@@ -37,6 +37,8 @@ import type {
   LumAppsCredentialJson,
   NotionCredentialJson,
   OCICredentialJson,
+  OneDriveAuthenticationMethod,
+  OneDriveCredentialJson,
   OutlineCredentialJson,
   OutlookCredentialJson,
   ProductboardCredentialJson,
@@ -49,6 +51,7 @@ import type {
   TeamsCredentialJson,
   TestRailCredentialJson,
   ZendeskCredentialJson,
+  ZoomCredentialJson,
   ZulipCredentialJson,
 } from "./types";
 
@@ -79,6 +82,10 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   dropbox: DropboxCredentialJson;
   salesforce: SalesforceCredentialJson;
   sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
+  onedrive: CredentialTemplateWithAuth<
+    OneDriveCredentialJson,
+    OneDriveAuthenticationMethod
+  >;
   asana: AsanaCredentialJson;
   teams: CredentialTemplateWithAuth<TeamsCredentialJson>;
   outlook: CredentialTemplateWithAuth<OutlookCredentialJson>;
@@ -92,6 +99,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   oci_storage: OCICredentialJson;
   freshdesk: FreshdeskCredentialJson;
   fireflies: FirefliesCredentialJson;
+  zoom: ZoomCredentialJson;
   braintrust: BraintrustCredentialJson;
   canvas: CanvasCredentialJson;
   egnyte: EgnyteCredentialJson;
@@ -212,6 +220,33 @@ export const credentialTemplates: Record<ValidSources, any> = {
       },
     ],
   } as CredentialTemplateWithAuth<SharepointCredentialJson>,
+  onedrive: {
+    authentication_method: "client_secret",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          onedrive_client_id: "",
+          onedrive_directory_id: "",
+          onedrive_client_secret: "",
+        },
+      },
+      {
+        value: "certificate",
+        label: "Certificate",
+        fields: {
+          onedrive_client_id: "",
+          onedrive_directory_id: "",
+          onedrive_certificate_password: "",
+          onedrive_private_key: null,
+        },
+      },
+    ],
+  } satisfies CredentialTemplateWithAuth<
+    OneDriveCredentialJson,
+    OneDriveAuthenticationMethod
+  >,
   asana: {
     asana_api_token_secret: "",
   },
@@ -342,6 +377,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
   },
   fireflies: {
     fireflies_api_key: "",
+  },
+  zoom: {
+    zoom_account_id: "",
+    zoom_client_id: "",
+    zoom_client_secret: "",
   },
   braintrust: {
     braintrust_api_key: "",
@@ -536,6 +576,13 @@ export const credentialDisplayNames: Record<string, string> = {
   sp_certificate_password: "SharePoint Certificate Password",
   sp_private_key: "SharePoint Private Key",
 
+  // OneDrive
+  onedrive_client_id: "OneDrive Client ID",
+  onedrive_client_secret: "OneDrive Client Secret",
+  onedrive_directory_id: "OneDrive Directory ID",
+  onedrive_certificate_password: "OneDrive Certificate Password",
+  onedrive_private_key: "OneDrive Certificate",
+
   // Asana
   asana_api_token_secret: "Asana API Token",
 
@@ -567,6 +614,11 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Fireflies
   fireflies_api_key: "Fireflies API Key",
+
+  // Zoom
+  zoom_account_id: "Zoom Account ID",
+  zoom_client_id: "Zoom Client ID",
+  zoom_client_secret: "Zoom Client Secret",
 
   // Braintrust
   braintrust_api_key: "Braintrust API Key",

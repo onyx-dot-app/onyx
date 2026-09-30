@@ -40,7 +40,7 @@ A plain line with no title or description.
 | `open`         | `boolean`                 | —              | Controlled open state           |
 | `defaultOpen`  | `boolean`                 | `false`        | Uncontrolled initial open state |
 | `onOpenChange` | `(open: boolean) => void` | —              | Callback when toggled           |
-| `children`     | `ReactNode`               | —              | Content revealed when open      |
+| `children`     | `ReactNode`               | —              | Content revealed when open; stays mounted while closed, inert and hidden from assistive tech, so the fold animates both ways |
 
 ## Usage Examples
 

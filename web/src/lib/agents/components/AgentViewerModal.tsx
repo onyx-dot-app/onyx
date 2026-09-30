@@ -36,7 +36,7 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/languageModels/utils";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -194,7 +194,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const t = useTranslations("agents.modals");
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();
-  const { llmProviders } = useLLMProviders(agent.id);
+  const { llmProviders } = useLanguageModelsForAgent(agent.id);
   const { appName } = useSettings();
 
   const handleStartChat = useCallback(

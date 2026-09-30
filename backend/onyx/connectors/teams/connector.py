@@ -23,7 +23,7 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
-from onyx.connectors.microsoft_utils.graph_env import (
+from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
@@ -35,6 +35,7 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.connectors.teams import groups, listing, threads
+from onyx.connectors.teams.config import MAX_WORKERS
 from onyx.connectors.teams.files import FileSource
 from onyx.connectors.teams.meeting_chats import (
     ChatSource,
@@ -105,8 +106,6 @@ class TeamsConnector(
     channel holds is read by one source per content type: its threads, and its
     files when attachments are on. What a scheduled meeting leaves behind is
     listed per organizer, so those sources follow the channels."""
-
-    MAX_WORKERS = 10
 
     def __init__(
         self,

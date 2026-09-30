@@ -1,3 +1,4 @@
+import itertools
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -13,6 +14,7 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.zoom.client import MAX_LISTING_PAGES
 from onyx.connectors.zoom.models import (
     ZoomRecordingEntry,
     ZoomRecordingPage,
@@ -25,14 +27,18 @@ from onyx.connectors.zoom.recordings.discovery import (
     _MAX_WORK_PER_STEP,
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
     _WIDE_BACKFILL_WINDOWS,
+    EARLIEST_RECORDING_DATE,
     GroupSource,
     HostAllowlistSource,
     IdAllowlistSource,
-    _listing_windows,
     _poll_window_dates,
     build_discovery_sources,
+    listing_windows,
 )
-from onyx.connectors.zoom.recordings.models import ZoomSessionType
+from onyx.connectors.zoom.recordings.models import (
+    ZoomListingIncomplete,
+    ZoomSessionType,
+)
 from tests.unit.onyx.connectors.zoom.helpers import mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     occurrence,
@@ -403,6 +409,9 @@ class TestBuildDiscoverySources:
     def test_blank_host_emails_and_group_id_are_not_configuration(self) -> None:
         assert build_discovery_sources(None, None, ["  "], "  ") == []
 
+    def test_blank_ids_are_not_configuration_either(self) -> None:
+        assert build_discovery_sources(["  "], [" "], None, None) == []
+
     def test_host_emails_alone_yield_a_host_source(self) -> None:
         sources = build_discovery_sources(None, None, ["host@example.com"])
         assert len(sources) == 1
@@ -500,6 +509,30 @@ class TestIdAllowlistWebinars:
         assert work.session_id == "222"
         assert work.occurrence_uuid == "w-1"
 
+    def test_an_id_pasted_with_spaces_reaches_zoom_without_them(self) -> None:
+        # Zoom's own UI shows numbers grouped with spaces, and a space in the
+        # URL path is an invalid id to Zoom.
+        source = IdAllowlistSource([], ["857 9609 3688"])
+        client = self._client_with_webinar_occurrences(
+            [ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        client.list_past_webinar_occurrences.assert_called_once_with("85796093688")
+        assert result.work[0].session_id == "85796093688"
+
+    def test_the_same_id_in_both_forms_is_crawled_once(self) -> None:
+        source = IdAllowlistSource([], ["857 9609 3688", "85796093688"])
+        client = self._client_with_webinar_occurrences(
+            [ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        client.list_past_webinar_occurrences.assert_called_once_with("85796093688")
+        assert len(result.work) == 1
+
     def test_meetings_run_before_webinars_in_one_cursor_walk(self) -> None:
         source = IdAllowlistSource(["111"], ["222"])
         client = mock_zoom_client()
@@ -569,9 +602,11 @@ def _client_for_hosts(
 ) -> MagicMock:
     client = mock_zoom_client()
     client.list_users.return_value = ZoomUserPage(users=users or [])
-    client.list_group_members.return_value = ZoomUserPage(users=members or [])
+    client.list_group_members.return_value = ZoomUserPage(
+        users=members or [], total_records=len(members or [])
+    )
     client.list_user_recordings.return_value = ZoomRecordingPage(
-        recordings=recordings or []
+        recordings=recordings or [], total_records=len(recordings or [])
     )
     return client
 
@@ -714,7 +749,9 @@ class TestGroupSource:
             ]
         )
         client.list_user_recordings.side_effect = lambda user_id, **_: (
-            ZoomRecordingPage(recordings=[_recording(f"uuid-{user_id}")])
+            ZoomRecordingPage(
+                recordings=[_recording(f"uuid-{user_id}")], total_records=1
+            )
         )
 
         first = source.discover_step(client, _HOST_START, _END, None)
@@ -741,8 +778,8 @@ class TestGroupSource:
         source = GroupSource("group-1")
         client = _client_for_hosts(recordings=[_recording("uuid-1")])
         client.list_group_members.side_effect = [
-            ZoomUserPage(users=[user(id="u1")], next_page_token="tok"),
-            ZoomUserPage(users=[user(id="u2")]),
+            ZoomUserPage(users=[user(id="u1")], next_page_token="tok", total_records=2),
+            ZoomUserPage(users=[user(id="u2")], total_records=2),
         ]
 
         first = source.discover_step(client, _HOST_START, _END, None)
@@ -785,13 +822,63 @@ class TestGroupSource:
         assert result.done is True
 
 
+class TestAListingZoomCutsShortFailsTheRun:
+    """Pruning deletes whatever a listing leaves out, and indexing never returns
+    to a window it reported a failure for, so neither may carry on with a short
+    answer. A listing with no count cannot be checked, so it is not trusted
+    either. The recordings loop and the members loop are separate code, so
+    both are driven through every way Zoom can cut a listing short."""
+
+    @pytest.mark.parametrize("listing", ["recordings", "members"])
+    @pytest.mark.parametrize(
+        ("cut_short_by", "message"),
+        [
+            ("sending fewer than it counted", "listed 1 of the 3"),
+            ("sending no count at all", "no total_records"),
+            ("repeating its cursor", "stopped advancing the cursor"),
+            ("never ending", f"past {MAX_LISTING_PAGES} pages"),
+        ],
+    )
+    def test_discovery_raises_rather_than_reporting_it(
+        self, listing: str, cut_short_by: str, message: str
+    ) -> None:
+        def page(**fields: Any) -> ZoomRecordingPage | ZoomUserPage:
+            if listing == "recordings":
+                return ZoomRecordingPage(recordings=[_recording("uuid-1")], **fields)
+            return ZoomUserPage(users=[user(id="u1")], **fields)
+
+        pages = {
+            "sending fewer than it counted": iter([page(total_records=3)]),
+            "sending no count at all": iter([page()]),
+            "repeating its cursor": itertools.repeat(page(next_page_token="same")),
+            "never ending": (
+                page(next_page_token=f"tok-{n}") for n in itertools.count()
+            ),
+        }[cut_short_by]
+
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+        if listing == "recordings":
+            client.list_user_recordings.side_effect = pages
+        else:
+            client.list_group_members.side_effect = pages
+
+        with pytest.raises(ZoomListingIncomplete, match=message):
+            source.discover_step(client, _HOST_START, _END, None)
+
+
 class TestUserRecordingsPaging:
     def test_no_page_token_ever_outlives_a_step(self) -> None:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[user(id="u1")])
+        # Zoom counts the whole query on every page, not the page itself.
         client.list_user_recordings.side_effect = [
-            ZoomRecordingPage(recordings=[_recording("uuid-1")], next_page_token="tok"),
-            ZoomRecordingPage(recordings=[_recording("uuid-2")]),
+            ZoomRecordingPage(
+                recordings=[_recording("uuid-1")],
+                next_page_token="tok",
+                total_records=2,
+            ),
+            ZoomRecordingPage(recordings=[_recording("uuid-2")], total_records=2),
         ]
 
         result = source.discover_step(client, _HOST_START, _END, None)
@@ -929,7 +1016,9 @@ class TestHostListChangesBetweenAttempts:
     ) -> tuple[list[str], MagicMock]:
         client = _client_for_hosts(members=members)
         client.list_user_recordings.side_effect = lambda user_id, **_: (
-            ZoomRecordingPage(recordings=[_recording(f"rec-{user_id}")])
+            ZoomRecordingPage(
+                recordings=[_recording(f"rec-{user_id}")], total_records=1
+            )
         )
         source = GroupSource("group-1")
         seen: list[str] = []
@@ -993,13 +1082,24 @@ class TestUserRecordingsPollWindow:
         # A day past the poll end, so an exclusive `to` still covers 2026-03-17.
         assert self._window(client) == ("2026-03-07", "2026-03-18")
 
-    def test_the_lag_buffer_never_pushes_the_start_before_the_epoch(self) -> None:
+    def test_a_first_run_asks_zoom_no_earlier_than_its_own_launch(self) -> None:
+        """A poll window starting at the epoch would otherwise have Zoom listing
+        the 43 years before it existed, one 30-day call at a time."""
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[user(id="u1")])
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc).timestamp()
+
+        source.discover_step(client, 0, end, None)
+
+        assert self._window(client)[0] == EARLIEST_RECORDING_DATE.isoformat()
+
+    def test_a_window_that_ends_before_zoom_existed_asks_nothing(self) -> None:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[user(id="u1")])
 
         source.discover_step(client, _ONE_HOUR, _ONE_HOUR * 2, None)
 
-        assert self._window(client)[0] == "1970-01-01"
+        client.list_user_recordings.assert_not_called()
 
     def test_an_occurrence_outside_the_window_is_zooms_call_not_ours(self) -> None:
         source = GroupSource("group-1")
@@ -1024,6 +1124,37 @@ class TestUserRecordingsSessionTypes:
         work = source.discover_step(client, _HOST_START, _END, None).work[0]
 
         assert work.session_type == ZoomSessionType.WEBINAR
+
+    def test_a_meetings_only_scope_leaves_a_hosts_webinars_out(self) -> None:
+        source = GroupSource("group-1", frozenset({ZoomSessionType.MEETING}))
+        client = _client_for_hosts(
+            members=[user(id="u1")],
+            recordings=[
+                _recording("uuid-meeting"),
+                _recording("uuid-webinar", recording_type="5"),
+            ],
+        )
+
+        result = source.discover_step(client, _HOST_START, _END, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-meeting"]
+        assert result.failures == []
+
+    def test_a_webinars_only_scope_leaves_a_hosts_meetings_out(self) -> None:
+        source = HostAllowlistSource(
+            ["host@example.com"], frozenset({ZoomSessionType.WEBINAR})
+        )
+        client = _client_for_hosts(
+            users=[user(id="u1", email="host@example.com")],
+            recordings=[
+                _recording("uuid-meeting"),
+                _recording("uuid-webinar", recording_type="5"),
+            ],
+        )
+
+        result = source.discover_step(client, _HOST_START, _END, None)
+
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-webinar"]
 
     def test_a_portal_upload_is_not_a_session_and_is_skipped(self) -> None:
         source = GroupSource("group-1")
@@ -1085,7 +1216,7 @@ class TestUserRecordingsFailures:
         def _recordings(user_id: str, **_: object) -> ZoomRecordingPage:
             if user_id == "u1":
                 raise RuntimeError("boom")
-            return ZoomRecordingPage(recordings=[_recording("uuid-2")])
+            return ZoomRecordingPage(recordings=[_recording("uuid-2")], total_records=1)
 
         client.list_user_recordings.side_effect = _recordings
 
@@ -1162,14 +1293,17 @@ def _client_recording_on(
     """
     client = mock_zoom_client()
     client.list_users.return_value = ZoomUserPage(users=[])
-    client.list_group_members.return_value = ZoomUserPage(users=[user(id="u1")])
+    client.list_group_members.return_value = ZoomUserPage(
+        users=[user(id="u1")], total_records=1
+    )
 
     def listing(**kwargs: Any) -> ZoomRecordingPage:
         if to_is_exclusive:
             asked_for = kwargs["from_date"] <= day < kwargs["to_date"]
         else:
             asked_for = kwargs["from_date"] <= day <= kwargs["to_date"]
-        return ZoomRecordingPage(recordings=[entry] if asked_for else [])
+        entries = [entry] if asked_for else []
+        return ZoomRecordingPage(recordings=entries, total_records=len(entries))
 
     client.list_user_recordings.side_effect = listing
     return client
@@ -1194,8 +1328,31 @@ class TestUserRecordingsListingWindow:
     and the next run moves the window on rather than coming back for them.
     """
 
+    def test_a_connector_with_no_start_date_asks_back_to_zoom_launch_only(
+        self,
+    ) -> None:
+        """A connector with no indexing start date polls from the epoch. Asking
+        Zoom for the 43 years before it existed is four times the calls for
+        nothing, against an account-wide rate limit."""
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+
+        from_date, _ = _poll_window_dates(0, end.timestamp())
+
+        assert from_date == EARLIEST_RECORDING_DATE
+
+    def test_a_start_date_after_zoom_launch_is_left_alone(self) -> None:
+        end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        from_date, _ = _poll_window_dates(start.timestamp(), end.timestamp())
+
+        assert (
+            from_date
+            == (start - timedelta(seconds=_OCCURRENCE_POLL_OVERLAP_SECONDS)).date()
+        )
+
     def test_each_window_starts_on_the_day_the_last_one_ended(self) -> None:
-        windows = _listing_windows(date(2025, 1, 1), date(2025, 6, 30))
+        windows = listing_windows(date(2025, 1, 1), date(2025, 6, 30))
 
         assert windows[0][0] == date(2025, 1, 1)
         assert windows[-1][1] == date(2025, 7, 1)
@@ -1211,7 +1368,7 @@ class TestUserRecordingsListingWindow:
         against an account-wide rate limit."""
         end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
         start = end - timedelta(days=365)
-        windows = _listing_windows(
+        windows = listing_windows(
             *_poll_window_dates(start.timestamp(), end.timestamp())
         )
         source = GroupSource("group-1")
@@ -1226,7 +1383,7 @@ class TestUserRecordingsListingWindow:
         its own date, abutting windows would ask for every day except this one."""
         end = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
         start = end - timedelta(days=365)
-        windows = _listing_windows(
+        windows = listing_windows(
             *_poll_window_dates(start.timestamp(), end.timestamp())
         )
         boundary = windows[0][1]
@@ -1240,7 +1397,7 @@ class TestUserRecordingsListingWindow:
         assert "uuid-boundary" in found
 
     def test_a_single_day_is_one_window(self) -> None:
-        assert _listing_windows(date(2025, 1, 1), date(2025, 1, 1)) == [
+        assert listing_windows(date(2025, 1, 1), date(2025, 1, 1)) == [
             (date(2025, 1, 1), date(2025, 1, 2))
         ]
 
@@ -1279,7 +1436,7 @@ class TestUserRecordingsListingWindow:
         assert found == []
 
     def test_a_window_that_ends_before_it_starts_asks_zoom_for_nothing(self) -> None:
-        assert _listing_windows(date(2025, 1, 2), date(2025, 1, 1)) == []
+        assert listing_windows(date(2025, 1, 2), date(2025, 1, 1)) == []
 
     def test_no_single_call_asks_for_more_than_zoom_allows(self) -> None:
         source = GroupSource("group-1")
@@ -1332,7 +1489,7 @@ class TestUserRecordingsListingWindow:
             result = source.discover_step(client, 0, _END, None)
             source.discover_step(client, 0, _END, result.next_cursor)
 
-        said = [r for r in caplog.records if "indexing start date" in r.getMessage()]
+        said = [r for r in caplog.records if "Indexing Start" in r.getMessage()]
         assert len(said) == 1
 
     def test_a_narrow_backfill_says_nothing(
@@ -1349,6 +1506,4 @@ class TestUserRecordingsListingWindow:
         with caplog.at_level("WARNING"):
             source.discover_step(client, narrow, end, None)
 
-        assert not [
-            r for r in caplog.records if "indexing start date" in r.getMessage()
-        ]
+        assert not [r for r in caplog.records if "Indexing Start" in r.getMessage()]
