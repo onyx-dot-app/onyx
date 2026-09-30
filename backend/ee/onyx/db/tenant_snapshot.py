@@ -120,15 +120,7 @@ def get_head_revision() -> str | None:
 
 
 def schema_has_tables(engine: Engine, schema: str) -> bool:
-    with engine.connect() as connection:
-        count = connection.scalar(
-            text(
-                "SELECT count(*) FROM information_schema.tables "
-                "WHERE table_schema = :schema"
-            ),
-            {"schema": schema},
-        )
-    return bool(count)
+    return bool(inspect(engine).get_table_names(schema=schema))
 
 
 def scratch_schema_name() -> str:
