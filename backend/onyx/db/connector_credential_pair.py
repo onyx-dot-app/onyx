@@ -240,6 +240,24 @@ def _add_user_filters(
     return stmt.where(where_clause)
 
 
+def get_manageable_cc_pairs_for_credentials(
+    db_session: Session,
+    user: User,
+    credential_ids: list[int],
+) -> list[ConnectorCredentialPair]:
+    """The pairs using any of these credentials that the user can manage, with
+    their connectors loaded. The single place that decides which connectors the
+    credential usage hints may show."""
+    stmt = (
+        select(ConnectorCredentialPair)
+        .distinct()
+        .options(selectinload(ConnectorCredentialPair.connector))
+        .where(ConnectorCredentialPair.credential_id.in_(credential_ids))
+    )
+    stmt = _add_user_filters(stmt, user, get_editable=True)
+    return list(db_session.scalars(stmt).unique().all())
+
+
 def get_connector_credential_pairs_for_user(
     db_session: Session,
     user: User,
