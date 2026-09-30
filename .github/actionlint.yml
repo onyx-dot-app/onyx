@@ -43,3 +43,5 @@ paths:
       - "shellcheck reported issue in this script: SC2046:.+"
       - "shellcheck reported issue in this script: SC2086:.+"
       - "shellcheck reported issue in this script: SC2193:.+"
+      # actionlint predates the GITHUB_TOKEN permission for Dependabot alerts.
+      - 'unknown permission scope "vulnerability-alerts".+'
