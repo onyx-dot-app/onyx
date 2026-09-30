@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Google Drive and Gmail access together, so one account can back both connectors. To use this account for Google Drive only, untick the Gmail scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Gmail you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Gmail and Google Drive access together, so one account can back both connectors. To use this account for Gmail only, untick the Google Drive scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"

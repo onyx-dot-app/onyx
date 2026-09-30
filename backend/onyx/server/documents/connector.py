@@ -47,6 +47,10 @@ from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryTask,
 )
+from onyx.connectors.credential_families import (
+    is_credential_usable_for_source,
+    to_source_credential_json,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (
     validate_ccpair_for_user,
@@ -254,7 +258,14 @@ def check_drive_tokens(
     if not db_credentials or not db_credentials.credential_json:
         return AuthStatus(authenticated=False)
 
-    credential_json = db_credentials.credential_json.get_value(apply_mask=False)
+    stored_json = db_credentials.credential_json.get_value(apply_mask=False)
+    if not is_credential_usable_for_source(
+        db_credentials.source, stored_json, DocumentSource.GOOGLE_DRIVE
+    ):
+        return AuthStatus(authenticated=False)
+    credential_json = to_source_credential_json(
+        DocumentSource.GOOGLE_DRIVE, stored_json
+    )
     if DB_CREDENTIALS_DICT_TOKEN_KEY not in credential_json:
         return AuthStatus(authenticated=False)
     token_json_str = str(credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
