@@ -24,7 +24,7 @@ from onyx.configs.constants import KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_non_deleting_cc_pair_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.enums import ConnectorCredentialPairStatus, VectorQuantization
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
 from onyx.document_index.interfaces import TenantState
@@ -165,11 +165,9 @@ def test_put_mapping_adds_field_to_existing_index(
             tenant_state=_TENANT_STATE,
             index_name=index_name,
             embedding_dim=EMBEDDING_DIM,
-            embedding_precision=EmbeddingPrecision.FLOAT,
+            vector_quantization=VectorQuantization.NONE,
         )
-        index.verify_and_create_index_if_necessary(
-            embedding_dim=EMBEDDING_DIM, embedding_precision=EmbeddingPrecision.FLOAT
-        )
+        index.verify_and_create_index_if_necessary(embedding_dim=EMBEDDING_DIM)
         doc_id = f"mapping-{uuid4().hex[:8]}"
         chunk = make_chunk(doc_id).model_copy(update={"cc_pair_ids": [7, 3]})
         index.index(
@@ -439,3 +437,41 @@ def test_backfill_marks_concurrently_modified_document_stale(
     assert row is not None and row.last_modified is not None
     assert row.last_modified > concurrent_modified_at
     assert _read_cc_pair_ids(test_index_name, doc_id) == [pairs.first.id]
+
+
+def test_backfill_batches_are_bounded_by_chunk_count(
+    db_session: Session,
+    pairs: _Pairs,
+) -> None:
+    prefix = f"cc-pair-chunk-bound-{uuid4().hex[:8]}"
+    doc_ids = [f"{prefix}-{i}" for i in range(3)]
+    for doc_id in doc_ids:
+        _add_document(db_session, [pairs.first], doc_id)
+        db_session.query(DbDocument).filter(DbDocument.id == doc_id).update(
+            {DbDocument.chunk_count: 3}
+        )
+    db_session.commit()
+
+    with patch.object(backfill_tasks, "_BACKFILL_MAX_CHUNKS_PER_BATCH", 7):
+        assert (
+            backfill_tasks._bound_by_chunk_count(db_session, doc_ids) == (doc_ids[:2])
+        )
+    # A document larger than the bound still makes a batch of one.
+    with patch.object(backfill_tasks, "_BACKFILL_MAX_CHUNKS_PER_BATCH", 1):
+        assert (
+            backfill_tasks._bound_by_chunk_count(db_session, doc_ids) == (doc_ids[:1])
+        )
+
+    # A document with an unknown chunk count makes a batch of its own.
+    db_session.query(DbDocument).filter(DbDocument.id == doc_ids[1]).update(
+        {DbDocument.chunk_count: None}
+    )
+    db_session.commit()
+    with patch.object(backfill_tasks, "_BACKFILL_MAX_CHUNKS_PER_BATCH", 7):
+        assert (
+            backfill_tasks._bound_by_chunk_count(db_session, doc_ids) == (doc_ids[:1])
+        )
+        assert (
+            backfill_tasks._bound_by_chunk_count(db_session, doc_ids[1:])
+            == (doc_ids[1:2])
+        )

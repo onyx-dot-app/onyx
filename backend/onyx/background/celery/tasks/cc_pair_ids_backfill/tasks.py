@@ -14,6 +14,7 @@ import time
 
 from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
+from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -23,6 +24,7 @@ from onyx.db.connector_credential_pair import (
     get_non_deleting_cc_pair_ids,
 )
 from onyx.db.document import (
+    fetch_known_chunk_counts_for_documents,
     get_cc_pair_ids_for_documents,
     get_document_ids_for_cc_pair_batch,
     get_last_modified_for_documents,
@@ -43,6 +45,9 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 from onyx.redis.redis_pool import get_redis_client
 
 _BACKFILL_BATCH_SIZE = 500
+# Bounds the chunks one update-by-query touches, so a batch of large documents
+# stays well within the request timeout. A batch always takes one document.
+_BACKFILL_MAX_CHUNKS_PER_BATCH = 5_000
 # Celery time limits do not apply in thread pools, so the loop enforces this.
 _BACKFILL_TIME_BUDGET_S = 10 * 60
 _BACKFILL_LOCK_TIMEOUT_S = _BACKFILL_TIME_BUDGET_S + 5 * 60
@@ -79,6 +84,26 @@ def _backfill_batch(index: OpenSearchDocumentIndex, document_ids: list[str]) -> 
             db_session.commit()
 
 
+def _bound_by_chunk_count(db_session: Session, document_ids: list[str]) -> list[str]:
+    """The leading documents whose chunks fit in one batch, at least one. A
+    document with an unknown chunk count counts as a full batch."""
+    bounded: list[str] = []
+    total_chunks = 0
+    for document_id, known_chunk_count in fetch_known_chunk_counts_for_documents(
+        document_ids, db_session
+    ):
+        chunk_count = (
+            _BACKFILL_MAX_CHUNKS_PER_BATCH
+            if known_chunk_count is None
+            else known_chunk_count
+        )
+        if bounded and total_chunks + chunk_count > _BACKFILL_MAX_CHUNKS_PER_BATCH:
+            break
+        bounded.append(document_id)
+        total_chunks += chunk_count
+    return bounded
+
+
 def run_cc_pair_ids_backfill(lock: RedisLock) -> bool:
     """Backfills until done, out of time, or the lock is lost. Returns True if
     the backfill of the current primary index is complete."""
@@ -113,11 +138,14 @@ def run_cc_pair_ids_backfill(lock: RedisLock) -> bool:
                 []
                 if cc_pair is None
                 or cc_pair.status == ConnectorCredentialPairStatus.DELETING
-                else get_document_ids_for_cc_pair_batch(
+                else _bound_by_chunk_count(
                     db_session,
-                    cc_pair_id=cc_pair_id,
-                    after_doc_id=progress.last_document_id,
-                    limit=_BACKFILL_BATCH_SIZE,
+                    get_document_ids_for_cc_pair_batch(
+                        db_session,
+                        cc_pair_id=cc_pair_id,
+                        after_doc_id=progress.last_document_id,
+                        limit=_BACKFILL_BATCH_SIZE,
+                    ),
                 )
             )
         if document_ids:

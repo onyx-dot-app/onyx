@@ -1774,6 +1774,19 @@ def fetch_chunk_counts_for_documents(
     return [(doc_id, chunk_counts.get(doc_id, 0)) for doc_id in document_ids]
 
 
+def fetch_known_chunk_counts_for_documents(
+    document_ids: list[str],
+    db_session: Session,
+) -> list[tuple[str, int | None]]:
+    """(document_id, chunk_count) in the order given. The count is None when the
+    document is missing or its chunk count is not known."""
+    stmt = select(DbDocument.id, DbDocument.chunk_count).where(
+        DbDocument.id.in_(document_ids)
+    )
+    chunk_counts = {str(row.id): row.chunk_count for row in db_session.execute(stmt)}
+    return [(doc_id, chunk_counts.get(doc_id)) for doc_id in document_ids]
+
+
 def fetch_chunk_count_for_document(
     document_id: str,
     db_session: Session,
