@@ -484,7 +484,11 @@ export default function AddConnector({
                   >
                     {/* A disabled fieldset also takes the controls out of the
                         tab order; the wrapper above only blocks the pointer. */}
-                    <fieldset disabled={!canCreate} className="contents">
+                    <fieldset
+                      disabled={!canCreate}
+                      className="contents"
+                      data-testid="connector-form"
+                    >
                       <Section gap={4} alignItems="start" width="full">
                         <Content
                           title={t("sections.configuration.title")}
