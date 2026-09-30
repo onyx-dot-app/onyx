@@ -20,6 +20,9 @@ from onyx.db.models import (
     UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
+from onyx.db.users import lock_group_membership
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 # (user_group_id, cc_pair_id)
 ManageRowKey = tuple[int, int]
@@ -28,9 +31,11 @@ ManageRowKey = tuple[int, int]
 def lock_cc_pairs_for_manage_access__no_commit(
     db_session: Session, cc_pair_ids: Collection[int]
 ) -> set[int]:
-    """Row-lock the pairs (in id order, so two writers cannot deadlock) and return the
-    ids that exist. Both manage-access writers take this lock before they read the
-    current rows, so a concurrent write cannot slip between their check and write."""
+    """Take the group-membership lock, then row-lock the pairs (in id order) and
+    return the ids that exist. Every manage-row writer takes the membership lock
+    before it reads the current rows, the legacy group PATCH included, so a
+    concurrent write cannot slip between a check and its write."""
+    lock_group_membership(db_session)
     if not cc_pair_ids:
         return set()
     return set(
@@ -96,6 +101,27 @@ def fetch_groups_with_global_permission(
         db_session, only_up_to_date=False, restrict_to_group_ids=set(group_ids)
     )
     return sorted(groups, key=lambda group: group.id)
+
+
+def assert_groups_have_no_global_manage_grant(
+    db_session: Session, group_ids: Collection[int]
+) -> None:
+    """A group with a global MANAGE_CONNECTORS grant is a fixed Editor of every
+    pair. A stored row for it would list the group twice, with two roles."""
+    if not group_ids:
+        return
+    fixed_group_ids = {
+        group.id
+        for group in fetch_groups_with_global_permission(
+            db_session, Permission.MANAGE_CONNECTORS
+        )
+    }
+    if conflicting := sorted(fixed_group_ids.intersection(group_ids)):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"User group(s) {conflicting} manage every connector through a global "
+            "Manage Connectors grant, so they can't get a connector role.",
+        )
 
 
 def write_manage_rows__no_commit(

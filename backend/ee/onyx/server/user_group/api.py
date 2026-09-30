@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.connector_manage_access import (
+    assert_groups_have_no_global_manage_grant,
     fetch_managed_cc_pair_roles_for_group,
     lock_cc_pairs_for_manage_access__no_commit,
     write_manage_rows__no_commit,
@@ -65,12 +66,13 @@ from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS, OnyxCeleryPriority, OnyxCeleryTask
+from onyx.db.connector_credential_pair import CCPairAccessLevel
 from onyx.db.document_set import (
     get_document_sets_by_ids,
     get_group_ids_for_document_sets,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission, PermissionAuthority
+from onyx.db.enums import ConnectorManageRole, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
 from onyx.db.user_group import assert_group_config_is_editable
@@ -89,6 +91,12 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
+
+# A group manager can give a group only a role they hold on the pair themselves.
+_ACCESS_LEVEL_TO_GIVE_ROLE: dict[ConnectorManageRole, CCPairAccessLevel] = {
+    ConnectorManageRole.EDITOR: CCPairAccessLevel.EDIT,
+    ConnectorManageRole.OPERATOR: CCPairAccessLevel.OPERATE,
+}
 
 
 @router.get("/admin/user-group")
@@ -455,7 +463,20 @@ def set_group_managed_cc_pairs(
         for cc_pair_id, role in requested.items()
         if current.get(cc_pair_id) is not role
     }
-    assert_cc_pairs_attachable_to_group(db_session, user, user_group_id, set(upserts))
+    if upserts:
+        assert_groups_have_no_global_manage_grant(db_session, [user_group_id])
+    for role, access_level in _ACCESS_LEVEL_TO_GIVE_ROLE.items():
+        assert_cc_pairs_attachable_to_group(
+            db_session,
+            user,
+            user_group_id,
+            cc_pair_ids={
+                cc_pair_id
+                for cc_pair_id, upsert_role in upserts.items()
+                if upsert_role is role
+            },
+            access_level=access_level,
+        )
     write_manage_rows__no_commit(
         db_session,
         upserts={

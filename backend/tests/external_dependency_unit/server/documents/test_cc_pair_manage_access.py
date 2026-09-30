@@ -186,7 +186,8 @@ def test_put_refuses_default_and_unknown_groups(db_session: Session) -> None:
 
 def test_group_side_keeps_the_group_edit_authorization(db_session: Session) -> None:
     """A scoped groups manager may attach or re-role only private pairs whose every
-    group they manage, or groupless pairs they created. Removal is not restricted."""
+    group they manage, or groupless pairs they created, and may give only a role
+    they hold. Removal is not restricted."""
     mine = _group(db_session)
     other = _group(db_session)
     manager = _manager_of(db_session, mine)
@@ -221,14 +222,20 @@ def test_group_side_keeps_the_group_edit_authorization(db_session: Session) -> N
         put([keep[0], ManagedCCPairEntry(cc_pair_id=shared.id, role=EDITOR)])
     db_session.rollback()
 
-    # re-role inside their scope, attach their own groupless pair (EDITOR by
-    # default) and drop the shared one
+    # an Operator can't make their group an Editor
+    with pytest.raises(OnyxError):
+        put([ManagedCCPairEntry(cc_pair_id=operated.id, role=EDITOR), keep[1]])
+    db_session.rollback()
+
+    # attach their own groupless pair (EDITOR by default), re-role it, and drop
+    # the shared one
+    assert put([keep[0], ManagedCCPairEntry(cc_pair_id=own_groupless.id)]) == {
+        operated.id: OPERATOR,
+        own_groupless.id: EDITOR,
+    }
     assert put(
-        [
-            ManagedCCPairEntry(cc_pair_id=operated.id, role=EDITOR),
-            ManagedCCPairEntry(cc_pair_id=own_groupless.id),
-        ]
-    ) == {operated.id: EDITOR, own_groupless.id: EDITOR}
+        [keep[0], ManagedCCPairEntry(cc_pair_id=own_groupless.id, role=OPERATOR)]
+    ) == {operated.id: OPERATOR, own_groupless.id: OPERATOR}
 
 
 def test_group_side_refuses_a_group_the_caller_does_not_manage(

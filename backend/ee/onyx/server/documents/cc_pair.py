@@ -295,13 +295,23 @@ def set_cc_pair_data_access(
 
 
 def _manage_access_rows(
-    db_session: Session, cc_pair_id: int
+    db_session: Session, cc_pair_id: int, visible_group_ids: set[int] | None
 ) -> list[CCPairManageAccessRow]:
+    """The fixed rows, then the stored rows of groups the caller can see
+    (``visible_group_ids``, None: all). A stored row of a group that is also
+    fixed is left out: the fixed Editor row already covers it."""
+    fixed_rows = fixed_manage_access_rows(db_session)
+    fixed_group_ids = {row.group_id for row in fixed_rows}
     roles = fetch_manage_roles_for_cc_pair(db_session, cc_pair_id)
+    shown_group_ids = {
+        group_id
+        for group_id in roles.keys() - fixed_group_ids
+        if visible_group_ids is None or group_id in visible_group_ids
+    }
     groups = fetch_user_groups(
-        db_session, only_up_to_date=False, restrict_to_group_ids=set(roles)
+        db_session, only_up_to_date=False, restrict_to_group_ids=shown_group_ids
     )
-    return fixed_manage_access_rows(db_session) + [
+    return fixed_rows + [
         CCPairManageAccessRow(
             group_id=group.id,
             group_name=group.name,
@@ -329,7 +339,9 @@ def get_cc_pair_manage_access(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "CC Pair not found for current user's permissions",
         )
-    return _manage_access_rows(db_session, cc_pair_id)
+    return _manage_access_rows(
+        db_session, cc_pair_id, get_visible_user_group_ids(user, db_session)
+    )
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/manage-access")
@@ -381,7 +393,9 @@ def set_cc_pair_manage_access(
             }
         },
     )
-    return _manage_access_rows(db_session, cc_pair_id)
+    return _manage_access_rows(
+        db_session, cc_pair_id, get_visible_user_group_ids(user, db_session)
+    )
 
 
 @router.get("/admin/manage-access-prefill")

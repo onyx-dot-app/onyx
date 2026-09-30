@@ -340,10 +340,55 @@ def test_manage_access_lists_fixed_admin_rows(env: _RolesEnv) -> None:
     fixed = [row for row in rows if row.is_fixed]
     assert "Admin" in {row.group_name for row in fixed}
     assert all(row.role is ConnectorManageRole.EDITOR for row in fixed)
+    # The operator sees only the stored rows of groups they can see.
+    assert {row.group_id: row.role for row in rows if not row.is_fixed} == {
+        env.operator_group.id: ConnectorManageRole.OPERATOR,
+    }
+    rows = CCPairManager.get_manage_access(cc_pair.id, env.admin)
     assert {row.group_id: row.role for row in rows if not row.is_fixed} == {
         env.editor_group.id: ConnectorManageRole.EDITOR,
         env.operator_group.id: ConnectorManageRole.OPERATOR,
     }
+
+
+def test_fixed_group_gets_no_stored_row(env: _RolesEnv) -> None:
+    """A group with a global Manage Connectors grant is a fixed Editor, so it shows
+    once, as fixed, and it can't also get a stored role."""
+    cc_pair = _pair(env, AccessType.PRIVATE)
+    group = UserGroupManager.create(user_performing_action=env.admin)
+    CCPairManager.set_manage_access(
+        cc_pair.id,
+        {
+            env.editor_group.id: ConnectorManageRole.EDITOR,
+            env.operator_group.id: ConnectorManageRole.OPERATOR,
+            group.id: ConnectorManageRole.OPERATOR,
+        },
+        user_performing_action=env.admin,
+    )
+    UserGroupManager.set_permissions(
+        group, ["manage:connectors"], env.admin
+    ).raise_for_status()
+    try:
+        rows = CCPairManager.get_manage_access(cc_pair.id, env.admin)
+        assert [row.is_fixed for row in rows if row.group_id == group.id] == [True]
+
+        other = _pair(env, AccessType.PRIVATE)
+        with pytest.raises(httpx.HTTPStatusError) as error:
+            CCPairManager.set_manage_access(
+                other.id,
+                {group.id: ConnectorManageRole.OPERATOR},
+                user_performing_action=env.admin,
+            )
+        assert error.value.response.status_code == 400
+        resp = _call(
+            env.admin,
+            "PUT",
+            f"/manage/admin/user-group/{group.id}/managed-cc-pairs",
+            {"cc_pairs": [{"cc_pair_id": other.id, "role": "operator"}]},
+        )
+        assert resp.status_code == 400, resp.text
+    finally:
+        UserGroupManager.set_permissions(group, [], env.admin).raise_for_status()
 
 
 def test_fixed_rows_survive_an_empty_put(env: _RolesEnv) -> None:
@@ -441,12 +486,19 @@ def test_group_side_sets_roles(env: _RolesEnv) -> None:
     assert not _denied(_OPERATOR_ACTIONS["pause"](env.no_role, cc_pair))
     assert _denied(_EDITOR_ACTIONS["edit_config"](env.no_role, cc_pair))
 
-    # The group side keeps the group-edit authorization: the pair sits only in a group
-    # they manage, so its manager may change their group's role on it.
+    # The group side keeps the group-edit authorization, but a manager can't give a
+    # group a role they don't hold: this Operator can't make their group an Editor.
     path = f"/manage/admin/user-group/{env.no_role_group.id}/managed-cc-pairs"
     resp = _call(env.no_role, "PUT", path, {"cc_pairs": [{"cc_pair_id": cc_pair.id}]})
+    assert resp.status_code == 403, resp.text
+    resp = _call(
+        env.no_role,
+        "PUT",
+        path,
+        {"cc_pairs": [{"cc_pair_id": cc_pair.id, "role": "operator"}]},
+    )
     assert resp.status_code == 200, resp.text
-    assert resp.json() == [{"cc_pair_id": cc_pair.id, "role": "editor"}]
+    assert resp.json() == [{"cc_pair_id": cc_pair.id, "role": "operator"}]
 
     # ...but not on a group they don't manage
     resp = _call(

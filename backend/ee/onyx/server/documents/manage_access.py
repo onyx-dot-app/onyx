@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.db.connector_manage_access import (
     ManageRowKey,
+    assert_groups_have_no_global_manage_grant,
     fetch_groups_with_global_permission,
     write_manage_rows__no_commit,
 )
@@ -103,5 +104,8 @@ def apply_manage_access_change__no_commit(
     if missing := sorted(added_group_ids - found_group_ids):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, f"User group(s) {missing} not found")
     assert_not_shared_with_default_group(db_session, added_group_ids)
+    assert_groups_have_no_global_manage_grant(
+        db_session, {group_id for group_id, _ in upserts}
+    )
 
     write_manage_rows__no_commit(db_session, upserts=upserts, deletes=deletes)

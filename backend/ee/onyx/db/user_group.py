@@ -767,13 +767,15 @@ def assert_cc_pairs_attachable_to_group(
     user: User,
     user_group_id: int,
     cc_pair_ids: set[int],
+    access_level: CCPairAccessLevel,
 ) -> None:
     """GATE 2 for attaching cc_pairs to a group, or changing the group's role on
     them: for a scoped manager, every pair must be a private one within their
     managed scope, or a groupless one they created. Otherwise the write could
     attach a public or out-of-scope connector to the group. The manager must
-    also be an Editor of each pair. A global MANAGE_USER_GROUPS holder is not
-    restricted. The caller checks that it manages the group."""
+    also hold ``access_level`` on each pair, so they can't give a group more
+    than they have. A global MANAGE_USER_GROUPS holder is not restricted. The
+    caller checks that it manages the group."""
     if (
         has_permission(user, Permission.MANAGE_USER_GROUPS)
         is not PermissionAuthority.SCOPED
@@ -819,14 +821,13 @@ def assert_cc_pairs_attachable_to_group(
             is_non_public=cc_pair.access_type != AccessType.PUBLIC,
         )
 
-    # An attached pair gets EDITOR, so an Operator can't use this to make
-    # themselves an Editor through another group they manage.
     if cc_pair_ids and not verify_user_can_manage_all_cc_pairs(
-        cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
+        cc_pair_ids, db_session, user, access_level
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Group managers can only attach connectors where they are an Editor.",
+            "Group managers can't give a group more access to a connector "
+            "than they have.",
         )
 
 
@@ -893,8 +894,13 @@ def update_user_group(
         db_user_group,
         attaching_cc_pairs=bool(added_cc_pair_ids),
     )
+    # A newly attached pair gets EDITOR.
     assert_cc_pairs_attachable_to_group(
-        db_session, user, user_group_id, cc_pair_ids=added_cc_pair_ids
+        db_session,
+        user,
+        user_group_id,
+        cc_pair_ids=added_cc_pair_ids,
+        access_level=CCPairAccessLevel.EDIT,
     )
 
     current_user_ids = {user.id for user in db_user_group.users}
@@ -1045,7 +1051,11 @@ def set_user_group_data_access_cc_pairs(
         return current_cc_pair_ids
 
     assert_cc_pairs_attachable_to_group(
-        db_session, user, user_group_id, cc_pair_ids=added_cc_pair_ids
+        db_session,
+        user,
+        user_group_id,
+        cc_pair_ids=added_cc_pair_ids,
+        access_level=CCPairAccessLevel.EDIT,
     )
     if not verify_user_can_manage_all_cc_pairs(
         changed_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
