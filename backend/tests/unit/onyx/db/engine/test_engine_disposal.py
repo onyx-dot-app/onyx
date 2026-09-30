@@ -8,7 +8,7 @@ and the api server hung.
 
 These tests exercise each disposal function directly. A higher-level
 integration check would re-run the FastAPI lifespan, but the lifespan touches
-auth, telemetry, vespa, and the file store — far more scaffolding than the
+auth, telemetry, OpenSearch, and the file store — far more scaffolding than the
 behavior we care about here, which is that ``dispose()`` is in fact called and
 the cached engine references are released.
 """

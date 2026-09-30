@@ -26,7 +26,6 @@ def test_kg_deep_extraction_owns_document_trace() -> None:
             metadata=MagicMock(),
             implied_extraction=MagicMock(),
             tenant_id="tenant",
-            index_name="index",
             kg_config_settings=MagicMock(),
         )
 

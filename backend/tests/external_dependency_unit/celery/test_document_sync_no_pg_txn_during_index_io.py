@@ -1,17 +1,16 @@
 """
 Regression coverage for document_index_metadata_sync_task holding a Postgres
-transaction across the document-index (Vespa/OpenSearch) HTTP round-trip.
+transaction across the document-index HTTP round-trip.
 
 Under bulk-deletion fan-out, every docprocessing-sync worker slot used to pin a
-DB connection in state idle-in-transaction for the duration of the index call
-(up to RetryDocumentIndex.STOP_AFTER seconds of tenacity retries). Those
-transactions blocked `UPDATE document SET last_synced` writers cluster-wide.
+DB connection in state idle-in-transaction for the duration of the index call.
+Those transactions blocked `UPDATE document SET last_synced` writers cluster-wide.
 The task is now split into three phases: read DB state and close the session,
 do index I/O with no connection held, then reopen a fresh session to mark the
 document synced.
 
 Uses real PostgreSQL for Document rows and search settings. Only
-RetryDocumentIndex.update is mocked (no index network I/O), so index-client
+OpenSearchIndexPair.update is mocked (no index network I/O), so index-client
 construction runs for real against the detached-from-session SearchSettings —
 guarding the phase boundary itself.
 """
@@ -26,11 +25,13 @@ import pytest
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
 
-from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.background.celery.tasks.vespa import tasks as vespa_tasks
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import Document as DbDocument
 from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
+from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchIndexPair,
+)
 from onyx.kg.models import KGStage
 from shared_configs.configs import (
     POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE as TEST_TENANT_ID,
@@ -65,13 +66,13 @@ def stale_document(
 
 
 def _run_task(doc_id: str, index_update_side_effect: object = None) -> bool:
-    """Run the sync task with RetryDocumentIndex.update patched.
+    """Run the sync task with OpenSearchIndexPair.update patched.
 
     Index clients are still built by the real factory from search settings that
     are detached from their (closed) phase-1 session.
     """
     with patch.object(
-        RetryDocumentIndex, "update", side_effect=index_update_side_effect
+        OpenSearchIndexPair, "update", side_effect=index_update_side_effect
     ):
         result: bool = vespa_tasks.document_index_metadata_sync_task.apply(
             args=(doc_id,), kwargs={"tenant_id": TEST_TENANT_ID}
@@ -92,7 +93,7 @@ def test_no_db_connection_held_during_index_io(
     result = _run_task(stale_document, index_update_side_effect=_record_pool_state)
 
     assert result is True
-    # the index update ran (once per configured index)...
+    # the index update ran...
     assert len(checked_out_during_update) >= 1
     # ...with no DB connection checked out by the task at any of those moments
     assert all(count == 0 for count in checked_out_during_update)

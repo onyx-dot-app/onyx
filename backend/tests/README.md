@@ -15,7 +15,7 @@ pytest -xv backend/tests/unit
 
 ### External Dependency Unit Tests (`tests/external_dependency_unit/`)
 
-Real Postgres, Redis, MinIO, and Vespa available. Real OpenAI key when set. Real
+Real Postgres, Redis, MinIO, and OpenSearch available. Real OpenAI key when set. Real
 Docker daemon when a Docker-backend test opts into it. Onyx application
 processes (API server, Celery workers) are **not** running. Tests import and
 call functions directly and can mock selectively.

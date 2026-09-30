@@ -5,8 +5,6 @@ import sys
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from onyx.document_index.document_index_utils import get_multipass_config
-
 # makes it so `PYTHONPATH=.` is not required when running this script
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -19,15 +17,11 @@ from onyx.db.document import (  # noqa: E402
 from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.db.tag import delete_orphan_tags_batched  # noqa: E402
+from onyx.document_index.factory import get_default_document_index  # noqa: E402
 from onyx.document_index.interfaces_new import (  # noqa: E402
+    DocumentIndex,
     DocumentSectionRequest,
-    TenantState,
 )
-from onyx.document_index.vespa.vespa_document_index import (  # noqa: E402
-    VespaDocumentIndex,
-)
-from shared_configs.configs import MULTI_TENANT  # noqa: E402
-from shared_configs.contextvars import get_current_tenant_id  # noqa: E402
 
 BATCH_SIZE = 100
 
@@ -61,34 +55,24 @@ def main() -> None:
                     )
                 return
 
-            # Setup Vespa index
             search_settings = get_current_search_settings(db_session)
-            multipass_config = get_multipass_config(search_settings)
-            index_name = search_settings.index_name
-            tenant_state = TenantState(
-                tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
-            )
-            vespa_index = VespaDocumentIndex(
-                index_name=index_name,
-                tenant_state=tenant_state,
-                large_chunks_enabled=multipass_config.enable_large_chunks,
-            )
+            document_index = get_default_document_index(search_settings, None)
 
-            # Delete chunks from Vespa first
-            print("Deleting orphaned document chunks from Vespa")
-            successfully_vespa_deleted_doc_ids: list[str] = []
+            # Delete chunks from the document index first
+            print("Deleting orphaned document chunks from the document index")
+            successfully_index_deleted_doc_ids: list[str] = []
             # Process documents in parallel using ThreadPoolExecutor
             with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
 
                 def process_doc(
-                    doc_id: str, vespa_index: VespaDocumentIndex = vespa_index
+                    doc_id: str, document_index: DocumentIndex = document_index
                 ) -> str | None:
                     document = get_document(doc_id, db_session)
                     if not document:
                         return None
-                    # Check if document exists in Vespa first
+                    # Check if document exists in the document index first
                     try:
-                        chunks = vespa_index.id_based_retrieval(
+                        chunks = document_index.id_based_retrieval(
                             chunk_requests=[
                                 DocumentSectionRequest(
                                     document_id=doc_id, max_chunk_ind=2
@@ -98,17 +82,17 @@ def main() -> None:
                             batch_retrieval=True,
                         )
                         if not chunks:
-                            print(f"Document {doc_id} not found in Vespa")
+                            print(f"Document {doc_id} not found in the document index")
                             return doc_id
                     except Exception as e:
                         print(
-                            f"Error checking if document {doc_id} exists in Vespa: {e}"
+                            f"Error checking if document {doc_id} exists in the document index: {e}"
                         )
                         return None
 
                     try:
-                        print(f"Deleting document {doc_id} in Vespa")
-                        chunks_deleted = vespa_index.delete(
+                        print(f"Deleting document {doc_id} in the document index")
+                        chunks_deleted = document_index.delete(
                             doc_id,
                             chunk_count=document.chunk_count,
                         )
@@ -119,7 +103,7 @@ def main() -> None:
                         return doc_id
                     except Exception as e:
                         print(
-                            f"Error deleting document {doc_id} in Vespa and will not delete from Postgres: {e}"
+                            f"Error deleting document {doc_id} in the document index and will not delete from Postgres: {e}"
                         )
                         return None
 
@@ -130,13 +114,13 @@ def main() -> None:
                 for future in concurrent.futures.as_completed(futures):
                     doc_id = future.result()
                     if doc_id:
-                        successfully_vespa_deleted_doc_ids.append(doc_id)
+                        successfully_index_deleted_doc_ids.append(doc_id)
 
             # Delete documents from Postgres
             print("Deleting orphaned documents from Postgres")
             try:
                 delete_documents_complete__no_commit(
-                    db_session, successfully_vespa_deleted_doc_ids
+                    db_session, successfully_index_deleted_doc_ids
                 )
                 db_session.commit()
                 delete_orphan_tags_batched(db_session)
@@ -144,9 +128,9 @@ def main() -> None:
                 print(f"Error deleting documents from Postgres: {e}")
                 break
 
-            total_processed += len(successfully_vespa_deleted_doc_ids)
+            total_processed += len(successfully_index_deleted_doc_ids)
             print(
-                f"Successfully cleaned up {len(successfully_vespa_deleted_doc_ids)} orphaned documents in this batch"
+                f"Successfully cleaned up {len(successfully_index_deleted_doc_ids)} orphaned documents in this batch"
             )
             print(f"Total documents processed so far: {total_processed}")
 

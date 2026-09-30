@@ -5,7 +5,7 @@ Regression tests for api-server pods crash-looping on startup while the index
 was read_only_allow_delete-blocked: the mapping refresh is a metadata write, so
 it is rejected while the block is active. verify_and_create_index_if_necessary
 still raises (callers like embedding-model swaps must not silently continue);
-the tolerant call sites — startup's setup_document_indices and the multitenant
+the tolerant call sites — startup's setup_document_index and the multitenant
 DocumentIndex init — catch the block error and proceed degraded.
 """
 
@@ -28,7 +28,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
 from onyx.indexing.models import IndexingSetting
-from onyx.setup import setup_document_indices
+from onyx.setup import setup_document_index
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.document_index.conftest import EMBEDDING_DIM
 
@@ -68,15 +68,15 @@ def test_verify_raises_typed_error_under_write_block(
     assert is_cluster_block_error(cause)
 
 
-def test_setup_document_indices_succeeds_under_write_block(
+def test_setup_document_index_succeeds_under_write_block(
     write_blocked_index: OpenSearchDocumentIndex,
 ) -> None:
     """Startup must survive an existing, readable index that is merely
     write-blocked instead of crash-looping."""
     index_setting = IndexingSetting.model_construct(model_dim=EMBEDDING_DIM)
 
-    assert setup_document_indices(
-        document_indices=[write_blocked_index],
+    assert setup_document_index(
+        document_index=write_blocked_index,
         index_setting=index_setting,
         num_attempts=1,
     )

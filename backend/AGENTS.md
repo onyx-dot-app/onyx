@@ -13,9 +13,10 @@ tests. Additive to the root `AGENTS.md`.
   PostgreSQL implementation of `CacheBackend`, so its queries belong there.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
   function.
-- OpenSearch is the current document index backend for search and indexing. Some legacy modules,
-  Celery task names, and migration helpers still mention Vespa; treat those as compatibility or
-  migration artifacts unless the active `DocumentIndex` factory/config path explicitly uses them.
+- OpenSearch is the only document index backend for search and indexing. Onyx no longer uses
+  Vespa. Some live Celery names still say "vespa" (the `vespa_metadata_sync` queue, the
+  `check_for_vespa_sync_task` task, the `onyx.background.celery.tasks.vespa` module); they sync
+  the document index and keep their names so running deployments are not disrupted.
 - Do not use `getattr`: it hides attribute access from the type checker. Use
   plain attribute access when the name is statically known. A genuinely dynamic
   lookup needs an `# ods: ignore[getattr]` comment with a brief justification

@@ -205,7 +205,6 @@ def _get_batch_documents_enhanced_metadata(
 
 def kg_extraction(
     tenant_id: str,
-    index_name: str,
     lock: RedisLock,
     processing_chunk_batch_size: int = 8,
 ) -> None:
@@ -219,7 +218,6 @@ def kg_extraction(
         - For each batch of unprocessed documents:
             - Classify each document to select proper ones
             - Get and extract from chunks
-            - Update chunks in Vespa
             - Update temporary KG extraction tables
             - Update document table to set kg_extracted = True
     """
@@ -397,7 +395,6 @@ def kg_extraction(
                     (
                         *arg,
                         tenant_id,
-                        index_name,
                         kg_config_settings,
                     ),
                 )

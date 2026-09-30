@@ -174,7 +174,7 @@ class IndexingPipelineResult(BaseModel):
     # NOTE: need total_docs, since the pipeline can skip some docs
     # (e.g. not even insert them into Postgres)
     total_docs: int
-    # number of chunks that were inserted into Vespa
+    # number of chunks that were inserted into the document index
     total_chunks: int
 
     failures: list[ConnectorFailure]
@@ -451,7 +451,7 @@ def index_doc_batch_with_handler(
     *,
     chunker: Chunker,
     embedder: IndexingEmbedder,
-    document_indices: list[DocumentIndex],
+    document_index: DocumentIndex,
     document_batch: list[Document],
     request_id: str | None,
     tenant_id: str,
@@ -468,7 +468,7 @@ def index_doc_batch_with_handler(
         index_pipeline_result = index_doc_batch(
             chunker=chunker,
             embedder=embedder,
-            document_indices=document_indices,
+            document_index=document_index,
             document_batch=document_batch,
             request_id=request_id,
             tenant_id=tenant_id,
@@ -1381,7 +1381,7 @@ def index_doc_batch(
     document_batch: list[Document],
     chunker: Chunker,
     embedder: IndexingEmbedder,
-    document_indices: list[DocumentIndex],
+    document_index: DocumentIndex,
     request_id: str | None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
@@ -1531,7 +1531,8 @@ def index_doc_batch(
         )
 
         # Filter to only successfully embedded chunks so
-        # doc_id_to_new_chunk_cnt reflects what's actually written to Vespa.
+        # doc_id_to_new_chunk_cnt reflects what's actually written to the
+        # document index.
         embedded_chunks = [
             c for c in chunks if c.source_document.id not in embedding_failed_doc_ids
         ]
@@ -1560,51 +1561,28 @@ def index_doc_batch(
                 doc_id_to_chunk_cnt_diff=doc_id_to_chunk_cnt_diff,
             )
 
-            primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = (
-                None
+            def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
+                for chunk in chunk_store.stream():
+                    yield enricher.enrich_chunk(chunk, 1.0)
+
+            vector_db_write_start = time.monotonic()
+            insertion_records, write_failures = write_chunks_to_vector_db_with_backoff(
+                document_index=document_index,
+                make_chunks=_enriched_stream,
+                indexing_metadata=indexing_metadata,
+                tenant_id=tenant_id,
             )
-            primary_doc_idx_vector_db_write_failures: list[ConnectorFailure] | None = (
-                None
+            vector_db_write_ms = max(
+                0, int((time.monotonic() - vector_db_write_start) * 1000)
             )
 
-            # Sum vector-db write time across all configured indices and
-            # record once per batch. Most deployments have a single index
-            # (primary), but during a switchover both primary and secondary
-            # are written; we want a single combined number per batch rather
-            # than one event per index (avoids inflating event_count).
-            vector_db_write_ms = 0
-            for document_index in document_indices:
-
-                def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
-                    for chunk in chunk_store.stream():
-                        yield enricher.enrich_chunk(chunk, 1.0)
-
-                vector_db_write_start = time.monotonic()
-                insertion_records, write_failures = (
-                    write_chunks_to_vector_db_with_backoff(
-                        document_index=document_index,
-                        make_chunks=_enriched_stream,
-                        indexing_metadata=indexing_metadata,
-                        tenant_id=tenant_id,
-                    )
-                )
-                vector_db_write_ms += max(
-                    0, int((time.monotonic() - vector_db_write_start) * 1000)
-                )
-
-                _verify_indexing_completeness(
-                    insertion_records=insertion_records,
-                    write_failures=write_failures,
-                    embedding_failed_doc_ids=embedding_failed_doc_ids,
-                    updatable_ids=updatable_ids,
-                    document_index_name=document_index.__class__.__name__,
-                )
-                # We treat the first document index we got as the primary one used
-                # for reporting the state of indexing.
-                if primary_doc_idx_insertion_records is None:
-                    primary_doc_idx_insertion_records = insertion_records
-                if primary_doc_idx_vector_db_write_failures is None:
-                    primary_doc_idx_vector_db_write_failures = write_failures
+            _verify_indexing_completeness(
+                insertion_records=insertion_records,
+                write_failures=write_failures,
+                embedding_failed_doc_ids=embedding_failed_doc_ids,
+                updatable_ids=updatable_ids,
+                document_index_name=document_index.__class__.__name__,
+            )
 
             safe_record_single_event_if_set(
                 IndexAttemptStage.VECTOR_DB_WRITE, attempt_id, vector_db_write_ms
@@ -1630,10 +1608,8 @@ def index_doc_batch(
             # on the next sync. Hashes were pre-computed in get_docs_to_update.
             # Skipped for FUTURE writes: stamping the PRESENT-only hash would make
             # the PRESENT poll skip the doc (cross-index suppression).
-            if primary_doc_idx_insertion_records is not None and not index_to_secondary:
-                successfully_indexed_ids = {
-                    r.document_id for r in primary_doc_idx_insertion_records
-                }
+            if not index_to_secondary:
+                successfully_indexed_ids = {r.document_id for r in insertion_records}
                 update_docs_content_hash__no_commit(
                     ids_to_new_hash={
                         doc_id: context.doc_id_to_content_hash[doc_id]
@@ -1643,23 +1619,18 @@ def index_doc_batch(
                     db_session=db_session,
                 )
 
-    assert primary_doc_idx_insertion_records is not None
-    assert primary_doc_idx_vector_db_write_failures is not None
-
     _maybe_push_documents(
         adapter=adapter,
         filtered_documents=filtered_documents,
-        insertion_records=primary_doc_idx_insertion_records,
+        insertion_records=insertion_records,
         from_beginning=from_beginning,
     )
 
     return IndexingPipelineResult(
-        new_docs=sum(
-            1 for r in primary_doc_idx_insertion_records if not r.already_existed
-        ),
+        new_docs=sum(1 for r in insertion_records if not r.already_existed),
         total_docs=len(filtered_documents),
         total_chunks=len(embedding_result.successful_chunk_ids),
-        failures=primary_doc_idx_vector_db_write_failures
+        failures=write_failures
         + embedding_result.connector_failures
         + enrichment_partition.failures
         + filter_failures,
@@ -1671,7 +1642,7 @@ def run_indexing_pipeline(
     document_batch: list[Document],
     request_id: str | None,
     embedder: IndexingEmbedder,
-    document_indices: list[DocumentIndex],
+    document_index: DocumentIndex,
     db_session: Session | None = None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
@@ -1737,7 +1708,7 @@ def run_indexing_pipeline(
         return index_doc_batch_with_handler(
             chunker=chunker,
             embedder=embedder,
-            document_indices=document_indices,
+            document_index=document_index,
             document_batch=document_batch,
             request_id=request_id,
             tenant_id=tenant_id,

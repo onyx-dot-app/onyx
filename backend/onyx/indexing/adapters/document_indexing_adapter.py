@@ -47,7 +47,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
 
     Keeps orchestration logic in the pipeline and side-effects in the adapter.
     Each phase opens its own short-lived session so no connection is held idle
-    during the long embedding and Vespa-write phases.
+    during the long embedding and document-index-write phases.
     """
 
     def __init__(

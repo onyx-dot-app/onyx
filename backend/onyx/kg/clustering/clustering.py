@@ -31,10 +31,6 @@ from onyx.db.relationships import (
     upsert_relationship,
     upsert_relationship_type,
 )
-from onyx.document_index.vespa.kg_interactions import (
-    get_kg_vespa_info_update_requests_for_document,
-    update_kg_chunks_vespa_info,
-)
 from onyx.kg.models import KGGroundingType
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.lock_utils import extend_lock
@@ -123,36 +119,9 @@ def _get_batch_entities_with_parent(
             offset += batch_size
 
 
-def _get_batch_kg_processed_documents(
-    batch_size: int,
-) -> Generator[list[Document], None, None]:
-    offset = 0
-
-    while True:
-        with get_session_with_current_tenant() as db_session:
-            batch = (
-                db_session.query(Document)
-                .join(
-                    KGEntityExtractionStaging,
-                    Document.id == KGEntityExtractionStaging.document_id,
-                )
-                .filter(
-                    KGEntityExtractionStaging.transferred_id_name.is_not(None),
-                )
-                .order_by(Document.id)
-                .offset(offset)
-                .limit(batch_size)
-                .all()
-            )
-            if not batch:
-                break
-            yield batch
-            offset += batch_size
-
-
 def _cluster_one_grounded_entity(
     entity: KGEntityExtractionStaging,
-) -> tuple[KGEntity, bool]:
+) -> KGEntity:
     """
     Cluster a single grounded entity.
     """
@@ -209,19 +178,15 @@ def _cluster_one_grounded_entity(
     with get_session_with_current_tenant() as db_session:
         if best_entity:
             logger.debug("Merged %s with %s", entity.name, best_entity.name)
-            update_vespa = (
-                best_entity.document_id is None and entity.document_id is not None
-            )
             transferred_entity = merge_entities(
                 db_session=db_session, parent=best_entity, child=entity
             )
         else:
-            update_vespa = entity.document_id is not None
             transferred_entity = transfer_entity(db_session=db_session, entity=entity)
 
         db_session.commit()
 
-    return transferred_entity, update_vespa
+    return transferred_entity
 
 
 def _create_one_parent_child_relationship(entity: KGEntityExtractionStaging) -> None:
@@ -303,7 +268,6 @@ def _transfer_one_relationship(
 
 def kg_clustering(
     tenant_id: str,
-    index_name: str,
     lock: RedisLock,
     processing_chunk_batch_size: int = 16,
 ) -> None:
@@ -406,36 +370,6 @@ def kg_clustering(
     time_delta = time.monotonic() - start_time
     logger.info(
         "Finished transferring %s relationship batches in %ss",
-        i_batch + 1,
-        format(time_delta, ".2f"),
-    )
-
-    # Update vespa for each document
-    start_time = time.monotonic()
-    i_batch = 0
-    for i_batch, documents in enumerate(  # noqa: B007
-        _get_batch_kg_processed_documents(batch_size=processing_chunk_batch_size)
-    ):
-        batch_update_requests = run_functions_tuples_in_parallel(
-            [
-                (get_kg_vespa_info_update_requests_for_document, (document.id,))
-                for document in documents
-            ]
-        )
-        for update_requests, document in zip(
-            batch_update_requests, documents, strict=True
-        ):
-            try:
-                update_kg_chunks_vespa_info(update_requests, index_name, tenant_id)
-            except Exception as e:
-                logger.error("Error updating vespa for document %s: %s", document.id, e)
-        last_lock_time = extend_lock(
-            lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
-        )
-        # logger.debug(f"Updated vespa for documents batch {i}")
-    time_delta = time.monotonic() - start_time
-    logger.info(
-        "Finished updating %s document batches in %ss",
         i_batch + 1,
         format(time_delta, ".2f"),
     )

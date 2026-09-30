@@ -13,8 +13,6 @@ data:
   {{- if .Values.opensearch.enabled }}
   OPENSEARCH_HOST: {{ .Values.opensearch.clusterName }}-{{ .Values.opensearch.nodeGroup }}.{{ .Release.Namespace }}.svc.cluster.local
   OPENSEARCH_REST_API_PORT: "9200"
-  ENABLE_OPENSEARCH_INDEXING_FOR_ONYX: "true"
-  ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX: "false"
   {{- end }}
   {{- if .Values.redis.enabled }}
   # Standalone Redis CR produces a Service named after the CR (no `-master`

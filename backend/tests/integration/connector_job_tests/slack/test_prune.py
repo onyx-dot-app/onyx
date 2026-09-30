@@ -22,14 +22,12 @@ from tests.integration.common_utils.test_models import (
     DATestCredential,
     DATestUser,
 )
-from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
 
 @pytest.mark.xfail(reason="flaky - see DAN-986 for details", strict=False)
 def test_slack_prune(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,  # noqa: ARG001
     slack_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     public_channel, private_channel = slack_test_setup

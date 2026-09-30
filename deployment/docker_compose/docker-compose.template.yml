@@ -414,7 +414,6 @@ services:
       #!for prod,no-letsencrypt
       # Set to debug to get more fine-grained logs
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
       #!endfor
     volumes:
       # Not necessary, this is just to reduce download time during startup

@@ -8,6 +8,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from tests.integration.common_utils.constants import API_SERVER_URL, NUM_DOCS
+from tests.integration.common_utils.document_index import DocumentIndexClient
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import DATestAPIKey
 from tests.integration.common_utils.test_models import (
@@ -15,7 +16,6 @@ from tests.integration.common_utils.test_models import (
     DATestUser,
     SimpleTestDocument,
 )
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def _verify_document_permissions(
@@ -25,13 +25,13 @@ def _verify_document_permissions(
     doc_set_names: list[str] | None = None,
     group_names: list[str] | None = None,
 ) -> None:
-    acl_keys = set(retrieved_doc.get("access_control_list", {}).keys())
+    acl_keys = set(retrieved_doc.get("access_control_list") or [])
     print(f"ACL keys: {acl_keys}")
 
     if cc_pair.access_type == AccessType.PUBLIC:
-        if "PUBLIC" not in acl_keys:
+        if not retrieved_doc.get("public"):
             raise ValueError(
-                f"Document {retrieved_doc['document_id']} is public but does not have the PUBLIC ACL key"
+                f"Document {retrieved_doc['document_id']} is public but is not marked public in the index"
             )
 
     if f"user_email:{doc_creating_user.email}" not in acl_keys:
@@ -51,7 +51,7 @@ def _verify_document_permissions(
             )
 
     if doc_set_names is not None:
-        found_doc_set_names = set(retrieved_doc.get("document_sets", {}).keys())
+        found_doc_set_names = set(retrieved_doc.get("document_sets") or [])
         if found_doc_set_names != set(doc_set_names):
             raise ValueError(
                 f"Document set names mismatch. \nFound: {found_doc_set_names}, \nExpected: {set(doc_set_names)}"
@@ -190,7 +190,7 @@ class DocumentManager:
 
     @staticmethod
     def verify(
-        vespa_client: vespa_fixture,
+        document_index_client: DocumentIndexClient,
         cc_pair: DATestCCPair,
         doc_creating_user: DATestUser,
         # If None, will not check doc sets or groups
@@ -200,11 +200,9 @@ class DocumentManager:
         verify_deleted: bool = False,
     ) -> None:
         doc_ids = [document.id for document in cc_pair.documents]
-        retrieved_docs_dict = vespa_client.get_documents_by_id(doc_ids)["documents"]
+        retrieved_chunks = document_index_client.get_chunks_by_document_id(doc_ids)
 
-        retrieved_docs = {
-            doc["fields"]["document_id"]: doc["fields"] for doc in retrieved_docs_dict
-        }
+        retrieved_docs = {chunk["document_id"]: chunk for chunk in retrieved_chunks}
 
         # NOTE(rkuo): too much log spam
         # Left this here for debugging purposes.
@@ -244,7 +242,7 @@ class DocumentManager:
     def fetch_documents_for_cc_pair(
         cc_pair_id: int,
         db_session: Session,
-        vespa_client: vespa_fixture,
+        document_index_client: DocumentIndexClient,
     ) -> list[SimpleTestDocument]:
         stmt = (
             select(DocumentByConnectorCredentialPair)
@@ -264,16 +262,15 @@ class DocumentManager:
             return []
 
         doc_ids = [document.id for document in documents]
-        retrieved_docs_dict = vespa_client.get_documents_by_id(doc_ids)["documents"]
+        retrieved_chunks = document_index_client.get_chunks_by_document_id(doc_ids)
 
         final_docs: list[SimpleTestDocument] = []
-        # NOTE: they are really chunks, but we're assuming that for these tests
-        # we only have one chunk per document for now
-        for doc_dict in retrieved_docs_dict:
-            doc_id = doc_dict["fields"]["document_id"]
-            doc_content = doc_dict["fields"]["content"]
-            # still called `image_file_name` in Vespa for backwards compatibility
-            image_file_id = doc_dict["fields"].get("image_file_name", None)
+        # NOTE: we're assuming that for these tests we only have one chunk per
+        # document for now
+        for chunk in retrieved_chunks:
+            doc_id = chunk["document_id"]
+            doc_content = chunk["content"]
+            image_file_id = chunk.get("image_file_id")
             final_docs.append(
                 SimpleTestDocument(
                     id=doc_id, content=doc_content, image_file_id=image_file_id

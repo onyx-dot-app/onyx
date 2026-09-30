@@ -1407,15 +1407,14 @@ class DocumentQuery:
                     # See https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#highlighter-types
                     "type": "unified",
                     # The length in chars of a match snippet. Somewhat
-                    # arbitrarily-chosen. The Vespa codepath limited total
-                    # highlights length to 400 chars. fragment_size *
-                    # number_of_fragments = 400 should be good enough.
+                    # arbitrarily-chosen. fragment_size * number_of_fragments
+                    # = 400 chars of highlights should be good enough.
                     "fragment_size": 100,
                     # The number of snippets to return per field per document
                     # hit.
                     "number_of_fragments": 4,
-                    # These tags wrap matched keywords and they match what Vespa
-                    # used to return. Use them to minimize changes to our code.
+                    # These tags wrap matched keywords. Downstream code expects
+                    # them.
                     "pre_tags": ["<hi>"],
                     "post_tags": ["</hi>"],
                 }

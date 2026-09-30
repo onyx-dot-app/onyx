@@ -266,7 +266,7 @@ def search_pipeline(
     # Pre-extracted persona search configuration (None when no persona)
     persona_search_info: PersonaSearchInfo | None,
     db_session: Session | None = None,
-    # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+    # Document index metadata filters for overflowing user files.  NOT the raw IDs
     # of the current project/persona — only set when user files couldn't fit
     # in the LLM context and need to be searched via vector DB.
     project_id_filter: int | None = None,

@@ -8,13 +8,13 @@ Validates that:
 
 2. The process_single_user_file_project_sync worker task reads persona
    associations from the DB, passes persona_ids to the document index via
-   VespaDocumentUserFields, and clears needs_persona_sync afterwards.
+   a MetadataUpdateRequest, and clears needs_persona_sync afterwards.
 
 3. upsert_persona correctly marks affected UserFiles with
    needs_persona_sync=True when file associations change.
 
-Uses real Redis and PostgreSQL.  Document index (Vespa) calls are mocked
-since we only need to verify the arguments passed to update_single.
+Uses real Redis and PostgreSQL.  Document index calls are mocked since we
+only need to verify the arguments passed to update.
 """
 
 from collections.abc import Generator
@@ -250,11 +250,8 @@ class TestCheckSweepIncludesPersonaSync:
 _PATCH_GET_SETTINGS = (
     "onyx.background.celery.tasks.user_file_processing.tasks.get_active_search_settings"
 )
-_PATCH_GET_INDICES = (
-    "onyx.background.celery.tasks.user_file_processing.tasks.get_all_document_indices"
-)
-_PATCH_HTTPX_INIT = (
-    "onyx.background.celery.tasks.user_file_processing.tasks.httpx_init_vespa_pool"
+_PATCH_GET_INDEX = (
+    "onyx.background.celery.tasks.user_file_processing.tasks.get_default_document_index"
 )
 _PATCH_DISABLE_VDB = (
     "onyx.background.celery.tasks.user_file_processing.tasks.DISABLE_VECTOR_DB"
@@ -312,9 +309,8 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
-            patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+            patch(_PATCH_GET_INDEX, return_value=mock_doc_index),
         ):
             process_single_user_file_project_sync.run(
                 user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
@@ -392,9 +388,8 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
-            patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+            patch(_PATCH_GET_INDEX, return_value=mock_doc_index),
         ):
             process_single_user_file_project_sync.run(
                 user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
@@ -421,7 +416,7 @@ class TestSyncTaskWritesPersonaIds:
         db_session: Session,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """A soft-deleted persona should NOT appear in the persona_ids sent to Vespa."""
+        """A soft-deleted persona should NOT appear in the persona_ids sent to the index."""
         user = create_test_user(db_session, "sync_deleted")
         uf = _create_completed_user_file(db_session, user, needs_persona_sync=True)
         persona = _create_test_persona(db_session, user)
@@ -444,9 +439,8 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
-            patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+            patch(_PATCH_GET_INDEX, return_value=mock_doc_index),
         ):
             process_single_user_file_project_sync.run(
                 user_file_id=str(uf.id),  # ty: ignore[invalid-argument-type]
@@ -610,9 +604,8 @@ def _run_sync(
 
     patches: list[Any] = [
         patch(_PATCH_DISABLE_VDB, False),
-        patch(_PATCH_HTTPX_INIT),
         patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
-        patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+        patch(_PATCH_GET_INDEX, return_value=mock_doc_index),
         patch(_PATCH_ACTIVE_SECONDARY, return_value=port_target),
     ]
     if supply is not None:
@@ -826,10 +819,9 @@ def _run_index_pass(uf_id: str, port_target: Any, index_secondary: MagicMock) ->
     current.status.is_current.return_value = True
 
     with (
-        patch(_PATCH_HTTPX_INIT),
         patch(_PATCH_GET_SETTINGS_LIST, return_value=[current]),
         patch(_PATCH_EMBEDDER),
-        patch(_PATCH_GET_INDICES, return_value=[MagicMock()]),
+        patch(_PATCH_GET_INDEX, return_value=MagicMock()),
         patch(_PATCH_RUN_PIPELINE, return_value=present_result),
         patch(_PATCH_ACTIVE_SECONDARY, return_value=port_target),
         patch(_PATCH_INDEX_SECONDARY, index_secondary),

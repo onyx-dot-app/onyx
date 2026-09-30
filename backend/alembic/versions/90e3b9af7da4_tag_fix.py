@@ -14,14 +14,28 @@ from typing import cast
 from typing import Generator
 
 from alembic import op
+import httpx
 import sqlalchemy as sa
 
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.db.search_settings import SearchSettings
 from shared_configs.configs import MULTI_TENANT
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 
 logger = logging.getLogger("alembic.runtime.migration")
+
+# Onyx no longer uses Vespa. These helpers were inlined from the removed Vespa
+# document index module so this migration stays importable.
+_VESPA_APP_CONTAINER_URL = os.environ.get("VESPA_CLOUD_URL") or (
+    f"http://{os.environ.get('VESPA_HOST') or 'localhost'}"
+    f":{os.environ.get('VESPA_PORT') or '8081'}"
+)
+DOCUMENT_ID_ENDPOINT = (
+    f"{_VESPA_APP_CONTAINER_URL}/document/v1/default/{{index_name}}/docid"
+)
+
+
+def get_vespa_http_client() -> httpx.Client:
+    # Self-hosted Vespa served a self-signed certificate.
+    return httpx.Client(verify=False, timeout=15, http2=True)  # noqa: S501
 
 
 # revision identifiers, used by Alembic.

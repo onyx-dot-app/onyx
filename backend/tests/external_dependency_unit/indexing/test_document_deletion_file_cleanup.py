@@ -182,12 +182,9 @@ class TestDeleteIngestionDoc:
         _index_doc(db_session, doc, attempt_metadata)
         assert get_filerecord(db_session, file_id) is not None
 
-        # Patch out Vespa — we're testing the file cleanup, not the document
-        # index integration.
-        with patch(
-            "onyx.server.onyx_api.ingestion.get_all_document_indices",
-            return_value=[],
-        ):
+        # Patch out the document index — we're testing the file cleanup, not
+        # the document index integration.
+        with patch("onyx.server.onyx_api.ingestion.get_default_document_index"):
             delete_ingestion_doc(
                 document_id=doc.id,
                 # a real admin: the body now feeds this to the GATE 2 cc_pair check
@@ -217,11 +214,10 @@ class TestDocumentByCcPairCleanupTask:
 
         assert get_filerecord(db_session, file_id) is not None
 
-        # Patch out Vespa interaction — no chunks were ever written, and we're
+        # Patch out the document index — no chunks were ever written, and we're
         # not testing the document index here.
         with patch(
-            "onyx.background.celery.tasks.shared.tasks.get_all_document_indices",
-            return_value=[],
+            "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
         ):
             result = document_by_cc_pair_cleanup_task.apply(
                 args=(
@@ -261,8 +257,7 @@ class TestDocumentByCcPairCleanupTask:
         db_session.commit()
 
         with patch(
-            "onyx.background.celery.tasks.shared.tasks.get_all_document_indices",
-            return_value=[],
+            "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
         ):
             results = [
                 document_by_cc_pair_cleanup_task.apply(
@@ -313,16 +308,12 @@ class TestDocumentByCcPairCleanupTask:
             assert get_document_connector_count(db_session, doc.id) == 1
             assert stored_doc.last_modified > indexed_at
 
-        with (
-            patch(
-                "onyx.background.celery.tasks.shared.tasks.get_all_document_indices",
-                return_value=[object()],
-            ),
-            patch(
-                "onyx.background.celery.tasks.shared.tasks.RetryDocumentIndex.update",
-                side_effect=assert_relationship_removed,
-            ),
-        ):
+        with patch(
+            "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
+        ) as mock_get_document_index:
+            mock_get_document_index.return_value.update.side_effect = (
+                assert_relationship_removed
+            )
             result = document_by_cc_pair_cleanup_task.apply(
                 args=(
                     doc.id,

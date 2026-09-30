@@ -820,7 +820,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 # NOTE: Index filters includes metadata tags which were filtered
                 # for invalid unicode at indexing time. In theory it would be
                 # ideal to do filtering here as well, in practice we never did
-                # that in the Vespa codepath and have not seen issues in
+                # that in the former Vespa codepath and have not seen issues in
                 # production, so we deliberately conform to the existing logic
                 # in order to not unknowningly introduce a possible bug.
                 index_filters=filters,
@@ -875,7 +875,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -924,7 +924,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -968,7 +968,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -1031,7 +1031,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Indexes raw document chunks into OpenSearch.
 
-        Used by the Vespa migration task and the reindex port. The reindex port
+        Used by the reindex port. The reindex port
         passes use_create_only=True so its stale backlog snapshot can never
         overwrite a chunk a live/forward writer already owns in FUTURE (an
         existing chunk is a benign 409). The port is pure gap-fill backfill of

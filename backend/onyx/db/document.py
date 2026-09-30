@@ -173,7 +173,7 @@ def count_secondary_only_sync_pending_documents_for_cc_pairs(
 def count_documents_by_needs_sync_or_secondary_pending(session: Session) -> int:
     """count_documents_by_needs_sync plus docs whose FUTURE sync was deferred.
 
-    The vespa sync producer gates on this so a deferred-only backlog still
+    The document index sync producer gates on this so a deferred-only backlog still
     generates drain tasks — a deferred doc has its needs_sync already cleared, so
     count_documents_by_needs_sync alone would miss it.
     """
@@ -1550,7 +1550,7 @@ def prepare_to_modify_documents(
 ) -> Generator[TransactionalContext, None, None]:
     """Try and acquire locks for the documents to prevent other jobs from
     modifying them at the same time (e.g. avoid race conditions). This should be
-    called ahead of any modification to Vespa. Locks should be released by the
+    called ahead of any modification to the document index. Locks should be released by the
     caller as soon as updates are complete by finishing the transaction.
 
     NOTE: only one commit is allowed within the context manager returned by this function.

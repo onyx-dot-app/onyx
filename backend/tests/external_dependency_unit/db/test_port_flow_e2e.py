@@ -305,7 +305,7 @@ def test_port_flow_end_to_end(
 
         # check_and_perform_index_swap fetches the FUTURE row via
         # get_secondary_search_settings (a stale FUTURE row exists in this dev
-        # DB), and get_all_document_indices would touch real Vespa/OpenSearch
+        # DB), and get_default_document_index would touch real OpenSearch
         # provisioning -> patch both in the swap_index namespace. The deferred
         # metadata-sync backlog is 0 in this dev DB; if it weren't, the swap
         # criterion would block, so we don't need to patch the count.
@@ -323,7 +323,7 @@ def test_port_flow_end_to_end(
                 "fetch_indexable_standard_connector_credential_pair_ids",
                 lambda *_, **__: [pair.id],
             ),
-            patch.object(swap_index, "get_all_document_indices", return_value=[]),
+            patch.object(swap_index, "get_default_document_index"),
         ):
             old_settings = swap_index.check_and_perform_index_swap(db_session)
 

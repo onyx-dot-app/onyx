@@ -1,19 +1,15 @@
 import time
 from collections.abc import Callable
 from datetime import datetime
-from http import HTTPStatus
 from typing import Any, cast
 
-import httpx
 from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
-from tenacity import RetryError
 
 from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.background.celery.tasks.shared.tasks import (
     LIGHT_SOFT_TIME_LIMIT,
     LIGHT_TIME_LIMIT,
@@ -26,7 +22,7 @@ from onyx.background.celery.tasks.vespa.document_sync import (
     reset_document_sync,
     try_generate_stale_document_sync_tasks,
 )
-from onyx.configs.app_configs import JOB_TIMEOUT, VESPA_SYNC_MAX_TASKS
+from onyx.configs.app_configs import DOCUMENT_INDEX_SYNC_MAX_TASKS, JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryTask,
@@ -57,12 +53,11 @@ from onyx.db.sync_record import (
     insert_sync_record,
     update_sync_record_status,
 )
-from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces_new import (
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
 )
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import (
     get_redis_client,
@@ -119,7 +114,12 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
         # 1/3: KICKOFF
         with get_session_with_current_tenant() as db_session:
             try_generate_stale_document_sync_tasks(
-                self.app, VESPA_SYNC_MAX_TASKS, db_session, r, lock_beat, tenant_id
+                self.app,
+                DOCUMENT_INDEX_SYNC_MAX_TASKS,
+                db_session,
+                r,
+                lock_beat,
+                tenant_id,
             )
 
         # region document set scan
@@ -265,7 +265,7 @@ def try_generate_document_set_sync_tasks(
 
     # Add all documents that need to be updated into the queue
     result = rds.generate_tasks(
-        VESPA_SYNC_MAX_TASKS, celery_app, db_session, r, lock_beat, tenant_id
+        DOCUMENT_INDEX_SYNC_MAX_TASKS, celery_app, db_session, r, lock_beat, tenant_id
     )
     if result is None:
         return None
@@ -340,7 +340,7 @@ def try_generate_user_group_sync_tasks(
         f"RedisUserGroup.generate_tasks starting. usergroup_id={usergroup.id}"
     )
     result = rug.generate_tasks(
-        VESPA_SYNC_MAX_TASKS, celery_app, db_session, r, lock_beat, tenant_id
+        DOCUMENT_INDEX_SYNC_MAX_TASKS, celery_app, db_session, r, lock_beat, tenant_id
     )
     if result is None:
         return None
@@ -540,36 +540,29 @@ def document_index_metadata_sync_task(
             completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
         else:
             # Client construction can be slow, so it also stays outside the
-            # session. This flow is for updates so we get all indices.
-            document_indices = get_all_document_indices(
+            # session.
+            document_index = get_default_document_index(
                 search_settings=primary_search_settings,
                 secondary_search_settings=secondary_search_settings,
-                httpx_client=HttpxPool.get("vespa"),
                 primary_backfill_in_progress=primary_backfill_in_progress,
             )
-
-            retry_document_indices: list[RetryDocumentIndex] = [
-                RetryDocumentIndex(document_index)
-                for document_index in document_indices
-            ]
 
             # Phase 2: document-index I/O — no DB connection held.
             # Reindex-port: doc missing from a still-populating index (FUTURE, or the
             # INSTANT-promoted primary) — defer rather than fail; the fully-populated
             # index's write already committed in the pair.
             port_index_missing = False
-            for retry_document_index in retry_document_indices:
-                try:
-                    # TODO(andrei): Previously there was a comment here saying
-                    # it was ok if a doc did not exist in the document index. I
-                    # don't agree with that claim, so keep an eye on this task
-                    # to see if this raises.
-                    retry_document_index.update([update_request])
-                except SecondaryIndexDocumentMissingError:
-                    task_logger.debug(
-                        f"doc={document_id} not in a still-porting index; deferring sync."
-                    )
-                    port_index_missing = True
+            try:
+                # TODO(andrei): Previously there was a comment here saying
+                # it was ok if a doc did not exist in the document index. I
+                # don't agree with that claim, so keep an eye on this task
+                # to see if this raises.
+                document_index.update([update_request])
+            except SecondaryIndexDocumentMissingError:
+                task_logger.debug(
+                    f"doc={document_id} not in a still-porting index; deferring sync."
+                )
+                port_index_missing = True
 
             # Phase 3: write back to PG in a fresh transaction.
             # update db last. Worst case = we crash right before this and
@@ -595,48 +588,18 @@ def document_index_metadata_sync_task(
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
         completion_status = OnyxCeleryTaskCompletionStatus.SOFT_TIME_LIMIT
-    except Exception as ex:
-        e: Exception | None = None
-        while True:
-            if isinstance(ex, RetryError):
-                task_logger.warning(
-                    f"Tenacity retry failed: num_attempts={ex.last_attempt.attempt_number}"
-                )
+    except Exception as e:
+        task_logger.exception(
+            f"document_index_metadata_sync_task exceptioned: doc={document_id}"
+        )
 
-                # only set the inner exception if it is of type Exception
-                e_temp = ex.last_attempt.exception()
-                if isinstance(e_temp, Exception):
-                    e = e_temp
-            else:
-                e = ex
+        completion_status = OnyxCeleryTaskCompletionStatus.RETRYABLE_EXCEPTION
+        if self.max_retries is not None and self.request.retries >= self.max_retries:
+            completion_status = OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
 
-            if isinstance(e, httpx.HTTPStatusError):
-                if e.response.status_code == HTTPStatus.BAD_REQUEST:
-                    task_logger.exception(
-                        f"Non-retryable HTTPStatusError: doc={document_id} status={e.response.status_code}"
-                    )
-                completion_status = (
-                    OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
-                )
-                break
-
-            task_logger.exception(
-                f"document_index_metadata_sync_task exceptioned: doc={document_id}"
-            )
-
-            completion_status = OnyxCeleryTaskCompletionStatus.RETRYABLE_EXCEPTION
-            if (
-                self.max_retries is not None
-                and self.request.retries >= self.max_retries
-            ):
-                completion_status = (
-                    OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
-                )
-
-            # Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
-            countdown = 2 ** (self.request.retries + 4)
-            self.retry(exc=e, countdown=countdown)  # this will raise a celery exception
-            break  # we won't hit this, but it looks weird not to have it
+        # Exponential backoff from 2^4 to 2^6 ... i.e. 16, 32, 64
+        countdown = 2 ** (self.request.retries + 4)
+        self.retry(exc=e, countdown=countdown)  # this will raise a celery exception
     finally:
         task_logger.info(
             f"document_index_metadata_sync_task completed: status={completion_status.value} doc={document_id}"

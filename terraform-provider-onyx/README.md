@@ -354,7 +354,7 @@ celery -A onyx.background.celery.versioned_apps.primary worker \
   --pool=threads --concurrency=4 --loglevel=INFO --hostname=tfacc-primary@%n -Q celery &
 celery -A onyx.background.celery.versioned_apps.light worker \
   --pool=threads --concurrency=8 --loglevel=INFO --hostname=tfacc-light@%n \
-  -Q vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration &
+  -Q vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup &
 ```
 
 The primary worker picks up the deletion checks the API server dispatches; the light

@@ -1,13 +1,18 @@
 import json
+from collections.abc import Generator
 
 from onyx.configs.constants import DocumentSource, OnyxCallTypes
 from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
+from onyx.context.search.models import IndexFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import get_kg_entity_by_document
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import KGConfigSettings
 from onyx.db.models import Document, KGEntityType, KGRelationshipType
+from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import get_structured_tags_for_document
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.kg.models import (
     KGAttributeEntityOption,
     KGAttributeTrackInfo,
@@ -28,7 +33,6 @@ from onyx.kg.utils.formatting_utils import (
     make_relationship_id,
     make_relationship_type_id,
 )
-from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
 from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import GenerationRequest, UserMessage
@@ -339,7 +343,6 @@ def kg_deep_extraction(
     metadata: KGEnhancedDocumentMetadata,
     implied_extraction: KGImpliedExtractionResults,
     tenant_id: str,
-    index_name: str,
     kg_config_settings: KGConfigSettings,
 ) -> KGDocumentDeepExtractionResults:
     """Perform one document's deep extraction and classification workflow."""
@@ -352,9 +355,39 @@ def kg_deep_extraction(
             metadata=metadata,
             implied_extraction=implied_extraction,
             tenant_id=tenant_id,
-            index_name=index_name,
             kg_config_settings=kg_config_settings,
         )
+
+
+def _get_document_chunk_batches(
+    document_id: str,
+    tenant_id: str,
+    batch_size: int = 8,
+) -> Generator[list[KGChunkFormat], None, None]:
+    """Yields the chunks of a document from the document index, in batches."""
+    with get_session_with_current_tenant() as db_session:
+        search_settings = get_current_search_settings(db_session)
+    document_index = get_default_document_index(search_settings, None)
+    chunks = document_index.id_based_retrieval(
+        chunk_requests=[DocumentSectionRequest(document_id=document_id)],
+        filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
+        batch_retrieval=True,
+    )
+    kg_chunks = [
+        KGChunkFormat(
+            document_id=chunk.document_id,
+            chunk_id=chunk.chunk_id,
+            title=chunk.title or "",
+            content=chunk.content,
+            primary_owners=chunk.primary_owners or [],
+            secondary_owners=chunk.secondary_owners or [],
+            source_type=chunk.source_type.value,
+            metadata=chunk.metadata,
+        )
+        for chunk in chunks
+    ]
+    for start in range(0, len(kg_chunks), batch_size):
+        yield kg_chunks[start : start + batch_size]
 
 
 def _kg_deep_extraction(
@@ -362,7 +395,6 @@ def _kg_deep_extraction(
     metadata: KGEnhancedDocumentMetadata,
     implied_extraction: KGImpliedExtractionResults,
     tenant_id: str,
-    index_name: str,
     kg_config_settings: KGConfigSettings,
 ) -> KGDocumentDeepExtractionResults:
     result = KGDocumentDeepExtractionResults(
@@ -375,7 +407,7 @@ def _kg_deep_extraction(
     relationship_types_str = get_relationship_types_str(active=True)
 
     for i, chunk_batch in enumerate(
-        get_document_vespa_contents(document_id, index_name, tenant_id)
+        _get_document_chunk_batches(document_id, tenant_id)
     ):
         # use first batch for classification
         if i == 0 and metadata.classification_enabled:
