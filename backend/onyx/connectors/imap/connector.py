@@ -440,7 +440,21 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
     # getaddresses honors quoted display names; a naive split on ","
     # breaks on headers like '"Lastname, Firstname" <a@b.c>'.
-    return [(name, addr) for name, addr in getaddresses([raw_header]) if addr]
+    # Fragments without "@" are display-name remnants, not addresses.
+    addrs = [
+        (name, addr)
+        for name, addr in getaddresses([raw_header])
+        if addr and "@" in addr
+    ]
+    if not addrs:
+        # getaddresses can yield nothing on headers mixing comments and
+        # brackets, e.g. 'Name (comment) [TAG] <a@b.c>'; extract the
+        # angle-addr directly as a fallback.
+        match = re.search(r"<([^<>\s]+@[^<>\s]+)>", raw_header)
+        if match:
+            name = raw_header[: match.start()].strip(' "')
+            addrs = [(name, match.group(1))]
+    return addrs
 
 
 def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
