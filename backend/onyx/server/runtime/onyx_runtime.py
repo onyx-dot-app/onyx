@@ -7,7 +7,9 @@ from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import (
+    CACHE_BACKEND,
     ENABLE_CC_PAIR_ACCESS_FILTER,
     ENABLE_TENANT_WORK_GATING,
     TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS,
@@ -162,12 +164,18 @@ class OnyxRuntime:
     def _read_request_path_bool_flag(feature: str, axis: str, default: bool) -> bool:
         """Like `_read_runtime_bool_flag`, for flags read on every request. It
         reads the same key through the cache backend, so it also works with
-        CACHE_BACKEND=postgres. A failed read returns `default`, so an outage
-        of the cache falls back to the default behavior instead of failing the
-        request."""
+        CACHE_BACKEND=postgres. That backend keeps each tenant's cache in the
+        tenant's schema and has no cloud schema in a single-tenant install, so
+        it reads the current tenant's cache. A failed read returns `default`,
+        so an outage of the cache falls back to the default behavior instead
+        of failing the request."""
         try:
             raw = get_cache_backend(
-                tenant_id=ONYX_CLOUD_TENANT_ID,
+                tenant_id=(
+                    None
+                    if CACHE_BACKEND == CacheBackendType.POSTGRES
+                    else ONYX_CLOUD_TENANT_ID
+                ),
                 operation_timeout_s=_REQUEST_PATH_FLAG_TIMEOUT_S,
             ).get(f"{ONYX_CLOUD_REDIS_RUNTIME}:{feature}:{axis}")
         except Exception:
