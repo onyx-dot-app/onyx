@@ -202,13 +202,21 @@ class ImapConnector(
                 )
                 continue
 
-            email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+            try:
+                email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
 
-            yield _convert_email_headers_and_body_into_document(
-                email_msg=email_msg,
-                email_headers=email_headers,
-                include_perm_sync=include_perm_sync,
-            )
+                yield _convert_email_headers_and_body_into_document(
+                    email_msg=email_msg,
+                    email_headers=email_headers,
+                    include_perm_sync=include_perm_sync,
+                )
+            except Exception:
+                # A single malformed email must not abort the whole batch.
+                logger.exception(
+                    "Failed to convert email_id=%r to a document; skipping",
+                    email_id,
+                )
+                continue
 
         return checkpoint
 
