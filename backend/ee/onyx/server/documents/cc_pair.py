@@ -354,9 +354,8 @@ def set_cc_pair_manage_access(
     db_session: Session = Depends(get_session),
 ) -> list[CCPairManageAccessRow]:
     """Replace the pair's stored rows. Fixed rows are not stored, so they stay."""
-    if not lock_cc_pairs_for_manage_access__no_commit(db_session, [cc_pair_id]):
-        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "CC Pair not found")
-    # GATE 2: only an Editor changes who manages the pair.
+    # GATE 2: only an Editor changes who manages the pair. Checked before the
+    # lock, so a missing id and one the caller cannot edit get the same answer.
     if not verify_user_has_access_to_cc_pair(
         cc_pair_id, db_session, user, CCPairAccessLevel.EDIT
     ):
@@ -364,6 +363,8 @@ def set_cc_pair_manage_access(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Group managers can only act on connectors where they are an Editor.",
         )
+    if not lock_cc_pairs_for_manage_access__no_commit(db_session, [cc_pair_id]):
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "CC Pair not found")
 
     requested = manage_access_by_group(request.manage_access)
     apply_manage_access_change__no_commit(

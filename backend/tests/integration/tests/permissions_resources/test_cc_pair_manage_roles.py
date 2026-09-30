@@ -545,3 +545,20 @@ def test_legacy_group_patch_keeps_roles(env: _RolesEnv) -> None:
 
     assert stored_role(kept) is ConnectorManageRole.OPERATOR
     assert stored_role(added) is ConnectorManageRole.EDITOR
+
+
+def test_manage_access_put_does_not_reveal_which_pair_ids_exist(
+    env: _RolesEnv,
+) -> None:
+    cc_pair = _pair(env, AccessType.PRIVATE)
+    body = {"manage_access": []}
+
+    missing = _call(
+        env.operator, "PUT", "/manage/admin/cc-pair/999999/manage-access", body
+    )
+    existing = _call(
+        env.operator, "PUT", f"/manage/admin/cc-pair/{cc_pair.id}/manage-access", body
+    )
+
+    assert missing.status_code == existing.status_code == 403
+    assert missing.json() == existing.json()
