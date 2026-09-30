@@ -127,10 +127,19 @@ export function CredentialsConfigurer({
     methods[0] ??
     CredentialCreationMethod.Manual;
 
-  /** One panel per route, keyed by method, for the card's tab strip. */
+  /**
+   * One panel per route, keyed by method, for the card's tab strip. Typing
+   * a token in leads, because it is the route every source shares and the
+   * one the card opens on; `getCredentialCreationMethods` returns OAuth
+   * first and is shared with the connector detail page, so the order is
+   * settled here rather than there.
+   */
   function credentialTabs() {
+    const ordered = [...methods].sort((left) =>
+      left === CredentialCreationMethod.Manual ? -1 : 1
+    );
     return Object.fromEntries(
-      methods.map((method) => [
+      ordered.map((method) => [
         method,
         {
           name:
