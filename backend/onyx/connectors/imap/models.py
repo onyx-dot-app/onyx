@@ -36,20 +36,24 @@ class EmailHeaders(BaseModel):
             if not value:
                 return None
 
-            decoded_value, encoding = email.header.decode_header(value)[0]
-            if isinstance(decoded_value, bytes):
-                encoding = encoding or "utf-8"
-                try:
-                    return decoded_value.decode(encoding, errors="replace")
-                except LookupError:
-                    # Bogus charset labels such as "unknown-8bit" are not
-                    # registered Python codecs and raise LookupError, which
-                    # errors="replace" does not cover.
-                    return decoded_value.decode("utf-8", errors="replace")
-            elif isinstance(decoded_value, str):
-                return decoded_value
-            else:
-                return None
+            parts: list[str] = []
+            for decoded_value, encoding in email.header.decode_header(value):
+                if isinstance(decoded_value, bytes):
+                    encoding = encoding or "utf-8"
+                    try:
+                        parts.append(
+                            decoded_value.decode(encoding, errors="replace")
+                        )
+                    except LookupError:
+                        # Bogus charset labels such as "unknown-8bit" are not
+                        # registered Python codecs and raise LookupError, which
+                        # errors="replace" does not cover.
+                        parts.append(
+                            decoded_value.decode("utf-8", errors="replace")
+                        )
+                elif isinstance(decoded_value, str):
+                    parts.append(decoded_value)
+            return "".join(parts) or None
 
         def _parse_date(date_str: str | None) -> datetime | None:
             if not date_str:
