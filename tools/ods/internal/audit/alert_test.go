@@ -26,10 +26,12 @@ func TestGroupAlerts_mergesSourcesPerPackage(t *testing.T) {
 		{ID: "CVE-b", Ecosystem: "npm", Package: "lodash", Severity: SeverityCritical},
 		{ID: "PYSEC-c", Aliases: []string{"GHSA-a", "CVE-b"}, Ecosystem: "npm", Package: "lodash", Severity: SeverityCritical},
 	}
-	// A non-blocking record lends its names but adds no advisory of its own.
+	// A non-blocking record lends its names but adds no advisory of its own,
+	// whichever side of the merge it lands on.
 	scanned := []Finding{
 		{ID: "OSV-2026-9", Aliases: []string{"GHSA-next-b"}, Ecosystem: "npm", Package: "next", Severity: SeverityLow},
 		{ID: "GHSA-other", Ecosystem: "npm", Package: "next", Severity: SeverityLow},
+		{ID: "GHSA-a", Ecosystem: "npm", Package: "lodash", Severity: SeverityLow},
 	}
 
 	got := groupAlerts(findings, scanned)
@@ -182,7 +184,7 @@ func TestSyncAlerts_opensUpdatesAndClosesIssues(t *testing.T) {
 	dir := t.TempDir()
 	blocking := []Finding{
 		{ID: "GHSA-old", Ecosystem: "npm", Package: "next", Severity: SeverityCritical},
-		{ID: "GHSA-new", Ecosystem: "npm", Package: "next", Severity: SeverityCritical, Title: "RCE | next/og"},
+		{ID: "GHSA-new", Ecosystem: "npm", Package: "next", Severity: SeverityCritical, Title: "RCE | next/og", URL: "https://osv.dev/vulnerability/GHSA-new"},
 	}
 	// A non-blocking PyPI finding shows the scan covered PyPI, so the missing
 	// requests finding means it was fixed.
@@ -265,6 +267,120 @@ esac`)
 	}
 	if len(alerts) != 1 || alerts[0].Key != "npm/next" || alerts[0].Issue != 42 {
 		t.Fatalf("expected the alert whose issue was opened, got %+v", alerts)
+	}
+}
+
+// TestSyncAlerts_reportsEachFailedGhCall makes one gh subcommand fail per case
+// and checks the sync names it, keeps going, and still returns what it recorded.
+func TestSyncAlerts_reportsEachFailedGhCall(t *testing.T) {
+	open := []map[string]any{
+		{"number": 7, "url": "u7", "body": renderAlertBody(Alert{Key: "npm/next", Advisories: []Advisory{{ID: "GHSA-old"}}})},
+		{"number": 8, "url": "u8", "body": renderAlertBody(Alert{Key: "PyPI/requests", Advisories: []Advisory{{ID: "GHSA-req"}}})},
+	}
+	openJSON, err := json.Marshal(open)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		fail string // "<verb> <noun>" that exits 1, or a special script
+		want string
+	}{
+		{"label create", "failed to create the cve-alert label"},
+		{"issue edit", "failed to mark issue #7 pending"},
+		{"issue edit --body-file", "failed to update issue #7"},
+		{"pr list", "failed to find the fix PR for PyPI/requests"},
+		{"pr close", "failed to close fix PR #55 for PyPI/requests"},
+		{"issue close", "failed to close issue #8"},
+		{"issue create", "failed to open an issue for Debian:13/libc6"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fail, func(t *testing.T) {
+			bin := fakeBinDir(t)
+			chdirNewRepo(t)
+			writeFixture(t, bin, "issues.json", string(openJSON))
+			writeFixture(t, bin, "fail.txt", tc.fail)
+			writeFakeCommand(t, bin, "gh", `dir="$(dirname "$0")"
+if [ "$1 $2" = "$(cat "$dir/fail.txt")" ] || [ "$1 $2 $4" = "$(cat "$dir/fail.txt")" ]; then echo "boom" >&2; exit 1; fi
+case "$1 $2" in
+  "issue list") cat "$dir/issues.json" ;;
+  "issue create") cat > /dev/null; echo "https://github.com/onyx-dot-app/onyx/issues/42" ;;
+  "issue edit") cat > /dev/null ;;
+  "pr list") [ "$6" = "cve-alerts/PyPI/requests-4238921e" ] && echo 55 ;;
+esac
+exit 0`)
+			deps := writeResult(t, t.TempDir(), "deps.json", Result{
+				Findings: []Finding{{ID: "GHSA-low", Ecosystem: "PyPI", Package: "urllib3", Severity: SeverityLow}},
+				Blocking: []Finding{
+					{ID: "GHSA-old", Ecosystem: "npm", Package: "next", Severity: SeverityCritical},
+					{ID: "GHSA-new", Ecosystem: "npm", Package: "next", Severity: SeverityCritical},
+					{ID: "DEBIAN-1", Ecosystem: "Debian:13", Package: "libc6", Severity: SeverityCritical},
+				},
+			})
+
+			_, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected an error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestSyncAlerts_inputErrors(t *testing.T) {
+	bin := fakeBinDir(t)
+	chdirNewRepo(t)
+	dir := t.TempDir()
+	allowlist := writeFixture(t, dir, "ignores.json", `{"ignores":[]}`)
+	deps := writeResultFile(t, dir, "deps.json", Finding{ID: "GHSA-1", Ecosystem: "npm", Package: "next", Severity: SeverityCritical})
+
+	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{filepath.Join(dir, "missing.json")}, IgnoreURL: allowlist}); err == nil {
+		t.Fatal("expected a missing result file to fail")
+	}
+	bad := writeFixture(t, dir, "bad.json", "{not json")
+	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{bad}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to parse audit result") {
+		t.Fatalf("expected a parse error, got %v", err)
+	}
+
+	writeFakeCommand(t, bin, "gh", "echo 'not json'")
+	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to parse cve-alert issues") {
+		t.Fatalf("expected an issue list parse error, got %v", err)
+	}
+	writeFakeCommand(t, bin, "gh", "echo 'HTTP 500' >&2; exit 1")
+	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "failed to list cve-alert issues") {
+		t.Fatalf("expected an issue list error, got %v", err)
+	}
+	writeFakeCommand(t, bin, "gh", `case "$1 $2" in "issue list") echo '[]' ;; "issue create") cat > /dev/null; echo "not a url" ;; esac; exit 0`)
+	if _, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, IgnoreURL: allowlist}); err == nil || !strings.Contains(err.Error(), "unexpected gh issue create output") {
+		t.Fatalf("expected a bad create output error, got %v", err)
+	}
+}
+
+func TestSyncAlerts_dryRunLogsEveryPlannedChange(t *testing.T) {
+	bin := fakeBinDir(t)
+	chdirNewRepo(t)
+	grown := renderAlertBody(Alert{Key: "npm/next", Advisories: []Advisory{{ID: "GHSA-old"}}})
+	pending := renderAlertBody(Alert{Key: "npm/react", Advisories: []Advisory{{ID: "GHSA-r"}}})
+	gone := renderAlertBody(Alert{Key: "npm/left-pad", Advisories: []Advisory{{ID: "GHSA-gone"}}})
+	fakeIssueGH(t, bin, []map[string]any{
+		{"number": 1, "url": "u1", "body": grown},
+		{"number": 2, "url": "u2", "body": pending, "labels": []map[string]string{{"name": AlertPendingLabel}}},
+		{"number": 3, "url": "u3", "body": gone},
+	})
+	deps := writeResultFile(t, t.TempDir(), "deps.json",
+		Finding{ID: "GHSA-old", Ecosystem: "npm", Package: "next", Severity: SeverityCritical},
+		Finding{ID: "GHSA-new", Ecosystem: "npm", Package: "next", Severity: SeverityCritical, URL: "https://osv.dev/vulnerability/GHSA-new"},
+		Finding{ID: "GHSA-r", Ecosystem: "npm", Package: "react", Severity: SeverityCritical},
+	)
+
+	alerts, err := SyncAlerts(SyncAlertsOptions{ResultFiles: []string{deps}, DryRun: true})
+	if err != nil {
+		t.Fatalf("SyncAlerts: %v", err)
+	}
+	var reasons []AlertReason
+	for _, a := range alerts {
+		reasons = append(reasons, a.Reason)
+	}
+	if !reflect.DeepEqual(reasons, []AlertReason{AlertGrown, AlertRetry}) {
+		t.Fatalf("expected a grown and a retried alert, got %+v", alerts)
 	}
 }
 

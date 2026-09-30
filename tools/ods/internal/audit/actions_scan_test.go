@@ -256,6 +256,25 @@ func TestScanActions_strictFailsOnAnyPartialFailure(t *testing.T) {
 		}
 	})
 
+	t.Run("resolves tags up front when they load", func(t *testing.T) {
+		bin := fakeBinDir(t)
+		root := chdirNewRepo(t)
+		writeParseableActionsRepo(t, root)
+		writeFixture(t, bin, "tags.json", `[{"name":"v46.0.2","commit":{"sha":"`+changedFilesFixedSHA+`"}}]`)
+		writeFakeCommand(t, bin, "gh", `cat "$(dirname "$0")/tags.json"`)
+		_, url := startFakeOSV(t, map[string][]osvVuln{
+			"tj-actions/changed-files": {changedFilesAdvisory()},
+		})
+
+		findings, err := scanActions(url, true)
+		if err != nil {
+			t.Fatalf("scanActions: %v", err)
+		}
+		if len(findings) != 2 {
+			t.Fatalf("expected the two changed-files findings, got %+v", findings)
+		}
+	})
+
 	t.Run("failed tag lookup", func(t *testing.T) {
 		bin := fakeBinDir(t)
 		root := chdirNewRepo(t)
