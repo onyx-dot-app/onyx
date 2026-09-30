@@ -18,6 +18,7 @@ from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.models import DocExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.github.connector import DocMetadata, GithubConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow, SortOrder
@@ -40,7 +41,9 @@ def github_doc_sync(
 
     # Initialize GitHub connector with credentials
     github_connector: GithubConnector = GithubConnector(
-        **cc_pair.connector.connector_specific_config
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
     )
 
     github_connector.load_credentials(credential_json(cc_pair))

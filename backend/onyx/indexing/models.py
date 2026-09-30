@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING, Optional, Protocol
 from pydantic import BaseModel, Field
 
 from onyx.access.models import DocumentAccess
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.db.enums import EmbeddingPrecision, SwitchoverType
+from onyx.db.enums import SwitchoverType, VectorQuantization
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.enums import EmbeddingProvider
@@ -112,6 +113,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     personas: list[int]
     boost: int
     aggregated_chunk_boost_factor: float
+    source_types: tuple[DocumentSource, ...] = ()
     # Full ancestor path from root hierarchy node to document's parent.
     # Stored as an integer array in OpenSearch for hierarchy-based filtering.
     # Empty list means no hierarchy info (document excluded from hierarchy searches).
@@ -129,6 +131,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         aggregated_chunk_boost_factor: float,
         tenant_id: str,
         ancestor_hierarchy_node_ids: list[int] | None = None,
+        source_types: tuple[DocumentSource, ...] | None = None,
     ) -> "DocMetadataAwareIndexChunk":
         return cls.model_construct(
             **shallow_model_dump(index_chunk),
@@ -140,6 +143,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,
             ancestor_hierarchy_node_ids=ancestor_hierarchy_node_ids or [],
+            source_types=source_types or (index_chunk.source_document.source,),
         )
 
 
@@ -185,12 +189,8 @@ class IndexingSetting(EmbeddingModelDetail):
     model_dim: int
     index_name: str | None
     multipass_indexing: bool
-    # Defaults to FLOAT (float32). OpenSearch ignores embedding_precision and
-    # stores vectors as float32 regardless — see
-    # onyx/document_index/opensearch/opensearch_document_index.py. BFLOAT16
-    # still works for existing Vespa deployments.
-    embedding_precision: EmbeddingPrecision = EmbeddingPrecision.FLOAT
     reduced_dimension: int | None = None
+    vector_quantization: VectorQuantization = VectorQuantization.NONE
 
     switchover_type: SwitchoverType = SwitchoverType.REINDEX
     enable_contextual_rag: bool
@@ -221,8 +221,8 @@ class IndexingSetting(EmbeddingModelDetail):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
-            embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
+            vector_quantization=search_settings.vector_quantization,
             switchover_type=search_settings.switchover_type,
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,

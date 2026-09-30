@@ -4,10 +4,10 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   EmbeddingModelSpec,
   EmbeddingProviderName,
-  ImageProcessingSettings,
   ReindexErrorRow,
   SavedSearchSettings,
   SwitchoverType,
+  VectorQuantization,
 } from "@/lib/searchSettings/types";
 import { isCloudBased } from "@/lib/searchSettings";
 
@@ -185,6 +185,7 @@ interface SetNewSearchSettingsArgs {
   switchoverType: SwitchoverType;
   enableContextualRag: boolean;
   contextualRagModelConfigurationId: number | null;
+  vectorQuantization: VectorQuantization;
   // The server recomputes this set itself and rejects the reindex if its own set contains
   // a cc_pair the admin never acknowledged.
   acknowledgedWontPortCcPairIds: number[];
@@ -196,6 +197,7 @@ export async function setNewSearchSettings({
   switchoverType,
   enableContextualRag,
   contextualRagModelConfigurationId,
+  vectorQuantization,
   acknowledgedWontPortCcPairIds,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
@@ -220,6 +222,7 @@ export async function setNewSearchSettings({
       multipass_indexing: false,
       enable_contextual_rag: enableContextualRag,
       contextual_rag_model_configuration_id: contextualRagModelConfigurationId,
+      vector_quantization: vectorQuantization,
       switchover_type: switchoverType,
       acknowledged_wont_port_cc_pair_ids: acknowledgedWontPortCcPairIds,
     }),
@@ -238,72 +241,4 @@ export async function updateInferenceSettings(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Image processing
-// ═══════════════════════════════════════════════════════════════════════════
-
-interface EnableImageProcessingArgs {
-  modelConfigurationId: number;
-  maxSizeMb: number;
-}
-
-/**
- * A failed image processing request. `detail` is the server's reason when
- * the body carried one, else null; the caller chooses a translated fallback.
- */
-export class ImageProcessingRequestError extends Error {
-  constructor(
-    readonly status: number,
-    readonly detail: string | null
-  ) {
-    super(detail ?? `Image processing request failed with status ${status}`);
-    this.name = "ImageProcessingRequestError";
-  }
-}
-
-async function throwOnError(response: Response): Promise<void> {
-  if (response.ok) return;
-  let detail: string | null = null;
-  try {
-    const body: unknown = await response.json();
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      "detail" in body &&
-      typeof body.detail === "string"
-    ) {
-      detail = body.detail;
-    }
-  } catch (error) {
-    // A non-JSON body (a proxy page, a truncated response) is worth a trace.
-    console.error("Image processing error response was not JSON:", error);
-  }
-  throw new ImageProcessingRequestError(response.status, detail);
-}
-
-/** Turns image processing on with this model, or repoints it. */
-export async function enableImageProcessing({
-  modelConfigurationId,
-  maxSizeMb,
-}: EnableImageProcessingArgs): Promise<ImageProcessingSettings> {
-  const response = await fetch(SWR_KEYS.imageProcessingSettings, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model_configuration_id: modelConfigurationId,
-      max_size_mb: maxSizeMb,
-    }),
-  });
-  await throwOnError(response);
-  return (await response.json()) as ImageProcessingSettings;
-}
-
-/** Turns image processing off. */
-export async function disableImageProcessing(): Promise<void> {
-  const response = await fetch(SWR_KEYS.imageProcessingSettings, {
-    method: "DELETE",
-  });
-  await throwOnError(response);
 }

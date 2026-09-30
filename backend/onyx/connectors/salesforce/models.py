@@ -137,6 +137,14 @@ class SalesforceSessionCredentials(BaseModel):
     sf_instance_host: str = Field(min_length=1)
 
 
+class SalesforceChildFields(BaseModel):
+    """Fields of one child relationship. Salesforce marks sortable separately
+    from queryable, so only sortable fields may appear in ORDER BY."""
+
+    queryable: set[str]
+    sortable: set[str]
+
+
 class SalesforceChildQueryPlan(BaseModel):
     """Window queries pick each child relationship's newest rows with the first
     field chunk. Wide relationships keep their remaining chunks here, to be

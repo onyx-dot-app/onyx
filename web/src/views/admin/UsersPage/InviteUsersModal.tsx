@@ -66,20 +66,20 @@ function buildMessage(
   if (tags.some((tag) => tag.error)) {
     return {
       icon: SvgAlertTriangle,
-      color: "muted-warning",
+      color: "warning",
       text: copy.someInvalid,
     };
   }
   if (validCount === 0) {
     return {
       icon: SvgAlertTriangle,
-      color: "muted-warning",
+      color: "warning",
       text: copy.needsValidEmail,
     };
   }
   return {
     icon: SvgCheckCircle,
-    color: "muted-success",
+    color: "success",
     text: copy.readyCount,
   };
 }

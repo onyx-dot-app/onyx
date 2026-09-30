@@ -143,6 +143,8 @@ function VertexAIModalInternals({
         <>
           <InputPadder>
             <MessageCard
+              outerPadding={1}
+              innerPadding={1}
               variant="info"
               title={t("vertexAi.workloadIdentityNotice.title", {
                 appName: settings.appName,

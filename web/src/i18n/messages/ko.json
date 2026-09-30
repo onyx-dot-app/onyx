@@ -909,6 +909,12 @@
         "sharepoint": {
           "description": "Microsoft 인트라넷"
         },
+        "onedrive": {
+          "description": "Microsoft 클라우드 저장소"
+        },
+        "zoom": {
+          "description": "회의 및 웨비나 녹화"
+        },
         "teams": {
           "description": "Microsoft 팀 채팅"
         },
@@ -2050,7 +2056,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "문서 ID",
+          "documentId": "실패 ID",
           "errorMessage": "오류 메시지",
           "status": "상태",
           "time": "시간"
@@ -2559,6 +2565,40 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "OneDrive 커넥터 구성",
+        "indexingScope": {
+          "label": "Onyx가 인덱싱할 OneDrive 파일의 소유자를 선택하세요",
+          "general": {
+            "label": "일반",
+            "description": "Microsoft 애플리케이션이 액세스할 수 있는 모든 적격 사용자를 인덱싱합니다."
+          },
+          "specific": {
+            "label": "특정",
+            "users": {
+              "label": "사용자",
+              "description": "인덱싱할 각 사용자의 사용자 계정 이름 또는 기본 이메일 주소를 추가하세요.",
+              "required": "특정 범위에 사용자를 한 명 이상 추가하세요"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "제외 경로",
+          "description": "각 파일 경로와 파일 이름에 적용할 glob 패턴입니다(예: '*.tmp' 또는 'Archive/*')."
+        },
+        "organizationLinks": {
+          "label": "조직 링크를 공개로 처리",
+          "description": "조직 전체 링크로 공유된 파일을 모든 Onyx 사용자에게 표시합니다."
+        },
+        "authorityHost": {
+          "label": "기관 호스트",
+          "description": "Microsoft ID 기관 호스트입니다. GCC High 또는 DoD에는 https://login.microsoftonline.us를 사용하세요."
+        },
+        "graphApiHost": {
+          "label": "Graph API 호스트",
+          "description": "Microsoft Graph 호스트입니다. GCC High 또는 DoD에는 https://graph.microsoft.us를 사용하세요."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "{source}(으)로 인증",
@@ -4815,6 +4855,9 @@
           "statusesLoading": "커넥터 상태를 불러오는 중…",
           "statusesFailed": "커넥터 상태를 불러오지 못했습니다. 재인덱싱하기 전에 다시 시도하세요."
         },
+        "applyWithoutReindex": {
+          "label": "재인덱싱 없이 적용"
+        },
         "rebuildAll": {
           "label": "기존 문서 전체 다시 구축"
         },
@@ -4848,7 +4891,7 @@
         "title": "재인덱싱 취소"
       },
       "captioningModel": {
-        "description": "인덱싱 중에 이미지를 분석하는 데 이 모델을 사용합니다. 비전 기능이 있는 모델만 선택할 수 있습니다. 변경 사항은 이후에 인덱싱되는 문서에만 적용됩니다. 기존 캡션은 이전 embedding에 이미 포함되어 있습니다.",
+        "description": "이 모델은 인덱싱 중 이미지를 분석하는 데 사용됩니다.",
         "title": "캡션 생성 LLM"
       },
       "changesBanner": {
@@ -4864,8 +4907,16 @@
           "description": "embedding 또는 검색 설정을 변경하면 적용을 위해 모든 문서를 전체 재인덱싱해야 하며, 문서 규모에 따라 **몇 시간에서 며칠**이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "변경 사항을 적용하려면 전체 재인덱싱이 필요합니다."
         },
+        "doNotReindex": {
+          "description": "이미지 처리 설정은 지금부터 인덱싱되는 문서에만 적용됩니다. 전체 재인덱싱을 실행하지 않는 한 기존 문서는 업데이트되지 않습니다.\n\n재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows).",
+          "title": "변경 사항은 새로 인덱싱된 콘텐츠에만 적용됩니다."
+        },
         "orSeparator": {
           "label": "또는"
+        },
+        "reindex": {
+          "description": "재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "전체 재인덱싱이 실행됩니다."
         }
       },
       "cloudDisabled": {
@@ -4962,12 +5013,13 @@
         "description": "문서를 인덱싱하고 embedding하여 검색과 조회에 사용할 방식을 설정합니다."
       },
       "imageExtraction": {
-        "description": "업로드된 파일(PDF, DOCX 등)에 포함된 이미지를 추출하고 비전 기능이 있는 LLM으로 요약하여, 이미지만 있는 문서도 검색하고 답변에 활용할 수 있게 합니다. 비전 기능이 있는 기본 LLM이 필요합니다.",
+        "description": "문서 인덱싱 중 이미지를 추출하고 검색 가능한 설명을 생성합니다.",
         "title": "이미지 추출 및 캡션 생성"
       },
       "imageProcessing": {
         "description": "인덱싱 중에 LLM으로 이미지를 분석하고 설명을 추가합니다.",
         "enableFirstTooltip": "이 항목을 설정하려면 이미지 추출 및 캡션 생성을 활성화하세요.",
+        "noModelSelected": "선택된 모델이 없습니다",
         "noVisionModelsTooltip": "비전 기능이 있는 모델이 설정되어 있지 않아 이미지 처리를 사용할 수 없습니다. 먼저 비전 기능이 있는 [언어 모델]({link})을 설정하세요.",
         "title": "이미지 처리"
       },
@@ -4981,7 +5033,7 @@
         }
       },
       "maxImageSize": {
-        "description": "리소스 사용을 제한하기 위해 이 크기를 넘는 이미지는 건너뜁니다.",
+        "description": "이 크기를 초과하는 이미지는 리소스 사용을 제한하기 위해 건너뜁니다.",
         "suffix": "(MB)",
         "title": "분석할 최대 이미지 크기"
       },
@@ -5148,24 +5200,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "일시 중지 또는 삭제 중이 아닌 모든 활성 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정의 현재 문서 인덱스를 계속 사용합니다.",
+          "description": "모든 **활성** (일시 중지/삭제 중이 아닌) 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정으로 현재 문서 인덱스를 계속 사용합니다.",
           "label": "활성 커넥터 재인덱싱 후 전환"
         },
+        "doNotReindex": {
+          "description": "**가장 안전한 옵션.** 새로 인덱싱된 콘텐츠에만 변경 사항을 적용합니다.",
+          "label": "재인덱싱 안 함"
+        },
         "instant": {
-          "description": "현재 문서 인덱스를 즉시 비우고 새 설정으로 전환합니다. 검색용 인덱스를 다시 채우려면 모든 커넥터를 재인덱싱해야 합니다.",
+          "description": "즉시 **현재 문서 인덱스를 비우고** 새 설정으로 전환합니다. 검색용 인덱스가 다시 채워지기 전에 모든 커넥터를 재인덱싱해야 합니다.",
           "label": "재인덱싱 전에 전환"
         },
         "placeholder": "전환 방식을 선택하세요",
         "reindexAll": {
-          "description": "가장 안전한 방식입니다. 모든 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정의 현재 문서 인덱스를 계속 사용합니다.",
+          "description": "모든 커넥터가 인덱싱을 성공적으로 완료할 때까지 기존 설정으로 현재 문서 인덱스를 계속 사용합니다.",
           "label": "모든 커넥터 재인덱싱 후 전환"
+        },
+        "reindexOptions": {
+          "label": "재인덱싱 옵션"
         }
       },
       "toasts": {
         "applyFailed": "설정 적용에 실패했습니다",
         "cancelReindexFailed": "재인덱싱 취소에 실패했습니다",
-        "captioningUpdateFailed": "캡션 생성 LLM 업데이트에 실패했습니다",
-        "captioningUpdated": "캡션 생성 LLM을 업데이트했습니다",
+        "captioningModelRequired": "적용하기 전에 캡션 LLM을 선택하세요.",
         "contextualModelRequired": "재인덱싱 전에 컨텍스트 검색 LLM을 선택하세요.",
         "contextualModelUpdateFailed": "컨텍스트 검색 LLM 업데이트에 실패했습니다",
         "contextualModelUpdated": "컨텍스트 검색 LLM을 업데이트했습니다",
@@ -5189,6 +5247,22 @@
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",
         "urlInvalid": "유효한 URL이어야 합니다"
+      },
+      "vectorQuantization": {
+        "description": "문서 벡터를 더 적은 비트로 저장하여 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다.",
+        "none": {
+          "description": "32비트 전체 정밀도.",
+          "label": "없음"
+        },
+        "scalar1Bit": {
+          "description": "메모리 사용량 32배 감소. OpenSearch 3.6 이상이 필요합니다.",
+          "label": "1비트"
+        },
+        "scalar7Bit": {
+          "description": "메모리 사용량 4배 감소. 검색 품질 저하가 거의 없습니다.",
+          "label": "7비트"
+        },
+        "title": "벡터 양자화"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {이 커넥터는 삭제됩니다} other {이 # 개의 커넥터는 삭제됩니다}}",
@@ -11492,6 +11566,12 @@
       },
       "poweredBy": {
         "label": "Powered by Onyx"
+      }
+    },
+    "modelSelectors": {
+      "placeholder": "모델 선택",
+      "globalDefault": {
+        "label": "전역 기본값"
       }
     },
     "nonSelectableConnectors": {

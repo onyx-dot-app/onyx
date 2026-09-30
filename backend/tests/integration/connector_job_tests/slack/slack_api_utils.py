@@ -7,11 +7,13 @@ Assumptions:
     - chat:write
 """
 
+import time
 from collections.abc import Callable, Generator
+from enum import StrEnum
 from typing import Any, cast
-from uuid import UUID, uuid4
 
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import RateLimitErrorRetryHandler
 from slack_sdk.web import SlackResponse
 
@@ -20,6 +22,24 @@ from onyx.connectors.slack.models import ChannelType, MessageType
 _SLACK_LIMIT = 900
 # Concurrent CI runs share each workspace's rate limits, so calls wait out 429s instead of failing the test.
 _RATE_LIMIT_MAX_RETRIES = 7
+
+# Names used by the per-run channels that tests created before the channel pool.
+_LEGACY_TEST_CHANNEL_PREFIXES = ("public_channel-", "private_channel-")
+# Older than any test run can last, so a sweep never archives a channel in use.
+_SWEEP_MIN_CHANNEL_AGE_SECONDS = 60 * 60
+# conversations.archive allows about 20 calls per minute.
+_SWEEP_MAX_CHANNELS = 100
+
+
+class SlackApiErrorCode(StrEnum):
+    ALREADY_ARCHIVED = "already_archived"
+    CHANNEL_NOT_FOUND = "channel_not_found"
+    MESSAGE_NOT_FOUND = "message_not_found"
+    NAME_TAKEN = "name_taken"
+
+
+def slack_error_code(error: SlackApiError) -> str:
+    return cast(str, error.response.get("error", ""))
 
 
 def make_paginated_slack_api_call(
@@ -120,7 +140,25 @@ def _delete_slack_conversation_messages(
                 print(message)
 
 
-def _create_slack_channel(
+def _delete_all_slack_conversation_messages(
+    slack_client: WebClient, channel: ChannelType
+) -> None:
+    """Deletes plain messages; system messages (joins, renames) cannot be deleted."""
+    channel_id = _get_slack_channel_id(channel)
+    timestamps = [
+        ts
+        for message_batch in get_channel_messages(slack_client, channel)
+        for message in message_batch
+        if not message.get("subtype") and (ts := message.get("ts"))
+    ]
+    for ts in timestamps:
+        try:
+            slack_client.chat_delete(channel=channel_id, ts=ts)
+        except SlackApiError as e:
+            print(f"Error deleting message {ts} in {channel_id}: {e}")
+
+
+def create_slack_channel(
     slack_client: WebClient, admin_user_id: str, name: str, is_private: bool
 ) -> ChannelType:
     response: SlackResponse = slack_client.conversations_create(
@@ -143,31 +181,46 @@ class SlackManager:
         return client
 
     @staticmethod
-    def create_test_channels(
-        slack_client: WebClient, admin_user_id: str
-    ) -> tuple[ChannelType, ChannelType]:
-        """Fresh channels per test start empty and are never shared with a concurrent CI run."""
-        suffix: UUID = uuid4()
-        public_channel: ChannelType = _create_slack_channel(
+    def list_active_channels(slack_client: WebClient) -> list[ChannelType]:
+        """Unarchived public channels plus the private channels the bot is in."""
+        channels: list[ChannelType] = []
+        for result in make_paginated_slack_api_call(
+            slack_client.conversations_list,
+            exclude_archived=True,
+            types="public_channel,private_channel",
+        ):
+            channels.extend(cast(list[ChannelType], result["channels"]))
+        return channels
+
+    @staticmethod
+    def reset_channel(
+        slack_client: WebClient, admin_user_id: str, channel: ChannelType
+    ) -> None:
+        """Returns a reused channel to the state of a new one: no messages, only the admin."""
+        _delete_all_slack_conversation_messages(slack_client, channel)
+        SlackManager.set_channel_members(
             slack_client=slack_client,
             admin_user_id=admin_user_id,
-            name=f"public_channel-{suffix}",
-            is_private=False,
+            channel=channel,
+            user_ids=[admin_user_id],
         )
+
+    @staticmethod
+    def sweep_leaked_test_channels(bot_token: str) -> None:
+        """Archives old per-run test channels. Safe to run concurrently; never raises."""
         try:
-            private_channel: ChannelType = _create_slack_channel(
-                slack_client=slack_client,
-                admin_user_id=admin_user_id,
-                name=f"private_channel-{suffix}",
-                is_private=True,
-            )
-        except Exception:
-            # The fixture never reaches teardown when setup raises.
-            SlackManager.archive_channels(
-                slack_client=slack_client, channels=[public_channel]
-            )
-            raise
-        return public_channel, private_channel
+            slack_client = SlackManager.get_slack_client(bot_token)
+            cutoff = time.time() - _SWEEP_MIN_CHANNEL_AGE_SECONDS
+            leaked = [
+                channel
+                for channel in SlackManager.list_active_channels(slack_client)
+                if channel["name"].startswith(_LEGACY_TEST_CHANNEL_PREFIXES)
+                and channel["created"] < cutoff
+            ][:_SWEEP_MAX_CHANNELS]
+            print(f"Sweeping {len(leaked)} leaked Slack test channels")
+            SlackManager.archive_channels(slack_client=slack_client, channels=leaked)
+        except Exception as e:
+            print(f"Error sweeping leaked Slack test channels: {e}")
 
     @staticmethod
     def build_slack_user_email_id_map(slack_client: WebClient) -> dict[str, str]:
@@ -223,10 +276,20 @@ class SlackManager:
 
     @staticmethod
     def archive_channels(slack_client: WebClient, channels: list[ChannelType]) -> None:
-        """Logs failures instead of raising so cleanup never fails a test."""
+        """Logs failures instead of raising so cleanup never fails a test.
+
+        A concurrent sweep may archive the same channel first, so that error is ignored.
+        """
         for channel in channels:
             channel_id: str = _get_slack_channel_id(channel)
             try:
                 slack_client.conversations_archive(channel=channel_id)
+            except SlackApiError as e:
+                if slack_error_code(e) in (
+                    SlackApiErrorCode.ALREADY_ARCHIVED,
+                    SlackApiErrorCode.CHANNEL_NOT_FOUND,
+                ):
+                    continue
+                print(f"Error archiving channel {channel_id}: {e}")
             except Exception as e:
                 print(f"Error archiving channel {channel_id}: {e}")

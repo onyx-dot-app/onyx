@@ -26,7 +26,10 @@ export interface OptionGroup {
   options: SelectOption[];
   /** The rows fold behind the title (see `SelectDivider`). */
   foldable?: boolean;
-  /** Render-only: the group is folded, so its rows are withheld. */
+  /**
+   * Render-only: the group is folded. Its rows stay in the list so the
+   * fold can animate closed, but they leave the keyboard walk.
+   */
   folded?: boolean;
 }
 
@@ -78,6 +81,7 @@ export function buildNavItems(
     if (group.foldable && group.title !== undefined) {
       items.push({ kind: "group", group });
     }
+    if (group.folded) continue;
     for (const option of group.options) items.push({ kind: "option", option });
   }
   return items;
@@ -127,9 +131,13 @@ interface UseFoldedGroupsProps {
 /**
  * Fold state for foldable groups, per open session. A group starts closed
  * unless it holds the selection, and starts open while a search is on;
- * either way a click on its title toggles it, and the toggle holds until
- * the search starts or stops, or the list closes. Returns the groups with
- * folded rows withheld, so rendering and the keyboard order agree.
+ * either way a click on its title toggles it. The selection those
+ * defaults read is the one from when the session started (the list
+ * opened, or a search started or stopped); after that only a title click
+ * changes a group, so a pick or a deselection while the list is open never
+ * folds anything, and a group that arrives mid-session starts as it would
+ * have at the start. Returns the groups with folded rows withheld, so
+ * rendering and the keyboard order agree.
  */
 export function useFoldedGroups({
   isOpen,
@@ -137,12 +145,20 @@ export function useFoldedGroups({
   isSelected,
   searching,
 }: UseFoldedGroupsProps) {
+  // The selection as the session found it. Held as state, not derived,
+  // so the live selection cannot re-fold groups afterwards.
+  const [sessionIsSelected, setSessionIsSelected] = useState(() => isSelected);
   const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(
     new Map()
   );
-  // Toggles reset when the list closes and when a search starts or stops,
-  // so each of those begins from the defaults below.
+
+  const latestIsSelected = useRef(isSelected);
   useEffect(() => {
+    latestIsSelected.current = isSelected;
+  });
+  useEffect(() => {
+    if (!isOpen) return;
+    setSessionIsSelected(() => latestIsSelected.current);
     setToggled(new Map());
   }, [isOpen, searching]);
 
@@ -151,10 +167,9 @@ export function useFoldedGroups({
       if (!group.foldable || group.title === undefined) return true;
       const choice = toggled.get(group.title);
       if (choice !== undefined) return choice;
-      if (searching) return true;
-      return group.options.some(isSelected);
+      return searching || group.options.some(sessionIsSelected);
     },
-    [toggled, searching, isSelected]
+    [toggled, searching, sessionIsSelected]
   );
 
   const toggleGroup = useCallback(
@@ -170,7 +185,7 @@ export function useFoldedGroups({
   const foldedSections = useMemo(
     () =>
       sections.map((group) =>
-        isGroupOpen(group) ? group : { ...group, options: [], folded: true }
+        isGroupOpen(group) ? group : { ...group, folded: true }
       ),
     [sections, isGroupOpen]
   );
@@ -341,6 +356,9 @@ export function useSelectOverlay() {
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  // A wrapping <label> is part of the trigger's hit area: the browser
+  // forwards its clicks to the input, so it must not count as outside.
+  const labelRef = useRef<HTMLLabelElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -352,21 +370,21 @@ export function useSelectOverlay() {
     }
   }, [isOpen]);
 
-  const { refs, floatingStyles } = useFloating({
+  const { refs, floatingStyles, isPositioned } = useFloating({
     open: isOpen,
     placement: "bottom-start",
     middleware: [
-      // 4px wider on each side than the trigger, shifted start-ward by 4px:
-      // with the dropdown's 4px inset, the rows' bounding boxes then align
-      // flush with the trigger's edges. crossAxis is direction-aware, so
-      // RTL mirrors correctly.
-      offset({ mainAxis: 4, crossAxis: -4 }),
+      // 6px wider on each side than the trigger, shifted start-ward by 6px:
+      // with the dropdown's 4px inset and its 1px border, the rows' bounding
+      // boxes then align flush with the trigger's content, inside its own
+      // border. crossAxis is direction-aware, so RTL mirrors correctly.
+      offset({ mainAxis: 4, crossAxis: -6 }),
       flip(),
       shift({ padding: 8 }),
       size({
         apply({ rects, elements }) {
           Object.assign(elements.floating.style, {
-            width: `${rects.reference.width + 8}px`,
+            width: `${rects.reference.width + 12}px`,
           });
         },
       }),
@@ -378,14 +396,18 @@ export function useSelectOverlay() {
   const setRootRef = useCallback(
     (node: HTMLDivElement | null) => {
       rootRef.current = node;
+      labelRef.current = node?.closest("label") ?? null;
       refs.setReference(node);
     },
     [refs]
   );
 
+  // Otherwise a label click dismisses the list and the forwarded click
+  // reopens it, so a second click on the label never closes it.
   useClickOutside<HTMLElement>(
     [
       rootRef as React.RefObject<HTMLElement>,
+      labelRef as React.RefObject<HTMLElement>,
       dropdownRef as React.RefObject<HTMLElement>,
     ],
     useCallback(() => {
@@ -408,5 +430,6 @@ export function useSelectOverlay() {
     dropdownRef,
     setFloatingRef: refs.setFloating,
     floatingStyles,
+    isPositioned,
   };
 }

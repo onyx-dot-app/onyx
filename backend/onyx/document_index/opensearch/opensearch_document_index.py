@@ -20,7 +20,7 @@ from onyx.context.search.models import (
     InferenceChunk,
     InferenceChunkUncleaned,
 )
-from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import VectorQuantization
 from onyx.db.models import DocumentSource
 from onyx.document_index.chunk_content_enrichment import (
     cleanup_content_for_chunks,
@@ -53,6 +53,8 @@ from onyx.document_index.opensearch.schema import (
     GLOBAL_BOOST_FIELD_NAME,
     HIDDEN_FIELD_NAME,
     PERSONAS_FIELD_NAME,
+    PUBLIC_FIELD_NAME,
+    SOURCE_TYPE_FIELD_NAME,
     USER_PROJECTS_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
@@ -169,6 +171,7 @@ def convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
         section_continuation=False,
         document_id=chunk.document_id,
         source_type=DocumentSource(chunk.source_type),
+        source_types=tuple(DocumentSource(source) for source in chunk.source_types),
         semantic_identifier=chunk.semantic_identifier,
         title=chunk.title,
         boost=chunk.global_boost,
@@ -217,6 +220,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         if _metadata_list
         else None
     )
+    source_types = chunk.source_types or (chunk.source_document.source,)
     return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
@@ -227,7 +231,8 @@ def _convert_onyx_chunk_to_opensearch_document(
         title_vector=chunk.title_embedding,
         content=filtered_content,
         content_vector=chunk.embeddings.full_embedding,
-        source_type=chunk.source_document.source.value,
+        source_type=source_types[0].value,
+        source_types=tuple(source.value for source in source_types),
         metadata_list=filtered_metadata_list,
         metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
@@ -291,7 +296,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         tenant_state: The tenant state of the caller.
         index_name: The name of the index to interact with.
         embedding_dim: The dimensionality of the embeddings used for the index.
-        embedding_precision: The precision of the embeddings used for the index.
+        vector_quantization: The scalar quantization of the index vector
+            fields. Used when the index is created and when it is searched.
     """
 
     def __init__(
@@ -299,10 +305,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
         tenant_state: TenantState,
         index_name: str,
         embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,
+        vector_quantization: VectorQuantization,
     ) -> None:
         self._index_name: str = index_name
         self._tenant_state: TenantState = tenant_state
+        self._vector_quantization: VectorQuantization = vector_quantization
         self._client = OpenSearchIndexClient(index_name=self._index_name)
 
         if (
@@ -311,9 +318,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             and index_name not in _verified_index_names_for_current_process
         ):
             try:
-                self.verify_and_create_index_if_necessary(
-                    embedding_dim=embedding_dim, embedding_precision=embedding_precision
-                )
+                self.verify_and_create_index_if_necessary(embedding_dim=embedding_dim)
             except OpenSearchIndexWriteBlockedError as e:
                 # Existing index, still readable — don't fail the caller. Not
                 # cached as verified, so a later init retries the mapping
@@ -329,11 +334,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             else:
                 _verified_index_names_for_current_process.add(index_name)
 
-    def verify_and_create_index_if_necessary(
-        self,
-        embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,  # noqa: ARG002
-    ) -> None:
+    def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
         """Verifies and creates the index if necessary.
 
         Also puts the desired cluster settings if not in a multitenant
@@ -349,8 +350,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
         Args:
             embedding_dim: Vector dimensionality for the vector similarity part
                 of the search.
-            embedding_precision: Precision of the values of the vectors for the
-                similarity part of the search.
 
         Raises:
             Exception: There was an error verifying or creating the index or
@@ -372,7 +371,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 set_cluster_state(self._client)
 
             expected_mappings = DocumentSchema.get_document_schema(
-                embedding_dim, self._tenant_state.multitenant
+                embedding_dim,
+                self._tenant_state.multitenant,
+                vector_quantization=self._vector_quantization,
             )
 
             if not self._client.index_exists():
@@ -675,6 +676,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # we don't have to think about passing in the appropriate types into
             # this dict.
             if update_request.access is not None:
+                properties_to_update[PUBLIC_FIELD_NAME] = (
+                    update_request.access.is_public
+                )
                 properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = (
                     generate_opensearch_filtered_access_control_list(
                         update_request.access
@@ -697,6 +701,17 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.persona_ids is not None:
                 properties_to_update[PERSONAS_FIELD_NAME] = list(
                     update_request.persona_ids
+                )
+            if update_request.source_types:
+                source_values = [
+                    source.value
+                    for source in sorted(
+                        set(update_request.source_types),
+                        key=lambda source: source.value,
+                    )
+                ]
+                properties_to_update[SOURCE_TYPE_FIELD_NAME] = (
+                    source_values[0] if len(source_values) == 1 else source_values
                 )
             if update_request.created_at is not None:
                 # Stored as epoch seconds
@@ -865,6 +880,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=False,
+            vector_quantization=self._vector_quantization,
         )
         normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
@@ -957,6 +973,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=False,
+            vector_quantization=self._vector_quantization,
         )
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
@@ -1058,46 +1075,33 @@ class OpenSearchIndexPair(DocumentIndex):
         # Embedding info needed at verify-and-create time per index.
         # TODO(andrei): This is dumb, fix this.
         secondary_embedding_dim: int | None = None,
-        secondary_embedding_precision: EmbeddingPrecision | None = None,
         # INSTANT reindex-port: primary is a promoted, still-backfilling index; see update().
         primary_backfill_in_progress: bool = False,
     ) -> None:
-        # All three secondary fields must be set together or all None — checked
-        # independently so a partially-set state surfaces here rather than
-        # deferring to a less informative assertion in verify_and_create.
+        # Both secondary fields must be set together or both None — checked
+        # here so a partially-set state surfaces early rather than deferring to
+        # a less informative assertion in verify_and_create.
         secondary_set = secondary is not None
         dim_set = secondary_embedding_dim is not None
-        precision_set = secondary_embedding_precision is not None
-        if not (secondary_set == dim_set == precision_set):
+        if secondary_set != dim_set:
             raise ValueError(
-                "Bug: Secondary OpenSearchDocumentIndex, secondary_embedding_dim, and "
-                "secondary_embedding_precision must all be set together or all be None. Got: "
-                f"secondary={secondary_set}, embedding_dim={dim_set}, "
-                f"embedding_precision={precision_set}."
+                "Bug: Secondary OpenSearchDocumentIndex and secondary_embedding_dim "
+                "must be set together or both be None. Got: "
+                f"secondary={secondary_set}, embedding_dim={dim_set}."
             )
         self._primary = primary
         self._secondary = secondary
         self._secondary_embedding_dim = secondary_embedding_dim
-        self._secondary_embedding_precision = secondary_embedding_precision
         self._primary_backfill_in_progress = primary_backfill_in_progress
 
-    def verify_and_create_index_if_necessary(
-        self,
-        embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,
-    ) -> None:
-        self._primary.verify_and_create_index_if_necessary(
-            embedding_dim, embedding_precision
-        )
+    def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
+        self._primary.verify_and_create_index_if_necessary(embedding_dim)
         if self._secondary is not None:
             assert self._secondary_embedding_dim is not None, (
                 "Bug: Secondary embedding dimension is not set."
             )
-            assert self._secondary_embedding_precision is not None, (
-                "Bug: Secondary embedding precision is not set."
-            )
             self._secondary.verify_and_create_index_if_necessary(
-                self._secondary_embedding_dim, self._secondary_embedding_precision
+                self._secondary_embedding_dim
             )
 
     def index(

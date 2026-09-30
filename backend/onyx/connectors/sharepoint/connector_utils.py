@@ -34,36 +34,35 @@ class SharepointPermissionCache(BaseModel):
     group_expansions: dict[str, SharepointGroupExpansion] = Field(default_factory=dict)
 
 
+def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001
+    return ExternalAccess.empty()
+
+
 def get_sharepoint_external_access(
     ctx: ClientContext,
     graph_client: GraphClient,
     permission_cache: SharepointPermissionCache,
     drive_item: DriveItem | None = None,
-    drive_name: str | None = None,
+    list_id: str | None = None,
     site_page: dict[str, Any] | None = None,
     add_prefix: bool = False,
     treat_sharing_link_as_public: bool = False,
 ) -> ExternalAccess:
     if drive_item and drive_item.id is None:
         raise ValueError("DriveItem ID is required")
-
-    # Get external access using the EE implementation
-    def noop_fallback(
-        *args: Any,  # noqa: ARG001
-        **kwargs: Any,  # noqa: ARG001
-    ) -> ExternalAccess:
-        return ExternalAccess.empty()
+    if drive_item and not list_id:
+        raise ValueError("SharePoint permission lookup requires a list ID")
 
     get_external_access_func = fetch_versioned_implementation_with_fallback(
         "onyx.external_permissions.sharepoint.permission_utils",
         "get_external_access_from_sharepoint",
-        fallback=noop_fallback,
+        fallback=_noop_external_access,
     )
 
-    external_access = get_external_access_func(
+    return get_external_access_func(
         ctx,
         graph_client,
-        drive_name,
+        list_id,
         drive_item,
         site_page,
         add_prefix,
@@ -71,33 +70,28 @@ def get_sharepoint_external_access(
         permission_cache,
     )
 
-    return external_access
-
 
 def get_sharepoint_hierarchy_node_external_access(
     ctx: ClientContext,
     graph_client: GraphClient,
     permission_cache: SharepointPermissionCache,
     node_type: HierarchyNodeType,
-    drive_name: str | None = None,
+    list_id: str | None = None,
     folder_server_relative_path: str | None = None,
 ) -> ExternalAccess:
-    def noop_fallback(
-        *args: Any,  # noqa: ARG001
-        **kwargs: Any,  # noqa: ARG001
-    ) -> ExternalAccess:
-        return ExternalAccess.empty()
+    if node_type == HierarchyNodeType.DRIVE and not list_id:
+        raise ValueError("SharePoint permission lookup requires a list ID")
 
     get_external_access_func = fetch_versioned_implementation_with_fallback(
         "onyx.external_permissions.sharepoint.permission_utils",
         "get_hierarchy_node_external_access_from_sharepoint",
-        fallback=noop_fallback,
+        fallback=_noop_external_access,
     )
     return get_external_access_func(
         ctx,
         graph_client,
         node_type,
-        drive_name,
+        list_id,
         folder_server_relative_path,
         permission_cache,
     )

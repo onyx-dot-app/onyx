@@ -16,6 +16,10 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
+    parse_graph_sharepoint_ids,
+)
 from onyx.connectors.microsoft_utils.graph_client import (
     GRAPH_API_MAX_RETRIES,
     GRAPH_API_RETRYABLE_STATUSES,
@@ -23,7 +27,7 @@ from onyx.connectors.microsoft_utils.graph_client import (
     sleep_and_retry,
 )
 from onyx.connectors.teams.models import (
-    ChannelFilesFolder,
+    ChannelLibrary,
     ChannelMember,
     ChannelRef,
     Message,
@@ -401,36 +405,45 @@ def fetch_messages(
         yield Message(**_sanitize_message_user_display_name(value))
 
 
-def fetch_channel_files_folder(
+def resolve_channel_library(
     graph_client: GraphClient, team_id: str, channel_id: str
-) -> ChannelFilesFolder:
+) -> ChannelLibrary:
     """Needs Files.Read.All or Sites.Read.All on Graph."""
-    json_data = get_json_with_retry(
+    folder = get_json_with_retry(
         graph_client=graph_client,
         request_url=f"teams/{team_id}/channels/{channel_id}/filesFolder",
     )
-    parent = json_data.get("parentReference") or {}
-    if not parent.get("driveId"):
+    parent = folder.get("parentReference") or {}
+    drive_id = parent.get("driveId") if isinstance(parent, dict) else None
+    if not isinstance(drive_id, str):
         raise ChannelFilesUnavailable(
             f"The files folder of channel {channel_id} names no document library"
         )
-    return ChannelFilesFolder(drive_id=parent["driveId"], id=json_data["id"])
-
-
-def fetch_drive_library(graph_client: GraphClient, drive_id: str) -> tuple[str, str]:
-    """The document library's name, which SharePoint REST looks the list up by,
-    and the url of its site. The site comes from the drive because the files
-    folder can leave its own site id empty."""
+    folder_id = folder.get("id")
+    if not isinstance(folder_id, str):
+        raise ChannelFilesUnavailable(
+            f"The files folder of channel {channel_id} has no durable identity"
+        )
     drive = get_json_with_retry(
         graph_client=graph_client,
-        request_url=f"drives/{drive_id}?$select=name,sharePointIds",
+        request_url=f"drives/{drive_id}?$select={SHAREPOINT_IDS_PROPERTY}",
     )
-    site_url = (drive.get("sharePointIds") or {}).get("siteUrl")
-    if not drive.get("name") or not site_url:
+    try:
+        sharepoint_ids = parse_graph_sharepoint_ids(drive.get(SHAREPOINT_IDS_PROPERTY))
+    except ValueError as e:
         raise ChannelFilesUnavailable(
-            f"Document library {drive_id} came back without its name or its site"
+            f"Document library {drive_id} returned malformed identity"
+        ) from e
+    if not sharepoint_ids or not sharepoint_ids.list_id or not sharepoint_ids.site_url:
+        raise ChannelFilesUnavailable(
+            f"Document library {drive_id} came back without its list or site identity"
         )
-    return drive["name"], site_url
+    return ChannelLibrary(
+        drive_id=drive_id,
+        list_id=sharepoint_ids.list_id,
+        site_url=sharepoint_ids.site_url,
+        folder_id=folder_id,
+    )
 
 
 # An image pasted into a message is hosted content, and its img tag points at

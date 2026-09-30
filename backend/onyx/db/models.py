@@ -77,7 +77,6 @@ from onyx.db.enums import (
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
     DefaultAppMode,
-    EmbeddingPrecision,
     EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
@@ -122,6 +121,7 @@ from onyx.db.enums import (
     ThemePreference,
     UsageActorKind,
     UserFileStatus,
+    VectorQuantization,
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
@@ -2325,12 +2325,13 @@ class SearchSettings(Base):
         postgresql.ARRAY(Integer), nullable=True
     )
 
-    # allows for quantization -> less memory usage for a small performance hit.
-    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
-    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
-    embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False),
-        default=EmbeddingPrecision.FLOAT,
+    # OpenSearch scalar quantization of the vector fields. Part of the index
+    # mapping, so it is fixed for the life of this row's index.
+    vector_quantization: Mapped[VectorQuantization] = mapped_column(
+        Enum(VectorQuantization, native_enum=False),
+        nullable=False,
+        default=VectorQuantization.NONE,
+        server_default=VectorQuantization.NONE.name,
     )
 
     # can be used to reduce dimensionality of vectors and save memory with
@@ -4195,9 +4196,8 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Owner user. SET NULL (not CASCADE) so deleting a user orphans shared
-    # personas instead of destroying them; the delete flow soft-deletes the
-    # private ones first.
+    # Owner user. SET NULL (not CASCADE) so deleting a user orphans their
+    # personas for the admins instead of destroying them.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
@@ -7433,7 +7433,8 @@ class GatedApp(Base):
             if self.external_app_id is not None
             else self.mcp_server_id
         )
-        assert tid is not None  # guaranteed by ck_gated_app_single_target
+        if tid is None:
+            raise ValueError("Gated app must have a target")
         return tid
 
     @property

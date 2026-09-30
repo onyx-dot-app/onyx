@@ -179,7 +179,6 @@ def _perform_index_swap(
                 )
                 document_index.verify_and_create_index_if_necessary(
                     embedding_dim=new_search_settings.final_embedding_dim,
-                    embedding_precision=new_search_settings.embedding_precision,
                 )
 
                 logger.notice("Document index swap complete.")

@@ -48,7 +48,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.factory import validate_ccpair_for_user, validate_connector_config
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
@@ -1487,25 +1487,6 @@ def _apply_federated_connector_status_filters(
     return filtered_statuses
 
 
-# Zoom caps its recording listing at a month per request, so with no start date it
-# asks for every month back to 1970, per host, against an account-wide rate limit.
-_SOURCES_REQUIRING_INDEXING_START = {DocumentSource.ZOOM}
-
-
-# Creation only: update_connector leaves the stored column alone, so demanding a date
-# on an update would reject callers over a value the endpoint then throws away.
-def _validate_indexing_start(connector_data: ConnectorBase) -> None:
-    if (
-        connector_data.source in _SOURCES_REQUIRING_INDEXING_START
-        and connector_data.indexing_start is None
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"The {connector_data.source.value} connector needs an indexing start "
-            "date. Set one so it knows how far back to look.",
-        )
-
-
 def _validate_connector_allowed(source: DocumentSource) -> None:
     valid_connectors = [
         x for x in ENABLED_CONNECTOR_TYPES.replace("_", "").split(",") if x
@@ -1518,6 +1499,15 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
 
     raise ValueError(
         "This connector type has been disabled by your system admin. Please contact them to get it enabled if you wish to use it."
+    )
+
+
+def _validate_connector_request(connector_data: ConnectorBase) -> None:
+    """Raises ``ValueError`` if the connector type is disabled or the config does
+    not match the source's typed config."""
+    _validate_connector_allowed(connector_data.source)
+    validate_connector_config(
+        connector_data.source, connector_data.connector_specific_config
     )
 
 
@@ -1534,8 +1524,7 @@ def create_connector_from_model(
     tenant_id = get_current_tenant_id()
 
     try:
-        _validate_connector_allowed(connector_data.source)
-        _validate_indexing_start(connector_data)
+        _validate_connector_request(connector_data)
 
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
@@ -1592,8 +1581,7 @@ def create_connector_with_mock_credential(
     )
 
     try:
-        _validate_connector_allowed(connector_data.source)
-        _validate_indexing_start(connector_data)
+        _validate_connector_request(connector_data)
         connector_response = create_connector(
             db_session=db_session,
             connector_data=connector_data,
@@ -1669,7 +1657,7 @@ def update_connector_from_model(
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     try:
-        _validate_connector_allowed(connector_data.source)
+        _validate_connector_request(connector_data)
         connector_base = connector_data.to_connector_base()
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
