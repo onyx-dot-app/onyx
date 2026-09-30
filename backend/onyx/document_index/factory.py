@@ -41,7 +41,7 @@ def build_opensearch_document_index(
         tenant_state=_build_tenant_state(),
         index_name=search_settings.index_name,
         embedding_dim=indexing_setting.final_embedding_dim,
-        embedding_precision=indexing_setting.embedding_precision,
+        vector_quantization=indexing_setting.vector_quantization,
     )
 
 
@@ -65,7 +65,6 @@ def _build_opensearch_pair(
         primary=primary,
         secondary=secondary,
         secondary_embedding_dim=secondary_indexing_setting.final_embedding_dim,
-        secondary_embedding_precision=secondary_indexing_setting.embedding_precision,
         primary_backfill_in_progress=primary_backfill_in_progress,
     )
 
@@ -88,7 +87,6 @@ def _build_vespa_pair(
             secondary=None,
             secondary_index_name=None,
             secondary_embedding_dim=None,
-            secondary_embedding_precision=None,
         )
     secondary_indexing_setting = IndexingSetting.from_db_model(
         secondary_search_settings
@@ -104,7 +102,6 @@ def _build_vespa_pair(
         secondary=secondary,
         secondary_index_name=secondary_search_settings.index_name,
         secondary_embedding_dim=secondary_indexing_setting.final_embedding_dim,
-        secondary_embedding_precision=secondary_indexing_setting.embedding_precision,
     )
 
 

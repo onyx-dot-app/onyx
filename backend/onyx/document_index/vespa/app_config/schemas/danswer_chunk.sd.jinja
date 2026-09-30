@@ -50,7 +50,7 @@ schema {{ schema_name }} {
             summary: dynamic
         }
         # Title embedding (x1)
-        field title_embedding type tensor<{{ embedding_precision }}>(x[{{ dim }}]) {
+        field title_embedding type tensor<float>(x[{{ dim }}]) {
             indexing: attribute | index
             attribute {
                 distance-metric: angular
@@ -58,7 +58,7 @@ schema {{ schema_name }} {
         }
         # Content embeddings (chunk + optional mini chunks embeddings)
         # "t" and "x" are arbitrary names, not special keywords
-        field embeddings type tensor<{{ embedding_precision }}>(t{},x[{{ dim }}]) {
+        field embeddings type tensor<float>(t{},x[{{ dim }}]) {
             indexing: attribute | index
             attribute {
                 distance-metric: angular
