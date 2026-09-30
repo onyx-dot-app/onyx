@@ -303,6 +303,11 @@ def test_restricted_data_access_keeps_a_group(
     scoped_other_group: DATestUserGroup,
 ) -> None:
     admin = permission_admin_user
+    # A syncing group refuses group-side writes.
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin,
+        user_groups_to_check=[scoped_managed_group, scoped_other_group],
+    )
     pair = _restricted_pair(admin, data_access=[scoped_managed_group.id])
 
     CCPairManager.set_data_access(
@@ -320,11 +325,16 @@ def test_restricted_data_access_keeps_a_group(
         scoped_other_group.id
     }
 
-    # The group side can add a restricted pair too.
+    # The group side can add a restricted pair too. A fresh group has no other
+    # pairs, so the PUT's full list is just this one.
+    new_group = UserGroupManager.create(admin, name="restricted-group-side")
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin, user_groups_to_check=[new_group]
+    )
     UserGroupManager.set_data_access_cc_pairs(
-        scoped_managed_group, [pair.id], admin
+        new_group, [pair.id], admin
     ).raise_for_status()
     assert CCPairManager.get_data_access_group_ids(pair.id, admin) == {
-        scoped_managed_group.id,
         scoped_other_group.id,
+        new_group.id,
     }
