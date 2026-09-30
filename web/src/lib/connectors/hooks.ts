@@ -141,12 +141,27 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     return null;
   }
 
-  async function remove(credential: AnyCredential): Promise<string | null> {
-    const response = await deleteCredential(credential.id, true);
+  async function remove(
+    credential: AnyCredential,
+    failureMessage: string
+  ): Promise<string | null> {
+    let response: Response;
+    try {
+      response = await deleteCredential(credential.id, true);
+    } catch (error) {
+      // The request never landed, so nothing changed and nothing refreshes.
+      return errorMessage(error) || failureMessage;
+    }
     refresh();
     if (response.ok) return null;
-    const body = await response.json();
-    return body.detail || body.message || null;
+    // A failure always answers with something the caller can show: an empty
+    // or unreadable body must not read as success.
+    try {
+      const body = await response.json();
+      return body.detail || body.message || failureMessage;
+    } catch {
+      return failureMessage;
+    }
   }
 
   async function authorize(invalidUrlMessage: string): Promise<string | null> {

@@ -62,7 +62,7 @@ export function CredentialsConfigurer({
     source: displayName,
   });
   async function onDeleteCredential(credential: Credential<any | null>) {
-    const error = await remove(credential);
+    const error = await remove(credential, t("add.unknownError.toast"));
     if (error === null) {
       toast.success(t("add.credentialDeleted.toast"));
     } else {

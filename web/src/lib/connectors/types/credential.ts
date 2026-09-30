@@ -107,8 +107,15 @@ export interface CredentialSetup {
   open: (method: CredentialCreationMethod) => Promise<string | null>;
   /** Hides whichever creation form is showing. */
   close: () => void;
-  /** Deletes a credential, then refetches the list. */
-  remove: (credential: AnyCredential) => Promise<string | null>;
+  /**
+   * Deletes a credential, then refetches the list. Resolves to `null` only
+   * on success; every failure resolves to a message, falling back to
+   * `failureMessage` when the server sends none.
+   */
+  remove: (
+    credential: AnyCredential,
+    failureMessage: string
+  ) => Promise<string | null>;
   /** Refetches the credential list. */
   refresh: () => void;
   /** Opens the hosted OAuth popup. `invalidUrlMessage` is the caller's copy. */
