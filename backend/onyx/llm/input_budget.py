@@ -2,14 +2,14 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from onyx.llm.models import ImageContentPart, LanguageModelInput, UserMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
+from onyx.llm.models import ImageContentPart
 
 
-def count_prompt_image_tokens(prompt: LanguageModelInput) -> int:
-    messages = prompt if isinstance(prompt, list) else [prompt]
+def count_prompt_image_tokens(prompt: list[ChatCompletionMessage]) -> int:
     return sum(
         part.token_count
-        for message in messages
+        for message in prompt
         if isinstance(message, UserMessage) and isinstance(message.content, list)
         for part in message.content
         if isinstance(part, ImageContentPart)

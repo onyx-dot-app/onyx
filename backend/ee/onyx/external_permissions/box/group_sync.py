@@ -12,6 +12,7 @@ from onyx.connectors.box.connector import (
     iter_box_enterprise_users,
     normalize_box_login,
 )
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -57,7 +58,11 @@ def box_group_sync(
 ) -> Generator[ExternalUserGroup, None, None]:
     creds = credential_json(cc_pair)
     enterprise_id = creds[BOX_ENTERPRISE_ID_CREDENTIAL_KEY]
-    connector = BoxConnector(**cc_pair.connector.connector_specific_config)
+    connector = BoxConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
     connector.load_credentials(creds)
     client = connector.enterprise_client
 

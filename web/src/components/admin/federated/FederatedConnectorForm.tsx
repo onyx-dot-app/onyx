@@ -420,7 +420,7 @@ export function FederatedConnectorForm({
         toast.success(result.message);
         // Redirect after a short delay
         setTimeout(() => {
-          router.push("/admin/indexing/status");
+          router.push("/admin/indexing-status");
         }, 500);
       } else {
         toast.error(result.message);
@@ -514,7 +514,7 @@ export function FederatedConnectorForm({
       if (result.success) {
         // Redirect after a short delay
         setTimeout(() => {
-          router.push("/admin/indexing/status");
+          router.push("/admin/indexing-status");
         }, 500);
       }
     } catch (error) {
@@ -788,7 +788,7 @@ export function FederatedConnectorForm({
 
   return (
     <div className="mx-auto w-[800px] pb-8">
-      <BackButton routerOverride="/admin/indexing/status" />
+      <BackButton routerOverride="/admin/indexing-status" />
 
       <div className="flex items-center justify-between h-16 pb-2 border-b border-neutral-200 dark:border-neutral-600">
         <div className="my-auto">

@@ -10,7 +10,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { InputNumber } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import {
   Content,
   InputHorizontal,
@@ -21,7 +21,7 @@ import {
 } from "@opal/layouts";
 import {
   Card,
-  InputMultiSelect,
+  InputTypeInTag,
   InputTypeIn,
   InputSwitch,
   Text,
@@ -29,7 +29,8 @@ import {
 } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { Settings, toSettings } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Settings, Tier, toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import type { RichStr } from "@opal/types";
 import type {
@@ -155,8 +156,11 @@ function JwtTextRow({
 
 export default function SecurityHardeningPage() {
   const t = useTranslations("admin.security");
+  const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
+  // Groups and perm sync are Business+, so the restriction is meaningless below.
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { authTypeMetadata, isLoading: authTypeLoading } =
     useAuthTypeMetadata();
   // Single-tenant at runtime, not just by build flag. The explicit === false
@@ -430,7 +434,7 @@ export default function SecurityHardeningPage() {
                       )}
                       withLabel
                     >
-                      <InputMultiSelect
+                      <InputTypeInTag
                         tags={validDomains}
                         onRemoveTag={removeDomain}
                         onAdd={addDomain}
@@ -620,7 +624,7 @@ export default function SecurityHardeningPage() {
                 responsive
               >
                 <div className="w-full sm:w-60">
-                  <InputSelect
+                  <InputSingleSelect
                     value={
                       draft.user_directory_admin_only
                         ? "admins_only"
@@ -631,29 +635,27 @@ export default function SecurityHardeningPage() {
                         user_directory_admin_only: value === "admins_only",
                       })
                     }
-                  >
-                    <InputSelect.Trigger />
-                    <InputSelect.Content>
-                      <InputSelect.Item
-                        value="all_users"
-                        wrapDescription
-                        description={t(
+                    defaultOption="all_users"
+                    placeholder={tInputSelect("placeholder.fallback")}
+                    options={[
+                      {
+                        value: "all_users",
+                        title: t("adminControls.userDirectory.allUsers.label"),
+                        description: t(
                           "adminControls.userDirectory.allUsers.description"
-                        )}
-                      >
-                        {t("adminControls.userDirectory.allUsers.label")}
-                      </InputSelect.Item>
-                      <InputSelect.Item
-                        value="admins_only"
-                        wrapDescription
-                        description={t(
+                        ),
+                      },
+                      {
+                        value: "admins_only",
+                        title: t(
+                          "adminControls.userDirectory.adminsOnly.label"
+                        ),
+                        description: t(
                           "adminControls.userDirectory.adminsOnly.description"
-                        )}
-                      >
-                        {t("adminControls.userDirectory.adminsOnly.label")}
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
+                        ),
+                      },
+                    ]}
+                  />
                 </div>
               </InputHorizontal>
 
@@ -664,7 +666,7 @@ export default function SecurityHardeningPage() {
                 responsive
               >
                 <div className="w-full sm:w-60">
-                  <InputSelect
+                  <InputSingleSelect
                     value={draft.incognito_availability}
                     onValueChange={async (value) => {
                       await saveSettings({
@@ -672,38 +674,32 @@ export default function SecurityHardeningPage() {
                       });
                       await mutate(SWR_KEYS.incognitoAvailability);
                     }}
-                  >
-                    <InputSelect.Trigger />
-                    <InputSelect.Content>
-                      <InputSelect.Item
-                        value="off"
-                        wrapDescription
-                        description={t(
+                    defaultOption="off"
+                    placeholder={tInputSelect("placeholder.fallback")}
+                    options={[
+                      {
+                        value: "off",
+                        title: t("adminControls.incognito.off.label"),
+                        description: t(
                           "adminControls.incognito.off.description"
-                        )}
-                      >
-                        {t("adminControls.incognito.off.label")}
-                      </InputSelect.Item>
-                      <InputSelect.Item
-                        value="everyone"
-                        wrapDescription
-                        description={t(
+                        ),
+                      },
+                      {
+                        value: "everyone",
+                        title: t("adminControls.incognito.everyone.label"),
+                        description: t(
                           "adminControls.incognito.everyone.description"
-                        )}
-                      >
-                        {t("adminControls.incognito.everyone.label")}
-                      </InputSelect.Item>
-                      <InputSelect.Item
-                        value="groups"
-                        wrapDescription
-                        description={t(
+                        ),
+                      },
+                      {
+                        value: "groups",
+                        title: t("adminControls.incognito.groups.label"),
+                        description: t(
                           "adminControls.incognito.groups.description"
-                        )}
-                      >
-                        {t("adminControls.incognito.groups.label")}
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
+                        ),
+                      },
+                    ]}
+                  />
                 </div>
               </InputHorizontal>
 
@@ -714,36 +710,36 @@ export default function SecurityHardeningPage() {
                 responsive
               >
                 <div className="w-full sm:w-60">
-                  <InputSelect
+                  <InputSingleSelect
                     value={draft.incognito_record_mode}
                     onValueChange={(value) =>
                       void saveSettings({
                         incognito_record_mode: value as IncognitoRecordMode,
                       })
                     }
-                  >
-                    <InputSelect.Trigger />
-                    <InputSelect.Content>
-                      <InputSelect.Item
-                        value="usage_only"
-                        wrapDescription
-                        description={t(
+                    defaultOption="usage_only"
+                    placeholder={tInputSelect("placeholder.fallback")}
+                    options={[
+                      {
+                        value: "usage_only",
+                        title: t(
+                          "adminControls.incognitoRecords.usageOnly.label"
+                        ),
+                        description: t(
                           "adminControls.incognitoRecords.usageOnly.description"
-                        )}
-                      >
-                        {t("adminControls.incognitoRecords.usageOnly.label")}
-                      </InputSelect.Item>
-                      <InputSelect.Item
-                        value="full_history"
-                        wrapDescription
-                        description={t(
+                        ),
+                      },
+                      {
+                        value: "full_history",
+                        title: t(
+                          "adminControls.incognitoRecords.fullHistory.label"
+                        ),
+                        description: t(
                           "adminControls.incognitoRecords.fullHistory.description"
-                        )}
-                      >
-                        {t("adminControls.incognitoRecords.fullHistory.label")}
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
+                        ),
+                      },
+                    ]}
+                  />
                 </div>
               </InputHorizontal>
 
@@ -755,7 +751,7 @@ export default function SecurityHardeningPage() {
                   responsive
                 >
                   <div className="w-full sm:w-60">
-                    <InputSelect
+                    <InputSingleSelect
                       value={
                         draft.mask_credential_prefix ? "masked" : "visible"
                       }
@@ -764,31 +760,46 @@ export default function SecurityHardeningPage() {
                           mask_credential_prefix: value === "masked",
                         })
                       }
-                    >
-                      <InputSelect.Trigger />
-                      <InputSelect.Content>
-                        <InputSelect.Item
-                          value="masked"
-                          wrapDescription
-                          description={t(
+                      defaultOption="masked"
+                      placeholder={tInputSelect("placeholder.fallback")}
+                      options={[
+                        {
+                          value: "masked",
+                          title: t(
+                            "adminControls.maskCredentials.masked.label"
+                          ),
+                          description: t(
                             "adminControls.maskCredentials.masked.description"
-                          )}
-                        >
-                          {t("adminControls.maskCredentials.masked.label")}
-                        </InputSelect.Item>
-                        <InputSelect.Item
-                          value="visible"
-                          wrapDescription
-                          description={t(
+                          ),
+                        },
+                        {
+                          value: "visible",
+                          title: t(
+                            "adminControls.maskCredentials.visible.label"
+                          ),
+                          description: t(
                             "adminControls.maskCredentials.visible.description"
-                          )}
-                        >
-                          {t("adminControls.maskCredentials.visible.label")}
-                        </InputSelect.Item>
-                      </InputSelect.Content>
-                    </InputSelect>
+                          ),
+                        },
+                      ]}
+                    />
                   </div>
                 </InputHorizontal>
+              )}
+
+              {businessTier && (
+                <ToggleRow
+                  title={t("adminControls.connectorGroupRestrictions.title")}
+                  description={t(
+                    "adminControls.connectorGroupRestrictions.description"
+                  )}
+                  checked={draft.allow_connector_group_restrictions}
+                  onCheckedChange={(checked) =>
+                    void saveSettings({
+                      allow_connector_group_restrictions: checked,
+                    })
+                  }
+                />
               )}
             </Section>
           </Card>
@@ -830,54 +841,48 @@ export default function SecurityHardeningPage() {
                   responsive
                 >
                   <div className="w-full sm:w-60">
-                    <InputSelect
+                    <InputSingleSelect
                       value={draft.ssrf_protection_level}
                       onValueChange={(value) =>
                         void saveSettings({
                           ssrf_protection_level: value as SSRFProtectionLevel,
                         })
                       }
-                    >
-                      <InputSelect.Trigger />
-                      <InputSelect.Content>
-                        <InputSelect.Item
-                          value="validate_all"
-                          wrapDescription
-                          description={t(
+                      defaultOption="validate_all"
+                      placeholder={tInputSelect("placeholder.fallback")}
+                      options={[
+                        {
+                          value: "validate_all",
+                          title: t("networkSafety.ssrf.validateAll.label"),
+                          description: t(
                             "networkSafety.ssrf.validateAll.description"
-                          )}
-                        >
-                          {t("networkSafety.ssrf.validateAll.label")}
-                        </InputSelect.Item>
-                        <InputSelect.Item
-                          value="validate_llm"
-                          wrapDescription
-                          description={t(
+                          ),
+                        },
+                        {
+                          value: "validate_llm",
+                          title: t("networkSafety.ssrf.validateLlm.label"),
+                          description: t(
                             "networkSafety.ssrf.validateLlm.description"
-                          )}
-                        >
-                          {t("networkSafety.ssrf.validateLlm.label")}
-                        </InputSelect.Item>
-                        <InputSelect.Item
-                          value="allow_private_network"
-                          wrapDescription
-                          description={t(
+                          ),
+                        },
+                        {
+                          value: "allow_private_network",
+                          title: t(
+                            "networkSafety.ssrf.allowPrivateNetwork.label"
+                          ),
+                          description: t(
                             "networkSafety.ssrf.allowPrivateNetwork.description"
-                          )}
-                        >
-                          {t("networkSafety.ssrf.allowPrivateNetwork.label")}
-                        </InputSelect.Item>
-                        <InputSelect.Item
-                          value="disabled"
-                          wrapDescription
-                          description={t(
+                          ),
+                        },
+                        {
+                          value: "disabled",
+                          title: t("networkSafety.ssrf.disabled.label"),
+                          description: t(
                             "networkSafety.ssrf.disabled.description"
-                          )}
-                        >
-                          {t("networkSafety.ssrf.disabled.label")}
-                        </InputSelect.Item>
-                      </InputSelect.Content>
-                    </InputSelect>
+                          ),
+                        },
+                      ]}
+                    />
                   </div>
                 </InputHorizontal>
               )}

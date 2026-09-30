@@ -3034,7 +3034,11 @@ class TestSearchFailureMetrics:
         search_after: list[object] | None = None
         while True:
             chunks, search_after, pit_id = test_client.fetch_chunks_for_doc_ids(
-                pit_id, doc_ids, search_after=search_after, page_size=4
+                pit_id,
+                doc_ids,
+                tenant_state=tenant_state,
+                search_after=search_after,
+                page_size=4,
             )
             seen.extend((c.document_id, c.chunk_index) for c in chunks)
             if search_after is None:
@@ -3057,7 +3061,7 @@ class TestSearchFailureMetrics:
 
         stale_pit = test_client.open_pit()
         chunks, search_after, stale_pit = test_client.fetch_chunks_for_doc_ids(
-            stale_pit, doc_ids, page_size=4
+            stale_pit, doc_ids, tenant_state=tenant_state, page_size=4
         )
         seen: list[tuple[str, int]] = [(c.document_id, c.chunk_index) for c in chunks]
         assert search_after is not None
@@ -3068,7 +3072,11 @@ class TestSearchFailureMetrics:
         pit_id = stale_pit
         while True:
             chunks, search_after, pit_id = test_client.fetch_chunks_for_doc_ids(
-                pit_id, doc_ids, search_after=search_after, page_size=4
+                pit_id,
+                doc_ids,
+                tenant_state=tenant_state,
+                search_after=search_after,
+                page_size=4,
             )
             seen.extend((c.document_id, c.chunk_index) for c in chunks)
             if search_after is None:
@@ -3098,7 +3106,9 @@ class TestSearchFailureMetrics:
 
         seen = [
             (c.document_id, c.chunk_index)
-            for page in test_client.iter_chunks_for_doc_ids(doc_ids, page_size=4)
+            for page in test_client.iter_chunks_for_doc_ids(
+                doc_ids, tenant_state=tenant_state, page_size=4
+            )
             for c in page
         ]
 
@@ -3128,7 +3138,14 @@ class TestSearchFailureMetrics:
         monkeypatch.setattr(test_client._client, "search", mock_search)
 
         with pytest.raises(NotFoundError):
-            test_client.fetch_chunks_for_doc_ids(pit_id, ["doc-a"], page_size=4)
+            test_client.fetch_chunks_for_doc_ids(
+                pit_id,
+                ["doc-a"],
+                tenant_state=TenantState(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False
+                ),
+                page_size=4,
+            )
         assert mock_search.call_count == 2  # original attempt + one reopened retry
 
     def test_pit_scan_raises_on_server_timeout(
@@ -3150,7 +3167,14 @@ class TestSearchFailureMetrics:
         )
 
         with pytest.raises(OpenSearchServerSideTimeout):
-            test_client.fetch_chunks_for_doc_ids(pit_id, ["doc-a"], page_size=4)
+            test_client.fetch_chunks_for_doc_ids(
+                pit_id,
+                ["doc-a"],
+                tenant_state=TenantState(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False
+                ),
+                page_size=4,
+            )
 
 
 class TestIndexReclaimPrimitive:

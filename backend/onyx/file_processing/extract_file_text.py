@@ -36,6 +36,11 @@ from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     unstructured_to_text,
 )
+from onyx.file_processing.zip_limits import (
+    assert_zip_container_within_limits,
+    assert_zip_within_limits,
+    read_zip_member,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.process_isolation import IsolatedProcessError, run_in_isolated_process
 
@@ -363,9 +368,10 @@ def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
     """
     try:
         with zipfile.ZipFile(docx_bytes) as z:
+            assert_zip_within_limits(z)
             for name in z.namelist():
                 if name.startswith("word/media/"):
-                    yield (z.read(name), name.split("/")[-1])
+                    yield (read_zip_member(z, z.getinfo(name)), name.split("/")[-1])
     except Exception:
         logger.exception("Failed to extract all docx images")
 
@@ -425,6 +431,7 @@ def read_docx_file(
         UnsupportedFormatException,
     )
 
+    assert_zip_container_within_limits(file)
     try:
         doc = md.convert(
             to_bytesio(file), stream_info=StreamInfo(mimetype=WORD_PROCESSING_MIME_TYPE)
@@ -470,9 +477,10 @@ def extract_pptx_images(pptx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
     """
     try:
         with zipfile.ZipFile(pptx_bytes) as z:
+            assert_zip_within_limits(z)
             for name in z.namelist():
                 if name.startswith("ppt/media/"):
-                    yield (z.read(name), name.split("/")[-1])
+                    yield (read_zip_member(z, z.getinfo(name)), name.split("/")[-1])
     except Exception:
         logger.exception("Failed to extract all pptx images")
 
@@ -488,6 +496,7 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     stream_info = StreamInfo(
         mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"
     )
+    assert_zip_container_within_limits(file)
     try:
         presentation = md.convert(to_bytesio(file), stream_info=stream_info)
     except (
@@ -746,11 +755,12 @@ def eml_to_text(file: IO[Any]) -> str:
 
 def epub_to_text(file: IO[Any]) -> str:
     with zipfile.ZipFile(file) as epub:
+        assert_zip_within_limits(epub)
         text_content = []
         for item in epub.infolist():
             if item.filename.endswith(".xhtml") or item.filename.endswith(".html"):
-                with epub.open(item) as html_file:
-                    text_content.append(parse_html_page_basic(html_file))
+                html_file: BytesIO = BytesIO(read_zip_member(epub, item))
+                text_content.append(parse_html_page_basic(html_file))
         return TEXT_SECTION_SEPARATOR.join(text_content)
 
 

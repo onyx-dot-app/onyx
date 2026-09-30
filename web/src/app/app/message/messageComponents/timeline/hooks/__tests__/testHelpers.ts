@@ -7,7 +7,7 @@ import {
   Placement,
   StopReason,
 } from "@/app/app/services/streamingModels";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 
 // Core packet factory
 export function createPacket(

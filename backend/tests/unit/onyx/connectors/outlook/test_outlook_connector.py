@@ -15,6 +15,12 @@ from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
 from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
@@ -46,13 +52,11 @@ from onyx.connectors.outlook.connector import (
     mailbox_node_id,
 )
 from onyx.connectors.outlook.models import (
-    OutlookAuthError,
     OutlookDeltaPage,
     OutlookEvent,
     OutlookEventPage,
     OutlookFolder,
     OutlookFolderPage,
-    OutlookGraphError,
     OutlookMailboxPage,
     OutlookMessagePage,
     OutlookRecipient,
@@ -796,10 +800,18 @@ def test_validation_maps_token_refusal_to_invalid_credential() -> None:
         _connector(gateway).validate_connector_settings()
 
 
-def test_validation_lists_unreachable_configured_mailboxes() -> None:
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(404, "MailboxNotEnabledForRESTAPI"), (423, "ErrorMailboxLocked")],
+)
+def test_validation_lists_unreachable_configured_mailboxes(
+    status: int, code: str
+) -> None:
+    """A denied, missing or locked mailbox is the mailbox's own problem, so it is
+    named in the validation error rather than failing the check outright."""
     gateway = _happy_gateway()
     gateway.resolve_mailbox.side_effect = [None, mailbox(id="user-2")]
-    gateway.probe_mailbox.side_effect = graph_error(404, "MailboxNotEnabledForRESTAPI")
+    gateway.probe_mailbox.side_effect = graph_error(status, code)
 
     with pytest.raises(ConnectorValidationError) as exc_info:
         _connector(
@@ -807,7 +819,7 @@ def test_validation_lists_unreachable_configured_mailboxes() -> None:
         ).validate_connector_settings()
 
     assert "ghost@contoso.com (no such user)" in str(exc_info.value)
-    assert "unlicensed@contoso.com (MailboxNotEnabledForRESTAPI)" in str(exc_info.value)
+    assert f"unlicensed@contoso.com ({code})" in str(exc_info.value)
 
 
 def test_validation_in_every_mailbox_mode_probes_the_user_listing() -> None:

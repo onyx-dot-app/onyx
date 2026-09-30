@@ -12,10 +12,15 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     ADMIN_FOLDER_3_FILE_IDS,
     ADMIN_MY_DRIVE_ID,
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+    EXTERNAL_ONLY_ADMIN_FOLDER_ID,
+    EXTERNAL_ONLY_ADMIN_SENTINEL_DOC_ID,
+    EXTERNAL_ONLY_USER_1_FOLDER_ID,
+    EXTERNAL_ONLY_USER_1_SENTINEL_DOC_ID,
     EXTERNAL_SHARED_DOC_SINGLETON,
     EXTERNAL_SHARED_DOCS_IN_FOLDER,
     EXTERNAL_SHARED_FOLDER_ID,
     EXTERNAL_SHARED_FOLDER_URL,
+    FIXTURE_SENTINEL_DOC_NAME,
     FOLDER_1_1_FILE_IDS,
     FOLDER_1_1_URL,
     FOLDER_1_2_FILE_IDS,
@@ -29,7 +34,12 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     FOLDER_2_URL,
     FOLDER_3_ID,
     FOLDER_3_URL,
+    GROUP_ORGANIZER_DRIVE_ID,
+    LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
+    LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
     MISC_SHARED_DRIVE_FNAMES,
+    NO_ORGANIZER_DRIVE_ID,
+    PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
@@ -41,6 +51,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     SHARED_DRIVE_1_FILE_IDS,
     SHARED_DRIVE_1_URL,
     SHARED_DRIVE_2_FILE_IDS,
+    SHORTCUT_ANCESTOR_NODE_IDS,
     TEST_USER_1_DRIVE_B_FOLDER_ID,
     TEST_USER_1_DRIVE_B_ID,
     TEST_USER_1_EMAIL,
@@ -56,6 +67,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_3_EMAIL,
     TEST_USER_3_FILE_IDS,
     TEST_USER_3_MY_DRIVE_ID,
+    _clear_parents,
     _pick,
     assert_expected_docs_in_retrieved_docs,
     assert_hierarchy_nodes_match_expected,
@@ -137,8 +149,11 @@ def test_include_all(
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
             *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+            *PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
         )
     )
+    # Reached without resolving test_user_1's My Drive root, so the parent is unset.
+    expected_nodes = _clear_parents(expected_nodes, LIMITED_ACCESS_MY_DRIVE_FOLDER_ID)
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
@@ -199,8 +214,9 @@ def test_include_shared_drives_only_with_size_threshold(
     # If instead someone with FULL access to the shared drive retrieves it, the connector will retrieve
     # the folder and all its files. There is currently no consistency to the order of assignment of users
     # to shared drives, so this is a heisenbug. When we guarantee that restricted folders are retrieved,
-    # we can change this to 53
-    assert len(output.documents) in (52, 53)
+    # we can change this to 55
+    # Includes the group-organizer drive sentinel and the folder_1 shortcut target.
+    assert len(output.documents) in (54, 55)
 
 
 @patch(
@@ -244,8 +260,9 @@ def test_include_shared_drives_only(
 
     # 2 extra files from shared drive owned by non-admin and not shared with admin
     # another one flaky for unknown reasons
-    # TODO: switch to 54 when restricted access issue is resolved
-    assert len(output.documents) in (53, 54)
+    # TODO: switch to 56 when restricted access issue is resolved
+    # Includes the group-organizer drive sentinel and the folder_1 shortcut target.
+    assert len(output.documents) in (55, 56)
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -262,12 +279,15 @@ def test_include_shared_drives_only(
             TEST_USER_1_EXTRA_DRIVE_1_ID,
             TEST_USER_1_EXTRA_DRIVE_2_ID,
             RESTRICTED_ACCESS_FOLDER_ID,
+            GROUP_ORGANIZER_DRIVE_ID,
         )
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
-        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
+        # The no-organizer drive is only reached when the connector happens to
+        # assign its lone content manager to it, so its presence is not stable.
+        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID, NO_ORGANIZER_DRIVE_ID},
     )
 
 
@@ -316,10 +336,17 @@ def test_include_my_drives_only(
         TEST_USER_1_EXTRA_FOLDER_ID,
         EXTERNAL_SHARED_FOLDER_ID,
         *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+        EXTERNAL_ONLY_USER_1_FOLDER_ID,
+        EXTERNAL_ONLY_ADMIN_FOLDER_ID,
+        LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+        LIMITED_ACCESS_MY_DRIVE_CHILD_ID,
     )
+    # Reached without resolving test_user_1's My Drive root, so the parent is unset.
+    expected_nodes = _clear_parents(expected_nodes, LIMITED_ACCESS_MY_DRIVE_FOLDER_ID)
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
+        ignorable_node_ids=set(SHORTCUT_ANCESTOR_NODE_IDS),
     )
 
 
@@ -490,8 +517,17 @@ def test_shared_folder_owned_by_external_user(
 
     expected_docs = EXTERNAL_SHARED_DOCS_IN_FOLDER
 
-    assert len(output.documents) == len(expected_docs)  # 1 for now
-    assert expected_docs[0] in output.documents[0].id
+    # Plus a sentinel in each of the two limited-access fixture folders. Neither
+    # admin nor test_user_1 can read both, so retrieving both is what proves the
+    # connector unioned over users rather than settling for one principal.
+    assert len(output.documents) == len(expected_docs) + 2
+    retrieved_ids = [doc.id for doc in output.documents]
+    for expected_id in (
+        expected_docs[0],
+        EXTERNAL_ONLY_USER_1_SENTINEL_DOC_ID,
+        EXTERNAL_ONLY_ADMIN_SENTINEL_DOC_ID,
+    ):
+        assert any(expected_id in doc_id for doc_id in retrieved_ids), expected_id
 
 
 @patch(
@@ -665,6 +701,10 @@ def test_specific_user_email_shared_with_me(
     expected += ["read only users can't download"]  # Shared with me
 
     expected += [id_to_name(file_id) for file_id in [0, 1] + ADMIN_FOLDER_3_FILE_IDS]
+
+    # test_user_1 holds a direct grant inside the externally owned folder, so its
+    # contents and the limited-access fixture docs are reachable.
+    expected += ["Food preferences ", FIXTURE_SENTINEL_DOC_NAME]
 
     # these are in shared drives
     # expected += ['perm_sync_doc_0ACOrCU1EMD1hUk9PVA_ab63b976-effb-49af-84e7-423d17a17dd7']

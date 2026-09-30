@@ -7,7 +7,7 @@ import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgAlertCircle } from "@opal/icons";
 import { AnimatePresence, motion } from "motion/react";
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
 import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -308,7 +308,7 @@ export default function BuildMessageList({
       <Hoverable.Root key={message.id} group="craftAgentMessage" width="full">
         <div className="flex items-start gap-3 py-4">
           <div className="shrink-0 h-9 flex items-center">
-            <Logo onyxBranded folded size={24} />
+            <FoldableLogo onyxBranded folded size={24} />
           </div>
           <div className="flex-1 flex flex-col gap-2 min-w-0">
             {visibleSavedRender ? (
@@ -402,7 +402,7 @@ export default function BuildMessageList({
         {showStreamingArea && (
           <div className="flex items-start gap-3 py-4">
             <div className="shrink-0 mt-2">
-              <Logo onyxBranded folded size={24} />
+              <FoldableLogo onyxBranded folded size={24} />
             </div>
             <div className="flex-1 flex flex-col gap-2 min-w-0">
               {streamRender?.pinnedTodo && (

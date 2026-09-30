@@ -1,18 +1,17 @@
 "use client";
 
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Modal } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
+import { InputSingleComboBoxField, InputSingleSelectField } from "@opal/form";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { InputVertical, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange, SvgUnplug, SvgSimpleLoader } from "@opal/icons";
@@ -66,6 +65,8 @@ export function VoiceProviderSetupModal({
   onSuccess,
 }: VoiceProviderSetupModalProps) {
   const t = useTranslations("admin.voice");
+  const tInputSelect = useTranslations("common.inputSelect");
+  const { appName } = useSettings();
   const onClose = useModalClose();
   const detail = getVoiceProviderDetail(providerType);
   const initialSttModel =
@@ -110,7 +111,7 @@ export function VoiceProviderSetupModal({
       .then((data: Array<{ id: string; name: string }>) => {
         const options = data.map((v) => ({
           value: v.id,
-          label: v.name,
+          title: v.name,
           description: v.id,
         }));
         setVoiceOptions(options);
@@ -327,6 +328,7 @@ export function VoiceProviderSetupModal({
                       subDescription={markdown(
                         t("setupModal.targetUri.description", {
                           portalUrl: AZURE_PORTAL_URL,
+                          appName: escapeMarkdown(appName),
                         })
                       )}
                       withLabel="target_uri"
@@ -400,21 +402,15 @@ export function VoiceProviderSetupModal({
                       )}
                       withLabel="stt_language"
                     >
-                      <InputSelectField name="stt_language">
-                        <InputSelect.Trigger
-                          aria-label={t("setupModal.sttLanguage.label")}
-                        />
-                        <InputSelect.Content>
-                          {detail.sttLanguageOptions.map((language) => (
-                            <InputSelect.Item
-                              key={language.id}
-                              value={language.id}
-                            >
-                              {language.name}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Content>
-                      </InputSelectField>
+                      <InputSingleSelectField
+                        name="stt_language"
+                        placeholder={tInputSelect("placeholder.fallback")}
+                        aria-label={t("setupModal.sttLanguage.label")}
+                        options={detail.sttLanguageOptions.map((language) => ({
+                          value: language.id,
+                          title: language.name,
+                        }))}
+                      />
                     </InputVertical>
                   )}
 
@@ -423,16 +419,14 @@ export function VoiceProviderSetupModal({
                       title={t("setupModal.sttModel.label")}
                       withLabel="stt_model"
                     >
-                      <InputSelectField name="stt_model">
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          {detail.sttModels!.map((m) => (
-                            <InputSelect.Item key={m.id} value={m.id}>
-                              {m.name}
-                            </InputSelect.Item>
-                          ))}
-                        </InputSelect.Content>
-                      </InputSelectField>
+                      <InputSingleSelectField
+                        name="stt_model"
+                        placeholder={tInputSelect("placeholder.fallback")}
+                        options={detail.sttModels!.map((m) => ({
+                          value: m.id,
+                          title: m.name,
+                        }))}
+                      />
                     </InputVertical>
                   )}
 
@@ -441,19 +435,19 @@ export function VoiceProviderSetupModal({
                       {(detail.ttsModels?.length ?? 0) > 1 && (
                         <InputVertical
                           title={t("setupModal.ttsModel.label")}
-                          subDescription={t("setupModal.ttsModel.description")}
+                          subDescription={t("setupModal.ttsModel.description", {
+                            appName,
+                          })}
                           withLabel="tts_model"
                         >
-                          <InputSelectField name="tts_model">
-                            <InputSelect.Trigger />
-                            <InputSelect.Content>
-                              {detail.ttsModels!.map((m) => (
-                                <InputSelect.Item key={m.id} value={m.id}>
-                                  {m.name}
-                                </InputSelect.Item>
-                              ))}
-                            </InputSelect.Content>
-                          </InputSelectField>
+                          <InputSingleSelectField
+                            name="tts_model"
+                            placeholder={tInputSelect("placeholder.fallback")}
+                            options={detail.ttsModels!.map((m) => ({
+                              value: m.id,
+                              title: m.name,
+                            }))}
+                          />
                         </InputVertical>
                       )}
 
@@ -469,7 +463,7 @@ export function VoiceProviderSetupModal({
                         )}
                         withLabel="default_voice"
                       >
-                        <InputComboBoxField
+                        <InputSingleComboBoxField
                           name="default_voice"
                           options={voiceOptions}
                           placeholder={
@@ -478,7 +472,7 @@ export function VoiceProviderSetupModal({
                               : t("setupModal.voice.placeholder")
                           }
                           disabled={isLoadingVoices}
-                          strict={false}
+                          mode="open"
                         />
                       </InputVertical>
                     </>

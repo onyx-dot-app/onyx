@@ -176,7 +176,7 @@ def generate_final_report(
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
             pre_answer_processing_time=pre_answer_processing_time,
-            timeout_override=DR_REPORT_LLM_TIMEOUT_S,
+            stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S,
         )
 
         # Save citation mapping to state_container so citations are persisted
@@ -228,7 +228,7 @@ def run_deep_research_llm_loop(
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),
     ):
-        # Here for lazy load LiteLLM
+        # Here for lazy load LiteLLM. initialize_litellm runs once per process.
         from onyx.llm.litellm_singleton.config import initialize_litellm
 
         # An approximate limit. In extreme cases it may still fail but this should allow deep research

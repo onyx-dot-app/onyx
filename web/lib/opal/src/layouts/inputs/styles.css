@@ -11,3 +11,12 @@
 .opal-input-label[data-disabled] {
   @apply cursor-not-allowed;
 }
+
+/* A wrapping label is part of a switch's hit area, so hovering anywhere on
+   the row paints the switch's hover state. */
+.opal-input-label:not([data-disabled]):hover .switch-normal {
+  background-color: var(--background-tint-04);
+}
+.opal-input-label:not([data-disabled]):hover .switch-normal-checked {
+  background-color: var(--action-selection-04);
+}

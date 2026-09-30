@@ -117,6 +117,11 @@ postgresql:
     enableSuperuserAccess: true
     superuserSecret:
       name: onyx-postgresql  # keep in sync with auth.postgresql
+    # Keep the CNPG Cluster and its PVCs on `helm uninstall`. The bundled operator is still
+    # removed; reinstall with the same release name to adopt the Cluster again. To delete it
+    # without the operator, `kubectl delete` it, then clear its finalizers with
+    # `kubectl patch clusters.postgresql.cnpg.io <release>-pg -n <ns> --type merge -p '{"metadata":{"finalizers":null}}'`.
+    retainOnUninstall: false
 
 # -- Master toggle for vector database support. When false:
 #   - Sets DISABLE_VECTOR_DB=true on all backend pods
@@ -227,12 +232,7 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /health
-  #     port: model-server
+  # readinessProbe: {} uses the chart default, set null to drop it.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
@@ -247,6 +247,8 @@ inferenceCapability:
     runAsNonRoot: true
     runAsUser: 1001
     fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     capabilities:
       drop:
@@ -258,6 +260,11 @@ inferenceCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
   # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
   # This prevents pending pods when cluster resources are constrained
   strategy: {}
@@ -305,12 +312,8 @@ indexCapability:
     limits:
       cpu: 6000m
       memory: 6Gi
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /health
-  #     port: model-server
+  # readinessProbe: {} uses the chart default, set null to drop it. The default is a
+  # TCP check: --limit-concurrency answers HTTP probes with 503 under load.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
@@ -325,6 +328,8 @@ indexCapability:
     runAsNonRoot: true
     runAsUser: 1001
     fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     capabilities:
       drop:
@@ -336,6 +341,11 @@ indexCapability:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
   # Deployment strategy - use Recreate or RollingUpdate with maxSurge: 0 to terminate old pod first
   # This prevents pending pods when cluster resources are constrained
   strategy: {}
@@ -451,12 +461,14 @@ webserver:
   podAnnotations: {}
   podLabels:
     scope: onyx-frontend
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
     # fsGroup: 2000
 
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
     # capabilities:
     #   drop:
     #   - ALL
@@ -480,15 +492,16 @@ webserver:
       cpu: 1000m
       memory: 1Gi
 
-  # Optional health probes
-  # Example:
-  # readinessProbe:
-  #   httpGet:
-  #     path: /api/health
-  #     port: http
+  # readinessProbe: {} uses the chart default (TCP check on the http port), set
+  # null to drop it. The web server has no health route: /api/* returns 404 here.
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
+
+  # preStop sleep lets endpoint removal reach the ingress before SIGTERM. It
+  # counts against the grace period and needs Kubernetes >= 1.30.
+  preStopSleepSeconds: 15
+  terminationGracePeriodSeconds: 30
 
   autoscaling:
     enabled: false
@@ -526,6 +539,11 @@ webserver:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 api:
   extraEnv: []
@@ -562,12 +580,14 @@ api:
   # real, so size against CPU/memory.
   threadpoolSize: 0
 
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
     # fsGroup: 2000
 
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
     # capabilities:
     #   drop:
     #   - ALL
@@ -593,13 +613,19 @@ api:
       cpu: 3000m
       memory: 3Gi
 
-  # Optional health probes.
+  # Health probes.
   #
-  # Match the path to the probe. /health/ready reports not-ready once the request
-  # threadpool is saturated, which is what should pull a pod out of the Service.
-  # /health only reports that the process is up. Do NOT put /health/ready on the
-  # liveness probe: saturation is load-induced and hits every replica at once,
-  # so restarting on it turns a slowdown into an outage.
+  # readinessProbe: {} uses the chart default, an httpGet on /health (process up
+  # and event loop answering). Set it to null to drop it. Readiness never
+  # restarts a pod, so it is safe while `alembic upgrade head` runs at startup.
+  #
+  # /health/ready also reports not-ready once the request threadpool is
+  # saturated. Use it for readiness only with several replicas: saturation hits
+  # every replica at once, and a lone not-ready pod leaves the Service empty.
+  # Do NOT put /health/ready on the liveness probe.
+  #
+  # Liveness and startup probes stay opt-in. Size a startupProbe for the longest
+  # migration you expect, or it kills the pod mid-migration.
   #
   # Example:
   # readinessProbe:
@@ -613,6 +639,12 @@ api:
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
+
+  # preStop sleep lets endpoint removal reach the ingress before SIGTERM, then
+  # uvicorn waits for in-flight chat streams until the grace period ends. The
+  # sleep counts against the grace period and needs Kubernetes >= 1.30.
+  preStopSleepSeconds: 15
+  terminationGracePeriodSeconds: 120
 
   autoscaling:
     enabled: false
@@ -650,6 +682,11 @@ api:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  # Rendered only when the replica count (or autoscaling.minReplicas) is above 1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
   # Disable only when a separate deployment step runs migrations.
   runStartupMigrations: true
@@ -698,13 +735,18 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
-  podSecurityContext: {}
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  # allowPrivilegeEscalation is dropped automatically if you set privileged.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
     # `privileged` is not needed by this workload and is intentionally omitted.
     # root is kept only so the optional customCACerts feature can run
     # update-ca-certificates; to run non-root, override this and
     # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
+    allowPrivilegeEscalation: false
 
 celery_beat:
   extraEnv: []
@@ -780,6 +822,9 @@ celery_worker_heavy:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_docprocessing:
   extraEnv: []
@@ -819,6 +864,9 @@ celery_worker_docprocessing:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_light:
   extraEnv: []
@@ -858,6 +906,9 @@ celery_worker_light:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_monitoring:
   extraEnv: []
@@ -897,6 +948,9 @@ celery_worker_monitoring:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_primary:
   extraEnv: []
@@ -936,6 +990,9 @@ celery_worker_primary:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 celery_worker_user_file_processing:
   extraEnv: []
@@ -975,6 +1032,9 @@ celery_worker_user_file_processing:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 # Dedicated worker for Craft scheduled-task headless executor fires.
 # Isolated from `heavy` because each fire is long-running (LLM + tool calls
@@ -1019,6 +1079,9 @@ celery_worker_scheduled_tasks:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 # Discord bot for Onyx
 # The bot offloads message processing to scalable API pods via HTTP requests.
@@ -1041,10 +1104,12 @@ discordbot:
     scope: onyx-backend
   deploymentLabels:
     app: discord-bot
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "500m"
@@ -1070,10 +1135,12 @@ slackbot:
     scope: onyx-backend
   deploymentLabels:
     app: slack-bot
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
   podSecurityContext:
-    {}
+    seccompProfile:
+      type: RuntimeDefault
   securityContext:
-    {}
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "500m"
@@ -1109,8 +1176,12 @@ mcpServer:
     servicePort: 8090
     targetPort: mcp-server-port
     portName: mcp-server-port
-  podSecurityContext: {}
-  securityContext: {}
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
   resources:
     requests:
       cpu: "250m"
@@ -1175,12 +1246,23 @@ celery_worker_docfetching:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
 
 ######################################################################
 #
 # End background workers section
 #
 ######################################################################
+
+# Pre-delete hook that deletes this release's CNPG Cluster and Redis CRs while
+# their operators still run.
+preDeleteCleanup:
+  image:
+    repository: registry.k8s.io/kubectl
+    tag: v1.34.12
+    pullPolicy: IfNotPresent
 
 # Uncomment to skip the bundled redis-operator and let an existing cluster-wide
 # operator reconcile the Redis CR below (keep redis.enabled: true). Your operator
@@ -1229,6 +1311,14 @@ minio:
   mode: standalone
   replicas: 1
   drivesPerNode: 1
+  # Docker Hub and quay.io no longer serve minio/minio or minio/mc, so both come
+  # from our mirror of the newest multi-arch build we kept, which ships mc too.
+  image:
+    repository: onyxdotapp/minio
+    tag: RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
+  mcImage:
+    repository: onyxdotapp/minio
+    tag: RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
   existingSecret: onyx-objectstorage
   buckets:
     - name: onyx-file-store-bucket
@@ -1260,7 +1350,11 @@ codeInterpreter:
   service:
     port: 8000
 
-# Values passed through to the code-interpreter subchart.
+# Values passed through to the code-interpreter subchart. Notable options:
+# code-interpreter.codeInterpreter.kubernetesExecutor.{securityContext.mode,pod,podResources},
+# code-interpreter.capacity.* and code-interpreter.fileStorage.shared (required for
+# replicaCount > 1). The top-level codeInterpreter.enabled only turns the subchart on. See
+# https://github.com/onyx-dot-app/python-sandbox/tree/main/kubernetes/code-interpreter
 code-interpreter:
   # API container resources. Workspace archives staged into sandboxes are
   # routinely tens of MB and the base64-encoded snapshot path roughly doubles
@@ -1639,7 +1733,10 @@ configMap:
   CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   AIRTABLE_ATTACHMENT_SIZE_THRESHOLD: ""
   DROPBOX_CONNECTOR_SIZE_THRESHOLD: ""
+  ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   BOX_CONNECTOR_SIZE_THRESHOLD: ""
+  SHAREPOINT_CONNECTOR_SIZE_THRESHOLD: ""
   OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD: ""
   TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD: ""
   TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
@@ -1665,6 +1762,12 @@ configMap:
   # toward the 6h crawl deadline if group syncs run long, so periodic
   # re-dispatches can't start concurrent duplicate syncs.
   CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: ""
+  # Per-connector document permission sync lock TTL in seconds (default 3600);
+  # raise it if a sync loses its lock mid-run ("lock that's no longer owned").
+  CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: ""
+  # Document-index sync beat lock TTL in seconds (default 120); raise it if the
+  # sync pass aborts with "no longer owned" or "Lock not owned on completion".
+  CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: ""
   # OnyxBot SlackBot Configs
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""

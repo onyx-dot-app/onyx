@@ -161,6 +161,8 @@ export default function ExternalAppSkillsStepModal({
                 />
                 {error && (
                   <MessageCard
+                    outerPadding={1}
+                    innerPadding={1}
                     variant="error"
                     title={t("errors.saveFailedTitle")}
                     description={error}

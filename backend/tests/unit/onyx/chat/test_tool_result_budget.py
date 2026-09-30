@@ -29,15 +29,15 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import InputBudgetExceededError
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.input_budget import estimate_request_tokens
-from onyx.llm.models import (
+from onyx.llm.model_request import (
     AssistantMessage,
-    FunctionCall,
-    LanguageModelInput,
-    LLMInputBudget,
+    ChatCompletionMessage,
+    RequestFunctionCall,
     ToolCall,
     ToolMessage,
     UserMessage,
 )
+from onyx.llm.models import LLMInputBudget
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
@@ -101,7 +101,6 @@ def _make_llm(max_input_tokens: int) -> LitellmLLM:
         model_provider=LlmProviderNames.OPENAI,
         model_name="gpt-3.5-turbo",
         max_input_tokens=max_input_tokens,
-        timeout=30,
     )
 
 
@@ -111,7 +110,6 @@ def _make_provider_llm(provider: str, model: str) -> LitellmLLM:
         model_provider=provider,
         model_name=model,
         max_input_tokens=32_000,
-        timeout=30,
     )
 
 
@@ -476,13 +474,13 @@ def test_ollama_conversion_charges_tool_labels_and_reminder() -> None:
 
 def test_mistral_conversion_includes_tool_to_user_bridge() -> None:
     llm = _make_provider_llm(LlmProviderNames.MISTRAL, "mistral-small")
-    prompt: LanguageModelInput = [
+    prompt: list[ChatCompletionMessage] = [
         AssistantMessage(
             content=None,
             tool_calls=[
                 ToolCall(
                     id="call-1",
-                    function=FunctionCall(
+                    function=RequestFunctionCall(
                         name="scripted_result", arguments='{"label":"x"}'
                     ),
                 )
@@ -505,13 +503,13 @@ def test_mistral_conversion_includes_tool_to_user_bridge() -> None:
 
 def test_bedrock_final_cycle_converts_tool_history_without_definitions() -> None:
     llm = _make_provider_llm(LlmProviderNames.BEDROCK, "anthropic.claude-3-haiku")
-    prompt: LanguageModelInput = [
+    prompt: list[ChatCompletionMessage] = [
         AssistantMessage(
             content=None,
             tool_calls=[
                 ToolCall(
                     id="call-1",
-                    function=FunctionCall(
+                    function=RequestFunctionCall(
                         name="scripted_result", arguments='{"label":"x"}'
                     ),
                 )
@@ -537,8 +535,8 @@ def test_final_request_guard_stops_before_litellm_completion() -> None:
         pytest.raises(InputBudgetExceededError) as exc_info,
     ):
         list(
-            llm.stream(
-                UserMessage(content="This request does not fit."),
+            llm.stream_raw(
+                [UserMessage(content="This request does not fit.")],
                 input_budget=LLMInputBudget(
                     max_tokens=0,
                     token_counter=token_counter,
@@ -554,13 +552,15 @@ def test_final_request_guard_stops_before_litellm_completion() -> None:
 def test_final_request_guard_accepts_exact_estimated_budget() -> None:
     llm = _make_llm(32_000)
     token_counter = get_llm_token_counter(llm)
-    prompt = UserMessage(content="This request exactly fits its estimate.")
+    prompt: list[ChatCompletionMessage] = [
+        UserMessage(content="This request exactly fits its estimate.")
+    ]
     prepared = llm.prepare_messages(prompt, False)
     estimated_tokens = estimate_request_tokens(prepared, None, token_counter)
 
     with patch("litellm.completion", return_value=[_answer_chunk()]) as completion:
         responses = list(
-            llm.stream(
+            llm.stream_raw(
                 prompt,
                 input_budget=LLMInputBudget(
                     max_tokens=estimated_tokens,

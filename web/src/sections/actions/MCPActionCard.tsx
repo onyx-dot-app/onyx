@@ -13,13 +13,9 @@ import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
 import ToolsList from "@/sections/actions/ToolsList";
 import { useCreateModal } from "@opal/components";
-import {
-  ActionStatus,
-  ToolSnapshot,
-  MCPServerStatus,
-  MCPServer,
-} from "@/lib/tools/types";
-import useServerTools from "@/hooks/useServerTools";
+import { ActionStatus, ToolSnapshot } from "@/lib/tools/types";
+import { MCPServerStatus, MCPServer } from "@/lib/mcp/types";
+import { useServerTools } from "@/lib/mcp/hooks";
 import { can } from "@/lib/permissions/resource-actions";
 import { KeyedMutator } from "swr";
 import type { IconProps } from "@opal/types";

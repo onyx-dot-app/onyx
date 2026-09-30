@@ -91,10 +91,15 @@ from onyx.llm.factory import (
     get_contextual_rag_llm_for_search_settings,
     get_default_llm_with_vision,
 )
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    ReasoningEffort,
+    UserMessage,
+)
 from onyx.llm.multi_llm import LLMRateLimitError
-from onyx.llm.utils import MAX_CONTEXT_TOKENS, llm_response_to_string
+from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.utils import (
     BaseTokenizer,
     get_tokenizer,
@@ -109,7 +114,6 @@ from onyx.server.query_and_chat.token_limit import check_global_token_rate_limit
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
@@ -226,7 +230,11 @@ def _upsert_documents_in_db(
         )
         document_metadata_list.append(db_doc_metadata)
 
-    upsert_documents(db_session, document_metadata_list)
+    upsert_documents(
+        db_session,
+        document_metadata_list,
+        source=documents[0].source if documents else None,
+    )
 
     # Insert document content metadata
     for doc in documents:
@@ -364,6 +372,8 @@ def get_docs_to_update(
 
     Two-gate dedup:
 
+    Permission changes bypass both gates so ACL updates persist.
+
     Gate 1 — timestamp skip (fast path):
       If the connector supplies doc_updated_at and it hasn't advanced past what we
       already indexed, skip immediately. No hash computation needed.
@@ -394,6 +404,18 @@ def get_docs_to_update(
     updatable_docs: list[Document] = []
     doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
+        db_doc = id_to_db_doc_map.get(doc.id)
+        access_changed = bool(
+            db_doc
+            and doc.external_access is not None
+            and (
+                doc.external_access.external_user_emails
+                != set(db_doc.external_user_emails or [])
+                or doc.external_access.external_user_group_ids
+                != set(db_doc.external_user_group_ids or [])
+                or doc.external_access.is_public != db_doc.is_public
+            )
+        )
         timestamp_advanced = (
             doc.doc_updated_at is not None
             and doc.id in id_update_time_map
@@ -406,6 +428,7 @@ def get_docs_to_update(
             and doc.doc_updated_at
             and doc.id in id_update_time_map
             and not timestamp_advanced
+            and not access_changed
         ):
             continue
 
@@ -414,8 +437,7 @@ def get_docs_to_update(
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
         if not timestamp_advanced and not ignore_content_hash_gate:
-            db_doc = id_to_db_doc_map.get(doc.id)
-            if db_doc and db_doc.content_hash == content_hash:
+            if db_doc and db_doc.content_hash == content_hash and not access_changed:
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
@@ -840,9 +862,9 @@ def _get_image_summarization_llm(
     llm = get_default_llm_with_vision()
     if llm is None:
         logger.warning(
-            "Image analysis is enabled but no vision-capable LLM is "
-            "available — images will not be summarized. Configure a "
-            "vision model in the admin LLM settings."
+            "Image analysis is enabled but no usable captioning model is "
+            "available — images will not be summarized. Check the captioning "
+            "model under Index Settings."
         )
     return llm
 
@@ -964,20 +986,21 @@ def add_document_summaries(
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
     prompt_msg = UserMessage(content=summary_prompt)
 
-    with llm_generation_span(
-        llm=llm,
-        flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
-        input_messages=[prompt_msg],
-        content_mode=TraceContentMode.METADATA_ONLY,
-    ) as span_generation:
-        response = llm.invoke(
-            prompt_msg,
-            max_tokens=MAX_CONTEXT_TOKENS,
-            reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-            total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-        )
-        record_llm_response(span_generation, response)
-    doc_summary = llm_response_to_string(response)
+    response = llm.invoke(
+        GenerationRequest(
+            messages=[prompt_msg],
+            options=GenerationOptions(
+                max_tokens=MAX_CONTEXT_TOKENS,
+                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+            ),
+        ),
+        context=GenerationContext(
+            flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+            content_mode=TraceContentMode.METADATA_ONLY,
+            total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+        ),
+    )
+    doc_summary = response.text
 
     for chunk in chunks_by_doc:
         chunk.doc_summary = doc_summary
@@ -1019,22 +1042,23 @@ def add_chunk_summaries(
         fallback_prompt = UserMessage(
             content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
         )
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
-            input_messages=[fallback_prompt],
-            content_mode=TraceContentMode.METADATA_ONLY,
-        ) as span_generation:
-            response = llm.invoke(
-                fallback_prompt,
-                max_tokens=MAX_CONTEXT_TOKENS,
-                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-            )
-            record_llm_response(span_generation, response)
-        doc_info = llm_response_to_string(response)
+        response = llm.invoke(
+            GenerationRequest(
+                messages=[fallback_prompt],
+                options=GenerationOptions(
+                    max_tokens=MAX_CONTEXT_TOKENS,
+                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                ),
+            ),
+            context=GenerationContext(
+                flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+                content_mode=TraceContentMode.METADATA_ONLY,
+                total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            ),
+        )
+        doc_info = response.text
 
-    from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+    from onyx.llm.prompt_cache.processor import cached_user_message
 
     context_prompt1 = CONTEXTUAL_RAG_PROMPT1.format(document=doc_info)
 
@@ -1042,28 +1066,25 @@ def add_chunk_summaries(
         context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
         try:
             # Apply prompt caching: cache the document context (prompt1), chunk content is the suffix
-            # For string inputs with continuation=True, the result will be a concatenated string
-            processed_prompt, _ = process_with_prompt_cache(
-                llm_config=llm.config,
-                cacheable_prefix=UserMessage(content=context_prompt1),
-                suffix=UserMessage(content=context_prompt2),
-                continuation=True,  # Append chunk to the document context
+            processed_prompt = cached_user_message(
+                llm.config, prefix=context_prompt1, suffix=context_prompt2
             )
 
-            with llm_generation_span(
-                llm=llm,
-                flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
-                input_messages=[processed_prompt],
-                content_mode=TraceContentMode.METADATA_ONLY,
-            ) as span_generation:
-                response = llm.invoke(
-                    processed_prompt,
-                    max_tokens=MAX_CONTEXT_TOKENS,
-                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                    total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-                )
-                record_llm_response(span_generation, response)
-            chunk.chunk_context = llm_response_to_string(response)
+            response = llm.invoke(
+                GenerationRequest(
+                    messages=[processed_prompt],
+                    options=GenerationOptions(
+                        max_tokens=MAX_CONTEXT_TOKENS,
+                        reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                    ),
+                ),
+                context=GenerationContext(
+                    flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
+                    content_mode=TraceContentMode.METADATA_ONLY,
+                    total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                ),
+            )
+            chunk.chunk_context = response.text
 
         except LLMRateLimitError as e:
             # Erroring during chunker is undesirable, so we log the error and continue

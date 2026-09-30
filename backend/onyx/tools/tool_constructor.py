@@ -69,7 +69,6 @@ class SearchToolConfig(BaseModel):
     # must be found via vector DB search instead.
     project_id_filter: int | None = None
     persona_id_filter: int | None = None
-    bypass_acl: bool = False
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
@@ -119,6 +118,19 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         max_input_tokens=llm.config.max_input_tokens,
         custom_config=llm_provider.custom_config,
     )
+
+
+def _require_chat_session_id(
+    custom_tool_config: CustomToolConfig | None, tool_name: str
+) -> UUID:
+    """Generated files are scoped to the chat session that produced them, so
+    the tools that write them cannot be built without one."""
+    if custom_tool_config is None or custom_tool_config.chat_session_id is None:
+        raise ValueError(
+            f"{tool_name} requires CustomToolConfig.chat_session_id: generated "
+            "files are scoped to the chat session that produced them"
+        )
+    return custom_tool_config.chat_session_id
 
 
 def should_disable_open_url_web_fetch(
@@ -222,7 +234,6 @@ def _construct_tools_impl(
             user_selected_filters=config.user_selected_filters,
             project_id_filter=config.project_id_filter,
             persona_id_filter=config.persona_id_filter,
-            bypass_acl=config.bypass_acl,
             slack_context=config.slack_context,
             enable_slack_search=config.enable_slack_search,
             auto_detect_filters=config.auto_detect_filters,
@@ -298,6 +309,9 @@ def _construct_tools_impl(
                         model=img_generation_llm_config.model_name,
                         tool_id=db_tool_model.id,
                         emitter=emitter,
+                        chat_session_id=_require_chat_session_id(
+                            custom_tool_config, ImageGenerationTool.__name__
+                        ),
                     )
                 ]
 
@@ -342,7 +356,13 @@ def _construct_tools_impl(
             # Handle Python/Code Interpreter Tool
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
-                    PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                    PythonTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        chat_session_id=_require_chat_session_id(
+                            custom_tool_config, PythonTool.__name__
+                        ),
+                    )
                 ]
 
             # Handle Coding Agent Tool

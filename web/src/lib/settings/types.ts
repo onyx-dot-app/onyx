@@ -97,6 +97,9 @@ export interface Settings {
   // are unavailable.
   vector_db_enabled?: boolean;
 
+  // HIDE_ONYX_BRANDING env var, honored only on the Enterprise tier.
+  hide_onyx_branding?: boolean;
+
   // True when hooks are available: single-tenant deployments only.
   hooks_enabled?: boolean;
 
@@ -150,9 +153,6 @@ export interface EnterpriseSettings {
   // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
   custom_help_link_url: string | null;
   custom_help_link_label: string | null;
-
-  // Hide the "Powered by Onyx" tagline under the sidebar logo.
-  hide_onyx_branding: boolean | null;
 }
 
 /**

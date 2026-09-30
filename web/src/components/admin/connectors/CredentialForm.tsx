@@ -9,11 +9,11 @@ import {
   createCredential,
   createCredentialWithPrivateKey,
 } from "@/lib/credential";
-import {
+import type {
   CredentialBase,
   Credential,
   CredentialWithPrivateKey,
-} from "@/lib/connectors/credentials";
+} from "@/lib/connectors/types";
 
 const PRIVATE_KEY_FIELD_KEY = "private_key";
 

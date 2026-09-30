@@ -28,7 +28,9 @@ from onyx.chat.models import (
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.exceptions import InputBudgetExceededError
-from onyx.llm.interfaces import LLMConfig, ToolChoiceOptions
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.models import ToolChoiceOptions
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME
@@ -818,7 +820,7 @@ class TestNonVisionImageBudgeting:
         monkeypatch.setattr(
             "onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05
         )
-        llm = Mock()
+        llm = Mock(spec=LitellmLLM)
         llm.config = LLMConfig(
             model_provider="openai",
             model_name="text-only-model",
@@ -1586,7 +1588,7 @@ class TestFallbackToolExtraction:
 
 class TestEmptyLlmResponseClassification:
     def _make_llm(self, provider: str = "openai", model: str = "gpt-5.2") -> Mock:
-        llm = Mock()
+        llm = Mock(spec=LitellmLLM)
         llm.config = LLMConfig(
             model_provider=provider,
             model_name=model,

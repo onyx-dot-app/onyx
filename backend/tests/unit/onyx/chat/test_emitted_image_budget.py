@@ -36,7 +36,6 @@ def _run_image_history(
         model_provider="azure",
         model_name="gpt-4o",
         max_input_tokens=max_input_tokens,
-        timeout=30,
     )
     response = litellm.ModelResponse(
         choices=[

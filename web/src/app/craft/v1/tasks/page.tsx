@@ -197,6 +197,7 @@ export default function ScheduledTasksListPage() {
   const headerActions = useMemo(
     () => (
       <Button
+        key="new"
         variant="default"
         prominence="primary"
         icon={SvgPlus}
@@ -215,7 +216,7 @@ export default function ScheduledTasksListPage() {
         icon={SvgClock}
         title={t("header.title")}
         description={t("header.description")}
-        rightChildren={headerActions}
+        actions={[headerActions]}
       />
       <SettingsLayouts.Body>
         {isLoading ? (

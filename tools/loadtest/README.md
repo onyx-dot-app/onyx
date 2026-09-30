@@ -95,6 +95,33 @@ approximating production traffic shape:
 ... uv run --group loadtest locust --headless -u 10 -r 2 -t 10m -H https://<your-onyx-url> BasicChatUser ChatWithSearchUser
 ```
 
+### Query diversity and retrieval realism
+
+Search scenarios draw from a ~50-question corpus (`DEFAULT_MESSAGES` in
+`onyx_client/chat_user.py`), and each user starts at a random offset in it, so
+the fleet does not ask the same question at the same moment. The mock also
+echoes the user's question — not the surrounding prompt scaffolding — as the
+rephrased search query.
+
+Both matter for measurement. With a short corpus, or with scaffolding dominating
+the query text, every search after warmup is an index cache hit (~0.05 s rather
+than ~0.5–1.5 s per novel kNN query on a large index). Retrieval then disappears
+from the results.
+
+Topic accuracy does not matter. kNN returns its nearest chunks whatever you ask,
+and section selection caps at 10, so on-topic and off-topic questions drive the
+same per-section fan-out. What matters is spread: vary the form (keyword
+fragments, full questions, long multi-clause asks), the length, and the subject
+area. The built-in corpus mixes business and technical topics because most
+deployments index business documents.
+
+To test against a known corpus, point `ONYX_MESSAGES_FILE` at a
+newline-delimited file of questions:
+
+```bash
+ONYX_MESSAGES_FILE=./questions.txt ... uv run --group loadtest locust ...
+```
+
 ### Targeted reproducers
 
 Run on their own (not part of the default mix) to stress a specific failure
@@ -207,6 +234,7 @@ stays at **0 failures** through your target concurrency.
 | `ONYX_LONGCONV_MODEL` | unset | Model for LongConversationUser (unset = persona default) |
 | `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (LongConversationUser 20, CompressionUser 60) |
 | `ONYX_MSG_CHARS` | 0 | Per-message size in chars (CompressionUser defaults to 8000; 0 = short questions) |
+| `ONYX_MESSAGES_FILE` | unset | Path to a newline-delimited question file; replaces the built-in corpus |
 | `ONYX_DISCONNECT_AFTER` | `first_answer_token` | Milestone after which DisconnectUser drops the stream |
 | `ONYX_FILE_KB` | 512 | Uploaded file size (KB) for FileAttachmentUser |
 | `ONYX_HOST_HEADER` | unset | `Host` header to send (set when `LOCUST_HOST` targets an internal Service to bypass an external ALB/WAF for high-rps runs) |

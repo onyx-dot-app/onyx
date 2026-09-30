@@ -16,7 +16,6 @@ from onyx.chat.citation_processor import (
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import (
-    _looks_like_xml_tool_call_payload,
     extract_tool_calls_from_response_text,
     run_llm_step,
     translate_history_to_llm_format,
@@ -35,7 +34,6 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
-from onyx.chat.search_receipts import maybe_append_search_receipt
 from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.chat.tool_result_budget import fit_tool_results, shorten_tool_result
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
@@ -49,9 +47,11 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError, InputBudgetExceededError
 from onyx.llm.input_budget import count_prompt_image_tokens, estimate_request_tokens
-from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
+from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
-from onyx.llm.models import LLMInputBudget, ReasoningEffort
+from onyx.llm.models import LLMInputBudget, ReasoningEffort, ToolChoiceOptions
+from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.tool_parsing import looks_like_xml_tool_call_payload
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
@@ -248,9 +248,9 @@ def _try_fallback_tool_extraction(
         llm_step_result.reasoning and not llm_step_result.answer and no_tool_calls
     )
     xml_tool_call_text_detected = no_tool_calls and (
-        _looks_like_xml_tool_call_payload(llm_step_result.answer)
-        or _looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
-        or _looks_like_xml_tool_call_payload(llm_step_result.reasoning)
+        looks_like_xml_tool_call_payload(llm_step_result.answer)
+        or looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
+        or looks_like_xml_tool_call_payload(llm_step_result.reasoning)
     )
     should_try_fallback = (
         (tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls)
@@ -917,8 +917,6 @@ def run_llm_loop(
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,
-    # Append retrieval receipts to internal search responses (see onyx.chat.search_receipts).
-    enable_search_receipts: bool = False,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -928,10 +926,8 @@ def run_llm_loop(
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),
     ):
-        # Fix some LiteLLM issues,
-        from onyx.llm.litellm_singleton.config import (
-            initialize_litellm,
-        )  # Here for lazy load LiteLLM
+        # Here for lazy load LiteLLM. initialize_litellm runs once per process.
+        from onyx.llm.litellm_singleton.config import initialize_litellm
 
         initialize_litellm()
 
@@ -998,9 +994,6 @@ def run_llm_loop(
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
-        # Candidate document ids seen by earlier searches in this user turn; receipts
-        # report new vs repeated candidates against it. Never shared across turns.
-        seen_search_document_ids: set[str] = set()
         citation_mapping: dict[int, str] = {}  # Maps citation_num -> document_id/URL
 
         # Fetch this in a short-lived session so the long-running stream loop does
@@ -1181,6 +1174,9 @@ def run_llm_loop(
                 else None
             )
 
+            if not isinstance(llm, LitellmLLM):
+                raise TypeError("Chat budgeting requires a LitellmLLM")
+
             tool_defs = [tool.tool_definition() for tool in final_tools]
             request_overhead_tokens = estimate_request_tokens(
                 [], tool_defs, token_counter
@@ -1319,7 +1315,6 @@ def run_llm_loop(
                 chat_files=chat_files,
                 url_snippet_map=extract_url_snippet_map(gathered_documents or []),
                 inject_memories_in_prompt=inject_memories_in_prompt,
-                include_search_retrieval_candidates=enable_search_receipts,
             )
             tool_responses = parallel_tool_call_results.tool_responses
             citation_mapping = parallel_tool_call_results.updated_citation_mapping
@@ -1365,15 +1360,6 @@ def run_llm_loop(
                 if not tool:
                     raise ValueError(
                         f"Tool '{tool_call.tool_name}' not found in tools list"
-                    )
-
-                # Responses are enriched in this sequential order, so an earlier
-                # sibling in the same batch counts as already seen. This runs before
-                # the response is persisted or added to history.
-                if enable_search_receipts and isinstance(tool, SearchTool):
-                    maybe_append_search_receipt(
-                        tool_response=tool_response,
-                        seen_document_ids=seen_search_document_ids,
                     )
 
                 # Extract search_docs if this is a search tool response

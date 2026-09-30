@@ -435,7 +435,9 @@ def fetch_user_groups_for_documents(
             and_(
                 ConnectorCredentialPair.id
                 == UserGroup__ConnectorCredentialPair.cc_pair_id,
-                ConnectorCredentialPair.access_type != AccessType.SYNC,
+                ConnectorCredentialPair.access_type.notin_(
+                    AccessType.perm_synced_types()
+                ),
             ),
         )
         .join(
@@ -750,6 +752,15 @@ def _assert_group_update_within_scope(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Connector credential pair '{cc_pair_id}' not found.",
             )
+        # A groupless cc_pair has no current group for within_scope to judge, so it
+        # would pass on the requested group alone. Only its creator may attach it —
+        # the same fallback that makes it editable at all (see _add_user_filters).
+        if not current_groups_by_cc_pair[cc_pair_id] and cc_pair.creator_id != user.id:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Group managers can only act on private resources they created "
+                "or that already sit in a group they manage.",
+            )
         assert_within_scope(
             user,
             db_session,
@@ -977,11 +988,9 @@ def rename_user_group(
     db_user_group.name = new_name
     db_user_group.time_last_modified_by_user = func.now()
 
-    # CC pair documents in Vespa contain the group name, so we need to
-    # trigger a sync to update them with the new name.
-    _mark_user_group__cc_pair_relationships_outdated__no_commit(
-        db_session=db_session, user_group_id=user_group_id
-    )
+    # Documents in the index carry the group name, so re-sync them. The group's
+    # cc_pair rows stay current: the sync reaches every document of the group's
+    # cc_pairs, and marking the rows outdated would make the sync delete them.
     if not DISABLE_VECTOR_DB:
         db_user_group.is_up_to_date = False
 

@@ -11,23 +11,19 @@ from unittest.mock import patch
 
 from pydantic import BaseModel
 
-from onyx.llm.interfaces import (
-    LLM,
-    LanguageModelInput,
-    LLMConfig,
-    LLMUserIdentity,
-    ReasoningEffort,
-    ToolChoice,
-)
+from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
+from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
+from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
-    FunctionCall,
     ModelResponse,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
-from onyx.llm.models import LLMInputBudget
+from onyx.llm.models import LLMInputBudget, ReasoningEffort, ToolChoice
+from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 
 T = TypeVar("T")
 
@@ -145,7 +141,7 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
                         ChatCompletionDeltaToolCall(
                             id=tc_data["tool_call_id"],
                             index=tc_data["index"],
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 arguments="",
                                 name=tc_data["tool_name"],
                             ),
@@ -156,7 +152,7 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
                         ChatCompletionDeltaToolCall(
                             index=tc_data["index"],
                             id=None,
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 arguments=tc_data["arguments"],
                                 name=None,
                             ),
@@ -171,7 +167,7 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
                     tool_calls=[
                         ChatCompletionDeltaToolCall(
                             id=data["tool_call_id"],
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 name=data["tool_name"],
                                 arguments="",
                             ),
@@ -183,7 +179,7 @@ def create_delta_from_stream_item(item: StreamItem) -> Delta:
                     tool_calls=[
                         ChatCompletionDeltaToolCall(
                             id=None,
-                            function=FunctionCall(
+                            function=ResponseFunctionCall(
                                 name=None,
                                 arguments=data["arguments"],
                             ),
@@ -220,8 +216,14 @@ class MockLLMController(abc.ABC):
         raise NotImplementedError
 
 
-class MockLLM(LLM, MockLLMController):
+class MockLLM(LitellmLLM, MockLLMController):
     def __init__(self) -> None:
+        super().__init__(
+            model_provider="openai",
+            api_key=None,
+            model_name="gpt-5-mini",
+            max_input_tokens=1000000000,
+        )
         self.stream_controller = SyncStreamController[StreamItem]()
 
     def add_response(self, response: LLMResponse) -> None:
@@ -300,36 +302,36 @@ class MockLLM(LLM, MockLLMController):
         )
 
     def prepare_messages(
-        self, prompt: LanguageModelInput, has_tools: bool
+        self, prompt: list[ChatCompletionMessage], has_tools: bool
     ) -> list[dict[str, Any]]:
         del has_tools
-        messages = prompt if isinstance(prompt, list) else [prompt]
-        return [message.model_dump(exclude_none=True) for message in messages]
+        return [message.model_dump(exclude_none=True) for message in prompt]
 
-    def invoke(
+    def invoke_raw(
         self,
-        prompt: LanguageModelInput,
+        prompt: list[ChatCompletionMessage],
         tools: list[dict] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
-        timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
-        total_timeout_override: float | None = None,
+        total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
+        operation: ProviderOperation | None = None,
     ) -> ModelResponse:
         raise NotImplementedError("We only care about streaming atm")
 
-    def stream(
+    def stream_raw(
         self,
-        prompt: LanguageModelInput,  # noqa: ARG002
+        prompt: list[ChatCompletionMessage],  # noqa: ARG002
         tools: list[dict] | None = None,  # noqa: ARG002
         tool_choice: ToolChoice | None = None,  # noqa: ARG002
         structured_response_format: dict | None = None,  # noqa: ARG002
-        timeout_override: int | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
+        operation: ProviderOperation | None = None,  # noqa: ARG002
         input_budget: LLMInputBudget | None = None,
     ) -> Iterator[ModelResponseStream]:
         del input_budget

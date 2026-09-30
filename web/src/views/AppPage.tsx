@@ -14,7 +14,7 @@ import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
-import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
@@ -30,7 +30,7 @@ import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
-import { SourceMetadata } from "@/lib/search/interfaces";
+import { SourceMetadata } from "@/lib/search/types";
 import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
@@ -962,7 +962,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {onboardingVisible && (
-                      <ShadowDiv mask className="overscroll-contain">
+                      <ShadowDiv variant="mask" className="overscroll-contain">
                         <OnboardingFlow
                           showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}

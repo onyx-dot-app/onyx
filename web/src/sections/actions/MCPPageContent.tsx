@@ -8,28 +8,23 @@ import MCPActionCard from "@/sections/actions/MCPActionCard";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import ActionCardSkeleton from "@/sections/actions/skeleton/ActionCardSkeleton";
 import { getActionIcon } from "@/lib/tools/utils";
-import {
-  ActionStatus,
-  MCPServerStatus,
-  MCPServer,
-  ToolSnapshot,
-} from "@/lib/tools/types";
+import { ActionStatus, ToolSnapshot } from "@/lib/tools/types";
+import { MCPServerStatus, MCPServer } from "@/lib/mcp/types";
 import { toast } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
 import AddMCPServerModal from "@/sections/actions/modals/AddMCPServerModal";
 import DisconnectEntityModal from "./modals/DisconnectEntityModal";
+import { updateToolStatus, updateToolsStatus } from "@/lib/tools/svc";
 import {
   deleteMCPServer,
   refreshMCPServerTools,
-  updateToolStatus,
   updateMCPServerStatus,
   updateMCPServer,
-  updateToolsStatus,
-} from "@/lib/tools/svc";
+} from "@/lib/mcp/svc";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { useAdminMcpServers } from "@/lib/tools/hooks";
+import { useAdminMcpServers } from "@/lib/mcp/hooks";
 
 export default function MCPPageContent() {
   const t = useTranslations("actions");

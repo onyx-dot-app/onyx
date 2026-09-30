@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from enum import Enum
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 class LLMInputBudget(BaseModel):
@@ -130,38 +130,6 @@ def resolve_reasoning_effort(
     return effort
 
 
-# OpenAI reasoning effort mapping
-# Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
-OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.AUTO: "medium",  # Default to medium when auto is requested
-    ReasoningEffort.OFF: "none",
-    ReasoningEffort.LOW: "low",
-    ReasoningEffort.MEDIUM: "medium",
-    ReasoningEffort.HIGH: "high",
-    ReasoningEffort.XHIGH: "xhigh",
-}
-
-# Anthropic reasoning effort to budget tokens mapping
-# Loosely based on budgets from LiteLLM but this ensures it's not updated without our knowing from a version bump.
-ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
-    ReasoningEffort.AUTO: 2048,
-    ReasoningEffort.LOW: 1024,
-    ReasoningEffort.MEDIUM: 2048,
-    ReasoningEffort.HIGH: 4096,
-    ReasoningEffort.XHIGH: 4096,
-}
-
-# Newer Anthropic models (Claude Opus 4.7+) use adaptive thinking with
-# output_config.effort instead of thinking.type.enabled + budget_tokens.
-ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.AUTO: "medium",
-    ReasoningEffort.LOW: "low",
-    ReasoningEffort.MEDIUM: "medium",
-    ReasoningEffort.HIGH: "high",
-    ReasoningEffort.XHIGH: "xhigh",
-}
-
-
 # Content part structures for multimodal messages
 # The classes in this mirror the OpenAI Chat Completions message types and work well with routers like LiteLLM
 class TextContentPart(BaseModel):
@@ -179,7 +147,6 @@ class ImageUrlDetail(BaseModel):
 class ImageContentPart(BaseModel):
     type: Literal["image_url"] = "image_url"
     image_url: ImageUrlDetail
-    # Internal estimate, excluded from provider payloads.
     token_count: int = Field(default=0, exclude=True)
 
 
@@ -202,51 +169,285 @@ class RedactedThinkingBlock(BaseModel):
 AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
 
 
-# Tool call structures
-class FunctionCall(BaseModel):
-    name: str
-    arguments: str
+class Usage(BaseModel):
+    completion_tokens: int
+    prompt_tokens: int
+    total_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+
+
+class TextContent(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ThinkingContent(BaseModel):
+    type: Literal["thinking"] = "thinking"
+    text: str
+    blocks: list[AnyThinkingBlock] | None = None
 
 
 class ToolCall(BaseModel):
-    type: Literal["function"] = "function"
+    type: Literal["tool_call"] = "tool_call"
     id: str
-    function: FunctionCall
+    name: str
+    arguments: dict[str, JsonValue]
+    argument_error: str | None = None
+    raw_arguments: str | None = None
+    arguments_complete: bool = True
 
 
-# Message types
+AssistantContent = Annotated[
+    TextContent | ThinkingContent | ToolCall, Field(discriminator="type")
+]
 
 
-# Base class for all cacheable messages
-class CacheableMessage(BaseModel):
-    # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
-    cache_control: dict | None = None
+class BaseMessage(BaseModel):
+    # Marks a stable prompt prefix for provider prompt caching; never sent as content.
+    cacheable: bool = Field(default=False, exclude=True)
 
 
-class SystemMessage(CacheableMessage):
+class SystemMessage(BaseMessage):
     role: Literal["system"] = "system"
     content: str
 
+    @property
+    def text(self) -> str:
+        return self.content
 
-class UserMessage(CacheableMessage):
+
+class UserMessage(BaseMessage):
     role: Literal["user"] = "user"
     content: str | list[ContentPart]
 
+    @property
+    def text(self) -> str:
+        return content_text(self.content)
 
-class AssistantMessage(CacheableMessage):
+
+class AssistantMessage(BaseMessage):
     role: Literal["assistant"] = "assistant"
-    content: str | None = None
-    tool_calls: list[ToolCall] | None = None
-    thinking_blocks: list[AnyThinkingBlock] | None = None
+    content: list[AssistantContent] = Field(default_factory=list)
+    stop_reason: str | None = None
+    error_message: str | None = None
+    usage: Usage | None = None
+
+    @property
+    def text(self) -> str:
+        return "".join(
+            block.text for block in self.content if isinstance(block, TextContent)
+        )
+
+    @property
+    def thinking(self) -> str:
+        return "".join(
+            block.text for block in self.content if isinstance(block, ThinkingContent)
+        )
+
+    @property
+    def thinking_blocks(self) -> list[AnyThinkingBlock] | None:
+        return [
+            block
+            for content in self.content
+            if isinstance(content, ThinkingContent)
+            for block in content.blocks or []
+        ] or None
+
+    @property
+    def tool_calls(self) -> list[ToolCall]:
+        return [block for block in self.content if isinstance(block, ToolCall)]
 
 
-class ToolMessage(CacheableMessage):
-    role: Literal["tool"] = "tool"
+class ToolResultMessage(BaseMessage):
+    role: Literal["tool_result"] = "tool_result"
+    # Provider tool messages carry text only.
     content: str
     tool_call_id: str
+    tool_name: str
+
+    @property
+    def text(self) -> str:
+        return self.content
 
 
-# Union type for all OpenAI Chat Completions messages
-ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
-# Allows for passing in a string directly. This is provided for convenience and is wrapped as a UserMessage.
-LanguageModelInput = list[ChatCompletionMessage] | ChatCompletionMessage
+Message = Annotated[
+    SystemMessage | UserMessage | AssistantMessage | ToolResultMessage,
+    Field(discriminator="role"),
+]
+
+
+def content_text(content: str | list[ContentPart]) -> str:
+    if isinstance(content, str):
+        return content
+    return "".join(part.text for part in content if isinstance(part, TextContentPart))
+
+
+class ToolDefinition(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    name: str
+    description: str
+    parameters: dict[str, JsonValue]
+
+
+class GenerationOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool_choice: ToolChoice = ToolChoiceOptions.AUTO
+    reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO
+    max_tokens: int | None = Field(default=None, gt=0)
+    structured_response_format: dict[str, JsonValue] | None = None
+
+
+class GenerationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    messages: list[Message] = Field(default_factory=list)
+    system_prompt: str = ""
+    tools: list[ToolDefinition] = Field(default_factory=list)
+    options: GenerationOptions = Field(default_factory=GenerationOptions)
+
+
+class GenerationRequestParams(BaseModel):
+    """Effective provider settings for the attempt that produced the response."""
+
+    model_config = ConfigDict(extra="forbid")
+    model_name: str
+    model_provider: str
+    reasoning_effort: ReasoningEffort
+    max_tokens: int | None
+    sent_kwargs: dict[str, JsonValue]
+
+
+class _Event(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    request_params: GenerationRequestParams | None = None
+
+
+class GenerationLifecycleEvent(_Event):
+    """Generation status; content arrives through incremental content events."""
+
+
+class GenerationStartEvent(GenerationLifecycleEvent):
+    type: Literal["start"] = "start"
+
+
+class GenerationDoneEvent(GenerationLifecycleEvent):
+    type: Literal["done"] = "done"
+    usage: Usage | None = None
+    stop_reason: str | None = None
+
+
+class GenerationErrorEvent(GenerationLifecycleEvent):
+    type: Literal["error"] = "error"
+    usage: Usage | None = None
+    stop_reason: Literal["error"] = "error"
+    error_message: str
+
+
+class GenerationTextEvent(_Event):
+    content_index: int = Field(ge=0)
+    text: str = ""
+
+
+class TextDeltaEvent(GenerationTextEvent):
+    type: Literal["text_delta"] = "text_delta"
+
+
+class ThinkingDeltaEvent(GenerationTextEvent):
+    blocks: list[AnyThinkingBlock] | None = None
+    type: Literal["thinking_delta"] = "thinking_delta"
+
+
+class GenerationToolCallEvent(_Event):
+    content_index: int = Field(ge=0)
+    tool_call: ToolCall
+    argument_deltas: dict[str, str] = Field(default_factory=dict)
+
+
+class ToolCallStartEvent(GenerationToolCallEvent):
+    type: Literal["tool_call_start"] = "tool_call_start"
+
+
+class ToolCallDeltaEvent(GenerationToolCallEvent):
+    type: Literal["tool_call_delta"] = "tool_call_delta"
+
+
+class ToolCallEndEvent(GenerationToolCallEvent):
+    type: Literal["tool_call_end"] = "tool_call_end"
+
+
+GenerationEvent = Annotated[
+    GenerationStartEvent
+    | GenerationDoneEvent
+    | GenerationErrorEvent
+    | TextDeltaEvent
+    | ThinkingDeltaEvent
+    | ToolCallStartEvent
+    | ToolCallDeltaEvent
+    | ToolCallEndEvent,
+    Field(discriminator="type"),
+]
+
+
+def apply_generation_event(message: AssistantMessage, event: GenerationEvent) -> None:
+    """Mutate caller-owned output while preserving its identity and application metadata.
+
+    The caller must serialize access to the message. Mutable event payloads are
+    copied, so later message updates cannot alter the event. Copy the message
+    before exposing it as a snapshot.
+    """
+    if isinstance(event, GenerationStartEvent):
+        return
+    if isinstance(event, (GenerationDoneEvent, GenerationErrorEvent)):
+        message.stop_reason = event.stop_reason
+        message.error_message = (
+            event.error_message if isinstance(event, GenerationErrorEvent) else None
+        )
+        message.usage = event.usage.model_copy(deep=True) if event.usage else None
+        return
+    index = event.content_index
+    if index > len(message.content):
+        raise ValueError("Generation update skips a content block")
+    if isinstance(event, GenerationToolCallEvent):
+        block = event.tool_call.model_copy(deep=True)
+        if index == len(message.content):
+            if not isinstance(event, ToolCallStartEvent):
+                raise ValueError("Tool update requires a started call")
+            message.content.append(block)
+        else:
+            if not isinstance(message.content[index], ToolCall):
+                raise ValueError("Tool update targets non-tool content")
+            message.content[index] = block
+        return
+    if index == len(message.content):
+        message.content.append(
+            ThinkingContent(text="")
+            if isinstance(event, ThinkingDeltaEvent)
+            else TextContent(text="")
+        )
+    content = message.content[index]
+    if isinstance(event, ThinkingDeltaEvent):
+        if not isinstance(content, ThinkingContent):
+            raise ValueError("Thinking update targets non-thinking content")
+        content.text += event.text
+        if event.blocks:
+            if content.blocks is None:
+                content.blocks = []
+            for block in event.blocks:
+                last = content.blocks[-1] if content.blocks else None
+                # Providers stream one thinking block as text fragments and then
+                # its signature. Merge them so the block can be replayed.
+                if (
+                    isinstance(block, ThinkingBlock)
+                    and isinstance(last, ThinkingBlock)
+                    and not last.signature
+                ):
+                    last.thinking += block.thinking
+                    last.signature = block.signature
+                else:
+                    content.blocks.append(block.model_copy(deep=True))
+    else:
+        if not isinstance(content, TextContent):
+            raise ValueError("Text update targets non-text content")
+        content.text += event.text

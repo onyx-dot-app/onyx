@@ -18,6 +18,7 @@ from collections.abc import Callable, Iterable
 
 from onyx.db.models import SearchSettings
 from onyx.document_index.factory import build_opensearch_document_index
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
@@ -33,7 +34,8 @@ from onyx.indexing.port_reembed import (
 )
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
 from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
-from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE, MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 # Cap per bulk write so it can't run long unheartbeated and get a live port stall-failed.
 _PORT_WRITE_PAGE_SIZE = 1000
@@ -85,6 +87,7 @@ def copy_present_chunks_to_future(
     strategy: ReembedStrategy,
     embedder: IndexingEmbedder,
     present_tokenizer: BaseTokenizer,
+    tenant_state: TenantState,
     augmentation_ctx: AugmentationReembedContext | None = None,
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
@@ -107,12 +110,16 @@ def copy_present_chunks_to_future(
     )
     if rag_on_augmentation:
         by_doc: dict[str, list[DocumentChunkWithoutVectors]] = defaultdict(list)
-        for page in present_client.iter_chunks_for_doc_ids(doc_ids):
+        for page in present_client.iter_chunks_for_doc_ids(
+            doc_ids, tenant_state=tenant_state
+        ):
             for chunk in page:
                 by_doc[chunk.document_id].append(chunk)
         pages = list(by_doc.values())
     else:
-        pages = present_client.iter_chunks_for_doc_ids(doc_ids)
+        pages = present_client.iter_chunks_for_doc_ids(
+            doc_ids, tenant_state=tenant_state
+        )
 
     chunks_written = 0
     for page_chunks in pages:
@@ -157,6 +164,32 @@ def copy_present_chunks_to_future(
     return chunks_written, False
 
 
+def find_documents_with_no_chunks(
+    search_settings: SearchSettings, document_ids: list[str]
+) -> list[str]:
+    """Gets the IDs of the documents with no chunks in the index of `search_settings`.
+
+    Raises if the cluster is unreachable.
+    """
+    index = build_opensearch_document_index(search_settings)
+    with_chunks = index.get_documents_with_any_chunk(document_ids)
+    return [
+        document_id for document_id in document_ids if document_id not in with_chunks
+    ]
+
+
+def find_documents_missing_from_index(
+    search_settings: SearchSettings, document_ids: list[str]
+) -> list[str]:
+    """Gets the IDs of the documents missing from the index of `search_settings`.
+
+    A document is missing when its chunk 0 is absent. Raises if the cluster is
+    unreachable.
+    """
+    index = build_opensearch_document_index(search_settings)
+    return index.get_documents_missing_chunks(document_ids)
+
+
 class PortCopier:
     """Resolves the OpenSearch handles, reembed strategy, and embedder once so
     copy_doc_batch runs with no DB session held. Build it while the search
@@ -174,6 +207,9 @@ class PortCopier:
         )
         self._present_client = OpenSearchIndexClient(
             index_name=present_search_settings.index_name
+        )
+        self._tenant_state = TenantState(
+            tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT
         )
         self._future_index = build_opensearch_document_index(future_search_settings)
         self._embedder = DefaultIndexingEmbedder.from_db_search_settings(
@@ -208,6 +244,7 @@ class PortCopier:
             strategy=self._strategy,
             embedder=self._embedder,
             present_tokenizer=self._present_tokenizer,
+            tenant_state=self._tenant_state,
             augmentation_ctx=self._augmentation_ctx,
             surviving_doc_ids=surviving_doc_ids,
             should_abort=should_abort,

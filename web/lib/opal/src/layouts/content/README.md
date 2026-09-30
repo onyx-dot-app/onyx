@@ -62,9 +62,10 @@ Invalid combinations (e.g. `sizePreset="headline" + variant="body"`) are exclude
 | `description`   | `string`                     | —              | Optional description below the title                                                                                 |
 | `editable`      | `boolean`                    | `false`        | Enable inline editing of the title                                                                                   |
 | `onTitleChange` | `(newTitle: string) => void` | —              | Called when user commits an edit                                                                                     |
-| `moreIcon1`     | `IconFunctionComponent`      | —              | Secondary icon in icon row (ContentXl only)                                                                          |
-| `moreIcon2`     | `IconFunctionComponent`      | —              | Tertiary icon in icon row (ContentXl only)                                                                           |
-| `color`         | `ColorTypes`                 | `"default"`    | Icon and title color pair. `"muted-success"` / `"muted-warning"` color only the icon and leave the text at `text-03` |
+| `moreIcon1`     | `IconFunctionComponent`      | —              | Secondary icon in icon row (ContentXl only); colored with the secondary foreground (`text-03`)                       |
+| `moreIcon2`     | `IconFunctionComponent`      | —              | Tertiary icon in icon row (ContentXl only); boxed and sized exactly like `icon`                                       |
+| `color`         | `ColorTypes`                 | `"default"`    | Icon and title color pair. `"success"` / `"warning"` / `"danger"` color only the icon and leave the text at `text-03` |
+| `titleColor`    | `Exclude<TextColor, "inherit">` | per `color` | Overrides the title colour only; `color` still picks the icon and description. Unset, the title takes its mode's tone: `text-04` for `default` and `interactive`, `text-03` for the rest, and the surface's foreground for `interactive` inside one. Inside an interactive surface an override holds at rest and yields to hover, pressed, selected and disabled. Display only: an editable title being edited keeps the input's standard colour |
 | `strikethrough` | `boolean`                    | `false`        | Strike the title through, for a title whose option is switched off                                                   |
 
 ## Internal Layouts

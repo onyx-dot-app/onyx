@@ -823,6 +823,10 @@ class AuthStatus(BaseModel):
     authenticated: bool
 
 
+class ConnectorGroupRestrictionsStatus(BaseModel):
+    enabled: bool
+
+
 class AuthUrl(BaseModel):
     auth_url: str
 

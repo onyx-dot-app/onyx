@@ -4,10 +4,18 @@
 
 import { ResolvedCitation } from "@/types/api-types";
 
+/**
+ * Returns the bearer credential for a single request. Called before every
+ * backend call, so a host can hand back a freshly minted short-lived token.
+ */
+export type TokenProvider = () => string | Promise<string>;
+
 export interface WidgetConfig {
   // Required
   backendUrl: string;
-  apiKey: string;
+
+  // Static credential. Omitted when the host supplies a `tokenProvider`.
+  apiKey?: string;
 
   // Optional - Assistant
   agentId?: number;
@@ -21,6 +29,8 @@ export interface WidgetConfig {
 
   // Optional - Display
   mode?: "launcher" | "inline";
+  // Inline mode: show the full chat panel before the first message.
+  startExpanded?: boolean;
 
   // Optional - Citations
   includeCitations?: boolean;

@@ -9,28 +9,59 @@ from typing import Any
 
 from onyx.connectors.zoom.models import (
     ZoomInvitee,
+    ZoomMeetingDetails,
     ZoomPanelist,
     ZoomParticipant,
     ZoomPastMeetingDetails,
     ZoomRecordingEntry,
+    ZoomRecordingFile,
     ZoomRegistrant,
     ZoomSessionOccurrence,
-    ZoomTranscript,
     ZoomUser,
     ZoomWebinarDetails,
 )
 
 
-def transcript(**overrides: Any) -> ZoomTranscript:
+def recording_file(**overrides: Any) -> ZoomRecordingFile:
     fields: dict[str, Any] = {
         "meeting_id": "uaFkQyFCSwya8iNYtkAw3A==",
-        "account_id": "Cx3wERazSgup7ZWRHQM8-w",
-        "meeting_topic": "My Personal Meeting",
-        "host_id": "_0ctZtY0REqWalTmwvrdIw",
-        "transcript_created_time": "2025-06-27T13:48:24Z",
-        "can_download": True,
+        "recording_start": "2021-03-18T05:41:36Z",
+        "file_type": "TRANSCRIPT",
+        "id": "ffc44b9b-c1a2-4a9d-9c0a-1b0a01b8ff9d",
+        "file_extension": "VTT",
+        "file_size": 3260,
+        "recording_end": "2021-03-18T06:01:36Z",
+        "recording_type": "audio_transcript",
+        "status": "completed",
+        "download_url": "https://zoom.example/transcript.vtt",
     }
-    return ZoomTranscript(**(fields | overrides))
+    return ZoomRecordingFile(**(fields | overrides))
+
+
+def recording_with_transcript(
+    download_url: str | None = "https://zoom.example/transcript.vtt",
+    is_ready: bool = True,
+    meeting_topic: str = "",
+    **overrides: Any,
+) -> ZoomRecordingEntry:
+    """What Zoom answers for a session that has a transcript. The topic defaults
+    to empty so callers that care about the details fallback do not have to opt
+    out of one."""
+    return recording_entry(
+        topic=meeting_topic,
+        recording_files=[
+            recording_file(
+                download_url=download_url,
+                status="completed" if is_ready else "processing",
+            )
+        ],
+        **overrides,
+    )
+
+
+def meeting_details(**overrides: Any) -> ZoomMeetingDetails:
+    fields: dict[str, Any] = {"host_id": "_0ctZtY0REqWalTmwvrdIw"}
+    return ZoomMeetingDetails(**(fields | overrides))
 
 
 def past_meeting_details(**overrides: Any) -> ZoomPastMeetingDetails:

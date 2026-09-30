@@ -21,7 +21,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
 from onyx.db.models import ChatMessage
 from onyx.llm.exceptions import InputBudgetExceededError
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
@@ -271,7 +271,6 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     setup.new_msg_req.include_citations = True
     setup.search_params.project_id_filter = None
     setup.search_params.persona_id_filter = None
-    setup.bypass_acl = False
     setup.slack_context = None
     setup.available_files.user_file_ids = []
     setup.available_files.chat_file_ids = []
