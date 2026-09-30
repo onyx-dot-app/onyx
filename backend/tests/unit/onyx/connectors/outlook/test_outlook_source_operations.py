@@ -15,13 +15,19 @@ from msal.exceptions import MsalServiceError
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
-from onyx.connectors.outlook.models import (
+from onyx.connectors.microsoft_utils.graph_errors import (
     INVALID_AUTH_METHOD_CODE,
     INVALID_AUTHORITY_CODE,
     INVALID_CERTIFICATE_CODE,
     MISSING_CREDENTIAL_CODE,
-    OutlookAuthError,
-    OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.outlook.models import (
     OutlookRecipient,
 )
 from onyx.connectors.outlook.source_operations import (
@@ -52,7 +58,8 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     user_json,
 )
 
-MODULE = "onyx.connectors.outlook.source_operations"
+MODULE = "onyx.connectors.microsoft_utils.graph_auth"
+SOURCE_MODULE = "onyx.connectors.outlook.source_operations"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
@@ -66,7 +73,7 @@ def _gateway(
         )
     )
     client = MagicMock()
-    gateway._graph_client = client
+    gateway._gateway()._client = client
     return gateway, client
 
 
@@ -647,10 +654,11 @@ def test_certificate_method_without_a_key_is_a_missing_credential() -> None:
 
     with (
         patch(f"{MODULE}.build_msal_app") as build,
-        pytest.raises(OutlookAuthError, match="outlook_private_key"),
+        pytest.raises(OutlookAuthError) as exc_info,
     ):
         gateway.check_token()
 
+    assert exc_info.value.code == MISSING_CREDENTIAL_CODE
     build.assert_not_called()
 
 
@@ -751,7 +759,9 @@ def test_attachment_download_streams_the_value_endpoint_with_a_cap() -> None:
             f"{MODULE}.acquire_graph_token",
             return_value={"access_token": "tok"},
         ),
-        patch(f"{MODULE}.download_graph_url_with_cap", return_value=b"pdf") as download,
+        patch(
+            f"{SOURCE_MODULE}.download_graph_url_with_cap", return_value=b"pdf"
+        ) as download,
     ):
         data = gateway.download_attachment(
             mailbox_id=MAILBOX_ID, message_id="msg-1", attachment_id="att-1", cap=10
@@ -773,7 +783,7 @@ def test_attachment_download_failure_is_a_graph_error() -> None:
         patch(f"{MODULE}.build_msal_app"),
         patch(f"{MODULE}.acquire_graph_token", return_value={"access_token": "tok"}),
         patch(
-            f"{MODULE}.download_graph_url_with_cap",
+            f"{SOURCE_MODULE}.download_graph_url_with_cap",
             side_effect=http_error(404, "ErrorItemNotFound"),
         ),
         pytest.raises(OutlookGraphError) as exc_info,

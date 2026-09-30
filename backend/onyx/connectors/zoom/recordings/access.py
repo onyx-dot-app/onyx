@@ -24,7 +24,7 @@ from onyx.connectors.zoom.models import (
     ZOOM_NOT_FOUND_CODE,
     ZoomRegistrant,
 )
-from onyx.connectors.zoom.recordings.models import OccurrenceWork
+from onyx.connectors.zoom.recordings.models import OccurrenceWork, zoom_error_code
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -32,22 +32,7 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
-_PERMANENT_ERROR_CODES = frozenset(
-    {ZOOM_MEETING_TOO_OLD_CODE, ZOOM_NOT_FOUND_CODE, ZOOM_NOT_ENTITLED_CODE}
-)
-
-
-def _zoom_error_code(error: requests.HTTPError) -> str | None:
-    response = error.response
-    if response is None:
-        return None
-    try:
-        body = response.json()
-    except ValueError:
-        return None
-    if not isinstance(body, dict) or body.get("code") is None:
-        return None
-    return str(body["code"])
+_GONE_ERROR_CODES = frozenset({ZOOM_MEETING_TOO_OLD_CODE, ZOOM_NOT_FOUND_CODE})
 
 
 def is_plan_denial(error: Exception) -> bool:
@@ -57,7 +42,26 @@ def is_plan_denial(error: Exception) -> bool:
         return True
     return (
         isinstance(error, requests.HTTPError)
-        and _zoom_error_code(error) == ZOOM_NOT_ENTITLED_CODE
+        and zoom_error_code(error) == ZOOM_NOT_ENTITLED_CODE
+    )
+
+
+def session_is_gone(error: Exception) -> bool:
+    """Zoom deleted the session, or it is past the retention window. Zoom says
+    so with a 404 on some endpoints and with its own code under a 400 on others.
+
+    This is for access lists, where both readings mean the same thing: nobody
+    can be named. It is NOT a deletion oracle. Code 12702 is in the set below,
+    and it means Zoom refuses to describe a session it may still be storing, so
+    anything that deletes documents wants `definitely_absent` instead.
+    """
+    if not isinstance(error, requests.HTTPError) or error.response is None:
+        return False
+    if error.response.status_code == 404:
+        return True
+    return (
+        error.response.status_code == 400
+        and zoom_error_code(error) in _GONE_ERROR_CODES
     )
 
 
@@ -66,19 +70,7 @@ def permanently_unavailable(error: Exception) -> bool:
     plain InsufficientPermissionsError and fails the whole run so an admin fixes
     it, instead of quietly emptying every document's access list.
     """
-    if is_plan_denial(error):
-        return True
-    if not isinstance(error, requests.HTTPError):
-        return False
-    response = error.response
-    if response is None:
-        return False
-    if response.status_code == 404:
-        return True
-    return (
-        response.status_code == 400
-        and _zoom_error_code(error) in _PERMANENT_ERROR_CODES
-    )
+    return is_plan_denial(error) or session_is_gone(error)
 
 
 def approved_registrant_emails(registrants: list[ZoomRegistrant]) -> list[str]:

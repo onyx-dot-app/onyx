@@ -15,7 +15,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.connectors.models import Document
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS, WebConnector
+from onyx.connectors.web.config import WEB_CONNECTOR_VALID_SETTINGS
+from onyx.connectors.web.connector import WebConnector
 from onyx.file_processing.html_utils import ParsedHTML
 
 

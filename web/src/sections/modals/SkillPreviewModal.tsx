@@ -104,6 +104,8 @@ export default function SkillPreviewModal({
 
           {error && !isLoading && (
             <MessageCard
+              outerPadding={1}
+              innerPadding={1}
               variant="error"
               title={t("preview.loadError.title")}
               description={t("preview.loadError.description")}
@@ -114,6 +116,8 @@ export default function SkillPreviewModal({
             <Section gap={4} alignItems="stretch">
               {displayedUnavailableReason && (
                 <MessageCard
+                  outerPadding={1}
+                  innerPadding={1}
                   variant="warning"
                   title={t("preview.unavailable.title")}
                   description={displayedUnavailableReason}

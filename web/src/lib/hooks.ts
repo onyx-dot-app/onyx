@@ -44,7 +44,10 @@ import {
   updateReasoningEffortForChatSession,
   updateTemperatureOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import {
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -467,7 +470,7 @@ export function useLlmManager(
     llmProviders: allUserProviders,
     defaultText: allUserDefaultText,
     isLoading: isLoadingAllProviders,
-  } = useLLMProviders();
+  } = useLanguageModels();
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an agent selected
   const personaId = activeAgent?.id !== undefined ? activeAgent.id : undefined;
@@ -475,7 +478,7 @@ export function useLlmManager(
     llmProviders: personaProviders,
     defaultText: personaDefaultText,
     isLoading: isLoadingPersonaProviders,
-  } = useLLMProviders(personaId);
+  } = useLanguageModelsForAgent(personaId);
 
   const llmProviders =
     personaProviders !== undefined ? personaProviders : allUserProviders;

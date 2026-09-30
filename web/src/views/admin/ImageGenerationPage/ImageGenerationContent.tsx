@@ -29,7 +29,7 @@ import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 
 const NO_DEFAULT_VALUE = "__none__";
 

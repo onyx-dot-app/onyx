@@ -630,6 +630,7 @@ export enum ValidSources {
   Discord = "discord",
   Salesforce = "salesforce",
   Sharepoint = "sharepoint",
+  OneDrive = "onedrive",
   Teams = "teams",
   Outlook = "outlook",
   Zendesk = "zendesk",
@@ -659,6 +660,7 @@ export enum ValidSources {
   Braintrust = "braintrust",
   Lumapps = "lumapps",
   Canvas = "canvas",
+  Zoom = "zoom",
 
   // Craft-specific sources
   CraftFile = "craft_file",
@@ -689,6 +691,8 @@ export const validAutoSyncSources = [
   ValidSources.Outlook,
   ValidSources.Canvas,
   ValidSources.Box,
+  ValidSources.OneDrive,
+  ValidSources.Zoom,
 ] as const;
 
 // Create a type from the array elements

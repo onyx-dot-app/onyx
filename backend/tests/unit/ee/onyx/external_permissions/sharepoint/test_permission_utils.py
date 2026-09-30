@@ -3,8 +3,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from office365.runtime.client_request import ClientRequestException
+from office365.sharepoint.client_context import ClientContext
 
-from ee.onyx.external_permissions.microsoft_utils.entra_groups import EntraGroup
+from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
+    ResolvedEntraGroup,
+)
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     AZURE_AD_GROUP_PRINCIPAL_TYPE,
     SHAREPOINT_GROUP_PRINCIPAL_TYPE,
@@ -28,6 +31,8 @@ from onyx.connectors.sharepoint.connector import (
 from onyx.connectors.sharepoint.connector_utils import (
     SharepointGroup,
     SharepointPermissionCache,
+    get_sharepoint_external_access,
+    get_sharepoint_hierarchy_node_external_access,
 )
 from onyx.db.enums import HierarchyNodeType
 
@@ -67,8 +72,17 @@ def test_sharepoint_ids_avoid_list_item_lookup(mock_sleep_and_retry: MagicMock) 
         }
     ).to_sdk_driveitem(MagicMock())
 
-    assert _get_sharepoint_list_item_id(drive_item) == "42"
+    assert _get_sharepoint_list_item_id(drive_item) == 42
     mock_sleep_and_retry.assert_not_called()
+
+
+def test_list_item_id_builds_numeric_sdk_resource_path() -> None:
+    context = ClientContext("https://tenant.sharepoint.com/sites/test")
+    item = context.web.lists.get_by_id(
+        "11111111-1111-1111-1111-111111111111"
+    ).items.get_by_id(42)
+
+    assert item.resource_path.to_url().endswith("/items/GetById(42)")
 
 
 @patch(f"{MODULE}._get_azuread_groups")
@@ -233,7 +247,7 @@ def test_document_group_cycles_are_resolved_once(mock_get_group: MagicMock) -> N
 def test_azuread_groups_wrap_shared_expansion(mock_expand: MagicMock) -> None:
     """Shared Entra results come back as SharePoint principals for the cache."""
     mock_expand.return_value = (
-        {EntraGroup(id="g2", name="Nested_g2")},
+        {ResolvedEntraGroup(id="g2", name="Nested_g2")},
         {"alice@contoso.com"},
     )
 
@@ -297,10 +311,10 @@ def test_default_skips_ad_enumeration(
 
 
 @pytest.mark.parametrize(
-    ("node_type", "drive_name", "folder_server_relative_path"),
+    ("node_type", "list_id", "folder_server_relative_path"),
     [
         (HierarchyNodeType.SITE, None, None),
-        (HierarchyNodeType.DRIVE, "Shared Documents", None),
+        (HierarchyNodeType.DRIVE, "list-id", None),
         (HierarchyNodeType.FOLDER, None, "/sites/eng/Shared Documents/API"),
     ],
 )
@@ -308,7 +322,7 @@ def test_default_skips_ad_enumeration(
 def test_hierarchy_node_access_uses_securable_object(
     mock_get_access: MagicMock,
     node_type: HierarchyNodeType,
-    drive_name: str | None,
+    list_id: str | None,
     folder_server_relative_path: str | None,
 ) -> None:
     expected_access = ExternalAccess.empty()
@@ -320,7 +334,7 @@ def test_hierarchy_node_access_uses_securable_object(
         ctx,
         graph_client,
         node_type,
-        drive_name,
+        list_id,
         folder_server_relative_path,
     )
 
@@ -329,12 +343,29 @@ def test_hierarchy_node_access_uses_securable_object(
     if node_type == HierarchyNodeType.SITE:
         assert securable_object is ctx.web
     elif node_type == HierarchyNodeType.DRIVE:
-        ctx.web.lists.get_by_title.assert_called_once_with("Documents")
+        ctx.web.lists.get_by_id.assert_called_once_with("list-id")
+        ctx.web.lists.get_by_title.assert_not_called()
     else:
         ctx.web.get_folder_by_server_relative_path.assert_called_once_with(
             "/sites/eng/Shared Documents/API"
         )
     assert mock_get_access.call_args.kwargs == {"add_prefix": True}
+
+
+def test_drive_hierarchy_without_list_id_fails_without_name_lookup() -> None:
+    client_context = MagicMock()
+
+    with pytest.raises(ValueError, match="requires a list ID"):
+        get_sharepoint_hierarchy_node_external_access(
+            client_context,
+            MagicMock(),
+            SharepointPermissionCache(),
+            HierarchyNodeType.DRIVE,
+            list_id=None,
+        )
+
+    client_context.web.lists.get_by_id.assert_not_called()
+    client_context.web.lists.get_by_title.assert_not_called()
 
 
 @patch(f"{MODULE}._get_groups_and_members_recursively")
@@ -509,7 +540,7 @@ def test_site_page_url_not_duplicated(
     get_external_access_from_sharepoint(
         client_context=ctx,
         graph_client=MagicMock(),
-        drive_name=None,
+        list_id=None,
         drive_item=None,
         site_page=site_page,
     )
@@ -607,6 +638,22 @@ def test_is_public_item_skips_api_call_when_disabled() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_drive_item_without_list_id_fails_without_name_lookup() -> None:
+    client_context = MagicMock()
+
+    with pytest.raises(ValueError, match="requires a list ID"):
+        get_sharepoint_external_access(
+            ctx=client_context,
+            graph_client=MagicMock(),
+            permission_cache=SharepointPermissionCache(),
+            list_id=None,
+            drive_item=MagicMock(),
+        )
+
+    client_context.web.lists.get_by_id.assert_not_called()
+    client_context.web.lists.get_by_title.assert_not_called()
+
+
 @patch(f"{MODULE}._is_public_item", return_value=True)
 @patch(f"{MODULE}.sleep_and_retry")
 def test_drive_item_public_when_sharing_link_enabled(
@@ -620,7 +667,7 @@ def test_drive_item_public_when_sharing_link_enabled(
     result = get_external_access_from_sharepoint(
         client_context=MagicMock(),
         graph_client=MagicMock(),
-        drive_name="Documents",
+        list_id="list-id",
         drive_item=drive_item,
         site_page=None,
         treat_sharing_link_as_public=True,
@@ -646,10 +693,11 @@ def test_drive_item_falls_through_when_sharing_link_disabled(
         found_public_group=False,
     )
 
+    client_context = MagicMock()
     result = get_external_access_from_sharepoint(
-        client_context=MagicMock(),
+        client_context=client_context,
         graph_client=MagicMock(),
-        drive_name="Documents",
+        list_id="list-id",
         drive_item=MagicMock(),
         site_page=None,
         treat_sharing_link_as_public=False,
@@ -657,3 +705,5 @@ def test_drive_item_falls_through_when_sharing_link_disabled(
 
     assert result.is_public is False
     assert len(result.external_user_group_ids) > 0
+    client_context.web.lists.get_by_id.assert_called_once_with("list-id")
+    client_context.web.lists.get_by_title.assert_not_called()

@@ -41,8 +41,8 @@ import {
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
-import { modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
@@ -65,7 +65,6 @@ import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
-import { getProvider } from "@/lib/languageModels";
 import { useSettings } from "@/lib/settings/hooks";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
@@ -739,7 +738,7 @@ export function ModelSelectionField({
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
-  const { defaultText } = useAdminLLMProviders();
+  const { defaultText } = useAdminLanguageModels();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);

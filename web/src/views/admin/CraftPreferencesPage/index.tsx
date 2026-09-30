@@ -24,7 +24,7 @@ import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { DefaultModel } from "@/lib/languageModels/types";
 import {
   deleteDefaultCraftModel,
@@ -108,7 +108,7 @@ export default function CraftPreferencesPage() {
     defaultCraft,
     defaultText,
     isLoading: isLoadingModels,
-  } = useAdminLLMProviders();
+  } = useAdminLanguageModels();
   const [isSavingModel, setIsSavingModel] = useState(false);
 
   // Hidden models still resolve, so an admin can clear or replace a default
