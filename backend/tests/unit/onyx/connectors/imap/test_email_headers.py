@@ -36,3 +36,29 @@ def test_encoded_word_inside_quotes_preserves_addr() -> None:
     )
     headers = EmailHeaders.from_email_msg(msg)
     assert "noreply@example.com" in headers.sender
+
+
+def test_missing_message_id_generates_stable_id() -> None:
+    raw = (
+        b"From: TME <tme@tme.eu>\r\n"
+        b"To: <tme@mydomain.com>\r\n"
+        b"Subject: Promo\r\n"
+        b"Date: Wed, 23 Sep 2026 07:39:05 +0000\r\n"
+        b"\r\nbody\r\n"
+    )
+    headers = EmailHeaders.from_email_msg(_msg(raw))
+    assert headers.id.startswith("generated-")
+    # Same message re-fetched -> same generated id, so it dedupes.
+    assert EmailHeaders.from_email_msg(_msg(raw)).id == headers.id
+
+
+def test_missing_date_and_from_are_tolerated() -> None:
+    msg = _msg(
+        b"To: <x@example.com>\r\n"
+        b"Subject: no date, no from\r\n"
+        b"Message-ID: <3@example.com>\r\n"
+        b"\r\nbody\r\n"
+    )
+    headers = EmailHeaders.from_email_msg(msg)
+    assert headers.sender == ""
+    assert headers.date.year == 1970
