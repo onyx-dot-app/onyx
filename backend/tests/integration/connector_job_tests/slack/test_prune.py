@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -90,9 +91,12 @@ def test_slack_prune(
         user_ids=[email_id_map[user.email] for user in desired_channel_members],
     )
 
-    public_message = "Steve's favorite number is 809752"
-    private_message = "Sara's favorite number is 346794"
-    message_to_delete = "Rebecca's favorite number is 753468"
+    # Unique per run: the index is not reset between runs, and a retry must not
+    # match chunks an earlier run left behind.
+    run_tag = uuid4().hex[:8]
+    public_message = f"Steve's favorite number is 809752 ({run_tag})"
+    private_message = f"Sara's favorite number is 346794 ({run_tag})"
+    message_to_delete = f"Rebecca's favorite number is 753468 ({run_tag})"
 
     SlackManager.add_message_to_channel(
         slack_client=slack_client,

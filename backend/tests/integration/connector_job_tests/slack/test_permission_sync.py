@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -104,8 +105,11 @@ def test_slack_permission_sync(
         user_ids=[email_id_map[user.email] for user in desired_channel_members],
     )
 
-    public_message = "Steve's favorite number is 809752"
-    private_message = "Sara's favorite number is 346794"
+    # Unique per run: the index is not reset between runs, and a retry must not
+    # match chunks an earlier run left behind.
+    run_tag = uuid4().hex[:8]
+    public_message = f"Steve's favorite number is 809752 ({run_tag})"
+    private_message = f"Sara's favorite number is 346794 ({run_tag})"
 
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
@@ -284,7 +288,10 @@ def test_slack_group_permission_sync(
     )
 
     # Add a test message to the private channel
-    private_message = "This is a secret message: 987654"
+    # Unique per run: the index is not reset between runs, and a retry must not
+    # match chunks an earlier run left behind.
+    run_tag = uuid4().hex[:8]
+    private_message = f"This is a secret message: 987654 ({run_tag})"
     SlackManager.add_message_to_channel(
         slack_client=slack_client,
         channel=private_channel,
