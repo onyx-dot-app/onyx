@@ -1,3 +1,4 @@
+import type { RichStr } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
 import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-type-in-tag/components";
 
@@ -5,7 +6,7 @@ import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-ty
 export type SelectOption = {
   value: string;
   title: string;
-  description?: string;
+  description?: string | RichStr;
   icon?: IconFunctionComponent;
   disabled?: boolean;
 };

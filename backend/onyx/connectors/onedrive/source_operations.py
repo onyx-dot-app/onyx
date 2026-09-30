@@ -6,6 +6,10 @@ import requests
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.microsoft_utils.config import (
+    DEFAULT_AUTHORITY_HOST,
+    DEFAULT_GRAPH_API_HOST,
+)
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
     DriveDeltaFetchResult,
@@ -30,10 +34,6 @@ from onyx.connectors.microsoft_utils.entra import (
     fetch_entra_user,
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
-from onyx.connectors.microsoft_utils.graph_env import (
-    DEFAULT_AUTHORITY_HOST,
-    DEFAULT_GRAPH_API_HOST,
-)
 from onyx.connectors.microsoft_utils.graph_errors import (
     MISSING_CREDENTIAL_CODE,
     microsoft_error_from_exception,

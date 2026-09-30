@@ -64,11 +64,8 @@ export const OptionsList: React.FC<OptionsListProps> = ({
     (count, section) => count + section.options.length,
     0
   );
-  // A folded group withholds its rows but still shows its title, so a
-  // list of folded groups is not empty.
-  const hasFoldedGroups = sections.some((section) => section.folded);
 
-  if (totalOptions === 0 && !showCreateOption && !hasFoldedGroups) {
+  if (totalOptions === 0 && !showCreateOption) {
     // An empty SET gets the icon'd empty state; a filter that matched
     // nothing keeps the lightweight text row.
     if (emptySet) {
@@ -130,10 +127,14 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           const isFoldable = group.foldable && group.title !== undefined;
           // The title claims its stop before the rows claim theirs.
           const headerIndex = isFoldable ? globalIndex++ : -1;
+          // A folded group's rows stay mounted for the fold animation but
+          // hold no keyboard stop: no index, no highlight, no exact match.
           const rows = group.options.map((option) => {
-            const index = globalIndex++;
+            const index = group.folded ? -1 : globalIndex++;
             const isExact =
-              (markAllMatches || !exactSeen) && isExactMatch(option);
+              !group.folded &&
+              (markAllMatches || !exactSeen) &&
+              isExactMatch(option);
             if (isExact) exactSeen = true;
             return (
               <OptionItem
@@ -141,7 +142,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
                 option={option}
                 index={index}
                 fieldId={fieldId}
-                isHighlighted={index === highlightedIndex}
+                isHighlighted={index >= 0 && index === highlightedIndex}
                 isSelected={
                   selectedValues
                     ? selectedValues.has(option.value)
@@ -176,7 +177,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
                   // stays at rest, unlike a standalone foldable Divider.
                   interaction={index === highlightedIndex ? "hover" : "rest"}
                 >
-                  {rows}
+                  <div className="opal-select-group-rows">{rows}</div>
                 </Divider>
               </div>
             );

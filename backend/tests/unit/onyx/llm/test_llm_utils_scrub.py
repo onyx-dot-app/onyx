@@ -49,6 +49,9 @@ class _StubLLM(LLM):
             raise self._raise_on_invoke
         return None
 
+    def stream(self, *_: Any, **__: Any) -> Any:  # noqa: ANN401
+        raise NotImplementedError
+
 
 def _make_config(
     *,

@@ -144,6 +144,17 @@ output "redis_server_ca_certs" {
 output "postgres_server_ca_cert" {
   value = module.onyx.postgres_server_ca_cert
 }
+
+# Credentials for the chart secrets.
+output "postgres_username" {
+  value     = module.onyx.postgres_username
+  sensitive = true
+}
+
+output "redis_auth_string" {
+  value     = module.onyx.redis_auth_string
+  sensitive = true
+}
 ```
 
 On a new project, enable two APIs before the first plan. The `gke` module
@@ -194,6 +205,11 @@ Roughly: small suits pilots and small teams, medium a department or company,
 large an org-wide deployment. Node counts are for the whole pool, not per zone.
 The index pool is memory-optimised at every tier because on GCP it carries the
 document index itself.
+
+The tiers size the infrastructure only. For the pod resources at each tier, see
+the chart's [SIZING.md](../../../helm/charts/onyx/SIZING.md). Copy only the
+`resources` values. Its OpenSearch `nodeSelector` is for EKS; on GKE use the one
+in [step 4](#4-send-the-document-index-to-its-own-node-pool).
 
 ### Using an existing network
 
@@ -352,8 +368,11 @@ and the Helm install happens afterwards. So the release joins that namespace
 and does not create one:
 
 ```bash
-helm install onyx onyx/onyx --namespace onyx -f values.yaml
+helm install onyx onyx/onyx --namespace onyx --version <chart version> -f values.yaml
 ```
+
+Always set `--version`, and set `global.version` in the values to the Onyx
+release. Both default to the newest release.
 
 Set `create_workload_namespace = false` if something else already creates it.
 
@@ -397,6 +416,9 @@ identity from step 1.
 ### 3. Point Onyx at Cloud SQL and Memorystore
 
 ```yaml
+global:
+  version: "v4.8.1"              # the Onyx release; the default is latest
+
 postgresql:
   enabled: false
 
@@ -409,19 +431,49 @@ configMap:
   POSTGRES_DB: "onyx"            # postgres_db_name output
   REDIS_HOST: "<redis_host output>"
   REDIS_PORT: "6378"             # redis_port output; 6378 is the TLS port
+  WEB_DOMAIN: "https://onyx.example.com"   # the address users open
 
 auth:
   postgresql:
     existingSecret: "onyx-postgresql"   # keys: username, password
   redis:
     existingSecret: "onyx-redis"        # key: redis_password = redis_auth_string output
+  opensearch:
+    existingSecret: "onyx-opensearch"   # keys: opensearch_admin_username, opensearch_admin_password
+  userauth:
+    enabled: true
+    existingSecret: "onyx-userauth"     # key: user_auth_secret (openssl rand -hex 32)
+  objectstorage:
+    enabled: false                      # GCS uses Workload Identity, not S3 keys
 ```
+
+Without the last three entries, `helm install` fails. The chart requires an
+OpenSearch admin password and S3 keys, and Onyx needs `USER_AUTH_SECRET`. The
+OpenSearch password needs uppercase, lowercase, a digit and a special
+character.
 
 Set `POSTGRES_DB`. Without it, Onyx uses the `postgres` database that Cloud SQL
 ships, and the `onyx` database stays empty.
 
-Create the two secrets in the `onyx` namespace from the Terraform outputs.
-Do not put the passwords in `values.yaml`.
+Create the secrets in the `onyx` namespace. Do not put the passwords in
+`values.yaml`. Terraform supplies the database and Redis credentials. Generate
+the OpenSearch and user-auth secrets:
+
+```bash
+kubectl -n onyx create secret generic onyx-postgresql \
+  --from-literal=username="$(terraform output -raw postgres_username)" \
+  --from-literal=password='<postgres_password>'
+kubectl -n onyx create secret generic onyx-redis \
+  --from-literal=redis_password="$(terraform output -raw redis_auth_string)"
+kubectl -n onyx create secret generic onyx-opensearch \
+  --from-literal=opensearch_admin_username=admin \
+  --from-literal=opensearch_admin_password='Os1!'"$(openssl rand -hex 16)"
+kubectl -n onyx create secret generic onyx-userauth \
+  --from-literal=user_auth_secret="$(openssl rand -hex 32)"
+```
+
+OpenSearch reads its admin password one time, at first start. A later change
+to the secret does not change the password.
 
 **Redis uses TLS by default.** `redis_transit_encryption_enabled` is `true`, so
 Memorystore serves TLS on port 6378 only. Turn on the chart's `redisTls`. It
@@ -459,6 +511,11 @@ postgresTls:
   caConfigMapName: onyx-postgres-ca
   caKey: ca.crt
 ```
+
+Do not turn on `postgresTls` with Onyx v4.8.x or earlier. Those versions reject
+the Cloud SQL server certificate (`Missing Authority Key Identifier`), and the
+API server crash-loops. Use `verify-ca`: `verify-full` fails, because the
+Cloud SQL certificate does not name the private IP address.
 
 ### 4. Send the document index to its own node pool
 
