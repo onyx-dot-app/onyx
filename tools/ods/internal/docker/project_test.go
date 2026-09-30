@@ -196,6 +196,7 @@ func TestResolvedPorts_AppEnv(t *testing.T) {
 		"OPENSEARCH_REST_API_PORT":  "9200",
 		"MODEL_SERVER_PORT":         "9000",
 		"S3_ENDPOINT_URL":           "http://localhost:9004",
+		"S3_LEGACY_ENDPOINT_URL":    "http://localhost:9005",
 		"CODE_INTERPRETER_BASE_URL": "http://localhost:8000",
 	}
 

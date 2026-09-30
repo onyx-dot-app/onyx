@@ -49,9 +49,9 @@ var InfraServices = []ServiceSpec{
 	{Name: "object-store", Ports: []PortSpec{
 		{ContainerPort: 8333, DefaultHost: 9004, ComposeVar: "OBJECT_STORE_HOST_PORT", AppVar: "S3_ENDPOINT_URL", AppFormat: "http://localhost:%d"},
 	}},
-	// Earlier releases' store, published so its files stay reachable from the host.
+	// Earlier releases' store. The app writes to it too while it holds files.
 	{Name: "minio", Ports: []PortSpec{
-		{ContainerPort: 9000, DefaultHost: 9005, ComposeVar: "MINIO_API_HOST_PORT"},
+		{ContainerPort: 9000, DefaultHost: 9005, ComposeVar: "MINIO_API_HOST_PORT", AppVar: "S3_LEGACY_ENDPOINT_URL", AppFormat: "http://localhost:%d"},
 	}},
 	{Name: "indexing_model_server", Ports: []PortSpec{}},
 	{Name: "code-interpreter", Ports: []PortSpec{

@@ -225,6 +225,7 @@ var composeAppEnv = map[string]string{
 	"OPENSEARCH_REST_API_PORT":  "19200",
 	"MODEL_SERVER_PORT":         "19000",
 	"S3_ENDPOINT_URL":           "http://localhost:18333",
+	"S3_LEGACY_ENDPOINT_URL":    "http://localhost:19000",
 	"CODE_INTERPRETER_BASE_URL": "http://localhost:18000",
 }
 

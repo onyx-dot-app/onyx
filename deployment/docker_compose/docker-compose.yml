@@ -97,6 +97,8 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      # While set, writes and deletes also reach earlier releases' MinIO and reads that miss fall back to it.
+      - S3_LEGACY_ENDPOINT_URL=${S3_LEGACY_ENDPOINT_URL:-}
       # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
       # Use --include-craft with install script, or manually set in .env file
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
@@ -181,6 +183,7 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_LEGACY_ENDPOINT_URL=${S3_LEGACY_ENDPOINT_URL:-}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_BOT_INVOKE_CHAR=${DISCORD_BOT_INVOKE_CHAR:-!}
       # API Server connection for Discord bot message processing
@@ -572,7 +575,7 @@ services:
       retries: 12
 
   minio:
-    # Earlier releases' store. A .env that still names it keeps using it.
+    # Earlier releases' store. While S3_LEGACY_ENDPOINT_URL names it, writes reach it too.
     # MinIO no longer publishes images, so this is our digest-pinned mirror of the last multi-arch build.
     # -cpuv1 also runs on x86-64-v1 CPUs.
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/onyxdotapp/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5
