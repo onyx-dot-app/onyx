@@ -90,9 +90,11 @@ export function CredentialsConfigurer({
     (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV);
   const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
 
-  const refresh = () => refreshSourceCredentials(connector);
+  function refresh() {
+    refreshSourceCredentials(connector);
+  }
 
-  const onDeleteCredential = async (credential: Credential<any | null>) => {
+  async function onDeleteCredential(credential: Credential<any | null>) {
     const response = await deleteCredential(credential.id, true);
     if (response.ok) {
       toast.success(t("add.credentialDeleted.toast"));
@@ -100,15 +102,17 @@ export function CredentialsConfigurer({
       const errorData = await response.json();
       toast.error(errorData.detail || errorData.message);
     }
-  };
+  }
 
-  const onSwap = async (selectedCredential: Credential<any>) => {
+  async function onSwap(selectedCredential: Credential<any>) {
     onCredentialChange(selectedCredential);
     toast.success(t("add.credentialSwapped.toast"));
     refresh();
-  };
+  }
 
-  const closeCredentialForm = () => setCredentialCreationMethod(null);
+  function closeCredentialForm() {
+    setCredentialCreationMethod(null);
+  }
 
   /**
    * The creation form for one method, rendered inside that method's card.
@@ -146,7 +150,7 @@ export function CredentialsConfigurer({
     );
   }
 
-  const attemptOauthRedirect = async () => {
+  async function attemptOauthRedirect() {
     try {
       const redirectUrl = await getConnectorOauthRedirectUrl(connector, {});
       window.location.href = redirectUrl;
@@ -155,11 +159,11 @@ export function CredentialsConfigurer({
         error instanceof Error ? error.message : t("add.oauthStartFailed.toast")
       );
     }
-  };
+  }
 
-  const openCredentialCreationMethod = async (
+  async function openCredentialCreationMethod(
     method: CredentialCreationMethod
-  ) => {
+  ) {
     if (
       method === CredentialCreationMethod.OAuth &&
       oauthDetails &&
@@ -172,10 +176,10 @@ export function CredentialsConfigurer({
       return;
     }
     setCredentialCreationMethod(method);
-  };
+  }
 
   // Gets an auth url from the server and sends the user to it in a popup.
-  const handleAuthorize = async () => {
+  async function handleAuthorize() {
     setIsAuthorizing(true);
     try {
       // Read at click time: the handler only ever runs in the browser, and
@@ -199,7 +203,7 @@ export function CredentialsConfigurer({
     } finally {
       setIsAuthorizing(false);
     }
-  };
+  }
 
   if (!credentials) {
     return null;
