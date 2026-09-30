@@ -5251,6 +5251,22 @@
         "targetUrlRequired": "La URL de destino es obligatoria",
         "urlInvalid": "Debe ser una URL válida"
       },
+      "vectorQuantization": {
+        "description": "Almacena los vectores de los documentos con menos bits para usar menos memoria. Menos bits pueden reducir la calidad de la búsqueda.",
+        "none": {
+          "description": "Precisión completa de 32 bits.",
+          "label": "Ninguna"
+        },
+        "scalar1Bit": {
+          "description": "32 veces menos memoria. Requiere OpenSearch 3.6 o posterior.",
+          "label": "1 bit"
+        },
+        "scalar7Bit": {
+          "description": "4 veces menos memoria. Casi sin pérdida de calidad de búsqueda.",
+          "label": "7 bits"
+        },
+        "title": "Cuantización de vectores"
+      },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Este conector se eliminará} other {Estos # conectores se eliminarán}}",
         "submit": "Eliminar y reindexar",

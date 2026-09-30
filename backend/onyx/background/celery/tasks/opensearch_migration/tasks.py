@@ -207,7 +207,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
                 tenant_state=tenant_state,
                 index_name=search_settings.index_name,
                 embedding_dim=indexing_setting.final_embedding_dim,
-                embedding_precision=indexing_setting.embedding_precision,
+                vector_quantization=indexing_setting.vector_quantization,
             )
             vespa_document_index = VespaDocumentIndex(
                 index_name=search_settings.index_name,

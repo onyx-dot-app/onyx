@@ -53,12 +53,14 @@ import {
 } from "@opal/icons";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { InputSingleSelect } from "@opal/components";
+import { InputSingleSelectField } from "@opal/form";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import {
   EmbeddingProviderName,
   SwitchoverType,
+  VectorQuantization,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingModelRequest,
@@ -615,6 +617,7 @@ function EmbeddingModelCard({
 interface IndexSettingsFormValues extends EmbeddingModelSelection {
   enable_contextual_rag: boolean;
   contextual_rag_model_configuration_id: number | null;
+  vector_quantization: VectorQuantization;
   image_processing_enabled: boolean;
   image_processing_model_configuration_id: number | null;
   image_processing_max_size_mb: number;
@@ -647,6 +650,8 @@ interface IndexSettingsChanges {
   contextualToggleChanged: boolean;
   /** Contextual Retrieval stays on and points at a different model. */
   contextualModelChanged: boolean;
+  /** Part of the index mapping, so it always needs a re-index. */
+  quantizationChanged: boolean;
   imageChanged: boolean;
   /** Any of the above. Formik's `dirty` also counts a change undone by hand. */
   any: boolean;
@@ -676,15 +681,19 @@ function classifyChanges(
     values.contextual_rag_model_configuration_id !== null &&
     values.contextual_rag_model_configuration_id !==
       initialValues.contextual_rag_model_configuration_id;
+  const quantizationChanged =
+    values.vector_quantization !== initialValues.vector_quantization;
   return {
     embeddingChanged,
     contextualToggleChanged,
     contextualModelChanged,
+    quantizationChanged,
     imageChanged,
     any:
       embeddingChanged ||
       contextualToggleChanged ||
       contextualModelChanged ||
+      quantizationChanged ||
       imageChanged,
   };
 }
@@ -697,7 +706,11 @@ function classifyChanges(
 type BannerMode = "reindex" | "contextualModelOnly" | "imageOnly";
 
 function bannerModeFor(changes: IndexSettingsChanges): BannerMode {
-  if (changes.embeddingChanged || changes.contextualToggleChanged) {
+  if (
+    changes.embeddingChanged ||
+    changes.contextualToggleChanged ||
+    changes.quantizationChanged
+  ) {
     return "reindex";
   }
   if (changes.contextualModelChanged) return "contextualModelOnly";
@@ -908,6 +921,8 @@ export default function IndexSettingsPage() {
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
       contextual_rag_model_configuration_id:
         searchSettings?.contextual_rag_model_configuration_id ?? null,
+      vector_quantization:
+        searchSettings?.vector_quantization ?? VectorQuantization.NONE,
       image_processing_enabled:
         settings.image_extraction_and_analysis_enabled ?? false,
       image_processing_model_configuration_id: captioningModelConfigId,
@@ -1172,6 +1187,7 @@ export default function IndexSettingsPage() {
                 contextualRagModelConfigurationId: values.enable_contextual_rag
                   ? values.contextual_rag_model_configuration_id
                   : null,
+                vectorQuantization: values.vector_quantization,
                 acknowledgedWontPortCcPairIds: frozenWontPortRef.current.map(
                   (c) => c.cc_pair_id
                 ),
@@ -1271,6 +1287,9 @@ export default function IndexSettingsPage() {
                 changes.contextualModelChanged
                   ? "warning"
                   : undefined;
+              const quantizationCardBorder = changes.quantizationChanged
+                ? "warning"
+                : undefined;
               const imageCardBorder = captioningModelMissing
                 ? "warning"
                 : changes.imageChanged
@@ -2000,6 +2019,55 @@ export default function IndexSettingsPage() {
                               </Card>
                             </Tabs>
                           )
+                        )}
+
+                        {!NEXT_PUBLIC_CLOUD_ENABLED && (
+                          <Card
+                            border="solid"
+                            borderColor={quantizationCardBorder}
+                            rounding={4}
+                          >
+                            <InputHorizontal
+                              title={t("vectorQuantization.title")}
+                              description={t("vectorQuantization.description")}
+                              withLabel
+                            >
+                              <InputSingleSelectField
+                                name="vector_quantization"
+                                defaultOption={VectorQuantization.NONE}
+                                placeholder={tInputSelect(
+                                  "placeholder.fallback"
+                                )}
+                                options={[
+                                  {
+                                    value: VectorQuantization.NONE,
+                                    title: t("vectorQuantization.none.label"),
+                                    description: t(
+                                      "vectorQuantization.none.description"
+                                    ),
+                                  },
+                                  {
+                                    value: VectorQuantization.SCALAR_7_BIT,
+                                    title: t(
+                                      "vectorQuantization.scalar7Bit.label"
+                                    ),
+                                    description: t(
+                                      "vectorQuantization.scalar7Bit.description"
+                                    ),
+                                  },
+                                  {
+                                    value: VectorQuantization.SCALAR_1_BIT,
+                                    title: t(
+                                      "vectorQuantization.scalar1Bit.label"
+                                    ),
+                                    description: t(
+                                      "vectorQuantization.scalar1Bit.description"
+                                    ),
+                                  },
+                                ]}
+                              />
+                            </InputHorizontal>
+                          </Card>
                         )}
                       </GeneralLayouts.Section>
 
