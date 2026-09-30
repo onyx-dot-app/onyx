@@ -25,7 +25,7 @@ import {
 } from "@/lib/types";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
+import { useSourceCredentials } from "@/lib/connectors/hooks";
 import type { Credential } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { ConnectorSourceCard } from "@/lib/connectors/components";
@@ -147,10 +147,7 @@ export default function ConnectorsPage() {
   const { appName } = settings;
 
   // Fetch Slack credentials to determine navigation behavior
-  const { data: slackCredentials } = useSWR<Credential<any>[]>(
-    buildSimilarCredentialInfoURL(ValidSources.Slack),
-    errorHandlingFetcher
-  );
+  const { data: slackCredentials } = useSourceCredentials(ValidSources.Slack);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 

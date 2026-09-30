@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
 import { useFederatedConnectors, usePublicCredentials } from "@/lib/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import type {
+  AnyCredential,
   Credential,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
   GoogleDriveCredentialJson,
   GoogleDriveServiceAccountCredentialJson,
   OAuthDetails,
+  SourceCredentialsResult,
 } from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -23,6 +25,9 @@ import type {
   ValidSources,
 } from "@/lib/types";
 
+/** How often the credential lists re-poll, in milliseconds. */
+const CREDENTIALS_REFRESH_INTERVAL_MS = 5000;
+
 /** The OAuth capabilities of a source: whether it supports OAuth, manual credentials, and any extra fields. */
 export function useOAuthDetails(sourceType: ValidSources) {
   return useSWR<OAuthDetails>(
@@ -32,6 +37,30 @@ export function useOAuthDetails(sourceType: ValidSources) {
       shouldRetryOnError: false,
     }
   );
+}
+
+/**
+ * Every credential this admin can see for one source, refreshed on a timer
+ * so a credential created elsewhere appears without a reload.
+ *
+ * The endpoint already filters by permission, so everything it returns is
+ * the caller's to edit or delete; there is no narrower "editable" list.
+ */
+export function useSourceCredentials(
+  sourceType: ValidSources
+): SourceCredentialsResult {
+  return useSWR<AnyCredential[], Error>(
+    SWR_KEYS.similarCredentials(sourceType),
+    errorHandlingFetcher,
+    { refreshInterval: CREDENTIALS_REFRESH_INTERVAL_MS }
+  );
+}
+
+/** Re-fetches what {@link useSourceCredentials} holds for one source. */
+export function refreshSourceCredentials(
+  sourceType: ValidSources
+): Promise<AnyCredential[] | undefined> {
+  return mutate(SWR_KEYS.similarCredentials(sourceType));
 }
 
 /**

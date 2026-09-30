@@ -4,7 +4,11 @@ import { FetchError, errorHandlingFetcher } from "@/lib/fetcher";
 import type { Credential } from "@/lib/connectors/types";
 import type { ConnectorSnapshot } from "@/lib/connectors/types";
 import { ValidSources } from "@/lib/types";
-import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
+import {
+  refreshSourceCredentials,
+  useSourceCredentials,
+} from "@/lib/connectors/hooks";
+import type { SourceCredentialsResult } from "@/lib/connectors/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 // Constants for service names to avoid typos
@@ -39,13 +43,7 @@ export const parseOauthAppCredentialJson = (
 
 export const useGoogleCredentials = (
   source: ValidSources.Gmail | ValidSources.GoogleDrive
-) => {
-  return useSWR<Credential<any>[]>(
-    buildSimilarCredentialInfoURL(source),
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
-  );
-};
+): SourceCredentialsResult => useSourceCredentials(source);
 
 export const useConnectorsByCredentialId = (credential_id: number | null) => {
   let url: string | null = null;
@@ -91,5 +89,5 @@ export const checkConnectorsExist = (
 export const refreshAllGoogleData = (
   source: ValidSources.Gmail | ValidSources.GoogleDrive
 ) => {
-  mutate(buildSimilarCredentialInfoURL(source));
+  refreshSourceCredentials(source);
 };

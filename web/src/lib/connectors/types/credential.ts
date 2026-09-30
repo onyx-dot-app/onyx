@@ -1,3 +1,5 @@
+import type { SWRResponse } from "swr";
+
 import type { ValidSources } from "@/lib/types";
 import type { TypedFile } from "../fileTypes";
 
@@ -51,3 +53,19 @@ export interface Credential<T> extends CredentialBase<T> {
   time_created: string;
   time_updated: string;
 }
+
+/**
+ * A credential as the UI handles it, with no constraint on the shape of its
+ * secret. Credential forms are built from per-source templates, so the call
+ * sites that only list, pick or delete a credential never know that shape.
+ */
+export type AnyCredential = Credential<Record<string, unknown>>;
+
+/**
+ * What `useSourceCredentials` returns: every credential the current admin
+ * can see for one source.
+ *
+ * `data` is undefined until the first response lands. The endpoint filters
+ * by permission, so each entry is the caller's to edit and delete.
+ */
+export type SourceCredentialsResult = SWRResponse<AnyCredential[], Error>;

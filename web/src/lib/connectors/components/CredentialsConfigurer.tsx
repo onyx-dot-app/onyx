@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import useSWR, { mutate } from "swr";
 import { useTranslations } from "next-intl";
 import { Button, Card, SelectCard, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
 import type { Credential } from "@/lib/connectors/types";
-import { useOAuthDetails } from "@/lib/connectors/hooks";
+import {
+  refreshSourceCredentials,
+  useOAuthDetails,
+  useSourceCredentials,
+} from "@/lib/connectors/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { deleteCredential } from "@/lib/credential";
@@ -58,16 +59,7 @@ export function CredentialsConfigurer({
   const t = useTranslations("admin.connectorsList");
   const settings = useSettings();
 
-  const { data: credentials } = useSWR<Credential<any>[]>(
-    buildSimilarCredentialInfoURL(connector),
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
-  );
-  const { data: editableCredentials } = useSWR<Credential<any>[]>(
-    buildSimilarCredentialInfoURL(connector, true),
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
-  );
+  const { data: credentials } = useSourceCredentials(connector);
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
     useOAuthDetails(connector);
 
@@ -102,11 +94,8 @@ export function CredentialsConfigurer({
     oauthSupportedSources.includes(connector) &&
     (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV);
   const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
-  const showExplicitCredentialMethods = credentialCreationMethods.length > 1;
 
-  const refresh = () => {
-    mutate(buildSimilarCredentialInfoURL(connector));
-  };
+  const refresh = () => refreshSourceCredentials(connector);
 
   const onDeleteCredential = async (credential: Credential<any | null>) => {
     const response = await deleteCredential(credential.id, true);
@@ -217,7 +206,7 @@ export function CredentialsConfigurer({
     }
   };
 
-  if (!credentials || !editableCredentials) {
+  if (!credentials) {
     return null;
   }
 
@@ -258,7 +247,6 @@ export function CredentialsConfigurer({
             accessType={accessType}
             defaultedCredential={currentCredential!}
             credentials={credentials}
-            editableCredentials={editableCredentials}
             onDeleteCredential={onDeleteCredential}
             onSwitch={onSwap}
           />

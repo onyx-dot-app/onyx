@@ -20,7 +20,6 @@ import { Button } from "@opal/components";
 import { canEditCredentialWithForm } from "@/lib/credentials/utils";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
-  editableCredentials: Credential<any>[];
   onSelectCredential: (credential: Credential<any> | null) => void;
   currentCredentialId?: number;
   onDeleteCredential: (credential: Credential<any>) => void;
@@ -29,7 +28,6 @@ interface CredentialSelectionTableProps {
 
 function CredentialSelectionTable({
   credentials,
-  editableCredentials,
   onEditCredential,
   onSelectCredential,
   currentCredentialId,
@@ -41,26 +39,13 @@ function CredentialSelectionTable({
     number | null
   >(null);
 
-  // rkuo: this appears to merge editableCredentials into credentials so we get a single list
-  // of credentials to display
-  // Pretty sure this merging should be done outside of this UI component
-  const allCredentials = React.useMemo(() => {
-    const credMap = new Map(editableCredentials.map((cred) => [cred.id, cred]));
-    credentials.forEach((cred) => {
-      if (!credMap.has(cred.id)) {
-        credMap.set(cred.id, cred);
-      }
-    });
-    return Array.from(credMap.values());
-  }, [credentials, editableCredentials]);
-
   const handleSelectCredential = (credentialId: number) => {
     const newSelectedId =
       selectedCredentialId === credentialId ? null : credentialId;
     setSelectedCredentialId(newSelectedId);
 
     const selectedCredential =
-      allCredentials.find((cred) => cred.id === newSelectedId) || null;
+      credentials.find((cred) => cred.id === newSelectedId) || null;
     onSelectCredential(selectedCredential);
   };
 
@@ -94,17 +79,15 @@ function CredentialSelectionTable({
           </tr>
         </thead>
 
-        {allCredentials.length > 0 && (
+        {credentials.length > 0 && (
           <tbody className="w-full">
-            {allCredentials.map((credential, ind) => {
+            {credentials.map((credential, ind) => {
               const selected = currentCredentialId
                 ? credential.id == (selectedCredentialId || currentCredentialId)
                 : false;
-              const editable = editableCredentials.some(
-                (editableCredential) => editableCredential.id === credential.id
-              );
-              const formEditable =
-                editable && canEditCredentialWithForm(credential);
+              // Everything the server returns is the caller's to change:
+              // `similar-credentials` already filters by permission.
+              const formEditable = canEditCredentialWithForm(credential);
               return (
                 <tr
                   key={credential.id}
@@ -136,7 +119,7 @@ function CredentialSelectionTable({
                   </td>
                   <td className="p-2 flex gap-x-2 content-center mt-auto">
                     <Button
-                      disabled={selected || !editable}
+                      disabled={selected}
                       onClick={async () => {
                         onDeleteCredential(credential);
                       }}
@@ -159,7 +142,7 @@ function CredentialSelectionTable({
         )}
       </table>
 
-      {allCredentials.length == 0 && (
+      {credentials.length == 0 && (
         <p className="mt-4">{t("credentials.table.empty.message")}</p>
       )}
     </div>
@@ -171,7 +154,6 @@ export interface ModifyCredentialProps {
   showIfEmpty?: boolean;
   attachedConnector?: Connector<any>;
   credentials: Credential<any>[];
-  editableCredentials: Credential<any>[];
   defaultedCredential?: Credential<any>;
   accessType: AccessType;
   onSwap?: (
@@ -190,7 +172,6 @@ export default function ModifyCredential({
   showIfEmpty,
   attachedConnector,
   credentials,
-  editableCredentials,
   defaultedCredential,
   accessType,
   onSwap,
@@ -205,7 +186,7 @@ export default function ModifyCredential({
   const [confirmDeletionCredential, setConfirmDeletionCredential] =
     useState<null | Credential<any>>(null);
 
-  if (!credentials || !editableCredentials) return null;
+  if (!credentials) return null;
 
   return (
     <>
@@ -259,7 +240,6 @@ export default function ModifyCredential({
             defaultedCredential ? defaultedCredential.id : undefined
           }
           credentials={credentials}
-          editableCredentials={editableCredentials}
           onSelectCredential={(credential: Credential<any> | null) => {
             if (credential && onSwitch) {
               onSwitch(credential);
