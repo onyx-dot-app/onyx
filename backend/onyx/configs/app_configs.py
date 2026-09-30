@@ -2145,6 +2145,11 @@ S3_LEGACY_AWS_SECRET_ACCESS_KEY = (
 # so writes from app pods still on the old release are picked up too.
 LEGACY_COPY_SETTLE_SECONDS = int(os.environ.get("LEGACY_COPY_SETTLE_SECONDS") or 600)
 LEGACY_COPY_WORKERS = int(os.environ.get("LEGACY_COPY_WORKERS") or 16)
+# A multi-tenant dev checkout keeps its file records in tenant schemas, which
+# the copy does not read, so `ods object-store migrate` copies every object.
+LEGACY_COPY_ALL_OBJECTS = (
+    os.environ.get("LEGACY_COPY_ALL_OBJECTS", "").lower() == "true"
+)
 
 # GCS (Google Cloud Storage) Configuration
 GCS_FILE_STORE_BUCKET_NAME = os.environ.get("GCS_FILE_STORE_BUCKET_NAME") or None

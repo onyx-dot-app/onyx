@@ -308,9 +308,12 @@ func runCompose(profile string, opts *ComposeOptions) error {
 
 		if profile == "dev" || profile == "multitenant" {
 			// Dev runs the object store only; `ods object-store migrate` is
-			// the one command that starts MinIO.
-			if err := setEnvValue("MINIO_REPLICAS", "0"); err != nil {
-				return err
+			// the one command that starts MinIO. The compose files still
+			// default the app to MinIO for installs that predate the store.
+			for k, v := range map[string]string{"MINIO_REPLICAS": "0", "S3_ENDPOINT_URL": "http://object-store:8333"} {
+				if err := setEnvValue(k, v); err != nil {
+					return err
+				}
 			}
 			ports, err := docker.FindAvailablePorts()
 			if err != nil {
@@ -329,7 +332,8 @@ func runCompose(profile string, opts *ComposeOptions) error {
 	if opts.Down {
 		args = append(args, "down")
 		if opts.Infra {
-			args = append(args, docker.InfraServiceNames()...)
+			// MinIO is not infra, but a migrate may have left it running.
+			args = append(append(args, docker.InfraServiceNames()...), "minio")
 		}
 	} else {
 		args = append(args, "up", "-d")

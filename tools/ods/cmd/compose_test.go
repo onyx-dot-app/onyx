@@ -91,6 +91,7 @@ func TestComposeCommand(t *testing.T) {
 			wantEnv: map[string]string{
 				"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES": "false",
 				"MINIO_REPLICAS":             "0",
+				"S3_ENDPOINT_URL":            "http://object-store:8333",
 				"POSTGRES_HOST_PORT":         "25432",
 				"REDIS_HOST_PORT":            "26379",
 				"OPENSEARCH_HOST_PORT":       "29200",
@@ -105,7 +106,7 @@ func TestComposeCommand(t *testing.T) {
 			name:       "multitenant down stops infra without touching .env",
 			args:       []string{"multitenant", "--down", "--infra"},
 			initialEnv: "KEEP=1\n",
-			wantCall:   "compose -p ods-proj -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.multitenant.yml --profile s3-filestore down " + composeInfraServices,
+			wantCall:   "compose -p ods-proj -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.multitenant.yml --profile s3-filestore down " + composeInfraServices + " minio",
 			wantEnv:    map[string]string{"KEEP": "1"},
 			wantTag:    "unset",
 		},

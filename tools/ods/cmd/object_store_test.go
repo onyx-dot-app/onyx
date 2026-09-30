@@ -30,7 +30,7 @@ func TestObjectStoreMigrate_copiesThenStopsMinio(t *testing.T) {
 	bin := composeFakeBin(t)
 	root := objectStoreRepo(t, bin)
 	uvEnv := filepath.Join(bin, "uv.env")
-	composeFakeTool(t, bin, "uv", `echo "$S3_ENDPOINT_URL $S3_LEGACY_ENDPOINT_URL $LEGACY_COPY_SETTLE_SECONDS" > "`+uvEnv+`"`)
+	composeFakeTool(t, bin, "uv", `echo "$S3_ENDPOINT_URL $S3_LEGACY_ENDPOINT_URL $LEGACY_COPY_ALL_OBJECTS" > "`+uvEnv+`"`)
 	envPath := filepath.Join(root, ".vscode", ".env")
 	writeFile(t, envPath, "POSTGRES_PORT=1\nS3_ENDPOINT_URL=http://localhost:9\nS3_LEGACY_ENDPOINT_URL=http://localhost:8\n")
 
@@ -55,11 +55,11 @@ func TestObjectStoreMigrate_copiesThenStopsMinio(t *testing.T) {
 	if got := composeReadFile(t, filepath.Join(bin, "docker.env")); got != "1 0\n1 0\n" {
 		t.Fatalf("expected the MinIO env on both compose calls, got %q", got)
 	}
-	if got := composeCalls(t, bin, "uv"); !slices.Equal(got, []string{"run python -m onyx.file_store.legacy_copy"}) {
-		t.Fatalf("expected the legacy copy, got %q", got)
+	if got := composeCalls(t, bin, "uv"); !slices.Equal(got, []string{"run python -m onyx.file_store.legacy_copy --retire"}) {
+		t.Fatalf("expected the legacy copy in retire mode, got %q", got)
 	}
-	// The discovered ports beat the .env file, and the settle window is skipped.
-	if got := composeReadFile(t, uvEnv); got != "http://localhost:9004 http://localhost:9005 0\n" {
+	// The discovered ports beat the .env file, and every object is copied.
+	if got := composeReadFile(t, uvEnv); got != "http://localhost:9004 http://localhost:9005 true\n" {
 		t.Fatalf("copy ran with env %q", got)
 	}
 	if got := composeReadFile(t, envPath); got != "POSTGRES_PORT=1\nS3_ENDPOINT_URL=http://localhost:9\n" {

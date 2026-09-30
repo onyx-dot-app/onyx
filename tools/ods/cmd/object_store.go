@@ -43,9 +43,11 @@ func newObjectStoreMigrateCommand() *cobra.Command {
 
 The dev stack runs the object store only. A checkout that used MinIO before it
 still has its files in the minio_data volume, and this command moves them
-across once: it starts MinIO, runs the app's legacy copy against it with the
-settle window skipped (nothing else writes to a dev MinIO), drops
-S3_LEGACY_ENDPOINT_URL from .vscode/.env so the app never writes to both
+across once: it starts MinIO, retires it with the app's legacy copy (every
+object is copied, since a multitenant checkout keeps its file records in
+tenant schemas; a quiet minute then confirms nothing still writes to MinIO
+alone, and the retired marker stops running backend processes from using it),
+drops S3_LEGACY_ENDPOINT_URL from .vscode/.env so the app never writes to both
 stores, and stops MinIO. The infra stack must be running. A failed copy leaves
 MinIO running and .vscode/.env untouched, so fix the cause and rerun.
 
@@ -97,16 +99,15 @@ func runObjectStoreMigrate(keepMinio bool) error {
 		return err
 	}
 	objectStore := docker.ObjectStore.Ports[0]
-	// Nothing else writes to a dev MinIO, so one clean pass is the whole copy.
 	overrides := []string{
 		objectStore.AppVar + "=" + objectStore.AppValue(objectStorePort),
 		fmt.Sprintf("%s=http://localhost:%d", legacyEndpointVar, minioPort),
-		"LEGACY_COPY_SETTLE_SECONDS=0",
+		"LEGACY_COPY_ALL_OBJECTS=true",
 	}
 	env := mergeEnv(overrides, mergeEnv(os.Environ(), fileVars))
 
-	log.Infof("Copying MinIO (localhost:%d) into the object store (localhost:%d)...", minioPort, objectStorePort)
-	copyCmd := exec.Command("uv", "run", "python", "-m", "onyx.file_store.legacy_copy")
+	log.Infof("Copying MinIO (localhost:%d) into the object store (localhost:%d) and retiring it...", minioPort, objectStorePort)
+	copyCmd := exec.Command("uv", "run", "python", "-m", "onyx.file_store.legacy_copy", "--retire")
 	copyCmd.Dir = filepath.Join(root, "backend")
 	copyCmd.Stdout = os.Stdout
 	copyCmd.Stderr = os.Stderr

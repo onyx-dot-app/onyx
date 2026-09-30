@@ -223,20 +223,25 @@ ods backend model_server --port 9001
 ### `object-store migrate` - Move a Dev MinIO's Files to the Object Store
 
 The dev stack runs the object store (SeaweedFS) only: `ods compose dev` keeps
-MinIO at zero replicas and `ods env` drops `S3_LEGACY_ENDPOINT_URL`. A checkout
-that used MinIO before the object store still has its files in the
-`<project>_minio_data` volume. This command moves them across once and leaves
-MinIO stopped, so the app writes to one store only.
+MinIO at zero replicas and points the app at the object store, and `ods env`
+drops `S3_LEGACY_ENDPOINT_URL`. A checkout that used MinIO before the object
+store still has its files in the `<project>_minio_data` volume. This command
+moves them across once and leaves MinIO stopped, so the app writes to one
+store only.
 
 ```shell
 ods object-store migrate
 ```
 
-It starts MinIO on a free port, runs the app's legacy copy from `backend` with
-`.vscode/.env` loaded and the settle window skipped, drops
-`S3_LEGACY_ENDPOINT_URL` from `.vscode/.env`, and stops MinIO. The infra stack
+It starts MinIO on a free port and retires it with the app's legacy copy, run
+from `backend` with `.vscode/.env` loaded: every object is copied (a
+multitenant checkout keeps its file records in tenant schemas), a quiet minute
+confirms nothing still writes to MinIO alone, and the retired marker stops
+running backend processes from using it. It then drops
+`S3_LEGACY_ENDPOINT_URL` from `.vscode/.env` and stops MinIO. The infra stack
 must be running (`ods compose dev --infra`). A failed copy leaves MinIO running
-and `.vscode/.env` untouched, so fix the cause and rerun.
+and `.vscode/.env` untouched, so fix the cause and rerun; `ods compose dev
+--infra --down` stops it too.
 
 **Flags:**
 
