@@ -30,6 +30,7 @@ from onyx.db.document import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import build_opensearch_document_index
 from onyx.document_index.opensearch.cc_pair_ids_backfill import (
@@ -84,6 +85,14 @@ def run_cc_pair_ids_backfill(lock: RedisLock) -> bool:
     start = time.monotonic()
     with get_session_with_current_tenant() as db_session:
         search_settings = get_current_search_settings(db_session)
+        # After an INSTANT swap, the port keeps copying chunks from the old
+        # index into this one, with the old chunks' cc_pair_ids. Wait for it,
+        # so no copy lands behind the cursor.
+        if search_settings.port_backfill_source_id is not None and (
+            port_backfill_has_pending_work(db_session, search_settings.id)
+        ):
+            task_logger.info("cc_pair_ids backfill: waiting for the reindex port")
+            return False
         progress = load_cc_pair_ids_backfill_progress(search_settings.index_name)
         if progress.pending_cc_pair_ids is None:
             progress.pending_cc_pair_ids = get_non_deleting_cc_pair_ids(db_session)

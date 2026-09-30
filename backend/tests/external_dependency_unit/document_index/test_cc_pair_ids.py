@@ -294,7 +294,9 @@ def test_backfill_fills_missing_field_resumes_and_reports_completion(
     missing_id = max(snapshot_ids) + 10_000
     test_snapshot = [pairs.first.id, pairs.deleting.id, missing_id, pairs.second.id]
 
-    search_settings = SimpleNamespace(index_name=test_index_name)
+    search_settings = SimpleNamespace(
+        index_name=test_index_name, port_backfill_source_id=None
+    )
     lock = get_redis_client().lock(f"test_cc_pair_backfill_{uuid4().hex}", timeout=60)
     assert lock.acquire(blocking=False)
     try:
@@ -366,6 +368,37 @@ def test_backfill_fills_missing_field_resumes_and_reports_completion(
             assert _read_cc_pair_ids(test_index_name, shared_doc) == sorted(
                 [pairs.first.id, pairs.second.id]
             )
+    finally:
+        lock.release()
+
+
+@pytest.mark.usefixtures("kv_progress_restored", "tenant_context")
+def test_backfill_waits_for_instant_swap_port(test_index_name: str) -> None:
+    search_settings = SimpleNamespace(
+        id=1, index_name=test_index_name, port_backfill_source_id=2
+    )
+    lock = get_redis_client().lock(f"test_cc_pair_backfill_{uuid4().hex}", timeout=60)
+    assert lock.acquire(blocking=False)
+    try:
+        with (
+            patch.object(
+                backfill_tasks,
+                "get_current_search_settings",
+                return_value=search_settings,
+            ),
+            patch.object(
+                backfill_tasks, "port_backfill_has_pending_work", return_value=True
+            ),
+            patch.object(backfill_tasks, "get_non_deleting_cc_pair_ids") as snapshot,
+        ):
+            assert not backfill_tasks.run_cc_pair_ids_backfill(lock)
+        snapshot.assert_not_called()
+        assert (
+            cc_pair_ids_backfill.load_cc_pair_ids_backfill_progress(
+                test_index_name
+            ).pending_cc_pair_ids
+            is None
+        )
     finally:
         lock.release()
 
