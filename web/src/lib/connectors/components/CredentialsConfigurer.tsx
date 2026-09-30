@@ -3,7 +3,8 @@
 import { useTranslations } from "next-intl";
 import { Button, Card, SelectCard, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
-import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
+// SvgExpand, SvgFold and SvgListTree return with the header buttons below.
+import { SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/connectors/types";
 import { useCredentialSetup } from "@/lib/connectors/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -54,9 +55,6 @@ export function CredentialsConfigurer({
     authorize,
     isAuthorizing,
   } = useCredentialSetup(connector);
-
-  // The fold button closes whichever create card is open.
-  const isOpen = openMethod !== null;
 
   // A source with one way in says what the card makes; a source with two
   // names each way instead, so the two cards stay distinguishable.
@@ -152,25 +150,28 @@ export function CredentialsConfigurer({
         sizePreset="main-content"
         variant="section"
         padding={0}
-        rightChildren={
-          <>
-            <Button icon={SvgListTree} prominence="tertiary">
-              {t("add.savedAccountsButton.label", {
-                count: credentials.length,
-              })}
-            </Button>
-            <Button
-              icon={isOpen ? SvgFold : SvgExpand}
-              prominence="tertiary"
-              aria-label={
-                isOpen
-                  ? t("add.collapseButton.ariaLabel")
-                  : t("add.expandButton.ariaLabel")
-              }
-              onClick={close}
-            />
-          </>
-        }
+        // The saved-accounts count has nowhere to lead yet, and the fold
+        // button only ever closes, so it reads as broken while no card is
+        // open. Both wait for the rest of the accounts panel.
+        // rightChildren={
+        //   <>
+        //     <Button icon={SvgListTree} prominence="tertiary">
+        //       {t("add.savedAccountsButton.label", {
+        //         count: credentials.length,
+        //       })}
+        //     </Button>
+        //     <Button
+        //       icon={isOpen ? SvgFold : SvgExpand}
+        //       prominence="tertiary"
+        //       aria-label={
+        //         isOpen
+        //           ? t("add.collapseButton.ariaLabel")
+        //           : t("add.expandButton.ariaLabel")
+        //       }
+        //       onClick={close}
+        //     />
+        //   </>
+        // }
       />
 
       <Section gap={4} alignItems="stretch" width="full">
