@@ -33,6 +33,7 @@ from onyx.db.models import (
 )
 from onyx.db.models import Document as DbDocument
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -817,6 +818,10 @@ class ConnectorFilesResponse(BaseModel):
 class ObjectCreationIdResponse(BaseModel):
     id: int
     credential: CredentialSnapshot | None = None
+
+
+class ConnectorWithMockCredentialCreationResponse(StatusResponse[int]):
+    connector_id: int
 
 
 class AuthStatus(BaseModel):
