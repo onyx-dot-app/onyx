@@ -9,8 +9,13 @@ Create Date: 2026-09-30 13:47:48.331663
 
 """
 
+import logging
+import time
+
 from alembic import op
 import sqlalchemy as sa
+
+logger = logging.getLogger("alembic.runtime.migration")
 
 # revision identifiers, used by Alembic.
 revision = "3067343245d1"
@@ -18,10 +23,44 @@ down_revision = "b7c2e4f1a9d3"
 branch_labels = None
 depends_on = None
 
+_LOCK_TIMEOUT = "5s"
+_DROP_ATTEMPTS = 12
+_RETRY_DELAY_S = 5
+
+
+def _drop_table_with_bounded_lock_wait(table_name: str) -> None:
+    """Drops a table whose foreign key points at `document`.
+
+    The drop needs an ACCESS EXCLUSIVE lock on `document`. While it waits for
+    that lock, every other query on `document` queues behind it. A short
+    lock_timeout keeps that stall short when a long transaction (for example
+    an indexing batch) holds a lock on `document`. Each attempt runs in a
+    savepoint, so a timeout does not abort the migration transaction.
+    """
+    bind = op.get_bind()
+    for attempt in range(1, _DROP_ATTEMPTS + 1):
+        try:
+            with bind.begin_nested():
+                bind.execute(sa.text(f"SET LOCAL lock_timeout = '{_LOCK_TIMEOUT}'"))
+                op.drop_table(table_name)
+            break
+        except sa.exc.DBAPIError:
+            if attempt == _DROP_ATTEMPTS:
+                raise
+            logger.warning(
+                "Could not lock `document` to drop %s (attempt %s/%s). Retrying in %ss.",
+                table_name,
+                attempt,
+                _DROP_ATTEMPTS,
+                _RETRY_DELAY_S,
+            )
+            time.sleep(_RETRY_DELAY_S)
+    bind.execute(sa.text("SET LOCAL lock_timeout = DEFAULT"))
+
 
 def upgrade() -> None:
     op.drop_table("opensearch_tenant_migration_record")
-    op.drop_table("opensearch_document_migration_record")
+    _drop_table_with_bounded_lock_wait("opensearch_document_migration_record")
 
 
 def downgrade() -> None:
