@@ -1766,9 +1766,9 @@ def delete_connector_by_id(
     ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    _assert_can_edit_connector(connector_id, db_session, user)
     try:
         with db_session.begin():
+            _assert_can_edit_connector(connector_id, db_session, user)
             result = delete_connector(
                 db_session=db_session,
                 connector_id=connector_id,

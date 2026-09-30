@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, exists, func, select
+from sqlalchemy import and_, delete, exists, func, select
 from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
@@ -12,6 +12,7 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     FederatedConnector,
     IndexAttempt,
+    UserGroup__ConnectorCredentialPair,
 )
 from onyx.server.documents.models import ConnectorBase, ObjectCreationIdResponse
 from onyx.server.models import StatusResponse
@@ -198,6 +199,17 @@ def delete_connector(
             success=True, message="Connector was already deleted", data=connector_id
         )
 
+    # Manage rows have no ON DELETE CASCADE, so the cc-pair delete below
+    # would fail on them.
+    db_session.execute(
+        delete(UserGroup__ConnectorCredentialPair).where(
+            UserGroup__ConnectorCredentialPair.cc_pair_id.in_(
+                select(ConnectorCredentialPair.id).where(
+                    ConnectorCredentialPair.connector_id == connector_id
+                )
+            )
+        )
+    )
     db_session.delete(connector)
     return StatusResponse(
         success=True, message="Connector deleted successfully", data=connector_id
