@@ -1,5 +1,8 @@
+import contextvars
 import json
-from collections.abc import Iterable
+import threading
+from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from opensearchpy.helpers.errors import BulkIndexError
@@ -90,6 +93,34 @@ _PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
 # Chunk IDs logged per direction when the cc-pair access shadow comparison
 # finds a disagreement.
 CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE = 5
+CC_PAIR_ACCESS_SHADOW_QUERY_TIMEOUT_S = 2
+# Shadow comparisons run off the request thread. When all workers are busy, a
+# comparison is skipped rather than queued.
+_CC_PAIR_ACCESS_SHADOW_MAX_IN_FLIGHT = 4
+_cc_pair_access_shadow_executor = ThreadPoolExecutor(
+    max_workers=_CC_PAIR_ACCESS_SHADOW_MAX_IN_FLIGHT,
+    thread_name_prefix="cc_pair_access_shadow",
+)
+_cc_pair_access_shadow_slots = threading.BoundedSemaphore(
+    _CC_PAIR_ACCESS_SHADOW_MAX_IN_FLIGHT
+)
+
+
+def _submit_cc_pair_access_shadow_check(check: Callable[[], None]) -> None:
+    if not _cc_pair_access_shadow_slots.acquire(blocking=False):
+        return
+
+    def _run() -> None:
+        try:
+            check()
+        finally:
+            _cc_pair_access_shadow_slots.release()
+
+    try:
+        _cc_pair_access_shadow_executor.submit(contextvars.copy_context().run, _run)
+    except Exception:
+        _cc_pair_access_shadow_slots.release()
+        raise
 
 
 # Per-process cache of indices we've already verified/created/applied the
@@ -834,6 +865,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
             len(chunk_requests),
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(
+            filters,
+            document_ids=sorted(
+                {chunk_request.document_id for chunk_request in chunk_requests}
+            ),
+        )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
             search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
@@ -869,11 +906,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
             results.extend(inference_chunks)
         return results
 
-    def _log_cc_pair_access_shadow_disagreement(self, filters: IndexFilters) -> None:
+    def _log_cc_pair_access_shadow_disagreement(
+        self, filters: IndexFilters, document_ids: list[str] | None = None
+    ) -> None:
         """In shadow mode, logs sample chunks where the old ACL filter and the
-        cc-pair access filter disagree, within this search's other filters.
-        Costs two filter-only ID queries per search. Results never depend on
-        it, so errors are logged and not raised."""
+        cc-pair access filter disagree, within this retrieval's other filters
+        and, if given, its document IDs. It runs two filter-only ID queries in
+        the background, so the retrieval never waits for it. Results never
+        depend on it, so errors are logged and not raised."""
         cc_pair_access = filters.cc_pair_access
         if (
             cc_pair_access is None
@@ -881,29 +921,38 @@ class OpenSearchDocumentIndex(DocumentIndex):
             or filters.access_control_list is None
         ):
             return
-        try:
-            for visible_to_old_filter_only in (True, False):
-                chunk_ids = self._client.search_for_document_ids(
-                    body=DocumentQuery.get_cc_pair_access_shadow_query(
-                        tenant_state=self._tenant_state,
-                        index_filters=filters,
-                        cc_pair_access=cc_pair_access,
-                        visible_to_old_filter_only=visible_to_old_filter_only,
-                        num_hits=CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE,
-                    ),
-                    search_type=OpenSearchSearchType.CC_PAIR_ACCESS_SHADOW,
-                )
-                if chunk_ids:
-                    logger.warning(
-                        "cc-pair access shadow: tenant=%s chunks visible only to the "
-                        "%s filter (sample of up to %d): %s",
-                        self._tenant_state.tenant_id,
-                        "old" if visible_to_old_filter_only else "cc-pair",
-                        CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE,
-                        chunk_ids,
+
+        def _check() -> None:
+            try:
+                for visible_to_old_filter_only in (True, False):
+                    chunk_ids = self._client.search_for_document_ids(
+                        body=DocumentQuery.get_cc_pair_access_shadow_query(
+                            tenant_state=self._tenant_state,
+                            index_filters=filters,
+                            cc_pair_access=cc_pair_access,
+                            visible_to_old_filter_only=visible_to_old_filter_only,
+                            num_hits=CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE,
+                            timeout_s=CC_PAIR_ACCESS_SHADOW_QUERY_TIMEOUT_S,
+                            document_ids=document_ids,
+                        ),
+                        search_type=OpenSearchSearchType.CC_PAIR_ACCESS_SHADOW,
                     )
+                    if chunk_ids:
+                        logger.warning(
+                            "cc-pair access shadow: tenant=%s chunks visible only "
+                            "to the %s filter (sample of up to %d): %s",
+                            self._tenant_state.tenant_id,
+                            "old" if visible_to_old_filter_only else "cc-pair",
+                            CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE,
+                            chunk_ids,
+                        )
+            except Exception:
+                logger.exception("cc-pair access shadow comparison failed")
+
+        try:
+            _submit_cc_pair_access_shadow_check(_check)
         except Exception:
-            logger.exception("cc-pair access shadow comparison failed")
+            logger.exception("cc-pair access shadow comparison could not start")
 
     def hybrid_retrieval(
         self,
@@ -1066,6 +1115,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_to_retrieve,
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(filters)
         query_body = DocumentQuery.get_random_search_query(
             tenant_state=self._tenant_state,
             index_filters=filters,

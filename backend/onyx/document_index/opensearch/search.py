@@ -389,6 +389,8 @@ class DocumentQuery:
         cc_pair_access: CCPairAccessFilter,
         visible_to_old_filter_only: bool,
         num_hits: int,
+        timeout_s: int,
+        document_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Returns a chunk ID query for chunks where the old ACL filter and the
         cc-pair access filter disagree, within the scope of the other filters.
@@ -397,6 +399,8 @@ class DocumentQuery:
             visible_to_old_filter_only: If True, finds chunks the old filter
                 shows and the cc-pair filter hides. If False, the reverse.
             num_hits: The maximum number of chunk IDs to return.
+            timeout_s: The OpenSearch query timeout.
+            document_ids: If given, limits the comparison to these documents.
         """
 
         def _filters(
@@ -429,6 +433,11 @@ class DocumentQuery:
             if visible_to_old_filter_only
             else (new_filters, old_filters)
         )
+        if document_ids is not None:
+            included = [
+                *included,
+                {"terms": {DOCUMENT_ID_FIELD_NAME: document_ids}},
+            ]
         return {
             "query": {
                 "bool": {
@@ -438,7 +447,7 @@ class DocumentQuery:
             },
             "size": num_hits,
             "_source": False,
-            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            "timeout": f"{timeout_s}s",
         }
 
     @staticmethod

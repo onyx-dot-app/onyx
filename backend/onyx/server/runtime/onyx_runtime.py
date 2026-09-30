@@ -6,6 +6,7 @@ from onyx.background.celery.tasks.beat_schedule import (
     CLOUD_BEAT_MULTIPLIER_DEFAULT,
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     ENABLE_CC_PAIR_ACCESS_FILTER,
     ENABLE_TENANT_WORK_GATING,
@@ -21,7 +22,12 @@ from onyx.configs.constants import (
 from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.file import FileWithMimeType, OnyxStaticFileManager
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+
+logger = setup_logger()
+
+_REQUEST_PATH_FLAG_TIMEOUT_S = 0.5
 
 
 class OnyxRuntime:
@@ -150,9 +156,35 @@ class OnyxRuntime:
         either `enabled` (shadow mode) or `enforce`."""
         r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
         raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:{feature}:{axis}")
+        return OnyxRuntime._parse_bool_flag(raw, default)
+
+    @staticmethod
+    def _read_request_path_bool_flag(feature: str, axis: str, default: bool) -> bool:
+        """Like `_read_runtime_bool_flag`, for flags read on every request. It
+        reads the same key through the cache backend, so it also works with
+        CACHE_BACKEND=postgres. A failed read returns `default`, so an outage
+        of the cache falls back to the default behavior instead of failing the
+        request."""
+        try:
+            raw = get_cache_backend(
+                tenant_id=ONYX_CLOUD_TENANT_ID,
+                operation_timeout_s=_REQUEST_PATH_FLAG_TIMEOUT_S,
+            ).get(f"{ONYX_CLOUD_REDIS_RUNTIME}:{feature}:{axis}")
+        except Exception:
+            logger.warning(
+                "Failed to read runtime flag %s:%s, using %s",
+                feature,
+                axis,
+                default,
+                exc_info=True,
+            )
+            return default
+        return OnyxRuntime._parse_bool_flag(raw, default)
+
+    @staticmethod
+    def _parse_bool_flag(raw: bytes | None, default: bool) -> bool:
         if raw is None:
             return default
-
         try:
             return raw.decode().strip().lower() == "true"
         except Exception:
@@ -189,17 +221,17 @@ class OnyxRuntime:
         shadow mode: results still use the old ACL filter, and disagreements
         are logged. Env-var `ENABLE_CC_PAIR_ACCESS_FILTER` is the fallback
         default when no Redis override is set."""
-        return OnyxRuntime._read_runtime_bool_flag(
+        return OnyxRuntime._read_request_path_bool_flag(
             "cc_pair_access_filter", "enabled", default=ENABLE_CC_PAIR_ACCESS_FILTER
         )
 
     @staticmethod
     def get_cc_pair_access_filter_enforce() -> bool:
         """Should search use the cc-pair access filter for results, in tenants
-        whose index is ready for it? Redis-only with a hard-coded default of
+        whose index is ready for it? Cache-only (no env var) with a hard-coded default of
         False, like `get_tenant_work_gating_enforce`. Only meaningful when
         `get_cc_pair_access_filter_enabled()` is also True."""
-        return OnyxRuntime._read_runtime_bool_flag(
+        return OnyxRuntime._read_request_path_bool_flag(
             "cc_pair_access_filter", "enforce", default=False
         )
 

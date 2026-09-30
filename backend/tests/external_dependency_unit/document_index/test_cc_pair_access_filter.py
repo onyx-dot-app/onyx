@@ -40,7 +40,7 @@ from onyx.db.models import (
 )
 from onyx.db.models import Document as DbDocument
 from onyx.db.search_settings import get_current_search_settings
-from onyx.document_index.interfaces import TenantState
+from onyx.document_index.interfaces import DocumentSectionRequest, TenantState
 from onyx.document_index.opensearch import (
     cc_pair_ids_backfill,
     opensearch_document_index,
@@ -413,15 +413,6 @@ def test_shadow_mode_keeps_old_results_and_logs_disagreement(
     docs: _Docs,
     opensearch_index: OpenSearchDocumentIndex,
 ) -> None:
-    with patch.object(opensearch_document_index.logger, "warning") as warning:
-        visible = _visible_docs(
-            db_session,
-            opensearch_index,
-            world.outsider,
-            CCPairAccessMode.SHADOW,
-            docs,
-        )
-    assert docs.private_public_in_source in visible
     expected_chunk_id = get_opensearch_doc_chunk_id(
         tenant_state=TenantState(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, multitenant=False
@@ -429,8 +420,50 @@ def test_shadow_mode_keeps_old_results_and_logs_disagreement(
         document_id=docs.private_public_in_source,
         chunk_index=0,
     )
-    logged_chunk_ids = [call.args[-1] for call in warning.call_args_list]
-    assert logged_chunk_ids == [[expected_chunk_id]]
+    # Run the background comparison inline so the test can read its log.
+    with (
+        patch.object(
+            opensearch_document_index,
+            "_submit_cc_pair_access_shadow_check",
+            lambda check: check(),
+        ),
+        patch.object(opensearch_document_index.logger, "warning") as warning,
+    ):
+        visible = _visible_docs(
+            db_session,
+            opensearch_index,
+            world.outsider,
+            CCPairAccessMode.SHADOW,
+            docs,
+        )
+        assert docs.private_public_in_source in visible
+        assert [call.args[-1] for call in warning.call_args_list] == [
+            [expected_chunk_id]
+        ]
+
+        # ID-based retrieval compares only the requested documents.
+        warning.reset_mock()
+        with patch(
+            f"{_ACCESS_FILTERS_MODULE}.get_cc_pair_access_mode",
+            return_value=CCPairAccessMode.SHADOW,
+        ):
+            access_filters = build_access_filters_for_user(world.outsider, db_session)
+        id_filters = IndexFilters(
+            access_control_list=access_filters.access_control_list,
+            cc_pair_access=access_filters.cc_pair_access,
+        )
+        for document_id, expected_logs in (
+            (docs.sync_public_in_source, []),
+            (docs.private_public_in_source, [[expected_chunk_id]]),
+        ):
+            warning.reset_mock()
+            opensearch_index.id_based_retrieval(
+                chunk_requests=[DocumentSectionRequest(document_id=document_id)],
+                filters=id_filters,
+            )
+            assert [
+                call.args[-1] for call in warning.call_args_list
+            ] == expected_logs, document_id
 
 
 @pytest.mark.usefixtures("ee")
