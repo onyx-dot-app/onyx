@@ -55,6 +55,10 @@ class _FakeJiraCodec(FamilyCredentialCodec[FakeAtlassianCredential]):
             "jira_api_token": family_credential.token,
         }
 
+    def accepts(self, family_credential: FakeAtlassianCredential) -> bool:
+        # Stands in for a kind of credential Jira cannot use.
+        return family_credential.email is not None
+
 
 def register_fake_atlassian_family(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(

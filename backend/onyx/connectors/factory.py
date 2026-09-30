@@ -198,14 +198,20 @@ def instantiate_connector(
     return connector
 
 
+def _credential_binding_class(
+    source: DocumentSource,
+) -> type[CredentialBinding] | None:
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    return mapping.config_class.credential_binding_class() if mapping else None
+
+
 def parse_credential_binding(
     source: DocumentSource, connector_specific_config: dict[str, Any]
 ) -> CredentialBinding | None:
     """The config's credential-bound values, or ``None`` if the source has no
     binding model or the stored config does not match it (rows written before
     typed configs existed may not conform)."""
-    mapping = CONNECTOR_CLASS_MAP.get(source)
-    binding_class = mapping.config_class.credential_binding_class() if mapping else None
+    binding_class = _credential_binding_class(source)
     if binding_class is None:
         return None
     try:
@@ -227,10 +233,9 @@ def _validate_credential_binding(
     """Raises ``ConnectorValidationError`` if the config's credential-bound
     values cannot be used with the credential, or cannot be checked because they
     do not match the source's binding model."""
-    mapping = CONNECTOR_CLASS_MAP.get(source)
     # A source without a connector class fails at instantiation with a clearer
     # error.
-    binding_class = mapping.config_class.credential_binding_class() if mapping else None
+    binding_class = _credential_binding_class(source)
     # Skip the decrypt when the source has no binding rule.
     if (
         binding_class is None

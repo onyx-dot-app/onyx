@@ -33,3 +33,11 @@ class FamilyCredentialCodec(ABC, Generic[FamilyCredentialT]):
 
     @abstractmethod
     def from_family(self, family_credential: FamilyCredentialT) -> dict[str, Any]: ...
+
+    def accepts(
+        self,
+        family_credential: FamilyCredentialT,  # noqa: ARG002
+    ) -> bool:
+        """False if this source cannot use this family credential, e.g. a kind
+        of authentication the source does not support. Defaults to True."""
+        return True

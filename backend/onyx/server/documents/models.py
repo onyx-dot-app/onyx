@@ -165,14 +165,24 @@ class CredentialSnapshot(CredentialBase):
         family credential listed for another source of its family is shown in
         that source's keys. Defaults to the credential's own source."""
         source = credential.source or DocumentSource.NOT_APPLICABLE
-        credential_json_value = to_source_credential_json(
-            view_source or source,
-            (
-                credential.credential_json.get_value(apply_mask=False)
-                if credential.credential_json
-                else {}
-            ),
+        stored_json = (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
         )
+        try:
+            credential_json_value = to_source_credential_json(
+                view_source or source, stored_json
+            )
+        except ValueError:
+            # One unreadable row (e.g. its source left the family registry) must
+            # not fail a whole credential listing.
+            logger.warning(
+                "Showing credential %s in its stored shape: it cannot be read as %s.",
+                credential.id,
+                (view_source or source).value,
+            )
+            credential_json_value = stored_json
         if mask_credential_prefix:
             credential_json_value = mask_credential_dict(credential_json_value)
 

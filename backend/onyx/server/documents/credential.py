@@ -96,6 +96,8 @@ def get_cc_source_full_info(
         user=user,
         document_source=source_type,
     )
+    if not credentials:
+        return []
     usages: defaultdict[int, list[CredentialUsage]] = defaultdict(list)
     for cc_pair in get_manageable_cc_pairs_for_credentials(
         db_session, user, [credential.id for credential in credentials]
@@ -115,11 +117,16 @@ def get_cc_source_full_info(
 
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
-        SimilarCredentialSnapshot.from_credential_db_model(
-            credential,
-            mask_credential_prefix=mask_credential_prefix,
-            view_source=source_type,
-        ).model_copy(update={"usages": usages[credential.id]})
+        SimilarCredentialSnapshot(
+            **dict(
+                CredentialSnapshot.from_credential_db_model(
+                    credential,
+                    mask_credential_prefix=mask_credential_prefix,
+                    view_source=source_type,
+                )
+            ),
+            usages=usages[credential.id],
+        )
         for credential in credentials
     ]
 

@@ -10,10 +10,13 @@ usable by that source only.
 
 from typing import Any
 
+import pydantic
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credential_family_base import (
     CREDENTIAL_FAMILY_KEY,
     CredentialFamily,
+    FamilyCredential,
     FamilyCredentialCodec,
 )
 
@@ -39,6 +42,13 @@ def stored_credential_family(stored_json: dict[str, Any]) -> CredentialFamily | 
     return CredentialFamily(marker) if marker is not None else None
 
 
+def _family_credential(
+    codec: FamilyCredentialCodec[Any], stored_json: dict[str, Any]
+) -> FamilyCredential:
+    family_json = {k: v for k, v in stored_json.items() if k != CREDENTIAL_FAMILY_KEY}
+    return codec.family_model.model_validate(family_json)
+
+
 def is_credential_usable_for_source(
     credential_source: DocumentSource | None,
     stored_json: dict[str, Any],
@@ -47,7 +57,13 @@ def is_credential_usable_for_source(
     if credential_source == target_source:
         return True
     family = stored_credential_family(stored_json)
-    return family is not None and family == credential_family_for_source(target_source)
+    codec = FAMILY_CREDENTIAL_CODECS.get(target_source)
+    if family is None or codec is None or codec.family != family:
+        return False
+    try:
+        return codec.accepts(_family_credential(codec, stored_json))
+    except pydantic.ValidationError:
+        return False
 
 
 def to_source_credential_json(
@@ -63,8 +79,12 @@ def to_source_credential_json(
         raise ValueError(
             f"A {family.value} credential cannot be used by the {source.value} source."
         )
-    family_json = {k: v for k, v in stored_json.items() if k != CREDENTIAL_FAMILY_KEY}
-    return codec.from_family(codec.family_model.model_validate(family_json))
+    family_credential = _family_credential(codec, stored_json)
+    if not codec.accepts(family_credential):
+        raise ValueError(
+            f"This {family.value} credential cannot be used by the {source.value} source."
+        )
+    return codec.from_family(family_credential)
 
 
 def to_stored_credential_json(
@@ -87,9 +107,14 @@ def to_stored_credential_json(
         else None
     )
     if current_family is not None:
-        if codec is None or codec.family != current_family:
+        if (
+            codec is None
+            or codec.family != current_family
+            or current_stored_json is None
+            or not is_credential_usable_for_source(None, current_stored_json, source)
+        ):
             raise ValueError(
-                f"The {source.value} source cannot write a "
+                f"The {source.value} source cannot write this "
                 f"{current_family.value} credential."
             )
     elif codec is None or current_stored_json is not None:

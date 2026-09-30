@@ -102,3 +102,31 @@ def test_keys_of_another_family_source_are_rejected() -> None:
             {**_CONFLUENCE_JSON, "jira_api_token": "secret-jira-token"},
             None,
         )
+
+
+def test_codec_can_refuse_a_family_credential() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.CONFLUENCE, {"confluence_access_token": "token"}, None
+    )
+
+    assert is_credential_usable_for_source(
+        DocumentSource.CONFLUENCE, stored, DocumentSource.CONFLUENCE
+    )
+    assert not is_credential_usable_for_source(
+        DocumentSource.CONFLUENCE, stored, DocumentSource.JIRA
+    )
+    with pytest.raises(ValueError, match="cannot be used by the jira source"):
+        to_source_credential_json(DocumentSource.JIRA, stored)
+    # A write would rebuild the credential without what Jira cannot read.
+    with pytest.raises(ValueError, match="cannot write this"):
+        to_stored_credential_json(
+            DocumentSource.JIRA, {"jira_api_token": "new"}, stored
+        )
+
+
+def test_malformed_family_credential_is_not_usable_by_other_sources() -> None:
+    stored = {"email": "user@example.com", CREDENTIAL_FAMILY_KEY: "atlassian"}
+
+    assert not is_credential_usable_for_source(
+        DocumentSource.CONFLUENCE, stored, DocumentSource.JIRA
+    )
