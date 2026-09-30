@@ -294,9 +294,7 @@ def test_anthropic_prompt_caching_reduces_costs(
     else:
         candidate_models = [
             "claude-haiku-4-5-20251001",
-            "claude-sonnet-4-5-20250929",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-sonnet-latest",
+            "claude-sonnet-5",
         ]
 
     import random
