@@ -24,12 +24,23 @@ from onyx.connectors.credential_family_base import (
     FamilyCredentialCodec,
 )
 from onyx.connectors.google_credential import GoogleCredentialCodec
+from onyx.connectors.microsoft_credential import (
+    ONEDRIVE_KEY_PREFIX,
+    OUTLOOK_KEY_PREFIX,
+    SHAREPOINT_KEY_PREFIX,
+    TEAMS_KEY_PREFIX,
+    MicrosoftCredentialCodec,
+)
 
 FAMILY_CREDENTIAL_CODECS: dict[DocumentSource, FamilyCredentialCodec[Any]] = {
     DocumentSource.CONFLUENCE: ConfluenceCredentialCodec(),
     DocumentSource.JIRA: JiraCredentialCodec(),
     DocumentSource.GMAIL: GoogleCredentialCodec(),
     DocumentSource.GOOGLE_DRIVE: GoogleCredentialCodec(),
+    DocumentSource.SHAREPOINT: MicrosoftCredentialCodec(SHAREPOINT_KEY_PREFIX),
+    DocumentSource.ONEDRIVE: MicrosoftCredentialCodec(ONEDRIVE_KEY_PREFIX),
+    DocumentSource.OUTLOOK: MicrosoftCredentialCodec(OUTLOOK_KEY_PREFIX),
+    DocumentSource.TEAMS: MicrosoftCredentialCodec(TEAMS_KEY_PREFIX),
 }
 
 
