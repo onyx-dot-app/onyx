@@ -88,6 +88,40 @@ func TestUpgradeRewritesOnlyImageTag(t *testing.T) {
 	}
 }
 
+// An upgrade moves a MinIO-era .env onto the object store the new compose file
+// runs, the same way a rerun of install does.
+func TestUpgradeAlignsBundledObjectStoreEndpoint(t *testing.T) {
+	runner := &fakeRunner{handler: healthyDockerHandler}
+	root := installFixture(t, runner, "v4.0.0")
+	envPath := filepath.Join(root, "deployment", ".env")
+	env, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minioEra := SetVar(SetVar(string(env), "S3_ENDPOINT_URL", minioEndpoint), "S3_LEGACY_ENDPOINT_URL", "")
+	if err := os.WriteFile(envPath, []byte(minioEra), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := testDeps(t, runner, notFoundServer(t)) // embedded compose runs object-store
+	if err := RunUpgrade(context.Background(), deps, Options{
+		NoPrompt: true, Tag: "v4.2.0", Dir: root, NoWait: true,
+	}); err != nil {
+		t.Fatalf("RunUpgrade: %v\noutput:\n%s", err, outBuf(deps).String())
+	}
+
+	got, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := Var(string(got), "S3_ENDPOINT_URL"); v != objectStoreEndpoint {
+		t.Errorf("S3_ENDPOINT_URL = %q, want %q", v, objectStoreEndpoint)
+	}
+	if v := Var(string(got), "S3_LEGACY_ENDPOINT_URL"); v != minioEndpoint {
+		t.Errorf("S3_LEGACY_ENDPOINT_URL = %q, want %q", v, minioEndpoint)
+	}
+}
+
 // A -dev image tag is the release's image with debugging tools added, and its
 // config files live at the release's ref. The upgrade must fetch them from
 // there rather than fall back to the embedded copies for a ref that does not
