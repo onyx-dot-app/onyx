@@ -470,7 +470,8 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Connection not found for current user's permissions",
+            "Group managers can only act on connectors that a group they "
+            "manage has the needed role on.",
         )
     return cc_pair
 

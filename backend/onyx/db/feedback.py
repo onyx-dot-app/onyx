@@ -63,9 +63,7 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
         )
         .where(DocumentByConnectorCredentialPair.id == DbDocument.id)
     )
-    operable_cc_pair_ids = select_cc_pair_ids_for_user(
-        user, CCPairAccessLevel.OPERATE
-    )
+    operable_cc_pair_ids = select_cc_pair_ids_for_user(user, CCPairAccessLevel.OPERATE)
 
     stmt = stmt.where(
         document_cc_pair_ids.where(DocCCPair.id.in_(operable_cc_pair_ids)).exists()
@@ -73,9 +71,7 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     if not get_editable:
         return stmt
     return stmt.where(
-        ~document_cc_pair_ids.where(
-            DocCCPair.id.not_in(operable_cc_pair_ids)
-        ).exists()
+        ~document_cc_pair_ids.where(DocCCPair.id.not_in(operable_cc_pair_ids)).exists()
     )
 
 
