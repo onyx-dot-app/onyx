@@ -19,11 +19,28 @@ from urllib.parse import unquote_plus
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from psycopg2 import sql
-from sqlalchemy import bindparam, delete, func, select, text
+from sqlalchemy import (
+    DateTime,
+    LargeBinary,
+    Text,
+    Uuid,
+    case,
+    cast,
+    column,
+    delete,
+    func,
+    inspect,
+    literal,
+    select,
+    table,
+    tuple_,
+)
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
+from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.selectable import TableClause
 
 from onyx.configs.app_configs import AWS_REGION_NAME, DB_READONLY_USER, USE_IAM_AUTH
 from onyx.configs.constants import SSL_CERT_FILE
@@ -70,12 +87,7 @@ _LIBPQ_SSL_ENV = {
 }
 # Values that legitimately differ between a clone and a fresh migration: row
 # timestamps, encrypted blobs (a random salt per write) and generated ids.
-_UNCOMPARED_COLUMN_TYPES = (
-    "timestamp without time zone",
-    "timestamp with time zone",
-    "bytea",
-    "uuid",
-)
+_UNCOMPARED_COLUMN_TYPES = (DateTime, LargeBinary, Uuid)
 _DIFF_LINES_REPORTED = 60
 # Seeded rows with one JSON field set to the migration's run date, so clone and
 # fresh schema differ by day. Only that field is dropped before comparing.
@@ -213,13 +225,11 @@ def store_template_snapshots(alembic_revision: str) -> None:
 
 
 def _require_template_at(shard_name: str, alembic_revision: str) -> None:
-    query = sql.SQL("SELECT version_num FROM {}").format(
-        sql.Identifier(TENANT_TEMPLATE_SCHEMA, "alembic_version")
+    version_table = table(
+        "alembic_version", column("version_num"), schema=TENANT_TEMPLATE_SCHEMA
     )
     with get_engine_for_shard(shard_name).connect() as connection:
-        stamped = connection.exec_driver_sql(
-            query.as_string(connection.connection.dbapi_connection)
-        ).scalar()
+        stamped = connection.scalar(select(version_table.c.version_num))
     if stamped != alembic_revision:
         raise RuntimeError(
             f"Template on shard {shard_name} is at {stamped}, not {alembic_revision}"
@@ -376,83 +386,69 @@ def _canonical_text_arrays(line: str) -> str:
 
 def _row_differences(connection: Connection, left: str, right: str) -> list[str]:
     differences: list[str] = []
-    for table in _tables(connection, left):
-        columns = _compared_columns(connection, left, table)
-        left_count, left_digest = _row_digest(connection, left, table, columns)
-        right_count, right_digest = _row_digest(connection, right, table, columns)
+    for table_name in _tables(connection, left):
+        columns = _compared_columns(connection, left, table_name)
+        left_count, left_digest = _row_digest(connection, left, table_name, columns)
+        right_count, right_digest = _row_digest(connection, right, table_name, columns)
         if left_count != right_count:
             differences.append(
-                f"{table}: {left_count} rows in {left}, {right_count} in {right}"
+                f"{table_name}: {left_count} rows in {left}, {right_count} in {right}"
             )
         elif left_digest != right_digest:
-            differences.append(f"{table}: row contents differ")
+            differences.append(f"{table_name}: row contents differ")
     return differences
 
 
 def _tables(connection: Connection, schema: str) -> list[str]:
-    return list(
-        connection.scalars(
-            text(
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema = :schema AND table_type = 'BASE TABLE' "
-                "ORDER BY table_name"
-            ),
-            {"schema": schema},
-        )
-    )
+    return sorted(inspect(connection).get_table_names(schema=schema))
 
 
-def _compared_columns(connection: Connection, schema: str, table: str) -> list[str]:
-    return list(
-        connection.scalars(
-            text(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_schema = :schema AND table_name = :table "
-                "AND is_generated = 'NEVER' AND data_type NOT IN :skipped "
-                "ORDER BY ordinal_position"
-            ).bindparams(bindparam("skipped", expanding=True)),
-            {
-                "schema": schema,
-                "table": table,
-                "skipped": list(_UNCOMPARED_COLUMN_TYPES),
-            },
-        )
-    )
+def _compared_columns(
+    connection: Connection, schema: str, table_name: str
+) -> list[str]:
+    """Columns whose values a clone and a fresh migration must agree on."""
+    return [
+        reflected["name"]
+        for reflected in inspect(connection).get_columns(table_name, schema=schema)
+        if "computed" not in reflected
+        and not isinstance(reflected["type"], _UNCOMPARED_COLUMN_TYPES)
+    ]
 
 
 def _row_digest(
-    connection: Connection, schema: str, table: str, columns: list[str]
+    connection: Connection, schema: str, table_name: str, columns: list[str]
 ) -> tuple[int, str]:
-    source = sql.Identifier(schema, table)
+    source = table(table_name, *(column(name) for name in columns), schema=schema)
     if not columns:
-        query = sql.SQL("SELECT count(*) FROM {}").format(source)
-    else:
-        # ROW keeps NULL positions, so a NULL moving between columns still differs.
-        row_text = sql.SQL("ROW({})::text").format(
-            sql.SQL(", ").join(_compared_value(table, column) for column in columns)
+        count = connection.scalar(select(func.count()).select_from(source))
+        return int(count or 0), ""
+    # A row constructor keeps NULL positions, so a NULL moving between columns
+    # still differs.
+    row_text = cast(
+        tuple_(*(_compared_value(source, name) for name in columns)),
+        Text,
+    ).label("row_text")
+    rows = select(row_text).select_from(source).subquery()
+    digest = func.md5(
+        func.coalesce(
+            func.string_agg(
+                rows.c.row_text, aggregate_order_by(literal("|"), rows.c.row_text)
+            ),
+            "",
         )
-        query = sql.SQL(
-            "SELECT count(*), "
-            "md5(coalesce(string_agg(row_text, '|' ORDER BY row_text), '')) "
-            "FROM (SELECT {} AS row_text FROM {}) rows"
-        ).format(row_text, source)
-    row = connection.exec_driver_sql(
-        query.as_string(connection.connection.dbapi_connection)
-    ).one()
-    return int(row[0]), "" if not columns else str(row[1])
+    )
+    row = connection.execute(select(func.count(), digest).select_from(rows)).one()
+    return int(row[0]), str(row[1])
 
 
-def _compared_value(table: str, column: str) -> sql.Composable:
-    seeded = _RUN_DATE_SEEDED_FIELDS.get(table)
-    if seeded is None or column != seeded[2]:
-        return sql.Identifier(column)
-    key_column, key_value, json_column, dated_field = seeded
-    return sql.SQL("CASE WHEN {} = {} THEN {} - {} ELSE {} END").format(
-        sql.Identifier(key_column),
-        sql.Literal(key_value),
-        sql.Identifier(json_column),
-        sql.Literal(dated_field),
-        sql.Identifier(json_column),
+def _compared_value(source: TableClause, name: str) -> ColumnElement:
+    seeded = _RUN_DATE_SEEDED_FIELDS.get(source.name)
+    if seeded is None or name != seeded[2]:
+        return source.c[name]
+    key_column, key_value, _, dated_field = seeded
+    return case(
+        (source.c[key_column] == key_value, source.c[name].op("-")(dated_field)),
+        else_=source.c[name],
     )
 
 

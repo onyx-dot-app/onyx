@@ -9,7 +9,7 @@ from typing import cast
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import Table, func, select, text
+from sqlalchemy import Table, delete, func, select, text
 
 from ee.onyx.db import tenant_snapshot
 from onyx.db.engine import tenant_utils
@@ -134,15 +134,7 @@ def test_rollout_stores_the_template_only_at_head(shard: str) -> None:
         with pytest.raises(RuntimeError):
             tenant_snapshot.store_template_snapshots("not-the-head")
     finally:
-        with tenant_snapshot.get_catalog_session() as db_session:
-            db_session.execute(
-                text(
-                    "DELETE FROM public.tenant_schema_snapshot "
-                    "WHERE shard_name = :shard AND alembic_revision = :head"
-                ),
-                {"shard": shard, "head": head},
-            )
-            db_session.commit()
+        _delete_snapshot_rows(shard, head)
 
 
 def test_template_is_rotated_by_shard(shard: str) -> None:
@@ -176,12 +168,15 @@ def test_store_keeps_the_newest_two() -> None:
             == f"-- {revisions[2]}"
         )
     finally:
-        with tenant_snapshot.get_catalog_session() as db_session:
-            db_session.execute(
-                text(
-                    "DELETE FROM public.tenant_schema_snapshot "
-                    "WHERE shard_name = :shard"
-                ),
-                {"shard": fake_shard},
-            )
-            db_session.commit()
+        _delete_snapshot_rows(fake_shard)
+
+
+def _delete_snapshot_rows(shard: str, head: str | None = None) -> None:
+    statement = delete(TenantSchemaSnapshot).where(
+        TenantSchemaSnapshot.shard_name == shard
+    )
+    if head is not None:
+        statement = statement.where(TenantSchemaSnapshot.alembic_revision == head)
+    with tenant_snapshot.get_catalog_session() as db_session:
+        db_session.execute(statement)
+        db_session.commit()
