@@ -67,15 +67,10 @@ export function CredentialsConfigurer({
     useState<CredentialCreationMethod | null>(null);
   // Wiring only: the fold button has no handler yet.
   const [isOpen] = useState(true);
-  const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isAuthorizeVisible, setIsAuthorizeVisible] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setCurrentPageUrl(window.location.href);
-    }
-
     if (EE_ENABLED && (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV)) {
       const sourceMetadata = getSourceMetadata(connector);
       if (sourceMetadata?.oauthSupported == true) {
@@ -181,13 +176,13 @@ export function CredentialsConfigurer({
 
   // Gets an auth url from the server and sends the user to it in a popup.
   const handleAuthorize = async () => {
-    if (!currentPageUrl) return;
-
     setIsAuthorizing(true);
     try {
+      // Read at click time: the handler only ever runs in the browser, and
+      // the page can change its own query string after mount.
       const response = await prepareOAuthAuthorizationRequest(
         connector,
-        currentPageUrl,
+        window.location.href,
         t("add.oauthStartFailed.toast")
       );
       if (response.url) {
