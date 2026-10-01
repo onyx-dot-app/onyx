@@ -30,11 +30,8 @@ _DOWNGRADE_BODY = re.compile(r"^def downgrade\b.*?(?=^\S|\Z)", re.MULTILINE | re
 # `insert as pg_insert` renames the construct, so calls are matched by alias.
 _INSERT_ALIAS = re.compile(r"\bimport\b.*\binsert\s+as\s+(\w+)")
 # `.add(` is only a row write on an ORM session, so sessions are matched by the
-# name they are bound to, however short.
-_SESSION_BINDINGS = (
-    re.compile(r"(\w+)\s*=\s*(?:Session|sessionmaker)\("),
-    re.compile(r"\b(?:Session|sessionmaker)\(.*\)\s+as\s+(\w+)\s*:"),
-)
+# name they are bound to, however short, through any sessionmaker factory.
+_SESSION_ROOTS = ("Session", "sessionmaker")
 _INSERT_PATTERNS = (
     re.compile(r"\bINSERT\s+INTO\b|\bINSERT\s*$", re.IGNORECASE),
     re.compile(r"\bop\.bulk_insert\("),
@@ -60,26 +57,44 @@ def _names_pattern(names: list[str], suffix: str) -> list[re.Pattern[str]]:
     return [re.compile(rf"(?<!\w)(?:{'|'.join(map(re.escape, names))}){suffix}")]
 
 
+def _session_names(source: str) -> list[str]:
+    """Names bound from Session, sessionmaker, or anything bound from those."""
+    names: list[str] = list(_SESSION_ROOTS)
+    while True:
+        callables = "|".join(map(re.escape, names))
+        bound = re.findall(
+            rf"(\w+)\s*=\s*(?:{callables})\(|\b(?:{callables})\(.*\)\s+as\s+(\w+)\s*:",
+            source,
+        )
+        new_names = [name for pair in bound for name in pair if name not in names]
+        if not new_names:
+            return names[len(_SESSION_ROOTS) :]
+        names.extend(dict.fromkeys(new_names))
+
+
 def _insert_patterns(source: str) -> list[re.Pattern[str]]:
-    sessions = [
-        name for binding in _SESSION_BINDINGS for name in binding.findall(source)
-    ]
     return [
         *_INSERT_PATTERNS,
         *_names_pattern(_INSERT_ALIAS.findall(source), r"\("),
-        *_names_pattern(sessions, r"\.add\("),
+        *_names_pattern(_session_names(source), r"\.add\("),
     ]
 
 
 def find_inserts(source: str) -> list[int]:
     """One-based line numbers outside downgrade where a row insert appears."""
     skipped = _downgrade_lines(source)
-    patterns = _insert_patterns(source)
-    return [
-        number
+    scanned = [
+        (number, line)
         for number, line in enumerate(source.splitlines(), start=1)
         if number not in skipped
-        and ALLOW_MARKER not in line
+    ]
+    # Names are resolved from the scanned lines only, so a downgrade session
+    # cannot turn a set.add in upgrade into a finding.
+    patterns = _insert_patterns("\n".join(line for _, line in scanned))
+    return [
+        number
+        for number, line in scanned
+        if ALLOW_MARKER not in line
         and any(pattern.search(line) for pattern in patterns)
     ]
 

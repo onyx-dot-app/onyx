@@ -101,6 +101,22 @@ def test_read_only_session_passes() -> None:
     assert check_migration_inserts.find_inserts(source) == []
 
 
+def test_factory_made_session_add_is_flagged() -> None:
+    source = (
+        "SessionLocal = sessionmaker(bind=op.get_bind())\n\n\n"
+        "def upgrade() -> None:\n    s = SessionLocal()\n    s.add(Tool(name='x'))\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == [6]
+
+
+def test_downgrade_session_name_does_not_taint_upgrade() -> None:
+    source = (
+        "def upgrade() -> None:\n    s = set()\n    s.add(value)\n\n\n"
+        "def downgrade() -> None:\n    s = Session(bind=op.get_bind())\n    s.add(row)\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == []
+
+
 def test_module_level_helper_is_flagged() -> None:
     source = (
         "def _seed() -> None:\n    op.bulk_insert(tool_table, rows)\n\n\n"
