@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { Text } from "@opal/components";
+import { cn } from "@opal/utils";
 import { ContentAction } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 
@@ -30,17 +31,25 @@ function ShareAvatar({ initial, icon: Icon }: ShareAvatarProps) {
 interface PermissionColumnsProps {
   rightChildren?: React.ReactNode;
   trailing?: React.ReactNode;
+  wide?: boolean;
 }
 
-// Fixed 160px left-aligned permission column (mock: Column/Medium) so every
-// row's permission label starts at the same x, plus the far-right slot
+// Fixed left-aligned permission column (mock: Column/Medium, 160px; wide:
+// 240px) so every row's permission label starts at the same x, plus the
+// far-right slot
 function PermissionColumns({
   rightChildren,
   trailing,
+  wide = false,
 }: PermissionColumnsProps) {
   return (
     <div className="flex shrink-0 items-center">
-      <div className="flex w-40 items-center justify-start">
+      <div
+        className={cn(
+          "flex items-center justify-start",
+          wide ? "w-60" : "w-40"
+        )}
+      >
         {rightChildren}
       </div>
       {trailing}
@@ -61,6 +70,8 @@ export interface ShareAccessRowProps {
   rightChildren?: React.ReactNode;
   /** Far-right slot past the permission column (e.g. the owner swap icon) */
   trailing?: React.ReactNode;
+  /** 240px permission column, for labels that carry a hint beside them */
+  wide?: boolean;
 }
 
 export function ShareAccessRow({
@@ -72,6 +83,7 @@ export function ShareAccessRow({
   description,
   rightChildren,
   trailing,
+  wide = false,
 }: ShareAccessRowProps) {
   // Stable identity: a fresh function each render makes ContentAction remount
   // the icon subtree instead of updating it.
@@ -96,7 +108,11 @@ export function ShareAccessRow({
           </div>
           {titleSlot}
         </div>
-        <PermissionColumns rightChildren={rightChildren} trailing={trailing} />
+        <PermissionColumns
+          rightChildren={rightChildren}
+          trailing={trailing}
+          wide={wide}
+        />
       </div>
     );
   }
@@ -111,6 +127,7 @@ export function ShareAccessRow({
           <PermissionColumns
             rightChildren={rightChildren}
             trailing={trailing}
+            wide={wide}
           />
         }
         sizePreset="main-ui"
