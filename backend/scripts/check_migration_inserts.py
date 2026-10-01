@@ -27,16 +27,17 @@ _REVISION_ID = re.compile(r'"(\w+)"')
 # downgrade may restore a seed it removed. Everything else is scanned, so
 # module-level helpers and import aliases cannot hide an insert.
 _DOWNGRADE_BODY = re.compile(r"^def downgrade\b.*?(?=^\S|\Z)", re.MULTILINE | re.DOTALL)
+# `insert as pg_insert` renames the construct, so calls are matched by alias.
+_INSERT_ALIAS = re.compile(r"\bimport\b.*\binsert\s+as\s+(\w+)")
 _INSERT_PATTERNS = (
     re.compile(r"\bINSERT\s+INTO\b|\bINSERT\s*$", re.IGNORECASE),
     re.compile(r"\bop\.bulk_insert\("),
     # Bare, module-qualified and table-method forms of the Core construct.
     re.compile(r"(?<!\w)insert\("),
-    # An aliased import such as `insert as pg_insert` hides the call name.
-    re.compile(r"\bimport\b.*\binsert\b"),
-    re.compile(
-        r"\b\w*session\.(?:add|add_all|merge|bulk_save_objects|bulk_insert_mappings)\("
-    ),
+    # An ORM session in a migration exists to write rows, whatever it is named.
+    re.compile(r"\b(?:Session|sessionmaker)\("),
+    re.compile(r"\.(?:add_all|merge|bulk_save_objects|bulk_insert_mappings)\("),
+    re.compile(r"\b\w*session\.add\("),
 )
 
 
@@ -44,19 +45,29 @@ def _downgrade_lines(source: str) -> set[int]:
     skipped: set[int] = set()
     for match in _DOWNGRADE_BODY.finditer(source):
         first_line = source.count("\n", 0, match.start()) + 1
-        skipped.update(range(first_line, first_line + match.group(0).count("\n") + 1))
+        last_line = source.count("\n", 0, match.end() - 1) + 1
+        skipped.update(range(first_line, last_line + 1))
     return skipped
+
+
+def _insert_patterns(source: str) -> list[re.Pattern[str]]:
+    aliases = _INSERT_ALIAS.findall(source)
+    if not aliases:
+        return list(_INSERT_PATTERNS)
+    alias_call = re.compile(rf"(?<!\w)(?:{'|'.join(map(re.escape, aliases))})\(")
+    return [*_INSERT_PATTERNS, alias_call]
 
 
 def find_inserts(source: str) -> list[int]:
     """One-based line numbers outside downgrade where a row insert appears."""
     skipped = _downgrade_lines(source)
+    patterns = _insert_patterns(source)
     return [
         number
         for number, line in enumerate(source.splitlines(), start=1)
         if number not in skipped
         and ALLOW_MARKER not in line
-        and any(pattern.search(line) for pattern in _INSERT_PATTERNS)
+        and any(pattern.search(line) for pattern in patterns)
     ]
 
 

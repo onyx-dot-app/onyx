@@ -20,9 +20,9 @@ _MARKER = "mmm"
         "op.execute(postgresql.insert(tool_table).values(name='x'))",
         "op.execute(tool_table.insert().values(name='x'))",
         "op.execute(tool_table.insert().from_select(cols, query))",
-        "from sqlalchemy.dialects.postgresql import insert as pg_insert",
         "db_session.add(Tool(name='x'))",
-        "session.bulk_save_objects(rows)",
+        "s.bulk_save_objects(rows)",
+        "session = Session(bind=op.get_bind())",
         "session.add(Tool(name='x'))",
         "session.add_all(rows)",
     ],
@@ -40,6 +40,7 @@ def test_row_inserts_are_flagged(line: str) -> None:
         "op.execute(\"UPDATE tool SET name = 'y' WHERE name = 'x'\")",
         "op.execute(\"DELETE FROM tool WHERE name = 'x'\")",
         "seen.add(name)",
+        "from sqlalchemy.dialects.postgresql import insert as pg_insert",
         "# the inserted rows keep their ids",
         'op.create_index("ix_tool_slug", "tool", ["slug"])',
         'op.execute("INSERT INTO b SELECT * FROM a")  # migration-inserts: allow',
@@ -60,18 +61,27 @@ def test_insert_split_across_lines_is_flagged() -> None:
 def test_only_the_downgrade_body_is_skipped() -> None:
     source = (
         'def upgrade() -> None:\n    op.execute("DELETE FROM tool")\n\n\n'
-        "def downgrade() -> None:\n    op.bulk_insert(tool_table, rows)\n\n\n"
-        "def _after() -> None:\n    op.bulk_insert(tool_table, rows)\n"
+        "def downgrade() -> None:\n    op.bulk_insert(tool_table, rows)\n"
+        'SEED = "INSERT INTO tool VALUES (1)"\n'
     )
-    assert check_migration_inserts.find_inserts(source) == [10]
+    assert check_migration_inserts.find_inserts(source) == [7]
 
 
-def test_aliased_import_is_flagged_at_the_import() -> None:
+def test_aliased_insert_is_flagged_at_the_call() -> None:
     source = (
         "from sqlalchemy.dialects.postgresql import insert as pg_insert\n\n\n"
         "def upgrade() -> None:\n    op.execute(pg_insert(tool_table).values())\n"
     )
-    assert check_migration_inserts.find_inserts(source) == [1]
+    assert check_migration_inserts.find_inserts(source) == [5]
+
+
+def test_aliased_insert_used_only_in_downgrade_passes() -> None:
+    source = (
+        "from sqlalchemy.dialects.postgresql import insert as pg_insert\n\n\n"
+        'def upgrade() -> None:\n    op.execute("DELETE FROM tool")\n\n\n'
+        "def downgrade() -> None:\n    op.execute(pg_insert(tool_table).values())\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == []
 
 
 def test_module_level_helper_is_flagged() -> None:
