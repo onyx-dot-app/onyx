@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/osv-scalibr/semantic"
 	"github.com/google/osv-scanner/v2/pkg/models"
 	"github.com/google/osv-scanner/v2/pkg/osvscanner"
 	"github.com/ossf/osv-schema/bindings/go/osvschema"
@@ -78,8 +79,45 @@ func findingFromGroup(group models.GroupInfo, pkg models.PackageVulns) Finding {
 	}
 	if vuln := findVuln(pkg.Vulnerabilities, group.IDs); vuln != nil {
 		f.Title = vulnTitle(vuln)
+		f.FixedIn = fixedFor(vuln, pkg.Package)
 	}
 	return f
+}
+
+// fixedFor returns the lowest fixed version above the installed one across
+// the record's ranges for the package, so a bump to it ends the finding.
+// Empty when the record names none the ecosystem's comparator can place.
+func fixedFor(v *osvschema.Vulnerability, pkg models.PackageInfo) string {
+	installed, err := semantic.Parse(pkg.Version, pkg.Ecosystem)
+	if err != nil {
+		return ""
+	}
+	best := ""
+	for _, aff := range v.GetAffected() {
+		if !strings.EqualFold(aff.GetPackage().GetName(), pkg.Name) {
+			continue
+		}
+		for _, r := range aff.GetRanges() {
+			for _, e := range r.GetEvents() {
+				fixed := e.GetFixed()
+				if fixed == "" {
+					continue
+				}
+				if c, err := installed.CompareStr(fixed); err != nil || c >= 0 {
+					continue
+				}
+				if best == "" {
+					best = fixed
+					continue
+				}
+				bestV, err := semantic.Parse(best, pkg.Ecosystem)
+				if c, cerr := bestV.CompareStr(fixed); err == nil && cerr == nil && c > 0 {
+					best = fixed
+				}
+			}
+		}
+	}
+	return best
 }
 
 // vulnTitle returns a one-line title for an advisory, preferring the summary

@@ -52,7 +52,26 @@ func TestFindingsFromResults(t *testing.T) {
 							{IDs: []string{"GHSA-aaaa"}, Aliases: []string{"GHSA-aaaa", "CVE-2020-1"}, MaxSeverity: "9.8"},
 						},
 						Vulnerabilities: []*osvschema.Vulnerability{
-							{Id: "GHSA-aaaa", Summary: "Prototype pollution"},
+							{
+								Id:      "GHSA-aaaa",
+								Summary: "Prototype pollution",
+								// Two lines fixed, one below the install; the lowest
+								// above it is the pin.
+								Affected: []*osvschema.Affected{
+									{
+										Package: &osvschema.Package{Name: "lodash", Ecosystem: "npm"},
+										Ranges: []*osvschema.Range{
+											{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "3.10.2"}}},
+											{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "5.0.0"}, {Fixed: "5.0.1"}}},
+											{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "4.0.0"}, {Fixed: "4.17.21"}}},
+										},
+									},
+									{
+										Package: &osvschema.Package{Name: "lodash-es", Ecosystem: "npm"},
+										Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "4.17.1"}}}},
+									},
+								},
+							},
 						},
 					},
 				},
@@ -100,10 +119,16 @@ func TestFindingsFromResults(t *testing.T) {
 	if len(npm.Aliases) != 2 {
 		t.Errorf("npm aliases = %v", npm.Aliases)
 	}
+	if npm.FixedIn != "4.17.21" {
+		t.Errorf("npm fixed_in = %q, want the lowest fixed version above 4.17.0", npm.FixedIn)
+	}
 
 	py := findings[1]
 	if py.Severity != SeverityHigh {
 		t.Errorf("py severity = %q, want high (database_specific fallback)", py.Severity)
+	}
+	if py.FixedIn != "" {
+		t.Errorf("py fixed_in = %q, want none without affected ranges", py.FixedIn)
 	}
 	if py.Title != "First line of details." {
 		t.Errorf("py title = %q, want first line of details", py.Title)
