@@ -143,31 +143,32 @@ class _InsertFinder(ast.NodeVisitor):
 
 
 def _executable_sql(sql: str) -> str:
-    """Blank out comments and single-quoted literals, leaving the rest in place.
+    """Blank out comments that sit outside quotes.
 
-    A quoted `--` is not a comment and a commented INSERT does not run. Dollar
-    quoted bodies are kept because the statements inside them do run."""
+    Quoted text is kept and scanned: a `--` inside a literal or identifier is
+    not a comment, and EXECUTE runs the SQL inside a literal."""
     out: list[str] = []
     i = 0
     while i < len(sql):
+        char = sql[i]
         if sql.startswith("--", i):
-            i = sql.find("\n", i)
-            i = len(sql) if i == -1 else i
+            newline = sql.find("\n", i)
+            i = len(sql) if newline == -1 else newline
             out.append(" ")
         elif sql.startswith("/*", i):
             close = sql.find("*/", i + 2)
             i = len(sql) if close == -1 else close + 2
             out.append(" ")
-        elif sql[i] == "'":
+        elif char in "'\"":
             close = i + 1
             while close < len(sql) and (
-                sql[close] != "'" or sql.startswith("''", close)
+                sql[close] != char or sql[close + 1 : close + 2] == char
             ):
-                close += 2 if sql.startswith("''", close) else 1
+                close += 2 if sql[close] == char else 1
+            out.append(sql[i : close + 1])
             i = close + 1
-            out.append(" ")
         else:
-            out.append(sql[i])
+            out.append(char)
             i += 1
     return "".join(out)
 

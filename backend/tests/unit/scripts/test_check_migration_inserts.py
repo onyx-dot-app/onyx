@@ -160,6 +160,18 @@ def test_quoted_comment_marker_does_not_hide_an_insert() -> None:
     assert check_migration_inserts.find_inserts(source) == [1]
 
 
+def test_dynamic_sql_insert_is_flagged() -> None:
+    source = (
+        "op.execute(\"DO $$ BEGIN EXECUTE 'INSERT INTO tool VALUES (1)'; END $$\")\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == [1]
+
+
+def test_quoted_identifier_with_dashes_does_not_hide_an_insert() -> None:
+    source = "op.execute('ALTER TABLE \"job--options\" ADD COLUMN x INT; INSERT INTO t VALUES (1)')\n"
+    assert check_migration_inserts.find_inserts(source) == [1]
+
+
 def test_commented_out_sql_insert_passes() -> None:
     source = (
         'op.execute("""\n    -- INSERT INTO tool VALUES (1)\n'
