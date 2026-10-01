@@ -207,22 +207,19 @@ test.describe("Chat File Uploads", () => {
       );
 
       const { inputBar } = chat;
-      await expect(inputBar.container.getByText("Processing...")).toBeVisible();
+      await inputBar.expectFileProcessing();
 
       await inputBar.fill("Summarize this file");
       await expect(inputBar.sendButton).toBeDisabled();
       await inputBar.send();
-      await expect(page.locator("#onyx-human-message")).toHaveCount(0);
+      await chat.expectNoHumanMessages();
       await inputBar.expectText("Summarize this file");
 
       fileStatus = "COMPLETED";
-      await expect(inputBar.container.getByText("Processing...")).toHaveCount(
-        0,
-        { timeout: 10000 }
-      );
+      await inputBar.expectFileProcessing(false);
       await expect(inputBar.sendButton).toBeEnabled();
       await inputBar.send();
-      await expect(page.locator("#onyx-human-message")).toHaveCount(1);
+      await chat.expectHumanMessage("Summarize this file");
     });
   });
 

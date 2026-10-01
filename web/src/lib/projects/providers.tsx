@@ -23,6 +23,7 @@ import {
   type ProjectFile,
   type UserFileDeleteResult,
 } from "@/lib/projects/types";
+import { isFilePending } from "@/lib/projects/utils";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -563,6 +564,33 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
   useEffect(() => {
     currentMessageFilesRef.current = currentMessageFiles;
+  }, [currentMessageFiles]);
+
+  // Files attached from recents or a project can still be processing; poll
+  // them too so their status does not stay pending. Each attach registers
+  // once, so a file the server stops reporting is not re-polled forever.
+  const autoTrackedIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const attachedIds = new Set(currentMessageFiles.map((f) => f.id));
+    autoTrackedIdsRef.current.forEach((id) => {
+      if (!attachedIds.has(id)) autoTrackedIdsRef.current.delete(id);
+    });
+    const toTrack = currentMessageFiles
+      .filter(
+        (f) =>
+          f.status !== UserFileStatus.UPLOADING &&
+          isFilePending(f.status) &&
+          !autoTrackedIdsRef.current.has(f.id)
+      )
+      .map((f) => f.id);
+    if (toTrack.length === 0) return;
+    toTrack.forEach((id) => autoTrackedIdsRef.current.add(id));
+    setTrackedUploadIds((prev) => {
+      if (toTrack.every((id) => prev.has(id))) return prev;
+      const next = new Set(prev);
+      toTrack.forEach((id) => next.add(id));
+      return next;
+    });
   }, [currentMessageFiles]);
 
   // Sync SWR-fetched recent files into local state. On first arrival, seed
