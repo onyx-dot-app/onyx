@@ -25,7 +25,7 @@ packages:
   src/app/ee: 95.8
   src/app/federated: 97
   src/app/mcp: 99.5
-  src/app/nrf: 99.3
+  src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/components: 97.7
   src/components/admin: 96

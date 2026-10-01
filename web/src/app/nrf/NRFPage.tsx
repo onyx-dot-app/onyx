@@ -37,7 +37,6 @@ import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/types";
@@ -59,7 +58,6 @@ interface NRFPageProps {
 }
 
 // Reserve half of the context window for the model's response output
-const AVAILABLE_CONTEXT_TOKENS = Number(DEFAULT_CONTEXT_TOKENS) * 0.5;
 
 export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const t = useTranslations("chat");
@@ -300,7 +298,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     });
 
   // Chat session controller for loading sessions
-  const { currentSessionFileTokenCount } = useChatSessionController({
+  useChatSessionController({
     existingChatSessionId,
     searchParams: searchParams!,
     firstMessage: undefined,
@@ -577,8 +575,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 stopGenerating={stopGenerating}
                 onSubmit={handleChatInputSubmit}
                 chatState={currentChatState}
-                currentSessionFileTokenCount={currentSessionFileTokenCount}
-                availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
                 activeAgent={activeAgent}
                 handleFileUpload={handleFileUpload}
                 disabled={
