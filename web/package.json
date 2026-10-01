@@ -77,7 +77,7 @@
     "next-intl": "^4.13.7",
     "next-themes": "^0.4.4",
     "postcss": "^8.5.10",
-    "posthog-js": "^1.421.0",
+    "posthog-js": "^1.434.12",
     "react": "19.2.8",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.8",
