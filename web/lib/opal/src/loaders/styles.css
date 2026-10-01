@@ -55,7 +55,8 @@
   content: "";
   position: absolute;
   inset-block: 0;
-  inset-inline-start: 0;
+  /* Physical, not logical: the sweep runs left to right in every language. */
+  left: 0;
   width: var(--opal-text-shimmer-band);
   background-image: linear-gradient(
     90deg,
