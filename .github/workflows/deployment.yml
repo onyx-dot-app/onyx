@@ -2049,7 +2049,7 @@ jobs:
   # run once its images are published, since a release branch has no schedule
   # and that run is what closes the branch's issues after a fix ships.
   dispatch-cve-alerts:
-    needs: [determine-builds, audit-gate, image-audit, merge-web, merge-backend, merge-model-server, merge-sandbox]
+    needs: [determine-builds, audit-gate, image-audit, merge-web, merge-backend, merge-model-server]
     if: >-
       always() && !cancelled() && needs.determine-builds.outputs.is-test-run != 'true' &&
       (needs.audit-gate.result == 'failure' || needs.image-audit.result == 'failure' || startsWith(github.ref_name, 'v'))
