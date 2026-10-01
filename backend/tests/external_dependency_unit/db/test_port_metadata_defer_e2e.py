@@ -47,7 +47,7 @@ from onyx.db.port_attempt import (
     create_port_attempt,
     mark_port_in_progress,
 )
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
     TenantState,

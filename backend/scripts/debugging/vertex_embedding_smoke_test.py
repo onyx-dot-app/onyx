@@ -7,6 +7,7 @@ import os
 import google.auth
 from google.auth.compute_engine.credentials import Credentials as MetadataCredentials
 
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
@@ -42,10 +43,14 @@ def main() -> None:
         api_url=None,
         provider_type=EmbeddingProvider.GOOGLE,
         reduced_dimension=768,
-        vertex_config=VertexEmbeddingConfig(
-            auth_method="workload_identity",
-            project_id=args.project_id,
-            location=args.location,
+        auth=build_embedding_auth(
+            EmbeddingProvider.GOOGLE,
+            None,
+            VertexEmbeddingConfig(
+                auth_method="workload_identity",
+                project_id=args.project_id,
+                location=args.location,
+            ),
         ),
     )
     passages = model.encode(

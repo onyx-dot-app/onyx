@@ -1,5 +1,4 @@
 import hashlib
-import mimetypes
 import os
 import re
 from io import BytesIO
@@ -21,6 +20,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
+from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.utils import (
     build_full_frontend_file_url,
     chat_image_gen_metadata,
@@ -487,9 +487,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                         # Determine MIME type from file extension
                         filename = workspace_file.path.split("/")[-1]
-                        mime_type, _ = mimetypes.guess_type(filename)
-                        # Default to binary if we can't determine the type
-                        mime_type = mime_type or "application/octet-stream"
+                        mime_type = (
+                            guess_mime_type(filename) or "application/octet-stream"
+                        )
 
                         # Save to Onyx file store
                         onyx_file_id = file_store.save_file(

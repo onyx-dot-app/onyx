@@ -183,14 +183,14 @@ func TestSetEnvValues_overwritesWithNewValue(t *testing.T) {
 
 func TestQueryContainerPorts_usesRunningContainersOnly(t *testing.T) {
 	bin := composeFakeBin(t)
-	composeFakeTool(t, bin, "docker", `case "$2" in *-relational_db-1|*-minio-1) echo "0.0.0.0:3$3" ;; *) exit 1 ;; esac`)
+	composeFakeTool(t, bin, "docker", `case "$2" in *-relational_db-1|*-object-store-1) echo "0.0.0.0:3$3" ;; *) exit 1 ;; esac`)
 	logs := composeCaptureLog(t)
 
 	resolved := queryContainerPorts("proj")
 
 	wantEnv := map[string]string{
-		"POSTGRES_HOST_PORT":  "35432",
-		"MINIO_API_HOST_PORT": "39000",
+		"POSTGRES_HOST_PORT":     "35432",
+		"OBJECT_STORE_HOST_PORT": "38333",
 	}
 	if got := resolved.ComposeEnv(); !maps.Equal(got, wantEnv) {
 		t.Fatalf("expected %v, got %v", wantEnv, got)
@@ -201,7 +201,6 @@ func TestQueryContainerPorts_usesRunningContainersOnly(t *testing.T) {
 		"port proj-opensearch-1 9200",
 		"port proj-inference_model_server-1 9000",
 		"port proj-object-store-1 8333",
-		"port proj-minio-1 9000",
 		"port proj-code-interpreter-1 8000",
 	}
 	if got := composeCalls(t, bin, "docker"); !slices.Equal(got, wantCalls) {
@@ -210,7 +209,6 @@ func TestQueryContainerPorts_usesRunningContainersOnly(t *testing.T) {
 	wantLogs := "level=warning msg=cache: container not running, skipping getting its port.\n" +
 		"level=warning msg=opensearch: container not running, skipping getting its port.\n" +
 		"level=warning msg=inference_model_server: container not running, skipping getting its port.\n" +
-		"level=warning msg=object-store: container not running, skipping getting its port.\n" +
 		"level=warning msg=code-interpreter: container not running, skipping getting its port.\n"
 	if logs.String() != wantLogs {
 		t.Fatalf("expected logs %q, got %q", wantLogs, logs.String())
@@ -225,7 +223,6 @@ var composeAppEnv = map[string]string{
 	"OPENSEARCH_REST_API_PORT":  "19200",
 	"MODEL_SERVER_PORT":         "19000",
 	"S3_ENDPOINT_URL":           "http://localhost:18333",
-	"S3_LEGACY_ENDPOINT_URL":    "http://localhost:19000",
 	"CODE_INTERPRETER_BASE_URL": "http://localhost:18000",
 }
 
@@ -240,7 +237,7 @@ func TestEnvCommand_updatesVSCodeEnvInPlace(t *testing.T) {
 	bin := composeEnvDocker(t)
 	root := composeRepo(t)
 	envPath := filepath.Join(root, ".vscode", ".env")
-	writeFile(t, envPath, "CUSTOM_SETTING=x\nPOSTGRES_PORT=1\n")
+	writeFile(t, envPath, "CUSTOM_SETTING=x\nPOSTGRES_PORT=1\nS3_LEGACY_ENDPOINT_URL=http://localhost:9005\n")
 
 	command := NewEnvCommand()
 	command.SetArgs([]string{})
@@ -252,12 +249,13 @@ func TestEnvCommand_updatesVSCodeEnvInPlace(t *testing.T) {
 	if !strings.HasPrefix(content, "CUSTOM_SETTING=x\nPOSTGRES_PORT=15432\n") {
 		t.Fatalf("expected existing lines to stay in place, got %q", content)
 	}
+	// The legacy endpoint is dropped: dev runs the object store only.
 	want := maps.Clone(composeAppEnv)
 	want["CUSTOM_SETTING"] = "x"
 	if got := composeEnvFile(t, content); !maps.Equal(got, want) {
 		t.Fatalf("expected %v, got %v", want, got)
 	}
-	if got := composeCalls(t, bin, "docker"); len(got) != 7 || got[0] != "port ods-proj-relational_db-1 5432" {
+	if got := composeCalls(t, bin, "docker"); len(got) != 6 || got[0] != "port ods-proj-relational_db-1 5432" {
 		t.Fatalf("expected port queries for project ods-proj, got %q", got)
 	}
 }

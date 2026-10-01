@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import (
     AWS_REGION_NAME,
+    LEGACY_COPY_ALL_OBJECTS,
     LEGACY_COPY_SETTLE_SECONDS,
     LEGACY_COPY_WORKERS,
     S3_AWS_ACCESS_KEY_ID,
@@ -207,6 +208,8 @@ def _put_new_object(
 # A file record is what makes an object live. Bundled MinIO installs are single
 # tenant, so records live in the default schema.
 def _keys_with_records(bucket: str, keys: list[str]) -> set[str]:
+    if LEGACY_COPY_ALL_OBJECTS:
+        return set(keys)
     with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
         return get_object_keys_with_records(bucket, keys, db_session)
 

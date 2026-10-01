@@ -200,7 +200,7 @@ def _set_cc_pair_creator(cc_pair_id: int, user_id: str) -> None:
 
 def _insert_stale_cc_pair_junction(group_id: int, cc_pair_id: int) -> None:
     """Simulate a removed-but-not-yet-swept cc_pair: an is_current=False junction row
-    (removals mark the row stale rather than delete it, until the Vespa sync runs)."""
+    (removals mark the row stale rather than delete it, until the document index sync runs)."""
     with get_session_with_current_tenant() as db_session:
         db_session.add(
             UserGroup__ConnectorCredentialPair(

@@ -26,7 +26,7 @@ from onyx.document_index.chunk_content_enrichment import (
     cleanup_content_for_chunks,
     generate_enriched_content_for_chunk_text,
 )
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     DocumentSectionRequest,
@@ -797,7 +797,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self,
         chunk_requests: list[DocumentSectionRequest],
         filters: IndexFilters,
-        # TODO(andrei): Remove this from the new interface at some point; we
+        # TODO(andrei): Remove this from the interface at some point; we
         # should not be exposing this.
         batch_retrieval: bool = False,  # noqa: ARG002
         # TODO(andrei): Add a param for whether to retrieve hidden docs.
@@ -820,7 +820,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 # NOTE: Index filters includes metadata tags which were filtered
                 # for invalid unicode at indexing time. In theory it would be
                 # ideal to do filtering here as well, in practice we never did
-                # that in the Vespa codepath and have not seen issues in
+                # that in the former Vespa codepath and have not seen issues in
                 # production, so we deliberately conform to the existing logic
                 # in order to not unknowningly introduce a possible bug.
                 index_filters=filters,
@@ -875,7 +875,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -924,7 +924,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -968,7 +968,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -1031,7 +1031,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Indexes raw document chunks into OpenSearch.
 
-        Used by the Vespa migration task and the reindex port. The reindex port
+        Used by the reindex port. The reindex port
         passes use_create_only=True so its stale backlog snapshot can never
         overwrite a chunk a live/forward writer already owns in FUTURE (an
         existing chunk is a benign 409). The port is pure gap-fill backfill of

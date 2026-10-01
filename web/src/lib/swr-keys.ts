@@ -241,10 +241,9 @@ export const SWR_KEYS = {
   connector: "/api/manage/connector",
   connectorOAuthDetails: (source: string) =>
     `/api/connector/oauth/details/${source}`,
-  // Credentials of one source the caller may attach; `editable` narrows to
-  // the ones the caller may also edit.
-  similarCredentials: (source: string, editable: boolean = false) =>
-    `/api/manage/admin/similar-credentials/${source}${editable ? "?get_editable=True" : ""}`,
+  // Credentials of one source the caller may attach.
+  similarCredentials: (source: string) =>
+    `/api/manage/admin/similar-credentials/${source}`,
 
   // ── CC-Pairs ──────────────────────────────────────────────────────────────
   ccPair: (ccPairId: string | number) =>

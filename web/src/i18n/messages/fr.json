@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "Rechercher des connecteurs..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Connecteur fédéré déjà configuré.</strong> Cliquez pour modifier le connecteur existant.",
-          "slackCredentialsFound": "<strong>Identifiants Slack existants trouvés.</strong> Cliquez pour gérer votre connecteur Slack."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "Connecter {source}"
@@ -2604,6 +2598,12 @@
           "label": "Autoriser avec {source}",
           "pendingLabel": "Autorisation en cours..."
         },
+        "collapseButton": {
+          "ariaLabel": "Replier"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Créer"
         },
@@ -2614,7 +2614,8 @@
           "title": "Créer un identifiant pour {source}"
         },
         "credentialStep": {
-          "title": "Sélectionnez un identifiant"
+          "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",
+          "title": "Compte d'authentification"
         },
         "credentialSwapped": {
           "toast": "Identifiant remplacé avec succès !"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "Erreur : {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Déplier"
+        },
         "federated": {
           "tooltip": {
-            "description": "Une option de recherche fédérée est disponible pour ce connecteur. Elle entraîne une latence plus élevée et une qualité de recherche réduite.",
+            "description": "Elle entraîne une latence plus élevée et une qualité de recherche réduite.",
             "link": {
               "label": "Utiliser la version fédérée à la place →"
-            }
+            },
+            "title": "Une option de recherche fédérée est disponible pour ce connecteur."
           }
         },
         "fileUploadFailed": {
           "toast": "Erreur lors du téléversement des fichiers"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "Nouveau compte {source}"
         },
         "oauthRedirectFailed": {
           "message": "Nous n'avons pas pu vous rediriger pour vous connecter avec {source}. Veuillez réessayer."
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "Réessayer"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}"
         },
         "timeout": {
           "toast": "L'opération a expiré après {seconds} secondes. Vérifiez si votre configuration contient des erreurs ?"
@@ -2718,7 +2732,8 @@
         },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer le Drive.",
-          "title": "Option 1 : application OAuth"
+          "title": "Option 1 : application OAuth",
+          "sharedScopesNote": "Google demande l'accès à Google Drive et à Gmail en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Google Drive, décochez les autorisations Gmail sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
@@ -2776,7 +2791,8 @@
         },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer la messagerie Gmail.",
-          "title": "Option 1 : application OAuth"
+          "title": "Option 1 : application OAuth",
+          "sharedScopesNote": "Google demande l'accès à Gmail et à Google Drive en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Gmail, décochez les autorisations Google Drive sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
@@ -2811,7 +2827,7 @@
         "connectButton": {
           "label": "Connecter"
         },
-        "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}."
+        "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}.{hasDocs, select, true { Voir la [documentation]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4819,6 +4835,12 @@
         "azureGptImage2": {
           "description": "Modèle de génération d'images GPT Image 2 hébergé sur Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "Modèle de génération d'images GPT Image 2.5 Flare hébergé sur Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Modèle de génération d'images GPT Image 2.5 Sunburst hébergé sur Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Le modèle Gemini 2.5 Flash Image (Nano Banana) est conçu pour la rapidité et l'efficacité."
         },
@@ -4835,7 +4857,13 @@
           "description": "Ancien modèle phare de génération d'images d'OpenAI."
         },
         "openaiGptImage2": {
-          "description": "Dernier modèle de génération d'images d'OpenAI, avec la meilleure fidélité aux prompts."
+          "description": "Modèle de génération d'images de génération précédente d'OpenAI, avec une haute fidélité aux prompts."
+        },
+        "openaiGptImage25Flare": {
+          "description": "Dernier modèle de génération d'images d'OpenAI, alliant haute qualité et génération rapide."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "Modèle premium de génération d'images d'OpenAI, pour les retouches les plus précises."
         }
       },
       "setDefaultError": {
@@ -6104,12 +6132,6 @@
         "imageSummarization": {
           "label": "Résumé des images"
         },
-        "kgDeepExtraction": {
-          "label": "Extraction du graphe de connaissances"
-        },
-        "kgDocumentClassification": {
-          "label": "Classification du graphe de connaissances"
-        },
         "other": {
           "label": "Autres"
         },
@@ -6126,8 +6148,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
-        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images et le traitement RAG contextuel.",
+        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images et le traitement RAG contextuel.",
         "error": {
           "title": "Échec du chargement de l'utilisation système pour cette période."
         },

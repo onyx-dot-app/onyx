@@ -1,13 +1,12 @@
 from pydantic import ConfigDict
 
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE, INDEX_BATCH_SIZE
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import BaseUrlCredentialBinding, ConnectorConfig
 
 
-class DrupalWikiConnectorConfig(ConnectorConfig):
+class DrupalWikiConnectorConfig(BaseUrlCredentialBinding, ConnectorConfig):
     model_config = ConfigDict(extra="allow")
 
-    base_url: str
     spaces: list[str] | None = None
     pages: list[str] | None = None
     batch_size: int = INDEX_BATCH_SIZE

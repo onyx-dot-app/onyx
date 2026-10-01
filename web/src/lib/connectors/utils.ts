@@ -218,13 +218,6 @@ export function buildCCPairInfoUrl(ccPairId: string | number) {
   return SWR_KEYS.ccPair(ccPairId);
 }
 
-export function buildSimilarCredentialInfoURL(
-  source_type: ValidSources,
-  get_editable: boolean = false
-) {
-  return SWR_KEYS.similarCredentials(source_type, get_editable);
-}
-
 export function getTooltipMessage(
   isInvalid: boolean,
   isDeleting: boolean,

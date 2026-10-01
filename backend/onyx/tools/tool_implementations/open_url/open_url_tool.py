@@ -23,7 +23,7 @@ from onyx.context.search.utils import (
 from onyx.db.document import fetch_document_ids_by_links, filter_existing_document_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OpenUrlDocuments,

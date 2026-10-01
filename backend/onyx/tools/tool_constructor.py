@@ -63,7 +63,7 @@ def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
 
 class SearchToolConfig(BaseModel):
     user_selected_filters: BaseFilters | None = None
-    # Vespa metadata filters for overflowing user files.  These are NOT the
+    # Document index metadata filters for overflowing user files.  These are NOT the
     # IDs of the current project/persona — they are only set when the
     # project's/persona's user files didn't fit in the LLM context window and
     # must be found via vector DB search instead.
@@ -214,8 +214,7 @@ def _construct_tools_impl(
     user_oauth_token: str | None = user.live_oauth_token
 
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
         persona_search_info = PersonaSearchInfo(

@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "搜索连接器..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>联合连接器已配置。</strong>点击可编辑现有连接器。",
-          "slackCredentialsFound": "<strong>已找到现有的 Slack 凭据。</strong>点击可管理您的 Slack 连接器。"
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "连接 {source}"
@@ -2604,6 +2598,12 @@
           "label": "使用 {source} 授权",
           "pendingLabel": "正在授权…"
         },
+        "collapseButton": {
+          "ariaLabel": "折叠"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "新建"
         },
@@ -2614,7 +2614,8 @@
           "title": "创建 {source} 凭据"
         },
         "credentialStep": {
-          "title": "选择凭据"
+          "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
+          "title": "身份验证账户"
         },
         "credentialSwapped": {
           "toast": "已成功更换凭据！"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "错误：{detail}"
         },
+        "expandButton": {
+          "ariaLabel": "展开"
+        },
         "federated": {
           "tooltip": {
-            "description": "此连接器支持联合搜索选项。它会带来更高的延迟和更低的搜索质量。",
+            "description": "它会带来更高的延迟和更低的搜索质量。",
             "link": {
               "label": "改用联合搜索版本 →"
-            }
+            },
+            "title": "此连接器支持联合搜索选项。"
           }
         },
         "fileUploadFailed": {
           "toast": "上传文件出错"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "新建 {source} 账户"
         },
         "oauthRedirectFailed": {
           "message": "无法将您重定向到 {source} 登录页面。请重试。"
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "重试"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}"
         },
         "timeout": {
           "toast": "操作在 {seconds} 秒后超时。请检查配置是否有误。"
@@ -2718,7 +2732,8 @@
         },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Drive 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用"
+          "title": "选项 1：OAuth 应用",
+          "sharedScopesNote": "Google 会同时请求 Google Drive 和 Gmail 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Google Drive，请在同意屏幕上取消勾选 Gmail 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
@@ -2776,7 +2791,8 @@
         },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Gmail 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用"
+          "title": "选项 1：OAuth 应用",
+          "sharedScopesNote": "Google 会同时请求 Gmail 和 Google Drive 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Gmail，请在同意屏幕上取消勾选 Google Drive 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
@@ -2811,7 +2827,7 @@
         "connectButton": {
           "label": "连接"
         },
-        "description": "连接到 {source} 并为 {appName} 设置连接器。"
+        "description": "连接到 {source} 并为 {appName} 设置连接器。{hasDocs, select, true {查看[文档]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4819,6 +4835,12 @@
         "azureGptImage2": {
           "description": "托管在 Microsoft Azure 上的 GPT Image 2 图像生成模型。"
         },
+        "azureGptImage25Flare": {
+          "description": "托管在 Microsoft Azure 上的 GPT Image 2.5 Flare 图像生成模型。"
+        },
+        "azureGptImage25Sunburst": {
+          "description": "托管在 Microsoft Azure 上的 GPT Image 2.5 Sunburst 图像生成模型。"
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) 模型专为速度和效率而设计。"
         },
@@ -4835,7 +4857,13 @@
           "description": "OpenAI 上一代旗舰图像生成模型。"
         },
         "openaiGptImage2": {
-          "description": "OpenAI 最新的图像生成模型，提示词还原度最高。"
+          "description": "OpenAI 上一代图像生成模型，提示词还原度高。"
+        },
+        "openaiGptImage25Flare": {
+          "description": "OpenAI 最新的图像生成模型，兼顾高质量与快速生成。"
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
         }
       },
       "setDefaultError": {
@@ -6104,12 +6132,6 @@
         "imageSummarization": {
           "label": "图像摘要"
         },
-        "kgDeepExtraction": {
-          "label": "知识图谱提取"
-        },
-        "kgDocumentClassification": {
-          "label": "知识图谱分类"
-        },
         "other": {
           "label": "其他"
         },
@@ -6126,8 +6148,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · 系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
-        "emptyDescription": "系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
+        "description": "{start} – {end} · 系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要和上下文 RAG 处理。",
+        "emptyDescription": "系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要和上下文 RAG 处理。",
         "error": {
           "title": "无法加载此期间的系统用量。"
         },

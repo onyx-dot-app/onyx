@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "البحث في الموصلات..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>موصل موحّد مهيأ بالفعل.</strong> انقر لتعديل الموصل الحالي.",
-          "slackCredentialsFound": "<strong>تم العثور على بيانات اعتماد Slack موجودة.</strong> انقر لإدارة موصل Slack الخاص بك."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "ربط {source}"
@@ -2604,6 +2598,12 @@
           "label": "التفويض عبر {source}",
           "pendingLabel": "جارٍ التفويض..."
         },
+        "collapseButton": {
+          "ariaLabel": "طي"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "إنشاء جديد"
         },
@@ -2614,7 +2614,8 @@
           "title": "إنشاء بيانات اعتماد {source}"
         },
         "credentialStep": {
-          "title": "اختر بيانات اعتماد"
+          "description": "استخدم حساب خدمة مشتركًا. يفهرس {appName} المحتوى باسم هذا الحساب.",
+          "title": "حساب المصادقة"
         },
         "credentialSwapped": {
           "toast": "تم تبديل بيانات الاعتماد بنجاح!"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "خطأ: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "توسيع"
+        },
         "federated": {
           "tooltip": {
-            "description": "يتوفر خيار بحث موحّد لهذا الموصل. سيؤدي إلى زمن استجابة أكبر وجودة بحث أقل.",
+            "description": "سيؤدي إلى زمن استجابة أكبر وجودة بحث أقل.",
             "link": {
               "label": "استخدم النسخة الموحّدة بدلًا من ذلك ←"
-            }
+            },
+            "title": "يتوفر خيار بحث موحّد لهذا الموصل."
           }
         },
         "fileUploadFailed": {
           "toast": "خطأ في رفع الملفات"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "حساب {source} جديد"
         },
         "oauthRedirectFailed": {
           "message": "تعذّر تحويلك لتسجيل الدخول عبر {source}. يرجى المحاولة مرة أخرى."
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "إعادة المحاولة"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}"
         },
         "timeout": {
           "toast": "انتهت مهلة العملية بعد {seconds} ثانية. هل تتحقق من إعداداتك بحثًا عن أخطاء؟"
@@ -2718,7 +2732,8 @@
         },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Drive الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth"
+          "title": "الخيار 1: تطبيق OAuth",
+          "sharedScopesNote": "يطلب Google الوصول إلى Google Drive وGmail معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Google Drive فقط، ألغِ تحديد نطاقات Gmail في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
@@ -2776,7 +2791,8 @@
         },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Gmail الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth"
+          "title": "الخيار 1: تطبيق OAuth",
+          "sharedScopesNote": "يطلب Google الوصول إلى Gmail وGoogle Drive معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Gmail فقط، ألغِ تحديد نطاقات Google Drive في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
@@ -2811,7 +2827,7 @@
         "connectButton": {
           "label": "اتصال"
         },
-        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}."
+        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}.{hasDocs, select, true { عرض [الوثائق]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4819,6 +4835,12 @@
         "azureGptImage2": {
           "description": "نموذج توليد الصور GPT Image 2 مستضاف على Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "نموذج توليد الصور GPT Image 2.5 Flare مستضاف على Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "نموذج توليد الصور GPT Image 2.5 Sunburst مستضاف على Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "نموذج Gemini 2.5 Flash Image ‏(Nano Banana) مصمم للسرعة والكفاءة."
         },
@@ -4835,7 +4857,13 @@
           "description": "نموذج توليد الصور الرائد السابق من OpenAI."
         },
         "openaiGptImage2": {
-          "description": "أحدث نموذج توليد صور من OpenAI بأعلى دقة التزام بالمطالبات."
+          "description": "نموذج توليد الصور من الجيل السابق من OpenAI بدقة عالية في الالتزام بالمطالبات."
+        },
+        "openaiGptImage25Flare": {
+          "description": "أحدث نموذج توليد صور من OpenAI بجودة عالية وسرعة توليد كبيرة."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "نموذج توليد الصور المتميز من OpenAI لأدق عمليات التعديل."
         }
       },
       "setDefaultError": {
@@ -6104,12 +6132,6 @@
         "imageSummarization": {
           "label": "تلخيص الصور"
         },
-        "kgDeepExtraction": {
-          "label": "استخراج الرسم البياني المعرفي"
-        },
-        "kgDocumentClassification": {
-          "label": "تصنيف الرسم البياني المعرفي"
-        },
         "other": {
           "label": "أخرى"
         },
@@ -6126,8 +6148,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله {appName} في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
-        "emptyDescription": "استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله {appName} في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
+        "description": "{start} – {end} · استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله {appName} في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية.",
+        "emptyDescription": "استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله {appName} في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية.",
         "error": {
           "title": "تعذر تحميل استخدام النظام لهذه الفترة."
         },

@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "Pesquisar conectores..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Conector federado já configurado.</strong> Clique para editar o conector existente.",
-          "slackCredentialsFound": "<strong>Credenciais do Slack existentes encontradas.</strong> Clique para gerenciar seu conector do Slack."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "Conectar {source}"
@@ -2604,6 +2598,12 @@
           "label": "Autorizar com {source}",
           "pendingLabel": "Autorizando..."
         },
+        "collapseButton": {
+          "ariaLabel": "Recolher"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Criar nova"
         },
@@ -2614,7 +2614,8 @@
           "title": "Criar uma credencial do {source}"
         },
         "credentialStep": {
-          "title": "Selecione uma credencial"
+          "description": "Use uma conta de serviço compartilhada. O {appName} indexa o conteúdo como esta conta.",
+          "title": "Conta de autenticação"
         },
         "credentialSwapped": {
           "toast": "Credencial trocada com sucesso!"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "Erro: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Expandir"
+        },
         "federated": {
           "tooltip": {
-            "description": "Uma opção de pesquisa federada está disponível para este conector. Ela resulta em maior latência e menor qualidade de pesquisa.",
+            "description": "Ela resulta em maior latência e menor qualidade de pesquisa.",
             "link": {
               "label": "Usar a versão federada →"
-            }
+            },
+            "title": "Uma opção de pesquisa federada está disponível para este conector."
           }
         },
         "fileUploadFailed": {
           "toast": "Erro ao enviar os arquivos"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "Nova conta do {source}"
         },
         "oauthRedirectFailed": {
           "message": "Não foi possível redirecionar você para entrar com {source}. Tente novamente."
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "Tentar novamente"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# conta salva} other {# contas salvas}}"
         },
         "timeout": {
           "toast": "A operação expirou após {seconds} segundos. Verifique se há erros na sua configuração."
@@ -2718,7 +2732,8 @@
         },
         "oauthOption": {
           "description": "Envie o JSON do app OAuth do Google Cloud Console ([instruções de configuração]({docsUrl})) e depois autentique com a conta Google cujo Drive você quer indexar.",
-          "title": "Opção 1: app OAuth"
+          "title": "Opção 1: app OAuth",
+          "sharedScopesNote": "O Google solicita acesso ao Google Drive e ao Gmail juntos, para que uma conta atenda aos dois conectores. Para usar esta conta apenas com o Google Drive, desmarque os escopos do Gmail na tela de consentimento ([por que pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Envie ou cole o JSON do seu app OAuth"
@@ -2776,7 +2791,8 @@
         },
         "oauthOption": {
           "description": "Envie o JSON do app OAuth do Google Cloud Console ([instruções de configuração]({docsUrl})) e depois autentique com a conta Google cujo Gmail você quer indexar.",
-          "title": "Opção 1: app OAuth"
+          "title": "Opção 1: app OAuth",
+          "sharedScopesNote": "O Google solicita acesso ao Gmail e ao Google Drive juntos, para que uma conta atenda aos dois conectores. Para usar esta conta apenas com o Gmail, desmarque os escopos do Google Drive na tela de consentimento ([por que pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Envie ou cole o JSON do seu app OAuth"
@@ -2811,7 +2827,7 @@
         "connectButton": {
           "label": "Conectar"
         },
-        "description": "Conecte-se ao {source} e configure o conector para {appName}."
+        "description": "Conecte-se ao {source} e configure o conector para {appName}.{hasDocs, select, true { Ver [documentação]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4819,6 +4835,12 @@
         "azureGptImage2": {
           "description": "Modelo de geração de imagens GPT Image 2 hospedado no Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "Modelo de geração de imagens GPT Image 2.5 Flare hospedado no Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Modelo de geração de imagens GPT Image 2.5 Sunburst hospedado no Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "O modelo Gemini 2.5 Flash Image (Nano Banana) foi projetado para velocidade e eficiência."
         },
@@ -4835,7 +4857,13 @@
           "description": "O antigo modelo principal de geração de imagens da OpenAI."
         },
         "openaiGptImage2": {
-          "description": "O modelo de geração de imagens mais recente da OpenAI, com a maior fidelidade ao prompt."
+          "description": "O modelo de geração de imagens da geração anterior da OpenAI, com alta fidelidade ao prompt."
+        },
+        "openaiGptImage25Flare": {
+          "description": "O modelo de geração de imagens mais recente da OpenAI, com alta qualidade e geração rápida."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "O modelo premium de geração de imagens da OpenAI, para as edições mais precisas."
         }
       },
       "setDefaultError": {
@@ -6104,12 +6132,6 @@
         "imageSummarization": {
           "label": "Resumo de imagens"
         },
-        "kgDeepExtraction": {
-          "label": "Extração do grafo de conhecimento"
-        },
-        "kgDocumentClassification": {
-          "label": "Classificação do grafo de conhecimento"
-        },
         "other": {
           "label": "Outros"
         },
@@ -6126,8 +6148,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · O uso do sistema é a atividade de LLM que o {appName} executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens, processamento RAG contextual e extração do grafo de conhecimento.",
-        "emptyDescription": "O uso do sistema é a atividade de LLM que o {appName} executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens, processamento RAG contextual e extração do grafo de conhecimento.",
+        "description": "{start} – {end} · O uso do sistema é a atividade de LLM que o {appName} executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens e processamento RAG contextual.",
+        "emptyDescription": "O uso do sistema é a atividade de LLM que o {appName} executa em segundo plano, e não para um usuário específico. Alguns exemplos são resumos de imagens e processamento RAG contextual.",
         "error": {
           "title": "Falha ao carregar o uso do sistema neste período."
         },

@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "Search connectors..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Federated connector already configured.</strong> Click to edit the existing connector.",
-          "slackCredentialsFound": "<strong>Existing Slack credentials found.</strong> Click to manage your Slack connector."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "Connect {source}"
@@ -2604,6 +2598,12 @@
           "label": "Authorize with {source}",
           "pendingLabel": "Authorizing..."
         },
+        "collapseButton": {
+          "ariaLabel": "Collapse"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Create New"
         },
@@ -2614,7 +2614,8 @@
           "title": "Create a {source} credential"
         },
         "credentialStep": {
-          "title": "Select a credential"
+          "description": "Use a shared service account. {appName} indexes content as this account.",
+          "title": "Authentication Account"
         },
         "credentialSwapped": {
           "toast": "Swapped credential successfully!"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "Error: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Expand"
+        },
         "federated": {
           "tooltip": {
-            "description": "A federated search option is available for this connector. It will result in greater latency and reduced search quality.",
+            "description": "It will result in greater latency and reduced search quality.",
             "link": {
               "label": "Use federated version instead →"
-            }
+            },
+            "title": "A federated search option is available for this connector."
           }
         },
         "fileUploadFailed": {
           "toast": "Error uploading files"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "New {source} Account"
         },
         "oauthRedirectFailed": {
           "message": "We couldn't redirect you to sign in with {source}. Please try again."
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "Retry"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
         },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
@@ -2718,7 +2732,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Google Drive and Gmail access together, so one account can back both connectors. To use this account for Google Drive only, untick the Gmail scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2776,7 +2791,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Gmail you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Gmail and Google Drive access together, so one account can back both connectors. To use this account for Gmail only, untick the Google Drive scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2811,7 +2827,7 @@
         "connectButton": {
           "label": "Connect"
         },
-        "description": "Connect to {source} and set up the connector for {appName}."
+        "description": "Connect to {source} and set up the connector for {appName}.{hasDocs, select, true { View [docs]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4819,6 +4835,12 @@
         "azureGptImage2": {
           "description": "GPT Image 2 image generation model hosted on Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "GPT Image 2.5 Flare image generation model hosted on Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "GPT Image 2.5 Sunburst image generation model hosted on Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) model is designed for speed and efficiency."
         },
@@ -4835,7 +4857,13 @@
           "description": "OpenAI's previous flagship Image Generation model."
         },
         "openaiGptImage2": {
-          "description": "OpenAI's latest Image Generation model with the highest prompt fidelity."
+          "description": "OpenAI's previous-generation Image Generation model with high prompt fidelity."
+        },
+        "openaiGptImage25Flare": {
+          "description": "OpenAI's latest Image Generation model with high quality and fast generation."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "OpenAI's premium Image Generation model for the most precise edits."
         }
       },
       "setDefaultError": {
@@ -6104,12 +6132,6 @@
         "imageSummarization": {
           "label": "Image summarization"
         },
-        "kgDeepExtraction": {
-          "label": "Knowledge graph extraction"
-        },
-        "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
-        },
         "other": {
           "label": "Other"
         },
@@ -6126,8 +6148,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
-        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
+        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
         "error": {
           "title": "Failed to load system usage for this period."
         },

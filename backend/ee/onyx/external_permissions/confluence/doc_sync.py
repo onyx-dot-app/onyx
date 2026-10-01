@@ -44,7 +44,7 @@ def confluence_doc_sync(
     )
 
     provider = OnyxDBCredentialsProvider(
-        get_current_tenant_id(), "confluence", cc_pair.credential_id
+        get_current_tenant_id(), cc_pair.connector.source, cc_pair.credential_id
     )
     confluence_connector.set_credentials_provider(provider)
 
