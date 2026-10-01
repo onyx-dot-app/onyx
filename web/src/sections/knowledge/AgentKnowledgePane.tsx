@@ -19,7 +19,7 @@ import type {
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
+} from "@/lib/hierarchy/types";
 import type { ProjectFile } from "@/lib/projects/types";
 import type { DocumentSetSummary } from "@/lib/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
@@ -40,7 +40,7 @@ import type {
   KnowledgeNavState,
   KnowledgeSearchResults,
   KnowledgeView,
-} from "@/sections/knowledge/agent-knowledge/interfaces";
+} from "@/sections/knowledge/agent-knowledge/types";
 
 interface AgentKnowledgePaneProps {
   enableKnowledge: boolean;

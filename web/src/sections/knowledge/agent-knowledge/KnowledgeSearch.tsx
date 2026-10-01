@@ -10,7 +10,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
+} from "@/lib/hierarchy/types";
 import type { SearchDocWithContent } from "@/lib/search/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import {
@@ -30,7 +30,7 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 
-import type { KnowledgeSearchResults } from "@/sections/knowledge/agent-knowledge/interfaces";
+import type { KnowledgeSearchResults } from "@/sections/knowledge/agent-knowledge/types";
 
 interface KnowledgeSearchBarProps {
   query: string;

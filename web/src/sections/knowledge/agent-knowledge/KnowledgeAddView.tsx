@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { getSourceMetadata } from "@/lib/sources";
-import type { ConnectedSource } from "@/lib/hierarchy/interfaces";
+import type { ConnectedSource } from "@/lib/hierarchy/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import { LineItemButton } from "@opal/components";
 import { SvgFiles, SvgFolder } from "@opal/icons";

@@ -46,7 +46,7 @@ import {
   DocumentSortField,
   DocumentSortDirection,
   FolderPosition,
-} from "@/lib/hierarchy/interfaces";
+} from "@/lib/hierarchy/types";
 import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,
