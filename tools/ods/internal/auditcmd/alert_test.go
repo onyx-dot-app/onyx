@@ -31,7 +31,7 @@ func TestAlertCommand_dryRunPrintsTheAlerts(t *testing.T) {
 	results := writeFixture(t, t.TempDir(), "deps.json", blockingResult)
 	allowlist := writeFixture(t, t.TempDir(), "ignores.json", `{"ignores":[]}`)
 
-	out, err := runAlert(t, "--results", results, "--ignore-url", allowlist, "--dry-run")
+	out, err := runAlert(t, "--results", results, "--ignore-url", allowlist, "--keep-open", "--dry-run")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
