@@ -102,3 +102,20 @@ Every image publishes a `-dev` twin for each of its tags (e.g. `latest-dev`, `v1
 its `-dev` twin adds interactive debugging tools (vim, nano, curl, ps, psql) that the default image leaves out to stay
 minimal. The web-server, model-server, and sandbox `-dev` tags are identical to their plain counterparts and exist so
 that one version string covers every image.
+
+### Self-hosted embedding models and air-gapped deployments
+The model-server image contains one embedding model: `ibm-granite/granite-embedding-97m-multilingual-r2`,
+the default for new installs. It works with no network access.
+
+The model servers download all other self-hosted embedding models from Hugging Face the first time
+they use them. This includes `nomic-ai/nomic-embed-text-v1`, which older images contained. The
+downloads go to the `model_cache_huggingface` and `indexing_huggingface_model_cache` volumes.
+When a model is in these volumes, the model servers load it from there with no network access. An
+upgrade keeps the models that are already in the volumes.
+
+For an air-gapped deployment:
+- Keep these volumes when you upgrade. Do not delete them.
+- To use a self-hosted model that is not in the volumes, give the model servers network access to
+  Hugging Face once, or copy the model into the Hugging Face cache in both volumes before you select it.
+  Onyx loads its recommended self-hosted models at the revision that
+  `backend/shared_configs/embedding_models.py` pins, so copy that revision.

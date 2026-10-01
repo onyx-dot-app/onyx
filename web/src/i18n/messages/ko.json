@@ -4934,6 +4934,9 @@
         "noModelsTooltip": "설정된 모델이 없어 컨텍스트 검색을 사용할 수 없습니다. 먼저 [언어 모델]({link})을 설정하세요.",
         "title": "컨텍스트 검색"
       },
+      "currentModel": {
+        "legacyHint": "레거시 모델입니다. 계속 작동하지만 새 인덱스에 다시 선택할 수는 없습니다. 업그레이드하려면 “모든 모델 보기”를 클릭하고 최신 모델을 선택하세요."
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "Embedding 모델과 설정은 Onyx Cloud에서 관리합니다."
@@ -5065,9 +5068,13 @@
         "currentButton": {
           "label": "현재 모델"
         },
-        "deprecated": {
-          "connectTooltip": "이 embedding 모델은 지원이 중단되어 연결할 수 없습니다.",
-          "selectTooltip": "이 embedding 모델은 지원이 중단되어 선택할 수 없습니다."
+        "gpuRecommended": {
+          "tag": "GPU 권장",
+          "tooltip": "CPU에서 이 모델로 인덱싱하면 매우 느립니다. 모델 서버를 GPU에서 실행하세요."
+        },
+        "legacy": {
+          "tag": "레거시",
+          "tooltip": "이 모델은 새 인덱스에 선택할 수 없습니다. 모델을 변경하기 전까지는 계속 작동합니다."
         },
         "selectButton": {
           "label": "모델 선택"
@@ -5079,6 +5086,11 @@
       "modelPicker": {
         "addCustomModel": {
           "label": "사용자 지정 모델 추가"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "LiteLLM 프록시 또는 Azure OpenAI 배포를 연결합니다. 모델 이름과 차원은 직접 입력합니다.",
+          "selfHostedDescription": "위 목록에 없는 Hugging Face 임베딩 모델을 실행합니다. 모델 이름, 차원, 접두사는 직접 입력합니다.",
+          "title": "고급: 자체 모델 또는 프록시 사용"
         },
         "cloudTab": {
           "label": "클라우드 기반"
@@ -5147,9 +5159,6 @@
             "label": "구성 추가"
           },
           "title": "{provider} embedding 제공업체의 구성을 추가하세요."
-        },
-        "deprecated": {
-          "suffix": "(지원 중단됨)"
         },
         "disconnect": {
           "errorToast": "{provider} 연결 해제에 실패했습니다",
@@ -5276,22 +5285,30 @@
         "restoreHint": "커넥터를 유지하려면 여기서 취소하고 재개하거나 문제를 해결한 뒤 다시 재인덱싱하세요. 그러면 새 인덱스로 이전됩니다. 그렇지 않으면 재인덱싱이 끝난 뒤 다시 추가하세요."
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere의 최고 품질 임베딩 모델로, 2048차원 출력을 제공합니다.",
+        "cohereEmbedV5Fast": "Cohere Embed 5 모델의 더 빠르고 저렴한 버전으로, 2048차원 출력을 제공합니다.",
         "cohereEmbedEnglishV3": "Cohere의 영어 임베딩 모델입니다. 영어 작업에 좋은 성능을 보입니다.",
         "cohereEmbedEnglishLightV3": "Cohere의 경량 영어 임베딩 모델입니다. 단순한 작업에 더 빠르고 효율적입니다.",
-        "cohereEmbedV4": "Cohere의 최신 다국어 임베딩 모델로, 기본 1536차원 출력으로 더 높은 검색 품질을 제공합니다.",
+        "cohereEmbedV4": "Cohere의 다국어 임베딩 모델로, 1536차원 출력을 제공합니다.",
         "openaiTextEmbedding3Large": "OpenAI의 대형 임베딩 모델입니다. 성능은 가장 좋지만 비용이 더 높습니다.",
         "openaiTextEmbedding3Small": "OpenAI의 더 새롭고 효율적인 임베딩 모델입니다. 성능과 비용의 균형이 좋습니다.",
         "googleGeminiEmbedding001": "Google의 Gemini 임베딩 모델입니다. 강력하고 효율적입니다.",
         "googleTextEmbedding005": "Google의 더 작고 가벼운 임베딩 모델입니다.",
         "googleGeminiEmbedding2": "Google의 최신 멀티모달 임베딩 모델(GA)입니다. 3072차원 출력으로 최고 품질의 검색을 제공합니다.",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2의 프리뷰 버전입니다. 새 설정에서는 gemini-embedding-2로 대체되었습니다.",
+        "googleTextEmbedding004": "Google의 이전 텍스트 임베딩 모델입니다. 최신 Google 모델로 대체되었습니다.",
+        "googleTextEmbeddingGecko003": "Google의 이전 Gecko 텍스트 임베딩 모델입니다. 최신 Google 모델로 대체되었습니다.",
         "voyageLarge2Instruct": "Voyage의 대형 임베딩 모델입니다. 지시 미세 조정으로 높은 성능을 제공합니다.",
         "voyageLight2Instruct": "Voyage의 경량 임베딩 모델입니다. 성능과 효율의 균형이 좋습니다.",
+        "graniteEmbedding97mMultilingualR2": "IBM의 소형 다국어 임베딩 모델입니다(파라미터 9,700만 개). CPU에서도 빠르며, {appName}에 포함되어 있어 다운로드가 필요 없습니다.",
+        "voyage4Nano": "Voyage AI의 오픈 웨이트 임베딩 모델로, 2048차원 출력을 제공합니다. 더 작은 모델보다 검색 품질이 높으며, GPU를 사용하면 인덱싱이 훨씬 빨라집니다.",
+        "nemotron3Embed1b": "NVIDIA의 10억 파라미터 다국어 임베딩 모델로, 2048차원 출력을 제공합니다. 검색 품질은 높지만 CPU에서는 인덱싱이 매우 느립니다.",
         "nomicEmbedTextV1": "검색, 유사도, 클러스터링, 분류에 특화된 Nomic의 임베딩 모델입니다.",
-        "e5BaseV2": "기본 모델보다 더 작고 빠른 모델입니다. 검색 품질은 낮아지지만 기본 모델보다 약 2배 빠릅니다.",
+        "e5BaseV2": "Microsoft E5 계열의 영어 임베딩 모델입니다. 속도와 검색 품질의 균형을 갖추었습니다.",
         "e5SmallV2": "E5 모델 계열 중 가장 작고 빠른 버전입니다. 리소스가 제한된 시스템에서 {appName}를 실행한다면 좋은 선택입니다.",
         "multilingualE5Base": "영어 이외의 언어로 된 코퍼스에는 이 모델을 선택하세요.",
-        "multilingualE5Small": "영어 이외의 언어로 된 코퍼스이면서 리소스가 제한된 시스템이라면 이 모델을 선택하세요."
+        "multilingualE5Small": "영어 이외의 언어로 된 코퍼스이면서 리소스가 제한된 시스템이라면 이 모델을 선택하세요.",
+        "gteSmall": "GTE 계열의 소형 영어 임베딩 모델입니다. 초기 {appName} 버전의 기본 모델이었습니다."
       }
     },
     "indexing": {

@@ -28,8 +28,12 @@ export async function testEmbedding({
   apiVersion,
   deploymentName,
 }: TestEmbeddingArgs) {
+  // An empty name makes the backend probe its provider default. OpenAI has
+  // none, so it falls back to a model every OpenAI key can call.
   const testModelName =
-    provider_type === "openai" ? "text-embedding-3-small" : modelName;
+    provider_type === "openai" && !modelName
+      ? "text-embedding-3-small"
+      : modelName;
 
   return await fetch("/api/admin/embedding/test-embedding", {
     method: "POST",
@@ -53,12 +57,17 @@ export async function testEmbedding({
  * `apiVersion` and `deploymentName` are Azure-specific — backend's
  * `CloudEmbeddingProviderCreationRequest` accepts them as optional, and
  * non-Azure providers should pass `null`.
+ *
+ * `fallbackModelName` is tested only when the test with `modelName` fails.
+ * The key is saved if either test passes. If both fail, the error of the
+ * `modelName` test is thrown.
  */
 export async function connectEmbeddingProvider({
   providerType,
   apiKey,
   apiUrl,
   modelName = "",
+  fallbackModelName,
   apiVersion,
   deploymentName,
 }: {
@@ -66,22 +75,31 @@ export async function connectEmbeddingProvider({
   apiKey: string | null;
   apiUrl: string;
   modelName?: string;
+  fallbackModelName?: string;
   apiVersion: string | null;
   deploymentName: string | null;
 }): Promise<void> {
   if (apiKey !== null) {
-    const testResponse = await testEmbedding({
-      provider_type: providerType,
-      modelName,
-      apiKey,
-      apiUrl,
-      apiVersion,
-      deploymentName,
-    });
+    const testWith = (testModelName: string) =>
+      testEmbedding({
+        provider_type: providerType,
+        modelName: testModelName,
+        apiKey,
+        apiUrl,
+        apiVersion,
+        deploymentName,
+      });
 
+    const testResponse = await testWith(modelName);
     if (!testResponse.ok) {
       const err: ErrorResponseBody = await testResponse.json();
-      throw new Error(err.detail ?? "Embedding test failed");
+      const fallbackPassed =
+        fallbackModelName !== undefined &&
+        fallbackModelName !== modelName &&
+        (await testWith(fallbackModelName)).ok;
+      if (!fallbackPassed) {
+        throw new Error(err.detail ?? "Embedding test failed");
+      }
     }
   }
 

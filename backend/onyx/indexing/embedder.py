@@ -46,6 +46,7 @@ class IndexingEmbedder(ABC):
         deployment_name: str | None,
         reduced_dimension: int | None,
         callback: IndexingHeartbeatInterface | None,
+        model_dim: int | None = None,
     ):
         self.model_name = model_name
         self.normalize = normalize
@@ -68,6 +69,7 @@ class IndexingEmbedder(ABC):
             api_version=api_version,
             deployment_name=deployment_name,
             reduced_dimension=reduced_dimension,
+            model_dim=model_dim,
             # The below are globally set, this flow always uses the indexing one
             server_host=INDEXING_MODEL_SERVER_HOST,
             server_port=INDEXING_MODEL_SERVER_PORT,
@@ -99,6 +101,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         deployment_name: str | None = None,
         reduced_dimension: int | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        model_dim: int | None = None,
     ):
         super().__init__(
             model_name,
@@ -112,6 +115,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name,
             reduced_dimension,
             callback,
+            model_dim=model_dim,
         )
 
     @log_function_time()
@@ -240,6 +244,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name=search_settings.deployment_name,
             reduced_dimension=search_settings.reduced_dimension,
             callback=callback,
+            model_dim=search_settings.model_dim,
         )
 
 

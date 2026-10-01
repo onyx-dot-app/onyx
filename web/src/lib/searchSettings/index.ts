@@ -5,6 +5,7 @@ import {
 } from "@/lib/searchSettings/constants";
 import {
   EmbeddingModel,
+  EmbeddingModelRef,
   EmbeddingProvider,
   EmbeddingProviderName,
   IndexSettingsTranslator,
@@ -35,10 +36,24 @@ export function findProvider(
  * provider — i.e. credentials are managed via API keys, the row should
  * have an editable creds modal, and the backend should route through a
  * cloud SDK rather than the local model server. Returns `false` for
- * self-hosted buckets (`NOMIC`, `MICROSOFT`) and `CUSTOM`.
+ * self-hosted buckets (e.g. `IBM`, `VOYAGE_SELF_HOSTED`, `NOMIC`) and `CUSTOM`.
  */
 export function isCloudBased(providerName: EmbeddingProviderName): boolean {
   return CLOUD_BASED_PROVIDERS.some((p) => p.providerName === providerName);
+}
+
+/**
+ * `true` for the cloud providers that have no registry models (LiteLLM,
+ * Azure). The admin enters the model spec in the connect modal. The picker
+ * shows them in the "bring your own" section, not in the main list.
+ */
+export function isBringYourOwnProvider(
+  providerName: EmbeddingProviderName
+): boolean {
+  return (
+    providerName === EmbeddingProviderName.LITELLM ||
+    providerName === EmbeddingProviderName.AZURE
+  );
 }
 
 /**
@@ -57,6 +72,92 @@ export function findRegistryModel(modelName: string): EmbeddingModel | null {
     if (m) return m;
   }
   return null;
+}
+
+/**
+ * Find the registry model of one provider group. Unlike `findRegistryModel`,
+ * a LiteLLM or Azure deployment whose label equals a registry name (e.g.
+ * `text-embedding-3-large`) does not match the OpenAI entry.
+ */
+export function findProviderModel(
+  providerName: EmbeddingProviderName,
+  modelName: string
+): EmbeddingModel | null {
+  return (
+    findProvider(providerName).embeddingModels.find(
+      (m) => m.modelName === modelName
+    ) ?? null
+  );
+}
+
+/** Identify a persisted model by its display group and name. */
+export function toEmbeddingModelRef(
+  modelName: string,
+  providerTypeHint: EmbeddingProviderName | null
+): EmbeddingModelRef {
+  return {
+    modelName,
+    providerName: resolveProviderName(modelName, providerTypeHint),
+  };
+}
+
+/** `true` if `ref` names this registry model of this provider group. */
+function isSameModel(
+  ref: EmbeddingModelRef | null,
+  provider: EmbeddingProvider,
+  model: EmbeddingModel
+): boolean {
+  return (
+    ref !== null &&
+    ref.providerName === provider.providerName &&
+    ref.modelName === model.modelName
+  );
+}
+
+/**
+ * The provider groups and models the picker lists (and searches).
+ *
+ * - A legacy model is kept only while it is the current model. The match uses
+ *   the provider AND the name, so an Azure deployment labelled like a registry
+ *   model does not bring back that model.
+ * - A group left with no models is dropped, except:
+ *   - Bring-your-own groups (LiteLLM, Azure). They have no registry models by
+ *     design.
+ *   - The group of the current model. It lists a current model that is not in
+ *     the registry.
+ *   - Groups in `keepProviders` (e.g. providers with saved credentials). Their
+ *     header holds the only Disconnect and Edit credentials buttons.
+ *
+ * Returns the same provider object when nothing in it is hidden.
+ */
+export function visibleEmbeddingProviders(
+  providers: EmbeddingProvider[],
+  current: EmbeddingModelRef | null,
+  keepProviders: ReadonlySet<EmbeddingProviderName> = new Set()
+): EmbeddingProvider[] {
+  const visible: EmbeddingProvider[] = [];
+  for (const provider of providers) {
+    if (isBringYourOwnProvider(provider.providerName)) {
+      visible.push(provider);
+      continue;
+    }
+    const models = provider.embeddingModels.filter(
+      (m) => !m.legacy || isSameModel(current, provider, m)
+    );
+    if (
+      models.length === 0 &&
+      current?.providerName !== provider.providerName &&
+      !keepProviders.has(provider.providerName)
+    ) {
+      continue;
+    }
+    visible.push(
+      models.length === provider.embeddingModels.length
+        ? provider
+        : { ...provider, embeddingModels: models }
+    );
+  }
+  return visible;
 }
 
 /** Translated registry description, undefined without a key. */
@@ -98,8 +199,8 @@ export function embeddingModelDescription(
  *
  *   2. Which logical bucket does this model belong to for UI purposes —
  *      icon, modal selection, displayName? (Currently UNREPRESENTED in the
- *      schema for self-hosted models: Nomic vs Microsoft vs custom must
- *      be inferred from `model_name` by walking a frontend registry.)
+ *      schema for self-hosted models: IBM vs Nomic vs Microsoft vs custom
+ *      must be inferred from `model_name` by walking a frontend registry.)
  *
  * Because (2) is unrepresented in the schema, the frontend has historically
  * resorted to one of two hacks:
@@ -139,7 +240,7 @@ export function embeddingModelDescription(
  * backend already filled it in), this resolver SIMULATES the proper schema
  * by deriving the canonical `EmbeddingProviderName`, including the
  * synthetic self-hosted bucket values that the backend cannot currently
- * persist (`NOMIC`, `MICROSOFT`, `CUSTOM`).
+ * persist (e.g. `IBM`, `NVIDIA`, `NOMIC`, `CUSTOM`).
  *
  * Resolution rules, in order:
  *
@@ -156,7 +257,7 @@ export function embeddingModelDescription(
  *      is yet available.
  *
  *   3. Otherwise, walk `SELF_HOSTED_PROVIDERS` for a `modelName` match and
- *      return that bucket's `providerName` (e.g. `NOMIC`, `MICROSOFT`).
+ *      return that bucket's `providerName` (e.g. `IBM`, `MICROSOFT`).
  *
  *   4. Otherwise — the model isn't in any registry — fall through to
  *      `EmbeddingProviderName.CUSTOM`. This is the "user added a custom

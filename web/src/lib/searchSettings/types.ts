@@ -21,9 +21,16 @@ export enum EmbeddingProviderName {
   LITELLM = "litellm",
   AZURE = "azure",
 
-  // Self-hosted
+  // Self-hosted display groups. Frontend-only: the backend stores
+  // provider_type=null for every self-hosted model, so these values are never
+  // sent. Do not reuse a cloud value (e.g. VOYAGE) for a self-hosted group:
+  // `isCloudBased` would then route the model to that cloud API.
+  IBM = "ibm",
+  VOYAGE_SELF_HOSTED = "voyage_self_hosted",
+  NVIDIA = "nvidia",
   NOMIC = "nomic",
   MICROSOFT = "microsoft",
+  GTE = "gte",
 
   // Custom self-hosted (frontend-only sentinel; backend stores provider_type=null)
   CUSTOM = "custom",
@@ -62,13 +69,6 @@ export interface EmbeddingProvider {
   costslink?: string;
   apiLink?: string;
   embeddingModels: EmbeddingModel[];
-
-  /**
-   * When true, this provider is no longer recommended for new deployments.
-   * Existing usage is allowed, but selecting it as a new embedding model is
-   * blocked in the UI.
-   */
-  deprecated?: boolean;
 }
 
 export interface EmbeddingModel {
@@ -79,9 +79,27 @@ export interface EmbeddingModel {
   passagePrefix?: string | null;
   // Absent for custom models, which have no registry description.
   descriptionKey?: IndexSettingsMessageKey;
+  /**
+   * Kept only so existing deployments still display and re-index correctly.
+   * Not offered as a new target: the picker shows a legacy model only while it
+   * is the current model, and the backend rejects it as a new target.
+   */
+  legacy?: boolean;
+  /** Indexing on CPU is too slow for practical use. */
+  gpuRecommended?: boolean;
 }
 
-export type EmbeddingModelSpec = Omit<EmbeddingModel, "descriptionKey">;
+/** The fields sent to the backend. Registry display flags are left out. */
+export type EmbeddingModelSpec = Omit<
+  EmbeddingModel,
+  "descriptionKey" | "legacy" | "gpuRecommended"
+>;
+
+/** The active embedding model, identified by its display group and name. */
+export interface EmbeddingModelRef {
+  modelName: string;
+  providerName: EmbeddingProviderName;
+}
 
 /**
  * Always write all three fields together. A name without its spec and provider forces

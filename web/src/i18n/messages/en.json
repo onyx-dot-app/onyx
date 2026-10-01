@@ -4934,6 +4934,9 @@
         "noModelsTooltip": "Contextual Retrieval is disabled because you have no models configured. Set up a [Language Model]({link}) first.",
         "title": "Contextual Retrieval"
       },
+      "currentModel": {
+        "legacyHint": "This is a legacy model. It keeps working, but you cannot select it again for a new index. To upgrade, click View All Models and select a newer model."
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "Embedding model and settings are managed by Onyx Cloud."
@@ -5065,9 +5068,13 @@
         "currentButton": {
           "label": "Current Model"
         },
-        "deprecated": {
-          "connectTooltip": "This embedding model is deprecated and cannot be connected to.",
-          "selectTooltip": "This embedding model is deprecated and cannot be selected."
+        "gpuRecommended": {
+          "tag": "GPU recommended",
+          "tooltip": "Indexing with this model on a CPU is very slow. Run the model server on a GPU."
+        },
+        "legacy": {
+          "tag": "Legacy",
+          "tooltip": "You cannot select this model for a new index. It keeps working until you change the model."
         },
         "selectButton": {
           "label": "Select Model"
@@ -5079,6 +5086,11 @@
       "modelPicker": {
         "addCustomModel": {
           "label": "Add Custom Model"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "Connect a LiteLLM proxy or an Azure OpenAI deployment. You supply the model name and dimension.",
+          "selfHostedDescription": "Run a Hugging Face embedding model that is not in the list above. You supply the model name, dimension and prefixes.",
+          "title": "Advanced: bring your own model or proxy"
         },
         "cloudTab": {
           "label": "Cloud-based"
@@ -5147,9 +5159,6 @@
             "label": "Add Configuration"
           },
           "title": "Add configs for your {provider} embedding providers."
-        },
-        "deprecated": {
-          "suffix": "(deprecated)"
         },
         "disconnect": {
           "errorToast": "Failed to disconnect {provider}",
@@ -5276,22 +5285,30 @@
         "restoreHint": "To keep a connector, cancel here, resume or fix it, then re-index — it will be carried over. Otherwise, add it back once the re-index finishes."
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere's highest-quality embedding model, with a 2048-dim output.",
+        "cohereEmbedV5Fast": "Faster, lower-cost version of Cohere's Embed 5 model, with a 2048-dim output.",
         "cohereEmbedEnglishV3": "Cohere's English embedding model. Good performance for English-language tasks.",
         "cohereEmbedEnglishLightV3": "Cohere's lightweight English embedding model. Faster and more efficient for simpler tasks.",
-        "cohereEmbedV4": "Cohere's latest multilingual embedding model with the default 1536-dim output for stronger retrieval quality.",
+        "cohereEmbedV4": "Cohere's multilingual embedding model, with a 1536-dim output.",
         "openaiTextEmbedding3Large": "OpenAI's large embedding model. Best performance, but more expensive.",
         "openaiTextEmbedding3Small": "OpenAI's newer, more efficient embedding model. Good balance of performance and cost.",
         "googleGeminiEmbedding001": "Google's Gemini embedding model. Powerful and efficient.",
         "googleTextEmbedding005": "Smaller, lighter-weight embedding model from Google.",
         "googleGeminiEmbedding2": "Google's latest multimodal embedding model (GA). Highest-quality retrieval with a 3072-dim output.",
         "googleGeminiEmbedding2Preview": "Preview version of Gemini Embedding 2. Superseded by gemini-embedding-2 for new setups.",
+        "googleTextEmbedding004": "Earlier Google text embedding model. Newer Google models replace it.",
+        "googleTextEmbeddingGecko003": "Earlier Google Gecko text embedding model. Newer Google models replace it.",
         "voyageLarge2Instruct": "Voyage's large embedding model. High performance with instruction fine-tuning.",
         "voyageLight2Instruct": "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
+        "graniteEmbedding97mMultilingualR2": "IBM's small multilingual embedding model (97M parameters). Fast on CPU, and it ships with {appName}, so no download is needed.",
+        "voyage4Nano": "Voyage AI's open-weights embedding model, with a 2048-dim output. Higher search quality than smaller models. A GPU makes indexing much faster.",
+        "nemotron3Embed1b": "NVIDIA's 1B-parameter multilingual embedding model, with a 2048-dim output. High search quality, but indexing on CPU is very slow.",
         "nomicEmbedTextV1": "Nomic's embedding model specialized for retrieval, similarity, clustering and classification.",
-        "e5BaseV2": "A smaller and faster model than the default. It is around 2x faster than the default model at the cost of lower search quality.",
+        "e5BaseV2": "English embedding model from Microsoft's E5 family. A balance of speed and search quality.",
         "e5SmallV2": "The smallest and fastest version of the E5 line of models. If you're running {appName} on a resource constrained system, then this may be a good choice.",
         "multilingualE5Base": "For corpora in other languages besides English, this is the one to choose.",
-        "multilingualE5Small": "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose."
+        "multilingualE5Small": "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose.",
+        "gteSmall": "Small English embedding model from the GTE family. The default model of early {appName} versions."
       }
     },
     "indexing": {

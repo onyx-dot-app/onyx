@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { EmbeddingProviderName } from "@/lib/searchSettings/types";
 import { IndexSettingsPage } from "./IndexSettingsPage";
 
 const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
@@ -115,6 +116,8 @@ function modelDisplayName(model: TestModelConfiguration): string {
 // Helpers shared across both describe blocks
 // ---------------------------------------------------------------------------
 
+// Legacy self-hosted models are not rendered unless current, so the first
+// "Select Model" is always one of the selectable models.
 async function stageNonCurrentSelfHostedModel(page: Page): Promise<void> {
   await expandModelPicker(page);
   await page.getByRole("tab", { name: /self.hosted/i }).click();
@@ -157,7 +160,9 @@ async function openConnectModal(
   // cloud provider — switch to Cloud-based tab explicitly first.
   await switchToCloudTab(page);
 
-  // Click the first Connect button visible — the dialog title confirms the provider
+  // Click the first Connect button visible — the dialog title confirms the provider.
+  // Cohere is the first cloud group and its first model (embed-v5.0-pro) is
+  // selectable; legacy models are not rendered, so no disabled card comes first.
   const connectButton = page.getByRole("button", { name: "Connect" }).first();
   await expect(connectButton).toBeVisible({ timeout: 10000 });
   await connectButton.click();
@@ -1084,4 +1089,213 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
       expect(body.provider_type).toBe(providerType);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Legacy embedding models
+//
+// Legacy models keep working for the deployments that use them, but they are
+// no longer offered as a new target. The current settings are mocked, so
+// these specs do not depend on the backend's real embedding model.
+// ---------------------------------------------------------------------------
+
+const GRANITE = "ibm-granite/granite-embedding-97m-multilingual-r2";
+
+interface MockedEmbeddingModel {
+  model_name: string;
+  provider_type: string | null;
+  model_dim: number;
+  normalize: boolean;
+  query_prefix: string;
+  passage_prefix: string;
+}
+
+async function mockCurrentEmbeddingModel(
+  page: Page,
+  model: MockedEmbeddingModel
+): Promise<void> {
+  const current = (await getCurrentSearchSettings(page)) as TestSearchSettings;
+  const servedSettings: TestSearchSettings = { ...current, ...model };
+  await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+    await route.fulfill({ status: 200, body: JSON.stringify(servedSettings) });
+  });
+  await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+    await route.fulfill({ status: 200, body: "null" });
+  });
+}
+
+/** Serve these cloud providers as connected (GET only). */
+async function mockConfiguredProviders(
+  page: Page,
+  providerTypes: string[]
+): Promise<void> {
+  await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      body: JSON.stringify(
+        providerTypes.map((provider_type) => ({
+          provider_type,
+          api_key: "****",
+          api_url: null,
+          api_version: null,
+          deployment_name: null,
+        }))
+      ),
+    });
+  });
+}
+
+test.describe("Index Settings — legacy embedding models @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  test("a legacy self-hosted current model renders as Current + Legacy", async ({
+    page,
+  }) => {
+    await mockCurrentEmbeddingModel(page, {
+      model_name: "intfloat/e5-base-v2",
+      provider_type: null,
+      model_dim: 768,
+      normalize: true,
+      query_prefix: "query: ",
+      passage_prefix: "passage: ",
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expectCurrentModelSummary("intfloat/e5-base-v2", {
+      legacy: true,
+    });
+
+    // A self-hosted current model opens the picker on the Self-hosted tab.
+    await indexSettings.expandModelPicker();
+    await indexSettings.expectModelCardCurrent(
+      EmbeddingProviderName.MICROSOFT,
+      "intfloat/e5-base-v2"
+    );
+    await indexSettings.expectModelCardLegacy(
+      EmbeddingProviderName.MICROSOFT,
+      "intfloat/e5-base-v2"
+    );
+    // Its legacy siblings stay hidden; the new models are offered.
+    await indexSettings.expectModelCardHidden(
+      EmbeddingProviderName.MICROSOFT,
+      "intfloat/e5-small-v2"
+    );
+    await indexSettings.expectModelCardHidden(
+      EmbeddingProviderName.NOMIC,
+      "nomic-ai/nomic-embed-text-v1"
+    );
+    await indexSettings.expectModelCardVisible(
+      EmbeddingProviderName.IBM,
+      GRANITE
+    );
+  });
+
+  test("a legacy cloud current model renders as Current + Legacy beside the new models", async ({
+    page,
+  }) => {
+    await mockCurrentEmbeddingModel(page, {
+      model_name: "embed-english-v3.0",
+      provider_type: "cohere",
+      model_dim: 1024,
+      normalize: false,
+      query_prefix: "",
+      passage_prefix: "",
+    });
+    await mockConfiguredProviders(page, ["cohere"]);
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expectCurrentModelSummary("embed-english-v3.0", {
+      legacy: true,
+    });
+
+    // A cloud current model opens the picker on the Cloud-based tab.
+    await indexSettings.expandModelPicker();
+    await indexSettings.expectModelCardCurrent(
+      EmbeddingProviderName.COHERE,
+      "embed-english-v3.0"
+    );
+    await indexSettings.expectModelCardLegacy(
+      EmbeddingProviderName.COHERE,
+      "embed-english-v3.0"
+    );
+    await indexSettings.expectModelCardVisible(
+      EmbeddingProviderName.COHERE,
+      "embed-v5.0-pro"
+    );
+    await indexSettings.expectModelCardHidden(
+      EmbeddingProviderName.COHERE,
+      "embed-v4.0"
+    );
+  });
+
+  test("legacy models are not selectable", async ({ page }) => {
+    await mockCurrentEmbeddingModel(page, {
+      model_name: GRANITE,
+      provider_type: null,
+      model_dim: 384,
+      normalize: true,
+      query_prefix: "",
+      passage_prefix: "",
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expectCurrentModelSummary(GRANITE, { legacy: false });
+
+    await indexSettings.expandModelPicker();
+    await indexSettings.switchToSelfHostedTab();
+    await indexSettings.expectModelCardCurrent(
+      EmbeddingProviderName.IBM,
+      GRANITE
+    );
+    await indexSettings.expectModelCardVisible(
+      EmbeddingProviderName.VOYAGE_SELF_HOSTED,
+      "voyageai/voyage-4-nano"
+    );
+    await indexSettings.expectModelCardVisible(
+      EmbeddingProviderName.NVIDIA,
+      "nvidia/Nemotron-3-Embed-1B-BF16"
+    );
+    for (const [providerName, modelName] of [
+      [EmbeddingProviderName.NOMIC, "nomic-ai/nomic-embed-text-v1"],
+      [EmbeddingProviderName.MICROSOFT, "intfloat/e5-base-v2"],
+      [EmbeddingProviderName.MICROSOFT, "intfloat/multilingual-e5-small"],
+      [EmbeddingProviderName.GTE, "thenlper/gte-small"],
+    ] as const) {
+      await indexSettings.expectModelCardHidden(providerName, modelName);
+    }
+
+    await indexSettings.switchToCloudTab();
+    await indexSettings.expectModelCardVisible(
+      EmbeddingProviderName.COHERE,
+      "embed-v5.0-fast"
+    );
+    await indexSettings.expectModelCardVisible(
+      EmbeddingProviderName.GOOGLE,
+      "gemini-embedding-2"
+    );
+    for (const [providerName, modelName] of [
+      [EmbeddingProviderName.COHERE, "embed-english-v3.0"],
+      [EmbeddingProviderName.COHERE, "embed-v4.0"],
+      [EmbeddingProviderName.GOOGLE, "gemini-embedding-001"],
+      [EmbeddingProviderName.GOOGLE, "text-embedding-005"],
+      [EmbeddingProviderName.VOYAGE, "voyage-large-2-instruct"],
+    ] as const) {
+      await indexSettings.expectModelCardHidden(providerName, modelName);
+    }
+
+    // Nor can a legacy model be found by name.
+    await indexSettings.switchToSelfHostedTab();
+    await indexSettings.searchModels("e5");
+    await indexSettings.expectNoSelfHostedResults();
+  });
 });
