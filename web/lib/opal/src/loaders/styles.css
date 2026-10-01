@@ -69,7 +69,7 @@
     transparent
   );
   will-change: transform;
-  animation: opal-shimmer-text-slide 2.5s linear infinite;
+  animation: opal-shimmer-text-slide 3.5s linear infinite;
 }
 
 /* Browsers without text mask clipping show the base text alone. */
@@ -79,13 +79,17 @@
   }
 }
 
-/* The wave starts one band-width off the left edge and ends just past the
-   right one, so no part of a pass leaves it off the text. */
+/* One 3.5s cycle: the wave crosses the text for 2.5s, from one band-width
+   off the left edge to just past the right, then waits off the text for 1s
+   before the next wave. */
 @keyframes opal-shimmer-text-slide {
-  from {
+  0% {
     translate: -100% 0;
   }
-  to {
+  71.4286% {
+    translate: 100cqw 0;
+  }
+  100% {
     translate: 100cqw 0;
   }
 }
