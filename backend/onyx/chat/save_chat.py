@@ -1,5 +1,4 @@
 import json
-import mimetypes
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,7 @@ from onyx.db.chat import (
 )
 from onyx.db.models import ChatMessage, ToolCall
 from onyx.db.tools import create_tool_call_no_commit
+from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
 from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
@@ -37,7 +37,7 @@ def _extract_referenced_file_descriptors(
                 gen_file.file_link.rsplit("/", 1)[-1] if gen_file.file_link else ""
             )
             if file_id and file_id in message_text:
-                mime_type, _ = mimetypes.guess_type(gen_file.filename)
+                mime_type = guess_mime_type(gen_file.filename)
                 descriptors.append(
                     FileDescriptor(
                         id=file_id,
