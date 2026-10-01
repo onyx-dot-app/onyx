@@ -1,13 +1,12 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Button, Card, SelectCard, Text } from "@opal/components";
+import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle } from "@opal/icons";
 import type { Credential } from "@/lib/connectors/types";
 import { useCredentialSetup } from "@/lib/connectors/hooks";
-import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
@@ -128,29 +127,15 @@ export function CredentialsConfigurer({
     CredentialCreationMethod.Manual;
 
   /**
-   * One panel per route, keyed by method, for the card's tab strip. Typing
-   * a token in leads, because it is the route every source shares and the
-   * one the card opens on; `getCredentialCreationMethods` returns OAuth
-   * first and is shared with the connector detail page, so the order is
-   * settled here rather than there.
+   * The routes in tab order. Typing a token in leads, because it is the
+   * route every source shares and the one the card opens on;
+   * `getCredentialCreationMethods` returns OAuth first and is shared with
+   * the connector detail page, so the order is settled here rather than
+   * there.
    */
-  function credentialTabs() {
-    const ordered = [...methods].sort((left) =>
-      left === CredentialCreationMethod.Manual ? -1 : 1
-    );
-    return Object.fromEntries(
-      ordered.map((method) => [
-        method,
-        {
-          name:
-            method === CredentialCreationMethod.OAuth
-              ? t("add.connectWithTab.label")
-              : t("add.manualTab.label"),
-          content: renderCredentialForm(method),
-        },
-      ])
-    );
-  }
+  const orderedMethods = [...methods].sort((left) =>
+    left === CredentialCreationMethod.Manual ? -1 : 1
+  );
 
   // Gets an auth url from the server and sends the user to it in a popup.
   async function handleAuthorize() {
@@ -272,10 +257,7 @@ export function CredentialsConfigurer({
             expandedContent={
               <div className="p-4" data-testid="credential-form">
                 {namesMethods ? (
-                  <SimpleTabs
-                    // A tab switch keeps what the user typed in the other route.
-                    keepMounted
-                    tabs={credentialTabs()}
+                  <Tabs
                     value={openMethod ?? defaultMethod}
                     onValueChange={(value) => {
                       // Matched against the real methods rather than cast:
@@ -283,7 +265,24 @@ export function CredentialsConfigurer({
                       const picked = methods.find((method) => method === value);
                       if (picked) selectMethod(picked);
                     }}
-                  />
+                  >
+                    <Tabs.List>
+                      {orderedMethods.map((method) => (
+                        <Tabs.Trigger key={method} value={method}>
+                          {method === CredentialCreationMethod.OAuth
+                            ? t("add.connectWithTab.label")
+                            : t("add.manualTab.label")}
+                        </Tabs.Trigger>
+                      ))}
+                    </Tabs.List>
+                    {/* A tab switch keeps what the user typed in the other
+                    route. */}
+                    {orderedMethods.map((method) => (
+                      <Tabs.Content key={method} value={method} keepMounted>
+                        {renderCredentialForm(method)}
+                      </Tabs.Content>
+                    ))}
+                  </Tabs>
                 ) : (
                   renderCredentialForm(defaultMethod)
                 )}
