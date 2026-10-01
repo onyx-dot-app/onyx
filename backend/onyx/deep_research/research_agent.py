@@ -86,7 +86,7 @@ class ResearchFeatureState(BaseModel):
     search_tools: dict[str, SearchToolState]
 
 
-class ResearchAgent(RestorableFeature):
+class ResearchAgent(Agent, RestorableFeature):
     """Investigate one question and return a report with source references."""
 
     def __init__(
@@ -104,10 +104,11 @@ class ResearchAgent(RestorableFeature):
         previous_run_id: str | None = None,
         agent_id: str | None = None,
     ) -> None:
-        allowed_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
-        self.tools = [tool.for_agent() for tool in tools if tool.name in allowed_names]
+        allowed_tools = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
+        self.application_tools = [
+            tool.for_agent() for tool in tools if tool.name in allowed_tools
+        ]
         self.started = time.monotonic()
-        self.llm = llm
         self.is_reasoning_model = model_is_reasoning_model(
             llm.config.model_name, llm.config.model_provider
         )
@@ -137,9 +138,9 @@ class ResearchAgent(RestorableFeature):
                 not self.is_reasoning_model
             )
         ]
-        self.agent = Agent(
+        super().__init__(
             llm,
-            tools=[tool.bind(self._tool_context) for tool in self.tools]
+            tools=[tool.bind(self._tool_context) for tool in self.application_tools]
             + control_tools,
             agent_id=agent_id,
             previous_run_id=previous_run_id,
@@ -148,8 +149,8 @@ class ResearchAgent(RestorableFeature):
                 checkpoint=checkpoint,
             ),
             restoration=self,
-            prepare_step=self.prepare_step,
-            after_step=self.after_step,
+            prepare_step=self._prepare_step,
+            after_step=self._after_step,
             generation_context=GenerationContext(
                 flow=LLMFlow.RESEARCH_AGENT, user_identity=user_identity
             ),
@@ -164,7 +165,7 @@ class ResearchAgent(RestorableFeature):
             ),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
-            search_tools=capture_search_state(self.tools),
+            search_tools=capture_search_state(self.application_tools),
         ).model_copy(deep=True)
 
     def restore_state(self, state: BaseModel) -> None:
@@ -177,7 +178,7 @@ class ResearchAgent(RestorableFeature):
         ):
             raise ValueError("Research restoration configuration does not match")
         self.started = time.monotonic() - saved.elapsed_seconds
-        restore_search_state(self.tools, saved.search_tools)
+        restore_search_state(self.application_tools, saved.search_tools)
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
 
@@ -191,7 +192,7 @@ class ResearchAgent(RestorableFeature):
             ),
         )
 
-    def prepare_step(self, state: StepInput) -> PreparedStep:
+    def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
         results = previous.tool_results if previous else []
         if previous is None:
@@ -237,8 +238,8 @@ class ResearchAgent(RestorableFeature):
             )
             reminder = USER_REPORT_QUERY.format(research_topic=research_topic)
         else:
-            tools = list(self.agent.tools)
-            tool_names = {tool.name for tool in self.tools}
+            tools = list(self.tools)
+            tool_names = {tool.name for tool in self.application_tools}
             has_open_url = OpenURLTool.NAME in tool_names
             template = (
                 RESEARCH_AGENT_PROMPT_REASONING
@@ -246,7 +247,7 @@ class ResearchAgent(RestorableFeature):
                 else RESEARCH_AGENT_PROMPT
             )
             system_prompt = template.format(
-                available_tools=generate_tools_description(self.tools),
+                available_tools=generate_tools_description(self.application_tools),
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
                 optional_internal_search_tool_description=INTERNAL_SEARCH_GUIDANCE
@@ -294,7 +295,7 @@ class ResearchAgent(RestorableFeature):
             ),
         )
 
-    def after_step(self, result: StepResult) -> bool:
+    def _after_step(self, result: StepResult) -> bool:
         for tool_result in result.tool_results:
             self._update_sources(tool_result)
         if result.options.tool_choice != ToolChoiceOptions.NONE:

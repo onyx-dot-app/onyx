@@ -100,11 +100,11 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     )
     project = partial(
         project_response,
-        tool_ids={tool.name: tool.id for tool in agent.tools},
+        tool_ids={tool.name: tool.id for tool in agent.application_tools},
         initial_citations=agent.initial_citations,
     )
     run_agent(
-        agent.agent,
+        agent,
         runs=runs,
         messages=history,
         listener=ResponsePresenter(emitter).consume if render else None,
@@ -115,7 +115,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.REQUIRED
     assert llm.requests[1]["tools"] is None
     assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.NONE
-    assert [message.role for message in agent.agent.state.messages] == [
+    assert [message.role for message in agent.state.messages] == [
         "user",
         "assistant",
         "tool_result",
@@ -124,10 +124,10 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     ]
     assert [
         message.tool_call_id
-        for message in agent.agent.state.messages[2:4]
+        for message in agent.state.messages[2:4]
         if message.role == "tool_result"
     ] == ["call-0", "call-1"]
-    assert agent.agent.state.messages[-1].text == "Final answer"
+    assert agent.state.messages[-1].text == "Final answer"
     snapshot = project(runs[-1].snapshot())
     assert snapshot.answer == "Final answer"
     assert snapshot.reasoning == "Compare the evidence"
@@ -206,14 +206,14 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
     )
     runs: list[Run] = []
     run_agent(
-        agent.agent,
+        agent,
         runs=runs,
         messages=[UserMessage(content="Find documents")],
         max_steps=2,
     )
     accepted = next(
         message
-        for message in agent.agent.state.messages
+        for message in agent.state.messages
         if isinstance(message, ToolResultMessage)
     )
     assert isinstance(accepted.details, SearchDocsResponse)
@@ -282,13 +282,13 @@ def test_source_file_staging_does_not_block_cancelled_snapshot(
     )
     project = partial(
         project_response,
-        tool_ids={tool.name: tool.id for tool in agent.tools},
+        tool_ids={tool.name: tool.id for tool in agent.application_tools},
         initial_citations=agent.initial_citations,
     )
     signal = CancellationSignal()
 
     def exercise() -> None:
-        run = agent.agent.start(
+        run = agent.start(
             messages=[UserMessage(content="Find documents")],
             max_steps=2,
             cancellation=signal,
@@ -359,7 +359,7 @@ def test_chat_reuses_completed_search_artifacts_without_duplicate_documents() ->
     )
     for _ in range(2):
         run_agent(
-            feature.agent,
+            feature,
             runs=runs,
             messages=[UserMessage(content="Explain the evidence")],
             max_steps=1,
@@ -400,7 +400,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         token_counter=len,
         reminders_enabled=False,
     )
-    prepared = agent.prepare_step(
+    prepared = agent._prepare_step(
         StepInput(
             history=[],
             input_messages=[UserMessage(content="Current question")],

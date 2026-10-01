@@ -5,9 +5,7 @@ import time
 from concurrent.futures import Future, wait
 from contextlib import ExitStack
 
-from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.runtime import Run
-from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import (
     PROCESSING_REFRESH_INTERVAL_S,
     set_processing_status,
@@ -364,8 +362,6 @@ class ChatTurnExecution:
         cancellation = CancellationSignal()
         links = ExitStack()
         links.enter_context(self.cancellation.on_cancel(cancellation.cancel))
-        chat_agent: ChatAgent | DeepResearchAgent | None = None
-        coordinator: AgentCoordinator | None = None
         try:
             if startup_error is not None:
                 raise startup_error
@@ -373,7 +369,9 @@ class ChatTurnExecution:
             chat_agent = create_chat_agent(
                 self.setup, self.user, index, cancellation, self._auto_filters
             )
-            persistence.tool_ids = {tool.name: tool.id for tool in chat_agent.tools}
+            persistence.tool_ids = {
+                tool.name: tool.id for tool in chat_agent.application_tools
+            }
             if isinstance(chat_agent, DeepResearchAgent):
                 if self.setup.research_tool_id is None:
                     raise ValueError("Deep research tool configuration is missing")
@@ -383,7 +381,7 @@ class ChatTurnExecution:
             else:
                 persistence.initial_citations = dict(chat_agent.initial_citations)
             coordinator = create_chat_agent_coordinator(
-                chat_agent.agent,
+                chat_agent,
                 message_id=self.setup.responses[index].message_id,
                 previous_run_id=self.setup.previous_run_id,
                 chat_session_id=self.setup.chat_session_id,
@@ -391,7 +389,7 @@ class ChatTurnExecution:
                     self.setup.incognito_record_mode
                 ),
                 llm=self.setup.responses[index].llm,
-                tools=chat_agent.tools,
+                tools=chat_agent.application_tools,
                 user_identity=self.setup.user_identity,
                 register_store=self._register_store,
                 response_store=persistence,
@@ -409,7 +407,7 @@ class ChatTurnExecution:
                     user_id=self.setup.user_identity.user_id,
                 ).model_dump(),
             ):
-                run = chat_agent.agent.start(
+                run = chat_agent.start(
                     background=False,
                     messages=self.setup.input_messages,
                     max_steps=chat_agent.max_steps,
@@ -418,7 +416,9 @@ class ChatTurnExecution:
                     event_dispatcher=self.delivery.events,
                     on_event=ResponsePresenter(
                         emitter,
-                        tool_ids={tool.name: tool.id for tool in chat_agent.tools},
+                        tool_ids={
+                            tool.name: tool.id for tool in chat_agent.application_tools
+                        },
                     ).consume,
                 )
 

@@ -70,7 +70,7 @@ class ChatAgentDirectory(AgentDirectory):
             user_identity=self.user_identity,
             language_section=configuration.language_section,
             reasoning_effort=configuration.reasoning_effort,
-        ).agent
+        )
 
     def read_run(self, run_id: str, parent_id: str) -> RunState | None:
         if self.store is not None:

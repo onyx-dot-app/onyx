@@ -59,7 +59,7 @@ from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet
 from onyx.tracing.flows import LLMFlow
 
 
-class ChatAgent(RestorableFeature):
+class ChatAgent(Agent, RestorableFeature):
     """Chat step preparation and result handling for the shared runtime."""
 
     def __init__(
@@ -90,9 +90,8 @@ class ChatAgent(RestorableFeature):
         self.context_files = context_files
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
-        self.tools = [tool.for_agent() for tool in tools]
+        self.application_tools = [tool.for_agent() for tool in tools]
         self.include_citations = include_citations
-        self.llm = llm
         self.reasoning_effort = reasoning_effort
         self.memory = user_memory_context
         self.inject_memories = inject_memories_in_prompt
@@ -117,9 +116,9 @@ class ChatAgent(RestorableFeature):
         self.persona = persona
         self.base_system_prompt = base_system_prompt
         self.reminders_enabled = reminders_enabled
-        self.agent = Agent(
+        super().__init__(
             llm,
-            tools=[tool.bind(self._tool_context) for tool in self.tools],
+            tools=[tool.bind(self._tool_context) for tool in self.application_tools],
             agent_id=agent_id,
             previous_run_id=previous_run_id,
             state=AgentState(
@@ -127,8 +126,8 @@ class ChatAgent(RestorableFeature):
                 checkpoint=checkpoint,
             ),
             restoration=self,
-            prepare_step=self.prepare_step,
-            after_step=self.after_step,
+            prepare_step=self._prepare_step,
+            after_step=self._after_step,
             generation_context=GenerationContext(
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
@@ -155,7 +154,7 @@ class ChatAgent(RestorableFeature):
             chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
             has_called_search_tool=self.has_called_search_tool,
             ran_image_gen=self.ran_image_gen,
-            search_tools=capture_search_state(self.tools),
+            search_tools=capture_search_state(self.application_tools),
         ).model_copy(deep=True)
 
     def restore_state(self, state: BaseModel) -> None:
@@ -176,7 +175,7 @@ class ChatAgent(RestorableFeature):
             or saved.reminders_enabled != self.reminders_enabled
         ):
             raise ValueError("Chat restoration configuration does not match")
-        restore_search_state(self.tools, saved.search_tools)
+        restore_search_state(self.application_tools, saved.search_tools)
         self.started = time.monotonic() - saved.elapsed_seconds
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
@@ -222,7 +221,7 @@ class ChatAgent(RestorableFeature):
             inject_memories_in_prompt=self.inject_memories,
         )
 
-    def prepare_step(self, state: StepInput) -> PreparedStep:
+    def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
         if previous is None:
             self.started = time.monotonic()
@@ -239,7 +238,7 @@ class ChatAgent(RestorableFeature):
             for message in state.messages
             if isinstance(message, ToolResultMessage)
         ]
-        tools = self.tools
+        tools = self.application_tools
         tool_choice = ToolChoiceOptions.AUTO
         if self.forced_tool_id is not None and state.step.index == 0:
             tools = [tool for tool in tools if tool.id == self.forced_tool_id]
@@ -250,7 +249,7 @@ class ChatAgent(RestorableFeature):
             tools = []
             tool_choice = ToolChoiceOptions.NONE
         prompt = build_chat_prompt(
-            tools=self.tools,
+            tools=self.application_tools,
             persona=self.persona,
             custom_prompt=self.custom_agent_prompt,
             base_prompt=self.base_system_prompt,
@@ -265,9 +264,7 @@ class ChatAgent(RestorableFeature):
         )
         available_tool_names = {tool.name for tool in tools}
         return PreparedStep(
-            tools=[
-                tool for tool in self.agent.tools if tool.name in available_tool_names
-            ],
+            tools=[tool for tool in self.tools if tool.name in available_tool_names],
             options=GenerationOptions(
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),
@@ -292,7 +289,7 @@ class ChatAgent(RestorableFeature):
             ),
         )
 
-    def after_step(self, result: StepResult) -> bool:
+    def _after_step(self, result: StepResult) -> bool:
         self._update_tool_context(result.message, result.tool_results)
         if not result.message.tool_calls or result.step.is_last:
             self._validate_answer(result)

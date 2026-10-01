@@ -131,7 +131,7 @@ def _setup_session(
                 )
 
 
-class CodingAgent:
+class CodingAgent(Agent):
     """Configure an agent to investigate a repository and produce a final answer."""
 
     def __init__(
@@ -144,7 +144,6 @@ class CodingAgent:
         bash_tool: BashTool,
     ) -> None:
         self.repo = repo
-        self.llm = llm
         self.token_counter = token_counter
         self.bash_tool = bash_tool
         self.is_sandbox_available = True
@@ -157,17 +156,17 @@ class CodingAgent:
         ]
         if not self.is_reasoning_model:
             tools.append(self._tool(CODING_AGENT_THINK_TOOL_DESCRIPTION, self._think))
-        self.agent = Agent(
+        super().__init__(
             llm,
             tools=tools,
-            prepare_step=self.prepare_step,
-            after_step=self.after_step,
+            prepare_step=self._prepare_step,
+            after_step=self._after_step,
             generation_context=GenerationContext(
                 flow=LLMFlow.CODING_AGENT, user_identity=user_identity
             ),
         )
 
-    def prepare_step(self, state: StepInput) -> PreparedStep:
+    def _prepare_step(self, state: StepInput) -> PreparedStep:
         if state.previous is None and not self.is_sandbox_available:
             raise ValueError("The coding agent's sandbox is no longer available")
         previous = state.previous
@@ -198,7 +197,7 @@ class CodingAgent:
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
             )
-            tools = list(self.agent.tools)
+            tools = list(self.tools)
             options.tool_choice = ToolChoiceOptions.REQUIRED
         options.max_tokens = (
             MAX_FINAL_ANSWER_TOKENS if is_final_step else MAX_INVESTIGATION_TOKENS
@@ -238,7 +237,7 @@ class CodingAgent:
             ),
         )
 
-    def after_step(self, result: StepResult) -> bool:
+    def _after_step(self, result: StepResult) -> bool:
         if result.options.tool_choice != ToolChoiceOptions.NONE:
             return True
         if not result.message.text:

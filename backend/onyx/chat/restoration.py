@@ -37,7 +37,7 @@ def restore_chat_agent(
     context = checkpoint.agent_state
     token_counter = get_llm_token_counter(llm)
     if isinstance(state, ChatFeatureState):
-        chat = ChatAgent(
+        return ChatAgent(
             messages=context.messages,
             tools=tools,
             custom_agent_prompt=state.custom_prompt,
@@ -58,7 +58,6 @@ def restore_chat_agent(
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,
         )
-        return chat.agent
     if isinstance(state, ResearchFeatureState):
         return ResearchAgent(
             tools=tools,
@@ -71,7 +70,7 @@ def restore_chat_agent(
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,
-        ).agent
+        )
     if isinstance(state, DeepResearchFeatureState):
         return DeepResearchAgent(
             messages=context.messages,
@@ -86,7 +85,7 @@ def restore_chat_agent(
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,
-        ).agent
+        )
     raise ValueError("Checkpoint has no supported chat feature state")
 
 

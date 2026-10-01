@@ -389,7 +389,7 @@ for another run. Chat stores `ResearchConfiguration` directly; the SDK passes th
 Register executable tools on `Agent.tools`; the runtime restores the saved step's selection.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.
-Rebuild the feature and its live resources, then create an agent with `restored.agent_state` and the saved `agent_id`.
+Rebuild the feature agent and its live resources with `restored.agent_state` and the saved `agent_id`.
 Call `Agent.resume(restored.run_state)` on that new agent.
 Resumption restores feature state and tools without repeating completed generation, tool actions, or feature hooks.
 The application must prevent the old owner and restored owner from executing concurrently.
@@ -467,7 +467,7 @@ A chat request follows this path:
 1. The API checks the request and selects streaming or complete output.
 2. `prepare_chat_turn` loads authorized history, selects models, and creates response records.
 3. `ChatTurnExecution` starts a response worker for each selected model.
-4. Each worker builds chat or research behavior and calls `Agent.start(background=False)`.
+4. Each worker creates a `ChatAgent` or `DeepResearchAgent` and calls `start(background=False)`.
 5. `Run` advances model and tool steps. The model step calls `LLM.stream`.
 6. The LLM adapter calls the configured provider and returns typed generation updates.
 
@@ -477,7 +477,10 @@ A suspended run can release its response worker without finishing the response.
 `Agent` supplies configuration and history. `Run` owns each execution's state and controls.
 The response worker executes the run directly; these objects do not each create a thread.
 
-Chat and research features supply prompts, tools, and step decisions to the SDK.
+`ChatAgent`, `ResearchAgent`, `DeepResearchAgent`, and `CodingAgent` extend `Agent`.
+Their constructors register feature callbacks; callers use `start()`, `resume()`, and `state` directly.
+Restorable features also register their state capture and restoration capability.
+`application_tools` contains application tool objects; inherited `tools` contains bound SDK tools.
 `chat/prompt_utils.py` builds instructions and assembles history, reminders, and file context.
 Its `build_chat_prompt` function selects chat instructions and reminders before assembly.
 `chat/prompt_formatting.py` resolves attachments, reminder tags, and cache markers for model input.

@@ -237,7 +237,7 @@ class Agent:
         self.after_step = after_step
         self.before_tool_call = before_tool_call
         self.after_tool_call = after_tool_call
-        self.restoration = restoration
+        self._restoration = restoration
         self._state = (state or AgentState()).snapshot()
         self._previous_run_id = previous_run_id
         self._lock = threading.RLock()
@@ -612,11 +612,11 @@ class Run:
             if state.progress is not None:
                 feature_state = state.progress.feature_state
                 if feature_state is not None:
-                    if agent.restoration is None:
+                    if agent._restoration is None:
                         raise ValueError(
                             "Feature restoration is required for this state"
                         )
-                    agent.restoration.restore_state(feature_state)
+                    agent._restoration.restore_state(feature_state)
             self._llm = agent.llm
             self._defaults = PreparedStep(
                 system_prompt=agent.system_prompt,
@@ -634,7 +634,7 @@ class Run:
             self._after_step = agent.after_step
             self._before_tool_call = agent.before_tool_call
             self._after_tool_call = agent.after_tool_call
-            self._restoration = agent.restoration
+            self._restoration = agent._restoration
             self._work = ExecutionWork()
             self._thread_context = copy_context()
             self._cancellation_link = ExitStack()

@@ -147,7 +147,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
     assert saved.progress is not None
     assert isinstance(saved.progress.feature_state, ChatFeatureState)
     restored.restore_state(saved.progress.feature_state)
-    restored.agent.tools[0].execute(
+    restored.tools[0].execute(
         ToolInvocation(
             call_id="call",
             arguments={},
@@ -193,7 +193,7 @@ def test_deep_research_restores_citations_and_control_tools() -> None:
         )
 
     original = feature()
-    prepared = original.prepare_step(
+    prepared = original._prepare_step(
         StepInput(
             history=[],
             input_messages=[],
@@ -208,7 +208,7 @@ def test_deep_research_restores_citations_and_control_tools() -> None:
         _checkpoint_model_types()["deep_research.state.v1"].model_validate_json(encoded)
     )
     names = {tool.name for tool in prepared.tools}
-    tools = [tool for tool in restored.agent.tools if tool.name in names]
+    tools = [tool for tool in restored.tools if tool.name in names]
     assert restored.citation_mapping[4].document_id == "reference"
     assert tools[0].definition == prepared.tools[0].definition
     result = tools[0].execute(
@@ -226,15 +226,15 @@ def test_deep_research_restores_citations_and_control_tools() -> None:
 def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
 
     original = chat(CaptureContextTool())
-    original.agent.llm = FakeModelClient(
+    original.llm = FakeModelClient(
         lambda _request, _signal: AssistantMessage(
             content=[ToolCall(id="echo-call", name="echo", arguments={})]
         )
     )
-    original.agent.before_tool_call = lambda _context: PendingToolInput(
+    original.before_tool_call = lambda _context: PendingToolInput(
         request_id="approve-echo", prompt="Run echo?", mode=InputMode.EXECUTE
     )
-    run = original.agent.start(max_steps=3, messages=[UserMessage(content="Check")])
+    run = original.start(max_steps=3, messages=[UserMessage(content="Check")])
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
     checkpoint = run.capture()
@@ -262,14 +262,14 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
         checkpoint=checkpoint.agent_state.checkpoint,
     )
     prepared_indices: list[int] = []
-    prepare = restored.prepare_step
+    prepare = restored._prepare_step
 
     def prepare_next(state: StepInput) -> PreparedStep:
         prepared_indices.append(state.step.index)
         return prepare(state)
 
-    restored.agent.prepare_step = prepare_next
-    resumed = restored.agent.resume(checkpoint.run_state)
+    restored.prepare_step = prepare_next
+    resumed = restored.resume(checkpoint.run_state)
     resumed.submit(
         HumanToolAnswer(request_id="approve-echo", decision=InputDecision.APPROVE)
     )
@@ -325,12 +325,12 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
         original.citation_mapping = {6: "reference"}
     elif isinstance(original, DeepResearchAgent):
         original.citation_mapping = {6: document()}
-    original.agent.before_tool_call = lambda _context: PendingToolInput(
+    original.before_tool_call = lambda _context: PendingToolInput(
         request_id="control",
         prompt="Continue?",
         mode=InputMode.EXECUTE,
     )
-    run = original.agent.start(max_steps=3, messages=[UserMessage(content="Research")])
+    run = original.start(max_steps=3, messages=[UserMessage(content="Research")])
     assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(timeout=5)
     checkpoint = run.capture()
@@ -346,7 +346,7 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
     restored = build(final_model)
     checkpoint = CheckpointStorage(_checkpoint_model_types()).load(encoded)
     restored = build(final_model, checkpoint.run_state.agent_id, checkpoint.agent_state)
-    resumed = restored.agent.resume(checkpoint.run_state)
+    resumed = restored.resume(checkpoint.run_state)
     resumed.submit(
         HumanToolAnswer(request_id="control", decision=InputDecision.APPROVE)
     )
@@ -375,7 +375,7 @@ def test_research_restores_search_scope_cache_without_recomputing() -> None:
         )
 
     original = ResearchAgent([search()], model(), len, None, "", ReasoningEffort.LOW)
-    saved_tool = original.tools[0]
+    saved_tool = original.application_tools[0]
     assert isinstance(saved_tool, SearchTool)
     saved_tool.restore_state(
         SearchToolState(
@@ -394,7 +394,7 @@ def test_research_restores_search_scope_cache_without_recomputing() -> None:
     restored.restore_state(
         _checkpoint_model_types()["research.state.v1"].model_validate_json(encoded)
     )
-    tool = restored.tools[0]
+    tool = restored.application_tools[0]
     assert isinstance(tool, SearchTool)
     state = tool.capture_state()
     assert state.cached_expansion == ("facts", ["facts", "evidence"])
@@ -430,7 +430,7 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
             user_identity=user_identity,
             bash_tool=bash_tool,
         )
-        child.agent.before_tool_call = lambda _context: PendingToolInput(
+        child.before_tool_call = lambda _context: PendingToolInput(
             request_id="allow-bash",
             prompt="Run command?",
             mode=InputMode.EXECUTE,
@@ -469,7 +469,7 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
     try:
         assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=5)
-        child = coordinator.active_run(children[0].agent.id)
+        child = coordinator.active_run(children[0].id)
         assert child is not None
         assert child.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert child.wait_for_idle(timeout=5)
@@ -583,17 +583,17 @@ def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> N
             loader=lambda: payload,
         )
     ]
-    original.agent.llm = FakeModelClient(
+    original.llm = FakeModelClient(
         lambda _request, _signal: AssistantMessage(
             content=[ToolCall(id="echo-call", name="echo", arguments={})],
         )
     )
-    original.agent.before_tool_call = lambda _context: PendingToolInput(
+    original.before_tool_call = lambda _context: PendingToolInput(
         request_id="echo",
         prompt="Continue?",
         mode=InputMode.EXECUTE,
     )
-    run = original.agent.start(
+    run = original.start(
         max_steps=2, messages=[UserMessage(content="Check")], coordinator=coordinator
     )
     try:
@@ -619,7 +619,7 @@ def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> N
             token_counter=len,
             agent_id=decoded.run_state.agent_id,
         )
-        resumed = restored.agent.resume(decoded.run_state, coordinator=coordinator)
+        resumed = restored.resume(decoded.run_state, coordinator=coordinator)
         assert resumed is not run and resumed.id == run.id
         resumed.submit(
             HumanToolAnswer(request_id="echo", decision=InputDecision.APPROVE)

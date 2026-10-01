@@ -110,7 +110,7 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
         agent_state=context,
         run_state=RunState(
             run_id="suspended-run",
-            agent_id=original.agent.id,
+            agent_id=original.id,
             status=RunStatus.SUSPENDED,
             steps=[],
             progress=RunProgress(step_limit=3, feature_state=state),
@@ -118,22 +118,21 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
     )
     saved = checkpoint.model_copy(deep=True)
     rebuilt = restore_chat_agent(checkpoint, llm=llm, tools=[], user_identity=None)
-    assert rebuilt is not original.agent
-    assert rebuilt.id == original.agent.id
+    assert rebuilt is not original
+    assert rebuilt.id == original.id
     assert rebuilt.state == context
-    assert rebuilt.restoration is not None
-    assert type(rebuilt.restoration) is type(original)
-    assert rebuilt.restoration is not original
-    rebuilt.restoration.restore_state(state)
-    restored = rebuilt.restoration.capture_state()
+    assert isinstance(rebuilt, (ChatAgent, ResearchAgent, DeepResearchAgent))
+    assert type(rebuilt) is type(original)
+    rebuilt.restore_state(state)
+    restored = rebuilt.capture_state()
     assert restored.model_dump(exclude={"elapsed_seconds"}) == state.model_dump(
         exclude={"elapsed_seconds"}
     )
     if isinstance(original, ChatAgent):
-        assert isinstance(rebuilt.restoration, ChatAgent)
-        assert rebuilt.restoration.custom_agent_prompt == original.custom_agent_prompt
-        assert rebuilt.restoration.persona == original.persona
-        prepared = rebuilt.restoration.prepare_step(
+        assert isinstance(rebuilt, ChatAgent)
+        assert rebuilt.custom_agent_prompt == original.custom_agent_prompt
+        assert rebuilt.persona == original.persona
+        prepared = rebuilt._prepare_step(
             StepInput(
                 history=context.messages,
                 input_messages=[],

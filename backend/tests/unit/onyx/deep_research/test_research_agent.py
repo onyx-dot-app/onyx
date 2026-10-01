@@ -88,7 +88,7 @@ def test_timed_out_child_preserves_successful_sibling(
     )
     runs: list[Run] = []
     result = run_agent(
-        feature.agent,
+        feature,
         messages=[UserMessage(content="Research")],
         max_steps=4,
         coordinator=AgentCoordinator(),
@@ -148,7 +148,7 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
         else ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
     )
     result = run_agent(
-        feature.agent, messages=[UserMessage(content="Research")], max_steps=10
+        feature, messages=[UserMessage(content="Research")], max_steps=10
     )
     assert result.output.text == "Report"
     assert len(requests) == 2

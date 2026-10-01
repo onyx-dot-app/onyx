@@ -398,7 +398,15 @@ def _chat_agent(agent: Agent, max_steps: int = 1) -> ChatAgent:
         llm=agent.llm,
         token_counter=len,
     )
-    chat_agent.agent = agent
+    chat_agent.tools = agent.tools
+    chat_agent.system_prompt = agent.system_prompt
+    chat_agent.options = agent.options
+    chat_agent.generation_context = agent.generation_context
+    chat_agent.prepare_step = agent.prepare_step
+    chat_agent.after_step = agent.after_step
+    chat_agent.before_tool_call = agent.before_tool_call
+    chat_agent.after_tool_call = agent.after_tool_call
+    chat_agent._restoration = None
     chat_agent.max_steps = max_steps
     return chat_agent
 

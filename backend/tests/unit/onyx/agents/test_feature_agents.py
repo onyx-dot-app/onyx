@@ -118,7 +118,7 @@ def test_coding_bash_order_history_and_final_answer() -> None:
         bash_tool=bash,
     )
     result = run_agent(
-        harness.agent,
+        harness,
         runs=runs,
         max_steps=3,
         messages=[UserMessage(content="Read repository")],
@@ -127,9 +127,7 @@ def test_coding_bash_order_history_and_final_answer() -> None:
     assert result.output.text == "Done"
     assert bash.run.call_count == 2
     responses = [
-        message
-        for message in harness.agent.state.messages
-        if message.role == "tool_result"
+        message for message in harness.state.messages if message.role == "tool_result"
     ]
     assert [(message.tool_call_id, message.text) for message in responses] == [
         ("call-0", "first"),
@@ -158,9 +156,8 @@ def test_cancel_after_coding_tools_prevents_final_model_call() -> None:
         user_identity=None,
         bash_tool=bash,
     )
-    agent = harness.agent
     with pytest.raises(AgentCancelled):
-        run_agent(agent, runs=runs, max_steps=3, cancellation=signal)
+        run_agent(harness, runs=runs, max_steps=3, cancellation=signal)
     assert len(llm.requests) == 1
 
 
@@ -180,7 +177,7 @@ def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) 
     )
     feature = ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
     result = run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         max_steps=3,
         messages=[UserMessage(content="Find facts")],
@@ -192,7 +189,7 @@ def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) 
         len(
             [
                 message
-                for message in feature.agent.state.messages
+                for message in feature.state.messages
                 if message.role == "tool_result"
             ]
         )
@@ -241,17 +238,17 @@ def test_research_executes_only_allowed_tools_and_records_results() -> None:
         ReasoningEffort.LOW,
     )
     result = run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         max_steps=3,
         messages=[UserMessage(content="Find facts")],
     )
-    assert [tool.name for tool in feature.tools] == [
+    assert [tool.name for tool in feature.application_tools] == [
         WebSearchTool.NAME,
         SearchTool.NAME,
     ]
     search.for_agent.assert_called_once_with()
-    assert feature.tools[1] is isolated_search
+    assert feature.application_tools[1] is isolated_search
     assert result.output.text == "Report"
     snapshot = runs[-1].snapshot()
     assert snapshot is not None
@@ -299,14 +296,14 @@ def test_deep_research_composes_plan_child_and_report() -> None:
         all_injected_file_metadata=None,
         skip_clarification=True,
     )
-    feature.agent.generation_context.stall_timeout_s = 11
+    feature.generation_context.stall_timeout_s = 11
     coordinator = AgentCoordinator()
     project = partial(
         project_response,
         tool_ids={RESEARCH_AGENT_TOOL_NAME: 7},
     )
     run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         coordinator=coordinator,
         messages=[UserMessage(content="Research")],
@@ -427,7 +424,7 @@ def test_deep_research_prelude_cancellation_keeps_partial_output(
     )
     with pytest.raises(AgentCancelled):
         run_agent(
-            feature.agent,
+            feature,
             runs=runs,
             coordinator=coordinator,
             messages=[UserMessage(content="Research")],
@@ -462,7 +459,7 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
         skip_clarification=True,
     )
     result = run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         coordinator=AgentCoordinator(),
         messages=[UserMessage(content="Research")],
@@ -475,7 +472,7 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
     assert len(llm.requests) == 3
     assert [
         message.text
-        for message in feature.agent.state.messages
+        for message in feature.state.messages
         if isinstance(message, UserMessage)
     ] == ["Research"]
 
@@ -487,14 +484,14 @@ def test_child_failure_is_a_failed_tool_result(
     monkeypatch: pytest.MonkeyPatch, error: Exception
 ) -> None:
     runs: list[Run] = []
-    original_prepare = ResearchAgent.prepare_step
+    original_prepare = ResearchAgent._prepare_step
 
     def fail_child(self: ResearchAgent, state: StepInput) -> PreparedStep:
         if state.input_messages[0].text == "unavailable":
             raise error
         return original_prepare(self, state)
 
-    monkeypatch.setattr(ResearchAgent, "prepare_step", fail_child)
+    monkeypatch.setattr(ResearchAgent, "_prepare_step", fail_child)
     llm = ScriptedLLM(
         [
             Delta(content="Plan"),
@@ -516,7 +513,7 @@ def test_child_failure_is_a_failed_tool_result(
         skip_clarification=True,
     )
     result = run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         coordinator=AgentCoordinator(),
         messages=[UserMessage(content="Research")],
@@ -524,9 +521,7 @@ def test_child_failure_is_a_failed_tool_result(
     )
     assert result.output.text == "Report with remaining evidence"
     tool_results = [
-        message
-        for message in feature.agent.state.messages
-        if message.role == "tool_result"
+        message for message in feature.state.messages if message.role == "tool_result"
     ]
     assert tool_results[0].is_error
     snapshot = runs[-1].snapshot()
@@ -554,7 +549,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
         )
         for topic in ("first", "second")
     }
-    original_prepare = ResearchAgent.prepare_step
+    original_prepare = ResearchAgent._prepare_step
 
     def child_prepare(child: ResearchAgent, state: StepInput) -> PreparedStep:
         prepared = original_prepare(child, state)
@@ -563,7 +558,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
         metadata.sources = {9: documents[state.input_messages[0].text]}
         return prepared
 
-    monkeypatch.setattr(ResearchAgent, "prepare_step", child_prepare)
+    monkeypatch.setattr(ResearchAgent, "_prepare_step", child_prepare)
 
     def allocate_citations(
         answer_text: str,
@@ -659,7 +654,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
             final_events.append(event)
 
     run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         coordinator=coordinator,
         messages=[UserMessage(content="Parent")],
@@ -668,7 +663,7 @@ def test_research_preserves_citation_identity_across_completion_and_call_order(
     )
     accepted = [
         message
-        for message in feature.agent.state.messages
+        for message in feature.state.messages
         if isinstance(message, ToolResultMessage)
         and message.tool_name == RESEARCH_AGENT_TOOL_NAME
     ]
@@ -716,13 +711,13 @@ def test_repeated_runs_use_new_input_and_restore_tool_execution(coding: bool) ->
         else ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
     )
     first = run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         max_steps=2,
         messages=[UserMessage(content="First question")],
     )
     second = run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         max_steps=2,
         messages=[UserMessage(content="Second question")],
@@ -753,7 +748,7 @@ def test_coding_rejects_run_after_sandbox_cleanup() -> None:
         bash_tool=MagicMock(spec=BashTool),
     )
     run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         max_steps=1,
         messages=[UserMessage(content="Read repository")],
@@ -763,7 +758,7 @@ def test_coding_rejects_run_after_sandbox_cleanup() -> None:
     feature.is_sandbox_available = False
     with pytest.raises(RunFailed) as failure:
         run_agent(
-            feature.agent,
+            feature,
             runs=runs,
             max_steps=1,
             messages=[UserMessage(content="Continue")],
@@ -776,7 +771,7 @@ def test_coding_rejects_run_after_sandbox_cleanup() -> None:
     assert [message.text for message in failed.input_messages] == ["Continue"]
     assert failed.messages == []
     assert failed.steps == []
-    assert feature.agent.state.messages[:-1] == [
+    assert feature.state.messages[:-1] == [
         *previous.input_messages,
         *previous.messages,
     ]
@@ -832,7 +827,7 @@ def test_restored_research_preserves_history_and_source_numbers(
         sources=None if from_tool_result else {4: document},
     )
     result = run_agent(
-        feature.agent,
+        feature,
         runs=runs,
         max_steps=1,
         messages=[UserMessage(content="Continue")],
@@ -840,7 +835,7 @@ def test_restored_research_preserves_history_and_source_numbers(
     assert isinstance(result.output.metadata, ResearchMessageMetadata)
     assert result.output.metadata.sources == {4: document}
     assert feature.citation_processor.get_next_citation_number() == 5
-    assert feature.agent.state.messages[0].text == "Find evidence"
+    assert feature.state.messages[0].text == "Find evidence"
     assert feature.citation_mapping == {4: "reference"}
 
 
@@ -855,7 +850,7 @@ def test_coding_prepared_request_keeps_decisions_when_history_changes() -> None:
         bash_tool=bash,
     )
     history: list[Message] = [UserMessage(content="Inspect the repository")]
-    prepared = feature.prepare_step(
+    prepared = feature._prepare_step(
         StepInput(
             history=[],
             input_messages=history,
@@ -865,7 +860,7 @@ def test_coding_prepared_request_keeps_decisions_when_history_changes() -> None:
     )
     assert prepared is not None
     initial = prepared.generation_request(history)
-    final = feature.prepare_step(
+    final = feature._prepare_step(
         StepInput(
             history=[],
             input_messages=history,
@@ -923,7 +918,7 @@ def test_empty_final_response_fails_at_step_limit(feature_name: str) -> None:
     budget = 2 if feature_name == "deep_research" else 1
     with pytest.raises(RunFailed) as failure:
         run_agent(
-            feature.agent,
+            feature,
             messages=[UserMessage(content="Task")],
             max_steps=budget,
             runs=runs,
@@ -975,7 +970,7 @@ def test_citation_conversion_failure_preserves_child_without_parent_result(
     runs: list[Run] = []
     with pytest.raises(RunFailed):
         run_agent(
-            feature.agent,
+            feature,
             messages=[UserMessage(content="Parent task")],
             max_steps=3,
             runs=runs,

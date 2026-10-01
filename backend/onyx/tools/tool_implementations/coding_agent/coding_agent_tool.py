@@ -109,11 +109,11 @@ class CodingAgentTool(Tool):
             repo=arguments.github_repo, github_token=self._github_token
         )
         session_id = sandbox.__enter__()
-        feature: CodingAgent | None = None
+        agent: CodingAgent | None = None
 
         def cleanup() -> None:
-            if feature is not None:
-                feature.is_sandbox_available = False
+            if agent is not None:
+                agent.is_sandbox_available = False
             try:
                 with cancellation_scope(CancellationSignal()):
                     sandbox.__exit__(None, None, None)
@@ -121,7 +121,7 @@ class CodingAgentTool(Tool):
                 logger.exception("Coding sandbox cleanup failed")
 
         try:
-            feature = CodingAgent(
+            agent = CodingAgent(
                 repo=arguments.github_repo,
                 llm=self._llm,
                 token_counter=get_llm_token_counter(self._llm),
@@ -131,7 +131,7 @@ class CodingAgentTool(Tool):
                 ),
             )
             submission = invocation.agents.spawn_agent(
-                feature.agent,
+                agent,
                 name="coding-"
                 + "".join(
                     char if char.isascii() and char.isalnum() else "-"

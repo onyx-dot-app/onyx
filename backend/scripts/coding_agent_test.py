@@ -58,7 +58,7 @@ def main() -> int:
             bash_tool=BashTool(tool_id=BASH_TOOL_SENTINEL_ID, session_id=session_id),
         )
 
-        run = feature.agent.start(
+        run = feature.start(
             max_steps=MAX_CODING_AGENT_CYCLES + 1,
             messages=[UserMessage(content=args.query)],
             on_event=events.append if args.dump_packets else None,

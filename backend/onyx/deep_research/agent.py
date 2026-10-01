@@ -104,7 +104,7 @@ class DeepResearchFeatureState(BaseModel):
     citation_mapping: CitationMapping
 
 
-class DeepResearchAgent(RestorableFeature):
+class DeepResearchAgent(Agent, RestorableFeature):
     """Clarify a question, coordinate research children, and write a report."""
 
     def __init__(
@@ -122,8 +122,7 @@ class DeepResearchAgent(RestorableFeature):
         previous_run_id: str | None = None,
         agent_id: str | None = None,
     ) -> None:
-        self.tools = allowed_tools
-        self.llm = llm
+        self.application_tools = allowed_tools
         self.token_counter = token_counter
         self.user_identity = user_identity
         self.language_section = language_section
@@ -141,7 +140,7 @@ class DeepResearchAgent(RestorableFeature):
         )
         self.max_steps = self.max_orchestrator_cycles + (1 if skip_clarification else 2)
         self.has_internal_search = any(
-            tool.name == SearchTool.NAME for tool in self.tools
+            tool.name == SearchTool.NAME for tool in self.application_tools
         )
         self.citation_mapping: CitationMapping = {}
         self._citation_lock = Lock()
@@ -164,7 +163,7 @@ class DeepResearchAgent(RestorableFeature):
             )
             for definition in get_orchestrator_tools(not self.is_reasoning_model)
         ]
-        self.agent = Agent(
+        super().__init__(
             llm,
             tools=[*self.clarification_tools, *self.research_tools],
             agent_id=agent_id,
@@ -174,8 +173,8 @@ class DeepResearchAgent(RestorableFeature):
                 checkpoint=checkpoint,
             ),
             restoration=self,
-            prepare_step=self.prepare_step,
-            after_step=self.after_step,
+            prepare_step=self._prepare_step,
+            after_step=self._after_step,
             generation_context=GenerationContext(
                 flow=LLMFlow.DEEP_RESEARCH, user_identity=user_identity
             ),
@@ -209,7 +208,7 @@ class DeepResearchAgent(RestorableFeature):
             self.citation_mapping = saved.citation_mapping
             self.started = time.monotonic() - saved.elapsed_seconds
 
-    def prepare_step(self, state: StepInput) -> PreparedStep:
+    def _prepare_step(self, state: StepInput) -> PreparedStep:
         if state.previous is None:
             self.started = time.monotonic()
             for message in state.history:
@@ -337,7 +336,7 @@ class DeepResearchAgent(RestorableFeature):
             return ResearchPhase.REPORT
         return ResearchPhase.REPORT if state.step.is_last else ResearchPhase.RESEARCH
 
-    def after_step(self, result: StepResult) -> bool:
+    def _after_step(self, result: StepResult) -> bool:
         metadata = result.message.metadata
         if not isinstance(metadata, ResearchMessageMetadata):
             raise ValueError("Research output requires phase metadata")
@@ -361,18 +360,21 @@ class DeepResearchAgent(RestorableFeature):
     def _research(self, invocation: ToolInvocation) -> ToolResult | ChildRunWait:
         task = parse_tool_arguments(ResearchTask, invocation.arguments)
         # Session override wins in sub-agents. AUTO keeps the tuned LOW default.
+        child_reasoning_effort = (
+            self.reasoning_effort
+            if self.reasoning_effort != ReasoningEffort.AUTO
+            else ReasoningEffort.LOW
+        )
         child = ResearchAgent(
-            tools=self.tools,
+            tools=self.application_tools,
             llm=self.llm,
             token_counter=self.token_counter,
             user_identity=self.user_identity,
             language_section=self.language_section,
-            reasoning_effort=self.reasoning_effort
-            if self.reasoning_effort != ReasoningEffort.AUTO
-            else ReasoningEffort.LOW,
+            reasoning_effort=child_reasoning_effort,
         )
         submission = invocation.agents.spawn_agent(
-            child.agent,
+            child,
             name="research-"
             + "".join(
                 char if char.isascii() and char.isalnum() else "-"
@@ -384,9 +386,7 @@ class DeepResearchAgent(RestorableFeature):
             messages=[UserMessage(content=task.task)],
             restoration_config=ResearchConfiguration(
                 language_section=self.language_section,
-                reasoning_effort=self.reasoning_effort
-                if self.reasoning_effort != ReasoningEffort.AUTO
-                else ReasoningEffort.LOW,
+                reasoning_effort=child_reasoning_effort,
             ),
         )
         return ChildRunWait(run_ids=[submission.run_id])

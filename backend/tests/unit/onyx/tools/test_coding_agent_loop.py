@@ -178,7 +178,7 @@ def run_agent(
             user_identity=None,
             bash_tool=bash_tool,
         )
-        run = feature.agent.start(
+        run = feature.start(
             max_steps=len(steps),
             messages=[UserMessage(content="How does chat work?")],
             parent_run_id="parent-run",

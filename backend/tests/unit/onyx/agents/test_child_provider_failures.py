@@ -103,7 +103,7 @@ def test_research_continues_after_child_provider_failure() -> None:
         ):
             responses.failure_observed.set()
 
-    run = feature.agent.start(
+    run = feature.start(
         max_steps=4,
         messages=[UserMessage(content="Research both topics")],
         coordinator=AgentCoordinator(),
@@ -126,7 +126,7 @@ def test_research_continues_after_child_provider_failure() -> None:
     assert failed.failure.llm_error.error_code == "CONNECTION_ERROR"
     results = [
         message
-        for message in feature.agent.state.messages
+        for message in feature.state.messages
         if isinstance(message, ToolResultMessage)
         and message.tool_name == RESEARCH_AGENT_TOOL_NAME
     ]
