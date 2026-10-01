@@ -6848,6 +6848,7 @@
         "loginRequired": "Você precisa primeiro entrar com seu provedor de identidade.",
         "oauthUserAlreadyExists": "Já existe uma conta com este e-mail usando outro método de login. Entre da forma que usou pela primeira vez, ou peça ao seu administrador para vincular este provedor.",
         "serverError": "Seu provedor de identidade encontrou um erro. Tente novamente.",
+        "staleSignIn": "Este link de acesso expirou ou não é mais válido. Entre novamente.",
         "temporarilyUnavailable": "Seu provedor de identidade está temporariamente indisponível. Tente novamente mais tarde."
       },
       "credentialsIssue": {
