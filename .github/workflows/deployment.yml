@@ -161,7 +161,7 @@ jobs:
     permissions:
       contents: read # checkout + read lockfiles
       id-token: write # OIDC for fetching the S3 allowlist
-      security-events: read # read Dependabot alerts
+      vulnerability-alerts: read # read Dependabot alerts
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -2112,6 +2112,35 @@ jobs:
           category: image-audit-${{ matrix.component }}
           ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
           sha: ${{ github.sha }}
+
+  # A failed audit usually means a new advisory, so the CVE Alerts run opens
+  # its tracking issue, fix PR, and Slack post. Every release tag also gets a
+  # run once its images are published, since a release branch has no schedule
+  # and that run is what closes the branch's issues after a fix ships.
+  dispatch-cve-alerts:
+    needs: [determine-builds, audit-gate, image-audit, merge-web, merge-backend, merge-model-server]
+    if: >-
+      always() && !cancelled() && needs.determine-builds.outputs.is-test-run != 'true' &&
+      (needs.audit-gate.result == 'failure' || needs.image-audit.result == 'failure' || startsWith(github.ref_name, 'v'))
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write # dispatch cve-alerts.yml
+      contents: read # look up the release branch
+    steps:
+      # A release tag's findings live on its release branch, so the run scans
+      # that branch. Anything else, such as the nightly tag, scans main.
+      - name: Dispatch CVE Alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ref=main
+          if [[ "${TAG}" =~ ^v([0-9]+\.[0-9]+)\. ]] && gh api "repos/${REPO}/branches/release/v${BASH_REMATCH[1]}" > /dev/null 2>&1; then
+            ref="release/v${BASH_REMATCH[1]}"
+          fi
+          gh workflow run cve-alerts.yml --repo "${REPO}" --ref "${ref}"
 
   notify-slack-on-failure:
     needs:
