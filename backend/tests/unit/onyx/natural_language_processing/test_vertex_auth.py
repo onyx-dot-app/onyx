@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -82,3 +83,57 @@ def test_service_account_does_not_implicitly_use_adc() -> None:
         with pytest.raises(ValueError, match="Service account JSON is required"):
             resolve_vertex_embedding_credentials(None, None)
     adc.assert_not_called()
+
+
+@pytest.mark.parametrize("auth_method", ["service_account_json", "workload_identity"])
+@pytest.mark.parametrize("env_location", [None, "us-central1"])
+def test_location_falls_back_to_environment_then_global(
+    monkeypatch: pytest.MonkeyPatch, auth_method: str, env_location: str | None
+) -> None:
+    if env_location is None:
+        monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
+    else:
+        monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", env_location)
+    credentials = MagicMock()
+    config = (
+        VertexEmbeddingConfig(
+            auth_method="workload_identity", project_id="target-project"
+        )
+        if auth_method == "workload_identity"
+        else None
+    )
+    with (
+        patch("google.auth.default", return_value=(credentials, "cluster-project")),
+        patch(
+            "google.oauth2.service_account.Credentials.from_service_account_info",
+            return_value=credentials,
+        ),
+    ):
+        resolved = resolve_vertex_embedding_credentials(
+            '{"project_id":"target-project"}', config
+        )
+    assert resolved == (credentials, "target-project", env_location or "global")
+
+
+@pytest.mark.parametrize("project_id", [None, "", "   ", 123])
+def test_service_account_rejects_invalid_project_id(
+    project_id: str | int | None,
+) -> None:
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info"
+    ) as key:
+        with pytest.raises(ValueError, match="non-empty project_id"):
+            resolve_vertex_embedding_credentials(
+                json.dumps({"project_id": project_id}), None
+            )
+    key.assert_not_called()
+
+
+@pytest.mark.parametrize("payload", ["[]", '{"project_id":"target","location":123}'])
+def test_service_account_rejects_invalid_payload(payload: str) -> None:
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info"
+    ) as key:
+        with pytest.raises(ValueError):
+            resolve_vertex_embedding_credentials(payload, None)
+    key.assert_not_called()

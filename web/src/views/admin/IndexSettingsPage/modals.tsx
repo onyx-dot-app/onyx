@@ -149,10 +149,8 @@ interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
-   * Current model spec for THIS provider, when the active embedding model
-   * belongs to it. `LiteLLMProviderModal` and `CustomSelfHostedModal` use
-   * this to preload model-spec fields (modelName, modelDim, prefixes,
-   * normalize) so the user doesn't have to retype them when editing.
+   * Model being connected, selected, or edited for this provider. Google
+   * tests this model. Custom providers also use it to preload model fields.
    */
   existingModel?: EmbeddingModel;
   /**
@@ -263,7 +261,7 @@ function GoogleAuthenticationFields() {
           name="projectId"
           title={tVertex("projectField.title")}
           subDescription={t("fields.googleWorkloadIdentity.description")}
-          placeholder="my-vertex-project"
+          placeholder={tVertex("projectField.placeholder")}
         />
       ) : (
         <GoogleCredentialsField />
@@ -272,7 +270,7 @@ function GoogleAuthenticationFields() {
         name="location"
         title={tVertex("locationField.title")}
         subDescription={tVertex("locationField.description")}
-        placeholder="global"
+        placeholder={tVertex("locationField.placeholder")}
       />
     </>
   );
@@ -281,6 +279,7 @@ function GoogleAuthenticationFields() {
 function GoogleProviderModal({
   provider,
   existingCredentials,
+  existingModel,
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
@@ -350,7 +349,10 @@ function GoogleProviderModal({
                   : null,
               location: values.location.trim() || null,
             },
-            modelName: provider.embeddingModels[0]?.modelName ?? "",
+            modelName:
+              existingModel?.modelName ??
+              provider.embeddingModels[0]?.modelName ??
+              "",
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {

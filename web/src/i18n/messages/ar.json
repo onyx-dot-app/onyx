@@ -5900,10 +5900,12 @@
             "title": "مفتاح API"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "المنطقة التي تُستضاف فيها نماذج Google Vertex AI الخاصة بك. راجع القائمة الكاملة للمناطق المدعومة في Google Cloud.",
             "title": "اسم منطقة Google Cloud"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "مشروع GCP الذي فُعّل فيه Vertex AI. مطلوب لأن ADC لا يمكنه استنتاج المشروع الهدف بموثوقية عند انتحال حساب الخدمة.",
             "title": "معرّف مشروع GCP"
           },

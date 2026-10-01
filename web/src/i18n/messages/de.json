@@ -5900,10 +5900,12 @@
             "title": "API-Schlüssel"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Region, in der Ihre Google Vertex AI-Modelle gehostet werden. Die vollständige Liste der unterstützten Regionen finden Sie bei Google Cloud.",
             "title": "Name der Google Cloud-Region"
           },
           "projectField": {
+            "placeholder": "mein-vertex-projekt",
             "description": "Das GCP-Projekt, in dem Vertex AI aktiviert ist. Erforderlich, weil ADC das Zielprojekt bei der Identitätsübernahme eines Dienstkontos nicht zuverlässig ermitteln kann.",
             "title": "GCP-Projekt-ID"
           },

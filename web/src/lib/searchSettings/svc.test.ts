@@ -21,6 +21,14 @@ describe("Google embedding authentication", () => {
       vertexConfig,
     });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      "/api/admin/embedding/test-embedding"
+    );
+    expect(fetchSpy.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(fetchSpy.mock.calls[1]?.[0]).toBe(
+      "/api/admin/embedding/embedding-provider"
+    );
+    expect(fetchSpy.mock.calls[1]?.[1]?.method).toBe("PUT");
     const testBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
     const saveBody = JSON.parse(String(fetchSpy.mock.calls[1]?.[1]?.body));
     expect(testBody.vertex_config).toEqual(vertexConfig);
@@ -51,5 +59,9 @@ describe("Google embedding authentication", () => {
       })
     ).rejects.toThrow("Permission denied");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      "/api/admin/embedding/test-embedding"
+    );
+    expect(fetchSpy.mock.calls[0]?.[1]?.method).toBe("POST");
   });
 });

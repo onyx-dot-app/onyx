@@ -5900,10 +5900,12 @@
             "title": "API 키"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Google Vertex AI 모델이 호스팅되는 리전입니다. 지원되는 리전 전체 목록은 Google Cloud에서 확인하세요.",
             "title": "Google Cloud 리전 이름"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "Vertex AI가 활성화된 GCP 프로젝트입니다. 서비스 계정 가장 환경에서는 ADC가 대상 프로젝트를 정확히 추론할 수 없으므로 필수입니다.",
             "title": "GCP 프로젝트 ID"
           },

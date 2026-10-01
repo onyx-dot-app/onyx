@@ -5900,10 +5900,12 @@
             "title": "Chave de API"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Região onde seus modelos do Google Vertex AI estão hospedados. Consulte a lista completa de regiões compatíveis no Google Cloud.",
             "title": "Nome da região do Google Cloud"
           },
           "projectField": {
+            "placeholder": "meu-projeto-vertex",
             "description": "O projeto do GCP com o Vertex AI ativado. É obrigatório porque o ADC não consegue inferir de forma confiável o projeto de destino com representação de conta de serviço.",
             "title": "ID do projeto do GCP"
           },

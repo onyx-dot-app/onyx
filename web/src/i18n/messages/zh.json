@@ -5900,10 +5900,12 @@
             "title": "API 密钥"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "托管您的 Google Vertex AI 模型的区域。支持的区域完整列表请参见 Google Cloud。",
             "title": "Google Cloud 区域名称"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "已启用 Vertex AI 的 GCP 项目。此项必填，因为在服务账号模拟下，ADC 无法可靠地推断目标项目。",
             "title": "GCP 项目 ID"
           },
