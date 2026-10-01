@@ -50,6 +50,7 @@ import { Button } from "@opal/components";
 import {
   Content,
   IllustrationContent,
+  PageCenter,
   Section,
   SettingsLayouts,
   toast,
@@ -516,15 +517,15 @@ export default function AddConnector({
               {credentialsLoading ? (
                 <PageLoader />
               ) : credentialsFailed ? (
-                // The same centred frame as PageLoader, so loading and
-                // failure sit in one place.
-                <div className="flex min-h-[60vh] w-full items-center justify-center">
+                // The same frame as PageLoader, so loading and failure sit
+                // in one place.
+                <PageCenter>
                   <IllustrationContent
                     illustration={SvgPlugBroken}
                     title={t("add.credentialsLoadFailed.title")}
                     description={t("add.credentialsLoadFailed.description")}
                   />
-                </div>
+                </PageCenter>
               ) : (
                 <Section gap={4} alignItems="stretch" width="full">
                   {!noCredentials && (
