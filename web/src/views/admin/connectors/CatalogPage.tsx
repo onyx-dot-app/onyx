@@ -144,8 +144,11 @@ export default function ConnectorsPage() {
   const settings = useSettings();
   const { appName } = settings;
 
-  // Fetch Slack credentials to determine navigation behavior
-  const { data: slackCredentials } = useSourceCredentials(ValidSources.Slack);
+  // Fetch Slack credentials to determine navigation behavior. Only the
+  // tile's link reads them, so one fetch is enough.
+  const { data: slackCredentials } = useSourceCredentials(ValidSources.Slack, {
+    poll: false,
+  });
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
