@@ -21,8 +21,16 @@ import (
 )
 
 // AlertLabel marks the tracking issue opened for each vulnerable package. The
-// open issues are the alert state: one exists while the package is blocking.
+// open issues are the alert state: one per branch exists while it is blocking.
 const AlertLabel = "cve-alert"
+
+// mainScope is the default scope and the only one whose issues need no
+// branch in their title.
+const mainScope = "main"
+
+// scopeLabel names the branch an issue tracks, so a package's issues on main
+// and on a release branch stay apart.
+func scopeLabel(scope string) string { return AlertLabel + ":" + scope }
 
 // AlertPendingLabel marks an issue whose alert has not been announced yet. The
 // workflow removes it after the Slack post, and every sync until then
@@ -111,7 +119,14 @@ type SyncAlertsOptions struct {
 	// fails when it cannot fetch it, since every accepted advisory would
 	// otherwise open an issue.
 	IgnoreURL string
-	DryRun    bool
+	// Scope is the branch the results came from, such as main or
+	// release/v4.8, and defaults to main. Issues, labels, and fix branches
+	// are keyed by it.
+	Scope string
+	// KeepOpen closes no issue, for a run that skipped a scan and so cannot
+	// tell a fixed package from an unscanned one.
+	KeepOpen bool
+	DryRun   bool
 }
 
 // SyncAlerts keeps one open issue per package with an unsuppressed blocking
@@ -133,19 +148,24 @@ func SyncAlerts(opts SyncAlertsOptions) ([]Alert, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch the allowlist from %s: %w", opts.IgnoreURL, err)
 	}
-	alerts := suppressAlerts(groupAlerts(blocking, scanned), ignores, time.Now())
+	scope := cmp.Or(opts.Scope, mainScope)
+	alerts := suppressAlerts(groupAlerts(blocking, scanned, scope), ignores, time.Now())
 
-	open, err := listAlertIssues()
+	open, err := listAlertIssues(scope)
 	if err != nil {
 		return nil, err
 	}
-	plan := planAlerts(alerts, open, coveredEcosystems(scanned))
+	covered := map[string]bool{}
+	if !opts.KeepOpen {
+		covered = coveredEcosystems(scanned)
+	}
+	plan := planAlerts(alerts, open, covered)
 
 	if opts.DryRun {
 		logPlan(plan)
 		return slices.Concat(plan.Create, plan.Update, plan.Retry), nil
 	}
-	return applyPlan(plan)
+	return applyPlan(plan, scope)
 }
 
 // suppressAlerts drops the advisories the allowlist covers, matching each by
@@ -177,18 +197,18 @@ func coveredEcosystems(findings []Finding) map[string]bool {
 // applyPlan makes the issue changes and returns the alerts to announce whose
 // issue it opened, updated, or found pending. It keeps going past a failed
 // change, since each one retries on the next sync.
-func applyPlan(plan alertPlan) ([]Alert, error) {
+func applyPlan(plan alertPlan, scope string) ([]Alert, error) {
 	var announced []Alert
 	var errs []error
 	creates := plan.Create
 	if len(creates)+len(plan.Update) > 0 {
-		if err := ensureAlertLabels(); err != nil {
+		if err := ensureAlertLabels(scope); err != nil {
 			errs = append(errs, err)
 			creates, plan.Update = nil, nil
 		}
 	}
 	for _, a := range creates {
-		if err := createAlertIssue(&a); err != nil {
+		if err := createAlertIssue(&a, scope); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -210,18 +230,18 @@ func applyPlan(plan alertPlan) ([]Alert, error) {
 	}
 	announced = append(announced, plan.Retry...)
 	for _, is := range plan.Close {
-		if err := closeAlert(is); err != nil {
+		if err := closeAlert(is, scope); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return announced, errors.Join(errs...)
 }
 
-// closeAlert closes a resolved package's issue and the workflow's open fix PR
-// for it. A PR pushed onto Dependabot's branch is left to Dependabot.
-func closeAlert(is trackedIssue) error {
+// closeAlert closes a resolved package's issue and the open PR on its fix
+// branch. Dependabot's PR and a cherry-pick PR are left alone.
+func closeAlert(is trackedIssue, scope string) error {
 	comment := "This package no longer has a blocking finding: it was fixed or suppressed in the audit allowlist."
-	out, err := ghOutput("", "pr", "list", "--state", "open", "--head", alertBranch(is.Key), "--json", "number", "--jq", ".[].number")
+	out, err := ghOutput("", "pr", "list", "--state", "open", "--head", alertBranch(scope, is.Key), "--json", "number", "--jq", ".[].number")
 	if err != nil {
 		return fmt.Errorf("failed to find the fix PR for %s: %w", is.Key, err)
 	}
@@ -238,11 +258,12 @@ func closeAlert(is trackedIssue) error {
 	return nil
 }
 
-// alertBranch names the fix branch for an alert key such as "npm/@scope/pkg".
-// The hash keeps keys that sanitize alike on separate branches.
-func alertBranch(key string) string {
+// alertBranch names the fix branch for an alert key such as "npm/@scope/pkg"
+// on a scope branch. The hash keeps keys that sanitize alike apart.
+func alertBranch(scope, key string) string {
 	sum := sha256.Sum256([]byte(key))
-	return "cve-alerts/" + branchUnsafe.ReplaceAllString(strings.ReplaceAll(key, "@", ""), "-") + "-" + hex.EncodeToString(sum[:4])
+	safe := func(s string) string { return branchUnsafe.ReplaceAllString(strings.ReplaceAll(s, "@", ""), "-") }
+	return "cve-alerts/" + safe(scope) + "/" + safe(key) + "-" + hex.EncodeToString(sum[:4])
 }
 
 func readResult(path string) (*Result, error) {
@@ -260,7 +281,7 @@ func readResult(path string) (*Result, error) {
 // groupAlerts folds blocking findings into one alert per package, merging an
 // advisory's sources by id or alias. Scanned findings lend their names, so the
 // allowlist also matches ids only a non-blocking source reported.
-func groupAlerts(blocking, scanned []Finding) []Alert {
+func groupAlerts(blocking, scanned []Finding, scope string) []Alert {
 	byKey := map[string]*Alert{}
 	var keys []string
 	for _, f := range blocking {
@@ -268,7 +289,7 @@ func groupAlerts(blocking, scanned []Finding) []Alert {
 		a := byKey[key]
 		if a == nil {
 			eco := canonicalEcosystem(f.Ecosystem)
-			a = &Alert{Key: key, Ecosystem: eco, Package: canonicalPackage(eco, f.Package), Branch: alertBranch(key)}
+			a = &Alert{Key: key, Ecosystem: eco, Package: canonicalPackage(eco, f.Package), Branch: alertBranch(scope, key)}
 			byKey[key] = a
 			keys = append(keys, key)
 		}
@@ -506,9 +527,10 @@ func parseTrackedIssue(number int, url, body string, pending bool) (trackedIssue
 	return is, true
 }
 
-func listAlertIssues() ([]trackedIssue, error) {
+func listAlertIssues(scope string) ([]trackedIssue, error) {
 	out, err := ghOutput("", "issue", "list",
 		"--label", AlertLabel,
+		"--label", scopeLabel(scope),
 		"--state", "open",
 		"--limit", strconv.Itoa(alertIssueLimit),
 		"--json", "number,url,body,labels",
@@ -544,10 +566,11 @@ func listAlertIssues() ([]trackedIssue, error) {
 	return issues, nil
 }
 
-func ensureAlertLabels() error {
+func ensureAlertLabels(scope string) error {
 	for _, l := range []struct{ name, description string }{
 		{AlertLabel, "Tracks a blocking dependency vulnerability; opened and closed by the CVE alerts workflow"},
 		{AlertPendingLabel, "The CVE alerts workflow has not announced this alert yet"},
+		{scopeLabel(scope), "CVE alert on the " + scope + " branch"},
 	} {
 		if _, err := ghOutput("", "label", "create", l.name, "--color", "B60205", "--description", l.description, "--force"); err != nil {
 			return fmt.Errorf("failed to create the %s label: %w", l.name, err)
@@ -556,11 +579,15 @@ func ensureAlertLabels() error {
 	return nil
 }
 
-func createAlertIssue(a *Alert) error {
+func createAlertIssue(a *Alert, scope string) error {
 	title := fmt.Sprintf("Vulnerable dependency: %s (%s)", a.Package, a.Ecosystem)
+	if scope != mainScope {
+		title += " on " + scope
+	}
 	out, err := ghOutput(renderAlertBody(*a), "issue", "create",
 		"--title", title,
 		"--label", AlertLabel,
+		"--label", scopeLabel(scope),
 		"--label", AlertPendingLabel,
 		"--body-file", "-",
 	)

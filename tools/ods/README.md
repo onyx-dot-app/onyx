@@ -713,7 +713,7 @@ ods audit --all-lockfiles --web --python
 #### Tracking issues for blocking findings
 
 `ods audit alert` keeps one open GitHub issue (label `cve-alert`) per package
-with a blocking finding. It reads the JSON results of earlier scans, applies the
+and branch with a blocking finding. It reads the JSON results of earlier scans, applies the
 allowlist, opens an issue for each newly blocking package, updates the issue
 when the package gains an advisory, and closes the issues of packages that no
 longer block. It prints the alerts that need announcing as JSON, including any
@@ -729,7 +729,10 @@ ods audit alert --results deps.json --results backend.json --dry-run
 ```
 
 Pass the results of every scan: a package missing from all of them counts as
-resolved and has its issue closed.
+resolved and has its issue closed. When a scan was skipped, pass `--keep-open`
+so no issue closes. `--scope <branch>` (default `main`) labels
+the issues with the branch the results came from, so a package's issues on
+`main` and on a release branch stay apart.
 
 #### Managing the allowlist
 
