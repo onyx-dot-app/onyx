@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 import { InputTypeIn, Text } from "@opal/components";
+import { useGridNavigation, useHotkey } from "@opal/hooks";
 import { useFederatedConnectors } from "@/lib/hooks";
 import {
   FederatedConnectorDetail,
@@ -161,17 +162,51 @@ export default function ConnectorsPage() {
     return popularSources.filter((s) => !resultIds.has(s.internalName));
   }, [popularSources, resultIds, searchTerm]);
 
-  // Enter or ArrowDown in the search field moves focus to the first card;
-  // a focused card opens on Enter.
   const catalogRef = useRef<HTMLDivElement>(null);
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter" && e.key !== "ArrowDown") return;
-    const card =
-      catalogRef.current?.querySelector<HTMLElement>("[data-source-card]");
-    if (!card) return;
-    e.preventDefault();
-    card.focus();
-  };
+
+  /**
+   * Moves focus to the search field, with the caret at the end. A term
+   * passed in replaces the current one.
+   */
+  function focusSearch(nextTerm?: string) {
+    const input = searchInputRef.current;
+    if (!input) return;
+    if (nextTerm !== undefined) setSearchTerm(nextTerm);
+    input.focus();
+    // After React writes the new value.
+    requestAnimationFrame(() => {
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    });
+  }
+
+  useHotkey("/", () => focusSearch());
+
+  // Arrows move between cards; leaving the top row, Escape, or typing
+  // returns to search. "/" is left to the hotkey above.
+  const { focusFirst } = useGridNavigation(catalogRef, {
+    itemSelector: "[data-source-card]",
+    onExit: (direction) => {
+      if (direction === "up") focusSearch();
+    },
+    onEscape: () => focusSearch(),
+    onTypeAhead: (character) => {
+      if (character === "/") return false;
+      focusSearch(rawSearchTerm + character);
+    },
+  });
+
+  // Enter or ArrowDown moves to the first card; Escape clears the term.
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape" && rawSearchTerm !== "") {
+      e.preventDefault();
+      setSearchTerm("");
+      return;
+    }
+    if ((e.key === "Enter" || e.key === "ArrowDown") && focusFirst()) {
+      e.preventDefault();
+    }
+  }
 
   return (
     <SettingsLayouts.Root width="lg">

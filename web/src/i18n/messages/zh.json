@@ -808,7 +808,7 @@
         "description": "将 {appName} 连接到您的数据源。"
       },
       "search": {
-        "placeholder": "搜索连接器..."
+        "placeholder": "搜索连接器，或按 \"/\" 聚焦..."
       },
       "sourceCard": {
         "connectButton": {
