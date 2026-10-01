@@ -182,6 +182,21 @@ def test_format_built_insert_is_flagged() -> None:
     assert check_migration_inserts.find_inserts(source) == [1]
 
 
+def test_spliced_and_prefixed_dynamic_inserts_are_flagged() -> None:
+    source = (
+        "op.execute(\"DO $$ BEGIN EXECUTE ' ' || 'INSERT INTO tool VALUES (1)'; END $$\")\n"
+        "op.execute(\"DO $$ BEGIN EXECUTE E'INSERT INTO tool VALUES (1)'; END $$\")\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == [1, 2]
+
+
+def test_formatted_text_outside_execute_passes() -> None:
+    source = (
+        "op.execute(\"UPDATE tool SET description = format('INSERT INTO %s', slug)\")\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == []
+
+
 def test_commented_out_sql_insert_passes() -> None:
     source = (
         'op.execute("""\n    -- INSERT INTO tool VALUES (1)\n'

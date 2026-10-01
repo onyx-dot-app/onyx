@@ -142,15 +142,17 @@ class _InsertFinder(ast.NodeVisitor):
             self._flag(node)
 
 
-_RUNS_QUOTED_SQL = re.compile(r"(?:\bEXECUTE|\bformat\s*\()\s*$", re.IGNORECASE)
+_EXECUTE = re.compile(r"\bEXECUTE\b", re.IGNORECASE)
 
 
 def _executable_sql(sql: str) -> str:
     """Blank out comments and quoted text that Postgres does not run.
 
-    A quoted value is data unless EXECUTE or format() receives it, in which
-    case its text is kept and scanned. A `--` inside quotes is never a comment."""
+    Quoted text is data, except that everything EXECUTE receives up to the
+    statement terminator is dynamic SQL and is kept, however it is spliced.
+    A `--` inside quotes is never a comment."""
     out: list[str] = []
+    executing = False
     i = 0
     while i < len(sql):
         char = sql[i]
@@ -168,11 +170,13 @@ def _executable_sql(sql: str) -> str:
                 sql[close] != char or sql[close + 1 : close + 2] == char
             ):
                 close += 2 if sql[close] == char else 1
-            quoted = sql[i : close + 1]
-            runs = char == "'" and _RUNS_QUOTED_SQL.search("".join(out)) is not None
-            out.append(quoted if runs else " ")
+            out.append(sql[i : close + 1] if executing and char == "'" else " ")
             i = close + 1
         else:
+            if char == ";":
+                executing = False
+            elif _EXECUTE.match(sql, i):
+                executing = True
             out.append(char)
             i += 1
     return "".join(out)
