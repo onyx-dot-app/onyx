@@ -11,7 +11,7 @@ from urllib.parse import quote, urlsplit
 
 import requests
 
-from onyx.utils.fleet_telemetry import _VERSION, BoundedTelemetry
+from onyx.utils.fleet_telemetry import _VERSION, BoundedTelemetry, poll_due
 
 _SERVICE_ROLES = {
     "api-server": "api",
@@ -109,8 +109,8 @@ class KubernetesCollector:
             "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
         )
         self._continuation: str | None = None
-        self._last_poll = 0.0
-        self._last_metrics = 0.0
+        self._last_poll: float | None = None
+        self._last_metrics: float | None = None
         self.errors = 0
         self._state: dict[str, tuple[int, bool, float, str]] = {}
         self._limits: dict[
@@ -335,7 +335,7 @@ class KubernetesCollector:
             return
         try:
             now = time.monotonic()
-            if now - self._last_poll >= 30:
+            if poll_due(self._last_poll, now, 30):
                 params: dict[str, Any] = {"limit": 25}
                 if self._continuation:
                     params["continue"] = self._continuation
@@ -351,9 +351,10 @@ class KubernetesCollector:
                         else None
                     )
                 self._last_poll = now
-            if (
-                now - self._last_metrics
-                >= self.client.settings["resource_interval_seconds"]
+            if poll_due(
+                self._last_metrics,
+                now,
+                self.client.settings["resource_interval_seconds"],
             ):
                 response = self._get(
                     f"/apis/metrics.k8s.io/v1beta1/namespaces/{quote(self.namespace)}/pods"

@@ -26,7 +26,12 @@ from onyx.db.fleet_telemetry import (
     job_page,
     tenant_schemas,
 )
-from onyx.utils.fleet_telemetry import BoundedTelemetry, start_telemetry, stop_telemetry
+from onyx.utils.fleet_telemetry import (
+    BoundedTelemetry,
+    poll_due,
+    start_telemetry,
+    stop_telemetry,
+)
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -135,7 +140,7 @@ class FleetCollector:
         if not 0 <= self.shard_index < self.shard_count:
             raise ValueError("Invalid collector shard")
         self.schemas = self._partition(schemas)
-        self._last_discovery = 0.0
+        self._last_discovery: float | None = None
         self._discover = MULTI_TENANT and "ONYX_TELEMETRY_SCHEMAS" not in os.environ
         self._failed_schema: dict[str, tuple[float, int]] = {}
         self._connector_cursor: dict[str, int] = {}
@@ -147,9 +152,9 @@ class FleetCollector:
         self._last_jobs: dict[str, float] = {}
         self._last_active_jobs: dict[str, float] = {}
         self._schema_position = 0
-        self._last_queues = 0.0
-        self._last_aws = 0.0
-        self._last_health = 0.0
+        self._last_queues: float | None = None
+        self._last_aws: float | None = None
+        self._last_health: float | None = None
         self._last_issue_level = 0
         self._source_success: dict[str, float] = {}
         self.source_errors = 0
@@ -213,9 +218,10 @@ class FleetCollector:
         if self._failed_schema.get(schema, (0, 0))[0] > now:
             return False
         collected = False
-        if (
-            now - self._last_connectors.get(schema, 0)
-            >= self.client.settings["connector_interval_seconds"]
+        if poll_due(
+            self._last_connectors.get(schema),
+            now,
+            self.client.settings["connector_interval_seconds"],
         ):
             rows = connector_page(
                 self.engine, schema, self._connector_cursor.get(schema, 0)
@@ -241,7 +247,7 @@ class FleetCollector:
         interval = self.client.settings["connector_interval_seconds"]
         rows = (
             attempt_page(self.engine, schema, since, after_id)
-            if now - self._last_attempts.get(schema, 0) >= interval
+            if poll_due(self._last_attempts.get(schema), now, interval)
             else None
         )
         collected = collected or rows is not None
@@ -308,7 +314,7 @@ class FleetCollector:
         observed_at = datetime.now(timezone.utc)
         historical = (
             job_page(self.engine, schema, job_since, job_after_id)
-            if now - self._last_jobs.get(schema, 0) >= interval
+            if poll_due(self._last_jobs.get(schema), now, interval)
             else None
         )
         active = (
@@ -319,7 +325,7 @@ class FleetCollector:
                 self._active_job_cursor.get(schema, ""),
                 active_only=True,
             )
-            if now - self._last_active_jobs.get(schema, 0) >= interval
+            if poll_due(self._last_active_jobs.get(schema), now, interval)
             else None
         )
         collected = collected or historical is not None or active is not None
@@ -375,9 +381,10 @@ class FleetCollector:
         return collected
 
     def collect_queues(self) -> None:
-        if (
-            time.monotonic() - self._last_queues
-            < self.client.settings["queue_interval_seconds"]
+        if not poll_due(
+            self._last_queues,
+            time.monotonic(),
+            self.client.settings["queue_interval_seconds"],
         ):
             return
         from redis import Redis
@@ -430,7 +437,7 @@ class FleetCollector:
         if not self.client.settings["enabled"]:
             return
         now = time.monotonic()
-        if self._discover and now - self._last_discovery >= 60:
+        if self._discover and poll_due(self._last_discovery, now, 60):
             try:
                 self.schemas = self._partition(tenant_schemas(self.engine))
                 self._discovery_failures = 0
@@ -462,9 +469,10 @@ class FleetCollector:
             self.collect_queues()
         except Exception:
             self.queue_errors += 1
-        if (
-            time.monotonic() - self._last_aws
-            >= self.client.settings["resource_interval_seconds"]
+        if poll_due(
+            self._last_aws,
+            time.monotonic(),
+            self.client.settings["resource_interval_seconds"],
         ):
             try:
                 from onyx.utils.fleet_telemetry_aws import collect_aws_resources
@@ -502,7 +510,7 @@ class FleetCollector:
             "last_aws_success_at": self.last_aws_success_at,
         }
         level = self.client.health["source_consecutive_errors"]
-        if time.monotonic() - self._last_health >= 60 or (
+        if poll_due(self._last_health, time.monotonic(), 60) or (
             level >= 3 and self._last_issue_level < 3
         ):
             self.client.emit(

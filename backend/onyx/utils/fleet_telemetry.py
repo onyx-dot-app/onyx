@@ -765,7 +765,8 @@ class BoundedTelemetry:
             pass
 
     def _run(self) -> None:
-        last_resource = last_config = 0.0
+        last_resource: float | None = None
+        last_config: float | None = None
         try:
             self.emit(
                 "runtime",
@@ -783,13 +784,11 @@ class BoundedTelemetry:
             self.emit("version", {"version": version})
             while not self._stop.is_set():
                 now = time.monotonic()
-                if now - last_config >= 60:
+                if poll_due(last_config, now, 60):
                     self._poll_settings()
                     last_config = now
-                if (
-                    self.settings["enabled"]
-                    and now - last_resource
-                    >= self.settings["resource_interval_seconds"]
+                if self.settings["enabled"] and poll_due(
+                    last_resource, now, self.settings["resource_interval_seconds"]
                 ):
                     from onyx.utils.fleet_telemetry_resources import (
                         collect_process_resource,
@@ -812,6 +811,11 @@ class BoundedTelemetry:
         except Exception:
             # Telemetry failure never reaches the application, including initialization.
             pass
+
+
+def poll_due(previous: float | None, now: float, interval: float) -> bool:
+    """Poll immediately before the first attempt, regardless of host uptime."""
+    return previous is None or now - previous >= interval
 
 
 _client: BoundedTelemetry | None = None
