@@ -1,6 +1,7 @@
 from enum import Enum, auto
 
-from sqlalchemy import delete, or_, select, update
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
 
@@ -26,7 +27,10 @@ from onyx.db.persona import get_raw_personas_for_user
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.constants import SOURCE_API_CONTEXT_LIMIT_PROVIDERS
+from onyx.llm.constants import (
+    LLM_PROVIDER_MODEL_PAGE_SIZE,
+    SOURCE_API_CONTEXT_LIMIT_PROVIDERS,
+)
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
@@ -729,6 +733,7 @@ def fetch_existing_llm_providers(
     flow_type_filter: list[LLMModelFlowType],
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
+    include_model_configurations: bool = True,
 ) -> list[LLMProviderModel]:
     """Fetch all LLM providers with optional filtering.
 
@@ -738,6 +743,9 @@ def fetch_existing_llm_providers(
         only_public: If True, only return public providers
         exclude_image_generation_providers: If True, exclude providers that are
             used for image generation configs
+        include_model_configurations: If False, leave model_configurations
+            unloaded. A provider can hold tens of thousands of rows, so callers
+            that only need a page use fetch_model_configurations_page instead.
     """
     stmt = select(LLMProviderModel)
 
@@ -757,15 +765,93 @@ def fetch_existing_llm_providers(
         stmt = stmt.where(~LLMProviderModel.id.in_(image_gen_provider_ids))
 
     stmt = stmt.options(
-        selectinload(LLMProviderModel.model_configurations),
         selectinload(LLMProviderModel.groups),
         selectinload(LLMProviderModel.personas),
     )
+    if include_model_configurations:
+        stmt = stmt.options(selectinload(LLMProviderModel.model_configurations))
 
     providers = list(db_session.scalars(stmt).all())
     if only_public:
         return [provider for provider in providers if provider.is_public]
     return providers
+
+
+class ModelConfigurationWindow(BaseModel):
+    """One page of a provider's stored model rows and where the next starts."""
+
+    # ORM rows ride inside, as in db/projects.py
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    model_configurations: list[ModelConfiguration]
+    next_offset: int | None
+
+
+def fetch_model_configurations_page(
+    db_session: Session,
+    provider_ids: list[int],
+    offset: int = 0,
+    name_query: str | None = None,
+) -> dict[int, ModelConfigurationWindow]:
+    """The same LLM_PROVIDER_MODEL_PAGE_SIZE window of every provider's models,
+    visible first then by name. `name_query` narrows each provider to models
+    whose name or display names contain it, so a picker can search models it
+    has not paged in yet."""
+    if not provider_ids:
+        return {}
+
+    row_number = (
+        func.row_number()
+        .over(
+            partition_by=ModelConfiguration.llm_provider_id,
+            order_by=(
+                ModelConfiguration.is_visible.desc(),
+                ModelConfiguration.name,
+                ModelConfiguration.id,
+            ),
+        )
+        .label("row_number")
+    )
+    ranked_stmt = select(ModelConfiguration.id.label("id"), row_number).where(
+        ModelConfiguration.llm_provider_id.in_(provider_ids)
+    )
+    if name_query:
+        ranked_stmt = ranked_stmt.where(
+            or_(
+                ModelConfiguration.name.icontains(name_query, autoescape=True),
+                ModelConfiguration.display_name.icontains(name_query, autoescape=True),
+                ModelConfiguration.custom_display_name.icontains(
+                    name_query, autoescape=True
+                ),
+            )
+        )
+    ranked = ranked_stmt.subquery()
+
+    # One row past the window says whether a next page exists, without a count.
+    window_end = offset + LLM_PROVIDER_MODEL_PAGE_SIZE
+    stmt = (
+        select(ModelConfiguration)
+        .join(ranked, ranked.c.id == ModelConfiguration.id)
+        .where(ranked.c.row_number > offset, ranked.c.row_number <= window_end + 1)
+        .order_by(ModelConfiguration.llm_provider_id, ranked.c.row_number)
+        .options(selectinload(ModelConfiguration.llm_model_flows))
+    )
+    rows_by_provider: dict[int, list[ModelConfiguration]] = {
+        provider_id: [] for provider_id in provider_ids
+    }
+    for model_configuration in db_session.scalars(stmt):
+        rows_by_provider[model_configuration.llm_provider_id].append(
+            model_configuration
+        )
+    return {
+        provider_id: ModelConfigurationWindow(
+            model_configurations=rows[:LLM_PROVIDER_MODEL_PAGE_SIZE],
+            next_offset=(
+                window_end if len(rows) > LLM_PROVIDER_MODEL_PAGE_SIZE else None
+            ),
+        )
+        for provider_id, rows in rows_by_provider.items()
+    }
 
 
 def fetch_first_accessible_llm_provider_by_type(
@@ -896,19 +982,20 @@ def fetch_existing_llm_provider(
 
 
 def fetch_existing_llm_provider_by_id(
-    id: int, db_session: Session
+    id: int, db_session: Session, include_model_configurations: bool = True
 ) -> LLMProviderModel | None:
-    provider_model = db_session.scalar(
+    stmt = (
         select(LLMProviderModel)
         .where(LLMProviderModel.id == id)
         .options(
-            selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),
             selectinload(LLMProviderModel.personas),
         )
     )
+    if include_model_configurations:
+        stmt = stmt.options(selectinload(LLMProviderModel.model_configurations))
 
-    return provider_model
+    return db_session.scalar(stmt)
 
 
 def fetch_accessible_llm_provider_by_id(

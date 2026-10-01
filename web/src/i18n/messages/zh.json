@@ -10849,6 +10849,9 @@
         },
         "loading": {
           "text": "正在加载模型..."
+        },
+        "loadingMore": {
+          "text": "正在加载更多模型..."
         }
       },
       "modelSettingsButton": {

@@ -10849,6 +10849,9 @@
         },
         "loading": {
           "text": "Chargement des modèles..."
+        },
+        "loadingMore": {
+          "text": "Chargement d'autres modèles..."
         }
       },
       "modelSettingsButton": {

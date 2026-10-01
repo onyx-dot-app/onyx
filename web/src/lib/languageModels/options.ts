@@ -91,6 +91,7 @@ export function buildLlmOptions(
         options.push({
           name: llmProvider.name ?? "",
           provider: llmProvider.provider,
+          providerId: llmProvider.id,
           providerDisplayName:
             llmProvider.name || getProvider(llmProvider.provider).productName,
           modelName: mc.name,
