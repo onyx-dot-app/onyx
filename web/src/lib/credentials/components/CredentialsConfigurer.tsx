@@ -5,7 +5,8 @@ import { useTranslations } from "next-intl";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
-import { SvgPlusCircle, SvgSimpleLoader } from "@opal/icons";
+import { SvgPlusCircle } from "@opal/icons";
+import { IconLoader } from "@opal/loaders";
 import type { Credential } from "@/lib/credentials/types";
 import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -193,7 +194,7 @@ export function CredentialsConfigurer({
       and create card once everything lands. */}
       {failed ? null : isLoading || !credentials ? (
         <Section padding={4}>
-          <SvgSimpleLoader />
+          <IconLoader />
         </Section>
       ) : (
         <Section gap={4} alignItems="stretch" width="full">
