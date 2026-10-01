@@ -11,7 +11,7 @@ import {
   swapCredential,
   updateCredential,
   updateCredentialWithPrivateKey,
-} from "@/lib/credential";
+} from "@/lib/credentials/svc";
 import { Section, toast } from "@opal/layouts";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { Button, Card, Modal, Text } from "@opal/components";

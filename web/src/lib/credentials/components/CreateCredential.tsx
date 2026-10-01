@@ -3,7 +3,7 @@ import { useTranslations } from "next-intl";
 import { Button as OpalButton } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { submitCredential } from "@/components/admin/connectors/CredentialForm";
+import { submitCredential } from "@/lib/credentials/svc";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";

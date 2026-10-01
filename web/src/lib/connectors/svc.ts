@@ -1,7 +1,7 @@
 import { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
-import { createCredential, linkCredential } from "@/lib/credential";
+import { createCredential, linkCredential } from "@/lib/credentials/svc";
 import { parseErrorDetail, type ErrorResponseBody } from "@/lib/fetcher";
 import type { FileUploadResponse } from "@/lib/fileConnector";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";

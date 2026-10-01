@@ -1,9 +1,10 @@
 import type {
+  Credential,
   CredentialBase,
   CredentialWithPrivateKey,
 } from "@/lib/connectors/types";
 import { AccessType, ProcessingMode } from "@/lib/types";
-import { TypedFile } from "./connectors/fileTypes";
+import { TypedFile } from "@/lib/connectors/fileTypes";
 import {
   CREDENTIAL_NAME,
   CREDENTIAL_SOURCE,
@@ -11,7 +12,7 @@ import {
   CREDENTIAL_FIELD_KEY,
   CREDENTIAL_TYPE_DEFINITION_KEY,
   CREDENTIAL_JSON,
-} from "./constants";
+} from "@/lib/constants";
 
 export async function createCredential(credential: CredentialBase<any>) {
   return await fetch(`/api/manage/credential`, {
@@ -172,4 +173,51 @@ export function swapCredential(
       access_type: accessType,
     }),
   });
+}
+
+const PRIVATE_KEY_FIELD_KEY = "private_key";
+
+// Localized message builders. Callers inside components pass translated
+// strings. The English defaults cover call sites that pass no messages.
+interface SubmitCredentialMessages {
+  success: () => string;
+  error: (detail: string) => string;
+}
+
+export async function submitCredential<T>(
+  credential: CredentialBase<T> | CredentialWithPrivateKey<T>,
+  messages?: SubmitCredentialMessages
+): Promise<{
+  credential?: Credential<any>;
+  message: string;
+  isSuccess: boolean;
+}> {
+  const buildSuccess = messages?.success ?? (() => "Success!");
+  const buildError =
+    messages?.error ?? ((detail: string) => `Error: ${detail}`);
+  let isSuccess = false;
+  try {
+    let response: Response;
+    if (PRIVATE_KEY_FIELD_KEY in credential && credential.private_key) {
+      response = await createCredentialWithPrivateKey(
+        credential as CredentialWithPrivateKey<T>
+      );
+    } else {
+      response = await createCredential(credential as CredentialBase<T>);
+    }
+    if (response.ok) {
+      const parsed_response = await response.json();
+      const credential = parsed_response.credential;
+      isSuccess = true;
+      return { credential, message: buildSuccess(), isSuccess: true };
+    } else {
+      const errorData = await response.json();
+      return {
+        message: buildError(String(errorData.detail)),
+        isSuccess: false,
+      };
+    }
+  } catch (error) {
+    return { message: buildError(String(error)), isSuccess: false };
+  }
 }

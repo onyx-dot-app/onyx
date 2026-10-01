@@ -8,7 +8,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { adminDeleteCredential } from "@/lib/credential";
+import { adminDeleteCredential } from "@/lib/credentials/svc";
 import {
   CredentialCreationMethod,
   getCredentialCreationMethods,
