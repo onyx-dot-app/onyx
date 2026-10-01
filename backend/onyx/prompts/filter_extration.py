@@ -17,18 +17,24 @@ context.
 
 ## Guidance
 
-Scope to a source when it is EXPLICITLY named — in this cycle's queries, or in an earlier \
-turn that this cycle continues. NEVER infer a source from the query's topic (e.g. an HR or \
-billing query is not a source). If no source is named, return [].
+Scope to a source ONLY when it is named as WHERE to look for the answer ("search X", \
+"check X", "look in X", "find it in X", "pull it from X", "only use X", "in my X") — in \
+this cycle's queries, or in an earlier turn that this cycle continues. A source that is the \
+SUBJECT of the question is not a directive, even when the queries repeat its name: the tool \
+itself, its connector or integration, who uses or maintains it, or how it is used ("which \
+teams use the Salesforce connector", "how much storage our Google Drive plan includes"). \
+NEVER infer a source from the topic either (e.g. an HR or billing query is not a source). \
+If no source is named as WHERE to look, return []. In the rest of this prompt, "named" \
+means named as WHERE to look.
 
 A source named in an earlier turn still applies to a same-topic follow-up that names no new \
 source — keep scoping to it.
 
 When source(s) ARE named, the phrasing decides the mode:
 
-- COMBINED — one or more named sources with NO fallback order ("in Google Drive"; "search \
-A and B"; "check both A and B"): scope to all of them every cycle, regardless of previous \
-cycles. A single named source is COMBINED — scope to it.
+- COMBINED — one or more sources named as WHERE to look, with NO fallback order ("in \
+Google Drive"; "search A and B"; "check both A and B"): scope to all of them every cycle, \
+regardless of previous cycles. A single named source is COMBINED — scope to it.
 
 - BACKOFF ("check A first, then B", "try A; if nothing, then B" — an order): scope to ONE \
 source per cycle. By DEFAULT ADVANCE — scope to the first named source NOT in any previous \
@@ -59,12 +65,15 @@ none of the named sources are listed.
 
 ## Guidance reminder
 
+WHERE vs SUBJECT: scope only to a source named as WHERE to look ("search X", "in X"). A \
+source that is the question's subject ("the Salesforce connector", "our Google Drive plan") \
+is not a directive.
 COMBINED ("A and B"): scope to all named sources, every cycle.
 BACKOFF ("A first, then B"): by DEFAULT ADVANCE to the first named source not in previous \
 cycles' searched_sources (a reworded retry keeps advancing). If this cycle's queries are \
 about a clearly DIFFERENT topic than the previous cycle's, re-search the source the previous \
 cycle used.
-If no source is named anywhere in the conversation, return [].
+If no source is named as WHERE to look, return [].
 
 ## Output format
 

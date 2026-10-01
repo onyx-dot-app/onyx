@@ -33,7 +33,7 @@ Sandbox containers run with:
   opencode auth/config only)
 - only the dedicated sandbox bridge network — never compose's default
   network. ``onyx-craft-api`` is the supported API endpoint on that bridge;
-  postgres, redis, minio, and model_server remain unreachable by service name.
+  postgres, redis, object-store, and model_server remain unreachable by service name.
 
 Threat model — Docker vs Kubernetes parity gap
 ----------------------------------------------
@@ -339,6 +339,7 @@ _COMPOSE_INTERNAL_HOSTNAMES = {
     "relational_db",
     "cache",
     "minio",
+    "object-store",
     "model_server",
     "indexing_model_server",
     "inference_model_server",
@@ -538,7 +539,7 @@ def build_container_create_kwargs(
     - **Single network**: joins only the caller-supplied ``network`` (the
       dedicated ``onyx_craft_sandbox`` bridge). Does NOT join compose's default
       network; the dedicated API alias is supported there, while postgres,
-      redis, and minio remain unreachable by service name.
+      redis, and object-store remain unreachable by service name.
 
     Proxy-enabled (``sandbox_proxy_host`` set; production self-host compose with
     ``--include-craft``):

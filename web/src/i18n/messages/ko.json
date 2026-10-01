@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console에서 OAuth 앱 JSON을 업로드한 다음([설정 방법]({docsUrl})), 인덱싱할 Drive의 Google 계정으로 인증하세요.",
-          "title": "옵션 1: OAuth 앱"
+          "title": "옵션 1: OAuth 앱",
+          "sharedScopesNote": "하나의 계정으로 두 커넥터를 모두 사용할 수 있도록 Google은 Google Drive와 Gmail 액세스를 함께 요청합니다. 이 계정을 Google Drive에만 사용하려면 동의 화면에서 Gmail 범위의 선택을 해제하세요([요청하는 이유]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "OAuth 앱 JSON을 업로드하거나 붙여 넣으세요"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console에서 OAuth 앱 JSON을 업로드한 다음([설정 방법]({docsUrl})), 인덱싱할 Gmail의 Google 계정으로 인증하세요.",
-          "title": "옵션 1: OAuth 앱"
+          "title": "옵션 1: OAuth 앱",
+          "sharedScopesNote": "하나의 계정으로 두 커넥터를 모두 사용할 수 있도록 Google은 Gmail과 Google Drive 액세스를 함께 요청합니다. 이 계정을 Gmail에만 사용하려면 동의 화면에서 Google Drive 범위의 선택을 해제하세요([요청하는 이유]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "OAuth 앱 JSON을 업로드하거나 붙여 넣으세요"
@@ -5247,6 +5249,22 @@
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",
         "urlInvalid": "유효한 URL이어야 합니다"
+      },
+      "vectorQuantization": {
+        "description": "문서 벡터를 더 적은 비트로 저장하여 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다.",
+        "none": {
+          "description": "32비트 전체 정밀도.",
+          "label": "없음"
+        },
+        "scalar1Bit": {
+          "description": "메모리 사용량 32배 감소. OpenSearch 3.6 이상이 필요합니다.",
+          "label": "1비트"
+        },
+        "scalar7Bit": {
+          "description": "메모리 사용량 4배 감소. 검색 품질 저하가 거의 없습니다.",
+          "label": "7비트"
+        },
+        "title": "벡터 양자화"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {이 커넥터는 삭제됩니다} other {이 # 개의 커넥터는 삭제됩니다}}",

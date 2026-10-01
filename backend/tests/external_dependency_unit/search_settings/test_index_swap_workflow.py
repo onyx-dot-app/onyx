@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import EmbeddingPrecision, SwitchoverType
+from onyx.db.enums import SwitchoverType
 from onyx.db.models import ConnectorCredentialPair, IndexModelStatus
 from onyx.db.search_settings import create_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
@@ -50,7 +50,6 @@ def _make_saved_search_settings(
         provider_type=None,
         index_name=f"test_index_{uuid4().hex[:8]}",
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=False,
         contextual_rag_llm_name=None,

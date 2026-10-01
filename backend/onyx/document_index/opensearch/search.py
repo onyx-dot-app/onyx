@@ -10,6 +10,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
 from onyx.context.search.models import IndexFilters, Tag, TimeRange
+from onyx.db.enums import VectorQuantization
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import (
     ASSUMED_DOCUMENT_AGE_DAYS,
@@ -17,6 +18,7 @@ from onyx.document_index.opensearch.constants import (
     DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
     HYBRID_SEARCH_NORMALIZATION_PIPELINE,
     HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
+    LUCENE_SCALAR_QUANTIZATION,
     HybridSearchNormalizationPipeline,
     HybridSearchSubqueryConfiguration,
 )
@@ -343,6 +345,7 @@ class DocumentQuery:
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
+        vector_quantization: VectorQuantization = VectorQuantization.NONE,
     ) -> dict[str, Any]:
         """Returns a final hybrid search query.
 
@@ -360,6 +363,8 @@ class DocumentQuery:
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the hybrid search query.
             include_hidden: Whether to include hidden documents.
+            vector_quantization: Quantization of the index vector fields. Sets
+                the rescoring of the vector subqueries.
 
         Returns:
             A dictionary representing the final hybrid search query.
@@ -378,7 +383,10 @@ class DocumentQuery:
         max_results_per_subquery = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
 
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
-            query_text, query_vector, vector_candidates=max_results_per_subquery
+            query_text,
+            query_vector,
+            vector_quantization,
+            vector_candidates=max_results_per_subquery,
         )
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
@@ -537,6 +545,7 @@ class DocumentQuery:
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
+        vector_quantization: VectorQuantization = VectorQuantization.NONE,
     ) -> dict[str, Any]:
         """Returns a final semantic search query.
 
@@ -551,6 +560,8 @@ class DocumentQuery:
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the semantic search query.
             include_hidden: Whether to include hidden documents.
+            vector_quantization: Quantization of the index vector fields. Sets
+                the rescoring of the vector query.
 
         Returns:
             A dictionary representing the final semantic search query.
@@ -585,6 +596,7 @@ class DocumentQuery:
         semantic_search_query = (
             DocumentQuery._get_content_vector_similarity_search_query(
                 query_embedding,
+                vector_quantization,
                 vector_candidates=num_hits,
                 search_filters=semantic_search_filters,
             )
@@ -678,6 +690,7 @@ class DocumentQuery:
     def _get_hybrid_search_subqueries(
         query_text: str,
         query_vector: list[float],
+        vector_quantization: VectorQuantization,
         # The default number of neighbors to consider for knn vector similarity
         # search. This is higher than the number of results because the scoring
         # is hybrid. For a detailed breakdown, see where the default value is
@@ -728,6 +741,7 @@ class DocumentQuery:
         Args:
             query_text: The text of the query to search for.
             query_vector: The vector embedding of the query to search for.
+            vector_quantization: Quantization of the index vector fields.
             num_candidates: The number of candidates to consider for vector
                 similarity search.
         """
@@ -739,10 +753,10 @@ class DocumentQuery:
         ):
             return [
                 DocumentQuery._get_title_vector_similarity_search_query(
-                    query_vector, vector_candidates
+                    query_vector, vector_quantization, vector_candidates
                 ),
                 DocumentQuery._get_content_vector_similarity_search_query(
-                    query_vector, vector_candidates
+                    query_vector, vector_quantization, vector_candidates
                 ),
                 DocumentQuery._get_title_content_combined_keyword_search_query(
                     query_text
@@ -754,7 +768,7 @@ class DocumentQuery:
         ):
             return [
                 DocumentQuery._get_content_vector_similarity_search_query(
-                    query_vector, vector_candidates
+                    query_vector, vector_quantization, vector_candidates
                 ),
                 DocumentQuery._get_title_content_combined_keyword_search_query(
                     query_text
@@ -766,40 +780,54 @@ class DocumentQuery:
             )
 
     @staticmethod
+    def _get_knn_field_query(
+        query_vector: list[float],
+        vector_quantization: VectorQuantization,
+        vector_candidates: int,
+    ) -> dict[str, Any]:
+        """Returns the body of a knn query for one vector field."""
+        knn_field_query: dict[str, Any] = {
+            "vector": query_vector,
+            "k": vector_candidates,
+        }
+        lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
+        if lucene_scalar_quantization is not None:
+            # Scores from quantized vectors are approximate. Rescore with the
+            # full-precision vectors so the ranking and the hybrid
+            # normalization use exact scores.
+            knn_field_query["rescore"] = {
+                "oversample_factor": lucene_scalar_quantization.rescore_oversample_factor
+            }
+        return knn_field_query
+
+    @staticmethod
     def _get_title_vector_similarity_search_query(
         query_vector: list[float],
+        vector_quantization: VectorQuantization,
         vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     ) -> dict[str, Any]:
         return {
             "knn": {
-                TITLE_VECTOR_FIELD_NAME: {
-                    "vector": query_vector,
-                    "k": vector_candidates,
-                }
+                TITLE_VECTOR_FIELD_NAME: DocumentQuery._get_knn_field_query(
+                    query_vector, vector_quantization, vector_candidates
+                )
             }
         }
 
     @staticmethod
     def _get_content_vector_similarity_search_query(
         query_vector: list[float],
+        vector_quantization: VectorQuantization,
         vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
         search_filters: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        query = {
-            "knn": {
-                CONTENT_VECTOR_FIELD_NAME: {
-                    "vector": query_vector,
-                    "k": vector_candidates,
-                }
-            }
-        }
-
+        knn_field_query = DocumentQuery._get_knn_field_query(
+            query_vector, vector_quantization, vector_candidates
+        )
         if search_filters is not None:
-            query["knn"][CONTENT_VECTOR_FIELD_NAME]["filter"] = {
-                "bool": {"filter": search_filters}
-            }  # ty: ignore[invalid-assignment]
+            knn_field_query["filter"] = {"bool": {"filter": search_filters}}
 
-        return query
+        return {"knn": {CONTENT_VECTOR_FIELD_NAME: knn_field_query}}
 
     @staticmethod
     def _get_title_content_combined_keyword_search_query(

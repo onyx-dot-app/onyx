@@ -70,9 +70,8 @@ backend = [
     # updating might have on this behavior.
     "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.7",
     "mcp[cli]==1.28.1",
-    "msal==1.34.0",
+    "msal==1.37.0",
     "msoffcrypto-tool==6.0.0",
-    "nltk==3.10.3",
     "Office365-REST-Python-Client==2.6.2",
     "oauthlib==3.2.2",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
@@ -174,7 +173,7 @@ dev = [
 # One-tool groups, installed with `--only-group` by the pre-commit hooks: each
 # tool comes from hash-verified uv.lock artifacts without a full project sync,
 # and each pin below is the only one in the repo.
-ods = ["onyx-devtools[audit]==0.13.8"]
+ods = ["onyx-devtools[audit]==0.13.9"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
@@ -193,7 +192,7 @@ loadtest = [
 
 # Model server specific dependencies (ML packages)
 model_server = [
-    "accelerate==1.14.0",
+    "accelerate==1.15.0",
     "einops==0.8.1",
     "numpy==2.4.1",
     "sentence-transformers==5.4.1",
@@ -215,7 +214,7 @@ default-groups = ["backend", "dev", "ee", "model_server"]
 override-dependencies = [
     "brotli>=1.2.0,<2.0",
     "h11>=0.11,<1.0",
-    "cryptography>=42.0,<50.0",
+    "cryptography>=42.0,<51.0",
     "h2>=4.3.0,<5.0",
     "hyperframe>=6.1.0,<7.0",
     # mitmproxy 12.x already pins tornado to the 6.5 series; keep this floor
@@ -254,6 +253,15 @@ all = "error"
 # own PR rather than a version bump.
 missing-override-decorator = "ignore"  # ~1.1k methods across ~250 files.
 missing-type-argument = "ignore"  # ~1k bare generics across ~350 files.
+
+# Old migrations must not change, and some pass arguments that app models later
+# dropped (e.g. dbaa756c2ccf passes embedding_precision to IndexingSetting).
+# Pydantic discards them at runtime, so silence only this rule there.
+[[tool.ty.overrides]]
+include = ["backend/alembic/versions/**"]
+
+[tool.ty.overrides.rules]
+pydantic-discarded-extra-argument = "ignore"
 
 [tool.uv.workspace]
 members = ["tools/ods"]

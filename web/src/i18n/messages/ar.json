@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Drive الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth"
+          "title": "الخيار 1: تطبيق OAuth",
+          "sharedScopesNote": "يطلب Google الوصول إلى Google Drive وGmail معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Google Drive فقط، ألغِ تحديد نطاقات Gmail في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Gmail الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth"
+          "title": "الخيار 1: تطبيق OAuth",
+          "sharedScopesNote": "يطلب Google الوصول إلى Gmail وGoogle Drive معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Gmail فقط، ألغِ تحديد نطاقات Google Drive في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
@@ -5247,6 +5249,22 @@
         "serviceAccountJsonRequired": "JSON حساب الخدمة مطلوب",
         "targetUrlRequired": "عنوان URL الهدف مطلوب",
         "urlInvalid": "يجب أن يكون عنوان URL صالحًا"
+      },
+      "vectorQuantization": {
+        "description": "خزّن متجهات المستندات بعدد أقل من البتات لاستخدام ذاكرة أقل. قد يؤدي تقليل عدد البتات إلى خفض جودة البحث.",
+        "none": {
+          "description": "دقة كاملة 32 بت.",
+          "label": "بدون"
+        },
+        "scalar1Bit": {
+          "description": "ذاكرة أقل بمقدار 32 مرة. يتطلب OpenSearch 3.6 أو إصدارًا أحدث.",
+          "label": "1 بت"
+        },
+        "scalar7Bit": {
+          "description": "ذاكرة أقل بمقدار 4 مرات. دون خسارة تُذكر في جودة البحث.",
+          "label": "7 بت"
+        },
+        "title": "تكميم المتجهات"
       },
       "wontPortConsentModal": {
         "connector": "{name} — {status}",

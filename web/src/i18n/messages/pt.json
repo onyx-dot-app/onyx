@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "Envie o JSON do app OAuth do Google Cloud Console ([instruções de configuração]({docsUrl})) e depois autentique com a conta Google cujo Drive você quer indexar.",
-          "title": "Opção 1: app OAuth"
+          "title": "Opção 1: app OAuth",
+          "sharedScopesNote": "O Google solicita acesso ao Google Drive e ao Gmail juntos, para que uma conta atenda aos dois conectores. Para usar esta conta apenas com o Google Drive, desmarque os escopos do Gmail na tela de consentimento ([por que pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Envie ou cole o JSON do seu app OAuth"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "Envie o JSON do app OAuth do Google Cloud Console ([instruções de configuração]({docsUrl})) e depois autentique com a conta Google cujo Gmail você quer indexar.",
-          "title": "Opção 1: app OAuth"
+          "title": "Opção 1: app OAuth",
+          "sharedScopesNote": "O Google solicita acesso ao Gmail e ao Google Drive juntos, para que uma conta atenda aos dois conectores. Para usar esta conta apenas com o Gmail, desmarque os escopos do Google Drive na tela de consentimento ([por que pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Envie ou cole o JSON do seu app OAuth"
@@ -5247,6 +5249,22 @@
         "serviceAccountJsonRequired": "O JSON da conta de serviço é obrigatório",
         "targetUrlRequired": "A URL de destino é obrigatória",
         "urlInvalid": "Deve ser uma URL válida"
+      },
+      "vectorQuantization": {
+        "description": "Armazene os vetores dos documentos com menos bits para usar menos memória. Menos bits podem reduzir a qualidade da pesquisa.",
+        "none": {
+          "description": "Precisão completa de 32 bits.",
+          "label": "Nenhuma"
+        },
+        "scalar1Bit": {
+          "description": "32 vezes menos memória. Requer OpenSearch 3.6 ou posterior.",
+          "label": "1 bit"
+        },
+        "scalar7Bit": {
+          "description": "4 vezes menos memória. Quase nenhuma perda na qualidade da pesquisa.",
+          "label": "7 bits"
+        },
+        "title": "Quantização de vetores"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Este conector será excluído} other {Estes # conectores serão excluídos}}",

@@ -9,7 +9,6 @@ from onyx.access.models import DocumentAccess
 from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
-from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
@@ -196,11 +195,7 @@ class SchemaVerifiable(abc.ABC):
     """
 
     @abc.abstractmethod
-    def verify_and_create_index_if_necessary(
-        self,
-        embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,
-    ) -> None:
+    def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
         """
         Verifies that the document index exists and is consistent with the
         expectations in the code.
@@ -212,8 +207,6 @@ class SchemaVerifiable(abc.ABC):
         Args:
             embedding_dim: Vector dimensionality for the vector similarity part
                 of the search.
-            embedding_precision: Precision of the values of the vectors for the
-                similarity part of the search.
         """
         raise NotImplementedError
 

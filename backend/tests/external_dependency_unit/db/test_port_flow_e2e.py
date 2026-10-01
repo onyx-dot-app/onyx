@@ -28,11 +28,11 @@ from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX, ASYM_QUERY_PREFIX
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import swap_index
 from onyx.db.enums import (
-    EmbeddingPrecision,
     IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
     SwitchoverType,
+    VectorQuantization,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -142,7 +142,6 @@ def _make_saved_settings(
         provider_type=None,
         index_name=index_name,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=False,
         contextual_rag_llm_name=None,
@@ -429,7 +428,7 @@ def test_delete_port_written_chunks_only_marked(
             tenant_state=tenant_state,
             index_name=index_name,
             embedding_dim=_VECTOR_DIM,
-            embedding_precision=EmbeddingPrecision.FLOAT,
+            vector_quantization=VectorQuantization.NONE,
         )
         deleted = index.delete_port_written_chunks([marked_doc, unmarked_doc])
         client.refresh_index()
