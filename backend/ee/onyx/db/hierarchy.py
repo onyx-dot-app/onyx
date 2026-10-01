@@ -11,6 +11,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import (
     build_restricted_acl_guard,
     build_user_cc_pair_access_filter,
+    has_sync_restricted_cc_pairs,
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
@@ -49,6 +50,7 @@ def _build_connector_access_filter(user_id: UUID) -> ColumnElement[bool]:
 
 
 def _build_hierarchy_access_filter(
+    db_session: Session,
     user_email: str,
     external_group_ids: list[str],
     user_id: UUID | None = None,
@@ -63,12 +65,15 @@ def _build_hierarchy_access_filter(
                 cast(postgresql.array(external_group_ids), postgresql.ARRAY(String))
             )
         )
+    acl_match = or_(*acl_filters)
+    # The guard's per-row EXISTS checks can only matter once a restricted pair exists.
+    if has_sync_restricted_cc_pairs(db_session):
+        acl_match = and_(
+            acl_match, build_restricted_acl_guard(user_id, _node_has_cc_pair)
+        )
     access_filters: list[ColumnElement[bool]] = [
         HierarchyNode.node_type == HierarchyNodeType.SOURCE,
-        and_(
-            or_(*acl_filters),
-            build_restricted_acl_guard(user_id, _node_has_cc_pair),
-        ),
+        acl_match,
     ]
     if user_id:
         access_filters.append(_build_connector_access_filter(user_id))
@@ -106,7 +111,9 @@ def _get_accessible_hierarchy_nodes_for_source(
         HierarchyNode.node_type != HierarchyNodeType.STUB,
     )
     stmt = stmt.where(
-        _build_hierarchy_access_filter(user_email, external_group_ids, user_id)
+        _build_hierarchy_access_filter(
+            db_session, user_email, external_group_ids, user_id
+        )
     )
     stmt = stmt.order_by(HierarchyNode.display_name)
     return list(db_session.execute(stmt).scalars().all())
@@ -130,7 +137,9 @@ def _search_accessible_hierarchy_nodes(
                 [HierarchyNodeType.STUB, HierarchyNodeType.SOURCE]
             ),
             HierarchyNode.display_name.ilike(pattern, escape="\\"),
-            _build_hierarchy_access_filter(user_email, external_group_ids, user_id),
+            _build_hierarchy_access_filter(
+                db_session, user_email, external_group_ids, user_id
+            ),
         )
         .order_by(HierarchyNode.display_name)
         .limit(limit)
@@ -150,6 +159,8 @@ def _filter_accessible_hierarchy_node_ids(
     """EE version: keep only the node ids the user can access."""
     stmt = select(HierarchyNode.id).where(HierarchyNode.id.in_(node_ids))
     stmt = stmt.where(
-        _build_hierarchy_access_filter(user_email, external_group_ids, user_id)
+        _build_hierarchy_access_filter(
+            db_session, user_email, external_group_ids, user_id
+        )
     )
     return set(db_session.execute(stmt).scalars().all())

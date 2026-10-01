@@ -991,9 +991,9 @@ def add_credential_to_connector(
             "check_if_valid_sync_source",
             noop_return_value=True,
         )(connector.source):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Connector of type {connector.source} does not support permission sync",
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Connector of type {connector.source} does not support permission sync",
             )
 
     if credential is None:

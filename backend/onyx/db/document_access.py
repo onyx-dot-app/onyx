@@ -10,6 +10,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from onyx.db.connector_credential_pair import (
     build_restricted_acl_guard,
     build_user_cc_pair_access_filter,
+    has_sync_restricted_cc_pairs,
 )
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import (
@@ -20,6 +21,7 @@ from onyx.db.models import (
 
 
 def apply_document_access_filter(
+    db_session: Session,
     stmt: Select,
     user_email: str | None,
     external_group_ids: list[str],
@@ -59,12 +61,15 @@ def apply_document_access_filter(
                 cast(postgresql.array(external_group_ids), postgresql.ARRAY(String))
             )
         )
+    acl_match = or_(*acl_filters)
+    # The guard's per-row EXISTS checks can only matter once a restricted pair exists.
+    if has_sync_restricted_cc_pairs(db_session):
+        acl_match = and_(
+            acl_match, build_restricted_acl_guard(user_id, _document_has_cc_pair)
+        )
     access_filters: list[ColumnElement[bool]] = [
         ConnectorCredentialPair.access_type == AccessType.PUBLIC,
-        and_(
-            or_(*acl_filters),
-            build_restricted_acl_guard(user_id, _document_has_cc_pair),
-        ),
+        acl_match,
     ]
     if user_id:
         access_filters.append(build_user_cc_pair_access_filter(user_id))
@@ -103,7 +108,7 @@ def get_accessible_documents_by_ids(
 
     stmt = select(Document).where(Document.id.in_(document_ids))
     stmt = apply_document_access_filter(
-        stmt, user_email, external_group_ids, user_id=user_id
+        db_session, stmt, user_email, external_group_ids, user_id=user_id
     )
     stmt = stmt.distinct()
     return list(db_session.execute(stmt).scalars().all())

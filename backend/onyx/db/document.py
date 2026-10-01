@@ -642,7 +642,7 @@ def get_accessible_documents_for_hierarchy_node_paginated(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
     stmt = apply_document_access_filter(
-        stmt, user_email, external_group_ids, user_id=user_id
+        db_session, stmt, user_email, external_group_ids, user_id=user_id
     )
 
     # Apply cursor filter based on sort type and direction
