@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { credentialTemplates } from "@/lib/credentials/templates";
+import { credentialTemplates } from "@/lib/credentials/constants";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { adminDeleteCredential, deleteCredential } from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
-  CredentialCreationMethod,
   getCredentialCreationMethods,
   shouldRedirectToOAuth,
-} from "@/lib/credentials/credentialCreation";
+} from "@/lib/credentials/utils";
+import { CredentialCreationMethod } from "@/lib/credentials/types";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
 import {

@@ -9,7 +9,7 @@ import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
-import { credentialTemplates } from "@/lib/credentials/templates";
+import { credentialTemplates } from "@/lib/credentials/constants";
 import type {
   Credential,
   CredentialTemplateWithAuth,

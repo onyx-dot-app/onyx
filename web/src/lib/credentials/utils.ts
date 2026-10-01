@@ -1,6 +1,6 @@
 import * as Yup from "yup";
 
-import { credentialTemplates } from "@/lib/credentials/templates";
+import { credentialTemplates } from "@/lib/credentials/constants";
 import type {
   Credential,
   CredentialTemplateWithAuth,
@@ -11,8 +11,12 @@ import type {
   CredentialFormValues,
 } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { credentialDisplayNames } from "@/lib/credentials/templates";
+import { credentialDisplayNames } from "@/lib/credentials/constants";
 import { toast } from "@opal/layouts";
+import {
+  CredentialCreationMethod,
+  type OAuthDetails,
+} from "@/lib/credentials/types";
 
 // What a credential template seeds a field with: "" for a required text
 // field, null for an optional one or a file, a boolean for a checkbox.
@@ -310,3 +314,41 @@ export const filterUploadedCredentials = <
 
   return { credential_id, uploadedCredentials };
 };
+
+// ---------------------------------------------------------------------------
+// Credential creation methods
+// ---------------------------------------------------------------------------
+
+export function getCredentialCreationMethods(
+  details?: OAuthDetails
+): CredentialCreationMethod[] {
+  if (!details) {
+    return [CredentialCreationMethod.Manual];
+  }
+
+  const methods: CredentialCreationMethod[] = [];
+  if (details.oauth_enabled) {
+    methods.push(CredentialCreationMethod.OAuth);
+  }
+  if (details.supports_manual_credentials) {
+    methods.push(CredentialCreationMethod.Manual);
+  }
+  return methods;
+}
+
+export function getCredentialCreationActionLabel(
+  method: CredentialCreationMethod,
+  sourceDisplayName: string,
+  explicitMethod: boolean
+): string {
+  if (!explicitMethod) {
+    return "Create New";
+  }
+  return method === CredentialCreationMethod.OAuth
+    ? `Connect with ${sourceDisplayName}`
+    : "Enter credentials manually";
+}
+
+export function shouldRedirectToOAuth(details: OAuthDetails): boolean {
+  return details.additional_kwargs.length === 0;
+}

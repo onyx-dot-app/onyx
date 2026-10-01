@@ -20,7 +20,7 @@ import {
   ConfigurableSources,
   ValidSources,
 } from "@/lib/connectors/types/source";
-import { credentialTemplates } from "@/lib/credentials/templates";
+import { credentialTemplates } from "@/lib/credentials/constants";
 import type { Credential } from "@/lib/credentials/types";
 import {
   defaultRefreshFreqMinutes,

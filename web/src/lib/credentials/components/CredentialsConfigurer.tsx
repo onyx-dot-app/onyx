@@ -12,10 +12,8 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
-import {
-  CredentialCreationMethod,
-  shouldRedirectToOAuth,
-} from "@/lib/credentials/credentialCreation";
+import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
+import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 

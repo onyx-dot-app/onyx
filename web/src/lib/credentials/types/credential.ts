@@ -1,8 +1,13 @@
 import type { SWRResponse } from "swr";
-import type { CredentialCreationMethod } from "@/lib/credentials/credentialCreation";
 import type { CredentialFieldValues } from "@/lib/credentials/types/fields";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
+
+/** The ways a credential can be created for a source. */
+export enum CredentialCreationMethod {
+  OAuth = "oauth",
+  Manual = "manual",
+}
 
 export interface OAuthAdditionalKwargDescription {
   name: string;
@@ -15,6 +20,7 @@ export interface OAuthDetails {
   supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
+
 export interface AuthMethodOption<
   TFields,
   TAuthMethod extends string = string,
@@ -26,6 +32,7 @@ export interface AuthMethodOption<
   // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
   disablePermSync?: boolean;
 }
+
 export interface CredentialTemplateWithAuth<
   TFields,
   TAuthMethod extends string = string,

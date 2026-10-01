@@ -12,7 +12,7 @@ import {
   updateConnectorCredentialPairName,
   updateConnectorCredentialPairProperty,
 } from "@/lib/connector";
-import { credentialTemplates } from "@/lib/credentials/templates";
+import { credentialTemplates } from "@/lib/credentials/constants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Title from "@/components/ui/title";
 import { useRouter } from "next/navigation";

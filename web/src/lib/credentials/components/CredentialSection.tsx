@@ -31,11 +31,11 @@ import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import type { CredentialFieldValues } from "@/lib/credentials/types";
 import {
-  CredentialCreationMethod,
   getCredentialCreationActionLabel,
   getCredentialCreationMethods,
   shouldRedirectToOAuth,
-} from "@/lib/credentials/credentialCreation";
+} from "@/lib/credentials/utils";
+import { CredentialCreationMethod } from "@/lib/credentials/types";
 import EditCredential from "@/lib/credentials/components/EditCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 
