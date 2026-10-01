@@ -20,7 +20,7 @@ import {
   ConfigurableSources,
   ValidSources,
 } from "@/lib/connectors/types/source";
-import { credentialTemplates } from "@/lib/credentials/constants";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import type { Credential } from "@/lib/credentials/types";
 import {
   defaultRefreshFreqMinutes,
@@ -152,7 +152,7 @@ export default function AddConnector({
   );
 
   // Get credential template and configuration
-  const credentialTemplate = credentialTemplates[connector];
+  const credentialTemplate = CREDENTIAL_TEMPLATES[connector];
   const configuration: ConnectionConfiguration =
     useConnectorConfiguration(connector);
   const formControlFieldNames = new Set(

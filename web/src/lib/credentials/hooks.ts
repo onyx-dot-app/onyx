@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { credentialTemplates } from "@/lib/credentials/constants";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { adminDeleteCredential, deleteCredential } from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -151,7 +151,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
 
   const displayName = getSourceDisplayName(sourceType) || sourceType;
   const methods = getCredentialCreationMethods(oauthDetails);
-  const template = credentialTemplates[sourceType] as
+  const template = CREDENTIAL_TEMPLATES[sourceType] as
     | CredentialFieldValues
     | undefined;
 

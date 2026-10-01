@@ -1,6 +1,6 @@
 import * as Yup from "yup";
 
-import { credentialTemplates } from "@/lib/credentials/constants";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import type {
   Credential,
   CredentialTemplateWithAuth,
@@ -11,7 +11,7 @@ import type {
   CredentialFormValues,
 } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { credentialDisplayNames } from "@/lib/credentials/constants";
+import { CREDENTIAL_DISPLAY_NAMES } from "@/lib/credentials/constants";
 import { toast } from "@opal/layouts";
 import {
   CredentialCreationMethod,
@@ -203,7 +203,7 @@ export function getEditableCredentialFields(
     return {};
   }
 
-  const credentialTemplate = credentialTemplates[sourceType] as
+  const credentialTemplate = CREDENTIAL_TEMPLATES[sourceType] as
     | CredentialFieldValues
     | null
     | undefined;
@@ -266,7 +266,7 @@ export function createInitialValues(
 
 /** The label for a credential field key, falling back to the key itself. */
 export function getDisplayNameForCredentialKey(key: string): string {
-  return credentialDisplayNames[key] || key;
+  return CREDENTIAL_DISPLAY_NAMES[key] || key;
 }
 
 // Parse an uploaded OAuth app JSON; toasts and returns null when invalid.
