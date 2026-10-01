@@ -152,7 +152,7 @@ def _executable_sql(sql: str) -> str:
     statement terminator is dynamic SQL and is kept, however it is spliced.
     A `--` inside quotes is never a comment."""
     out: list[str] = []
-    executing = False
+    executing: bool = False
     i = 0
     while i < len(sql):
         char = sql[i]
