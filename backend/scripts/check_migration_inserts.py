@@ -142,11 +142,14 @@ class _InsertFinder(ast.NodeVisitor):
             self._flag(node)
 
 
-def _executable_sql(sql: str) -> str:
-    """Blank out comments that sit outside quotes.
+_RUNS_QUOTED_SQL = re.compile(r"(?:\bEXECUTE|\bformat\s*\()\s*$", re.IGNORECASE)
 
-    Quoted text is kept and scanned: a `--` inside a literal or identifier is
-    not a comment, and EXECUTE runs the SQL inside a literal."""
+
+def _executable_sql(sql: str) -> str:
+    """Blank out comments and quoted text that Postgres does not run.
+
+    A quoted value is data unless EXECUTE or format() receives it, in which
+    case its text is kept and scanned. A `--` inside quotes is never a comment."""
     out: list[str] = []
     i = 0
     while i < len(sql):
@@ -165,7 +168,9 @@ def _executable_sql(sql: str) -> str:
                 sql[close] != char or sql[close + 1 : close + 2] == char
             ):
                 close += 2 if sql[close] == char else 1
-            out.append(sql[i : close + 1])
+            quoted = sql[i : close + 1]
+            runs = char == "'" and _RUNS_QUOTED_SQL.search("".join(out)) is not None
+            out.append(quoted if runs else " ")
             i = close + 1
         else:
             out.append(char)

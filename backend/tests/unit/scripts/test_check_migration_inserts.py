@@ -172,6 +172,16 @@ def test_quoted_identifier_with_dashes_does_not_hide_an_insert() -> None:
     assert check_migration_inserts.find_inserts(source) == [1]
 
 
+def test_quoted_data_mentioning_an_insert_passes() -> None:
+    source = "op.execute(\"UPDATE tool SET description = 'INSERT INTO the form' WHERE id = 1\")\n"
+    assert check_migration_inserts.find_inserts(source) == []
+
+
+def test_format_built_insert_is_flagged() -> None:
+    source = "op.execute(\"DO $$ BEGIN EXECUTE format('INSERT INTO %I VALUES (1)', 'tool'); END $$\")\n"
+    assert check_migration_inserts.find_inserts(source) == [1]
+
+
 def test_commented_out_sql_insert_passes() -> None:
     source = (
         'op.execute("""\n    -- INSERT INTO tool VALUES (1)\n'
