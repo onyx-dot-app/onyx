@@ -1716,7 +1716,7 @@ export default function IndexSettingsPage() {
                               <Card
                                 expandable
                                 expanded={viewAllModelsOpen}
-                                expandableContentHeight="fit"
+                                expandableContentHeight="full"
                                 border="solid"
                                 borderColor={embeddingCardBorder}
                                 rounding={4}

@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "커넥터 검색..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>페더레이션 커넥터가 이미 구성되어 있습니다.</strong> 클릭하여 기존 커넥터를 편집하세요.",
-          "slackCredentialsFound": "<strong>기존 Slack 자격 증명을 찾았습니다.</strong> 클릭하여 Slack 커넥터를 관리하세요."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "{source} 연결"
@@ -2604,6 +2598,12 @@
           "label": "{source}(으)로 인증",
           "pendingLabel": "인증하는 중..."
         },
+        "collapseButton": {
+          "ariaLabel": "접기"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "새로 만들기"
         },
@@ -2614,7 +2614,8 @@
           "title": "{source} 자격 증명 만들기"
         },
         "credentialStep": {
-          "title": "자격 증명 선택"
+          "description": "공유 서비스 계정을 사용합니다. {appName}이(가) 이 계정으로 콘텐츠를 인덱싱합니다.",
+          "title": "인증 계정"
         },
         "credentialSwapped": {
           "toast": "자격 증명을 교체했습니다!"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "오류: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "펼치기"
+        },
         "federated": {
           "tooltip": {
-            "description": "이 커넥터에는 페더레이션 검색 옵션이 있습니다. 지연 시간이 늘어나고 검색 품질이 낮아집니다.",
+            "description": "지연 시간이 늘어나고 검색 품질이 낮아집니다.",
             "link": {
               "label": "대신 페더레이션 버전 사용 →"
-            }
+            },
+            "title": "이 커넥터에는 페더레이션 검색 옵션이 있습니다."
           }
         },
         "fileUploadFailed": {
           "toast": "파일 업로드 중 오류가 발생했습니다"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "새 {source} 계정"
         },
         "oauthRedirectFailed": {
           "message": "{source} 로그인 페이지로 이동하지 못했습니다. 다시 시도하세요."
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "다시 시도"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}"
         },
         "timeout": {
           "toast": "{seconds}초 후 작업 시간이 초과되었습니다. 설정에 오류가 있는지 확인하세요."
@@ -2813,7 +2827,7 @@
         "connectButton": {
           "label": "연결"
         },
-        "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다."
+        "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다.{hasDocs, select, true { [문서]({url}) 보기} other {}}"
       },
       "invalidConnector": {
         "homeButton": {

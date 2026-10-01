@@ -152,7 +152,8 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 
 ### `Tabs.Content`
 
-| Prop      | Type      | Default      | Description                                               |
-| --------- | --------- | ------------ | --------------------------------------------------------- |
-| `value`   | `string`  | **required** | Must match a `Tabs.Trigger` value                         |
-| `padding` | `Spacing` | `0`          | Additional inner padding, as a spacing step (`N / 4` rem) |
+| Prop          | Type      | Default      | Description                                                                            |
+| ------------- | --------- | ------------ | -------------------------------------------------------------------------------------- |
+| `value`       | `string`  | **required** | Must match a `Tabs.Trigger` value                                                      |
+| `padding`     | `Spacing` | `0`          | Additional inner padding, as a spacing step (`N / 4` rem)                              |
+| `keepMounted` | `boolean` | `false`      | Keeps the panel mounted but hidden while inactive, so form state survives a tab switch |

@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "コネクターを検索..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>フェデレーテッドコネクターは設定済みです。</strong> クリックすると、既存のコネクターを編集できます。",
-          "slackCredentialsFound": "<strong>既存の Slack 資格情報が見つかりました。</strong> クリックすると、Slack コネクターを管理できます。"
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "{source} を接続"
@@ -2604,6 +2598,12 @@
           "label": "{source} で認可",
           "pendingLabel": "認可しています..."
         },
+        "collapseButton": {
+          "ariaLabel": "折りたたむ"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "新規作成"
         },
@@ -2614,7 +2614,8 @@
           "title": "{source} の認証情報を作成"
         },
         "credentialStep": {
-          "title": "認証情報を選択"
+          "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
+          "title": "認証アカウント"
         },
         "credentialSwapped": {
           "toast": "認証情報を切り替えました！"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "エラー: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "展開"
+        },
         "federated": {
           "tooltip": {
-            "description": "このコネクターではフェデレーテッド検索を利用できます。ただし、レイテンシーが大きくなり、検索品質は下がります。",
+            "description": "ただし、レイテンシーが大きくなり、検索品質は下がります。",
             "link": {
               "label": "代わりにフェデレーテッド版を使用 →"
-            }
+            },
+            "title": "このコネクターではフェデレーテッド検索を利用できます。"
           }
         },
         "fileUploadFailed": {
           "toast": "ファイルのアップロード中にエラーが発生しました"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "新しい {source} アカウント"
         },
         "oauthRedirectFailed": {
           "message": "{source} でのサインイン画面にリダイレクトできませんでした。もう一度お試しください。"
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "再試行"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
         },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
@@ -2813,7 +2827,7 @@
         "connectButton": {
           "label": "接続"
         },
-        "description": "{source} に接続し、{appName} 用のコネクタを設定します。"
+        "description": "{source} に接続し、{appName} 用のコネクタを設定します。{hasDocs, select, true {[ドキュメント]({url})を見る} other {}}"
       },
       "invalidConnector": {
         "homeButton": {

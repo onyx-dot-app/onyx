@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "Search connectors..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Federated connector already configured.</strong> Click to edit the existing connector.",
-          "slackCredentialsFound": "<strong>Existing Slack credentials found.</strong> Click to manage your Slack connector."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "Connect {source}"
@@ -2604,6 +2598,12 @@
           "label": "Authorize with {source}",
           "pendingLabel": "Authorizing..."
         },
+        "collapseButton": {
+          "ariaLabel": "Collapse"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Create New"
         },
@@ -2614,7 +2614,8 @@
           "title": "Create a {source} credential"
         },
         "credentialStep": {
-          "title": "Select a credential"
+          "description": "Use a shared service account. {appName} indexes content as this account.",
+          "title": "Authentication Account"
         },
         "credentialSwapped": {
           "toast": "Swapped credential successfully!"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "Error: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Expand"
+        },
         "federated": {
           "tooltip": {
-            "description": "A federated search option is available for this connector. It will result in greater latency and reduced search quality.",
+            "description": "It will result in greater latency and reduced search quality.",
             "link": {
               "label": "Use federated version instead →"
-            }
+            },
+            "title": "A federated search option is available for this connector."
           }
         },
         "fileUploadFailed": {
           "toast": "Error uploading files"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "New {source} Account"
         },
         "oauthRedirectFailed": {
           "message": "We couldn't redirect you to sign in with {source}. Please try again."
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "Retry"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
         },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
@@ -2813,7 +2827,7 @@
         "connectButton": {
           "label": "Connect"
         },
-        "description": "Connect to {source} and set up the connector for {appName}."
+        "description": "Connect to {source} and set up the connector for {appName}.{hasDocs, select, true { View [docs]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {

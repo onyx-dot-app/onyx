@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "البحث في الموصلات..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>موصل موحّد مهيأ بالفعل.</strong> انقر لتعديل الموصل الحالي.",
-          "slackCredentialsFound": "<strong>تم العثور على بيانات اعتماد Slack موجودة.</strong> انقر لإدارة موصل Slack الخاص بك."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "ربط {source}"
@@ -2604,6 +2598,12 @@
           "label": "التفويض عبر {source}",
           "pendingLabel": "جارٍ التفويض..."
         },
+        "collapseButton": {
+          "ariaLabel": "طي"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "إنشاء جديد"
         },
@@ -2614,7 +2614,8 @@
           "title": "إنشاء بيانات اعتماد {source}"
         },
         "credentialStep": {
-          "title": "اختر بيانات اعتماد"
+          "description": "استخدم حساب خدمة مشتركًا. يفهرس {appName} المحتوى باسم هذا الحساب.",
+          "title": "حساب المصادقة"
         },
         "credentialSwapped": {
           "toast": "تم تبديل بيانات الاعتماد بنجاح!"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "خطأ: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "توسيع"
+        },
         "federated": {
           "tooltip": {
-            "description": "يتوفر خيار بحث موحّد لهذا الموصل. سيؤدي إلى زمن استجابة أكبر وجودة بحث أقل.",
+            "description": "سيؤدي إلى زمن استجابة أكبر وجودة بحث أقل.",
             "link": {
               "label": "استخدم النسخة الموحّدة بدلًا من ذلك ←"
-            }
+            },
+            "title": "يتوفر خيار بحث موحّد لهذا الموصل."
           }
         },
         "fileUploadFailed": {
           "toast": "خطأ في رفع الملفات"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "حساب {source} جديد"
         },
         "oauthRedirectFailed": {
           "message": "تعذّر تحويلك لتسجيل الدخول عبر {source}. يرجى المحاولة مرة أخرى."
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "إعادة المحاولة"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}"
         },
         "timeout": {
           "toast": "انتهت مهلة العملية بعد {seconds} ثانية. هل تتحقق من إعداداتك بحثًا عن أخطاء؟"
@@ -2813,7 +2827,7 @@
         "connectButton": {
           "label": "اتصال"
         },
-        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}."
+        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}.{hasDocs, select, true { عرض [الوثائق]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {

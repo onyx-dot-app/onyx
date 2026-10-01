@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "搜索连接器..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>联合连接器已配置。</strong>点击可编辑现有连接器。",
-          "slackCredentialsFound": "<strong>已找到现有的 Slack 凭据。</strong>点击可管理您的 Slack 连接器。"
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "连接 {source}"
@@ -2604,6 +2598,12 @@
           "label": "使用 {source} 授权",
           "pendingLabel": "正在授权…"
         },
+        "collapseButton": {
+          "ariaLabel": "折叠"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "新建"
         },
@@ -2614,7 +2614,8 @@
           "title": "创建 {source} 凭据"
         },
         "credentialStep": {
-          "title": "选择凭据"
+          "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
+          "title": "身份验证账户"
         },
         "credentialSwapped": {
           "toast": "已成功更换凭据！"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "错误：{detail}"
         },
+        "expandButton": {
+          "ariaLabel": "展开"
+        },
         "federated": {
           "tooltip": {
-            "description": "此连接器支持联合搜索选项。它会带来更高的延迟和更低的搜索质量。",
+            "description": "它会带来更高的延迟和更低的搜索质量。",
             "link": {
               "label": "改用联合搜索版本 →"
-            }
+            },
+            "title": "此连接器支持联合搜索选项。"
           }
         },
         "fileUploadFailed": {
           "toast": "上传文件出错"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "新建 {source} 账户"
         },
         "oauthRedirectFailed": {
           "message": "无法将您重定向到 {source} 登录页面。请重试。"
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "重试"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}"
         },
         "timeout": {
           "toast": "操作在 {seconds} 秒后超时。请检查配置是否有误。"
@@ -2813,7 +2827,7 @@
         "connectButton": {
           "label": "连接"
         },
-        "description": "连接到 {source} 并为 {appName} 设置连接器。"
+        "description": "连接到 {source} 并为 {appName} 设置连接器。{hasDocs, select, true {查看[文档]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {

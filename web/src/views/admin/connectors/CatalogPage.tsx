@@ -15,18 +15,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Tooltip, InputTypeIn, Text } from "@opal/components";
-import { richNodes } from "@opal/utils";
+import { InputTypeIn, Text } from "@opal/components";
 import { useFederatedConnectors } from "@/lib/hooks";
 import {
   FederatedConnectorDetail,
   federatedSourceToRegularSource,
-  ValidSources,
 } from "@/lib/types";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
-import type { Credential } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { ConnectorSourceCard } from "@/lib/connectors/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -43,19 +37,20 @@ const route = ADMIN_ROUTES.CONNECTORS;
 const SOURCE_CARD_GRID =
   "grid grid-cols-2 @xl/sourcecards:grid-cols-3 @3xl/sourcecards:grid-cols-4 gap-2";
 
-function SourceTileTooltipWrapper({
+/**
+ * One source in the catalog. A source with a federated connector already
+ * set up links to that connector instead of a fresh setup.
+ */
+function SourceTile({
   sourceMetadata,
   federatedConnectors,
-  slackCredentials,
 }: {
   sourceMetadata: SourceMetadata;
   federatedConnectors?: FederatedConnectorDetail[];
-  slackCredentials?: Credential<any>[];
 }) {
   const t = useTranslations("admin.addConnector");
   const description = t(SOURCE_DESCRIPTION_KEYS[sourceMetadata.internalName]);
 
-  // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
     if (!sourceMetadata.federated || !federatedConnectors) {
       return null;
@@ -68,69 +63,16 @@ function SourceTileTooltipWrapper({
     );
   }, [sourceMetadata, federatedConnectors]);
 
-  // For Slack specifically, check if there are existing non-federated credentials
-  const isSlackTile = sourceMetadata.internalName === ValidSources.Slack;
-  const hasExistingSlackCredentials = useMemo(() => {
-    return isSlackTile && slackCredentials && slackCredentials.length > 0;
-  }, [isSlackTile, slackCredentials]);
-
-  // Determine the URL to navigate to
-  const navigationUrl = useMemo(() => {
-    // If there's an existing federated connector, route to edit it
-    if (existingFederatedConnector) {
-      return `/admin/federated/${existingFederatedConnector.id}` as Route;
-    }
-
-    // For all other sources (including Slack), use the regular admin URL
-    return sourceMetadata.adminUrl as Route;
-  }, [existingFederatedConnector, sourceMetadata]);
-
-  // Compute whether to hide the tooltip
-  const shouldHideTooltip =
-    !existingFederatedConnector &&
-    !hasExistingSlackCredentials &&
-    !sourceMetadata.federated;
-
-  // If tooltip should be hidden, just render the tile as a component
-  if (shouldHideTooltip) {
-    return (
-      <ConnectorSourceCard
-        sourceMetadata={sourceMetadata}
-        description={description}
-        navigationUrl={navigationUrl}
-      />
-    );
-  }
+  const navigationUrl = existingFederatedConnector
+    ? (`/admin/federated/${existingFederatedConnector.id}` as Route)
+    : (sourceMetadata.adminUrl as Route);
 
   return (
-    <Tooltip
-      side="top"
-      tooltip={
-        existingFederatedConnector ? (
-          <Text as="p" font="secondary-body" color="inherit">
-            {richNodes(
-              t.rich("sourceTile.tooltip.federatedConfigured", {
-                strong: (chunks) => <strong>{chunks}</strong>,
-              })
-            )}
-          </Text>
-        ) : hasExistingSlackCredentials ? (
-          <Text as="p" font="secondary-body" color="inherit">
-            {richNodes(
-              t.rich("sourceTile.tooltip.slackCredentialsFound", {
-                strong: (chunks) => <strong>{chunks}</strong>,
-              })
-            )}
-          </Text>
-        ) : undefined
-      }
-    >
-      <ConnectorSourceCard
-        sourceMetadata={sourceMetadata}
-        description={description}
-        navigationUrl={navigationUrl}
-      />
-    </Tooltip>
+    <ConnectorSourceCard
+      sourceMetadata={sourceMetadata}
+      description={description}
+      navigationUrl={navigationUrl}
+    />
   );
 }
 
@@ -145,12 +87,6 @@ export default function ConnectorsPage() {
   const { data: federatedConnectors } = useFederatedConnectors();
   const settings = useSettings();
   const { appName } = settings;
-
-  // Fetch Slack credentials to determine navigation behavior
-  const { data: slackCredentials } = useSWR<Credential<any>[]>(
-    buildSimilarCredentialInfoURL(ValidSources.Slack),
-    errorHandlingFetcher
-  );
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -282,11 +218,10 @@ export default function ConnectorsPage() {
                 >
                   <div className={SOURCE_CARD_GRID}>
                     {dedupedPopular.map((source) => (
-                      <SourceTileTooltipWrapper
+                      <SourceTile
                         key={source.internalName}
                         sourceMetadata={source}
                         federatedConnectors={federatedConnectors}
-                        slackCredentials={slackCredentials}
                       />
                     ))}
                   </div>
@@ -310,11 +245,10 @@ export default function ConnectorsPage() {
                     </Text>
                     <div className={SOURCE_CARD_GRID}>
                       {sources.map((source) => (
-                        <SourceTileTooltipWrapper
+                        <SourceTile
                           key={source.internalName}
                           sourceMetadata={source}
                           federatedConnectors={federatedConnectors}
-                          slackCredentials={slackCredentials}
                         />
                       ))}
                     </div>

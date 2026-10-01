@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "Konnektoren suchen..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Föderierter Konnektor bereits konfiguriert.</strong> Klicken Sie, um den vorhandenen Konnektor zu bearbeiten.",
-          "slackCredentialsFound": "<strong>Vorhandene Slack-Anmeldedaten gefunden.</strong> Klicken Sie, um Ihren Slack-Konnektor zu verwalten."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "{source} verbinden"
@@ -2604,6 +2598,12 @@
           "label": "Mit {source} autorisieren",
           "pendingLabel": "Wird autorisiert..."
         },
+        "collapseButton": {
+          "ariaLabel": "Einklappen"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Neu erstellen"
         },
@@ -2614,7 +2614,8 @@
           "title": "Anmeldedaten für {source} erstellen"
         },
         "credentialStep": {
-          "title": "Anmeldedaten auswählen"
+          "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
+          "title": "Authentifizierungskonto"
         },
         "credentialSwapped": {
           "toast": "Anmeldedaten erfolgreich gewechselt!"
@@ -2622,16 +2623,26 @@
         "error": {
           "toast": "Fehler: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Ausklappen"
+        },
         "federated": {
           "tooltip": {
-            "description": "Für diesen Konnektor ist eine föderierte Suchoption verfügbar. Sie führt zu höherer Latenz und geringerer Suchqualität.",
+            "description": "Sie führt zu höherer Latenz und geringerer Suchqualität.",
             "link": {
               "label": "Stattdessen die föderierte Version verwenden →"
-            }
+            },
+            "title": "Für diesen Konnektor ist eine föderierte Suchoption verfügbar."
           }
         },
         "fileUploadFailed": {
           "toast": "Fehler beim Hochladen der Dateien"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "Neues {source}-Konto"
         },
         "oauthRedirectFailed": {
           "message": "Wir konnten Sie nicht zur Anmeldung bei {source} weiterleiten. Bitte versuchen Sie es erneut."
@@ -2644,6 +2655,9 @@
         },
         "retryButton": {
           "label": "Erneut versuchen"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}"
         },
         "timeout": {
           "toast": "Zeitüberschreitung des Vorgangs nach {seconds} Sekunden. Prüfen Sie Ihre Konfiguration auf Fehler."
@@ -2813,7 +2827,7 @@
         "connectButton": {
           "label": "Verbinden"
         },
-        "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein."
+        "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein.{hasDocs, select, true { [Doku]({url}) ansehen} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
