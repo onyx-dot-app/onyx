@@ -162,8 +162,6 @@ export default function ConnectorsPage() {
     return popularSources.filter((s) => !resultIds.has(s.internalName));
   }, [popularSources, resultIds, searchTerm]);
 
-  const catalogRef = useRef<HTMLDivElement>(null);
-
   /**
    * Moves focus to the search field, with the caret at the end. A term
    * passed in replaces the current one.
@@ -184,7 +182,7 @@ export default function ConnectorsPage() {
 
   // Arrows move between cards; leaving the top row, Escape, or typing
   // returns to search. "/" is left to the hotkey above.
-  const { focusFirst } = useGridNavigation(catalogRef, {
+  const { ref: catalogRef, focusFirst } = useGridNavigation({
     itemSelector: "[data-source-card]",
     onExit: (direction) => {
       if (direction === "up") focusSearch();

@@ -1,7 +1,7 @@
 "use client";
 
 import "@opal/hooks/useGridNavigation.css";
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type GridDirection = "up" | "down" | "left" | "right";
 
@@ -23,6 +23,11 @@ export interface UseGridNavigationOptions {
 }
 
 export interface UseGridNavigationReturn {
+  /**
+   * Put on the container. A callback ref, so a container that mounts late,
+   * or is replaced, still gets the keys.
+   */
+  ref: (element: HTMLElement | null) => void;
   /** Focuses the first item. Returns false when there is none. */
   focusFirst: () => boolean;
 }
@@ -50,9 +55,9 @@ function sameRow(a: DOMRect, b: DOMRect): boolean {
 /**
  * The item an arrow key lands on, or null when there is none that way. It
  * reads the layout rather than indexes, so it follows a responsive column
- * count and crosses between grids in the same container. Left and right
- * stay in the row; up and down take the nearest row and the item closest
- * to the same column.
+ * count, a right-to-left layout, and crosses between grids in the same
+ * container. Left and right take the nearest item in the row; up and down
+ * take the nearest row and the item closest to the same column.
  */
 function itemInDirection(
   items: HTMLElement[],
@@ -61,10 +66,24 @@ function itemInDirection(
 ): HTMLElement | null {
   const origin = from.getBoundingClientRect();
 
+  // Left and right read positions too, not list order, so a right-to-left
+  // layout moves the way the arrow points.
   if (direction === "left" || direction === "right") {
-    const index = items.indexOf(from);
-    const next = items[direction === "left" ? index - 1 : index + 1];
-    return next && sameRow(next.getBoundingClientRect(), origin) ? next : null;
+    const toLeft = direction === "left";
+    return (
+      items.reduce<{ item: HTMLElement; gap: number } | null>(
+        (nearest, item) => {
+          const rect = item.getBoundingClientRect();
+          if (item === from || !sameRow(rect, origin)) return nearest;
+          const gap = toLeft
+            ? origin.left - rect.left
+            : rect.left - origin.left;
+          if (gap <= 0 || (nearest && nearest.gap <= gap)) return nearest;
+          return { item, gap };
+        },
+        null
+      )?.item ?? null
+    );
   }
 
   const below = direction === "down";
@@ -106,21 +125,23 @@ function itemInDirection(
  *
  * @example
  * ```tsx
- * const gridRef = useRef<HTMLDivElement>(null);
- * const { focusFirst } = useGridNavigation(gridRef, {
+ * const { ref, focusFirst } = useGridNavigation({
  *   itemSelector: "[data-card]",
  *   onExit: (direction) => direction === "up" && searchRef.current?.focus(),
  *   onEscape: () => searchRef.current?.focus(),
  * });
  *
  * <input ref={searchRef} onKeyDown={(e) => e.key === "ArrowDown" && focusFirst()} />
- * <div ref={gridRef}>{cards}</div>
+ * <div ref={ref}>{cards}</div>
  * ```
  */
 export default function useGridNavigation(
-  containerRef: RefObject<HTMLElement | null>,
   options: UseGridNavigationOptions
 ): UseGridNavigationReturn {
+  // State rather than a ref object, so mounting the container re-runs the
+  // effect that binds it.
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+
   // The latest options, so inline callbacks do not rebind the listener.
   const optionsRef = useRef(options);
   useEffect(() => {
@@ -131,14 +152,11 @@ export default function useGridNavigation(
 
   const items = useCallback(
     () =>
-      Array.from(
-        containerRef.current?.querySelectorAll<HTMLElement>(itemSelector) ?? []
-      ),
-    [containerRef, itemSelector]
+      Array.from(container?.querySelectorAll<HTMLElement>(itemSelector) ?? []),
+    [container, itemSelector]
   );
 
   useEffect(() => {
-    const container = containerRef.current;
     if (!enabled || !container) return;
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -214,7 +232,7 @@ export default function useGridNavigation(
       container.removeEventListener("pointermove", handlePointerMove);
       setMode(null);
     };
-  }, [containerRef, itemSelector, enabled, items]);
+  }, [container, itemSelector, enabled, items]);
 
   const focusFirst = useCallback(() => {
     const [first] = items();
@@ -222,5 +240,5 @@ export default function useGridNavigation(
     return first !== undefined;
   }, [items]);
 
-  return { focusFirst };
+  return { ref: setContainer, focusFirst };
 }
