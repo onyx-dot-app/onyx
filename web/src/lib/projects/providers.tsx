@@ -165,6 +165,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
     new Set()
   );
+  const trackedUploadIdsRef = useRef<Set<string>>(trackedUploadIds);
+  useEffect(() => {
+    trackedUploadIdsRef.current = trackedUploadIds;
+  }, [trackedUploadIds]);
   const [allRecentFiles, setAllRecentFiles] = useState<ProjectFile[]>([]);
   const [allCurrentProjectFiles, setAllCurrentProjectFiles] = useState<
     ProjectFile[]
@@ -748,31 +752,38 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         });
 
         // Remove completed/skipped/failed from tracking
-        const remaining = new Set(trackedUploadIds);
+        const finishedIds = new Set<string>();
         const newlyFailed: ProjectFile[] = [];
         for (const f of statuses) {
           const s = String(f.status).toLowerCase();
           if (s === "completed" || s === "skipped") {
-            remaining.delete(f.id);
+            finishedIds.add(f.id);
           } else if (s === "failed") {
-            remaining.delete(f.id);
+            finishedIds.add(f.id);
             newlyFailed.push(f);
           }
         }
         // Requested ids the server no longer reports are deleted files: stop
-        // tracking them. Ids registered after this request went out stay.
+        // tracking them.
         for (const id of ids) {
           if (!statusById.has(id)) {
-            remaining.delete(id);
+            finishedIds.add(id);
           }
         }
         if (newlyFailed.length > 0) {
           setLastFailedFiles(newlyFailed);
         }
-        const trackingChanged = remaining.size !== trackedUploadIds.size;
-        if (trackingChanged) {
-          setTrackedUploadIds(remaining);
-        }
+        // Remove from the latest set, not this poll's snapshot, so ids
+        // registered while the request was in flight stay tracked.
+        const remaining = new Set(
+          Array.from(trackedUploadIdsRef.current).filter(
+            (id) => !finishedIds.has(id)
+          )
+        );
+        setTrackedUploadIds((prev) => {
+          if (!Array.from(prev).some((id) => finishedIds.has(id))) return prev;
+          return new Set(Array.from(prev).filter((id) => !finishedIds.has(id)));
+        });
 
         // If all tracked uploads finished (completed or failed), do a single refresh
         if (remaining.size === 0) {

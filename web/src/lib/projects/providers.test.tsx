@@ -206,16 +206,17 @@ describe("ProjectsContext attached file status polling", () => {
   beforeEach(() => {
     mockGetRecentFiles.mockReset();
     mockGetUserFileStatuses.mockReset();
+    mockGetUserFileStatuses.mockResolvedValue([]);
     mockGetRecentFiles.mockResolvedValue([]);
   });
 
-  it("refreshes a pending file attached from recents until it is ready", async () => {
-    const pendingFile: ProjectFile = {
-      id: "file-1",
-      name: "notes.txt",
+  function makePendingFile(id: string): ProjectFile {
+    return {
+      id,
+      name: `${id}.txt`,
       project_id: null,
       user_id: null,
-      file_id: "store-1",
+      file_id: `store-${id}`,
       created_at: "2026-01-01T00:00:00Z",
       status: UserFileStatus.INDEXING,
       file_type: "text/plain",
@@ -224,6 +225,17 @@ describe("ProjectsContext attached file status polling", () => {
       token_count: 10,
       chunk_count: null,
     };
+  }
+
+  function completedStatuses(ids: string[]): ProjectFile[] {
+    return ids.map((id) => ({
+      ...makePendingFile(id),
+      status: UserFileStatus.COMPLETED,
+    }));
+  }
+
+  it("refreshes a pending file attached from recents until it is ready", async () => {
+    const pendingFile = makePendingFile("file-1");
     mockGetUserFileStatuses.mockResolvedValue([
       { ...pendingFile, status: UserFileStatus.COMPLETED },
     ]);
@@ -241,4 +253,42 @@ describe("ProjectsContext attached file status polling", () => {
     );
     expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"]);
   });
+
+  it("keeps a file attached while an earlier status request is in flight", async () => {
+    const first = makePendingFile("file-1");
+    const second = makePendingFile("file-2");
+    let resolveFirstPoll: (value: ProjectFile[]) => void = () => {};
+    mockGetUserFileStatuses
+      .mockImplementationOnce(
+        () =>
+          new Promise<ProjectFile[]>((resolve) => {
+            resolveFirstPoll = resolve;
+          })
+      )
+      .mockImplementation(async (ids: string[]) => completedStatuses(ids));
+
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([first]);
+    });
+    await waitFor(() =>
+      expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"])
+    );
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([first, second]);
+    });
+    await act(async () => {
+      resolveFirstPoll(completedStatuses(["file-1"]));
+    });
+
+    await waitFor(
+      () =>
+        expect(result.current.currentMessageFiles.map((f) => f.status)).toEqual(
+          [UserFileStatus.COMPLETED, UserFileStatus.COMPLETED]
+        ),
+      { timeout: 5000 }
+    );
+  }, 10000);
 });
