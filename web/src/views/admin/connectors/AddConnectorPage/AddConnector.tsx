@@ -11,7 +11,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/lib/app/components";
 import { linkCredential } from "@/lib/credentials/svc";
-import { CredentialsConfigurer } from "@/lib/connectors/components";
+import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
