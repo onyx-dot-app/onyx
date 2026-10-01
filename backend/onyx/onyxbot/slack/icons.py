@@ -19,6 +19,8 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.OUTLINE: "Outline.png",
     DocumentSource.CONFLUENCE: "Confluence.png",
     DocumentSource.JIRA: "Jira.png",
+    # no dedicated Slack icon asset yet; JSM requests are Jira issues
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "Jira.png",
     DocumentSource.SLAB: "Slab.png",
     DocumentSource.PRODUCTBOARD: "Productboard.png",
     DocumentSource.FILE: _DEFAULT_SOURCE_IMAGE_FILENAME,
