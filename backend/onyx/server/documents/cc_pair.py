@@ -71,6 +71,9 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.capability_check_runs import (
+    start_capability_checks_for_new_pairing,
+)
 from onyx.server.documents.models import (
     CCPairFullInfo,
     CCPairSyncAttemptsResponse,
@@ -926,6 +929,10 @@ def associate_credential_to_connector(
             # the body and the *connector* id in data, so a caller checking the
             # status stored the wrong id and reported a no-op as a success.
             raise OnyxError(OnyxErrorCode.CONFLICT, response.message)
+
+        start_capability_checks_for_new_pairing(
+            db_session, credential_id=credential_id, connector_id=connector_id
+        )
 
         # Tenant-work-gating lifecycle hook: keep new-tenant latency to
         # seconds instead of one full-fanout interval.

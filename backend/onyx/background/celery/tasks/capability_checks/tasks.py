@@ -1,7 +1,8 @@
 """Celery tasks for the granular capability check runs.
 
-The run task is enqueued by the capability-check trigger endpoint after it marks
-the scope's row RUNNING, and writes through the unconditional upsert: a granular
+The run task is enqueued by ``start_capability_check_run`` (the manual trigger
+endpoint, cc-pair creation and credential swap) after it marks the scope's row
+RUNNING, and writes through the unconditional upsert: a granular
 run is the freshest truth and replaces whatever is stored (see the accessors'
 writer model). A run that fails gracefully records FAILED_TO_RUN itself; only
 hard kills and expired tasks leave their row RUNNING for the beat sweep to
@@ -47,6 +48,9 @@ def run_capability_checks_task(
     # Serialized UUID; None only for tasks enqueued before the fence deployed,
     # whose terminal writes then match only their own pre-migration NULL marks.
     run_id: str | None = None,
+    # What started the run. Defaults to MANUAL for tasks enqueued before this
+    # argument existed.
+    trigger: str = CapabilityCheckTrigger.MANUAL.value,
 ) -> None:
     """Runs every capability check for the scope and stores the report.
 
@@ -55,6 +59,7 @@ def run_capability_checks_task(
     instead of mislabeling the successor's row.
     """
     parsed_run_id = UUID(run_id) if run_id is not None else None
+    parsed_trigger = CapabilityCheckTrigger(trigger)
     try:
         # Setup reads use a short-lived session: the probes below can run for
         # hours, and an open transaction would hold its connection and read
@@ -94,7 +99,7 @@ def run_capability_checks_task(
             connector_specific_config=config,
             connector_id=connector_id,
             input_type=input_type,
-            trigger=CapabilityCheckTrigger.MANUAL,
+            trigger=parsed_trigger,
         )
         with get_session_with_current_tenant() as db_session:
             completed_row = upsert_completed_capability_report(
@@ -102,7 +107,7 @@ def run_capability_checks_task(
                 credential_id=credential_id,
                 connector_id=connector_id,
                 source=source,
-                trigger=CapabilityCheckTrigger.MANUAL,
+                trigger=parsed_trigger,
                 report=report,
                 connector_config_hash=(
                     compute_connector_config_hash(config)

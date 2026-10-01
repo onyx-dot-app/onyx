@@ -77,3 +77,9 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
     )
     checks.extend(get_perm_sync_checks(source))
     return checks
+
+
+def has_named_capability_checks(source: DocumentSource) -> bool:
+    """True when the source registers named checks beyond the legacy fallback,
+    so a full run reports more than the blocking validation already recorded."""
+    return any(not check.is_fallback for check in get_capability_checks(source))
