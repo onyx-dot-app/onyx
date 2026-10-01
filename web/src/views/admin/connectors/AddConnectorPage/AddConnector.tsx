@@ -277,9 +277,8 @@ export default function AddConnector({
     revealChecksCard();
     setCheckingBeforeCreate(true);
     try {
-      const outcome = await draftChecks.run(input, {
-        force: before === "failed",
-      });
+      // Failed results are run again: the admin may have fixed the source.
+      const outcome = await draftChecks.run(input, { rerunFailed: true });
       if (outcome.kind === "error") return true;
       if (outcome.kind === "stale") return false;
       const after = requiredChecksStatus(outcome.snapshot);

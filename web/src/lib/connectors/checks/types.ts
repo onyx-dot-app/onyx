@@ -147,6 +147,8 @@ export interface DraftCheckRunRequest {
   draft_key: string;
   /** The `connector_specific_config` the create request would send. */
   form_state: Record<string, unknown>;
+  /** Run checks whose cached result failed again instead of reusing it. */
+  rerun_failed?: boolean;
 }
 
 /**

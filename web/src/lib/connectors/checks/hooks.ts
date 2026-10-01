@@ -84,6 +84,11 @@ export interface DraftCheckRunInput {
 export interface DraftCheckRunOptions {
   /** Start a new run even when the last run had the same input. */
   force?: boolean;
+  /**
+   * Run checks whose cached result failed again. A finished run of the same
+   * input that has a failed check does not count as the same run.
+   */
+  rerunFailed?: boolean;
 }
 
 /**
@@ -179,13 +184,20 @@ export function useDraftConnectorChecks(
       input: DraftCheckRunInput,
       options: DraftCheckRunOptions = {}
     ): Promise<DraftCheckRunOutcome> => {
-      const request = buildRequest(input);
-      if (request === null) return Promise.resolve({ kind: "stale" });
-      const key = JSON.stringify(request);
+      const base = buildRequest(input);
+      if (base === null) return Promise.resolve({ kind: "stale" });
+      const key = JSON.stringify(base);
       const last = lastRunRef.current;
-      if (!options.force && last !== null && last.key === key) {
+      const lastFailed =
+        last?.settled?.checks.some((check) => check.state === "failed") ??
+        false;
+      const rejoin = !options.force && !(options.rerunFailed && lastFailed);
+      if (rejoin && last !== null && last.key === key) {
         return last.promise;
       }
+      const request: DraftCheckRunRequest = options.rerunFailed
+        ? { ...base, rerun_failed: true }
+        : base;
 
       const generation = ++generationRef.current;
       const isCurrent = () => generation === generationRef.current;
