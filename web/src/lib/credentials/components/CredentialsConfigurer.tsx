@@ -194,7 +194,7 @@ export function CredentialsConfigurer({
       toast says so), and the accounts and create card once everything
       lands. */}
       {failed ? null : isLoading || !credentials ? (
-        <CardLoader padding={6} />
+        <CardLoader />
       ) : (
         <Section gap={4} alignItems="stretch" width="full">
           <Card border="solid" rounding={4} padding={6}>
