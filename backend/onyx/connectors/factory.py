@@ -111,6 +111,17 @@ def identify_connector_class(
     return connector
 
 
+def split_comma_separated_config_fields(
+    source: DocumentSource, connector_specific_config: dict[str, Any]
+) -> dict[str, Any]:
+    """Returns the config with the source's comma-separated list fields split
+    into one value per entry."""
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    if mapping is None:
+        return connector_specific_config
+    return mapping.config_class.split_comma_separated_fields(connector_specific_config)
+
+
 def validate_connector_config(
     source: DocumentSource, connector_specific_config: dict[str, Any]
 ) -> None:

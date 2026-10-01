@@ -3,6 +3,8 @@ from onyx.connectors.connector_config import ConnectorConfig
 
 
 class DiscordConnectorConfig(ConnectorConfig):
+    COMMA_SEPARATED_FIELDS = frozenset({"server_ids"})
+
     server_ids: list[str] | None = None
     channel_names: list[str] | None = None
     # YYYY-MM-DD

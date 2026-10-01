@@ -9,6 +9,8 @@ class ZoomCredentialBinding(CredentialBinding):
 
 
 class ZoomConnectorConfig(ZoomCredentialBinding, ConnectorConfig):
+    COMMA_SEPARATED_FIELDS = frozenset({"meeting_ids", "webinar_ids", "host_emails"})
+
     meeting_ids: list[str] | None = None
     webinar_ids: list[str] | None = None
     host_emails: list[str] | None = None

@@ -1,6 +1,6 @@
-from typing import Any
+from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class CredentialBinding(BaseModel):
@@ -37,6 +37,37 @@ class ConnectorConfig(BaseModel):
     # extra="forbid" matches the kwargs constructors, where an unknown key is a
     # TypeError. Some configs hold secrets, so errors must not echo input values.
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    # List fields where one entry may hold several comma-separated values, so
+    # users can paste many values into one input.
+    COMMA_SEPARATED_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _split_comma_separated_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        return cls.split_comma_separated_fields(data)
+
+    @classmethod
+    def split_comma_separated_fields(cls, config: dict[str, Any]) -> dict[str, Any]:
+        """Returns a copy of ``config`` with each comma-separated field split on
+        commas, stripped, and with empty values dropped."""
+        result = dict(config)
+        for name in cls.COMMA_SEPARATED_FIELDS:
+            value = result.get(name)
+            if not isinstance(value, list):
+                continue
+            split_values: list[Any] = []
+            for item in value:
+                if isinstance(item, str):
+                    split_values.extend(
+                        part for raw in item.split(",") if (part := raw.strip())
+                    )
+                else:
+                    split_values.append(item)
+            result[name] = split_values
+        return result
 
     @classmethod
     def credential_binding_class(cls) -> type[CredentialBinding] | None:

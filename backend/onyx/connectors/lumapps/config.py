@@ -7,6 +7,8 @@ class LumAppsCredentialBinding(BaseUrlCredentialBinding):
 
 
 class LumAppsConnectorConfig(LumAppsCredentialBinding, ConnectorConfig):
+    COMMA_SEPARATED_FIELDS = frozenset({"instance_ids"})
+
     instance_ids: list[str] | None = None
     custom_content_types: list[str] | None = None
     lang: str = "en"

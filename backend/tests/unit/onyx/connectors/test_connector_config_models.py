@@ -5,7 +5,10 @@ import typing
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.factory import build_connector_kwargs
+from onyx.connectors.factory import (
+    build_connector_kwargs,
+    split_comma_separated_config_fields,
+)
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 from onyx.connectors.sharepoint.config import (
     SharepointConnectorConfig,
@@ -86,3 +89,37 @@ def test_credential_binding_class_is_the_most_specific_binding() -> None:
         is SharepointCredentialBinding
     )
     assert WebConnectorConfig.credential_binding_class() is None
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    list(CONNECTOR_CLASS_MAP.values()),
+    ids=[source.value for source in CONNECTOR_CLASS_MAP],
+)
+def test_comma_separated_fields_are_config_fields(mapping: ConnectorMapping) -> None:
+    config_class = mapping.config_class
+    assert config_class.COMMA_SEPARATED_FIELDS <= config_class.model_fields.keys()
+
+
+def test_comma_separated_fields_are_split_and_stripped() -> None:
+    config = {
+        "sites": [
+            "https://a.sharepoint.com/sites/one, https://a.sharepoint.com/sites/two,",
+            " https://a.sharepoint.com/sites/three ",
+        ],
+        "excluded_paths": ["Archive/a,b.docx"],
+    }
+    expected_sites = [
+        "https://a.sharepoint.com/sites/one",
+        "https://a.sharepoint.com/sites/two",
+        "https://a.sharepoint.com/sites/three",
+    ]
+
+    assert split_comma_separated_config_fields(DocumentSource.SHAREPOINT, config) == {
+        "sites": expected_sites,
+        "excluded_paths": ["Archive/a,b.docx"],
+    }
+    assert build_connector_kwargs(DocumentSource.SHAREPOINT, config) == {
+        "sites": expected_sites,
+        "excluded_paths": ["Archive/a,b.docx"],
+    }

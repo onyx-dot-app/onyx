@@ -14,6 +14,8 @@ class SharepointCredentialBinding(MicrosoftCloudBinding):
 
 
 class SharepointConnectorConfig(SharepointCredentialBinding, ConnectorConfig):
+    COMMA_SEPARATED_FIELDS = frozenset({"sites", "excluded_sites"})
+
     batch_size: int = INDEX_BATCH_SIZE
     sites: list[str] | None = None
     excluded_sites: list[str] | None = None
