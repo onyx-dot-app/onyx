@@ -314,7 +314,7 @@ export default function ProjectChatSessionList() {
         </div>
 
         {isLoadingProjectDetails && !currentProjectDetails ? (
-          <SvgSimpleLoader className="mx-4" />
+          <SvgSimpleLoader size={16} className="mx-4" />
         ) : projectChats.length === 0 ? (
           <Card rounding={3} border="dashed" color="transparent" padding={2}>
             <div className="p-1">

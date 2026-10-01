@@ -95,7 +95,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
   if (isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
-        <SvgSimpleLoader />
+        <SvgSimpleLoader size={16} />
       </div>
     );
   }

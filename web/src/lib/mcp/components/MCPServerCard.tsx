@@ -54,7 +54,7 @@ export default function MCPServerCard({
   if (isLoading) {
     cardContent = (
       <Section padding={4}>
-        <SvgSimpleLoader />
+        <SvgSimpleLoader size={16} />
       </Section>
     );
   } else if (hasTools) {

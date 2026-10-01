@@ -533,7 +533,7 @@ export default function SkillEditorPage({
         <SettingsLayouts.Body>
           {!isCreating && isLoading && (
             <div className="flex min-h-40 items-center justify-center">
-              <SvgSimpleLoader />
+              <SvgSimpleLoader size={16} />
             </div>
           )}
 

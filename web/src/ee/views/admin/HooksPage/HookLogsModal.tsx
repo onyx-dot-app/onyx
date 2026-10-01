@@ -123,7 +123,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
         <Modal.Body>
           {isLoading ? (
             <Section justifyContent="center" height="fit" className="py-6">
-              <SvgSimpleLoader />
+              <SvgSimpleLoader size={16} />
             </Section>
           ) : error ? (
             <Text font="main-ui-body" color="text-03">

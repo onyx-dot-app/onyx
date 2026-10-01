@@ -215,7 +215,7 @@ export default function ProjectContextPanel({
           <input {...getInputProps()} />
 
           {isLoadingProjectDetails && !currentProjectDetails ? (
-            <SvgSimpleLoader />
+            <SvgSimpleLoader size={16} />
           ) : allCurrentProjectFiles.length > 0 ? (
             <>
               {/* Mobile / small screens: just show a button to view files */}

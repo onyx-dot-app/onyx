@@ -274,7 +274,7 @@ export default function ServiceAccountsPage() {
           divider
         />
         <SettingsLayouts.Body>
-          <SvgSimpleLoader />
+          <SvgSimpleLoader size={16} />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );

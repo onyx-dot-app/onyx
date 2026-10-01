@@ -235,7 +235,7 @@ export default function HookStatusPopover({
           >
             {isLoading ? (
               <Section justifyContent="center">
-                <SvgSimpleLoader />
+                <SvgSimpleLoader size={16} />
               </Section>
             ) : error ? (
               <Text font="secondary-body" color="text-03">

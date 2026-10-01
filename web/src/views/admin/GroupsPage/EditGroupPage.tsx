@@ -614,7 +614,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         />
 
         <SettingsLayouts.Body>
-          {isLoading && <SvgSimpleLoader />}
+          {isLoading && <SvgSimpleLoader size={16} />}
 
           {error && (
             <Text as="p" secondaryBody text03>

@@ -28,7 +28,7 @@ function SlackBotEditContent({ botId }: { botId: string }) {
   } = useSlackChannelConfigsByBot(Number(botId));
 
   if (isSlackBotLoading || isSlackChannelConfigsLoading) {
-    return <SvgSimpleLoader />;
+    return <SvgSimpleLoader size={16} />;
   }
 
   if (slackBotError || !slackBot) {

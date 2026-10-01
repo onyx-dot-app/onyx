@@ -62,7 +62,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
       <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
       <SettingsLayouts.Body>
         {isLoading ? (
-          <SvgSimpleLoader />
+          <SvgSimpleLoader size={16} />
         ) : channelsError || !slackChannelConfigs ? (
           <ErrorCallout
             errorTitle={t("error.generic.title")}

@@ -11,7 +11,7 @@ export default meta;
 type Story = StoryObj<typeof SvgSimpleLoader>;
 
 export const Default: Story = {
-  args: {},
+  args: { size: 16 },
 };
 
 export const Large: Story = {

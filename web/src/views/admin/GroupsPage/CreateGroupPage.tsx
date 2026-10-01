@@ -134,7 +134,7 @@ function CreateGroupPage() {
         <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* Members table */}
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <SvgSimpleLoader size={16} />}
 
         {error ? (
           <Text as="p" secondaryBody text03>

@@ -72,7 +72,7 @@ function CheckingStatus() {
       <Text mainUiAction text03>
         {t("status.checking.label")}
       </Text>
-      <SvgSimpleLoader />
+      <SvgSimpleLoader size={16} />
     </Section>
   );
 }

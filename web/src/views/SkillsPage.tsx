@@ -369,7 +369,7 @@ export default function SkillsPage() {
           />
         )}
 
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <SvgSimpleLoader size={16} />}
 
         {error && !isLoading && (
           <MessageCard

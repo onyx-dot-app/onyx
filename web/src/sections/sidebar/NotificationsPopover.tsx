@@ -347,7 +347,7 @@ export default function NotificationsPopover({
       {isLoading ? (
         <div className="h-(--notifications-popover)">
           <Section>
-            <SvgSimpleLoader />
+            <SvgSimpleLoader size={16} />
           </Section>
         </div>
       ) : newNotifications.length === 0 && olderNotifications.length === 0 ? (
@@ -408,6 +408,7 @@ export default function NotificationsPopover({
               className="h-8 flex items-center justify-center transition-opacity duration-300"
             >
               <SvgSimpleLoader
+                size={16}
                 className={isLoadingMore ? "opacity-100" : "opacity-40"}
               />
             </div>

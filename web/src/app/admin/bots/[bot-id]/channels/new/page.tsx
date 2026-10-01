@@ -42,7 +42,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
     isAgentsLoading ||
     (enterpriseTier && isStdAnswerLoading)
   ) {
-    return <SvgSimpleLoader />;
+    return <SvgSimpleLoader size={16} />;
   }
 
   if (docSetsError || !documentSets) {

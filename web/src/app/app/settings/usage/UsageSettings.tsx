@@ -463,7 +463,7 @@ export default function UsageSettings() {
               alignItems="center"
               width="full"
             >
-              <SvgSimpleLoader />
+              <SvgSimpleLoader size={16} />
             </Section>
           </Card>
         ) : error || !data ? (

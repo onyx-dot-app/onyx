@@ -86,7 +86,7 @@ function GroupPermissionsSection({
       />
       <SimpleCollapsible.Content>
         {isLoading || !registry ? (
-          <SvgSimpleLoader />
+          <SvgSimpleLoader size={16} />
         ) : (
           <Card>
             {registry.map((entry, index) => {

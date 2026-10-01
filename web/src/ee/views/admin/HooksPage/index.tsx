@@ -541,7 +541,7 @@ export default function HooksPage() {
   }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router, t]);
 
   if (settings.isLoading || !enterpriseTier || !settings.hooks_enabled) {
-    return <SvgSimpleLoader />;
+    return <SvgSimpleLoader size={16} />;
   }
 
   const isLoading = specsLoading || hooksLoading;
@@ -607,7 +607,7 @@ export default function HooksPage() {
         />
         <SettingsLayouts.Body>
           {isLoading ? (
-            <SvgSimpleLoader />
+            <SvgSimpleLoader size={16} />
           ) : specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError

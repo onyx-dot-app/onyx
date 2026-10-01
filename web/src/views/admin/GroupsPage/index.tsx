@@ -93,7 +93,7 @@ function GroupsPage() {
           actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}
         />
 
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <SvgSimpleLoader size={16} />}
 
         {error && (
           <IllustrationContent

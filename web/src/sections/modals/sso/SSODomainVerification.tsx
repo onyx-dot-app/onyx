@@ -233,7 +233,7 @@ export default function SSODomainVerification({
         )}
         {isLoading && rows.length === 0 ? (
           <Section flexDirection="row" alignItems="center" height="fit" gap={2}>
-            <SvgSimpleLoader className="text-text-03" />
+            <SvgSimpleLoader size={16} className="text-text-03" />
             <Text font="main-ui-body" color="text-03">
               {t("domainVerification.loading.message")}
             </Text>

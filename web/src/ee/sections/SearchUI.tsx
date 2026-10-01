@@ -178,7 +178,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   if (state.phase === "searching") {
     return (
       <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-        <SvgSimpleLoader />
+        <SvgSimpleLoader size={16} />
       </div>
     );
   }

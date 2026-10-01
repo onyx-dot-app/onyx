@@ -98,7 +98,7 @@ export default function SkillPreviewModal({
         <Modal.Body>
           {isLoading && (
             <div className="flex items-center justify-center min-h-40">
-              <SvgSimpleLoader />
+              <SvgSimpleLoader size={16} />
             </div>
           )}
 
