@@ -65,7 +65,6 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     SectionEnd,
-    TopLevelBranching,
 )
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.interface import Tool
@@ -703,20 +702,6 @@ def run_deep_research_llm_loop(
                             1 if report_reasoned else 0
                         )
                         break
-
-                    if len(research_agent_calls) > 1:
-                        emitter.emit(
-                            Packet(
-                                placement=Placement(
-                                    turn_index=research_agent_calls[
-                                        0
-                                    ].placement.turn_index
-                                ),
-                                obj=TopLevelBranching(
-                                    num_parallel_branches=len(research_agent_calls)
-                                ),
-                            )
-                        )
 
                     research_results = run_research_agent_calls(
                         # The tool calls here contain the placement information
