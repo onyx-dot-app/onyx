@@ -752,7 +752,7 @@ after a failed deploy audit, opens a fix PR when a pin applies, and posts to
 Slack for each alert that got one.
 
 ```shell
-ods audit --all-lockfiles --web --python --ignore-url "" --format=json > deps.json
+ods audit --web --python --ignore-url "" --format=json > deps.json
 ods audit image docker.io/onyxdotapp/onyx-backend:edge --ignore-url "" --format=json > backend.json
 ods audit alert --results deps.json --results backend.json --dry-run
 ```
