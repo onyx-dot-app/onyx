@@ -38,7 +38,7 @@ Props: `lines` (default `1`), `width` of the last line (`"full" | "3/4" | "2/3" 
 <TextLoader font="main-ui-body">Indexing documents…</TextLoader>
 ```
 
-Props: `children` (`string | RichStr`), `font` (`TextFont`, default `"main-ui-action"`). The text rests at `text-02` and the wave peaks at `text-04`.
+Props: `children` (plain `string`; markdown is not accepted), `font` (`TextFont`, default `"main-ui-action"`). The text rests at `text-02` and the wave peaks at `text-04`.
 
 The wave is 40% of the text's length, never narrower than 40px. Its rate scales with the length, so it crosses any text in 2s, with a 1s pause between waves; on wrapped text it runs along each line in reading order. Those four values are constants at the top of `text-loader/components.tsx`.
 
