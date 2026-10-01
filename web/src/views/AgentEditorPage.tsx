@@ -1239,8 +1239,13 @@ export default function AgentEditorPage({
             );
 
             const hasProcessingFiles = values.user_file_ids.some(
-              (fileId: string) =>
-                fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
+              (fileId: string) => {
+                const status = fileStatusMap.get(fileId);
+                return (
+                  status === UserFileStatus.PROCESSING ||
+                  status === UserFileStatus.INDEXING
+                );
+              }
             );
             // Saved agents report their status (group ownership counts as
             // shared); unsaved ones derive it from the draft form state.

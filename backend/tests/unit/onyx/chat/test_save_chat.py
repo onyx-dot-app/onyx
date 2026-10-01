@@ -73,6 +73,27 @@ def test_extracts_referenced_file() -> None:
     assert result[0]["name"] == "chart.png"
 
 
+def test_generated_spreadsheet_is_tabular_without_system_mime_types(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    # Simulate a server image without /etc/mime.types.
+    monkeypatch.setattr("mimetypes.guess_type", lambda *_a, **_k: (None, None))
+    file_id = "xlsx-123"
+    files = [
+        PythonExecutionFile(
+            filename="report.xlsx",
+            file_link=f"http://localhost/api/chat/file/{file_id}",
+        )
+    ]
+    tool_call = _make_tool_call_info(generated_files=files)
+    message = f"[report.xlsx](http://localhost/api/chat/file/{file_id})"
+
+    result = _extract_referenced_file_descriptors([tool_call], message)
+
+    assert len(result) == 1
+    assert result[0]["type"] == ChatFileType.TABULAR
+
+
 def test_filters_unreferenced_files() -> None:
     referenced_id = "ref-111"
     unreferenced_id = "unref-222"

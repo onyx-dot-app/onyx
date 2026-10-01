@@ -4571,6 +4571,12 @@
         "azureGptImage2": {
           "description": "نموذج توليد الصور GPT Image 2 مستضاف على Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "نموذج توليد الصور GPT Image 2.5 Flare مستضاف على Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "نموذج توليد الصور GPT Image 2.5 Sunburst مستضاف على Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "نموذج Gemini 2.5 Flash Image ‏(Nano Banana) مصمم للسرعة والكفاءة."
         },
@@ -4587,7 +4593,13 @@
           "description": "نموذج توليد الصور الرائد السابق من OpenAI."
         },
         "openaiGptImage2": {
-          "description": "أحدث نموذج توليد صور من OpenAI بأعلى دقة التزام بالمطالبات."
+          "description": "نموذج توليد الصور من الجيل السابق من OpenAI بدقة عالية في الالتزام بالمطالبات."
+        },
+        "openaiGptImage25Flare": {
+          "description": "أحدث نموذج توليد صور من OpenAI بجودة عالية وسرعة توليد كبيرة."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "نموذج توليد الصور المتميز من OpenAI لأدق عمليات التعديل."
         }
       },
       "setDefaultError": {
