@@ -49,6 +49,7 @@ def _process(argument_chunks: list[str]) -> tuple[str, Delta | None]:
         'line one\nline two\ttabbed "quoted" and C:\\path\\new',
         "ends with a backslash \\",
         'ends with a quote "',
+        "unicode caf\u00e9 and emoji \U0001f600",
     ],
 )
 @pytest.mark.parametrize("chunk_size", [1, 2, 3, 1000])

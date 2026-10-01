@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
 from onyx.deep_research.dr_mock_tools import GENERATE_REPORT_TOOL_NAME, THINK_TOOL_NAME
 from onyx.deep_research.models import SpecialToolCalls
@@ -11,11 +11,10 @@ from onyx.llm.model_response import (
     ResponseFunctionCall,
 )
 from onyx.tools.models import ToolCallKickoff
+from onyx.utils.streaming_json import appended_text, parse_partial_object
 
-# JSON prefixes to detect in think_tool arguments
-# The schema is: {"reasoning": "...content..."}
-JSON_PREFIX_WITH_SPACE = '{"reasoning": "'
-JSON_PREFIX_NO_SPACE = '{"reasoning":"'
+# think_tool arguments are {"reasoning": "..."}
+THINK_TOOL_REASONING_KEY = "reasoning"
 
 
 class ThinkToolProcessorState(BaseModel):
@@ -25,97 +24,19 @@ class ThinkToolProcessorState(BaseModel):
     think_tool_index: int | None = None
     think_tool_id: str | None = None
     full_arguments: str = ""  # Full accumulated arguments for final tool call
-    accumulated_args: str = ""  # Working buffer for JSON parsing
-    json_prefix_stripped: bool = False
-    # Set once the closing quote of the reasoning string is seen
-    reasoning_closed: bool = False
-    # Pending reasoning content, e.g. a trailing backslash of a split escape
-    buffer: str = ""
-
-
-def _unescape_json_string(s: str) -> str:
-    """
-    Unescape JSON string escape sequences.
-
-    JSON strings use backslash escapes like \\n for newlines, \\t for tabs, etc.
-    When we extract content from JSON by string manipulation (without json.loads),
-    we need to manually decode these escape sequences.
-
-    Note: We use a placeholder approach to handle escaped backslashes correctly.
-    For example, "\\\\n" (escaped backslash + n) should become "\\n" (literal backslash + n),
-    not a newline character.
-    """
-    # First, protect escaped backslashes with a placeholder
-    placeholder = "\x00ESCAPED_BACKSLASH\x00"
-    result = s.replace("\\\\", placeholder)
-
-    # Now unescape common JSON escape sequences
-    result = result.replace("\\n", "\n")
-    result = result.replace("\\r", "\r")
-    result = result.replace("\\t", "\t")
-    result = result.replace('\\"', '"')
-
-    # Finally, restore escaped backslashes as single backslashes
-    result = result.replace(placeholder, "\\")
-
-    return result
-
-
-def _split_json_string_content(buffer: str) -> tuple[str, str, bool]:
-    """Split raw JSON string content at its closing quote.
-
-    Returns (content safe to emit, content to hold for the next chunk,
-    whether the closing quote was found). A trailing backslash is held
-    because it may start an escape sequence.
-    """
-    i = 0
-    while i < len(buffer):
-        char = buffer[i]
-        if char == "\\":
-            if i + 1 == len(buffer):
-                return buffer[:i], buffer[i:], False
-            i += 2
-        elif char == '"':
-            return buffer[:i], "", True
-        else:
-            i += 1
-    return buffer, "", False
+    # Partial parse of full_arguments as of the previous delta
+    parsed_arguments: dict[str, JsonValue] = {}
 
 
 def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
-    """
-    Extract reasoning content from accumulated arguments, stripping JSON wrapper.
-
-    Returns the next chunk of reasoning to emit, or None if nothing to emit yet.
-    """
-    if state.reasoning_closed:
-        state.accumulated_args = ""
+    """Return the reasoning text added since the previous delta, if any."""
+    try:
+        current = parse_partial_object(state.full_arguments)
+    except ValueError:
         return None
-
-    # If we haven't found the JSON prefix yet, look for it
-    if not state.json_prefix_stripped:
-        # Try both prefix variants
-        for prefix in [JSON_PREFIX_WITH_SPACE, JSON_PREFIX_NO_SPACE]:
-            prefix_pos = state.accumulated_args.find(prefix)
-            if prefix_pos != -1:
-                # Found prefix - extract content after it
-                content_start = prefix_pos + len(prefix)
-                state.buffer = state.accumulated_args[content_start:]
-                state.accumulated_args = ""
-                state.json_prefix_stripped = True
-                break
-
-        if not state.json_prefix_stripped:
-            # Haven't seen full prefix yet, keep accumulating
-            return None
-    else:
-        state.buffer += state.accumulated_args
-        state.accumulated_args = ""
-
-    content, state.buffer, state.reasoning_closed = _split_json_string_content(
-        state.buffer
-    )
-    return _unescape_json_string(content) or None
+    added = appended_text(state.parsed_arguments, current).get(THINK_TOOL_REASONING_KEY)
+    state.parsed_arguments = current
+    return added
 
 
 def create_think_tool_token_processor() -> Callable[
@@ -179,10 +100,7 @@ def create_think_tool_token_processor() -> Callable[
                     and tool_call.function
                     and tool_call.function.arguments
                 ):
-                    # Track full arguments for final tool call
                     state.full_arguments += tool_call.function.arguments
-                    # Also accumulate for JSON parsing
-                    state.accumulated_args += tool_call.function.arguments
 
                     # Try to extract reasoning content
                     reasoning_chunk = _extract_reasoning_chunk(state)
