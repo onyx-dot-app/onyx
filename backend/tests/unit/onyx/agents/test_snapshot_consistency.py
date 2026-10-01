@@ -23,6 +23,7 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
 )
@@ -97,7 +98,10 @@ def test_message_and_operation_updates_are_visible_together(
     def execute(_invocation: ToolInvocation) -> ToolResult:
         return ToolResult(content="raw")
 
-    tool = AgentTool(name="lookup", description="", parameters={}, execute=execute)
+    tool = AgentTool(
+        definition=ToolDefinition(name="lookup", description="", parameters={}),
+        execute=execute,
+    )
 
     def prepare(_input: StepInput) -> PreparedStep:
         preparing.set()
@@ -176,9 +180,7 @@ def test_tool_result_is_retained_while_finalization_blocks_the_next_step() -> No
         FakeModelClient(generate),
         tools=[
             AgentTool(
-                name="lookup",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="lookup", description="", parameters={}),
                 execute=lambda _invocation: ToolResult(content="raw"),
             )
         ],

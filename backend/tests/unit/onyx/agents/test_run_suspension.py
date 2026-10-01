@@ -33,6 +33,7 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -91,8 +92,14 @@ def test_answer_starts_approved_action_while_parallel_sibling_is_running() -> No
             ]
         ),
         tools=[
-            AgentTool(name="search", description="", parameters={}, execute=sibling),
-            AgentTool(name="effect", description="", parameters={}, execute=effect),
+            AgentTool(
+                definition=ToolDefinition(name="search", description="", parameters={}),
+                execute=sibling,
+            ),
+            AgentTool(
+                definition=ToolDefinition(name="effect", description="", parameters={}),
+                execute=effect,
+            ),
         ],
         before_tool_call=_gate,
     )
@@ -132,7 +139,12 @@ def test_answer_during_suspension_delivery_drain_restarts_exactly_once() -> None
 
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
-        tools=[AgentTool(name="effect", description="", parameters={}, execute=effect)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="effect", description="", parameters={}),
+                execute=effect,
+            )
+        ],
         before_tool_call=_gate,
     )
     run = agent.start(max_steps=2, on_event=observe)
@@ -161,7 +173,12 @@ def test_identical_answer_retry_restarts_after_thread_start_failure(
 
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
-        tools=[AgentTool(name="effect", description="", parameters={}, execute=effect)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="effect", description="", parameters={}),
+                execute=effect,
+            )
+        ],
         before_tool_call=_gate,
     )
     run = agent.start(max_steps=2)
@@ -205,7 +222,10 @@ def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
             state=context,
             tools=[
                 AgentTool(
-                    name="question", description="", parameters={}, execute=question
+                    definition=ToolDefinition(
+                        name="question", description="", parameters={}
+                    ),
+                    execute=question,
                 )
             ],
         )
@@ -278,9 +298,17 @@ def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> 
             agent_id="agent",
             state=context,
             tools=[
-                AgentTool(name="effect", description="", parameters={}, execute=effect),
                 AgentTool(
-                    name="question", description="", parameters={}, execute=question
+                    definition=ToolDefinition(
+                        name="effect", description="", parameters={}
+                    ),
+                    execute=effect,
+                ),
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="question", description="", parameters={}
+                    ),
+                    execute=question,
                 ),
             ],
             before_tool_call=_gate,
@@ -342,7 +370,12 @@ def test_feature_capture_failure_finishes_run_and_releases_work() -> None:
     agent = Agent(
         _model([ToolCall(id="question", name="question", arguments={})]),
         tools=[
-            AgentTool(name="question", description="", parameters={}, execute=question)
+            AgentTool(
+                definition=ToolDefinition(
+                    name="question", description="", parameters={}
+                ),
+                execute=question,
+            )
         ],
         restoration=_FailingRestoration(),
     )
@@ -414,9 +447,7 @@ def test_current_thread_start_returns_on_suspension_and_resumes_on_worker() -> N
         _model([ToolCall(id="effect", name="effect", arguments={})]),
         tools=[
             AgentTool(
-                name="effect",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="effect", description="", parameters={}),
                 execute=lambda _: ToolResult(content="sent"),
             )
         ],
@@ -449,9 +480,7 @@ def test_released_run_does_not_save_terminal_output() -> None:
         _model([ToolCall(id="effect", name="effect", arguments={})]),
         tools=[
             AgentTool(
-                name="effect",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="effect", description="", parameters={}),
                 execute=lambda _: ToolResult(content="sent"),
             )
         ],
@@ -483,7 +512,12 @@ def test_checkpoint_save_precedes_local_release(save_fails: bool) -> None:
     coordinator = AgentCoordinator()
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
-        tools=[AgentTool(name="effect", description="", parameters={}, execute=effect)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="effect", description="", parameters={}),
+                execute=effect,
+            )
+        ],
         before_tool_call=_gate,
     )
     run = agent.start(background=False, max_steps=2, coordinator=coordinator)
@@ -530,7 +564,12 @@ def test_explicit_suspension_blocks_dependency_wakeup_until_resume(
 
     agent = Agent(
         _model([ToolCall(id="effect", name="effect", arguments={})]),
-        tools=[AgentTool(name="effect", description="", parameters={}, execute=effect)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="effect", description="", parameters={}),
+                execute=effect,
+            )
+        ],
         before_tool_call=_gate,
     )
     run = agent.start(max_steps=2)
@@ -564,9 +603,7 @@ def test_run_can_capture_and_release_without_its_creating_agent() -> None:
         state=AgentState(messages=[UserMessage(content="Earlier context")]),
         tools=[
             AgentTool(
-                name="effect",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="effect", description="", parameters={}),
                 execute=lambda _: ToolResult(content="sent"),
             )
         ],

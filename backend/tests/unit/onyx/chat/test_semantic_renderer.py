@@ -40,6 +40,7 @@ from onyx.llm.models import (
     TextContent,
     TextDeltaEvent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     UserMessage,
 )
@@ -90,7 +91,12 @@ def test_rendering_does_not_change_requests_transcript_or_execution() -> None:
         agent = Agent(
             llm,
             tools=[
-                AgentTool(name="echo", description="", parameters={}, execute=echo),
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="echo", description="", parameters={}
+                    ),
+                    execute=echo,
+                ),
             ],
         )
         listener = None

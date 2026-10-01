@@ -62,7 +62,6 @@ from onyx.tools.tool_implementations.search.models import SearchToolState
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
 )
-from onyx.tools.tool_runner import bind_tool
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, ScriptedLLM
 from tests.unit.onyx.agents.test_feature_agents import tool_delta
@@ -114,7 +113,7 @@ class CaptureContextTool(EchoTool):
     def __init__(self) -> None:
         self.contexts: list[ToolContext] = []
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         invocation.cancellation.check()
         self.contexts.append(context.model_copy(deep=True))
         return ToolResult(content="done")
@@ -445,7 +444,7 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
     monkeypatch.setattr(f"{module}.get_llm_token_counter", lambda _llm: len)
     monkeypatch.setattr(
         BashTool,
-        "run",
+        "_run",
         lambda _self, _invocation, _context: ToolResult(content="files"),
     )
     child_model = ScriptedLLM(
@@ -465,7 +464,7 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
         128000,
     )
     coordinator = AgentCoordinator()
-    parent = Agent(parent_model, tools=[bind_tool(tool, lambda: ToolContext())])
+    parent = Agent(parent_model, tools=[tool.bind(lambda: ToolContext())])
     run = parent.start(max_steps=2, coordinator=coordinator)
     try:
         assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED

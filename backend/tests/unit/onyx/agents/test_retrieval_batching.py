@@ -15,10 +15,11 @@ from onyx.llm.models import (
     AssistantMessage,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
 )
-from onyx.tools.tool_runner import _merge_tool_arguments
+from onyx.tools.interface import merge_tool_arguments
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -52,12 +53,12 @@ def test_compatible_calls_share_execution_and_keep_each_result(
         FakeModelClient(lambda *_: next(replies)),
         tools=[
             AgentTool(
-                name="search",
-                description="Search",
-                parameters={},
+                definition=ToolDefinition(
+                    name="search", description="Search", parameters={}
+                ),
                 execute=execute,
                 execution_mode=mode,
-                merge_arguments=partial(_merge_tool_arguments, field="queries"),
+                merge_arguments=partial(merge_tool_arguments, field="queries"),
             )
         ],
     ).start(max_steps=2, on_event=events.append)
@@ -116,11 +117,11 @@ def test_before_tool_hook_keeps_individual_calls() -> None:
         before_tool_call=before,
         tools=[
             AgentTool(
-                name="search",
-                description="Search",
-                parameters={},
+                definition=ToolDefinition(
+                    name="search", description="Search", parameters={}
+                ),
                 execute=execute,
-                merge_arguments=partial(_merge_tool_arguments, field="queries"),
+                merge_arguments=partial(merge_tool_arguments, field="queries"),
             )
         ],
     ).start(max_steps=2)
@@ -155,11 +156,11 @@ def test_cancellation_reaches_shared_retrieval() -> None:
         ),
         tools=[
             AgentTool(
-                name="search",
-                description="Search",
-                parameters={},
+                definition=ToolDefinition(
+                    name="search", description="Search", parameters={}
+                ),
                 execute=execute,
-                merge_arguments=partial(_merge_tool_arguments, field="queries"),
+                merge_arguments=partial(merge_tool_arguments, field="queries"),
             )
         ],
     ).start(max_steps=2)
@@ -190,11 +191,9 @@ def test_suspended_batch_restores_results_without_retrieval_reexecution() -> Non
         return ToolResult(content="shared evidence")
 
     tool = AgentTool(
-        name="search",
-        description="Search",
-        parameters={},
+        definition=ToolDefinition(name="search", description="Search", parameters={}),
         execute=execute,
-        merge_arguments=partial(_merge_tool_arguments, field="queries"),
+        merge_arguments=partial(merge_tool_arguments, field="queries"),
     )
     run = Agent(
         FakeModelClient(
@@ -256,15 +255,18 @@ def test_sequential_batching_does_not_cross_another_tool() -> None:
         FakeModelClient(lambda *_: next(replies)),
         tools=[
             AgentTool(
-                name="search",
-                description="Search",
-                parameters={},
+                definition=ToolDefinition(
+                    name="search", description="Search", parameters={}
+                ),
                 execute=execute,
                 execution_mode=ToolExecutionMode.SEQUENTIAL,
-                merge_arguments=partial(_merge_tool_arguments, field="queries"),
+                merge_arguments=partial(merge_tool_arguments, field="queries"),
             ),
             AgentTool(
-                name="other", description="Other", parameters={}, execute=execute
+                definition=ToolDefinition(
+                    name="other", description="Other", parameters={}
+                ),
+                execute=execute,
             ),
         ],
     ).start(max_steps=2)

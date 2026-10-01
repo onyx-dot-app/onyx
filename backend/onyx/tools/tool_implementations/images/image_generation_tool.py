@@ -287,7 +287,7 @@ class ImageGenerationTool(Tool):
 
         return reference_images
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         if PROMPT_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{PROMPT_FIELD}' parameter in generate_image tool call",

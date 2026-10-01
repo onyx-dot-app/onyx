@@ -275,6 +275,8 @@ def _trim_sections_by_tokens(
 
 
 class SearchTool(Tool):
+    merge_list_argument = QUERIES_FIELD
+
     NAME = "internal_search"
     DISPLAY_NAME = "Internal Search"
     DESCRIPTION = "Search connected applications for information."
@@ -691,7 +693,7 @@ class SearchTool(Tool):
             time_filter=self._time_filter,
         )
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         message_history = tool_message_history(list(invocation.messages))
         original_query = next(
             (

@@ -41,6 +41,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -227,9 +228,9 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         agent_id=root_id,
         tools=[
             AgentTool(
-                name="reuse",
-                description="Read saved research",
-                parameters={},
+                definition=ToolDefinition(
+                    name="reuse", description="Read saved research", parameters={}
+                ),
                 execute=reuse,
             )
         ],

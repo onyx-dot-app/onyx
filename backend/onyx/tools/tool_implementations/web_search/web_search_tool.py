@@ -73,6 +73,8 @@ def _normalize_queries_input(raw: Any) -> list[str]:
 
 
 class WebSearchTool(Tool):
+    merge_list_argument = QUERIES_FIELD
+
     NAME = "web_search"
     DESCRIPTION = "Search the web for information."
     DISPLAY_NAME = "Web Search"
@@ -173,7 +175,7 @@ class WebSearchTool(Tool):
             logger.warning("Web search query '%s' failed: %s", query, error_msg)
             return (None, error_msg)
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         if QUERIES_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{QUERIES_FIELD}' parameter in web_search tool call",

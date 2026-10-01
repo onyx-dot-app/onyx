@@ -16,6 +16,7 @@ import pytest
 from onyx.agents.tools import ToolInvocation
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import ToolResult
 from onyx.tools.interface import ToolContext
 from onyx.tools.models import FileReadResult, ToolCallException
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
@@ -125,6 +126,7 @@ class TestRun:
             ),
             context=ToolContext(),
         )
+        assert isinstance(resp, ToolResult)
         assert content in resp.text
         assert isinstance(resp.details, FileReadResult)
         assert resp.details.file_id == str(uid)
@@ -155,6 +157,7 @@ class TestRun:
             ),
             context=ToolContext(),
         )
+        assert isinstance(resp, ToolResult)
         assert "efghij" in resp.text
 
     @patch.object(FileReaderTool, "_load_file")
@@ -179,6 +182,7 @@ class TestRun:
             ),
             context=ToolContext(),
         )
+        assert isinstance(resp, ToolResult)
         assert f"Characters 0-{MAX_NUM_CHARS}" in resp.text
 
     @patch.object(FileReaderTool, "_load_file")
@@ -200,12 +204,13 @@ class TestRun:
             ),
             context=ToolContext(),
         )
+        assert isinstance(resp, ToolResult)
         assert "use start_char=10 to continue reading" in resp.text
 
     def test_raises_on_missing_file_id(self) -> None:
         tool = _make_tool()
         with pytest.raises(ToolCallException, match="Missing required"):
-            tool.run(
+            tool._run(
                 invocation=ToolInvocation(
                     call_id="test",
                     arguments={},
@@ -230,7 +235,7 @@ class TestRun:
 
         tool = _make_tool(user_file_ids=[uid])
         with pytest.raises(ToolCallException, match="not a text file"):
-            tool.run(
+            tool._run(
                 invocation=ToolInvocation(
                     call_id="test",
                     arguments={FILE_ID_FIELD: str(uid)},

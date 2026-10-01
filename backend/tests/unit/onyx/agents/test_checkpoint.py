@@ -37,6 +37,7 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -230,8 +231,14 @@ def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent
         agent_id="agent",
         state=context,
         tools=[
-            AgentTool(name="search", description="", parameters={}, execute=search),
-            AgentTool(name="send", description="", parameters={}, execute=send),
+            AgentTool(
+                definition=ToolDefinition(name="search", description="", parameters={}),
+                execute=search,
+            ),
+            AgentTool(
+                definition=ToolDefinition(name="send", description="", parameters={}),
+                execute=send,
+            ),
         ],
         before_tool_call=gate,
         after_tool_call=finalize,
@@ -262,9 +269,7 @@ def test_answer_resumes_in_the_execution_owners_context() -> None:
         FakeModelClient(generate),
         tools=[
             AgentTool(
-                name="ask",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="ask", description="", parameters={}),
                 execute=lambda _: PendingToolInput(
                     request_id="answer", mode=InputMode.RESULT, prompt="Question"
                 ),

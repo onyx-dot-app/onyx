@@ -66,6 +66,7 @@ from onyx.llm.models import (
     TextContent,
     ToolCall,
     ToolChoiceOptions,
+    ToolDefinition,
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
@@ -1932,7 +1933,14 @@ def test_api_execution_uses_threads_and_preserves_tenant_after_reader_closes() -
         )
         agent = Agent(
             FakeModelClient(lambda *_: next(replies)),
-            tools=[AgentTool(name="work", description="", parameters={}, execute=tool)],
+            tools=[
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="work", description="", parameters={}
+                    ),
+                    execute=tool,
+                )
+            ],
         )
         prepared = _chat_agent(agent, max_steps=2)
         tasks = ActiveChatTurns()
@@ -2197,9 +2205,9 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once() -> Non
         ),
         tools=[
             AgentTool(
-                name="question",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="question", description="", parameters={}
+                ),
                 execute=lambda _: PendingToolInput(
                     request_id="answer", prompt="Question", mode=InputMode.RESULT
                 ),

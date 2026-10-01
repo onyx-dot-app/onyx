@@ -14,6 +14,7 @@ from onyx.configs.app_configs import (
     CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
 )
 from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import ToolResult
 from onyx.tools.interface import ToolContext
 from onyx.tools.models import LlmBashExecutionResult, ToolCallException
 from onyx.tools.tool_implementations.bash.bash_tool import (
@@ -116,6 +117,7 @@ def test_happy_path_returns_serialized_result_and_metadata() -> None:
             invocation=_invocation(emitter, arguments={"cmd": "echo hello"}),
             context=ToolContext(),
         )
+        assert isinstance(response, ToolResult)
 
     # Client called with the right args
     client.execute_bash_in_session.assert_called_once_with(
@@ -144,7 +146,7 @@ def test_missing_cmd_raises_tool_call_exception() -> None:
     tool, emitter = _make_tool()
 
     with pytest.raises(ToolCallException) as excinfo:
-        tool.run(invocation=_invocation(emitter, arguments={}), context=ToolContext())
+        tool._run(invocation=_invocation(emitter, arguments={}), context=ToolContext())
 
     # Internal message + llm-facing message both present and mention the field
     assert CMD_FIELD in str(excinfo.value)
@@ -167,7 +169,7 @@ def test_non_string_cmd_raises_tool_call_exception(bad_cmd: JsonValue) -> None:
     tool, emitter = _make_tool()
 
     with pytest.raises(ToolCallException) as excinfo:
-        tool.run(
+        tool._run(
             invocation=_invocation(emitter, arguments={"cmd": bad_cmd}),
             context=ToolContext(),
         )
@@ -198,6 +200,7 @@ def test_client_exception_returns_error_result() -> None:
             invocation=_invocation(emitter, arguments={"cmd": "ls"}),
             context=ToolContext(),
         )
+        assert isinstance(response, ToolResult)
 
     payload = json.loads(response.text)
     assert payload["stdout"] == ""
@@ -221,6 +224,7 @@ def test_client_constructor_failure_returns_error_result() -> None:
             invocation=_invocation(emitter, arguments={"cmd": "ls"}),
             context=ToolContext(),
         )
+        assert isinstance(response, ToolResult)
 
     # Error path: error result returned, no exception bubbled out
     payload = json.loads(response.text)
@@ -251,6 +255,7 @@ def test_long_stdout_is_truncated() -> None:
             invocation=_invocation(emitter, arguments={"cmd": "cat huge.txt"}),
             context=ToolContext(),
         )
+        assert isinstance(response, ToolResult)
 
     payload = json.loads(response.text)
     assert "[output truncated" in payload["stdout"]
@@ -272,6 +277,7 @@ def test_short_stdout_is_not_truncated() -> None:
             invocation=_invocation(emitter, arguments={"cmd": "echo short"}),
             context=ToolContext(),
         )
+        assert isinstance(response, ToolResult)
 
     payload = json.loads(response.text)
     assert payload["stdout"] == "short"
@@ -297,6 +303,7 @@ def test_nonzero_exit_code_sets_error_field_to_stderr() -> None:
             invocation=_invocation(emitter, arguments={"cmd": "cat missing.txt"}),
             context=ToolContext(),
         )
+        assert isinstance(response, ToolResult)
 
     payload = json.loads(response.text)
     assert payload["exit_code"] == 1
@@ -320,6 +327,7 @@ def test_zero_exit_code_with_stderr_does_not_set_error() -> None:
             invocation=_invocation(emitter, arguments={"cmd": "legacy-cmd"}),
             context=ToolContext(),
         )
+        assert isinstance(response, ToolResult)
 
     payload = json.loads(response.text)
     assert payload["exit_code"] == 0
@@ -449,6 +457,7 @@ def test_timed_out_response_is_propagated() -> None:
             invocation=_invocation(emitter, arguments={"cmd": "sleep 99999"}),
             context=ToolContext(),
         )
+        assert isinstance(response, ToolResult)
 
     payload = json.loads(response.text)
     assert payload["timed_out"] is True

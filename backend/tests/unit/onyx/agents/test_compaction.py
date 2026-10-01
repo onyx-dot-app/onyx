@@ -29,6 +29,7 @@ from onyx.llm.models import (
     TextContent,
     ThinkingDeltaEvent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -120,7 +121,12 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         return [*messages, SystemMessage(content="Use the required report format.")]
 
     tools = [
-        AgentTool(name="lookup", description="Search", parameters={}, execute=execute)
+        AgentTool(
+            definition=ToolDefinition(
+                name="lookup", description="Search", parameters={}
+            ),
+            execute=execute,
+        )
     ]
     agent = Agent(
         model,

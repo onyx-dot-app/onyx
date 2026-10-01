@@ -14,7 +14,7 @@ from onyx.agents.events import AgentEvent, ToolEndEvent
 from onyx.agents.execution_records import RunFailureKind
 from onyx.agents.models import AgentStep, PreparedStep, StepInput
 from onyx.agents.runtime import Agent, Run, RunFailed
-from onyx.agents.tools import ToolInvocation
+from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.emitter import Emitter
@@ -73,7 +73,6 @@ from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tools.tool_runner import bind_tool
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
@@ -225,6 +224,12 @@ def test_research_executes_only_allowed_tools_and_records_results() -> None:
         name=SearchTool.NAME,
         description="Search documents",
         parameters={"type": "object"},
+    )
+    isolated_search.bind.return_value = AgentTool(
+        definition=isolated_search.tool_definition.return_value,
+        execute=MagicMock(
+            side_effect=AssertionError("Internal search was not requested")
+        ),
     )
     search.for_agent.return_value = isolated_search
     feature = ResearchAgent(
@@ -1010,7 +1015,7 @@ def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
     module = "onyx.tools.tool_implementations.coding_agent.coding_agent_tool"
     monkeypatch.setattr(f"{module}._setup_session", sandbox)
     monkeypatch.setattr(f"{module}.get_llm_token_counter", lambda _llm: len)
-    monkeypatch.setattr(BashTool, "run", bash)
+    monkeypatch.setattr(BashTool, "_run", bash)
     child_llm = ScriptedLLM([tool_delta(BASH_TOOL_NAME, '{"cmd":"pwd"}')], 128000)
     coding = CodingAgentTool(tool_id=1, llm=child_llm)
     parent_llm = ScriptedLLM(
@@ -1022,7 +1027,7 @@ def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(
         128000,
     )
     coordinator = AgentCoordinator()
-    parent = Agent(parent_llm, tools=[bind_tool(coding, lambda: ToolContext())])
+    parent = Agent(parent_llm, tools=[coding.bind(lambda: ToolContext())])
     run = parent.start(max_steps=2, coordinator=coordinator)
     try:
         assert entered.wait(5)

@@ -402,11 +402,11 @@ class ToolBatch:
         )
         try:
             if children is not None:
-                if tool.complete_children is None:
+                if tool.result_from_children is None:
                     raise ValueError(
                         "Tool does not support completing child dependencies"
                     )
-                result = tool.complete_children(invocation, children)
+                result = tool.result_from_children(invocation, children)
                 if self.run._coordination is not None:
                     self.run._coordination.observe_children(
                         [child.run_id for child in children]

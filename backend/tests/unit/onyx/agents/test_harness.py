@@ -28,6 +28,7 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -64,9 +65,9 @@ def echo(
     sequential: bool = False,
 ) -> AgentTool:
     return AgentTool(
-        name="echo",
-        description="Echo",
-        parameters={"type": "object"},
+        definition=ToolDefinition(
+            name="echo", description="Echo", parameters={"type": "object"}
+        ),
         execute=execute
         or (lambda invocation: ToolResult(content=str(invocation.arguments["value"]))),
         execution_mode=ToolExecutionMode.SEQUENTIAL
@@ -288,7 +289,12 @@ def test_abort_reaches_nested_agent_and_waits_for_idle() -> None:
 
     agent = Agent(
         scripted(calls()),
-        tools=[AgentTool(name="echo", description="", parameters={}, execute=execute)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="echo", description="", parameters={}),
+                execute=execute,
+            )
+        ],
     )
 
     def exercise() -> None:

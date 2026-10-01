@@ -92,7 +92,7 @@ class MemoryTool(Tool):
         )
 
     @override
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         if MEMORY_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{MEMORY_FIELD}' parameter in add_memory tool call",

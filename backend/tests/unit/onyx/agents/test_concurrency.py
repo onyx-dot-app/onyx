@@ -19,6 +19,7 @@ from onyx.llm.models import (
     AssistantMessage,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
 )
 from onyx.utils.threadpool_concurrency import start_thread_future
@@ -134,7 +135,12 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
                 )
             ),
             tools=[
-                AgentTool(name="leaf", description="", parameters={}, execute=delegate)
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="leaf", description="", parameters={}
+                    ),
+                    execute=delegate,
+                )
             ],
         )
         spawned = invocation.agents.spawn_agent(
@@ -152,7 +158,10 @@ def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
             )
         ),
         tools=[
-            AgentTool(name="parent", description="", parameters={}, execute=parent_tool)
+            AgentTool(
+                definition=ToolDefinition(name="parent", description="", parameters={}),
+                execute=parent_tool,
+            )
         ],
     )
     run = root.start(max_steps=1, coordinator=AgentCoordinator())
@@ -215,7 +224,12 @@ def test_child_thread_start_failure_rolls_back_registration(
             )
         ),
         tools=[
-            AgentTool(name="delegate", description="", parameters={}, execute=delegate)
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+            )
         ],
     )
     run = root.start(max_steps=1, coordinator=coordinator)
@@ -300,8 +314,14 @@ def test_terminal_snapshot_rejects_late_tool_result(
             )
         ),
         tools=[
-            AgentTool(name="late", description="", parameters={}, execute=late),
-            AgentTool(name="fail", description="", parameters={}, execute=fail),
+            AgentTool(
+                definition=ToolDefinition(name="late", description="", parameters={}),
+                execute=late,
+            ),
+            AgentTool(
+                definition=ToolDefinition(name="fail", description="", parameters={}),
+                execute=fail,
+            ),
         ],
     )
     original_record = ToolBatch._record_tool_result

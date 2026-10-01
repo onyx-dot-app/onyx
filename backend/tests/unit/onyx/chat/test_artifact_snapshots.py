@@ -12,7 +12,7 @@ from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.models import AssistantMessage, ToolCall, ToolResult
+from onyx.llm.models import AssistantMessage, ToolCall, ToolDefinition, ToolResult
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.models import LlmPythonExecutionResult, PythonExecutionFile
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -56,8 +56,14 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
             )
         ),
         tools=[
-            AgentTool(name="write", description="", parameters={}, execute=write),
-            AgentTool(name="wait", description="", parameters={}, execute=wait),
+            AgentTool(
+                definition=ToolDefinition(name="write", description="", parameters={}),
+                execute=write,
+            ),
+            AgentTool(
+                definition=ToolDefinition(name="wait", description="", parameters={}),
+                execute=wait,
+            ),
         ],
     )
 
@@ -87,9 +93,9 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
             ),
             tools=[
                 AgentTool(
-                    name="research",
-                    description="",
-                    parameters={},
+                    definition=ToolDefinition(
+                        name="research", description="", parameters={}
+                    ),
                     execute=research,
                 )
             ],

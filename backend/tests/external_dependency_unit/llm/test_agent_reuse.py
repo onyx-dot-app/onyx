@@ -18,6 +18,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     UserMessage,
 )
@@ -89,9 +90,9 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
         FakeModelClient(parent_reply),
         tools=[
             AgentTool(
-                name="delegate",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
                 execute=coordinate,
             )
         ],

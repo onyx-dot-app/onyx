@@ -28,6 +28,7 @@ from onyx.llm.models import (
     TextContent,
     TextDeltaEvent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     Usage,
@@ -46,9 +47,7 @@ def test_result_order_hook_updates_and_application_data_exclusion() -> None:
         return result
 
     tool = AgentTool(
-        name="work",
-        description="",
-        parameters={},
+        definition=ToolDefinition(name="work", description="", parameters={}),
         execute=lambda invocation: ToolResult(
             content=invocation.call_id, details=ApplicationData()
         ),
@@ -142,9 +141,7 @@ def test_running_snapshot_records_unfinished_calls_without_inventing_results() -
         ),
         tools=[
             AgentTool(
-                name="work",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="work", description="", parameters={}),
                 execute=lambda _: ToolResult(content="unused"),
             )
         ],

@@ -338,7 +338,7 @@ class PythonTool(Tool):
             logger.info("Staged file for Python execution: %s", plan.file_name)
         return files_to_stage, failed_uploads
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         if CODE_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{CODE_FIELD}' parameter in python tool call",

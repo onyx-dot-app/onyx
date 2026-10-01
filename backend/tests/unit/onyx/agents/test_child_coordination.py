@@ -43,6 +43,7 @@ from onyx.llm.models import (
     TextContent,
     TextDeltaEvent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     UserMessage,
 )
@@ -77,9 +78,11 @@ def parent_agent(
         agent_id=agent_id,
         tools=[
             AgentTool(
-                name="coordinate",
-                description="Coordinate child work",
-                parameters={},
+                definition=ToolDefinition(
+                    name="coordinate",
+                    description="Coordinate child work",
+                    parameters={},
+                ),
                 execute=execute,
             )
         ],
@@ -423,7 +426,12 @@ def test_cancelled_parent_waits_for_child_terminal_record_before_snapshot() -> N
                 )
             ),
             tools=[
-                AgentTool(name="work", description="", parameters={}, execute=pending)
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="work", description="", parameters={}
+                    ),
+                    execute=pending,
+                )
             ],
         )
 
@@ -960,9 +968,9 @@ def test_parent_child_wait_releases_worker_while_sibling_continues() -> None:
         FakeModelClient(question_reply),
         tools=[
             AgentTool(
-                name="question",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="question", description="", parameters={}
+                ),
                 execute=lambda _: PendingToolInput(
                     request_id="answer",
                     prompt="Continue?",
@@ -1013,11 +1021,11 @@ def test_parent_child_wait_releases_worker_while_sibling_continues() -> None:
         FakeModelClient(lambda *_: next(parent_messages)),
         tools=[
             AgentTool(
-                name="delegate",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
                 execute=delegate,
-                complete_children=complete,
+                result_from_children=complete,
             )
         ],
     )
@@ -1064,9 +1072,7 @@ def test_cold_restore_rejects_existing_owner_and_missing_child_rolls_back() -> N
             agent_id=agent_id,
             tools=[
                 AgentTool(
-                    name="q",
-                    description="",
-                    parameters={},
+                    definition=ToolDefinition(name="q", description="", parameters={}),
                     execute=lambda _: PendingToolInput(
                         request_id="question",
                         prompt="Question",
@@ -1150,16 +1156,18 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
             FakeModelClient(lambda *_: next(replies)),
             tools=[
                 AgentTool(
-                    name="delegate",
-                    description="",
-                    parameters={},
+                    definition=ToolDefinition(
+                        name="delegate", description="", parameters={}
+                    ),
                     execute=delegate,
-                    complete_children=lambda *_: ToolResult(content="Failure handled"),
+                    result_from_children=lambda *_: ToolResult(
+                        content="Failure handled"
+                    ),
                 ),
                 AgentTool(
-                    name="question",
-                    description="",
-                    parameters={},
+                    definition=ToolDefinition(
+                        name="question", description="", parameters={}
+                    ),
                     execute=lambda _: PendingToolInput(
                         request_id="answer", prompt="Continue?", mode=InputMode.RESULT
                     ),
@@ -1211,14 +1219,17 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
         state=restored.agent_state,
         tools=[
             AgentTool(
-                name="delegate",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
                 execute=unexpected,
-                complete_children=lambda *_: ToolResult(content="Failure handled"),
+                result_from_children=lambda *_: ToolResult(content="Failure handled"),
             ),
             AgentTool(
-                name="question", description="", parameters={}, execute=unexpected
+                definition=ToolDefinition(
+                    name="question", description="", parameters={}
+                ),
+                execute=unexpected,
             ),
         ],
     )
@@ -1268,9 +1279,9 @@ def test_completion_cleanup_waits_for_terminal_and_parent_retains_it(
         FakeModelClient(lambda *_: next(child_replies)),
         tools=[
             AgentTool(
-                name="question",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="question", description="", parameters={}
+                ),
                 execute=lambda _: PendingToolInput(
                     request_id="answer",
                     prompt="Continue?",
@@ -1309,11 +1320,11 @@ def test_completion_cleanup_waits_for_terminal_and_parent_retains_it(
         FakeModelClient(lambda *_: next(replies)),
         tools=[
             AgentTool(
-                name="delegate",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
                 execute=delegate,
-                complete_children=lambda *_: ToolResult(content="finished"),
+                result_from_children=lambda *_: ToolResult(content="finished"),
             )
         ],
     )
@@ -1392,9 +1403,7 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
         ),
         tools=[
             AgentTool(
-                name="q",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="q", description="", parameters={}),
                 execute=lambda _: PendingToolInput(
                     request_id="answer", prompt="Question", mode=InputMode.RESULT
                 ),
@@ -1431,11 +1440,11 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
         FakeModelClient(lambda *_: next(replies)),
         tools=[
             AgentTool(
-                name="delegate",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
                 execute=delegate,
-                complete_children=lambda *_: ToolResult(content="done"),
+                result_from_children=lambda *_: ToolResult(content="done"),
             )
         ],
     )
@@ -1469,9 +1478,7 @@ def test_child_handoff_preserves_parent_waiter_and_cleanup(early_answer: bool) -
             agent_id=saved.run_state.agent_id,
             tools=[
                 AgentTool(
-                    name="q",
-                    description="",
-                    parameters={},
+                    definition=ToolDefinition(name="q", description="", parameters={}),
                     execute=lambda _: ToolResult(content="must not run"),
                 )
             ],
@@ -1504,9 +1511,7 @@ def test_coordinator_close_leaves_released_state_unchanged() -> None:
         ),
         tools=[
             AgentTool(
-                name="q",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="q", description="", parameters={}),
                 execute=lambda _: PendingToolInput(
                     request_id="answer", prompt="Question", mode=InputMode.RESULT
                 ),
@@ -1557,11 +1562,11 @@ def test_parent_handoff_releases_feature_and_preserves_child_dependency() -> Non
         ),
         tools=[
             AgentTool(
-                name="delegate",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
                 execute=delegate,
-                complete_children=lambda *_: ToolResult(content="child finished"),
+                result_from_children=lambda *_: ToolResult(content="child finished"),
             )
         ],
     )
@@ -1596,11 +1601,13 @@ def test_parent_handoff_releases_feature_and_preserves_child_dependency() -> Non
             agent_id=saved.run_state.agent_id,
             tools=[
                 AgentTool(
-                    name="delegate",
-                    description="",
-                    parameters={},
+                    definition=ToolDefinition(
+                        name="delegate", description="", parameters={}
+                    ),
                     execute=lambda _: pytest.fail("Completed spawn must not repeat"),
-                    complete_children=lambda *_: ToolResult(content="child finished"),
+                    result_from_children=lambda *_: ToolResult(
+                        content="child finished"
+                    ),
                 )
             ],
         )
@@ -1770,9 +1777,7 @@ def test_registration_releases_execution_locks_during_spawn_and_resume() -> None
     assert coordinator.close(timeout=3)
 
     tool = AgentTool(
-        name="pause",
-        description="",
-        parameters={},
+        definition=ToolDefinition(name="pause", description="", parameters={}),
         execute=lambda _: PendingToolInput(
             request_id="pause", prompt="Continue?", mode=InputMode.RESULT
         ),
@@ -1823,9 +1828,7 @@ def suspended_agent() -> Agent:
         ),
         tools=[
             AgentTool(
-                name="ask",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="ask", description="", parameters={}),
                 execute=lambda _: PendingToolInput(
                     request_id="question", prompt="Continue?", mode=InputMode.RESULT
                 ),

@@ -37,6 +37,7 @@ from onyx.llm.models import (
     TextContent,
     ThinkingDeltaEvent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -54,9 +55,7 @@ class ExtraData(BaseModel):
 
 def _tool(execute: Callable[[ToolInvocation], ToolResult] | None = None) -> AgentTool:
     return AgentTool(
-        name="lookup",
-        description="",
-        parameters={},
+        definition=ToolDefinition(name="lookup", description="", parameters={}),
         execute=execute
         or (lambda _invocation: ToolResult(content="original", details=ExtraData())),
     )
@@ -289,7 +288,10 @@ def test_completed_tools_survive_sibling_cancellation() -> None:
             )
         ),
         tools=[
-            AgentTool(name="lookup", description="", parameters={}, execute=execute)
+            AgentTool(
+                definition=ToolDefinition(name="lookup", description="", parameters={}),
+                execute=execute,
+            )
         ],
     )
     run = agent.start(max_steps=1)

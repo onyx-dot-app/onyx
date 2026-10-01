@@ -46,6 +46,7 @@ class CodingAgentTool(Tool):
         llm: LLM,
         github_token: str | None = None,
     ) -> None:
+        self.result_from_children = self._result_from_children
         self._id = tool_id
         self._llm = llm
         self._github_token = github_token
@@ -102,7 +103,7 @@ class CodingAgentTool(Tool):
         )
 
     @override
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ChildRunWait:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ChildRunWait:  # noqa: ARG002
         arguments = parse_tool_arguments(CodingAgentArguments, invocation.arguments)
         sandbox = _setup_session(
             repo=arguments.github_repo, github_token=self._github_token
@@ -146,13 +147,12 @@ class CodingAgentTool(Tool):
             cleanup()
             raise
 
-    @override
-    def complete_children(
+    def _result_from_children(
         self,
-        invocation: ToolInvocation,
-        context: ToolContext,
+        _invocation: ToolInvocation,
+        _context: ToolContext,
         children: list[RunState],
-    ) -> ToolResult:  # noqa: ARG002
+    ) -> ToolResult:
         if len(children) != 1:
             raise ValueError("Coding delegation requires one child result")
         completed = result_from_snapshot(children[0])

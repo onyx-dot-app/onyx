@@ -1,9 +1,4 @@
-"""
-Unit tests for chat_files handling in tool_runner.py.
-
-These tests verify that chat files are properly passed to PythonTool
-through the ToolContext mechanism.
-"""
+"""Chat file conversion preserves the metadata supplied to tools."""
 
 from unittest.mock import patch
 

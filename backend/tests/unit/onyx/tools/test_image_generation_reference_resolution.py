@@ -26,7 +26,6 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
-from onyx.tools.tool_runner import bind_tool
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
 
@@ -172,7 +171,7 @@ def test_cancelled_image_run_retains_provider_work_until_idle(
             0.01,
         ),
     ):
-        agent = Agent(llm, tools=[bind_tool(tool, lambda: ToolContext())])
+        agent = Agent(llm, tools=[tool.bind(lambda: ToolContext())])
         run = agent.start(max_steps=1)
         try:
             assert started.wait(2)

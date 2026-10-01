@@ -54,6 +54,7 @@ from onyx.llm.models import (
     AssistantMessage,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     UserMessage,
 )
@@ -227,8 +228,14 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         )
 
     tools = [
-        AgentTool(name="search", description="", parameters={}, execute=execute),
-        AgentTool(name="ask", description="", parameters={}, execute=execute),
+        AgentTool(
+            definition=ToolDefinition(name="search", description="", parameters={}),
+            execute=execute,
+        ),
+        AgentTool(
+            definition=ToolDefinition(name="ask", description="", parameters={}),
+            execute=execute,
+        ),
     ]
 
     def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
@@ -437,7 +444,8 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
             state=checkpoint.agent_state,
             tools=[
                 AgentTool(
-                    name=name, description="", parameters={}, execute=unexpected_tool
+                    definition=ToolDefinition(name=name, description="", parameters={}),
+                    execute=unexpected_tool,
                 )
                 for name in ("search", "ask")
             ],
@@ -511,9 +519,7 @@ def test_transfer_rejects_input_missing_from_history_before_handoff(
         agent_id=str(branch[0]),
         tools=[
             AgentTool(
-                name="ask",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="ask", description="", parameters={}),
                 execute=lambda _: PendingToolInput(
                     request_id="answer", prompt="Which file?", mode=InputMode.RESULT
                 ),
@@ -543,9 +549,7 @@ def test_competing_resume_claims_and_stale_writer(
     owner = store(branch)
     coordinator = AgentCoordinator()
     tool = AgentTool(
-        name="ask",
-        description="",
-        parameters={},
+        definition=ToolDefinition(name="ask", description="", parameters={}),
         execute=lambda _: PendingToolInput(
             request_id="answer", prompt="Which file?", mode=InputMode.RESULT
         ),
@@ -808,7 +812,12 @@ def test_terminal_run_retains_control_until_cancelled_tool_drains(
             )
         ),
         agent_id=str(branch[0]),
-        tools=[AgentTool(name="slow", description="", parameters={}, execute=tool)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="slow", description="", parameters={}),
+                execute=tool,
+            )
+        ],
     )
     try:
         run = agent.start(

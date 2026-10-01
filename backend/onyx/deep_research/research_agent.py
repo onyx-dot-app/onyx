@@ -69,7 +69,6 @@ from onyx.tools.tool_implementations.search.search_tool import (
 )
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tools.tool_runner import bind_tool
 from onyx.tools.utils import generate_tools_description
 from onyx.tracing.flows import LLMFlow
 
@@ -123,7 +122,7 @@ class ResearchAgent(FeatureRestoration):
         }
         self.agent = Agent(
             llm,
-            tools=[bind_tool(tool, self._tool_context) for tool in self.tools]
+            tools=[tool.bind(self._tool_context) for tool in self.tools]
             + self._control_tools(),
             agent_id=agent_id,
             previous_run_id=previous_run_id,
@@ -166,9 +165,7 @@ class ResearchAgent(FeatureRestoration):
     def _control_tools(self) -> list[AgentTool]:
         return [
             AgentTool(
-                name=definition.name,
-                description=definition.description,
-                parameters=definition.parameters,
+                definition=definition,
                 execute=lambda _invocation, name=definition.name: ToolResult(
                     content="Ready to produce the research report."
                     if name == GENERATE_REPORT_TOOL_NAME

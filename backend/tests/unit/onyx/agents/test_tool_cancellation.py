@@ -19,6 +19,7 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
 )
@@ -62,9 +63,9 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
             FakeModelClient(reply),
             tools=[
                 AgentTool(
-                    name="child",
-                    description="",
-                    parameters={},
+                    definition=ToolDefinition(
+                        name="child", description="", parameters={}
+                    ),
                     execute=execute,
                 )
             ],
@@ -130,7 +131,10 @@ def test_cancelled_child_does_not_block_independent_parent_work() -> None:
             )
         ),
         tools=[
-            AgentTool(name="block", description="", parameters={}, execute=blocked_tool)
+            AgentTool(
+                definition=ToolDefinition(name="block", description="", parameters={}),
+                execute=blocked_tool,
+            )
         ],
     )
 
@@ -165,7 +169,12 @@ def test_cancelled_child_does_not_block_independent_parent_work() -> None:
 
     root = Agent(
         FakeModelClient(reply),
-        tools=[AgentTool(name="child", description="", parameters={}, execute=execute)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="child", description="", parameters={}),
+                execute=execute,
+            )
+        ],
     )
     with ThreadPoolExecutor(max_workers=1) as workers:
         result = workers.submit(
@@ -203,7 +212,12 @@ def test_stop_cancels_a_cooperative_tool_wait() -> None:
                 content=[ToolCall(id="wait", name="wait", arguments={})]
             )
         ),
-        tools=[AgentTool(name="wait", description="", parameters={}, execute=execute)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="wait", description="", parameters={}),
+                execute=execute,
+            )
+        ],
     )
     signal = CancellationSignal()
     with ThreadPoolExecutor(max_workers=1) as workers:
@@ -244,7 +258,12 @@ def test_parallel_failure_cancels_a_blocked_earlier_call() -> None:
                 ]
             )
         ),
-        tools=[AgentTool(name="work", description="", parameters={}, execute=execute)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="work", description="", parameters={}),
+                execute=execute,
+            )
+        ],
     )
 
     def exercise() -> None:
@@ -297,7 +316,12 @@ def test_parent_completion_joins_unawaited_child_runs(child_fails: bool) -> None
                 else [ToolCall(id="child", name="child", arguments={})]
             )
         ),
-        tools=[AgentTool(name="child", description="", parameters={}, execute=execute)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="child", description="", parameters={}),
+                execute=execute,
+            )
+        ],
     )
     runs: list[Run] = []
     coordinator = AgentCoordinator()
@@ -342,7 +366,12 @@ def test_cancelled_tool_cleanup_uses_its_own_live_signal() -> None:
             )
         ),
         tools=[
-            AgentTool(name="cleanup", description="", parameters={}, execute=execute)
+            AgentTool(
+                definition=ToolDefinition(
+                    name="cleanup", description="", parameters={}
+                ),
+                execute=execute,
+            )
         ],
     )
     signal = CancellationSignal()
@@ -389,7 +418,12 @@ def test_tool_failure_logs_unobserved_child_failure(
                 content=[ToolCall(id="child", name="child", arguments={})]
             )
         ),
-        tools=[AgentTool(name="child", description="", parameters={}, execute=execute)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="child", description="", parameters={}),
+                execute=execute,
+            )
+        ],
     )
 
     def on_event(event: AgentEvent) -> None:

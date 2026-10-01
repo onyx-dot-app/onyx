@@ -170,11 +170,9 @@ class AgentTool:
     def __init__(
         self,
         *,
-        name: str,
-        description: str,
-        parameters: dict[str, JsonValue],
+        definition: ToolDefinition,
         execute: Callable[[ToolInvocation], ToolOutcome],
-        complete_children: Callable[[ToolInvocation, list["RunState"]], ToolResult]
+        result_from_children: Callable[[ToolInvocation, list["RunState"]], ToolResult]
         | None = None,
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
         merge_arguments: Callable[
@@ -182,22 +180,18 @@ class AgentTool:
         ]
         | None = None,
     ) -> None:
-        self.definition = ToolDefinition(
-            name=name, description=description, parameters=parameters
-        )
+        self.definition = definition
         self.execute = execute
-        self.complete_children = complete_children
+        self.result_from_children = result_from_children
         self.execution_mode = execution_mode
         self.merge_arguments = merge_arguments
 
     def snapshot(self) -> "AgentTool":
         definition = self.definition.model_copy(deep=True)
         return AgentTool(
-            name=definition.name,
-            description=definition.description,
-            parameters=definition.parameters,
+            definition=definition,
             execute=self.execute,
-            complete_children=self.complete_children,
+            result_from_children=self.result_from_children,
             execution_mode=self.execution_mode,
             merge_arguments=self.merge_arguments,
         )

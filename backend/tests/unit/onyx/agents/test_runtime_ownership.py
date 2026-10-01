@@ -28,6 +28,7 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
 )
@@ -165,7 +166,10 @@ def test_cancelled_work_keeps_agent_and_coordinator_reserved(kind: str) -> None:
             ),
             tools=[
                 AgentTool(
-                    name="blocked", description="Wait", parameters={}, execute=tool
+                    definition=ToolDefinition(
+                        name="blocked", description="Wait", parameters={}
+                    ),
+                    execute=tool,
                 )
             ],
         )
@@ -282,7 +286,12 @@ def test_parallel_result_survives_another_tool_failure(cancelled: bool) -> None:
             )
         ),
         tools=[
-            AgentTool(name="work", description="Work", parameters={}, execute=execute)
+            AgentTool(
+                definition=ToolDefinition(
+                    name="work", description="Work", parameters={}
+                ),
+                execute=execute,
+            )
         ],
     )
     handles: list[Run] = []

@@ -8,10 +8,13 @@ from functools import partial
 import pytest
 
 from onyx.agents.events import AgentEvent
+from onyx.agents.models import AgentStep, StepInput
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
+from onyx.chat.context import ChatReminders
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import PromptMetadata
+from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -365,3 +368,75 @@ def test_chat_reuses_completed_search_artifacts_without_duplicate_documents() ->
         assert feature.citation_mapping == {4: "reference"}
         assert feature.citation_processor.citation_to_doc == {4: document}
         assert feature.gathered_documents == [document]
+
+
+@pytest.mark.parametrize("replace_base", [False, True])
+def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
+    replace_base: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("onyx.chat.prompt_utils.get_company_context", lambda: None)
+    monkeypatch.setattr("onyx.chat.llm_step.PROMPT_CACHE_CHAT_HISTORY", True)
+    files = ExtractedContextFiles(
+        file_texts=["Attached evidence"],
+        image_files=[],
+        use_as_search_filter=False,
+        total_token_count=4,
+        uncapped_token_count=4,
+        file_metadata=[],
+    )
+    agent = ChatAgent(
+        messages=[],
+        tools=[EchoTool()],
+        custom_agent_prompt="Custom instructions",
+        base_system_prompt="Base instructions",
+        context_files=files,
+        persona=PersonaPromptConfig(
+            system_prompt="Replacement instructions",
+            task_prompt="Task reminder",
+            datetime_aware=False,
+            replace_base_system_prompt=replace_base,
+        ),
+        user_memory_context=None,
+        llm=ScriptedLLM([]),
+        token_counter=len,
+        reminders=ChatReminders(enabled=False),
+    )
+    prepared = agent.prepare_step(
+        StepInput(
+            history=[],
+            input_messages=[UserMessage(content="Current question")],
+            messages=[],
+            step=AgentStep(index=0, limit=2),
+        )
+    )
+    history: list[Message] = [
+        UserMessage(content="Earlier question"),
+        UserMessage(content="Current question"),
+    ]
+    original = [message.model_dump() for message in history]
+    first = prepared.generation_request(history)
+    files.file_texts[0] = "Changed attachment"
+    agent.context.custom_prompt = "Changed instructions"
+    second = prepared.generation_request([history[-1]])
+    for request in [first, second]:
+        assert request.messages[0].text.startswith(
+            "Replacement instructions" if replace_base else "Base instructions"
+        )
+        assert request.messages[0].cacheable
+        assert any(
+            '"contents": "Attached evidence"' in message.text
+            for message in request.messages
+        )
+        assert not any("Changed" in message.text for message in request.messages)
+        assert any(
+            message.text == "Custom instructions" for message in request.messages
+        ) is (not replace_base)
+        assert request.messages[-2].text == "Current question"
+        assert (
+            request.messages[-1].text
+            == "<system-reminder>\nTask reminder\n</system-reminder>"
+        )
+        assert [tool.name for tool in request.tools] == ["echo"]
+    assert any(message.text == "Earlier question" for message in first.messages)
+    assert not any(message.text == "Earlier question" for message in second.messages)
+    assert [message.model_dump() for message in history] == original

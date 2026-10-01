@@ -159,7 +159,7 @@ class TestWebSearchToolRunQueryCoercion:
         tool_context = ToolContext(next_citation_num=1)
 
         with pytest.raises(ToolCallException) as exc_info:
-            tool.run(
+            tool._run(
                 invocation=ToolInvocation(
                     call_id="test",
                     arguments={"queries": "   "},

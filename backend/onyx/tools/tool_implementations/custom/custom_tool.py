@@ -125,7 +125,7 @@ class CustomTool(Tool):
         reader = csv.DictReader(csv_file)
         return list(reader)
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         path_params = {}
         for path_param_schema in self._method_spec.get_path_param_schemas():
             param_name = path_param_schema["name"]

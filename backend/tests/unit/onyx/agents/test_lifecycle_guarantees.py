@@ -32,6 +32,7 @@ from onyx.llm.models import (
     TextContent,
     TextDeltaEvent,
     ToolCall,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -109,9 +110,7 @@ def test_tool_execution_survives_enrichment_failure() -> None:
         ),
         tools=[
             AgentTool(
-                name="write",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="write", description="", parameters={}),
                 execute=lambda _: ToolResult(content="saved"),
             )
         ],
@@ -239,9 +238,7 @@ def test_binary_tool_details_can_be_delivered() -> None:
         ),
         tools=[
             AgentTool(
-                name="file",
-                description="",
-                parameters={},
+                definition=ToolDefinition(name="file", description="", parameters={}),
                 execute=lambda _: ToolResult(
                     content="file",
                     details=BinaryDetails(content=b"\xff\x00"),
@@ -273,7 +270,12 @@ def test_late_tool_completion_cannot_change_a_closed_run() -> None:
                 content=[ToolCall(id="call", name="slow", arguments={})]
             )
         ),
-        tools=[AgentTool(name="slow", description="", parameters={}, execute=execute)],
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="slow", description="", parameters={}),
+                execute=execute,
+            )
+        ],
     )
     run = agent.start(max_steps=1)
     try:
@@ -294,9 +296,7 @@ def test_late_tool_completion_cannot_change_a_closed_run() -> None:
 
 def test_selected_tool_definition_and_callback_stay_paired() -> None:
     tool = AgentTool(
-        name="original",
-        description="",
-        parameters={},
+        definition=ToolDefinition(name="original", description="", parameters={}),
         execute=lambda _: ToolResult(content="original", terminate=True),
     )
 
@@ -425,7 +425,10 @@ def test_tool_argument_mutation_does_not_change_recorded_model_call() -> None:
             )
         ),
         tools=[
-            AgentTool(name="lookup", description="", parameters={}, execute=execute)
+            AgentTool(
+                definition=ToolDefinition(name="lookup", description="", parameters={}),
+                execute=execute,
+            )
         ],
     )
     result = agent.start(background=False, max_steps=1).result()

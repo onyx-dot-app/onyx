@@ -412,6 +412,8 @@ MAX_URLS_PER_CALL = 10
 
 
 class OpenURLTool(Tool):
+    merge_list_argument = URLS_FIELD
+
     NAME = "open_url"
     DESCRIPTION = "Open and read the content of one or more URLs."
     DESCRIPTION_NO_WEB_FETCH = (
@@ -512,7 +514,7 @@ class OpenURLTool(Tool):
             },
         )
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         urls = _normalize_string_list(invocation.arguments.get(URLS_FIELD))
 
         if len(urls) > MAX_URLS_PER_CALL:

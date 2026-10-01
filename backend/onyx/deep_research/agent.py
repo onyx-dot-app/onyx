@@ -197,11 +197,9 @@ class DeepResearchAgent(FeatureRestoration):
     def _build_research_tools(self) -> list[AgentTool]:
         return [
             AgentTool(
-                name=definition.name,
-                description=definition.description,
-                parameters=definition.parameters,
+                definition=definition,
                 execute=self._research,
-                complete_children=self._complete_research,
+                result_from_children=self._research_result_from_children,
             )
             if definition.name == RESEARCH_AGENT_TOOL_NAME
             else self._control_tool(
@@ -356,9 +354,7 @@ class DeepResearchAgent(FeatureRestoration):
     @staticmethod
     def _control_tool(definition: ToolDefinition, result: str) -> AgentTool:
         return AgentTool(
-            name=definition.name,
-            description=definition.description,
-            parameters=definition.parameters,
+            definition=definition,
             execute=lambda _invocation: ToolResult(content=result),
         )
 
@@ -394,7 +390,7 @@ class DeepResearchAgent(FeatureRestoration):
         )
         return ChildRunWait(run_ids=[submission.run_id])
 
-    def _complete_research(
+    def _research_result_from_children(
         self, _invocation: ToolInvocation, completed: list[RunState]
     ) -> ToolResult:
         if len(completed) != 1:

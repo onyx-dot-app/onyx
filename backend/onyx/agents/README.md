@@ -68,7 +68,7 @@ It saves the response under a chat message ID. Message IDs connect SDK events to
 ```python
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.llm.models import ToolResult, UserMessage
+from onyx.llm.models import ToolDefinition, ToolResult, UserMessage
 
 
 def get_weather(invocation: ToolInvocation) -> ToolResult:
@@ -80,13 +80,15 @@ agent = Agent(
     system_prompt="You are a weather assistant.",
     tools=[
         AgentTool(
-            name="get_weather",
-            description="Get the weather for a city.",
-            parameters={
-                "type": "object",
-                "properties": {"city": {"type": "string"}},
-                "required": ["city"],
-            },
+            definition=ToolDefinition(
+                name="get_weather",
+                description="Get the weather for a city.",
+                parameters={
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            ),
             execute=get_weather,
         )
     ],
@@ -137,6 +139,7 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
 Without this callback, the agent uses its configured instructions, tools, and model options.
+A custom callback returns the complete step configuration; the runtime does not merge agent defaults into it.
 
 `after_step(StepResult)` processes each completed step, including the last allowed step.
 Return `True` to continue or `False` to finish. Without this callback, the agent continues after tool calls
@@ -146,6 +149,8 @@ Raise from `after_step` when output validation fails. The run retains the comple
 
 Both callbacks run on tracked threads. Compaction does not repeat either callback.
 `PreparedStep.assemble_messages` must be pure and repeatable: compaction can call it again with shorter history.
+Capture instructions and other step decisions during preparation. Assemble them around the history supplied by the runtime.
+Do not fetch settings, advance feature state, or capture the original history inside the assembler.
 
 `Agent.generation_context` supplies tracing identity, content policy, and execution timeouts for every step.
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
@@ -168,8 +173,7 @@ The runtime waits for tool callbacks, then `after_step`, before preparing anothe
 
 ## Tools
 
-An `AgentTool` is a name, a description, a JSON-schema `parameters` dict, and a synchronous
-`execute` function. Each tool call runs on its own tracked thread.
+An `AgentTool` pairs a `ToolDefinition` with a synchronous `execute` function. Each tool call runs on its own tracked thread.
 The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
@@ -184,7 +188,11 @@ When a step makes several tool calls, they run in parallel, unless any called to
 whatever order tools finish, but the model history keeps the original call order.
 Result enrichment and final tool events follow model-call order.
 
-Application tools use `Tool.for_agent()` when binding to a conversation. Stateful tools must
+Application tools implement `_run(invocation, context)`. Public `run()` adds tracing,
+cancellation checks, and expected-error handling.
+`Tool.bind(get_context)` creates an SDK tool.
+The binding resolves context during execution and calls public `run()`.
+Harnesses use `Tool.for_agent()` to isolate application tools for a conversation. Stateful tools must
 return an isolated instance. SearchTool does this and declares sequential execution; its
 internal retrieval work still runs in parallel.
 
@@ -193,8 +201,8 @@ that batch; each original call retains its ID and receives the pooled result and
 Other arguments must match. Sequential steps combine only adjacent calls, preserving order
 relative to other tools. Shared retrieval uses the tool's existing combined-result limits.
 
-`tool_runner.py` selects mergeable tools through `MERGEABLE_TOOL_FIELDS` and binds
-`merge_arguments`. The SDK does not inspect search fields.
+Retrieval tools declare `merge_list_argument` using their query or URL parameter name.
+`Tool.bind` supplies the merger to the SDK, which does not inspect search fields.
 Steps with a `before_tool_call` hook and calls waiting for input execute individually.
 Batch results are recorded together before checkpoint capture; resumed runs skip completed calls.
 Prompt assembly replaces exact repeated passages within a step with references to earlier results.
@@ -223,7 +231,7 @@ def delegate(invocation: ToolInvocation) -> ChildRunWait:
     return ChildRunWait(run_ids=[child.run_id])
 ```
 
-Set `AgentTool.complete_children` to convert the terminal child snapshots into a `ToolResult`.
+Set `AgentTool.result_from_children` to convert the terminal child snapshots into a `ToolResult`.
 The runtime suspends the parent while it waits, then calls this function without repeating `delegate`.
 The function receives failed and cancelled snapshots too, so the feature can choose how to report them.
 A successful completion callback marks those child failures as handled.

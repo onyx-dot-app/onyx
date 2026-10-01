@@ -57,7 +57,6 @@ from onyx.tools.restoration import (
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
-from onyx.tools.tool_runner import bind_tool
 from onyx.tracing.flows import LLMFlow
 
 
@@ -128,7 +127,7 @@ class ChatAgent(FeatureRestoration):
         )
         self.agent = Agent(
             llm,
-            tools=[bind_tool(tool, self._tool_context) for tool in self.tools],
+            tools=[tool.bind(self._tool_context) for tool in self.tools],
             agent_id=agent_id,
             previous_run_id=previous_run_id,
             state=AgentState(
@@ -264,9 +263,11 @@ class ChatAgent(FeatureRestoration):
             is_last_step=state.step.is_last,
             ran_image_gen=self.ran_image_gen,
         )
-        selected_names = {tool.name for tool in tools}
+        available_tool_names = {tool.name for tool in tools}
         return PreparedStep(
-            tools=[tool for tool in self.agent.tools if tool.name in selected_names],
+            tools=[
+                tool for tool in self.agent.tools if tool.name in available_tool_names
+            ],
             options=GenerationOptions(
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),
@@ -287,7 +288,7 @@ class ChatAgent(FeatureRestoration):
                 if self.file_metadata
                 else None,
                 llm_config=self.llm.config,
-                available_tool_names=selected_names,
+                available_tool_names=available_tool_names,
             ),
         )
 

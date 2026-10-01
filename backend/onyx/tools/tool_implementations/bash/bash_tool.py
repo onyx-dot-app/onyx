@@ -102,7 +102,7 @@ class BashTool(Tool):
             },
         )
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         if CMD_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{CMD_FIELD}' parameter in bash tool call",

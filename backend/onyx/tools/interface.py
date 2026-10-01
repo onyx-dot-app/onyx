@@ -1,19 +1,25 @@
 import abc
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from functools import partial
+from typing import TYPE_CHECKING, final
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.agents.tools import ToolExecutionMode, ToolInvocation, ToolOutcome
+from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolOutcome
 from onyx.chat.llm_step import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.db.memory import UserMemoryContext
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import ChatFile, ChatMinimalTextMessage, ToolCallException
+from onyx.tracing.framework.create import function_span
+from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from onyx.agents.models import RunState
 
+
+logger = setup_logger()
 
 CITATIONS_PER_TOOL_CALL = 100
 
@@ -72,8 +78,38 @@ def parse_tool_arguments[T: BaseModel](
         ) from error
 
 
+def merge_tool_arguments(
+    first: dict[str, JsonValue], second: dict[str, JsonValue], *, field: str
+) -> dict[str, JsonValue] | None:
+    """Combine nonempty string lists when all other arguments match."""
+    if {key: value for key, value in first.items() if key != field} != {
+        key: value for key, value in second.items() if key != field
+    }:
+        return None
+    left, right = first.get(field), second.get(field)
+    if not isinstance(left, list) or not isinstance(right, list):
+        return None
+    if (
+        not left
+        or not right
+        or any(not isinstance(value, str) for value in left + right)
+    ):
+        return None
+    merged_args = first.copy()
+    merged_args[field] = left + right
+    return merged_args
+
+
+ToolResultFromChildren = Callable[
+    [ToolInvocation, ToolContext, list["RunState"]], ToolResult
+]
+
+
 class Tool(abc.ABC):
-    """An application tool bound to the runtime with a ToolContext."""
+    """An application tool with context, tracing, and an SDK binding."""
+
+    result_from_children: ToolResultFromChildren | None = None
+    merge_list_argument: str | None = None
 
     def for_agent(self) -> "Tool":
         """Return an instance safe to bind to one agent's conversation."""
@@ -112,13 +148,60 @@ class Tool(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         raise NotImplementedError
 
-    def complete_children(
-        self,
-        invocation: ToolInvocation,
-        context: ToolContext,
-        children: list["RunState"],
-    ) -> ToolResult:
-        raise NotImplementedError(f"Tool {self.name} does not support child completion")
+    @final
+    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
+        """Run with tracing and convert expected tool errors into model-visible results."""
+        invocation.cancellation.check()
+        with function_span(self.name) as span:
+            span.span_data.input = str(invocation.arguments)
+            try:
+                result = self._run(invocation, context)
+            except ToolCallException as error:
+                logger.warning("Tool call rejected by %s: %s", self.name, error)
+                result = ToolResult(content=error.llm_facing_message, is_error=True)
+            span.span_data.output = (
+                result.text
+                if isinstance(result, ToolResult)
+                else result.model_dump_json()
+            )
+        invocation.cancellation.check()
+        return result
+
+    def bind(self, get_context: Callable[[], ToolContext]) -> AgentTool:
+        """Bind runtime callbacks; resolve application context only when they execute."""
+        convert_child_results = self.result_from_children
+        result_from_children = None
+        if convert_child_results is not None:
+
+            def result_from_children(
+                invocation: ToolInvocation, children: list["RunState"]
+            ) -> ToolResult:
+                context = get_context()
+                invocation.cancellation.check()
+                with function_span(self.name) as span:
+                    span.span_data.input = str(invocation.arguments)
+                    try:
+                        result = convert_child_results(invocation, context, children)
+                    except ToolCallException as error:
+                        logger.warning("Tool call rejected by %s: %s", self.name, error)
+                        result = ToolResult(
+                            content=error.llm_facing_message, is_error=True
+                        )
+                    span.span_data.output = result.text
+                invocation.cancellation.check()
+                return result
+
+        return AgentTool(
+            definition=self.tool_definition(),
+            execute=lambda invocation: self.run(invocation, get_context()),
+            execution_mode=self.execution_mode,
+            merge_arguments=partial(
+                merge_tool_arguments, field=self.merge_list_argument
+            )
+            if self.merge_list_argument is not None
+            else None,
+            result_from_children=result_from_children,
+        )

@@ -205,7 +205,7 @@ class EchoTool(Tool):
             },
         )
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         invocation.cancellation.check()
         return ToolResult(content=str(invocation.arguments["value"]))
 

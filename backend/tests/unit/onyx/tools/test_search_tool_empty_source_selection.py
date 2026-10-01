@@ -6,7 +6,7 @@ from pydantic import JsonValue
 from onyx.agents.tools import ToolInvocation
 from onyx.context.search.models import BaseFilters, SearchDocsResponse
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.models import UserMessage
+from onyx.llm.models import ToolResult, UserMessage
 from onyx.tools.interface import ToolContext
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -33,6 +33,7 @@ def test_empty_source_selection_returns_no_results() -> None:
     response = tool.run(
         invocation=_invocation({"queries": ["q"]}), context=ToolContext()
     )
+    assert isinstance(response, ToolResult)
 
     assert isinstance(response.details, SearchDocsResponse)
     assert response.details.search_docs == []
@@ -76,7 +77,7 @@ def test_malformed_call_raises_despite_empty_selection() -> None:
     tool = _make_tool(BaseFilters(source_type=[]))
 
     with pytest.raises(ToolCallException):
-        tool.run(invocation=_invocation({}), context=ToolContext())
+        tool._run(invocation=_invocation({}), context=ToolContext())
 
 
 def _invocation(arguments: dict[str, JsonValue]) -> ToolInvocation:

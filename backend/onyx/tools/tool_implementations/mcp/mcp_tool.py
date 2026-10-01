@@ -125,7 +125,7 @@ class MCPTool(Tool):
             parameters=_normalize_parameters_schema(self._tool_definition),
         )
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         _start = time.monotonic()
         _server = self.mcp_server.name
         outcome = MCPToolCallStatus.ERROR

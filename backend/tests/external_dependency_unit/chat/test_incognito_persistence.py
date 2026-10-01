@@ -43,7 +43,7 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.models import AssistantMessage, TextContent, UserMessage
+from onyx.llm.models import AssistantMessage, TextContent, ToolDefinition, UserMessage
 from onyx.redis.redis_pool import get_redis_client
 from onyx.tools.models import ToolCallInfo
 from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
@@ -497,9 +497,9 @@ def test_incognito_response_restores_agents_without_database_content(
         agent_id=str(session.id),
         tools=[
             AgentTool(
-                name="delegate",
-                description="",
-                parameters={},
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
                 execute=delegate,
             )
         ],

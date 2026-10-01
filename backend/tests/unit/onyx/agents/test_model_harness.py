@@ -29,6 +29,7 @@ from onyx.llm.models import (
     GenerationToolCallEvent,
     TextDeltaEvent,
     ToolChoiceOptions,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -38,9 +39,9 @@ from tests.unit.onyx.agents.fakes import FakeModelClient, ScriptedLLM
 
 def tool() -> AgentTool:
     return AgentTool(
-        name="echo",
-        description="Echo",
-        parameters={"type": "object"},
+        definition=ToolDefinition(
+            name="echo", description="Echo", parameters={"type": "object"}
+        ),
         execute=lambda invocation: ToolResult(
             content=str(invocation.arguments["value"])
         ),

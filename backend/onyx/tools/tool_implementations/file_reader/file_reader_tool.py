@@ -132,7 +132,7 @@ class FileReaderTool(Tool):
             return load_user_file_content(metadata)
         return load_chat_file_by_id(str(file_id))
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         if FILE_ID_FIELD not in invocation.arguments:
             raise ToolCallException(
                 message=f"Missing required '{FILE_ID_FIELD}' parameter",

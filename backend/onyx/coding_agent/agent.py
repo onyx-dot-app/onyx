@@ -46,7 +46,6 @@ from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
-from onyx.tools.tool_runner import run_tool
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.github import download_github_archive, parse_github_source
 from onyx.utils.logger import setup_logger
@@ -245,15 +244,13 @@ class CodingAgent:
         execute: Callable[[ToolInvocation], ToolResult],
     ) -> AgentTool:
         return AgentTool(
-            name=definition.name,
-            description=definition.description,
-            parameters=definition.parameters,
+            definition=definition,
             execute=execute,
             execution_mode=ToolExecutionMode.SEQUENTIAL,
         )
 
     def _bash(self, invocation: ToolInvocation) -> ToolResult:
-        result = run_tool(self.bash_tool, invocation, ToolContext())
+        result = self.bash_tool.run(invocation, ToolContext())
         if not isinstance(result, ToolResult):
             raise TypeError("The coding bash tool must return a completed result")
         return result

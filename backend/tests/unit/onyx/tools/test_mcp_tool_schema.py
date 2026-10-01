@@ -106,7 +106,7 @@ class _StaticTool(Tool):
     def emit_start(self, invocation: ToolInvocation) -> None:
         pass
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         raise NotImplementedError
 
 

@@ -62,5 +62,5 @@ class KnowledgeGraphTool(Tool):
             },
         )
 
-    def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         raise NotImplementedError("KnowledgeGraphTool.run is not implemented.")
