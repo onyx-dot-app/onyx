@@ -1,11 +1,9 @@
 import * as Yup from "yup";
-
 import { Button, InputTypeIn, MessageCard } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import { Form, Formik, FormikHelpers } from "formik";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-
 import type { OAuthAdditionalKwargDescription } from "@/lib/credentials/types";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { ValidSources } from "@/lib/connectors/types/source";

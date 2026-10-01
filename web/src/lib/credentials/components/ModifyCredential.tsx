@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+"use client";
+
+import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

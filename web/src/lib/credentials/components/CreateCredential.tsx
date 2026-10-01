@@ -27,7 +27,6 @@ import {
   IsPublicGroupSelectorFormType,
   IsPublicGroupSelector,
 } from "@/components/IsPublicGroupSelector";
-import { useUser } from "@/providers/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
