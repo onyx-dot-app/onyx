@@ -314,8 +314,12 @@ def create_external_app(
     auth_template: dict[str, Any],
     organization_credentials: dict[str, str],
     action_policies: dict[str, EndpointPolicy] | None = None,
+    oauth_config: dict[str, Any] | None = None,
 ) -> ExternalApp:
     """Create an external-app gateway row and its policy state.
+
+    ``oauth_config`` (CUSTOM only) is a serialized ``CustomOAuthConfig``; the
+    caller validates it before it gets here.
 
     Flush only; callers own the transaction. Built-in provisioning separately
     associates its system skill with ``associate_built_in_skill__no_commit``.
@@ -330,6 +334,7 @@ def create_external_app(
         upstream_url_patterns=upstream_url_patterns,
         auth_template=auth_template,
         organization_credentials=organization_credentials,
+        oauth_config=oauth_config,
     )
     db_session.add(app)
     # Policies key off the gated_app identity row, which needs app.id.
@@ -589,6 +594,7 @@ def update_external_app(
     auth_template: dict[str, Any] | UnsetType = UNSET,
     organization_credentials: dict[str, str] | UnsetType = UNSET,
     action_policies: dict[str, EndpointPolicy] | UnsetType = UNSET,
+    oauth_config: dict[str, Any] | None | UnsetType = UNSET,
 ) -> ExternalApp:
     """Partial-update external-app gateway state (flush only).
 
@@ -624,6 +630,9 @@ def update_external_app(
         app.upstream_url_patterns = upstream_url_patterns
     if is_set(auth_template):
         app.auth_template = auth_template
+    if is_set(oauth_config):
+        # Explicit None clears the config (back to static credentials).
+        app.oauth_config = oauth_config
     if is_set(organization_credentials):
         # Admin responses mask org credentials; restore any masked value the form
         # echoed back so an unchanged secret isn't overwritten with its mask.

@@ -8,13 +8,14 @@ import {
   EndpointPolicy,
   ExternalAppAdminResponse,
   ExternalAppType,
+  CustomOAuthConfig,
 } from "@/app/craft/v1/apps/registry";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
 async function readErrorDetail(
   res: Response,
-  fallback: string
+  fallback: string,
 ): Promise<string> {
   const data: ErrorResponseBody = await res.json().catch(() => ({}));
   return data.detail ?? `${fallback} (HTTP ${res.status}).`;
@@ -36,7 +37,7 @@ interface CreateBuiltInExternalAppBody {
  * through {@link updateExternalApp}.
  */
 export async function createBuiltInExternalApp(
-  body: CreateBuiltInExternalAppBody
+  body: CreateBuiltInExternalAppBody,
 ): Promise<ExternalAppAdminResponse> {
   const res = await fetch(`${BUILD_API_BASE}/admin/apps/built-in`, {
     method: "POST",
@@ -54,6 +55,9 @@ interface CreateCustomExternalAppInput {
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
+  // Present → users connect via an admin-defined OAuth 2.0 flow (client_id /
+  // client_secret ride in organization_credentials). Omit for static creds.
+  oauth_config?: CustomOAuthConfig | null;
 }
 
 /**
@@ -61,7 +65,7 @@ interface CreateCustomExternalAppInput {
  * created and managed independently through the Skills experience.
  */
 export async function createCustomExternalApp(
-  input: CreateCustomExternalAppInput
+  input: CreateCustomExternalAppInput,
 ): Promise<ExternalAppAdminResponse> {
   const res = await fetch(`${BUILD_API_BASE}/admin/apps/custom`, {
     method: "POST",
@@ -86,6 +90,9 @@ interface UpdateExternalAppBody {
   // Full replacement of the app's custom-skill associations. Provider-owned
   // built-in skills are preserved by the backend.
   associated_skill_ids?: string[];
+  // CUSTOM apps only. Omit to leave untouched; explicit null clears the OAuth
+  // config (back to static credentials).
+  oauth_config?: CustomOAuthConfig | null;
 }
 
 /**
@@ -95,7 +102,7 @@ interface UpdateExternalAppBody {
  */
 export async function updateExternalApp(
   id: number,
-  body: UpdateExternalAppBody
+  body: UpdateExternalAppBody,
 ): Promise<ExternalAppAdminResponse> {
   const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}`, {
     method: "PATCH",
@@ -117,15 +124,34 @@ export async function deleteExternalApp(id: number): Promise<void> {
   }
 }
 
+interface OAuthRedirectUriResponse {
+  redirect_uri: string;
+}
+
+/**
+ * The redirect URI admins must register with a third-party OAuth app
+ * (`GET /admin/apps/oauth/redirect-uri`) — shared by built-in and custom apps.
+ */
+export async function fetchExternalAppOAuthRedirectUri(): Promise<string> {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/oauth/redirect-uri`);
+  if (!res.ok) {
+    throw new Error(
+      await readErrorDetail(res, "Failed to load OAuth redirect URI"),
+    );
+  }
+  const body: OAuthRedirectUriResponse = await res.json();
+  return body.redirect_uri;
+}
+
 interface OAuthStartResponse {
   authorize_url: string;
 }
 
 export async function startExternalAppOAuth(
-  externalAppId: number
+  externalAppId: number,
 ): Promise<OAuthStartResponse> {
   const res = await fetch(
-    `${BUILD_API_BASE}/apps/${externalAppId}/oauth/start`
+    `${BUILD_API_BASE}/apps/${externalAppId}/oauth/start`,
   );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to start OAuth"));
@@ -140,7 +166,7 @@ interface OAuthCallbackResponse {
 
 export async function completeExternalAppOAuthCallback(
   code: string,
-  state: string
+  state: string,
 ): Promise<OAuthCallbackResponse> {
   const res = await fetch(`${BUILD_API_BASE}/apps/oauth/callback`, {
     method: "POST",
@@ -162,7 +188,7 @@ export type ConnectAppDecision = "connected" | "declined";
  */
 export async function postConnectAppDecision(
   requestId: string,
-  decision: ConnectAppDecision
+  decision: ConnectAppDecision,
 ): Promise<void> {
   const res = await fetch(
     `${BUILD_API_BASE}/apps/connect/${requestId}/decision`,
@@ -170,7 +196,7 @@ export async function postConnectAppDecision(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ decision }),
-    }
+    },
   );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to resolve connection"));
@@ -179,7 +205,7 @@ export async function postConnectAppDecision(
 
 export async function upsertUserCredentials(
   externalAppId: number,
-  userCredentials: Record<string, unknown>
+  userCredentials: Record<string, unknown>,
 ): Promise<void> {
   const res = await fetch(
     `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
@@ -187,7 +213,7 @@ export async function upsertUserCredentials(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_credentials: userCredentials }),
-    }
+    },
   );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to save credentials"));
@@ -195,11 +221,11 @@ export async function upsertUserCredentials(
 }
 
 export async function disconnectUserFromApp(
-  externalAppId: number
+  externalAppId: number,
 ): Promise<void> {
   const res = await fetch(
     `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
-    { method: "DELETE" }
+    { method: "DELETE" },
   );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to disconnect app"));

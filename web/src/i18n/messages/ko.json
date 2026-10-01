@@ -11782,6 +11782,8 @@
         "creatingButton": "만드는 중…",
         "disabled": {
           "nameMissing": "이 사용자 지정 앱을 만들기 전에 이름을 입력하세요.",
+          "oauthClientMissing": "Enter the OAuth client ID and client secret.",
+          "oauthUrlsMissing": "Enter the OAuth authorize URL and token URL.",
           "patternMissing": "업스트림 URL 패턴을 하나 이상 추가하세요. 패턴을 입력하고 Enter를 누르세요.",
           "pristine": "저장하기 전에 변경하세요.",
           "saving": "이미 저장이 진행 중입니다."
@@ -11792,6 +11794,12 @@
           "saveFailedTitle": "저장할 수 없습니다"
         },
         "fields": {
+          "authMode": {
+            "description": "How users authenticate with this app.",
+            "label": "Authentication",
+            "oauth": "OAuth 2.0 — each user connects their own account",
+            "static": "Static credentials — API keys or tokens"
+          },
           "headers": {
             "addButton": "헤더 추가",
             "description": "선택 사항. 아웃바운드 요청에 삽입되는 헤더입니다. 사용자(또는 아래의 조직)가 제공하는 값에는 '{placeholder}'를 사용하세요(예: \"Bearer '{api_key}'\"). 비워 두면 자격 증명을 삽입하지 않고 업스트림 패턴만 허용합니다.",
@@ -11802,6 +11810,33 @@
           "name": {
             "label": "이름",
             "placeholder": "내 사용자 지정 앱"
+          },
+          "oauth": {
+            "authorizeUrl": {
+              "label": "Authorize URL"
+            },
+            "clientId": {
+              "label": "Client ID"
+            },
+            "clientSecret": {
+              "label": "Client secret"
+            },
+            "redirectUri": {
+              "description": "Register this redirect URL in the third-party app's OAuth settings: {uri}",
+              "label": "Redirect URL"
+            },
+            "scopes": {
+              "description": "Scopes to request. Type a scope and press Enter. Leave empty to use the provider's defaults.",
+              "label": "Scopes"
+            },
+            "tokenAuthMethod": {
+              "basic": "HTTP Basic authorization header",
+              "label": "Token endpoint client authentication",
+              "post": "Client credentials in request body (default)"
+            },
+            "tokenUrl": {
+              "label": "Token URL"
+            }
           },
           "orgCredentials": {
             "addButton": "자격 증명 추가",

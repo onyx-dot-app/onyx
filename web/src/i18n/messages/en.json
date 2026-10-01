@@ -11782,6 +11782,8 @@
         "creatingButton": "Creating…",
         "disabled": {
           "nameMissing": "Enter a name before creating this custom app.",
+          "oauthClientMissing": "Enter the OAuth client ID and client secret.",
+          "oauthUrlsMissing": "Enter the OAuth authorize URL and token URL.",
           "patternMissing": "Add at least one upstream URL pattern. Type a pattern and press Enter.",
           "pristine": "Make a change before saving.",
           "saving": "Save is already in progress."
@@ -11792,6 +11794,12 @@
           "saveFailedTitle": "Couldn't save"
         },
         "fields": {
+          "authMode": {
+            "description": "How users authenticate with this app.",
+            "label": "Authentication",
+            "oauth": "OAuth 2.0 — each user connects their own account",
+            "static": "Static credentials — API keys or tokens"
+          },
           "headers": {
             "addButton": "Add header",
             "description": "Optional — headers injected into outbound requests. Use '{placeholder}' for values the user (or org below) supplies, e.g. \"Bearer '{api_key}'\". Leave empty to allowlist the upstream patterns without injecting credentials.",
@@ -11802,6 +11810,33 @@
           "name": {
             "label": "Name",
             "placeholder": "My Custom App"
+          },
+          "oauth": {
+            "authorizeUrl": {
+              "label": "Authorize URL"
+            },
+            "clientId": {
+              "label": "Client ID"
+            },
+            "clientSecret": {
+              "label": "Client secret"
+            },
+            "redirectUri": {
+              "description": "Register this redirect URL in the third-party app's OAuth settings: {uri}",
+              "label": "Redirect URL"
+            },
+            "scopes": {
+              "description": "Scopes to request. Type a scope and press Enter. Leave empty to use the provider's defaults.",
+              "label": "Scopes"
+            },
+            "tokenAuthMethod": {
+              "basic": "HTTP Basic authorization header",
+              "label": "Token endpoint client authentication",
+              "post": "Client credentials in request body (default)"
+            },
+            "tokenUrl": {
+              "label": "Token URL"
+            }
           },
           "orgCredentials": {
             "addButton": "Add credential",

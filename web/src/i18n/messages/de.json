@@ -11782,6 +11782,8 @@
         "creatingButton": "Wird erstellt…",
         "disabled": {
           "nameMissing": "Gib einen Namen ein, bevor du diese benutzerdefinierte App erstellst.",
+          "oauthClientMissing": "Enter the OAuth client ID and client secret.",
+          "oauthUrlsMissing": "Enter the OAuth authorize URL and token URL.",
           "patternMissing": "Füge mindestens ein Upstream-URL-Muster hinzu. Gib ein Muster ein und drücke die Eingabetaste.",
           "pristine": "Nimm vor dem Speichern eine Änderung vor.",
           "saving": "Ein Speichervorgang läuft bereits."
@@ -11792,6 +11794,12 @@
           "saveFailedTitle": "Speichern nicht möglich"
         },
         "fields": {
+          "authMode": {
+            "description": "How users authenticate with this app.",
+            "label": "Authentication",
+            "oauth": "OAuth 2.0 — each user connects their own account",
+            "static": "Static credentials — API keys or tokens"
+          },
           "headers": {
             "addButton": "Header hinzufügen",
             "description": "Optional: Header, die in ausgehende Anfragen eingefügt werden. Verwende '{placeholder}' für Werte, die der Nutzer (oder unten die Organisation) liefert, z. B. \"Bearer '{api_key}'\". Leer lassen, um die Upstream-Muster ohne Zugangsdaten freizugeben.",
@@ -11802,6 +11810,33 @@
           "name": {
             "label": "Name",
             "placeholder": "Meine benutzerdefinierte App"
+          },
+          "oauth": {
+            "authorizeUrl": {
+              "label": "Authorize URL"
+            },
+            "clientId": {
+              "label": "Client ID"
+            },
+            "clientSecret": {
+              "label": "Client secret"
+            },
+            "redirectUri": {
+              "description": "Register this redirect URL in the third-party app's OAuth settings: {uri}",
+              "label": "Redirect URL"
+            },
+            "scopes": {
+              "description": "Scopes to request. Type a scope and press Enter. Leave empty to use the provider's defaults.",
+              "label": "Scopes"
+            },
+            "tokenAuthMethod": {
+              "basic": "HTTP Basic authorization header",
+              "label": "Token endpoint client authentication",
+              "post": "Client credentials in request body (default)"
+            },
+            "tokenUrl": {
+              "label": "Token URL"
+            }
           },
           "orgCredentials": {
             "addButton": "Zugangsdaten hinzufügen",

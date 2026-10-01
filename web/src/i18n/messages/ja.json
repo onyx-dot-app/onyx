@@ -11782,6 +11782,8 @@
         "creatingButton": "作成中…",
         "disabled": {
           "nameMissing": "このカスタムアプリを作成する前に名前を入力してください。",
+          "oauthClientMissing": "Enter the OAuth client ID and client secret.",
+          "oauthUrlsMissing": "Enter the OAuth authorize URL and token URL.",
           "patternMissing": "アップストリーム URL パターンを 1 つ以上追加してください。パターンを入力して Enter を押します。",
           "pristine": "保存する前に変更を加えてください。",
           "saving": "保存処理がすでに進行中です。"
@@ -11792,6 +11794,12 @@
           "saveFailedTitle": "保存できませんでした"
         },
         "fields": {
+          "authMode": {
+            "description": "How users authenticate with this app.",
+            "label": "Authentication",
+            "oauth": "OAuth 2.0 — each user connects their own account",
+            "static": "Static credentials — API keys or tokens"
+          },
           "headers": {
             "addButton": "ヘッダーを追加",
             "description": "任意。送信リクエストに挿入されるヘッダーです。ユーザー（または下記の組織）が提供する値には '{placeholder}' を使います（例: \"Bearer '{api_key}'\"）。空のままにすると、認証情報を挿入せずにアップストリームパターンを許可します。",
@@ -11802,6 +11810,33 @@
           "name": {
             "label": "名前",
             "placeholder": "マイカスタムアプリ"
+          },
+          "oauth": {
+            "authorizeUrl": {
+              "label": "Authorize URL"
+            },
+            "clientId": {
+              "label": "Client ID"
+            },
+            "clientSecret": {
+              "label": "Client secret"
+            },
+            "redirectUri": {
+              "description": "Register this redirect URL in the third-party app's OAuth settings: {uri}",
+              "label": "Redirect URL"
+            },
+            "scopes": {
+              "description": "Scopes to request. Type a scope and press Enter. Leave empty to use the provider's defaults.",
+              "label": "Scopes"
+            },
+            "tokenAuthMethod": {
+              "basic": "HTTP Basic authorization header",
+              "label": "Token endpoint client authentication",
+              "post": "Client credentials in request body (default)"
+            },
+            "tokenUrl": {
+              "label": "Token URL"
+            }
           },
           "orgCredentials": {
             "addButton": "認証情報を追加",

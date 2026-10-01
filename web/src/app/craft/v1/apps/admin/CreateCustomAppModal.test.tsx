@@ -63,6 +63,8 @@ const CUSTOM_APP: ExternalAppAdminResponse = {
   actions: [],
   associated_skills: [],
   is_onyx_managed: false,
+  oauth_config: null,
+  oauth_redirect_uri: null,
 };
 
 function renderExistingApp({
@@ -77,7 +79,7 @@ function renderExistingApp({
       onClose={onClose}
       onSaved={onSaved}
       existingApp={CUSTOM_APP}
-    />
+    />,
   );
   return { onClose, onSaved, unmount };
 }
@@ -102,7 +104,7 @@ describe("CreateCustomAppModal", () => {
         onClose={jest.fn()}
         onSaved={jest.fn()}
         existingApp={null}
-      />
+      />,
     );
     expect(screen.getByPlaceholderText("My Custom App")).toHaveFocus();
   });
@@ -119,7 +121,7 @@ describe("CreateCustomAppModal", () => {
         onClose={onClose}
         onSaved={onSaved}
         existingApp={null}
-      />
+      />,
     );
 
     expect(screen.queryByText(/bundle/i)).not.toBeInTheDocument();
@@ -130,7 +132,7 @@ describe("CreateCustomAppModal", () => {
       target: { value: "Acme CRM" },
     });
     const patternInput = screen.getByPlaceholderText(
-      "https://api.example.com/*"
+      "https://api.example.com/*",
     );
     fireEvent.change(patternInput, {
       target: { value: "https://api.acme.test/*" },
@@ -154,7 +156,7 @@ describe("CreateCustomAppModal", () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByText("Add skills to Acme CRM")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Associate existing" })
+      screen.getByRole("button", { name: "Associate existing" }),
     ).toBeInTheDocument();
 
     const beforeUnload = new Event("beforeunload", { cancelable: true });
@@ -181,7 +183,7 @@ describe("CreateCustomAppModal", () => {
             { id: "invalid-skill", name: "broken-skill", is_valid: false },
           ],
         }}
-      />
+      />,
     );
 
     fireEvent.change(screen.getByDisplayValue("Acme CRM"), {
@@ -195,7 +197,7 @@ describe("CreateCustomAppModal", () => {
         upstream_url_patterns: ["https://api.acme.test/*"],
         auth_template: {},
         organization_credentials: {},
-      })
+      }),
     );
   });
 
@@ -254,18 +256,18 @@ describe("CreateCustomAppModal", () => {
     const appModal = screen.getByRole("dialog", { name: /Edit Acme CRM/ });
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
     expect(appModal).not.toContainElement(
-      screen.getByPlaceholderText("Search editable skills...")
+      screen.getByPlaceholderText("Search editable skills..."),
     );
     fireEvent.click(screen.getAllByRole("button", { name: /acme-lookup/ })[0]!);
     expect(
       screen.getByText(
-        "App-associated skills must be available to everyone. This change is applied when you save the app."
-      )
+        "App-associated skills must be available to everyone. This change is applied when you save the app.",
+      ),
     ).toBeInTheDocument();
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Make organization-wide" })
+      screen.getByRole("button", { name: "Make organization-wide" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
     const sameNamedSkills = screen.getAllByRole("button", {
@@ -273,24 +275,24 @@ describe("CreateCustomAppModal", () => {
     });
     expect(sameNamedSkills).toHaveLength(2);
     const disabledSameNamedSkill = sameNamedSkills.find(
-      (item) => item.getAttribute("aria-disabled") === "true"
+      (item) => item.getAttribute("aria-disabled") === "true",
     );
     expect(disabledSameNamedSkill).toHaveTextContent(
-      "A skill named “acme-lookup” is already associated."
+      "A skill named “acme-lookup” is already associated.",
     );
     const invalidSkill = screen.getByRole("button", {
       name: "Associate broken-skill",
     });
     expect(invalidSkill).toHaveAttribute("aria-disabled", "true");
     expect(invalidSkill).toHaveTextContent(
-      "Invalid skill — fix it before associating."
+      "Invalid skill — fix it before associating.",
     );
     const otherAppAssociation = screen.getByRole("button", {
       name: "Associate other-app-skill",
     });
     expect(otherAppAssociation).toHaveAttribute("aria-disabled", "true");
     expect(otherAppAssociation).toHaveTextContent(
-      "Already associated with app “Other CRM”."
+      "Already associated with app “Other CRM”.",
     );
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -302,7 +304,7 @@ describe("CreateCustomAppModal", () => {
         auth_template: {},
         organization_credentials: {},
         associated_skill_ids: ["skill-a"],
-      })
+      }),
     );
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -316,16 +318,16 @@ describe("CreateCustomAppModal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(
-      screen.getByRole("button", { name: /^Start from scratch/ })
+      screen.getByRole("button", { name: /^Start from scratch/ }),
     );
 
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(mockRouterPush).toHaveBeenCalledWith(
-      "/craft/v1/skills/new?externalAppId=17&externalAppName=Acme+CRM"
+      "/craft/v1/skills/new?externalAppId=17&externalAppName=Acme+CRM",
     );
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
@@ -346,17 +348,17 @@ describe("CreateCustomAppModal", () => {
       name: "Discard unsaved changes?",
     });
     fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Cancel" })
+      within(confirmation).getByRole("button", { name: "Cancel" }),
     );
     expect(
-      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" }),
     ).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("Unsaved Acme CRM")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(
-      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" }),
     ).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("Unsaved Acme CRM")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
@@ -365,10 +367,10 @@ describe("CreateCustomAppModal", () => {
       name: "Discard unsaved changes?",
     });
     fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Close" })
+      within(confirmation).getByRole("button", { name: "Close" }),
     );
     expect(
-      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" }),
     ).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("Unsaved Acme CRM")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
@@ -389,12 +391,12 @@ describe("CreateCustomAppModal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(externalAppsService.updateExternalApp).toHaveBeenCalledTimes(1)
+      expect(externalAppsService.updateExternalApp).toHaveBeenCalledTimes(1),
     );
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(
-      screen.queryByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.queryByRole("dialog", { name: "Discard unsaved changes?" }),
     ).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
@@ -430,13 +432,13 @@ describe("CreateCustomAppModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
     ).toBeVisible();
 
     fireEvent.click(
       within(
-        screen.getByRole("dialog", { name: "Discard unsaved changes?" })
-      ).getByRole("button", { name: "Cancel" })
+        screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
+      ).getByRole("button", { name: "Cancel" }),
     );
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
@@ -463,12 +465,14 @@ describe("CreateCustomAppModal", () => {
     });
     expect(mockRouterPush).not.toHaveBeenCalled();
     fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Cancel" })
+      within(confirmation).getByRole("button", { name: "Cancel" }),
     );
 
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled()
+      expect(
+        screen.getByRole("button", { name: "Review skill" }),
+      ).toBeEnabled(),
     );
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
@@ -490,7 +494,7 @@ describe("CreateCustomAppModal", () => {
             { id: "existing-skill", name: "hubspot-crm", is_valid: true },
           ],
         }}
-      />
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
@@ -498,7 +502,7 @@ describe("CreateCustomAppModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "App “Acme CRM” already has an associated skill named “hubspot-crm”. Upload a skill with a different name."
+      "App “Acme CRM” already has an associated skill named “hubspot-crm”. Upload a skill with a different name.",
     );
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
@@ -524,7 +528,7 @@ describe("CreateCustomAppModal", () => {
             { id: "new-skill", name: "newly-created", is_valid: true },
           ],
         }}
-      />
+      />,
     );
 
     expect(screen.getByDisplayValue("Unsaved Acme CRM")).toBeInTheDocument();
@@ -554,7 +558,7 @@ describe("CreateCustomAppModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
     fireEvent.click(
-      screen.getByRole("button", { name: "Associate pending-skill" })
+      screen.getByRole("button", { name: "Associate pending-skill" }),
     );
     expect(screen.getByText("pending-skill")).toBeInTheDocument();
 
@@ -567,7 +571,7 @@ describe("CreateCustomAppModal", () => {
             { id: "server-skill", name: "server-skill", is_valid: true },
           ],
         }}
-      />
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -576,8 +580,8 @@ describe("CreateCustomAppModal", () => {
         CUSTOM_APP.id,
         expect.objectContaining({
           associated_skill_ids: ["pending-skill"],
-        })
-      )
+        }),
+      ),
     );
   });
 });

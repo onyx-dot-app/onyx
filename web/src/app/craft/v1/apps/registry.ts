@@ -39,7 +39,7 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
  * unknown types so the UI never breaks on a new backend provider the
  * frontend hasn't been redeployed for. */
 export function getAppTypeLogo(
-  app_type: ExternalAppType
+  app_type: ExternalAppType,
 ): IconFunctionComponent {
   return _BUILT_IN_LOGOS[app_type] ?? SvgPlug;
 }
@@ -103,6 +103,29 @@ export interface ExternalAppAdminResponse {
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
   // admin may only set availability and policies (the UI hides the rest).
   is_onyx_managed: boolean;
+  // Admin-defined OAuth flow for CUSTOM apps (no secrets); null for
+  // static-credential custom apps and all built-ins.
+  oauth_config: CustomOAuthConfig | null;
+  // The redirect URI to register with the third-party OAuth app; null when the
+  // app doesn't authenticate via OAuth.
+  oauth_redirect_uri: string | null;
+}
+
+export type TokenEndpointAuthMethod =
+  "client_secret_post" | "client_secret_basic";
+
+/**
+ * Authorization-code-flow parameters for an admin-defined OAuth app. Holds no
+ * secrets — the client id/secret are organization credentials.
+ */
+export interface CustomOAuthConfig {
+  authorize_url: string;
+  token_url: string;
+  scopes: string[];
+  scope_param?: string;
+  scope_delimiter?: " " | ",";
+  extra_authorize_params?: Record<string, string>;
+  token_endpoint_auth_method?: TokenEndpointAuthMethod;
 }
 
 export interface ExternalAppUserResponse {
@@ -125,7 +148,7 @@ export interface ExternalAppUserResponse {
  */
 export function availableBuiltInDescriptors(
   descriptors: BuiltInExternalAppDescriptor[],
-  configuredApps: ExternalAppAdminResponse[]
+  configuredApps: ExternalAppAdminResponse[],
 ): BuiltInExternalAppDescriptor[] {
   const configuredAppTypes = new Set(configuredApps.map((app) => app.app_type));
   return descriptors.filter((d) => !configuredAppTypes.has(d.app_type));

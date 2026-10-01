@@ -95,6 +95,8 @@ const APP: ExternalAppAdminResponse = {
     { id: "custom-skill", name: "slack-workflow", is_valid: true },
   ],
   is_onyx_managed: false,
+  oauth_config: null,
+  oauth_redirect_uri: null,
 };
 
 function renderExistingProvider(onClose = jest.fn()) {
@@ -104,7 +106,7 @@ function renderExistingProvider(onClose = jest.fn()) {
       onSaved={jest.fn()}
       descriptor={DESCRIPTOR}
       existingApp={APP}
-    />
+    />,
   );
   return { onClose };
 }
@@ -135,7 +137,7 @@ describe("ConfigureProviderModal", () => {
         auth_template: { Authorization: "Bearer {token}" },
         action_policies: {},
         organization_credentials: { token: "updated-token" },
-      })
+      }),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -155,7 +157,7 @@ describe("ConfigureProviderModal", () => {
         onSaved={jest.fn()}
         descriptor={noInputDescriptor}
         existingApp={null}
-      />
+      />,
     );
 
     const addButton = screen.getByRole("button", { name: "Add" });
@@ -171,8 +173,8 @@ describe("ConfigureProviderModal", () => {
           auth_template: DESCRIPTOR.auth_template,
           organization_credentials: {},
           action_policies: {},
-        }
-      )
+        },
+      ),
     );
     expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
   });
@@ -184,16 +186,16 @@ describe("ConfigureProviderModal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(
-      screen.getByRole("button", { name: /^Start from scratch/ })
+      screen.getByRole("button", { name: /^Start from scratch/ }),
     );
 
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(mockRouterPush).toHaveBeenCalledWith(
-      "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack"
+      "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack",
     );
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
@@ -204,12 +206,12 @@ describe("ConfigureProviderModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
 
     expect(
-      screen.getByRole("button", { name: /Import from GitHub/ })
+      screen.getByRole("button", { name: /Import from GitHub/ }),
     ).toHaveAttribute("aria-disabled", "true");
     expect(
       screen.getByText(
-        "If your skills are in GitHub, import them on the Skills page first, then associate them with this app."
-      )
+        "If your skills are in GitHub, import them on the Skills page first, then associate them with this app.",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -238,19 +240,19 @@ describe("ConfigureProviderModal", () => {
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
     ).toBeVisible();
     expect(onClose).not.toHaveBeenCalled();
 
     fireEvent.click(
       within(
-        screen.getByRole("dialog", { name: "Discard unsaved changes?" })
-      ).getByRole("button", { name: "Cancel" })
+        screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
+      ).getByRole("button", { name: "Cancel" }),
     );
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
 
@@ -269,12 +271,12 @@ describe("ConfigureProviderModal", () => {
 
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
     ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(mockRouterPush).toHaveBeenCalledWith(
-      "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack&draft=draft-id"
+      "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack&draft=draft-id",
     );
   });
 
@@ -290,7 +292,7 @@ describe("ConfigureProviderModal", () => {
         onSaved={jest.fn()}
         descriptor={DESCRIPTOR}
         existingApp={null}
-      />
+      />,
     );
     fireEvent.change(screen.getByPlaceholderText("Token"), {
       target: { value: "org-token" },
@@ -317,7 +319,7 @@ describe("ConfigureProviderModal", () => {
         onSaved={jest.fn()}
         descriptor={DESCRIPTOR}
         existingApp={null}
-      />
+      />,
     );
     fireEvent.change(screen.getByPlaceholderText("Token"), {
       target: { value: "org-token" },
@@ -334,7 +336,7 @@ describe("ConfigureProviderModal", () => {
       name: "Discard unsaved changes?",
     });
     fireEvent.click(
-      within(confirmation).getByRole("button", { name: "Cancel" })
+      within(confirmation).getByRole("button", { name: "Cancel" }),
     );
 
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
@@ -371,7 +373,7 @@ describe("ConfigureProviderModal", () => {
         onSaved={jest.fn()}
         descriptor={DESCRIPTOR}
         existingApp={null}
-      />
+      />,
     );
     fireEvent.change(screen.getByPlaceholderText("Token"), {
       target: { value: "org-token" },
@@ -381,7 +383,7 @@ describe("ConfigureProviderModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
     fireEvent.click(
-      screen.getByRole("button", { name: "Associate slack-helper" })
+      screen.getByRole("button", { name: "Associate slack-helper" }),
     );
     expect(screen.getByRole("button", { name: "Save skills" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
@@ -390,11 +392,11 @@ describe("ConfigureProviderModal", () => {
 
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("dialog", { name: "Discard unsaved changes?" })
+      screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(mockRouterPush).toHaveBeenCalledWith(
-      "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack&draft=draft-id"
+      "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack&draft=draft-id",
     );
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
   });
