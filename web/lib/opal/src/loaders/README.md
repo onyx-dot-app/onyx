@@ -10,7 +10,7 @@
 | `TextLoader` | Real text for a status still in progress: the text itself shimmers. |
 | `IconLoader` | An inline spinner, e.g. beside a label or in a row. |
 
-The shimmer and the spinner hold still under `prefers-reduced-motion`. `CardLoader`, `LineLoader` and `IconLoader` announce themselves to screen readers with the Opal loading label; `TextLoader` shows real text, so it says nothing extra.
+`LineLoader`, `CardLoader` and `TextLoader` share one wave: 40% of the length but at least 40px, a 2s crossing whatever the length, then a 1s pause. Only the colours differ. The shimmer and the spinner hold still under `prefers-reduced-motion`. `CardLoader`, `LineLoader` and `IconLoader` announce themselves to screen readers with the Opal loading label; `TextLoader` shows real text, so it says nothing extra.
 
 ## CardLoader
 

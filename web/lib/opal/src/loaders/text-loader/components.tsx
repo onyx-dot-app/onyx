@@ -5,6 +5,9 @@ import { useLayoutEffect, useRef } from "react";
 import { Text, type TextFont } from "@opal/components";
 import type { RichStr } from "@opal/types";
 
+// The block shimmer in loaders/styles.css (LineLoader, CardLoader) uses the
+// same wave; keep the two in step.
+
 /** The wave's narrowest, in pixels. */
 const MIN_BAND_PX = 40;
 /** On longer text the wave grows to this share of the text's length. */

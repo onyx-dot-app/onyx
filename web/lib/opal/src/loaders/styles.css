@@ -1,8 +1,11 @@
 @reference "#reference.css";
 
 /* ---------------------------------------------------------------------------
-   Shimmer block: a placeholder surface with a highlight sweeping across it.
-   Only `translate` animates, so the sweep composites on the GPU. Under
+   Shimmer block (LineLoader, CardLoader): a placeholder surface with a wave
+   sweeping across it. The wave matches TextLoader's (see the constants in
+   text-loader/components.tsx): 40% of the block's width but at least 40px,
+   a 2s crossing whatever the width, then a 1s pause. Only `translate`
+   animates, so the sweep composites on the GPU. Under
    `prefers-reduced-motion` the sweep stops and the block holds still.
    --------------------------------------------------------------------------- */
 
@@ -10,20 +13,25 @@
   position: relative;
   overflow: hidden;
   background-color: var(--background-tint-02);
+  /* Lets the sweep reach the block's far edge with `cqw`. */
+  container-type: inline-size;
 }
 
 .opal-shimmer-block::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset-block: 0;
+  /* Physical, not logical: the sweep runs left to right in every language. */
+  left: 0;
+  width: max(40px, 40%);
   background-image: linear-gradient(
     90deg,
-    transparent 30%,
+    transparent,
     var(--background-tint-00) 50%,
-    transparent 70%
+    transparent
   );
   will-change: transform;
-  animation: opal-shimmer-slide 1.4s ease-in-out infinite;
+  animation: opal-shimmer-slide 3s linear infinite;
 }
 
 /* ---------------------------------------------------------------------------
@@ -85,12 +93,17 @@
   }
 }
 
+/* One 3s cycle: the wave crosses for 2s, from one band-width off the left
+   edge to just past the right one, then waits off the block for 1s. */
 @keyframes opal-shimmer-slide {
-  from {
+  0% {
     translate: -100% 0;
   }
-  to {
-    translate: 100% 0;
+  66.6667% {
+    translate: 100cqw 0;
+  }
+  100% {
+    translate: 100cqw 0;
   }
 }
 
