@@ -3,20 +3,36 @@
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 
 from onyx.agents.models import RunState
-from onyx.agents.tools import ToolInvocation
+from onyx.agents.runtime import Agent
+from onyx.agents.tools import ToolInvocation, ToolOutcome
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import LLM
-from onyx.llm.models import ToolResult
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequest,
+    TextContent,
+    ToolCall,
+    ToolResult,
+    ToolResultMessage,
+)
 from onyx.tools.interface import ToolContext
-from onyx.tools.models import MemoryOperation, MemoryUpdated, ToolCallException
+from onyx.tools.models import (
+    MemoryOperation,
+    MemoryUpdated,
+    ToolCallException,
+    ToolExecutionException,
+)
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
 @pytest.mark.parametrize("failure", ["domain", "defect", "cancel"])
+@pytest.mark.parametrize("complete_children", [False, True])
 def test_tool_binding_preserves_failure_policy(
-    failure: str, monkeypatch: pytest.MonkeyPatch
+    failure: str, complete_children: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     error = (
         ToolCallException("invalid memory", "Please provide a memory")
@@ -27,23 +43,72 @@ def test_tool_binding_preserves_failure_policy(
     )
     tool = MemoryTool(tool_id=1, llm=MagicMock(spec=LLM))
     monkeypatch.setattr(tool, "_run", MagicMock(side_effect=error))
-    execute = tool.bind(lambda: ToolContext()).execute
-    assert execute is not None
+    tool.result_from_children = MagicMock(side_effect=error)
+    bound = tool.bind(lambda: ToolContext())
     invocation = ToolInvocation(
         call_id="memory",
         arguments={},
         cancellation=CancellationSignal(),
         update=lambda _progress: None,
     )
-    if failure == "domain":
-        result = execute(invocation)
+
+    def execute() -> ToolOutcome:
+        if complete_children:
+            assert bound.result_from_children is not None
+            return bound.result_from_children(invocation, [])
+        return bound.execute(invocation)
+
+    if failure != "cancel":
+        result = execute()
         assert isinstance(result, ToolResult)
         assert result.is_error
-        assert result.text == "Please provide a memory"
+        assert result.text == (
+            "Please provide a memory"
+            if failure == "domain"
+            else "Tool failed with error: invalid runtime state"
+        )
     else:
         with pytest.raises(type(error)) as caught:
-            execute(invocation)
+            execute()
         assert caught.value is error
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        requests.HTTPError("503 Service Unavailable"),
+        ToolExecutionException("Image request rejected by content policy"),
+        ValueError("File missing-file does not exist"),
+    ],
+)
+def test_model_can_respond_after_tool_execution_failure(
+    error: Exception, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool = MemoryTool(tool_id=1, llm=MagicMock(spec=LLM))
+    monkeypatch.setattr(tool, "_run", MagicMock(side_effect=error))
+    observed: list[ToolResultMessage] = []
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if request.messages and isinstance(request.messages[-1], ToolResultMessage):
+            observed.append(request.messages[-1])
+            return AssistantMessage(
+                content=[TextContent(text="I can try another way.")]
+            )
+        return AssistantMessage(
+            content=[ToolCall(id="failed-call", name=tool.name, arguments={})]
+        )
+
+    result = run_agent(
+        Agent(FakeModelClient(generate), tools=[tool.bind(lambda: ToolContext())]),
+        max_steps=2,
+    )
+    assert result.output.text == "I can try another way."
+    assert len(observed) == 1
+    assert observed[0].tool_call_id == "failed-call"
+    assert observed[0].is_error
+    assert observed[0].text == f"Tool failed with error: {error}"
 
 
 def test_tool_binding_preserves_complete_result(

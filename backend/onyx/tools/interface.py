@@ -153,7 +153,7 @@ class Tool(abc.ABC):
 
     @final
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
-        """Run with tracing and convert expected tool errors into model-visible results."""
+        """Run with tracing and return tool errors to the model; cancellation propagates."""
         invocation.cancellation.check()
         with function_span(self.name) as span:
             span.span_data.input = str(invocation.arguments)
@@ -162,6 +162,14 @@ class Tool(abc.ABC):
             except ToolCallException as error:
                 logger.warning("Tool call rejected by %s: %s", self.name, error)
                 result = ToolResult(content=error.llm_facing_message, is_error=True)
+            except Exception as error:
+                logger.exception("Tool execution failed for %s", self.name)
+                span.set_error(
+                    {"message": str(error), "data": {"tool_name": self.name}}
+                )
+                result = ToolResult(
+                    content=f"Tool failed with error: {error}", is_error=True
+                )
             span.span_data.output = (
                 result.text
                 if isinstance(result, ToolResult)
@@ -189,6 +197,14 @@ class Tool(abc.ABC):
                         logger.warning("Tool call rejected by %s: %s", self.name, error)
                         result = ToolResult(
                             content=error.llm_facing_message, is_error=True
+                        )
+                    except Exception as error:
+                        logger.exception("Tool completion failed for %s", self.name)
+                        span.set_error(
+                            {"message": str(error), "data": {"tool_name": self.name}}
+                        )
+                        result = ToolResult(
+                            content=f"Tool failed with error: {error}", is_error=True
                         )
                     span.span_data.output = result.text
                 invocation.cancellation.check()
