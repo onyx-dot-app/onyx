@@ -5,6 +5,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { isStaleSsoStateError } from "@/lib/auth/utils";
 
 // Maps raw IdP/OAuth error codes to user-friendly messages.
 // If the message is a known code, we replace it; otherwise show it as-is.
@@ -26,6 +27,10 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
     "Your identity provider is temporarily unavailable. Please try again later.",
 };
 
+// Shown when the automatic restart for a stale OAuth state was already used.
+const STALE_SIGN_IN_MESSAGE =
+  "This sign-in link has expired or is no longer valid. Please sign in again.";
+
 function resolveMessage(raw: string | null): string | null {
   if (!raw) return null;
   return ERROR_CODE_MESSAGES[raw] ?? raw;
@@ -36,7 +41,9 @@ interface AuthErrorContentProps {
 }
 
 function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
-  const message = resolveMessage(rawMessage);
+  const message = isStaleSsoStateError(rawMessage)
+    ? STALE_SIGN_IN_MESSAGE
+    : resolveMessage(rawMessage);
   return (
     <AuthFlowContainer>
       <div className="flex flex-col items-center gap-4">
