@@ -1487,9 +1487,9 @@ scipy==1.16.3 \
     # via
     #   scikit-learn
     #   sentence-transformers
-sentence-transformers==5.4.1 \
-    --hash=sha256:436bcb1182a0ff42a8fb2b1c43498a70d0a75b688d182f2cd0d1dd115af61ddc \
-    --hash=sha256:a6d640fc363849b63affb8e140e9d328feabab86f83d58ac3e16b1c28140b790
+sentence-transformers==5.6.0 \
+    --hash=sha256:0e7164d051e416c1853ade7c274ff52af3f9da0f4be7f0b83d734c27699e1057 \
+    --hash=sha256:d2075b5e687a1611005e20ab04a6846994d51adfcf39610aed066af3c0c0b81f
 sentry-sdk==2.14.0 \
     --hash=sha256:1e0e2eaf6dad918c7d1e0edac868a7bf20017b177f242cefe2a6bcd47955961d \
     --hash=sha256:b8bc3dc51d06590df1291b7519b85c75e2ced4f28d9ea655b6d54033503b5bf4
@@ -1604,9 +1604,9 @@ torch==2.9.1 \
     # via
     #   accelerate
     #   sentence-transformers
-tqdm==4.67.1 \
-    --hash=sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2 \
-    --hash=sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2
+tqdm==4.70.0 \
+    --hash=sha256:55b0b0dbd97462d06ebee91e4dac24ed4d4702be82b24f07e6c1d27e08cea220 \
+    --hash=sha256:7f585706bfddbdebf89daac705b2dfcc16890130727d3197ca62c732b4310953
     # via
     #   huggingface-hub
     #   openai
