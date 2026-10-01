@@ -1,3 +1,4 @@
+import "@opal/components/cards/shared.css";
 import "@opal/components/cards/select-card/styles.css";
 import type { BorderVariants, Rounding, Spacing } from "@opal/types";
 import { roundingToRem, spacingToRem } from "@opal/shared";
@@ -249,6 +250,7 @@ function SelectCardShell({
         className="opal-select-card"
         style={{ ...paddingStyle, ...headerRadius }}
         data-border={border}
+        data-opal-status-border="default"
       >
         {children}
       </div>
@@ -264,6 +266,7 @@ function SelectCardShell({
         <CardFold
           expanded={foldOpen}
           border={border}
+          borderColor="default"
           radius={radius}
           contentHeight={foldHeight}
         >
