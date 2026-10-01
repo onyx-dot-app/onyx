@@ -40,10 +40,11 @@ interface UploadFile {
  */
 async function uploadFilesToChat(
   page: Page,
-  files: UploadFile[]
+  files: UploadFile[],
+  getStatus: () => string = () => "COMPLETED"
 ): Promise<void> {
-  // Report every tracked file as COMPLETED so the chat input treats uploads
-  // as ready. The send button is disabled while a file is still processing,
+  // Report every tracked file as COMPLETED (by default) so the chat input
+  // treats uploads as ready. The send button is disabled while a file is still processing,
   // and a file that fails to index is dropped from the message — so without
   // this stub these tests would race (or depend on) the real indexing
   // pipeline. UI rendering is what's under test here, not indexing.
@@ -57,7 +58,7 @@ async function uploadFilesToChat(
       body: JSON.stringify(
         ids.map((id) => ({
           id,
-          status: "COMPLETED",
+          status: getStatus(),
           token_count: 1,
           chunk_count: 1,
         }))
@@ -181,6 +182,44 @@ test.describe("Chat File Uploads", () => {
       ).toBeVisible();
 
       await chat.screenshotContainer("chat-uploaded-multiple-files");
+    });
+  });
+
+  test.describe("File Processing State", () => {
+    test("file chip shows processing and blocks send until the file is ready", async ({
+      page,
+    }) => {
+      await chat.goto();
+      await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
+
+      let fileStatus = "PROCESSING";
+      const fileName = "notes-processing.txt";
+      await uploadFilesToChat(
+        page,
+        [
+          {
+            name: fileName,
+            mimeType: "text/plain",
+            buffer: Buffer.from("Notes that are still processing.", "utf-8"),
+          },
+        ],
+        () => fileStatus
+      );
+
+      const { inputBar } = chat;
+      await inputBar.expectFileProcessing();
+
+      await inputBar.fill("Summarize this file");
+      await expect(inputBar.sendButton).toBeDisabled();
+      await inputBar.send();
+      await chat.expectNoHumanMessages();
+      await inputBar.expectText("Summarize this file");
+
+      fileStatus = "COMPLETED";
+      await inputBar.expectFileProcessing(false);
+      await expect(inputBar.sendButton).toBeEnabled();
+      await inputBar.send();
+      await chat.expectHumanMessage("Summarize this file");
     });
   });
 

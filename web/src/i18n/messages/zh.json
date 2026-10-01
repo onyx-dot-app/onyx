@@ -4819,6 +4819,12 @@
         "azureGptImage2": {
           "description": "托管在 Microsoft Azure 上的 GPT Image 2 图像生成模型。"
         },
+        "azureGptImage25Flare": {
+          "description": "托管在 Microsoft Azure 上的 GPT Image 2.5 Flare 图像生成模型。"
+        },
+        "azureGptImage25Sunburst": {
+          "description": "托管在 Microsoft Azure 上的 GPT Image 2.5 Sunburst 图像生成模型。"
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) 模型专为速度和效率而设计。"
         },
@@ -4835,7 +4841,13 @@
           "description": "OpenAI 上一代旗舰图像生成模型。"
         },
         "openaiGptImage2": {
-          "description": "OpenAI 最新的图像生成模型，提示词还原度最高。"
+          "description": "OpenAI 上一代图像生成模型，提示词还原度高。"
+        },
+        "openaiGptImage25Flare": {
+          "description": "OpenAI 最新的图像生成模型，兼顾高质量与快速生成。"
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
         }
       },
       "setDefaultError": {
