@@ -10,7 +10,7 @@ import type {
   Credential,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { GmailAuthSection } from "./Credential";
 import { usePublicCredentials } from "@/lib/hooks";
 import { useUser } from "@/providers/UserProvider";

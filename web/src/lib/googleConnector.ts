@@ -1,14 +1,14 @@
 import useSWR, { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import { FetchError, errorHandlingFetcher } from "@/lib/fetcher";
-import type { Credential } from "@/lib/connectors/types";
+import type { Credential } from "@/lib/credentials/types";
 import type { ConnectorSnapshot } from "@/lib/connectors/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import {
   refreshSourceCredentials,
   useSourceCredentials,
 } from "@/lib/connectors/hooks";
-import type { SourceCredentialsResult } from "@/lib/connectors/types";
+import type { SourceCredentialsResult } from "@/lib/credentials/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 // Constants for service names to avoid typos

@@ -21,7 +21,7 @@ import {
   ValidSources,
 } from "@/lib/connectors/types/source";
 import { credentialTemplates } from "@/lib/connectors/credentials";
-import type { Credential } from "@/lib/connectors/types";
+import type { Credential } from "@/lib/credentials/types";
 import {
   defaultRefreshFreqMinutes,
   useConnectorConfiguration,

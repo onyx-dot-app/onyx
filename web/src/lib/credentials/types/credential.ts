@@ -1,6 +1,6 @@
 import type { SWRResponse } from "swr";
 import type { CredentialCreationMethod } from "@/lib/credentials/credentialCreation";
-import type { CredentialFieldValues } from "@/lib/credentials/types";
+import type { CredentialFieldValues } from "@/lib/credentials/types/fields";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
 
@@ -133,4 +133,19 @@ export interface CredentialSetup {
   authorize: (invalidUrlMessage: string) => Promise<string | null>;
   /** True while the popup request is in flight. */
   isAuthorizing: boolean;
+}
+
+/** One credential field a federated source asks for. */
+export interface CredentialFieldSpec {
+  type: string;
+  description: string;
+  required: boolean;
+  default?: any;
+  example?: any;
+  secret: boolean;
+}
+
+/** The credential fields a federated source asks for. */
+export interface CredentialSchemaResponse {
+  credentials: Record<string, CredentialFieldSpec>;
 }

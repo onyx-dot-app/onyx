@@ -20,7 +20,7 @@ import { getSourceDisplayName } from "@/lib/sources";
 import type {
   ConfluenceCredentialJson,
   Credential,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { useCredentialSetup } from "@/lib/connectors/hooks";
 import { Spinner } from "@/components/Spinner";

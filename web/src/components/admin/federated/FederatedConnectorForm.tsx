@@ -5,12 +5,14 @@ import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Button, InputCheckbox, Divider, Tooltip } from "@opal/components";
 import {
-  CredentialFieldSpec,
   ConfigurationFieldSpec,
   FederatedConnectorCreateRequest,
   FederatedConnectorDetail,
-  CredentialSchemaResponse,
 } from "@/lib/types";
+import {
+  CredentialFieldSpec,
+  CredentialSchemaResponse,
+} from "@/lib/credentials/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";

@@ -5,7 +5,7 @@ import { getDisplayNameForCredentialKey } from "@/lib/connectors/utils";
 import type {
   Credential,
   CredentialTemplateWithAuth,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { isTypedFileField } from "@/lib/connectors/utils";
 import type {
   CredentialFieldValues,

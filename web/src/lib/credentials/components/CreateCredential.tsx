@@ -13,7 +13,7 @@ import { credentialTemplates } from "@/lib/connectors/credentials";
 import type {
   Credential,
   CredentialTemplateWithAuth,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
 import type {
   CredentialActionType,

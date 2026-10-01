@@ -8,7 +8,7 @@ import { SvgEdit } from "@opal/icons";
 import type {
   ConfluenceCredentialJson,
   Credential,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import type { Connector } from "@/lib/connectors/types";
 import {
   SvgArrowExchange,

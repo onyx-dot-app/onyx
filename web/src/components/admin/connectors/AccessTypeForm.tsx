@@ -13,7 +13,7 @@ import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
-import type { Credential } from "@/lib/connectors/types";
+import type { Credential } from "@/lib/credentials/types";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";

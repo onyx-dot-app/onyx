@@ -53,7 +53,7 @@ import type {
   ZendeskCredentialJson,
   ZoomCredentialJson,
   ZulipCredentialJson,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 
 // Gmail and Google Drive use dedicated credential UIs, so their templates are partial.
 type CredentialTemplateMap = Record<ValidSources, object | null> & {

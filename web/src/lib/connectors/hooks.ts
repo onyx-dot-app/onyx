@@ -33,13 +33,11 @@ import type {
   CredentialSetup,
   OAuthDetails,
   SourceCredentialsResult,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type {
-  CredentialSchemaResponse,
-  FederatedConnectorDetail,
-} from "@/lib/types";
+import type { FederatedConnectorDetail } from "@/lib/types";
+import type { CredentialSchemaResponse } from "@/lib/credentials/types";
 import type {
   ConfigurableSources,
   ValidSources,

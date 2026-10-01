@@ -1,4 +1,4 @@
-import type { OAuthDetails } from "@/lib/connectors/types";
+import type { OAuthDetails } from "@/lib/credentials/types";
 
 export enum CredentialCreationMethod {
   OAuth = "oauth",

@@ -7,7 +7,7 @@ import type {
   ValidStatuses,
 } from "@/lib/types";
 import type { Connector } from "@/lib/connectors/types/connector";
-import type { Credential } from "@/lib/connectors/types/credential";
+import type { Credential } from "@/lib/credentials/types";
 
 export enum ConnectorCredentialPairStatus {
   SCHEDULED = "SCHEDULED",
