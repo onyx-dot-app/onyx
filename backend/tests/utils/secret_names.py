@@ -47,6 +47,8 @@ class TestSecret(StrEnum):
     JIRA_USER_EMAIL = "jira-user-email"
     JIRA_API_TOKEN = "jira-api-token"
     JIRA_API_TOKEN_SCOPED = "jira-api-token-scoped"
+    JSM_DOMAIN = "jsm-domain"
+    JSM_SERVICE_DESK_ID = "jsm-service-desk-id"
     GONG_ACCESS_KEY = "gong-access-key"
     GONG_ACCESS_KEY_SECRET = "gong-access-key-secret"
     GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR = "google-drive-service-account-json"

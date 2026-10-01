@@ -885,6 +885,40 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Configure which Jira Service Management (JSM) project to index. Customer requests from the specified service desk will be indexed.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter your Atlassian domain:",
+        label: "Atlassian Domain",
+        name: "jsm_domain",
+        optional: false,
+        description:
+          "Your Atlassian site domain (e.g., your-domain.atlassian.net, without https://).",
+      },
+      {
+        type: "text",
+        query: "Enter the service desk ID:",
+        label: "Service Desk ID",
+        name: "service_desk_id",
+        optional: false,
+        description:
+          "The ID of the JSM service desk to index (find it under Project Settings > Service desk ID, or the number in the portal URL, e.g., '1').",
+      },
+      {
+        type: "text",
+        query: "Filter by request status (optional):",
+        label: "Request Status Filter",
+        name: "request_status",
+        optional: true,
+        description:
+          "Only index requests with this status category (e.g., 'OPEN' or 'DONE'). Leave empty to index all requests.",
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
