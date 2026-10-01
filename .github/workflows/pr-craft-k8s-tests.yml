@@ -34,7 +34,9 @@ permissions:
   contents: read
 
 env:
+  # The chart's object store, and the MinIO it falls back to while copying.
   S3_ENDPOINT_URL: "http://127.0.0.1:9004"
+  S3_LEGACY_ENDPOINT_URL: "http://127.0.0.1:9005"
   S3_FILE_STORE_BUCKET_NAME: "onyx-file-store-bucket"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
@@ -622,17 +624,38 @@ jobs:
       - name: Forward chart MinIO to runner
         run: |
           set -eo pipefail
-          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-minio 9004:9000; sleep 1; done" \
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-minio 9005:9000; sleep 1; done" \
             > "${RUNNER_TEMP}/minio-port-forward.log" 2>&1 &
           echo "$!" > "${RUNNER_TEMP}/minio-port-forward.pid"
           for _ in $(seq 1 30); do
-            if curl -fsS "${S3_ENDPOINT_URL}/minio/health/ready"; then
-              echo "chart MinIO is reachable at ${S3_ENDPOINT_URL}"
+            if curl -fsS "${S3_LEGACY_ENDPOINT_URL}/minio/health/ready"; then
+              echo "chart MinIO is reachable at ${S3_LEGACY_ENDPOINT_URL}"
               exit 0
             fi
             sleep 1
           done
           cat "${RUNNER_TEMP}/minio-port-forward.log" || true
+          exit 1
+
+      - name: Wait for chart object store ready
+        run: |
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+            deployment/onyx-object-store --timeout=180s
+
+      - name: Forward chart object store to runner
+        run: |
+          set -eo pipefail
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-object-store 9004:8333; sleep 1; done" \
+            > "${RUNNER_TEMP}/object-store-port-forward.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/object-store-port-forward.pid"
+          for _ in $(seq 1 30); do
+            if curl -fsS "${S3_ENDPOINT_URL}/healthz"; then
+              echo "chart object store is reachable at ${S3_ENDPOINT_URL}"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "${RUNNER_TEMP}/object-store-port-forward.log" || true
           exit 1
 
       - name: Wait for chart app runtime ready
@@ -767,6 +790,8 @@ jobs:
           kubectl -n "${HELM_RELEASE_NAMESPACE}" get pods,svc,job -l release=onyx || true
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-minio --tail=500 || true
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs job/onyx-minio-post-job --all-containers --tail=500 || true
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-object-store --tail=500 || true
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs -l app=legacy-minio-copy --tail=500 || true
           python - <<'PY' || true
           import os, boto3
           from botocore.config import Config
@@ -797,7 +822,7 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::port-forward logs"
-          for f in postgres redis minio api; do
+          for f in postgres redis minio object-store api; do
             echo "--- ${f} ---"; cat "${RUNNER_TEMP}/${f}-port-forward.log" 2>/dev/null || true
           done
           echo "::endgroup::"
@@ -828,6 +853,7 @@ jobs:
             "${RUNNER_TEMP}/postgres-port-forward.pid" \
             "${RUNNER_TEMP}/redis-port-forward.pid" \
             "${RUNNER_TEMP}/minio-port-forward.pid" \
+            "${RUNNER_TEMP}/object-store-port-forward.pid" \
             "${RUNNER_TEMP}/api-port-forward.pid" \
             "${RUNNER_TEMP}/sandbox-log-watcher.pid"; do
             if [ -f "${pid_file}" ]; then

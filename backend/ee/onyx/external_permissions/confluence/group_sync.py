@@ -161,7 +161,9 @@ def confluence_group_sync(
     tenant_id: str,
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
-    provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
+    provider = OnyxDBCredentialsProvider(
+        tenant_id, cc_pair.connector.source, cc_pair.credential_id
+    )
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
     scoped_token = cc_pair.connector.connector_specific_config.get(
         "scoped_token", False

@@ -25,7 +25,9 @@ locally-launched services (API server, Celery workers, etc.) connect to the
 correct Docker Compose infrastructure for the current project/worktree.
 
 Queries running containers for their actual host port mappings, then upserts
-the corresponding keys in .vscode/.env. All other entries are left untouched.
+the corresponding keys in .vscode/.env. S3_LEGACY_ENDPOINT_URL is dropped,
+since the dev stack runs the object store only. All other entries are left
+untouched.
 
 Examples:
   # Write env vars for the current project (auto-detected from directory)
@@ -85,6 +87,11 @@ func runEnv(dryRun bool) error {
 	if err := setEnvValues(envPath, appEnv); err != nil {
 		return fatalErrorf("Failed to update %s: %w", envPath, err)
 	}
+	// Dev runs the object store only, so a legacy endpoint left by an earlier
+	// ods would only make the app fail over to a MinIO that never starts.
+	if err := removeEnvKey(envPath, legacyEndpointVar); err != nil {
+		return fatalErrorf("Failed to update %s: %w", envPath, err)
+	}
 
 	log.Infof("Updated %s", envPath)
 	for k, v := range appEnv {
@@ -101,7 +108,7 @@ func queryContainerPorts(projName string) *docker.ResolvedPorts {
 	resolved := docker.NewResolvedPorts()
 
 	for _, svc := range docker.InfraServices {
-		container := fmt.Sprintf("%s-%s-1", projName, svc.Name)
+		container := docker.ContainerName(projName, svc.Name)
 		for _, spec := range svc.Ports {
 			port, err := docker.GetHostPort(container, spec.ContainerPort)
 			if err != nil {
@@ -156,4 +163,21 @@ func setEnvValues(envPath string, values map[string]string) error {
 	}
 
 	return os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0644)
+}
+
+// removeEnvKey drops every "KEY=" line from a dotenv file.
+func removeEnvKey(envPath, key string) error {
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", envPath, err)
+	}
+
+	prefix := key + "="
+	var kept []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, prefix) {
+			kept = append(kept, line)
+		}
+	}
+	return os.WriteFile(envPath, []byte(strings.Join(kept, "\n")), 0644)
 }

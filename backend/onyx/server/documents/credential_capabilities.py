@@ -26,6 +26,7 @@ from onyx.connectors.capability_checks.runner import (
     capability_check_run_ceiling_seconds,
     capability_check_run_stale_after,
 )
+from onyx.connectors.credential_families import is_credential_usable_for_source
 from onyx.connectors.factory import validate_connector_config
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
@@ -172,6 +173,9 @@ def trigger_capability_check(
             "connector_specific_config requires connector_id: the "
             "credential-scoped run is config-less by definition.",
         )
+    # A connector-scoped run checks the connector's source, which a family
+    # credential may not share.
+    run_source = credential.source
     if request.connector_id is not None:
         connector = fetch_connector_by_id(request.connector_id, db_session)
         # One shape for missing and inaccessible, so neither connector existence
@@ -182,13 +186,22 @@ def trigger_capability_check(
                 f"Connector {request.connector_id} does not exist or is not "
                 "accessible.",
             )
-        if connector.source != credential.source:
+        if not is_credential_usable_for_source(
+            credential.source,
+            (
+                credential.credential_json.get_value(apply_mask=False)
+                if credential.credential_json
+                else {}
+            ),
+            connector.source,
+        ):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Connector {request.connector_id} is a "
                 f"{connector.source.value} connector; credential "
-                f"{credential_id} is for {credential.source.value}.",
+                f"{credential_id} cannot be used by it.",
             )
+        run_source = connector.source
         if request.connector_specific_config is not None:
             try:
                 validate_connector_config(
@@ -200,9 +213,9 @@ def trigger_capability_check(
         db_session,
         credential_id=credential_id,
         connector_id=request.connector_id,
-        source=credential.source,
+        source=run_source,
         trigger=CapabilityCheckTrigger.MANUAL,
-        active_within=capability_check_run_stale_after(credential.source),
+        active_within=capability_check_run_stale_after(run_source),
     )
     if row is None:
         # An unexpired run is in flight; return its row without re-enqueueing.
@@ -241,7 +254,7 @@ def trigger_capability_check(
             # Queue wait is bounded by one execution ceiling; the staleness
             # cutoff above allows for both, so an expired task never strands the
             # scope.
-            expires=capability_check_run_ceiling_seconds(credential.source),
+            expires=capability_check_run_ceiling_seconds(run_source),
         )
     except Exception:
         # The 503 handler logs no traceback, so record the cause here (broker

@@ -4887,6 +4887,11 @@ class FileRecord(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    # The legacy copy looks records up by object, once per copied file.
+    __table_args__ = (
+        Index("ix_file_record_bucket_name_object_key", "bucket_name", "object_key"),
+    )
+
 
 class FileContent(Base):
     """Stores file content in PostgreSQL using Large Objects.

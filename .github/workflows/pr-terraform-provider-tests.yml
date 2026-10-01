@@ -51,7 +51,7 @@ env:
   POSTGRES_PASSWORD: "password"
   # Pin defensively. Compose's ${VAR:-default} prefers a leaked host value over
   # the --env-file one.
-  S3_ENDPOINT_URL: "http://minio:9000"
+  S3_ENDPOINT_URL: "http://object-store:8333"
 
 jobs:
   changes:
@@ -271,7 +271,7 @@ jobs:
           EOF
 
       # api_server and background are named; depends_on pulls in db / cache /
-      # opensearch / model servers / minio. web_server + nginx are omitted.
+      # opensearch / model servers / object store. web_server + nginx are omitted.
       - name: Bring up the stack
         working-directory: deployment/docker_compose
         run: |

@@ -62,7 +62,7 @@ func composeEnvFile(t *testing.T, content string) map[string]string {
 	return env
 }
 
-const composeInfraServices = "relational_db cache opensearch inference_model_server minio indexing_model_server code-interpreter"
+const composeInfraServices = "relational_db cache opensearch inference_model_server object-store indexing_model_server code-interpreter"
 
 func TestComposeCommand(t *testing.T) {
 	tests := []struct {
@@ -90,13 +90,14 @@ func TestComposeCommand(t *testing.T) {
 			wantCall: "compose -p ods-proj -f docker-compose.yml -f docker-compose.dev.yml --profile s3-filestore up -d --force-recreate " + composeInfraServices,
 			wantEnv: map[string]string{
 				"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES": "false",
-				"POSTGRES_HOST_PORT":                      "25432",
-				"REDIS_HOST_PORT":                         "26379",
-				"OPENSEARCH_HOST_PORT":                    "29200",
-				"MODEL_SERVER_HOST_PORT":                  "29000",
-				"MINIO_API_HOST_PORT":                     "29000",
-				"MINIO_CONSOLE_HOST_PORT":                 "29001",
-				"CODE_INTERPRETER_HOST_PORT":              "28000",
+				"MINIO_REPLICAS":             "0",
+				"S3_ENDPOINT_URL":            "http://object-store:8333",
+				"POSTGRES_HOST_PORT":         "25432",
+				"REDIS_HOST_PORT":            "26379",
+				"OPENSEARCH_HOST_PORT":       "29200",
+				"MODEL_SERVER_HOST_PORT":     "29000",
+				"OBJECT_STORE_HOST_PORT":     "28333",
+				"CODE_INTERPRETER_HOST_PORT": "28000",
 			},
 			wantTag:   "edge",
 			wantPorts: true,
@@ -105,7 +106,7 @@ func TestComposeCommand(t *testing.T) {
 			name:       "multitenant down stops infra without touching .env",
 			args:       []string{"multitenant", "--down", "--infra"},
 			initialEnv: "KEEP=1\n",
-			wantCall:   "compose -p ods-proj -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.multitenant.yml --profile s3-filestore down " + composeInfraServices,
+			wantCall:   "compose -p ods-proj -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.multitenant.yml --profile s3-filestore down " + composeInfraServices + " minio",
 			wantEnv:    map[string]string{"KEEP": "1"},
 			wantTag:    "unset",
 		},
