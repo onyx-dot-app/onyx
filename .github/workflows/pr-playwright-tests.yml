@@ -25,7 +25,6 @@ env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-  GEN_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
   FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
   GOOGLE_PSE_API_KEY: ${{ secrets.GOOGLE_PSE_API_KEY }}
@@ -65,7 +64,6 @@ env:
   MCP_PER_USER_KEY_SERVER_HOST: 0.0.0.0
   MCP_PER_USER_KEY_SERVER_PUBLIC_HOST: host.docker.internal
 
-  MOCK_LLM_RESPONSE: true
   MCP_TEST_SERVER_PORT: 8004
   MCP_TEST_SERVER_URL: http://host.docker.internal:8004/mcp
   MCP_TEST_SERVER_PUBLIC_URL: http://host.docker.internal:8004/mcp
@@ -533,7 +531,6 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
@@ -545,7 +542,6 @@ jobs:
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
@@ -595,7 +591,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml up -d --wait --wait-timeout 300
         id: start_docker
 
       - name: Seed dev license
@@ -642,7 +638,7 @@ jobs:
           cd deployment/docker_compose
           # Pass the same -f overrides as `up` so the mock MCP/IdP services
           # (defined only in the override files) are included in the logs.
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
@@ -716,7 +712,6 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
@@ -728,7 +723,6 @@ jobs:
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
@@ -784,7 +778,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml up -d --wait --wait-timeout 300
         id: start_docker
 
       - name: Seed dev license
@@ -817,7 +811,7 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
@@ -876,7 +870,6 @@ jobs:
 
       - name: Create .env file for Docker Compose
         env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
         run: |
@@ -884,8 +877,6 @@ jobs:
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
-          MOCK_LLM_RESPONSE=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
           # MCP E2E tests register mock servers on host.docker.internal (a private
@@ -904,7 +895,7 @@ jobs:
       - name: Start Docker containers (lite)
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d --wait
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml -f docker-compose.mock-llm-test.yml up -d --wait
         id: start_docker
 
       - name: Seed dev license
@@ -929,7 +920,7 @@ jobs:
           WORKSPACE: ${{ github.workspace }}
         run: |
           cd deployment/docker_compose
-          docker compose logs > docker-compose.log
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml -f docker-compose.mock-llm-test.yml logs > docker-compose.log
           mv docker-compose.log ${WORKSPACE}/docker-compose.log
 
       - name: Upload logs
