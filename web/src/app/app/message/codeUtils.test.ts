@@ -120,7 +120,7 @@ describe("preprocessLaTeX", () => {
 
     it("should handle Einstein's equation with mixed LaTeX and code blocks", () => {
       const input =
-        "Sure! The equation for Einstein's mass-energy equivalence, \\(E = mc^2\\), can be written in LaTeX as follows: ```latex\nE = mc^2\n``` When rendered, it looks like this: \\[ E = mc^2 \\]";
+        "Sure! The equation for Einstein's mass-energy equivalence, \\(E = mc^2\\), can be written in LaTeX as follows:\n```latex\nE = mc^2\n```\nWhen rendered, it looks like this: \\[ E = mc^2 \\]";
       const processed = preprocessLaTeX(input);
 
       // LaTeX inline delimiters should be converted
@@ -350,6 +350,12 @@ describe("preprocessLaTeX fenced code", () => {
   it("does not treat a four-space indented fence as code", () => {
     expect(preprocessLaTeX("    ~~~\nPrice $5\n~~~")).toBe(
       "    ~~~\nPrice \\$5\n~~~"
+    );
+  });
+
+  it("protects an unclosed trailing block while streaming", () => {
+    expect(preprocessLaTeX("Text $5\n```\nlet x = $5")).toBe(
+      "Text \\$5\n```\nlet x = $5"
     );
   });
 

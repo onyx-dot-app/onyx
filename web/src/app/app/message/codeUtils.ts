@@ -178,8 +178,8 @@ export const labelBareCodeFences = (content: string): string => {
     .join("\n");
 };
 
-// Replaces each closed fenced code block with the string from `replace`;
-// an unclosed trailing block is left as is.
+// Replaces each fenced code block, including an unclosed trailing one
+// (mid-stream), with the string from `replace`.
 const replaceFencedCodeBlocks = (
   content: string,
   replace: (block: string) => string
@@ -209,7 +209,7 @@ const replaceFencedCodeBlocks = (
       out.push(line);
     }
   }
-  if (block) out.push(...block);
+  if (block) out.push(replace(block.join("\n")));
   return out.join("\n");
 };
 
