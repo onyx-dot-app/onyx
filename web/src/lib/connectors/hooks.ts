@@ -8,7 +8,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { deleteCredential } from "@/lib/credential";
+import { adminDeleteCredential } from "@/lib/credential";
 import {
   CredentialCreationMethod,
   getCredentialCreationMethods,
@@ -89,7 +89,8 @@ export function useSourceCredentials(
  * is a toast, a banner or inline text.
  */
 export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
-  const { data: credentials } = useSourceCredentials(sourceType);
+  const { data: credentials, error: credentialsError } =
+    useSourceCredentials(sourceType);
   const { data: oauthDetails, isLoading } = useOAuthDetails(sourceType);
   const [openMethod, setOpenMethod] = useState<CredentialCreationMethod | null>(
     null
@@ -153,7 +154,9 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   ): Promise<string | null> {
     let response: Response;
     try {
-      response = await deleteCredential(credential.id, true);
+      // The list holds every credential this admin manages, not only their
+      // own, so the delete goes through the admin route.
+      response = await adminDeleteCredential(credential.id);
     } catch (error) {
       // The request never landed, so nothing changed and nothing refreshes.
       return errorMessage(error) || failureMessage;
@@ -193,6 +196,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   return {
     displayName,
     credentials,
+    credentialsError,
     oauthDetails,
     isLoading,
     methods,
