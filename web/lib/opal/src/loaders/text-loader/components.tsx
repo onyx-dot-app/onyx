@@ -9,8 +9,9 @@ import type { RichStr } from "@opal/types";
 const MIN_BAND_PX = 40;
 /** On longer text the wave grows to this share of the text's length. */
 const BAND_SHARE = 0.4;
-/** How fast the wave travels, in pixels per second, on any length of text. */
-const RATE_PX_PER_S = 60;
+/** How long the wave takes to cross the text, in seconds. Its rate scales
+ * with the text's length, so every crossing takes this long. */
+const CROSSING_S = 2;
 /** The pause between waves, in seconds. */
 const GAP_S = 1;
 
@@ -28,9 +29,9 @@ interface TextLoaderProps {
  * `LineLoader`.
  *
  * The wave is the background of the inline text, clipped to its glyphs, so
- * on wrapped text it runs along each line in reading order. It moves at one
- * rate on any text: the component measures the text's run length (every
- * line fragment) and sets the pass duration from it.
+ * on wrapped text it runs along each line in reading order. The component
+ * measures the text's run length (every line fragment) and scales the wave's
+ * width and rate to it.
  */
 function TextLoader({ children, font = "main-ui-action" }: TextLoaderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -49,8 +50,10 @@ function TextLoader({ children, font = "main-ui-action" }: TextLoaderProps) {
         0
       );
       const band = Math.max(MIN_BAND_PX, length * BAND_SHARE);
-      const tail = RATE_PX_PER_S * GAP_S;
-      const duration = (length + band + tail) / RATE_PX_PER_S;
+      const rate = (length + band) / CROSSING_S;
+      // The pause is distance travelled off the end at this text's rate.
+      const tail = rate * GAP_S;
+      const duration = CROSSING_S + GAP_S;
       wave.style.setProperty("--opal-text-shimmer-band", `${band}px`);
       wave.style.setProperty("--opal-text-shimmer-tail", `${tail}px`);
       wave.style.setProperty("--opal-text-shimmer-duration", `${duration}s`);
