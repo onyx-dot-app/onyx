@@ -43,15 +43,17 @@ from onyx.natural_language_processing.constants import (
     DEFAULT_VOYAGE_MODEL,
     EmbeddingModelTextType,
 )
+from onyx.natural_language_processing.embedding_auth import (
+    ApiKeyEmbeddingAuth,
+    CloudEmbeddingAuth,
+    VertexEmbeddingAuth,
+    build_embedding_auth,
+)
 from onyx.natural_language_processing.exceptions import (
     CohereBillingLimitError,
     ModelServerRateLimitError,
 )
 from onyx.natural_language_processing.utils import get_tokenizer, tokenizer_trim_content
-from onyx.natural_language_processing.vertex_auth import (
-    VertexEmbeddingConfig,
-    resolve_vertex_embedding_credentials,
-)
 from onyx.server.metrics.embedding import (
     observe_embedding_client,
     track_embedding_in_progress,
@@ -329,24 +331,29 @@ class AuthenticationError(Exception):
 class CloudEmbedding:
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None,
         provider: EmbeddingProvider,
         api_url: str | None = None,
         api_version: str | None = None,
         timeout: int = API_BASED_EMBEDDING_TIMEOUT,
-        vertex_config: VertexEmbeddingConfig | None = None,
+        auth: CloudEmbeddingAuth | None = None,
     ) -> None:
         self.provider = provider
         self.api_key = api_key
         self.api_url = api_url
         self.api_version = api_version
         self.timeout = timeout
-        self.vertex_config = vertex_config
+        self.auth = auth or build_embedding_auth(provider, api_key)
         self.http_client = httpx.AsyncClient(timeout=timeout)
         self._closed = False
         self.sanitized_api_key = (
             api_key[:4] + "********" + api_key[-4:] if api_key else None
         )
+
+    def _resolve_api_key(self) -> str:
+        if not isinstance(self.auth, ApiKeyEmbeddingAuth):
+            raise ValueError("This provider does not use API-key authentication.")
+        return self.auth.resolve_credentials().api_key.get_secret_value()
 
     async def _embed_openai(
         self, texts: list[str], model: str | None, reduced_dimension: int | None
@@ -358,7 +365,7 @@ class CloudEmbedding:
 
         # Use the OpenAI specific timeout for this one
         client = openai.AsyncOpenAI(
-            api_key=self.api_key, timeout=OPENAI_EMBEDDING_TIMEOUT
+            api_key=self._resolve_api_key(), timeout=OPENAI_EMBEDDING_TIMEOUT
         )
 
         final_embeddings: list[Embedding] = []
@@ -380,7 +387,7 @@ class CloudEmbedding:
         if not model:
             model = DEFAULT_COHERE_MODEL
 
-        client = CohereAsyncClient(api_key=self.api_key)
+        client = CohereAsyncClient(api_key=self._resolve_api_key())
 
         final_embeddings: list[Embedding] = []
         for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
@@ -406,7 +413,7 @@ class CloudEmbedding:
             model = DEFAULT_VOYAGE_MODEL
 
         client = voyageai.AsyncClient(
-            api_key=self.api_key, timeout=API_BASED_EMBEDDING_TIMEOUT
+            api_key=self._resolve_api_key(), timeout=API_BASED_EMBEDDING_TIMEOUT
         )
 
         response = await client.embed(
@@ -426,7 +433,7 @@ class CloudEmbedding:
             model=model,
             input=texts,
             timeout=API_BASED_EMBEDDING_TIMEOUT,
-            api_key=self.api_key,
+            api_key=self._resolve_api_key(),
             api_base=self.api_url,
             api_version=self.api_version,
         )
@@ -446,15 +453,15 @@ class CloudEmbedding:
         resolved_model = model or DEFAULT_VERTEX_MODEL
 
         # ADC discovery can contact the GKE metadata server.
-        credentials, project_id, location = await asyncio.to_thread(
-            resolve_vertex_embedding_credentials, self.api_key, self.vertex_config
-        )
+        if not isinstance(self.auth, VertexEmbeddingAuth):
+            raise ValueError("Google embeddings require Vertex authentication.")
+        resolved = await asyncio.to_thread(self.auth.resolve_credentials)
 
         client = genai.Client(
             vertexai=True,
-            project=project_id,
-            location=location,
-            credentials=credentials,
+            project=resolved.project_id,
+            location=resolved.location,
+            credentials=resolved.credentials,
         )
 
         # gemini-embedding-2 rejects task_type; embedding intent is conveyed
@@ -561,7 +568,9 @@ class CloudEmbedding:
             raise ValueError("API URL is required for LiteLLM proxy embedding.")
 
         headers = (
-            {} if not self.api_key else {"Authorization": f"Bearer {self.api_key}"}
+            {}
+            if not (api_key := self._resolve_api_key())
+            else {"Authorization": f"Bearer {api_key}"}
         )
 
         response = await self.http_client.post(
@@ -787,7 +796,7 @@ class EmbeddingModel:
         api_version: str | None = None,
         deployment_name: str | None = None,
         reduced_dimension: int | None = None,
-        vertex_config: VertexEmbeddingConfig | None = None,
+        auth: CloudEmbeddingAuth | None = None,
     ) -> None:
         self.api_key = api_key
         self.provider_type = provider_type
@@ -800,7 +809,11 @@ class EmbeddingModel:
         self.api_version = api_version
         self.deployment_name = deployment_name
         self.reduced_dimension = reduced_dimension
-        self.vertex_config = vertex_config
+        self.auth = (
+            auth or build_embedding_auth(provider_type, api_key)
+            if provider_type is not None
+            else None
+        )
         self.tokenizer = get_tokenizer(
             model_name=model_name, provider_type=provider_type
         )
@@ -824,14 +837,9 @@ class EmbeddingModel:
         if self.provider_type is None:
             raise ValueError("Provider type is required for direct API calls")
 
-        uses_workload_identity = (
-            self.provider_type == EmbeddingProvider.GOOGLE
-            and self.vertex_config is not None
-            and self.vertex_config.auth_method == "workload_identity"
-        )
-        if self.api_key is None and not uses_workload_identity:
-            logger.error("API key not provided for cloud model")
-            raise RuntimeError("API key not provided for cloud model")
+        if self.auth is None:
+            raise ValueError("Authentication is required for cloud embeddings.")
+        self.auth.validate_credentials()
 
         # Check for prefix usage with cloud models
         if embed_request.manual_query_prefix or embed_request.manual_passage_prefix:
@@ -863,7 +871,7 @@ class EmbeddingModel:
             provider=self.provider_type,
             api_url=self.api_url,
             api_version=self.api_version,
-            vertex_config=self.vertex_config,
+            auth=self.auth,
         ) as cloud_model:
             embeddings = await cloud_model.embed(
                 texts=embed_request.texts,
@@ -1204,6 +1212,7 @@ class EmbeddingModel:
         server_host: str,  # Changes depending on indexing or inference
         server_port: int,
         retrim_content: bool = False,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> "EmbeddingModel":
         return cls(
             server_host=server_host,
@@ -1219,12 +1228,16 @@ class EmbeddingModel:
             api_version=search_settings.api_version,
             deployment_name=search_settings.deployment_name,
             reduced_dimension=search_settings.reduced_dimension,
-            vertex_config=(
-                VertexEmbeddingConfig.model_validate(
+            callback=callback,
+            auth=(
+                build_embedding_auth(
+                    search_settings.provider_type,
+                    search_settings.api_key,
                     search_settings.cloud_provider.vertex_config
+                    if search_settings.cloud_provider is not None
+                    else None,
                 )
-                if search_settings.cloud_provider is not None
-                and search_settings.cloud_provider.vertex_config is not None
+                if search_settings.provider_type is not None
                 else None
             ),
         )

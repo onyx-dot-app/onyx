@@ -31,6 +31,7 @@ from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
     CloudEmbeddingProviderCreationRequest,
@@ -301,8 +302,11 @@ def upsert_cloud_embedding_provider(
             if (
                 updates["api_key"] is not None
                 and existing_provider.vertex_config is not None
-                and existing_provider.vertex_config.get("auth_method")
-                == "workload_identity"
+                and not build_embedding_auth(
+                    existing_provider.provider_type,
+                    None,
+                    existing_provider.vertex_config,
+                ).requires_api_key
             ):
                 updates["vertex_config"] = None
             else:

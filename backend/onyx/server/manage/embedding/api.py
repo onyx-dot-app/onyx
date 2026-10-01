@@ -18,11 +18,11 @@ from onyx.db.search_settings import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.indexing.models import EmbeddingModelDetail
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from onyx.natural_language_processing.vertex_auth import (
-    VertexEmbeddingConfig,
-    validate_vertex_embedding_config,
+from onyx.natural_language_processing.embedding_auth import (
+    CloudEmbeddingAuth,
+    build_embedding_auth,
 )
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
     CloudEmbeddingProviderCreationRequest,
@@ -39,15 +39,13 @@ admin_router = APIRouter(prefix="/admin/embedding")
 basic_router = APIRouter(prefix="/embedding")
 
 
-def _validate_vertex_config(
-    provider_type: EmbeddingProvider, config: VertexEmbeddingConfig | None
-) -> None:
+def _build_request_auth(
+    request: TestEmbeddingRequest | CloudEmbeddingProviderCreationRequest,
+) -> CloudEmbeddingAuth:
     try:
-        if config is not None and provider_type != EmbeddingProvider.GOOGLE:
-            raise ValueError(
-                "Vertex configuration is only supported for Google embeddings."
-            )
-        validate_vertex_embedding_config(config)
+        return build_embedding_auth(
+            request.provider_type, request.api_key, request.vertex_config
+        )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
 
@@ -58,22 +56,15 @@ def test_embedding_configuration(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    _validate_vertex_config(
-        test_llm_request.provider_type, test_llm_request.vertex_config
-    )
+    auth = _build_request_auth(test_llm_request)
     api_key = test_llm_request.api_key
-    uses_workload_identity = (
-        test_llm_request.vertex_config is not None
-        and test_llm_request.vertex_config.auth_method == "workload_identity"
-    )
-    if (
-        api_key is None
-        and test_llm_request.provider_type == EmbeddingProvider.GOOGLE
-        and not uses_workload_identity
-    ):
-        existing = fetch_embedding_provider(db_session, EmbeddingProvider.GOOGLE)
+    if api_key is None and auth.requires_api_key:
+        existing = fetch_embedding_provider(db_session, test_llm_request.provider_type)
         if existing is not None and existing.api_key is not None:
             api_key = existing.api_key.get_value(apply_mask=False)
+            auth = build_embedding_auth(
+                test_llm_request.provider_type, api_key, test_llm_request.vertex_config
+            )
     try:
         test_model = EmbeddingModel(
             server_host=MODEL_SERVER_HOST,
@@ -84,7 +75,7 @@ def test_embedding_configuration(
             model_name=test_llm_request.model_name,
             api_version=test_llm_request.api_version,
             deployment_name=test_llm_request.deployment_name,
-            vertex_config=test_llm_request.vertex_config,
+            auth=auth,
             normalize=False,
             query_prefix=None,
             passage_prefix=None,
@@ -163,11 +154,8 @@ def put_cloud_embedding_provider(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CloudEmbeddingProvider:
-    _validate_vertex_config(provider.provider_type, provider.vertex_config)
-    if (
-        provider.vertex_config
-        and provider.vertex_config.auth_method == "workload_identity"
-    ):
+    auth = _build_request_auth(provider)
+    if not auth.requires_api_key:
         provider = provider.model_copy(
             update={"api_key": None, "api_key_changed": True}
         )

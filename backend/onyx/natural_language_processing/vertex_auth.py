@@ -6,8 +6,15 @@ import google.auth
 from google.auth.credentials import Credentials
 from google.oauth2 import service_account
 from pydantic import BaseModel, ConfigDict, JsonValue
+from typing_extensions import TypedDict
 
 from shared_configs.configs import MULTI_TENANT
+
+
+class VertexEmbeddingConfigDict(TypedDict):
+    auth_method: Literal["service_account_json", "workload_identity"]
+    project_id: str | None
+    location: str | None
 
 
 class VertexEmbeddingConfig(BaseModel):
@@ -17,6 +24,13 @@ class VertexEmbeddingConfig(BaseModel):
     )
     project_id: str | None = None
     location: str | None = None
+
+
+class VertexEmbeddingCredentials(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    credentials: Credentials
+    project_id: str
+    location: str
 
 
 def validate_vertex_embedding_config(config: VertexEmbeddingConfig | None) -> None:
@@ -32,7 +46,7 @@ def validate_vertex_embedding_config(config: VertexEmbeddingConfig | None) -> No
 
 def resolve_vertex_embedding_credentials(
     api_key: str | None, config: VertexEmbeddingConfig | None
-) -> tuple[Credentials, str, str]:
+) -> VertexEmbeddingCredentials:
     validate_vertex_embedding_config(config)
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
     location = config.location.strip() if config and config.location else None
@@ -59,8 +73,8 @@ def resolve_vertex_embedding_credentials(
         )
         project_id = json_project_id.strip()
         location = location or json_location
-    return (
-        credentials,
-        project_id,
-        location or os.environ.get("GOOGLE_CLOUD_LOCATION") or "global",
+    return VertexEmbeddingCredentials(
+        credentials=credentials,
+        project_id=project_id,
+        location=location or os.environ.get("GOOGLE_CLOUD_LOCATION") or "global",
     )

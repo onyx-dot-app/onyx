@@ -2,6 +2,7 @@ from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from google.auth.credentials import Credentials
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document, TextSection
@@ -61,7 +62,10 @@ def test_saved_workload_identity_embeds_indexing_chunks_and_titles() -> None:
     client.aio.models.embed_content = AsyncMock(return_value=response)
     client.aio.aclose = AsyncMock()
     with (
-        patch("google.auth.default", return_value=(MagicMock(), "cluster-project")),
+        patch(
+            "google.auth.default",
+            return_value=(MagicMock(spec=Credentials), "cluster-project"),
+        ),
         patch("google.genai.Client", return_value=client) as genai,
         patch("onyx.natural_language_processing.search_nlp_models.get_tokenizer"),
     ):

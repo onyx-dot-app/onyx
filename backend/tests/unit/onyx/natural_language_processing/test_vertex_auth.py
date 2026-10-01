@@ -2,6 +2,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.auth.credentials import Credentials
 
 from onyx.natural_language_processing.vertex_auth import (
     VertexEmbeddingConfig,
@@ -10,7 +11,7 @@ from onyx.natural_language_processing.vertex_auth import (
 
 
 def test_workload_identity_uses_adc_and_explicit_target_project() -> None:
-    credentials = MagicMock()
+    credentials = MagicMock(spec=Credentials)
     config = VertexEmbeddingConfig(
         auth_method="workload_identity",
         project_id=" target-project ",
@@ -25,7 +26,9 @@ def test_workload_identity_uses_adc_and_explicit_target_project() -> None:
         ) as key,
     ):
         resolved = resolve_vertex_embedding_credentials("unused-key", config)
-    assert resolved == (credentials, "target-project", "us-central1")
+    assert resolved.credentials is credentials
+    assert resolved.project_id == "target-project"
+    assert resolved.location == "us-central1"
     adc.assert_called_once_with(
         scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
@@ -63,7 +66,7 @@ def test_workload_identity_rejects_shared_deployment_credentials() -> None:
 
 
 def test_service_account_preserves_json_project_and_location() -> None:
-    credentials = MagicMock()
+    credentials = MagicMock(spec=Credentials)
     with (
         patch(
             "google.oauth2.service_account.Credentials.from_service_account_info",
@@ -74,7 +77,9 @@ def test_service_account_preserves_json_project_and_location() -> None:
         resolved = resolve_vertex_embedding_credentials(
             '{"project_id":"key-project","location":"us-east1"}', None
         )
-    assert resolved == (credentials, "key-project", "us-east1")
+    assert resolved.credentials is credentials
+    assert resolved.project_id == "key-project"
+    assert resolved.location == "us-east1"
     adc.assert_not_called()
 
 
@@ -94,7 +99,7 @@ def test_location_falls_back_to_environment_then_global(
         monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
     else:
         monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", env_location)
-    credentials = MagicMock()
+    credentials = MagicMock(spec=Credentials)
     config = (
         VertexEmbeddingConfig(
             auth_method="workload_identity", project_id="target-project"
@@ -112,7 +117,9 @@ def test_location_falls_back_to_environment_then_global(
         resolved = resolve_vertex_embedding_credentials(
             '{"project_id":"target-project"}', config
         )
-    assert resolved == (credentials, "target-project", env_location or "global")
+    assert resolved.credentials is credentials
+    assert resolved.project_id == "target-project"
+    assert resolved.location == (env_location or "global")
 
 
 @pytest.mark.parametrize("project_id", [None, "", "   ", 123])

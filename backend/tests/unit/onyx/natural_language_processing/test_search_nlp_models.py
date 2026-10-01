@@ -4,11 +4,13 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.auth.credentials import Credentials
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
 from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.search_nlp_models import (
     CloudEmbedding,
     EmbeddingModel,
@@ -99,7 +101,10 @@ async def test_vertex_workload_identity_embeds_each_gemini_2_input_separately() 
     )
     client.aio.aclose = AsyncMock()
     with (
-        patch("google.auth.default", return_value=(MagicMock(), "cluster-project")),
+        patch(
+            "google.auth.default",
+            return_value=(MagicMock(spec=Credentials), "cluster-project"),
+        ),
         patch("google.genai.Client", return_value=client) as genai,
         patch("onyx.natural_language_processing.search_nlp_models.get_tokenizer"),
     ):
@@ -113,10 +118,14 @@ async def test_vertex_workload_identity_embeds_each_gemini_2_input_separately() 
             api_key=None,
             api_url=None,
             provider_type=EmbeddingProvider.GOOGLE,
-            vertex_config=VertexEmbeddingConfig(
-                auth_method="workload_identity",
-                project_id="target-project",
-                location="global",
+            auth=build_embedding_auth(
+                EmbeddingProvider.GOOGLE,
+                None,
+                VertexEmbeddingConfig(
+                    auth_method="workload_identity",
+                    project_id="target-project",
+                    location="global",
+                ),
             ),
         )
         response = await model._make_direct_api_call(
@@ -144,9 +153,9 @@ async def test_vertex_embed_keeps_task_type_for_existing_models(
 ) -> None:
     """Existing Vertex models continue to receive task_type and unmodified text."""
     with patch(
-        "google.oauth2.service_account.Credentials.from_service_account_info"
+        "google.oauth2.service_account.Credentials.from_service_account_info",
     ) as mock_credentials:
-        mock_credentials.return_value = MagicMock()
+        mock_credentials.return_value = MagicMock(spec=Credentials)
 
         with patch("google.genai.Client") as mock_genai_client:
             mock_client = MagicMock()
@@ -203,9 +212,9 @@ async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
 ) -> None:
     """gemini-embedding-2 omits task_type and prefixes the text per Google's docs."""
     with patch(
-        "google.oauth2.service_account.Credentials.from_service_account_info"
+        "google.oauth2.service_account.Credentials.from_service_account_info",
     ) as mock_credentials:
-        mock_credentials.return_value = MagicMock()
+        mock_credentials.return_value = MagicMock(spec=Credentials)
 
         with patch("google.genai.Client") as mock_genai_client:
             mock_client = MagicMock()
