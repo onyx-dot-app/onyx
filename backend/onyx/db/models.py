@@ -96,8 +96,6 @@ from onyx.db.enums import (
     MCPServerStatus,
     MCPTransport,
     NotificationSeverity,
-    OpenSearchDocumentMigrationStatus,
-    OpenSearchTenantMigrationStatus,
     PatType,
     Permission,
     PermissionSyncStatus,
@@ -983,7 +981,7 @@ class ConnectorCredentialPair(Base):
     )
 
     # Determines how documents are processed after fetching:
-    # REGULAR: Full pipeline (chunk → embed → Vespa)
+    # REGULAR: Full pipeline (chunk → embed → document index)
     # FILE_SYSTEM: Write to file system only (for CLI agent sandbox)
     processing_mode: Mapped[ProcessingMode] = mapped_column(
         Enum(ProcessingMode, native_enum=False),
@@ -1158,7 +1156,7 @@ class Document(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Number of chunks in the document (in Vespa)
+    # Number of chunks in the document (in the document index)
     # Only null for documents indexed prior to this change
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -1167,13 +1165,13 @@ class Document(Base):
     # Null for documents indexed before this column was added.
     content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # last time any vespa relevant row metadata or the doc changed.
+    # last time any document-index-relevant row metadata or the doc changed.
     # does not include last_synced
     last_modified: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True, default=func.now()
     )
 
-    # last successful sync to vespa
+    # last successful sync to the document index
     last_synced: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
@@ -1270,121 +1268,6 @@ class Document(Base):
             "id",
             postgresql_where=text("secondary_only_sync_pending IS TRUE"),
         ),
-    )
-
-
-class OpenSearchDocumentMigrationRecord(Base):
-    """Tracks the migration status of documents from Vespa to OpenSearch.
-
-    This table can be dropped when the migration is complete for all Onyx
-    instances.
-    """
-
-    __tablename__ = "opensearch_document_migration_record"
-
-    document_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("document.id", ondelete="CASCADE"),
-        primary_key=True,
-        nullable=False,
-        index=True,
-    )
-    status: Mapped[OpenSearchDocumentMigrationStatus] = mapped_column(
-        Enum(OpenSearchDocumentMigrationStatus, native_enum=False),
-        default=OpenSearchDocumentMigrationStatus.PENDING,
-        nullable=False,
-        index=True,
-    )
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    attempts_count: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False, index=True
-    )
-    last_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-        index=True,
-    )
-
-    document: Mapped["Document"] = relationship("Document")
-
-
-class OpenSearchTenantMigrationRecord(Base):
-    """Tracks the state of the OpenSearch migration for a tenant.
-
-    Should only contain one row.
-
-    This table can be dropped when the migration is complete for all Onyx
-    instances.
-    """
-
-    __tablename__ = "opensearch_tenant_migration_record"
-    __table_args__ = (
-        # Singleton pattern - unique index on constant ensures only one row.
-        Index("idx_opensearch_tenant_migration_singleton", text("(true)"), unique=True),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
-    document_migration_record_table_population_status: Mapped[
-        OpenSearchTenantMigrationStatus
-    ] = mapped_column(
-        Enum(OpenSearchTenantMigrationStatus, native_enum=False),
-        default=OpenSearchTenantMigrationStatus.PENDING,
-        nullable=False,
-    )
-    num_times_observed_no_additional_docs_to_populate_migration_table: Mapped[int] = (
-        mapped_column(Integer, default=0, nullable=False)
-    )
-    overall_document_migration_status: Mapped[OpenSearchTenantMigrationStatus] = (
-        mapped_column(
-            Enum(OpenSearchTenantMigrationStatus, native_enum=False),
-            default=OpenSearchTenantMigrationStatus.PENDING,
-            nullable=False,
-        )
-    )
-    num_times_observed_no_additional_docs_to_migrate: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        nullable=False,
-    )
-    last_updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-    # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started".
-    # Otherwise contains a serialized mapping between slice ID and continuation
-    # token for that slice.
-    vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    total_chunks_migrated: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    total_chunks_errored: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    total_chunks_in_vespa: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    migration_completed_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    enable_opensearch_retrieval: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    approx_chunk_count_in_vespa: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
     )
 
 
@@ -5233,7 +5116,8 @@ class UserGroup(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
-    # whether or not changes to the UserGroup have been propagated to Vespa
+    # whether or not changes to the UserGroup have been propagated to the
+    # document index
     is_up_to_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # tell the sync job to clean up the group
     is_up_for_deletion: Mapped[bool] = mapped_column(

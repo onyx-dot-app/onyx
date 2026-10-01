@@ -11,7 +11,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentSectionRequest
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.server.documents.models import ChunkInfo, DocumentInfo
@@ -29,8 +29,7 @@ def get_document_info(
     db_session: Session = Depends(get_session),
 ) -> DocumentInfo:
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     user_acl_filters = build_access_filters_for_user(user, db_session)
     inference_chunks = document_index.id_based_retrieval(
@@ -74,8 +73,7 @@ def get_chunk_info(
     db_session: Session = Depends(get_session),
 ) -> ChunkInfo:
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     user_acl_filters = build_access_filters_for_user(user, db_session)
     chunk_request = DocumentSectionRequest(

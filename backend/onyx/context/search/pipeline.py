@@ -21,7 +21,7 @@ from onyx.context.search.retrieval.search_runner import search_chunks
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.models import User
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
@@ -266,7 +266,7 @@ def search_pipeline(
     # Pre-extracted persona search configuration (None when no persona)
     persona_search_info: PersonaSearchInfo | None,
     db_session: Session | None = None,
-    # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+    # Document index metadata filters for overflowing user files.  NOT the raw IDs
     # of the current project/persona — only set when user files couldn't fit
     # in the LLM context and need to be searched via vector DB.
     project_id_filter: int | None = None,

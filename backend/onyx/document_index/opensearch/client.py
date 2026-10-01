@@ -32,7 +32,7 @@ from onyx.configs.app_configs import (
     OPENSEARCH_VERIFY_CERTS,
     PIT_KEEP_ALIVE,
 )
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     OpenSearchAuthMethod,

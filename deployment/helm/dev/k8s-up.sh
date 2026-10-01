@@ -117,7 +117,6 @@ trap 'rm -rf "$HELM_DEV_HOME"' EXIT
 
 # Repo names must match the dep names in Chart.yaml.
 helm repo add cloudnative-pg  https://cloudnative-pg.github.io/charts          >/dev/null
-helm repo add vespa           https://onyx-dot-app.github.io/vespa-helm-charts >/dev/null
 helm repo add opensearch      https://opensearch-project.github.io/helm-charts >/dev/null
 helm repo add ingress-nginx   https://kubernetes.github.io/ingress-nginx       >/dev/null
 helm repo add redis-ot        https://ot-container-kit.github.io/helm-charts   >/dev/null

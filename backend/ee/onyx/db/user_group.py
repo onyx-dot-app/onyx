@@ -577,7 +577,7 @@ def _mark_user_group__cc_pair_relationships_outdated__no_commit(
 def _current_cc_pair_ids(db_user_group: UserGroup) -> list[int]:
     """The cc_pairs currently attached to the group — is_current junction rows only.
 
-    A removed cc_pair keeps a stale ``is_current=False`` row until the Vespa sync
+    A removed cc_pair keeps a stale ``is_current=False`` row until the document index sync
     deletes it, and the plain ``cc_pairs`` relationship has no is_current filter, so
     it would still surface the removed pair. Reading it as "current" lets a removed
     (possibly public / out-of-scope) pair be re-attached without re-clearing the
@@ -803,8 +803,8 @@ def update_user_group(
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
     """If successful, this can set db_user_group.is_up_to_date = False.
-    That will be processed by check_for_vespa_user_groups_sync_task and trigger
-    a long running background sync to Vespa.
+    That will be processed by check_for_vespa_sync_task and trigger
+    a long running background sync to the document index.
     """
     # Gate before any read so a non-manager can't confirm the group exists; the
     # cc_pair scope check below needs the group row and runs after.

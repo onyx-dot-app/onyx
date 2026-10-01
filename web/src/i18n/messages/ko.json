@@ -6114,12 +6114,6 @@
         "imageSummarization": {
           "label": "이미지 요약"
         },
-        "kgDeepExtraction": {
-          "label": "지식 그래프 추출"
-        },
-        "kgDocumentClassification": {
-          "label": "지식 그래프 분류"
-        },
         "other": {
           "label": "기타"
         },
@@ -6136,8 +6130,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · 시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리, 지식 그래프 추출 등이 포함됩니다.",
-        "emptyDescription": "시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리, 지식 그래프 추출 등이 포함됩니다.",
+        "description": "{start} – {end} · 시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리 등이 포함됩니다.",
+        "emptyDescription": "시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리 등이 포함됩니다.",
         "error": {
           "title": "이 기간의 시스템 사용량을 불러오지 못했습니다."
         },

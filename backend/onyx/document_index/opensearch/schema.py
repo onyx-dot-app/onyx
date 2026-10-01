@@ -21,7 +21,7 @@ from onyx.configs.app_configs import (
     USING_AWS_MANAGED_OPENSEARCH,
 )
 from onyx.db.enums import VectorQuantization
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     EF_CONSTRUCTION,
@@ -505,8 +505,6 @@ class DocumentSchema:
                         vector_quantization
                     ),
                 },
-                # TODO(andrei): This is a tensor in Vespa. Also look at feature
-                # parity for these other method fields.
                 CONTENT_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",
                     "dimension": vector_dimension,

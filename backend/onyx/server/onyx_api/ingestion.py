@@ -32,7 +32,7 @@ from onyx.db.search_settings import (
     get_secondary_search_settings,
 )
 from onyx.db.user_file import get_owned_file_ids, get_user_file_by_id
-from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.indexing.adapters.document_indexing_adapter import (
@@ -186,12 +186,7 @@ def upsert_ingestion_doc(
 
     # Need to index for both the primary and secondary index if possible
     active_search_settings = get_active_search_settings(db_session)
-    # This flow is for indexing so we get all indices.
-    document_indices = get_all_document_indices(
-        active_search_settings.primary,
-        None,
-        None,
-    )
+    document_index = get_default_document_index(active_search_settings.primary, None)
 
     search_settings = get_current_search_settings(db_session)
 
@@ -212,7 +207,7 @@ def upsert_ingestion_doc(
 
     indexing_pipeline_result = run_indexing_pipeline(
         embedder=index_embedding_model,
-        document_indices=document_indices,
+        document_index=document_index,
         ignore_time_skip=True,
         db_session=db_session,
         tenant_id=tenant_id,
@@ -235,14 +230,13 @@ def upsert_ingestion_doc(
             search_settings=sec_search_settings
         )
 
-        # This flow is for indexing so we get all indices.
-        sec_document_indices = get_all_document_indices(
-            active_search_settings.secondary, None, None
+        sec_document_index = get_default_document_index(
+            active_search_settings.secondary, None
         )
 
         run_indexing_pipeline(
             embedder=new_index_embedding_model,
-            document_indices=sec_document_indices,
+            document_index=sec_document_index,
             ignore_time_skip=True,
             # FUTURE write: skip content_hash dedup, else the primary run's hash
             # suppresses this into a no-op.
@@ -301,18 +295,15 @@ def delete_ingestion_doc(
     if recorded_ids:
         db_session.commit()
 
-    # This flow is for deletion so we get all indices.
-    document_indices = get_all_document_indices(
+    document_index = get_default_document_index(
         active_search_settings.primary,
         active_search_settings.secondary,
-        None,
     )
     try:
-        for document_index in document_indices:
-            document_index.delete(
-                document_id,
-                chunk_count=document.chunk_count,
-            )
+        document_index.delete(
+            document_id,
+            chunk_count=document.chunk_count,
+        )
         delete_documents_complete(db_session, [document_id])
     except Exception:
         # A failed DB delete leaves the session aborted; roll back before the candidate

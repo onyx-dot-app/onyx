@@ -6114,12 +6114,6 @@
         "imageSummarization": {
           "label": "Resumen de imágenes"
         },
-        "kgDeepExtraction": {
-          "label": "Extracción del grafo de conocimiento"
-        },
-        "kgDocumentClassification": {
-          "label": "Clasificación del grafo de conocimiento"
-        },
         "other": {
           "label": "Otros"
         },
@@ -6136,8 +6130,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · El uso del sistema es actividad del LLM que {appName} ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
-        "emptyDescription": "El uso del sistema es actividad del LLM que {appName} ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
+        "description": "{start} – {end} · El uso del sistema es actividad del LLM que {appName} ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes y el procesamiento RAG contextual.",
+        "emptyDescription": "El uso del sistema es actividad del LLM que {appName} ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes y el procesamiento RAG contextual.",
         "error": {
           "title": "No se pudo cargar el uso del sistema de este periodo."
         },

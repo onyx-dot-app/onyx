@@ -55,8 +55,7 @@ def admin_search(
         tenant_id=tenant_id,
     )
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     if not query or query.strip() == "":
         matching_chunks = document_index.random_retrieval(filters=final_filters)

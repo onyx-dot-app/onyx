@@ -241,7 +241,7 @@ CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
 
 # Per-doc metadata-sync task expiry: bounds queue growth if consumers stall. An
 # expired task's doc stays needs_sync / secondary_only_sync_pending and is
-# re-enqueued on the next vespa-sync beat pass, so dropping it is safe.
+# re-enqueued on the next document index sync beat pass, so dropping it is safe.
 CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
@@ -364,11 +364,6 @@ class BlobType(str, Enum):
     S3 = "s3"
     GOOGLE_CLOUD_STORAGE = "google_cloud_storage"
     OCI_STORAGE = "oci_storage"
-
-
-class DocumentIndexType(str, Enum):
-    COMBINED = "combined"  # Vespa
-    SPLIT = "split"  # Typesense + Qdrant
 
 
 class QueryHistoryType(str, Enum):
@@ -518,8 +513,6 @@ class OnyxCeleryQueues:
     # Scheduled tasks queue (Craft scheduled-task executor)
     SCHEDULED_TASKS = "scheduled_tasks"
 
-    OPENSEARCH_MIGRATION = "opensearch_migration"
-
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -539,7 +532,6 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
-    OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
     OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
     SECURITY_SETTINGS = "da_lock:security_settings"
@@ -744,16 +736,6 @@ class OnyxCeleryTask:
     SCHEDULED_TASKS_RUN = "scheduled_tasks_run"
     SCHEDULED_TASKS_CLEANUP_STUCK = "scheduled_tasks_cleanup_stuck"
 
-    CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
-        "check_for_documents_for_opensearch_migration_task"
-    )
-    MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_documents_from_vespa_to_opensearch_task"
-    )
-    MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_chunks_from_vespa_to_opensearch_task"
-    )
-
 
 # this needs to correspond to the matching entry in supervisord
 ONYX_CELERY_BEAT_HEARTBEAT_KEY = "onyx:celery:beat:heartbeat"
@@ -771,11 +753,6 @@ if platform.system() == "Darwin":
     REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60  # noqa: B009  # ods: ignore[getattr]
 else:
     REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009  # ods: ignore[getattr]
-
-
-class OnyxCallTypes(str, Enum):
-    FIREFLIES = "FIREFLIES"
-    GONG = "GONG"
 
 
 NUM_DAYS_TO_KEEP_CHECKPOINTS = 7

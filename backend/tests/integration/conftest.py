@@ -57,7 +57,6 @@ from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
     get_session_with_current_tenant,
 )
-from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
     fetch_versioned_implementation,
 )
@@ -66,6 +65,9 @@ from tests.integration.common_utils import http_client  # noqa: E402
 from tests.integration.common_utils.constants import (  # noqa: E402
     ADMIN_USER_NAME,
     GENERAL_HEADERS,
+)
+from tests.integration.common_utils.document_index import (  # noqa: E402
+    DocumentIndexClient,
 )
 from tests.integration.common_utils.managers.api_key import APIKeyManager  # noqa: E402
 from tests.integration.common_utils.managers.document import (  # noqa: E402
@@ -101,7 +103,6 @@ from tests.integration.common_utils.test_models import (  # noqa: E402
     DATestUser,
     SimpleTestDocument,
 )
-from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
 from tests.integration.mock_services.mock_llm_server.server import (  # noqa: E402
     run_in_thread,
 )
@@ -149,7 +150,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     (
         "light",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
-        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim,opensearch_migration",
+        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim",
     ),
     (
         "heavy",
@@ -352,10 +353,8 @@ instantiate the session directly within the test.
 
 
 @pytest.fixture
-def vespa_client() -> vespa_fixture:
-    with get_session_with_current_tenant() as db_session:
-        search_settings = get_current_search_settings(db_session)
-        return vespa_fixture(index_name=search_settings.index_name)
+def document_index_client() -> DocumentIndexClient:
+    return DocumentIndexClient()
 
 
 @pytest.fixture

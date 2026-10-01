@@ -6114,12 +6114,6 @@
         "imageSummarization": {
           "label": "Résumé des images"
         },
-        "kgDeepExtraction": {
-          "label": "Extraction du graphe de connaissances"
-        },
-        "kgDocumentClassification": {
-          "label": "Classification du graphe de connaissances"
-        },
         "other": {
           "label": "Autres"
         },
@@ -6136,8 +6130,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
-        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images et le traitement RAG contextuel.",
+        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images et le traitement RAG contextuel.",
         "error": {
           "title": "Échec du chargement de l'utilisation système pour cette période."
         },

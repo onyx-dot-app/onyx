@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
+    DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
     PORT_SWAP_VERIFY_DOCS_PER_UNIT,
     PORT_SWAP_VERIFY_RETRY_DELAY_S,
-    VESPA_NUM_ATTEMPTS_ON_STARTUP,
 )
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.db.connector_credential_pair import (
@@ -58,7 +58,7 @@ from onyx.db.user_file import (
     filter_existing_user_file_ids_any_owner,
     sample_ported_user_file_ids,
 )
-from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.opensearch.port_copy import (
     find_documents_missing_from_index,
     find_documents_with_no_chunks,
@@ -161,44 +161,42 @@ def _perform_index_swap(
         new_search_settings.contextual_rag_model_configuration_id = None
         db_session.commit()
 
-    # This flow is for checking and possibly creating an index so we get all
-    # indices.
-    document_indices = get_all_document_indices(new_search_settings, None, None)
+    # Check for and possibly create the index for the new search settings.
+    document_index = get_default_document_index(new_search_settings, None)
 
     WAIT_SECONDS = 5
 
-    for document_index in document_indices:
-        success = False
-        for x in range(VESPA_NUM_ATTEMPTS_ON_STARTUP):
-            try:
-                logger.notice(
-                    "Document index %s swap (attempt %s/%s)...",
-                    document_index.__class__.__name__,
-                    x + 1,
-                    VESPA_NUM_ATTEMPTS_ON_STARTUP,
-                )
-                document_index.verify_and_create_index_if_necessary(
-                    embedding_dim=new_search_settings.final_embedding_dim,
-                )
-
-                logger.notice("Document index swap complete.")
-                success = True
-                break
-            except Exception:
-                logger.exception(
-                    "Document index swap for %s did not succeed. The document index services may not be ready yet. Retrying in %s seconds.",
-                    document_index.__class__.__name__,
-                    WAIT_SECONDS,
-                )
-                time.sleep(WAIT_SECONDS)
-
-        if not success:
-            logger.error(
-                "Document index swap for %s did not succeed. Attempt limit reached. (%s)",
+    success = False
+    for x in range(DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP):
+        try:
+            logger.notice(
+                "Document index %s swap (attempt %s/%s)...",
                 document_index.__class__.__name__,
-                VESPA_NUM_ATTEMPTS_ON_STARTUP,
+                x + 1,
+                DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
             )
-            return None
+            document_index.verify_and_create_index_if_necessary(
+                embedding_dim=new_search_settings.final_embedding_dim,
+            )
+
+            logger.notice("Document index swap complete.")
+            success = True
+            break
+        except Exception:
+            logger.exception(
+                "Document index swap for %s did not succeed. The document index services may not be ready yet. Retrying in %s seconds.",
+                document_index.__class__.__name__,
+                WAIT_SECONDS,
+            )
+            time.sleep(WAIT_SECONDS)
+
+    if not success:
+        logger.error(
+            "Document index swap for %s did not succeed. Attempt limit reached. (%s)",
+            document_index.__class__.__name__,
+            DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
+        )
+        return None
 
     return current_search_settings
 

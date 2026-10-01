@@ -75,7 +75,7 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
-# Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
+# Disables vector DB (OpenSearch) entirely. When True, connectors and RAG search
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
 
@@ -542,36 +542,11 @@ OPENSEARCH_EXPLAIN_ENABLED = (
 # existing indices need reindexing after a change.
 OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "english"
 
-# This is the "base" config for now, the idea is that at least for our dev
-# environments we always want to be dual indexing into both OpenSearch and Vespa
-# to stress test the new codepaths. Only enable this if there is some instance
-# of OpenSearch running for the relevant Onyx instance.
-# NOTE: Now enabled on by default, unless the env indicates otherwise.
-ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
-    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "true").lower() == "true"
-)
-# NOTE: This effectively does nothing anymore, admins can now toggle whether
-# retrieval is through OpenSearch. This value is only used as a final fallback
-# in case that doesn't work for whatever reason.
-# Given that the "base" config above is true, this enables whether we want to
-# retrieve from OpenSearch or Vespa. We want to be able to quickly toggle this
-# in the event we see issues with OpenSearch retrieval in our dev environments.
-ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-    and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
-)
-DISABLE_OPENSEARCH_MIGRATION_TASK = (
-    os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
-)
-ONYX_DISABLE_VESPA = os.environ.get("ONYX_DISABLE_VESPA", "true").lower() == "true"
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
     os.environ.get("VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT", "true").lower()
     == "true"
-)
-OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
-    os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
 )
 # Lifetime of a point-in-time used to scan an index consistently (reindex port).
 # Each search extends the lease; an idle PIT self-expires after this.
@@ -592,19 +567,11 @@ ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH = (
     == "true"
 )
 
-VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
-# NOTE: this is used if and only if the vespa config server is accessible via a
-# different host than the main vespa application
-VESPA_CONFIG_SERVER_HOST = os.environ.get("VESPA_CONFIG_SERVER_HOST") or VESPA_HOST
-VESPA_PORT = os.environ.get("VESPA_PORT") or "8081"
-VESPA_TENANT_PORT = os.environ.get("VESPA_TENANT_PORT") or "19071"
-# the number of times to try and connect to vespa on startup before giving up
-VESPA_NUM_ATTEMPTS_ON_STARTUP = int(os.environ.get("NUM_RETRIES_ON_STARTUP") or 10)
-
-VESPA_CLOUD_URL = os.environ.get("VESPA_CLOUD_URL", "")
-
-VESPA_CLOUD_CERT_PATH = os.environ.get("VESPA_CLOUD_CERT_PATH")
-VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
+# The number of times to try to connect to the document index on startup before
+# giving up.
+DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP = int(
+    os.environ.get("NUM_RETRIES_ON_STARTUP") or 10
+)
 
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
 INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
@@ -1188,8 +1155,9 @@ CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
 )
 
-# The maximum number of tasks that can be queued up to sync to Vespa in a single pass
-VESPA_SYNC_MAX_TASKS = 8192
+# The maximum number of tasks that can be queued up to sync to the document index
+# in a single pass
+DOCUMENT_INDEX_SYNC_MAX_TASKS = 8192
 
 DB_YIELD_PER_DEFAULT = 64
 
@@ -1675,15 +1643,6 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
-# The intent was to have this be configurable per query, but I don't think any
-# codepath was actually configuring this, so for the migrated Vespa interface
-# we'll just use the default value, but also have it be configurable by env var.
-RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0)
-
-# Should match the rerank-count value set in
-# backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
-RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
-
 # Flat per-image cost (cents) when litellm has no price for an image model.
 # Clamped to >= 0 so a misconfigured negative can't credit usage.
 DEFAULT_IMAGE_COST_CENTS = max(
@@ -1762,11 +1721,6 @@ PROMPT_CACHE_CHAT_HISTORY = (
 # gateway. Off by default.
 ENABLE_AZURE_IMAGE_CAP = os.environ.get("ENABLE_AZURE_IMAGE_CAP", "").lower() == "true"
 
-# If set to `true` will enable additional logs about Vespa query performance
-# (time spent on finding the right docs + time spent fetching summaries from disk)
-LOG_VESPA_TIMING_INFORMATION = (
-    os.environ.get("LOG_VESPA_TIMING_INFORMATION", "").lower() == "true"
-)
 LOG_ENDPOINT_LATENCY = os.environ.get("LOG_ENDPOINT_LATENCY", "").lower() == "true"
 LOG_POSTGRES_LATENCY = os.environ.get("LOG_POSTGRES_LATENCY", "").lower() == "true"
 LOG_POSTGRES_CONN_COUNTS = (
@@ -1836,22 +1790,6 @@ CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
     os.environ.get("CUSTOM_ANSWER_VALIDITY_CONDITIONS", "[]")
 )
 
-VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
-# This is the timeout for the client side of the Vespa migration task. When
-# exceeded, an exception is raised in our code. This value should be higher than
-# VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT.
-VESPA_MIGRATION_REQUEST_TIMEOUT_S = int(
-    os.environ.get("VESPA_MIGRATION_REQUEST_TIMEOUT_S") or "120"
-)
-# This is the timeout Vespa uses on the server side to know when to wrap up its
-# traversal and try to report partial results. This differs from the client
-# timeout above which raises an exception in our code when exceeded. This
-# timeout allows Vespa to return gracefully. This value should be lower than
-# VESPA_MIGRATION_REQUEST_TIMEOUT_S. Formatted as <number of seconds>s.
-VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
-    "VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT", "110s"
-)
-
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
 
 # Size of the api-server anyio threadpool that runs sync endpoints, including the
@@ -1912,9 +1850,6 @@ AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
 IMAGE_MODEL_PROVIDER = os.environ.get("IMAGE_MODEL_PROVIDER", "openai")
-
-# Use managed Vespa (Vespa Cloud). If set, must also set VESPA_CLOUD_URL, VESPA_CLOUD_CERT_PATH and VESPA_CLOUD_KEY_PATH
-MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
 
@@ -2176,10 +2111,6 @@ AZURE_STORAGE_CONNECTION_STRING = (
     os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or None
 )
 AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") or None
-
-# Forcing Vespa Language
-# English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
-VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
 
 
 #####

@@ -6114,12 +6114,6 @@
         "imageSummarization": {
           "label": "Image summarization"
         },
-        "kgDeepExtraction": {
-          "label": "Knowledge graph extraction"
-        },
-        "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
-        },
         "other": {
           "label": "Other"
         },
@@ -6136,8 +6130,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
-        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
+        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
         "error": {
           "title": "Failed to load system usage for this period."
         },
