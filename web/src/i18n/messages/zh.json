@@ -4932,6 +4932,9 @@
         "noModelsTooltip": "上下文检索已禁用，因为您尚未配置任何模型。请先设置[语言模型]({link})。",
         "title": "上下文检索"
       },
+      "currentModel": {
+        "legacyHint": "这是旧版模型。它会继续工作，但不能再次选择用于新索引。如需升级，请点击“查看所有模型”并选择较新的模型。"
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "Embedding 模型和相关设置由 Onyx Cloud 管理。"
@@ -5063,9 +5066,13 @@
         "currentButton": {
           "label": "当前模型"
         },
-        "deprecated": {
-          "connectTooltip": "此 embedding 模型已弃用，无法连接。",
-          "selectTooltip": "此 embedding 模型已弃用，无法选择。"
+        "gpuRecommended": {
+          "tag": "建议使用 GPU",
+          "tooltip": "在 CPU 上使用此模型进行索引非常慢。请在 GPU 上运行模型服务器。"
+        },
+        "legacy": {
+          "tag": "旧版",
+          "tooltip": "此模型不能用于新索引。在您更换模型之前，它会继续工作。"
         },
         "selectButton": {
           "label": "选择模型"
@@ -5077,6 +5084,11 @@
       "modelPicker": {
         "addCustomModel": {
           "label": "添加自定义模型"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "连接 LiteLLM 代理或 Azure OpenAI 部署。模型名称和维度由您自行填写。",
+          "selfHostedDescription": "运行上方列表中没有的 Hugging Face 嵌入模型。模型名称、维度和前缀由您自行填写。",
+          "title": "高级：使用自己的模型或代理"
         },
         "cloudTab": {
           "label": "云端"
@@ -5145,9 +5157,6 @@
             "label": "添加配置"
           },
           "title": "为您的 {provider} embedding 提供商添加配置。"
-        },
-        "deprecated": {
-          "suffix": "（已弃用）"
         },
         "disconnect": {
           "errorToast": "断开 {provider} 的连接失败",
@@ -5274,22 +5283,30 @@
         "restoreHint": "如需保留某个连接器，请在此取消，先恢复或修复它，然后重新索引，它就会被迁移过去。否则请在重新索引完成后重新添加。"
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Cohere 质量最高的嵌入模型，2048 维输出。",
+        "cohereEmbedV5Fast": "Cohere Embed 5 模型的更快、更低成本版本，2048 维输出。",
         "cohereEmbedEnglishV3": "Cohere 的英语嵌入模型。在英语任务上表现良好。",
         "cohereEmbedEnglishLightV3": "Cohere 的轻量级英语嵌入模型。处理简单任务更快、更高效。",
-        "cohereEmbedV4": "Cohere 最新的多语言嵌入模型，默认 1536 维输出，检索质量更高。",
+        "cohereEmbedV4": "Cohere 的多语言嵌入模型，1536 维输出。",
         "openaiTextEmbedding3Large": "OpenAI 的大型嵌入模型。性能最佳，但成本更高。",
         "openaiTextEmbedding3Small": "OpenAI 更新、更高效的嵌入模型。性能与成本平衡良好。",
         "googleGeminiEmbedding001": "Google 的 Gemini 嵌入模型。强大且高效。",
         "googleTextEmbedding005": "Google 更小、更轻量的嵌入模型。",
         "googleGeminiEmbedding2": "Google 最新的多模态嵌入模型（GA）。3072 维输出，检索质量最高。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 的预览版。新部署已由 gemini-embedding-2 取代。",
+        "googleTextEmbedding004": "Google 早期的文本嵌入模型。已被更新的 Google 模型取代。",
+        "googleTextEmbeddingGecko003": "Google 早期的 Gecko 文本嵌入模型。已被更新的 Google 模型取代。",
         "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
         "voyageLight2Instruct": "Voyage 的轻量级嵌入模型。性能与效率平衡良好。",
+        "graniteEmbedding97mMultilingualR2": "IBM 的小型多语言嵌入模型（9700 万参数）。在 CPU 上运行很快，且已随 {appName} 提供，无需下载。",
+        "voyage4Nano": "Voyage AI 的开放权重嵌入模型，2048 维输出。搜索质量高于更小的模型。使用 GPU 可大幅加快索引速度。",
+        "nemotron3Embed1b": "NVIDIA 的 10 亿参数多语言嵌入模型，2048 维输出。搜索质量高，但在 CPU 上索引非常慢。",
         "nomicEmbedTextV1": "Nomic 的嵌入模型，专注于检索、相似度、聚类和分类。",
-        "e5BaseV2": "比默认模型更小、更快的模型。速度约为默认模型的 2 倍，但搜索质量较低。",
+        "e5BaseV2": "Microsoft E5 系列的英文嵌入模型。在速度与搜索质量之间取得平衡。",
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",
         "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
-        "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
+        "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。",
+        "gteSmall": "GTE 系列的小型英文嵌入模型。早期 {appName} 版本的默认模型。"
       }
     },
     "indexing": {

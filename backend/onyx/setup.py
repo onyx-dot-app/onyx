@@ -36,6 +36,7 @@ from onyx.db.llm import (
     update_default_provider,
     upsert_llm_provider,
 )
+from onyx.db.models import SearchSettings
 from onyx.db.search_settings import (
     get_active_search_settings,
     get_current_search_settings,
@@ -79,6 +80,7 @@ from shared_configs.configs import (
     MODEL_SERVER_PORT,
     MULTI_TENANT,
 )
+from shared_configs.embedding_models import get_local_model_spec
 
 logger = setup_logger()
 
@@ -129,6 +131,9 @@ def setup_onyx(
     if search_settings.query_prefix or search_settings.passage_prefix:
         logger.notice('Query embedding prefix: "%s"', search_settings.query_prefix)
         logger.notice('Passage embedding prefix: "%s"', search_settings.passage_prefix)
+    warn_on_custom_models_with_registry_names(
+        [search_settings, secondary_search_settings]
+    )
 
     # setup Postgres with default credential, llm providers, etc.
     setup_postgres(db_session)
@@ -179,6 +184,36 @@ def setup_onyx(
 
         # update multipass indexing setting based on GPU availability
         update_default_multipass_indexing(db_session)
+
+
+def warn_on_custom_models_with_registry_names(
+    search_settings_list: list[SearchSettings | None],
+) -> None:
+    """Warn about a self-hosted model that has the exact name of a registry model
+    but another dimension. An admin added it with "Add Custom Model" before the
+    registry existed. The model server keeps loading it as before (see
+    model_server/embedding_model_loader.py), so it works, but it is not the
+    registry model. Only logs; the settings are not changed."""
+    for settings in search_settings_list:
+        if settings is None or settings.provider_type is not None:
+            continue
+        spec = get_local_model_spec(settings.model_name)
+        if spec is None or settings.model_dim == spec.model_dim:
+            continue
+        logger.warning(
+            "Embedding model %s (search settings %s, %s) is a custom model with "
+            "%s dimensions. The Onyx model with this name has %s dimensions. The "
+            "model server loads the custom model as before, so its index keeps "
+            "working. To use the Onyx model, re-index to %s with %s dimensions "
+            "and the Onyx settings.",
+            settings.model_name,
+            settings.id,
+            settings.status.value,
+            settings.model_dim,
+            spec.model_dim,
+            spec.model_name,
+            spec.model_dim,
+        )
 
 
 def mark_reindex_flag(db_session: Session) -> None:

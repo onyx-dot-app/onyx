@@ -1,17 +1,27 @@
-from collections.abc import AsyncGenerator
+import asyncio
+import json
+from collections.abc import AsyncGenerator, Callable, Iterator
 from threading import Lock
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
+from cohere import AsyncClient as RealCohereAsyncClient
+from google import genai
+from google.genai import _transformers as genai_transformers
+from google.genai import types as genai_types
+from google.oauth2.credentials import Credentials as TokenCredentials
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
 from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import (
+    AuthenticationError,
     CloudEmbedding,
     EmbeddingModel,
+    _vertex_requires_single_content,
     clean_model_name,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
@@ -541,6 +551,50 @@ def test_batch_encode_local_model_sequential() -> None:
     assert result == [_embedding_for_idx(i) for i in range(n_texts)]
 
 
+def test_from_db_model_sends_the_stored_dim_for_self_hosted_models() -> None:
+    """The model server uses it to keep the legacy load for a custom model that
+    has a registry name (e.g. voyage-4-nano stored with 1024 dims)."""
+    search_settings = MagicMock()
+    search_settings.model_name = "voyageai/voyage-4-nano"
+    search_settings.model_dim = 1024
+    search_settings.normalize = True
+    search_settings.query_prefix = None
+    search_settings.passage_prefix = None
+    search_settings.api_key = None
+    search_settings.api_url = None
+    search_settings.api_version = None
+    search_settings.deployment_name = None
+    search_settings.reduced_dimension = None
+    search_settings.provider_type = None
+    with patch(f"{_SEARCH_NLP_MODULE}.get_tokenizer", return_value=MagicMock()):
+        model = EmbeddingModel.from_db_model(
+            search_settings=search_settings, server_host="localhost", server_port=9000
+        )
+
+    with patch.object(
+        EmbeddingModel,
+        "_make_model_server_request",
+        side_effect=_fake_model_server_call,
+    ) as request:
+        model.encode(texts=[_text_for_idx(0)], text_type=EmbedTextType.QUERY)
+
+    assert request.call_args.args[0].expected_dim == 1024
+
+
+def test_cloud_request_has_no_stored_dim() -> None:
+    model = _make_cloud_embedding_model()
+    model.model_dim = 1536
+
+    with patch.object(
+        EmbeddingModel,
+        "_make_direct_api_call",
+        new=AsyncMock(side_effect=_fake_direct_api_call),
+    ) as request:
+        model.encode(texts=[_text_for_idx(0)], text_type=EmbedTextType.QUERY)
+
+    assert request.call_args.args[0].expected_dim is None
+
+
 def test_batch_encode_error_propagates() -> None:
     """
     Tests that a failing batch propagates its exception out of encode().
@@ -673,3 +727,520 @@ async def test_batch_encode_async_caller_multi_batch() -> None:
     # Postcondition.
     assert result == [_embedding_for_idx(i) for i in range(n_texts)]
     assert spy_asyncio_run.call_count == 0
+
+
+# ------------------------------------------------------------------------------
+# Vertex AI through the real google-genai SDK
+#
+# These tests replace only the HTTP transport (httpx.MockTransport) and the
+# credentials. The SDK builds the real requests and picks the real endpoint, so
+# a call that the SDK refuses (more than one content for an :embedContent
+# model) fails here the same way as in production.
+# ------------------------------------------------------------------------------
+
+_VERTEX_SERVICE_ACCOUNT_JSON = (
+    '{"project_id": "fake-project", "type": "service_account"}'
+)
+_VERTEX_MODEL_PATH = (
+    "/v1beta1/projects/fake-project/locations/global/publishers/google/models"
+)
+_VERTEX_ENV_VARS = (
+    "GOOGLE_CLOUD_LOCATION",
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_GENAI_USE_VERTEXAI",
+)
+_VERTEX_TEST_DIM = 4
+_VERTEX_ERRORS: dict[int, tuple[str, str]] = {
+    400: ("INVALID_ARGUMENT", "Request contains an invalid argument."),
+    403: ("PERMISSION_DENIED", "Permission 'aiplatform.endpoints.predict' denied."),
+    404: ("NOT_FOUND", "Publisher model not found."),
+    429: ("RESOURCE_EXHAUSTED", "Resource exhausted. Please try again later."),
+    503: ("UNAVAILABLE", "The service is currently unavailable."),
+}
+
+
+def _doc_texts(count: int) -> list[str]:
+    return [f"doc {i}" for i in range(count)]
+
+
+def _index_in_text(text: str) -> int:
+    # Works for "doc 7" and for Gemini templates such as "title: none | text: doc 7".
+    return int(text.rsplit(" ", 1)[-1])
+
+
+def _vertex_vector(index: int) -> list[float]:
+    # The fake server puts the text index first, so tests can check order.
+    return [float(index)] + [0.0] * (_VERTEX_TEST_DIM - 1)
+
+
+def _vertex_error_response(code: int) -> httpx.Response:
+    status, message = _VERTEX_ERRORS[code]
+    return httpx.Response(
+        code, json={"error": {"code": code, "message": message, "status": status}}
+    )
+
+
+class _FakeVertexServer:
+    """Answers Vertex :embedContent and :predict requests."""
+
+    def __init__(self) -> None:
+        self.requests: list[tuple[str, dict[str, Any]]] = []
+        self.client_kwargs: list[dict[str, Any]] = []
+        self.in_flight = 0
+        self.max_in_flight = 0
+        # Response delay for each text index, so that calls finish out of order.
+        self.delay_for_index: Callable[[int], float] = lambda _index: 0.0
+        # Text -> status codes to send (one per attempt) before a success.
+        self.transient_errors: dict[str, list[int]] = {}
+        # Text -> status code to send on every attempt.
+        self.permanent_errors: dict[str, int] = {}
+
+    def embed_content_texts(self) -> list[str]:
+        return [
+            body["content"]["parts"][0]["text"]
+            for path, body in self.requests
+            if path.endswith(":embedContent")
+        ]
+
+    async def handle(self, request: httpx.Request) -> httpx.Response:
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            body = json.loads(request.content)
+            self.requests.append((request.url.path, body))
+            if request.url.path.endswith(":embedContent"):
+                text = body["content"]["parts"][0]["text"]
+                await asyncio.sleep(self.delay_for_index(_index_in_text(text)))
+                pending = self.transient_errors.get(text)
+                if pending:
+                    return _vertex_error_response(pending.pop(0))
+                if text in self.permanent_errors:
+                    return _vertex_error_response(self.permanent_errors[text])
+                return httpx.Response(
+                    200,
+                    json={
+                        "embedding": {"values": _vertex_vector(_index_in_text(text))}
+                    },
+                )
+            if request.url.path.endswith(":predict"):
+                predictions = [
+                    {
+                        "embeddings": {
+                            "values": _vertex_vector(
+                                _index_in_text(instance["content"])
+                            ),
+                            "statistics": {"token_count": 1, "truncated": False},
+                        }
+                    }
+                    for instance in body["instances"]
+                ]
+                return httpx.Response(200, json={"predictions": predictions})
+            return _vertex_error_response(404)
+        finally:
+            self.in_flight -= 1
+
+
+@pytest.fixture
+def fake_vertex(monkeypatch: pytest.MonkeyPatch) -> Iterator[_FakeVertexServer]:
+    """Sends the requests of every genai.Client that Onyx creates to a fake server."""
+    for env_var in _VERTEX_ENV_VARS:
+        monkeypatch.delenv(env_var, raising=False)
+
+    server = _FakeVertexServer()
+    real_client_cls = genai.Client
+
+    def _client_factory(**kwargs: Any) -> genai.Client:
+        server.client_kwargs.append(dict(kwargs))
+        http_options = kwargs.pop("http_options", None) or genai_types.HttpOptions()
+        update: dict[str, Any] = {
+            "httpx_async_client": httpx.AsyncClient(
+                transport=httpx.MockTransport(server.handle)
+            )
+        }
+        if http_options.retry_options is not None:
+            # Keep the attempts and status codes under test. Only shorten the waits.
+            update["retry_options"] = http_options.retry_options.model_copy(
+                update={"initial_delay": 0.001, "max_delay": 0.001, "jitter": 0.001}
+            )
+        return real_client_cls(
+            **kwargs, http_options=http_options.model_copy(update=update)
+        )
+
+    with (
+        patch("google.genai.Client", new=_client_factory),
+        patch(
+            "google.oauth2.service_account.Credentials.from_service_account_info",
+            return_value=TokenCredentials(token="fake-token"),
+        ),
+    ):
+        yield server
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "gemini-embedding-2",
+        "gemini-embedding-2-preview",
+        "gemini-embedding-001",
+        "text-embedding-005",
+        "text-embedding-004",
+        "text-multilingual-embedding-002",
+        "textembedding-gecko@003",
+        "multimodalembedding@001",
+        "publishers/google/models/gemini-embedding-2",
+        "publishers/google/models/gemini-embedding-001",
+        "Gemini-Embedding-2",
+        "gemini-embedding-001 ",
+        "intfloat/multilingual-e5-large-instruct-maas",
+        "",
+    ],
+)
+def test_vertex_requires_single_content_matches_sdk(model_name: str) -> None:
+    """The SDK picks :embedContent (one content per call) with this same rule."""
+    assert _vertex_requires_single_content(
+        model_name
+    ) == genai_transformers.t_is_vertex_embed_content_model(model_name)
+
+
+def test_vertex_requires_single_content_for_registry_models() -> None:
+    assert _vertex_requires_single_content("gemini-embedding-2")
+    assert _vertex_requires_single_content("gemini-embedding-2-preview")
+    assert not _vertex_requires_single_content("gemini-embedding-001")
+    assert not _vertex_requires_single_content("text-embedding-005")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text_type", "reduced_dimension", "template", "expected_config"),
+    [
+        (
+            EmbedTextType.PASSAGE,
+            None,
+            "title: none | text: {text}",
+            {"autoTruncate": True},
+        ),
+        (
+            EmbedTextType.QUERY,
+            768,
+            "task: search result | query: {text}",
+            {"autoTruncate": True, "outputDimensionality": 768},
+        ),
+    ],
+)
+async def test_vertex_gemini_embedding_2_sends_one_content_per_call(
+    fake_vertex: _FakeVertexServer,
+    text_type: EmbedTextType,
+    reduced_dimension: int | None,
+    template: str,
+    expected_config: dict[str, Any],
+) -> None:
+    """12 texts become 12 single-content :embedContent calls, in text order."""
+    texts = _doc_texts(12)
+
+    with patch(f"{_SEARCH_NLP_MODULE}.VERTEXAI_EMBED_CONTENT_CONCURRENCY", 1):
+        async with CloudEmbedding(
+            _VERTEX_SERVICE_ACCOUNT_JSON, EmbeddingProvider.GOOGLE
+        ) as embedding:
+            result = await embedding.embed(
+                texts=texts,
+                text_type=text_type,
+                model_name="gemini-embedding-2",
+                reduced_dimension=reduced_dimension,
+            )
+
+    assert result == [_vertex_vector(i) for i in range(12)]
+    assert fake_vertex.requests == [
+        (
+            f"{_VERTEX_MODEL_PATH}/gemini-embedding-2:embedContent",
+            {
+                "content": {"parts": [{"text": template.format(text=text)}]},
+                "embedContentConfig": expected_config,
+            },
+        )
+        for text in texts
+    ]
+
+
+@pytest.mark.asyncio
+async def test_vertex_single_content_calls_are_bounded_and_keep_order(
+    fake_vertex: _FakeVertexServer,
+) -> None:
+    texts = _doc_texts(12)
+    # Later texts answer faster, so calls finish out of order.
+    fake_vertex.delay_for_index = lambda index: 0.002 * (12 - index)
+
+    with patch(f"{_SEARCH_NLP_MODULE}.VERTEXAI_EMBED_CONTENT_CONCURRENCY", 4):
+        async with CloudEmbedding(
+            _VERTEX_SERVICE_ACCOUNT_JSON, EmbeddingProvider.GOOGLE
+        ) as embedding:
+            result = await embedding.embed(
+                texts=texts,
+                text_type=EmbedTextType.PASSAGE,
+                model_name="gemini-embedding-2",
+            )
+
+    assert result == [_vertex_vector(i) for i in range(12)]
+    assert sorted(fake_vertex.embed_content_texts()) == sorted(
+        f"title: none | text: {text}" for text in texts
+    )
+    assert len(fake_vertex.requests) == 12
+    assert 2 <= fake_vertex.max_in_flight <= 4
+
+
+@pytest.mark.asyncio
+async def test_vertex_single_content_keeps_the_window_loop(
+    fake_vertex: _FakeVertexServer,
+) -> None:
+    """A window starts only after all calls of the previous window are done."""
+    with (
+        patch(f"{_SEARCH_NLP_MODULE}.VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", 5),
+        patch(f"{_SEARCH_NLP_MODULE}.VERTEXAI_EMBED_CONTENT_CONCURRENCY", 4),
+    ):
+        async with CloudEmbedding(
+            _VERTEX_SERVICE_ACCOUNT_JSON, EmbeddingProvider.GOOGLE
+        ) as embedding:
+            result = await embedding.embed(
+                texts=_doc_texts(12),
+                text_type=EmbedTextType.PASSAGE,
+                model_name="gemini-embedding-2",
+            )
+
+    assert result == [_vertex_vector(i) for i in range(12)]
+    sent = [_index_in_text(text) for text in fake_vertex.embed_content_texts()]
+    assert sorted(sent[:5]) == [0, 1, 2, 3, 4]
+    assert sorted(sent[5:10]) == [5, 6, 7, 8, 9]
+    assert sorted(sent[10:]) == [10, 11]
+    assert fake_vertex.max_in_flight <= 4
+
+
+def test_vertex_gemini_embedding_2_encode_indexing_path(
+    fake_vertex: _FakeVertexServer,
+) -> None:
+    """EmbeddingModel.encode (the indexing path) with 12 passages."""
+    with patch(f"{_SEARCH_NLP_MODULE}.get_tokenizer", return_value=MagicMock()):
+        model = EmbeddingModel(
+            server_host="localhost",
+            server_port=9000,
+            model_name="gemini-embedding-2",
+            normalize=False,
+            query_prefix=None,
+            passage_prefix=None,
+            api_key=_VERTEX_SERVICE_ACCOUNT_JSON,
+            api_url=None,
+            provider_type=EmbeddingProvider.GOOGLE,
+        )
+
+    result = model.encode(texts=_doc_texts(12), text_type=EmbedTextType.PASSAGE)
+
+    assert result == [_vertex_vector(i) for i in range(12)]
+    assert len(fake_vertex.embed_content_texts()) == 12
+    assert all(
+        path.endswith("/gemini-embedding-2:embedContent")
+        for path, _body in fake_vertex.requests
+    )
+
+
+@pytest.mark.asyncio
+async def test_vertex_client_options_only_for_single_content_models(
+    fake_vertex: _FakeVertexServer,
+) -> None:
+    async with CloudEmbedding(
+        _VERTEX_SERVICE_ACCOUNT_JSON, EmbeddingProvider.GOOGLE
+    ) as embedding:
+        for model_name in ("gemini-embedding-2", "text-embedding-005"):
+            await embedding.embed(
+                texts=["doc 0"], text_type=EmbedTextType.QUERY, model_name=model_name
+            )
+        timeout_s = embedding.timeout
+
+    single_content_kwargs, predict_kwargs = fake_vertex.client_kwargs
+    http_options = single_content_kwargs["http_options"]
+    assert isinstance(http_options, genai_types.HttpOptions)
+    assert http_options.timeout == timeout_s * 1000
+    assert http_options.retry_options == genai_types.HttpRetryOptions(
+        attempts=5, http_status_codes=[408, 429, 500, 502, 503, 504]
+    )
+    # :predict models keep the old client call and the SDK defaults.
+    assert set(predict_kwargs) == {"vertexai", "project", "location", "credentials"}
+
+
+@pytest.mark.asyncio
+async def test_vertex_single_content_retries_transient_errors_per_call(
+    fake_vertex: _FakeVertexServer,
+) -> None:
+    """The SDK retries one failed text; the other texts are not sent again."""
+    fake_vertex.transient_errors = {"title: none | text: doc 3": [429, 503]}
+
+    async with CloudEmbedding(
+        _VERTEX_SERVICE_ACCOUNT_JSON, EmbeddingProvider.GOOGLE
+    ) as embedding:
+        result = await embedding.embed(
+            texts=_doc_texts(12),
+            text_type=EmbedTextType.PASSAGE,
+            model_name="gemini-embedding-2",
+        )
+
+    assert result == [_vertex_vector(i) for i in range(12)]
+    assert len(fake_vertex.requests) == 12 + 2
+
+
+@pytest.mark.asyncio
+async def test_vertex_single_content_permission_error_is_authentication_error(
+    fake_vertex: _FakeVertexServer,
+) -> None:
+    """A failed call is not hidden inside an ExceptionGroup."""
+    fake_vertex.permanent_errors = {"title: none | text: doc 5": 403}
+
+    with patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()):
+        async with CloudEmbedding(
+            _VERTEX_SERVICE_ACCOUNT_JSON, EmbeddingProvider.GOOGLE
+        ) as embedding:
+            with pytest.raises(AuthenticationError):
+                await embedding.embed(
+                    texts=_doc_texts(12),
+                    text_type=EmbedTextType.PASSAGE,
+                    model_name="gemini-embedding-2",
+                )
+
+
+@pytest.mark.asyncio
+async def test_vertex_single_content_error_keeps_provider_message(
+    fake_vertex: _FakeVertexServer,
+) -> None:
+    fake_vertex.permanent_errors = {"title: none | text: doc 5": 400}
+
+    with patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()):
+        async with CloudEmbedding(
+            _VERTEX_SERVICE_ACCOUNT_JSON, EmbeddingProvider.GOOGLE
+        ) as embedding:
+            with pytest.raises(RuntimeError, match="INVALID_ARGUMENT") as exc_info:
+                await embedding.embed(
+                    texts=_doc_texts(12),
+                    text_type=EmbedTextType.PASSAGE,
+                    model_name="gemini-embedding-2",
+                )
+
+    assert "TaskGroup" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_name", ["gemini-embedding-001", "text-embedding-005"])
+async def test_vertex_predict_models_still_batch(
+    fake_vertex: _FakeVertexServer, model_name: str
+) -> None:
+    """:predict models still send up to 50 texts per call, one call at a time."""
+    texts = _doc_texts(60)
+
+    with patch(f"{_SEARCH_NLP_MODULE}.VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", 50):
+        async with CloudEmbedding(
+            _VERTEX_SERVICE_ACCOUNT_JSON, EmbeddingProvider.GOOGLE
+        ) as embedding:
+            result = await embedding.embed(
+                texts=texts,
+                text_type=EmbedTextType.PASSAGE,
+                model_name=model_name,
+            )
+
+    assert result == [_vertex_vector(i) for i in range(60)]
+    predict_path = f"{_VERTEX_MODEL_PATH}/{model_name}:predict"
+    assert fake_vertex.requests == [
+        (
+            predict_path,
+            {
+                "instances": [
+                    {"content": text, "task_type": "RETRIEVAL_DOCUMENT"}
+                    for text in window
+                ],
+                "parameters": {"autoTruncate": True},
+            },
+        )
+        for window in (texts[:50], texts[50:])
+    ]
+    assert fake_vertex.max_in_flight == 1
+
+
+# ------------------------------------------------------------------------------
+# Cohere through the real cohere SDK
+# ------------------------------------------------------------------------------
+
+
+class _FakeCohereServer:
+    """Answers Cohere v1 /embed requests like the API does for embedding_types."""
+
+    def __init__(self, dim: int) -> None:
+        self.dim = dim
+        self.requests: list[tuple[str, dict[str, Any]]] = []
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        self.requests.append((request.url.path, body))
+        vectors = [
+            [float(_index_in_text(text))] + [0.0] * (self.dim - 1)
+            for text in body["texts"]
+        ]
+        return httpx.Response(
+            200,
+            json={
+                "id": "fake",
+                "response_type": "embeddings_by_type",
+                "embeddings": {"float": vectors},
+                "texts": body["texts"],
+                "meta": {"api_version": {"version": "1"}},
+            },
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model_name", "dim"),
+    [
+        ("embed-v5.0-pro", 2048),
+        ("embed-v5.0-fast", 2048),
+        ("embed-v4.0", 1536),
+        ("embed-english-v3.0", 1024),
+        ("embed-english-light-v3.0", 384),
+    ],
+)
+@pytest.mark.parametrize(
+    ("text_type", "input_type"),
+    [
+        (EmbedTextType.PASSAGE, "search_document"),
+        (EmbedTextType.QUERY, "search_query"),
+    ],
+)
+async def test_cohere_embed_uses_v1_embed_for_all_models(
+    model_name: str, dim: int, text_type: EmbedTextType, input_type: str
+) -> None:
+    """v5 uses the same v1 /embed call as v3 and v4; 130 texts become 96 + 34."""
+    server = _FakeCohereServer(dim)
+    texts = _doc_texts(130)
+
+    def _client_factory(api_key: str) -> RealCohereAsyncClient:
+        return RealCohereAsyncClient(
+            api_key=api_key,
+            httpx_client=httpx.AsyncClient(
+                transport=httpx.MockTransport(server.handle)
+            ),
+        )
+
+    with patch(f"{_SEARCH_NLP_MODULE}.CohereAsyncClient", new=_client_factory):
+        async with CloudEmbedding("fake-key", EmbeddingProvider.COHERE) as embedding:
+            result = await embedding.embed(
+                texts=texts, text_type=text_type, model_name=model_name
+            )
+
+    assert len(result) == 130
+    assert all(len(vector) == dim for vector in result)
+    assert [vector[0] for vector in result] == [float(i) for i in range(130)]
+    request_body = {
+        "model": model_name,
+        "input_type": input_type,
+        "truncate": "END",
+        "embedding_types": ["float"],
+    }
+    assert server.requests == [
+        ("/v1/embed", {**request_body, "texts": texts[:96]}),
+        ("/v1/embed", {**request_body, "texts": texts[96:]}),
+    ]

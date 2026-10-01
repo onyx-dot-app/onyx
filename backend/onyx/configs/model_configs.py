@@ -1,7 +1,9 @@
 import json
+import logging
 import os
 
 from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
+from shared_configs.embedding_models import find_embedding_model_spec
 
 #####
 # Embedding/Reranking Model Configs
@@ -17,11 +19,35 @@ from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
 DOCUMENT_ENCODER_MODEL = (
     os.environ.get("DOCUMENT_ENCODER_MODEL") or DEFAULT_DOCUMENT_ENCODER_MODEL
 )
+# Defaults for the settings below come from the registry spec of
+# DOCUMENT_ENCODER_MODEL. Models not in the registry use the old literals.
+# Env vars win when DOCUMENT_ENCODER_MODEL is set. Without it, env values that
+# differ from the default model's spec are ignored (see below). These values
+# only seed the first search settings row of a fresh DB (alembic dbaa756c2ccf).
+_DOCUMENT_ENCODER_SPEC = find_embedding_model_spec(None, DOCUMENT_ENCODER_MODEL)
+
 # If the below is changed, Vespa deployment must also be changed
-DOC_EMBEDDING_DIM = int(os.environ.get("DOC_EMBEDDING_DIM") or 768)
+DOC_EMBEDDING_DIM = int(
+    os.environ.get("DOC_EMBEDDING_DIM")
+    or (_DOCUMENT_ENCODER_SPEC.model_dim if _DOCUMENT_ENCODER_SPEC else 768)
+)
+_NORMALIZE_EMBEDDINGS_DEFAULT = (
+    _DOCUMENT_ENCODER_SPEC.normalize if _DOCUMENT_ENCODER_SPEC else True
+)
 NORMALIZE_EMBEDDINGS = (
-    os.environ.get("NORMALIZE_EMBEDDINGS") or "true"
+    os.environ.get("NORMALIZE_EMBEDDINGS")
+    or ("true" if _NORMALIZE_EMBEDDINGS_DEFAULT else "false")
 ).lower() == "true"
+
+# The default self-hosted model before granite.
+PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
+
+# Tokenizer for chat token counting and for the fallback when a model's own
+# tokenizer can't load. It keeps the pre-granite semantics on purpose: env
+# DOCUMENT_ENCODER_MODEL, else nomic (baked into the API image).
+DEFAULT_TOKENIZER_MODEL = (
+    os.environ.get("DOCUMENT_ENCODER_MODEL") or PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL
+)
 
 # Old default model settings, which are needed for an automatic easy upgrade
 OLD_DEFAULT_DOCUMENT_ENCODER_MODEL = "thenlper/gte-small"
@@ -33,8 +59,47 @@ OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS = False
 SIM_SCORE_RANGE_LOW = float(os.environ.get("SIM_SCORE_RANGE_LOW") or 0.0)
 SIM_SCORE_RANGE_HIGH = float(os.environ.get("SIM_SCORE_RANGE_HIGH") or 1.0)
 # Certain models like e5, BGE, etc use a prefix for asymmetric retrievals (query generally shorter than docs)
-ASYM_QUERY_PREFIX = os.environ.get("ASYM_QUERY_PREFIX", "search_query: ")
-ASYM_PASSAGE_PREFIX = os.environ.get("ASYM_PASSAGE_PREFIX", "search_document: ")
+# An env var set to "" stays "" (no fallback to the default).
+ASYM_QUERY_PREFIX = os.environ.get(
+    "ASYM_QUERY_PREFIX",
+    _DOCUMENT_ENCODER_SPEC.query_prefix if _DOCUMENT_ENCODER_SPEC else "search_query: ",
+)
+ASYM_PASSAGE_PREFIX = os.environ.get(
+    "ASYM_PASSAGE_PREFIX",
+    (
+        _DOCUMENT_ENCODER_SPEC.passage_prefix
+        if _DOCUMENT_ENCODER_SPEC
+        else "search_document: "
+    ),
+)
+
+# Without DOCUMENT_ENCODER_MODEL, the default model keeps its registry settings.
+# Its output dimension is fixed, and env files written for the previous default
+# (nomic: 768 dims, "search_query: " prefixes) would seed a broken index or
+# worse search. Set DOCUMENT_ENCODER_MODEL to use these env vars.
+_IGNORED_MODEL_ENV_VARS: list[str] = []
+if not os.environ.get("DOCUMENT_ENCODER_MODEL") and _DOCUMENT_ENCODER_SPEC:
+    if DOC_EMBEDDING_DIM != _DOCUMENT_ENCODER_SPEC.model_dim:
+        _IGNORED_MODEL_ENV_VARS.append("DOC_EMBEDDING_DIM")
+        DOC_EMBEDDING_DIM = _DOCUMENT_ENCODER_SPEC.model_dim
+    if NORMALIZE_EMBEDDINGS != _DOCUMENT_ENCODER_SPEC.normalize:
+        _IGNORED_MODEL_ENV_VARS.append("NORMALIZE_EMBEDDINGS")
+        NORMALIZE_EMBEDDINGS = _DOCUMENT_ENCODER_SPEC.normalize
+    if ASYM_QUERY_PREFIX != _DOCUMENT_ENCODER_SPEC.query_prefix:
+        _IGNORED_MODEL_ENV_VARS.append("ASYM_QUERY_PREFIX")
+        ASYM_QUERY_PREFIX = _DOCUMENT_ENCODER_SPEC.query_prefix
+    if ASYM_PASSAGE_PREFIX != _DOCUMENT_ENCODER_SPEC.passage_prefix:
+        _IGNORED_MODEL_ENV_VARS.append("ASYM_PASSAGE_PREFIX")
+        ASYM_PASSAGE_PREFIX = _DOCUMENT_ENCODER_SPEC.passage_prefix
+    if _IGNORED_MODEL_ENV_VARS:
+        logging.getLogger(__name__).warning(
+            "Ignoring %s: DOCUMENT_ENCODER_MODEL is not set, so the first "
+            "embedding model of a new database is the default model %s with its "
+            "own settings. Existing databases are not affected. Set "
+            "DOCUMENT_ENCODER_MODEL to use these env vars.",
+            ", ".join(_IGNORED_MODEL_ENV_VARS),
+            DOCUMENT_ENCODER_MODEL,
+        )
 # Purely an optimization, memory limitation consideration
 
 # User's set embedding batch size overrides the default encoding batch sizes

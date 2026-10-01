@@ -70,6 +70,7 @@ from shared_configs.configs import (
     MODEL_SERVER_READ_TIMEOUT,
     OPENAI_EMBEDDING_TIMEOUT,
     SKIP_WARM_UP,
+    VERTEXAI_EMBED_CONTENT_CONCURRENCY,
     VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType, RerankerProvider
@@ -83,6 +84,9 @@ from shared_configs.model_server_models import (
     RerankResponse,
 )
 from shared_configs.utils import batch_list
+
+# Re-export: alembic dbaa756c2ccf and other callers import it from this module.
+from shared_configs.utils import clean_model_name as clean_model_name
 
 logger = setup_logger()
 
@@ -201,10 +205,6 @@ WARM_UP_STRINGS = [
 ]
 
 
-def clean_model_name(model_str: str) -> str:
-    return model_str.replace("/", "_").replace("-", "_").replace(".", "_").lower()
-
-
 def build_model_server_url(
     model_server_host: str,
     model_server_port: int,
@@ -258,6 +258,24 @@ def _is_gemini_embedding_2_model(model: str) -> bool:
     )
 
 
+# SDK-level retries for Vertex :embedContent requests. One batch becomes many
+# single-text requests there, so a transient error must not fail the batch.
+# The :predict models keep the SDK defaults.
+_VERTEX_EMBED_CONTENT_RETRY_ATTEMPTS = 5
+_VERTEX_EMBED_CONTENT_RETRY_HTTP_STATUS_CODES = (408, 429, 500, 502, 503, 504)
+
+
+def _vertex_requires_single_content(model: str) -> bool:
+    """True if Vertex serves ``model`` on :embedContent (one content per call).
+
+    Mirrors ``google.genai._transformers.t_is_vertex_embed_content_model``, which
+    the SDK uses to pick the endpoint. For these models the SDK raises
+    ``ValueError`` when a call has more than one content. Other models
+    (gemini-embedding-001, text-embedding-005) use :predict, which takes many.
+    """
+    return ("gemini" in model and model != "gemini-embedding-001") or "maas" in model
+
+
 def _format_vertex_embedding_text(text: str, model: str, embedding_type: str) -> str:
     if not _is_gemini_embedding_2_model(model):
         return text
@@ -297,7 +315,7 @@ def _extract_cohere_embeddings(response_embeddings: Any) -> list[Embedding]:
     """Normalize Cohere's embed response across SDK versions.
 
     v3 models return ``response.embeddings`` as a flat ``list[list[float]]``.
-    v4 models return an ``EmbedByTypeResponseEmbeddings`` object that carries
+    v4 and v5 models return an ``EmbedByTypeResponseEmbeddings`` object that carries
     the embeddings under ``float_`` (and possibly other per-type buckets when
     ``embedding_types`` is set). We always read the float bucket here since
     we never request alternate types.
@@ -451,12 +469,30 @@ class CloudEmbedding:
             or "global"
         )
 
-        client = genai.Client(
-            vertexai=True,
-            project=project_id,
-            location=location,
-            credentials=credentials,
-        )
+        single_content = _vertex_requires_single_content(resolved_model)
+        if single_content:
+            client = genai.Client(
+                vertexai=True,
+                project=project_id,
+                location=location,
+                credentials=credentials,
+                http_options=genai_types.HttpOptions(
+                    timeout=self.timeout * 1000,  # milliseconds
+                    retry_options=genai_types.HttpRetryOptions(
+                        attempts=_VERTEX_EMBED_CONTENT_RETRY_ATTEMPTS,
+                        http_status_codes=list(
+                            _VERTEX_EMBED_CONTENT_RETRY_HTTP_STATUS_CODES
+                        ),
+                    ),
+                ),
+            )
+        else:
+            client = genai.Client(
+                vertexai=True,
+                project=project_id,
+                location=location,
+                credentials=credentials,
+            )
 
         # gemini-embedding-2 rejects task_type; embedding intent is conveyed
         # via the instruction-formatted text instead. Older models continue
@@ -473,21 +509,21 @@ class CloudEmbedding:
                 auto_truncate=True,
             )
 
-        async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
-            content_requests: list[Any] = [
-                genai_types.Content(
-                    parts=[
-                        genai_types.Part(
-                            text=_format_vertex_embedding_text(
-                                text=text,
-                                model=resolved_model,
-                                embedding_type=embedding_type,
-                            )
+        def _to_content(text: str) -> genai_types.Content:
+            return genai_types.Content(
+                parts=[
+                    genai_types.Part(
+                        text=_format_vertex_embedding_text(
+                            text=text,
+                            model=resolved_model,
+                            embedding_type=embedding_type,
                         )
-                    ]
-                )
-                for text in batch_texts
-            ]
+                    )
+                ]
+            )
+
+        async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
+            content_requests: list[Any] = [_to_content(text) for text in batch_texts]
             response = await client.aio.models.embed_content(
                 model=resolved_model,
                 contents=content_requests,
@@ -506,9 +542,45 @@ class CloudEmbedding:
                 embeddings.append(embedding.values)
             return embeddings
 
+        request_semaphore = asyncio.Semaphore(VERTEXAI_EMBED_CONTENT_CONCURRENCY)
+
+        async def _embed_single_text(text: str) -> Embedding:
+            async with request_semaphore:
+                response = await client.aio.models.embed_content(
+                    model=resolved_model,
+                    contents=[_to_content(text)],
+                    config=embed_config,
+                )
+
+            if not response.embeddings or len(response.embeddings) != 1:
+                raise RuntimeError(
+                    "Expected exactly one embedding from Google GenAI embedContent."
+                )
+            values = response.embeddings[0].values
+            if values is None:
+                raise RuntimeError("Missing embedding values from Google GenAI.")
+            return values
+
+        async def _embed_batch_one_text_per_call(
+            batch_texts: list[str],
+        ) -> list[Embedding]:
+            try:
+                async with asyncio.TaskGroup() as task_group:
+                    tasks = [
+                        task_group.create_task(_embed_single_text(text))
+                        for text in batch_texts
+                    ]
+            except ExceptionGroup as exc_group:
+                # Re-raise the first provider error unwrapped, so embed() maps it
+                # (auth error vs. retryable error) the same way as for :predict.
+                raise exc_group.exceptions[0]
+            return [task.result() for task in tasks]
+
         # Process VertexAI batches sequentially to avoid additional intra-task fanout.
         # The higher-level thread pool already provides concurrency; running these
         # requests in parallel here was causing excessive memory usage.
+        # Models that take one content per call send one request per text, with
+        # at most VERTEXAI_EMBED_CONTENT_CONCURRENCY requests in flight.
         batches = [
             texts[i : i + VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE]
             for i in range(0, len(texts), VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE)
@@ -524,7 +596,10 @@ class CloudEmbedding:
 
         try:
             for batch_idx, batch in enumerate(batches):
-                batch_embeddings = await _embed_batch(batch)
+                if single_content:
+                    batch_embeddings = await _embed_batch_one_text_per_call(batch)
+                else:
+                    batch_embeddings = await _embed_batch(batch)
                 all_embeddings.extend(batch_embeddings)
 
                 # Log progress for large batches to track memory usage patterns
@@ -786,6 +861,7 @@ class EmbeddingModel:
         api_version: str | None = None,
         deployment_name: str | None = None,
         reduced_dimension: int | None = None,
+        model_dim: int | None = None,
     ) -> None:
         self.api_key = api_key
         self.provider_type = provider_type
@@ -798,6 +874,9 @@ class EmbeddingModel:
         self.api_version = api_version
         self.deployment_name = deployment_name
         self.reduced_dimension = reduced_dimension
+        # The stored dimension of a self-hosted model. The model server uses it
+        # to keep the legacy load for a custom model with a registry name.
+        self.model_dim = model_dim
         self.tokenizer = get_tokenizer(
             model_name=model_name, provider_type=provider_type
         )
@@ -998,6 +1077,7 @@ class EmbeddingModel:
                 manual_passage_prefix=self.passage_prefix,
                 api_url=self.api_url,
                 reduced_dimension=self.reduced_dimension,
+                expected_dim=self.model_dim if self.provider_type is None else None,
             )
 
             num_texts = len(text_batch)
@@ -1210,6 +1290,7 @@ class EmbeddingModel:
             api_version=search_settings.api_version,
             deployment_name=search_settings.deployment_name,
             reduced_dimension=search_settings.reduced_dimension,
+            model_dim=search_settings.model_dim,
         )
 
 

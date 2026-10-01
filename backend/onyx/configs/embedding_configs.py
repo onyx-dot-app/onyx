@@ -125,4 +125,31 @@ SUPPORTED_EMBEDDING_MODELS = [
         dim=384,
         index_name="danswer_chunk_intfloat_multilingual_e5_small",
     ),
+    # New models. index_name is what _compute_index_name produces for the stored
+    # model_name: "danswer_chunk_" + clean_model_name(model_name).
+    SupportedEmbeddingModel(
+        name="cohere/embed-v5.0-pro",
+        dim=2048,
+        index_name="danswer_chunk_embed_v5_0_pro",
+    ),
+    SupportedEmbeddingModel(
+        name="cohere/embed-v5.0-fast",
+        dim=2048,
+        index_name="danswer_chunk_embed_v5_0_fast",
+    ),
+    SupportedEmbeddingModel(
+        name="ibm-granite/granite-embedding-97m-multilingual-r2",
+        dim=384,
+        index_name="danswer_chunk_ibm_granite_granite_embedding_97m_multilingual_r2",
+    ),
+    SupportedEmbeddingModel(
+        name="voyageai/voyage-4-nano",
+        dim=2048,
+        index_name="danswer_chunk_voyageai_voyage_4_nano",
+    ),
+    SupportedEmbeddingModel(
+        name="nvidia/Nemotron-3-Embed-1B-BF16",
+        dim=2048,
+        index_name="danswer_chunk_nvidia_nemotron_3_embed_1b_bf16",
+    ),
 ]

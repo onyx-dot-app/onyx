@@ -4932,6 +4932,9 @@
         "noModelsTooltip": "Contextual Retrieval ist deaktiviert, weil keine Modelle konfiguriert sind. Richten Sie zuerst ein [Sprachmodell]({link}) ein.",
         "title": "Contextual Retrieval"
       },
+      "currentModel": {
+        "legacyHint": "Dies ist ein veraltetes Modell. Es funktioniert weiter, aber Sie können es nicht erneut für einen neuen Index auswählen. Klicken Sie zum Upgrade auf „Alle Modelle anzeigen“ und wählen Sie ein neueres Modell."
+      },
       "embeddingModel": {
         "cloudManaged": {
           "title": "Das Embedding-Modell und die Einstellungen werden von Onyx Cloud verwaltet."
@@ -5063,9 +5066,13 @@
         "currentButton": {
           "label": "Aktuelles Modell"
         },
-        "deprecated": {
-          "connectTooltip": "Dieses Embedding-Modell ist veraltet und kann nicht verbunden werden.",
-          "selectTooltip": "Dieses Embedding-Modell ist veraltet und kann nicht ausgewählt werden."
+        "gpuRecommended": {
+          "tag": "GPU empfohlen",
+          "tooltip": "Die Indexierung mit diesem Modell auf einer CPU ist sehr langsam. Betreiben Sie den Modellserver auf einer GPU."
+        },
+        "legacy": {
+          "tag": "Veraltet",
+          "tooltip": "Sie können dieses Modell nicht für einen neuen Index auswählen. Es funktioniert weiter, bis Sie das Modell wechseln."
         },
         "selectButton": {
           "label": "Modell auswählen"
@@ -5077,6 +5084,11 @@
       "modelPicker": {
         "addCustomModel": {
           "label": "Benutzerdefiniertes Modell hinzufügen"
+        },
+        "bringYourOwn": {
+          "cloudDescription": "Verbinden Sie einen LiteLLM-Proxy oder ein Azure-OpenAI-Deployment. Modellname und Dimension geben Sie selbst an.",
+          "selfHostedDescription": "Betreiben Sie ein Hugging-Face-Embedding-Modell, das nicht in der Liste oben steht. Modellname, Dimension und Präfixe geben Sie selbst an.",
+          "title": "Erweitert: eigenes Modell oder eigenen Proxy verwenden"
         },
         "cloudTab": {
           "label": "Cloud-basiert"
@@ -5145,9 +5157,6 @@
             "label": "Konfiguration hinzufügen"
           },
           "title": "Fügen Sie Konfigurationen für Ihre {provider}-Embedding-Anbieter hinzu."
-        },
-        "deprecated": {
-          "suffix": "(veraltet)"
         },
         "disconnect": {
           "errorToast": "{provider} konnte nicht getrennt werden",
@@ -5274,22 +5283,30 @@
         "restoreHint": "Um einen Konnektor zu behalten, brechen Sie hier ab, setzen Sie ihn fort oder korrigieren Sie ihn und starten Sie die Neuindizierung erneut – dann wird er übernommen. Andernfalls fügen Sie ihn nach Abschluss der Neuindizierung erneut hinzu."
       },
       "modelDescriptions": {
+        "cohereEmbedV5Pro": "Das Embedding-Modell von Cohere mit der höchsten Qualität, mit 2048 Dimensionen.",
+        "cohereEmbedV5Fast": "Schnellere und günstigere Variante des Embed-5-Modells von Cohere, mit 2048 Dimensionen.",
         "cohereEmbedEnglishV3": "Englisches Embedding-Modell von Cohere. Gute Leistung bei englischsprachigen Aufgaben.",
         "cohereEmbedEnglishLightV3": "Leichtgewichtiges englisches Embedding-Modell von Cohere. Schneller und effizienter für einfachere Aufgaben.",
-        "cohereEmbedV4": "Neuestes mehrsprachiges Embedding-Modell von Cohere mit standardmäßig 1536 Dimensionen für bessere Retrieval-Qualität.",
+        "cohereEmbedV4": "Mehrsprachiges Embedding-Modell von Cohere mit 1536 Dimensionen.",
         "openaiTextEmbedding3Large": "Großes Embedding-Modell von OpenAI. Beste Leistung, aber teurer.",
         "openaiTextEmbedding3Small": "Neueres, effizienteres Embedding-Modell von OpenAI. Gutes Verhältnis von Leistung und Kosten.",
         "googleGeminiEmbedding001": "Gemini-Embedding-Modell von Google. Leistungsstark und effizient.",
         "googleTextEmbedding005": "Kleineres, leichteres Embedding-Modell von Google.",
         "googleGeminiEmbedding2": "Neuestes multimodales Embedding-Modell von Google (GA). Höchste Retrieval-Qualität mit 3072 Dimensionen.",
         "googleGeminiEmbedding2Preview": "Vorschauversion von Gemini Embedding 2. Für neue Einrichtungen durch gemini-embedding-2 ersetzt.",
+        "googleTextEmbedding004": "Früheres Text-Embedding-Modell von Google. Durch neuere Google-Modelle ersetzt.",
+        "googleTextEmbeddingGecko003": "Früheres Gecko-Text-Embedding-Modell von Google. Durch neuere Google-Modelle ersetzt.",
         "voyageLarge2Instruct": "Großes Embedding-Modell von Voyage. Hohe Leistung durch Instruction-Fine-Tuning.",
         "voyageLight2Instruct": "Leichtgewichtiges Embedding-Modell von Voyage. Gutes Verhältnis von Leistung und Effizienz.",
+        "graniteEmbedding97mMultilingualR2": "Kleines mehrsprachiges Embedding-Modell von IBM (97 Mio. Parameter). Schnell auf der CPU und in {appName} enthalten, daher ist kein Download nötig.",
+        "voyage4Nano": "Open-Weights-Embedding-Modell von Voyage AI mit 2048 Dimensionen. Höhere Suchqualität als kleinere Modelle. Mit einer GPU ist die Indexierung deutlich schneller.",
+        "nemotron3Embed1b": "Mehrsprachiges Embedding-Modell von NVIDIA mit 1 Mrd. Parametern und 2048 Dimensionen. Hohe Suchqualität, aber die Indexierung auf der CPU ist sehr langsam.",
         "nomicEmbedTextV1": "Embedding-Modell von Nomic, spezialisiert auf Retrieval, Ähnlichkeit, Clustering und Klassifikation.",
-        "e5BaseV2": "Ein kleineres und schnelleres Modell als der Standard. Etwa doppelt so schnell wie das Standardmodell, bei geringerer Suchqualität.",
+        "e5BaseV2": "Englisches Embedding-Modell aus der E5-Familie von Microsoft. Ausgewogen zwischen Geschwindigkeit und Suchqualität.",
         "e5SmallV2": "Die kleinste und schnellste Variante der E5-Modellreihe. Eine gute Wahl, wenn {appName} auf einem System mit begrenzten Ressourcen läuft.",
         "multilingualE5Base": "Für Korpora in anderen Sprachen als Englisch ist dies die richtige Wahl.",
-        "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl."
+        "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl.",
+        "gteSmall": "Kleines englisches Embedding-Modell aus der GTE-Familie. Das Standardmodell früher {appName}-Versionen."
       }
     },
     "indexing": {

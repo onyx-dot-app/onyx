@@ -55,10 +55,15 @@ RUN uv pip install --python /app/.venv/bin/python --no-cache-dir --no-deps --req
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
-# Cache the embedding model's weights, tokenizer, and metadata in the image.
+# Cache the default embedding model's weights, tokenizer, and metadata in the image,
+# at its pinned revision, so fresh and air-gapped installs can embed with no download.
+# The name and revision must match the bundled entry in
+# shared_configs/embedding_models.py (a unit test checks this). Other self-hosted
+# models, nomic-ai/nomic-embed-text-v1 included, download on first use.
 FROM builder AS embedding-models
 RUN python -c "from sentence_transformers import SentenceTransformer; \
-SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=False);"
+SentenceTransformer(model_name_or_path='ibm-granite/granite-embedding-97m-multilingual-r2', \
+revision='835ad14087e140460703cf0fae09f97d469d65c2', trust_remote_code=False);"
 
 # Runtime stage. We run as the `onyx` user (UID 1001, carried over from the previous
 # image; see USER below) and chown everything the runtime writes to it. The DHI runtime
@@ -97,7 +102,9 @@ COPY --from=builder --chown=1001:1001 /var/log/onyx /var/log/onyx
 
 # In case the user has volumes mounted to /app/.cache/huggingface that they've downloaded while
 # running Onyx, move the current contents of the cache folder to a temporary location to ensure
-# it's preserved in order to combine with the user's cache contents
+# it's preserved in order to combine with the user's cache contents. At startup the model server
+# merges it into the cache without overwriting files, so a volume keeps every model it already
+# has (for example nomic-ai/nomic-embed-text-v1 from older images).
 COPY --chown=1001:1001 --from=embedding-models /app/.cache/huggingface /app/.cache/temp_huggingface
 
 # Utils used by model server

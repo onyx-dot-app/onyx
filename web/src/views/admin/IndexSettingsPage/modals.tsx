@@ -108,6 +108,7 @@ async function testAndSaveProviderCredentials({
   unknownErrorMessage,
   apiUrl = "",
   modelName = "",
+  fallbackModelName,
   apiVersion = null,
   deploymentName = null,
 }: {
@@ -117,6 +118,8 @@ async function testAndSaveProviderCredentials({
   unknownErrorMessage: string;
   apiUrl?: string;
   modelName?: string;
+  /** Tested only if the test with `modelName` fails. */
+  fallbackModelName?: string;
   apiVersion?: string | null;
   deploymentName?: string | null;
 }): Promise<boolean> {
@@ -126,6 +129,7 @@ async function testAndSaveProviderCredentials({
       apiKey,
       apiUrl,
       modelName,
+      fallbackModelName,
       apiVersion,
       deploymentName,
     });
@@ -151,12 +155,43 @@ interface ProviderModalProps {
    */
   existingModel?: EmbeddingModel;
   /**
+   * Registry model the admin is connecting this provider for. The credential
+   * test embeds with it, so it checks access to the model that will index.
+   * Without it (editing credentials), the test uses `existingModel`. If that
+   * test fails, it tries the backend default model, because the provider may
+   * have retired the current legacy model.
+   */
+  targetModelName?: string;
+  /**
    * Called after the modal finishes its work. The optional `customModel`
    * argument is only populated by `CustomSelfHostedModal`, which uses it
    * to hand the just-defined model spec back to the page so it can be
    * staged into the Formik form.
    */
   onSubmit: (req?: EmbeddingModelRequest) => void;
+}
+
+/** The model a registry provider's credential test embeds with. */
+function probeModelName({
+  targetModelName,
+  existingModel,
+}: Pick<ProviderModalProps, "targetModelName" | "existingModel">): string {
+  return targetModelName ?? existingModel?.modelName ?? "";
+}
+
+/**
+ * The model to test if the `probeModelName` test fails: the backend default
+ * (""), only when editing the credentials of the current model's provider.
+ * The provider may have retired that model, and the admin must still be able
+ * to save a new key. A connect for a target model never falls back.
+ */
+function probeFallbackModelName({
+  targetModelName,
+  existingModel,
+}: Pick<ProviderModalProps, "targetModelName" | "existingModel">):
+  | string
+  | undefined {
+  return targetModelName === undefined && existingModel ? "" : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +204,8 @@ interface StandardFormValues {
 function StandardProviderModal({
   provider,
   existingCredentials,
+  existingModel,
+  targetModelName,
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
@@ -195,6 +232,11 @@ function StandardProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey,
+            modelName: probeModelName({ targetModelName, existingModel }),
+            fallbackModelName: probeFallbackModelName({
+              targetModelName,
+              existingModel,
+            }),
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
@@ -219,6 +261,8 @@ interface GoogleFormValues {
 function GoogleProviderModal({
   provider,
   existingCredentials,
+  existingModel,
+  targetModelName,
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
@@ -260,6 +304,11 @@ function GoogleProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey: values.apiKey || null,
+            modelName: probeModelName({ targetModelName, existingModel }),
+            fallbackModelName: probeFallbackModelName({
+              targetModelName,
+              existingModel,
+            }),
             unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {

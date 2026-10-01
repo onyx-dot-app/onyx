@@ -137,6 +137,14 @@ RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
 RUN python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
 
+# Tokenizer of the default self-hosted embedding model for fresh installs. The
+# nomic tokenizer above stays: it is the default tokenizer (chat token counting
+# and the fallback) and serves existing nomic deployments. The revision must
+# equal hf_revision in shared_configs/embedding_models.py, because the API
+# server loads registry tokenizers at that revision.
+RUN python -c "from tokenizers import Tokenizer; \
+Tokenizer.from_pretrained('ibm-granite/granite-embedding-97m-multilingual-r2', revision='835ad14087e140460703cf0fae09f97d469d65c2')"
+
 # Pre-downloading tiktoken for setups with limited egress
 RUN python -c "import tiktoken; \
 tiktoken.get_encoding('cl100k_base')"
