@@ -431,6 +431,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     else:
         setup_multitenant_onyx()
 
+    from onyx.utils.fleet_telemetry import start_telemetry
+
+    start_telemetry("api")
+
     if not MULTI_TENANT:
         # don't emit a metric for every pod rollover/restart
         optional_telemetry(
@@ -454,6 +458,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     try:
         yield
     finally:
+        from onyx.utils.fleet_telemetry import stop_telemetry
+
+        stop_telemetry()
         # Flush buffered per-user usage before disposing the DB engines its drain
         # thread writes through.
         from onyx.tracing.setup import shutdown_tracing

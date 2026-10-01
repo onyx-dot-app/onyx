@@ -109,6 +109,7 @@ Set secret name
 Create env vars from secrets (global secrets only — skips entries with allPods: false)
 */}}
 {{- define "onyx.envSecrets" -}}
+{{- include "onyx.fleetTelemetryEnv" . }}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
     {{- $allPods := or (not (hasKey $secretContent "allPods")) (ne (toString $secretContent.allPods) "false") }}
     {{- if and (ne $secretSuffix "metricsAuth") (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) $allPods }}

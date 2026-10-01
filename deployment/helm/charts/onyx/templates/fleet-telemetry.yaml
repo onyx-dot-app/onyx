@@ -1,0 +1,147 @@
+{{- define "onyx.fleetTelemetryEnv" -}}
+{{- if .Values.fleetTelemetry.enabled }}
+- name: ONYX_TELEMETRY_ENDPOINT
+  value: {{ .Values.fleetTelemetry.endpoint | quote }}
+- name: ONYX_TELEMETRY_CUSTOMER_UUID
+  value: {{ required "fleetTelemetry.customerUuid is required" .Values.fleetTelemetry.customerUuid | quote }}
+- name: ONYX_TELEMETRY_DEPLOYMENT_ID
+  value: {{ required "fleetTelemetry.deploymentId is required" .Values.fleetTelemetry.deploymentId | quote }}
+- name: ONYX_TELEMETRY_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ required "fleetTelemetry.existingSecret is required" .Values.fleetTelemetry.existingSecret }}
+      key: ONYX_TELEMETRY_TOKEN
+- name: ONYX_TELEMETRY_PRIVACY_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.fleetTelemetry.existingSecret }}
+      key: ONYX_TELEMETRY_PRIVACY_KEY
+{{- end }}
+{{- end }}
+{{- if and .Values.fleetTelemetry.enabled .Values.fleetTelemetry.collector.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+  {{- with .Values.fleetTelemetry.collector.serviceAccountAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: {{ .Values.fleetTelemetry.collector.kubernetes }}
+{{- if .Values.fleetTelemetry.collector.kubernetes }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: telemetry-collector
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: telemetry-collector
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ include "onyx.resourceName" (list . "telemetry-collector") }}
+      automountServiceAccountToken: {{ .Values.fleetTelemetry.collector.kubernetes }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: collector
+          {{- if .Values.fleetTelemetry.collector.image }}
+          image: {{ .Values.fleetTelemetry.collector.image | quote }}
+          {{- else }}
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Values.global.version }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command: ["python", "-m", "onyx.utils.fleet_telemetry_collector"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.fleetTelemetry.collector.resources | nindent 12 }}
+          env:
+            {{- include "onyx.fleetTelemetryEnv" . | nindent 12 }}
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: LOG_LEVEL
+              value: "ERROR"
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+            {{- if .Values.fleetTelemetry.collector.awsResources }}
+            - name: AWS_REGION
+              value: {{ .Values.fleetTelemetry.collector.awsRegion | quote }}
+            - name: ONYX_TELEMETRY_AWS_RESOURCES_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fleetTelemetry.existingSecret }}
+                  key: ONYX_TELEMETRY_AWS_RESOURCES_JSON
+            {{- end }}
+            - name: ONYX_TELEMETRY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fleetTelemetry.existingSecret }}
+                  key: ONYX_TELEMETRY_DATABASE_URL
+            - name: ONYX_TELEMETRY_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fleetTelemetry.existingSecret }}
+                  key: ONYX_TELEMETRY_REDIS_URL
+                  optional: true
+            {{- if .Values.fleetTelemetry.collector.schemas }}
+            - name: ONYX_TELEMETRY_SCHEMAS
+              value: {{ .Values.fleetTelemetry.collector.schemas | quote }}
+            {{- end }}
+            - name: ONYX_TELEMETRY_SCHEMA_SHARD_INDEX
+              value: {{ .Values.fleetTelemetry.collector.schemaShardIndex | quote }}
+            - name: ONYX_TELEMETRY_SCHEMA_SHARD_COUNT
+              value: {{ .Values.fleetTelemetry.collector.schemaShardCount | quote }}
+            - name: ONYX_TELEMETRY_KUBERNETES
+              value: {{ .Values.fleetTelemetry.collector.kubernetes | quote }}
+            - name: ONYX_TELEMETRY_KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+{{- end }}

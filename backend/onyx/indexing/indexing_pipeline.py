@@ -352,6 +352,8 @@ def embed_and_stream(
                 ...
     """
     with ChunkBatchStore() as store:
+        from onyx.utils.fleet_telemetry import emit_stage_counter
+
         embed_start = time.monotonic()
         result = _embed_chunks_to_store(
             chunks=chunks,
@@ -361,6 +363,16 @@ def embed_and_stream(
             store=store,
         )
         embed_duration_ms = max(0, int((time.monotonic() - embed_start) * 1000))
+        emit_stage_counter(
+            attempt_id,
+            "embed",
+            {
+                "embed_chunks": len(result.successful_chunk_ids),
+                "embed_errors": len(result.connector_failures),
+            },
+            duration_ms=embed_duration_ms,
+            tenant_id=tenant_id,
+        )
         safe_record_single_event_if_set(
             IndexAttemptStage.EMBEDDING, attempt_id, embed_duration_ms
         )
@@ -1464,6 +1476,14 @@ def index_doc_batch(
     )
 
     filtered_documents, filter_failures = filter_fnc(document_batch)
+    from onyx.utils.fleet_telemetry import emit_stage_counter
+
+    emit_stage_counter(
+        attempt_id,
+        "prepare",
+        {"prepare_docs": len(filtered_documents)},
+        tenant_id=tenant_id,
+    )
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(

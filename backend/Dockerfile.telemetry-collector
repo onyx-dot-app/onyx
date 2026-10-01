@@ -1,0 +1,14 @@
+FROM python:3.13-slim-bookworm
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app
+WORKDIR /app
+RUN pip install --no-cache-dir \
+    'SQLAlchemy==2.0.43' 'psycopg2-binary==2.9.10' \
+    'requests==2.32.5' 'redis==6.4.0' 'psutil==7.0.0' 'boto3==1.40.39'
+COPY onyx/__init__.py onyx/__init__.py
+COPY onyx/configs/__init__.py onyx/configs/constants.py onyx/configs/
+COPY onyx/db/__init__.py onyx/db/fleet_telemetry.py onyx/db/
+COPY onyx/utils/__init__.py onyx/utils/fleet_telemetry*.py onyx/utils/
+COPY shared_configs/ shared_configs/
+RUN groupadd --gid 1001 collector && useradd --uid 1001 --gid 1001 --no-create-home collector
+USER 1001:1001
+CMD ["python", "-m", "onyx.utils.fleet_telemetry_collector"]
