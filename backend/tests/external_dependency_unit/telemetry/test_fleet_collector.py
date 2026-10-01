@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import InternalError
 
+from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.db.fleet_telemetry import collector_engine, connector_page, job_page
 from onyx.utils.fleet_telemetry import BoundedTelemetry, TelemetryConfig
 from onyx.utils.fleet_telemetry_collector import FleetCollector
@@ -17,7 +18,9 @@ from onyx.utils.fleet_telemetry_collector import FleetCollector
 
 @pytest.fixture
 def source_schema() -> Generator[tuple[str, str], None, None]:
-    source_url = os.environ["ONYX_TELEMETRY_TEST_DB"]
+    source_url = os.environ.get("ONYX_TELEMETRY_TEST_DB") or build_connection_string(
+        db_api=SYNC_DB_API
+    )
     schema = "telemetry_test_" + uuid.uuid4().hex[:12]
     engine = create_engine(source_url)
     tables = (
