@@ -26,8 +26,6 @@ const OTHER_CATEGORY = "other";
 const IMAGE_SUMMARIZATION_FLOW = "image_summarization";
 const CONTEXTUAL_RAG_DOC_SUMMARY_FLOW = "contextual_rag_doc_summary";
 const CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW = "contextual_rag_chunk_context";
-const KG_DOCUMENT_CLASSIFICATION_FLOW = "kg_document_classification";
-const KG_DEEP_EXTRACTION_FLOW = "kg_deep_extraction";
 
 interface SystemUsageRow extends UsageExportTotals {
   category: string;
@@ -56,10 +54,6 @@ function categoryLabel(category: string, t: SystemUsageTranslate): string {
       return t("categories.contextualRagDocumentSummary.label");
     case CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW:
       return t("categories.contextualRagChunkContext.label");
-    case KG_DOCUMENT_CLASSIFICATION_FLOW:
-      return t("categories.kgDocumentClassification.label");
-    case KG_DEEP_EXTRACTION_FLOW:
-      return t("categories.kgDeepExtraction.label");
     case UNATTRIBUTED_CATEGORY:
       return t("categories.unattributed.label");
     case OTHER_CATEGORY:

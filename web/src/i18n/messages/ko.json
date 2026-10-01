@@ -6100,12 +6100,6 @@
         "imageSummarization": {
           "label": "이미지 요약"
         },
-        "kgDeepExtraction": {
-          "label": "지식 그래프 추출"
-        },
-        "kgDocumentClassification": {
-          "label": "지식 그래프 분류"
-        },
         "other": {
           "label": "기타"
         },

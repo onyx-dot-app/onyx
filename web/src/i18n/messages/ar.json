@@ -6100,12 +6100,6 @@
         "imageSummarization": {
           "label": "تلخيص الصور"
         },
-        "kgDeepExtraction": {
-          "label": "استخراج الرسم البياني المعرفي"
-        },
-        "kgDocumentClassification": {
-          "label": "تصنيف الرسم البياني المعرفي"
-        },
         "other": {
           "label": "أخرى"
         },

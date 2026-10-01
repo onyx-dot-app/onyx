@@ -6100,12 +6100,6 @@
         "imageSummarization": {
           "label": "画像要約"
         },
-        "kgDeepExtraction": {
-          "label": "ナレッジグラフ抽出"
-        },
-        "kgDocumentClassification": {
-          "label": "ナレッジグラフ分類"
-        },
         "other": {
           "label": "その他"
         },

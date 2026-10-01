@@ -6100,12 +6100,6 @@
         "imageSummarization": {
           "label": "Résumé des images"
         },
-        "kgDeepExtraction": {
-          "label": "Extraction du graphe de connaissances"
-        },
-        "kgDocumentClassification": {
-          "label": "Classification du graphe de connaissances"
-        },
         "other": {
           "label": "Autres"
         },

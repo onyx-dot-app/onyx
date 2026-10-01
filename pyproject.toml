@@ -398,7 +398,6 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/deep_research/dr_loop.py" = ["C901"] # 26
 "backend/onyx/document_index/opensearch/search.py" = ["C901"] # 48
 "backend/onyx/federated_connectors/federated_retrieval.py" = ["C901"] # 21
-"backend/onyx/kg/extractions/extraction_processing.py" = ["C901"] # 30
 "backend/onyx/llm/multi_llm.py" = ["C901"] # 45
 "backend/onyx/llm/utils.py" = ["C901"] # 30
 "backend/onyx/onyxbot/slack/handlers/handle_message.py" = ["C901"] # 34

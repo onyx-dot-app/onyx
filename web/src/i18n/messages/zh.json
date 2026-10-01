@@ -6100,12 +6100,6 @@
         "imageSummarization": {
           "label": "图像摘要"
         },
-        "kgDeepExtraction": {
-          "label": "知识图谱提取"
-        },
-        "kgDocumentClassification": {
-          "label": "知识图谱分类"
-        },
         "other": {
           "label": "其他"
         },
