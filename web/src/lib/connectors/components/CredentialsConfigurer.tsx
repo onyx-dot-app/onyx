@@ -58,8 +58,8 @@ export function CredentialsConfigurer({
     isAuthorizing,
   } = useCredentialSetup(connector);
 
-  // A source with one way in says what the card makes; a source with two
-  // names each way instead, so the two cards stay distinguishable.
+  // The create card's one label, whatever the number of routes; the tabs
+  // inside it name the routes.
   const newAccountLabel = t("add.newAccountButton.label", {
     source: displayName,
   });
@@ -218,11 +218,11 @@ export function CredentialsConfigurer({
           </Section>
         </Card>
 
-        {/* One card per way of creating a credential. The fold button is the
-      only control: the card around it is a plain container, so a click in
-      the open form cannot fold it away. While the OAuth details are still
-      loading we do not yet know how many cards there are, so a single
-      disabled one holds the place. */}
+        {/* One card creates a credential. Its header toggles it; the fold
+      below is a plain container, so a click in the open form cannot fold
+      it away. The routes into the source are tabs inside the fold. While
+      the OAuth details load the routes are unknown, so a disabled card
+      holds the place. */}
         {isLoading ? (
           <Card
             border="solid"
