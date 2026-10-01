@@ -11,7 +11,9 @@ This module provides a citation processor that can:
 """
 
 import re
+from bisect import bisect_right
 from collections.abc import Generator
+from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
@@ -54,45 +56,70 @@ CitationMapping: TypeAlias = dict[int, SearchDoc]
 # ============================================================================
 
 
-# CommonMark fence line: up to 3 spaces of indent, then 3+ backticks or tildes.
-_FENCE_LINE_PATTERN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+# Fence line, optionally inside blockquote (">") or list item ("-", "1.") containers.
+_FENCE_LINE_PATTERN = re.compile(
+    r"^((?:[ \t]*(?:>|(?:[-*+]|\d{1,9}[.)])(?=[ \t])))*)([ \t]*)(`{3,}|~{3,})(.*)$"
+)
+
+
+@dataclass(frozen=True)
+class _OpenFence:
+    fence: str
+    column: int
+    quote_depth: int
 
 
 class CodeFenceTracker:
-    """Line-aware tracker of whether streamed markdown is inside a fenced code
-    block. Unlike counting backticks, it ignores inline ``` in prose and
-    respects fence char and length (e.g. a ```` fence wrapping ``` lines)."""
+    """Line-aware tracker of fenced code blocks in streamed markdown. Unlike
+    counting backticks, it ignores inline ``` in prose and respects fence char
+    and length (e.g. a ```` fence wrapping ``` lines)."""
 
     def __init__(self) -> None:
-        self._open_fence: str | None = None
+        self._open: _OpenFence | None = None
         self._partial_line = ""
-
-    @property
-    def in_code_block(self) -> bool:
-        return self._open_fence is not None
+        self._line_start = 0
+        # Offsets of fence lines that open or close a block, in order.
+        self._transitions: list[int] = []
 
     def feed(self, text: str) -> None:
         lines = (self._partial_line + text).split("\n")
         self._partial_line = lines.pop()
         for line in lines:
             self._process_line(line)
+            self._line_start += len(line) + 1
+
+    def flush(self) -> None:
+        """Treat the pending unterminated line as complete (end of a step)."""
+        self._process_line(self._partial_line)
+        self._line_start += len(self._partial_line)
+        self._partial_line = ""
+
+    def in_code_block_at(self, offset: int) -> bool:
+        return bisect_right(self._transitions, offset) % 2 == 1
 
     def _process_line(self, line: str) -> None:
         match = _FENCE_LINE_PATTERN.match(line)
         if not match:
             return
-        fence, info = match.group(1), match.group(2)
-        if self._open_fence is None:
+        prefix, indent, fence, info = match.groups()
+        column = len(prefix) + len(indent)
+        quote_depth = prefix.count(">")
+        if self._open is None:
             # Backtick fences cannot have backticks in the info string.
             if fence[0] == "`" and "`" in info:
                 return
-            self._open_fence = fence
+            self._open = _OpenFence(fence, column, quote_depth)
+            self._transitions.append(self._line_start)
         elif (
-            fence[0] == self._open_fence[0]
-            and len(fence) >= len(self._open_fence)
+            fence[0] == self._open.fence[0]
+            and len(fence) >= len(self._open.fence)
             and not info.strip()
+            and prefix.replace(">", "").strip() == ""
+            and quote_depth == self._open.quote_depth
+            and column <= self._open.column + 3
         ):
-            self._open_fence = None
+            self._open = None
+            self._transitions.append(self._line_start)
 
 
 # ============================================================================
@@ -312,8 +339,10 @@ class DynamicCitationProcessor:
         """
         # None -> end of stream, flush remaining segment
         if token is None:
+            self.code_fence_tracker.flush()
             if self.curr_segment:
                 yield self.curr_segment
+                self.curr_segment = ""
             return
 
         # Handle stop stream token
@@ -343,14 +372,21 @@ class DynamicCitationProcessor:
         self.llm_out += token
         self.code_fence_tracker.feed(token)
 
-        # Look for citations in current segment
-        citation_matches = list(self.citation_pattern.finditer(self.curr_segment))
+        # Look for citations in current segment, skipping ones inside code blocks
+        segment_offset = len(self.llm_out) - len(self.curr_segment)
+        citation_matches = [
+            match
+            for match in self.citation_pattern.finditer(self.curr_segment)
+            if not self.code_fence_tracker.in_code_block_at(
+                segment_offset + match.start()
+            )
+        ]
         possible_citation_found = bool(
             re.search(self.possible_citation_pattern, self.curr_segment)
         )
 
         result = ""
-        if citation_matches and not self.code_fence_tracker.in_code_block:
+        if citation_matches:
             match_idx = 0
             for match in citation_matches:
                 match_span = match.span()

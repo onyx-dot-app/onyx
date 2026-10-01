@@ -293,6 +293,25 @@ describe("labelBareCodeFences", () => {
     );
   });
 
+  it("handles fences inside list items and blockquotes", () => {
+    expect(
+      labelBareCodeFences("1. Step:\n   ```\n   code\n   ```\nAfter.")
+    ).toBe("1. Step:\n   ```plaintext\n   code\n   ```\nAfter.");
+    expect(labelBareCodeFences("- ```python\n  code\n  ```\nAfter.")).toBe(
+      "- ```python\n  code\n  ```\nAfter."
+    );
+    expect(labelBareCodeFences("> ```\n> code\n> ```\nAfter.")).toBe(
+      "> ```plaintext\n> code\n> ```\nAfter."
+    );
+  });
+
+  it("does not close a tilde fence with backticks", () => {
+    const input = "~~~python\n```\ncode\n```\n~~~\n```\nnext\n```";
+    expect(labelBareCodeFences(input)).toBe(
+      "~~~python\n```\ncode\n```\n~~~\n```plaintext\nnext\n```"
+    );
+  });
+
   it("handles an unclosed trailing fence mid-stream", () => {
     expect(labelBareCodeFences("Text:\n```")).toBe("Text:\n```plaintext");
     expect(labelBareCodeFences("Text:\n```\nx = 1")).toBe(
@@ -300,6 +319,15 @@ describe("labelBareCodeFences", () => {
     );
     expect(labelBareCodeFences("```python\nx = 1\n```")).toBe(
       "```python\nx = 1\n```"
+    );
+  });
+});
+
+describe("preprocessLaTeX fenced code", () => {
+  it("leaves dollars inside a four-backtick block with inner fences", () => {
+    const input = "````md\n```\ncost $5\n```\nalso $6\n````\nPrice $7";
+    expect(preprocessLaTeX(input)).toBe(
+      "````md\n```\ncost $5\n```\nalso $6\n````\nPrice \\$7"
     );
   });
 });

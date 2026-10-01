@@ -62,6 +62,90 @@ export function extractCodeText(
 
   return codeText || "";
 }
+
+// Fence line, optionally inside blockquote (">") or list item ("-", "1.") containers.
+const FENCE_LINE_REGEX =
+  /^((?:[ \t]*(?:>|(?:[-*+]|\d{1,9}[.)])(?=[ \t])))*)([ \t]*)(`{3,}|~{3,})(.*)$/;
+
+type FenceRole = "open" | "close" | "code" | "text";
+
+// Classifies each line by fenced-code role. Inline ``` in prose is ignored;
+// closers need the opener's char, >= its length, no info string, and the same
+// container. A trailing unclosed block (mid-stream) stays "code".
+const classifyFenceLines = (lines: string[]): FenceRole[] => {
+  let open: { fence: string; column: number; quoteDepth: number } | null = null;
+  return lines.map((line): FenceRole => {
+    const match = FENCE_LINE_REGEX.exec(line);
+    if (!match) return open ? "code" : "text";
+    const prefix = match[1] ?? "";
+    const fence = match[3] ?? "";
+    const info = match[4] ?? "";
+    const column = prefix.length + (match[2] ?? "").length;
+    const quoteDepth = prefix.split(">").length - 1;
+    if (open === null) {
+      // Backtick fences cannot have backticks in the info string.
+      if (fence.startsWith("`") && info.includes("`")) return "text";
+      open = { fence, column, quoteDepth };
+      return "open";
+    }
+    if (
+      fence[0] === open.fence[0] &&
+      fence.length >= open.fence.length &&
+      info.trim() === "" &&
+      prefix.replace(/>/g, "").trim() === "" &&
+      quoteDepth === open.quoteDepth &&
+      column <= open.column + 3
+    ) {
+      open = null;
+      return "close";
+    }
+    return "code";
+  });
+};
+
+// Labels bare opening backtick fences as `plaintext`; closers stay bare.
+export const labelBareCodeFences = (content: string): string => {
+  const lines = content.split("\n");
+  const roles = classifyFenceLines(lines);
+  return lines
+    .map((line, i) => {
+      if (roles[i] !== "open") return line;
+      const match = FENCE_LINE_REGEX.exec(line);
+      if (!match || !match[3]?.startsWith("`") || match[4]?.trim()) {
+        return line;
+      }
+      return `${match[1]}${match[2]}${match[3]}plaintext`;
+    })
+    .join("\n");
+};
+
+// Replaces each closed fenced code block with the string from `replace`.
+const replaceFencedCodeBlocks = (
+  content: string,
+  replace: (block: string) => string
+): string => {
+  const lines = content.split("\n");
+  const roles = classifyFenceLines(lines);
+  const out: string[] = [];
+  let block: string[] | null = null;
+  for (const [i, line] of lines.entries()) {
+    const role = roles[i];
+    if (role === "open") {
+      block = [line];
+    } else if (block && (role === "code" || role === "close")) {
+      block.push(line);
+      if (role === "close") {
+        out.push(replace(block.join("\n")));
+        block = null;
+      }
+    } else {
+      out.push(line);
+    }
+  }
+  if (block) out.push(...block);
+  return out.join("\n");
+};
+
 // We must preprocess LaTeX in the LLM output to avoid improper formatting
 
 export const preprocessLaTeX = (content: string) => {
@@ -76,9 +160,9 @@ export const preprocessLaTeX = (content: string) => {
 
   // Extract code blocks and replace with placeholders
   const codeBlocks: string[] = [];
-  const withCodeBlocksReplaced = content.replace(/```[\s\S]*?```/g, (match) => {
+  const withCodeBlocksReplaced = replaceFencedCodeBlocks(content, (block) => {
     const placeholder = `___CODE_BLOCK_${codeBlocks.length}___`;
-    codeBlocks.push(match);
+    codeBlocks.push(block);
     return placeholder;
   });
 
@@ -175,44 +259,6 @@ const protectCodeFences = (
         (_, i) => blocks[Number(i)] ?? ""
       ),
   };
-};
-
-// CommonMark fence line: up to 3 spaces of indent, then 3+ backticks or tildes.
-const FENCE_LINE_REGEX = /^( {0,3})(`{3,}|~{3,})(.*)$/;
-
-// Labels bare opening backtick fences as `plaintext`. Scans line by line so
-// inline ``` in prose is ignored and closing fences (same char, length >=
-// opener, no info string) stay bare. A trailing unclosed fence (mid-stream)
-// counts as open.
-export const labelBareCodeFences = (content: string): string => {
-  let openFence: string | null = null;
-  return content
-    .split("\n")
-    .map((line) => {
-      const match = FENCE_LINE_REGEX.exec(line);
-      if (!match) return line;
-      const indent = match[1] ?? "";
-      const fence = match[2] ?? "";
-      const info = match[3] ?? "";
-      if (openFence === null) {
-        // Backtick fences cannot have backticks in the info string.
-        if (fence.startsWith("`") && info.includes("`")) return line;
-        openFence = fence;
-        if (fence.startsWith("`") && info.trim() === "") {
-          return `${indent}${fence}plaintext`;
-        }
-        return line;
-      }
-      if (
-        fence[0] === openFence[0] &&
-        fence.length >= openFence.length &&
-        info.trim() === ""
-      ) {
-        openFence = null;
-      }
-      return line;
-    })
-    .join("\n");
 };
 
 // Mid-stream the buffer can hold `$$x = y` with no closing `$$` yet.

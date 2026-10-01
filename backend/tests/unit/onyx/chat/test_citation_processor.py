@@ -847,6 +847,65 @@ def test_longer_fence_wraps_triple_backticks(
     assert len(citations) == 1
 
 
+def test_closing_fence_without_newline_resets_between_steps(
+    mock_search_docs: CitationMapping,
+) -> None:
+    """A step ending on a bare closing fence must not leave the reused
+    processor in code-block state for the next step."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    first, _ = process_tokens(processor, ["```python\nx = 1\n", "```"])
+    second, citations = process_tokens(processor, ["See [1]."])
+
+    assert first == "```python\nx = 1\n```"
+    assert second == "See [[1]](https://example.com/doc1)."
+    assert len(citations) == 1
+
+
+def test_code_state_is_decided_per_citation_in_one_chunk(
+    mock_search_docs: CitationMapping,
+) -> None:
+    """One chunk holding a code citation, the closing fence and a prose
+    citation must handle each citation by its own position."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens(
+        processor,
+        ["```\n", "print('[1]')\n```\nReal [1].\n```\nlate [1]\n```\n"],
+    )
+
+    assert output == (
+        "```\nprint('[1]')\n```\nReal [[1]](https://example.com/doc1).\n"
+        "```\nlate [1]\n```\n"
+    )
+    assert len(citations) == 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "1. Step:\n   ```\n   code [1]\n   ```\nAfter [1].\n",
+        "- ```python\n  code [1]\n  ```\nAfter [1].\n",
+        "> ```\n> code [1]\n> ```\nAfter [1].\n",
+        "~~~python\n```\ncode [1]\n```\n~~~\nAfter [1].\n",
+    ],
+    ids=["list-continuation", "list-marker", "blockquote", "tilde"],
+)
+def test_container_and_tilde_fences(
+    mock_search_docs: CitationMapping, text: str
+) -> None:
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens(processor, list(text))
+
+    assert "code [1]\n" in output
+    assert "After [[1]](https://example.com/doc1)." in output
+    assert len(citations) == 1
+
+
 def test_citation_outside_code_block_processed(
     mock_search_docs: CitationMapping,
 ) -> None:
