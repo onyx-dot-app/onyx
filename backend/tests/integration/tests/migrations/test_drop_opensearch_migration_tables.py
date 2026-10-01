@@ -184,3 +184,35 @@ def test_upgrade_waits_out_a_long_lock_on_document(
     assert _migration_tables(engine) == set()
     # The first attempt timed out behind the lock, so the drop was retried.
     assert elapsed >= 5.0
+
+
+def test_upgrade_fails_fast_on_an_error_that_is_not_a_lock_timeout(
+    at_previous_revision: Engine,
+) -> None:
+    """Only a lock timeout is retried. A permanent error, here a view that
+    depends on the table, must fail the migration on the first attempt."""
+    engine = at_previous_revision
+    view_name = "drop_migration_test_dependent_view"
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                f"CREATE VIEW {view_name} AS SELECT document_id "
+                f"FROM {DOCUMENT_RECORD_TABLE}"
+            )
+        )
+    try:
+        start = time.monotonic()
+        with pytest.raises(Exception, match="depend"):
+            upgrade_postgres(
+                database="postgres", config_name="alembic", revision=DROP_REVISION
+            )
+        elapsed = time.monotonic() - start
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP VIEW IF EXISTS {view_name}"))
+
+    # A retry would add at least one 5 s delay.
+    assert elapsed < 5.0
+    # The migration ran in one transaction, so nothing was dropped.
+    assert _current_revision(engine) == PREVIOUS_REVISION
+    assert _migration_tables(engine) == {DOCUMENT_RECORD_TABLE, TENANT_RECORD_TABLE}
