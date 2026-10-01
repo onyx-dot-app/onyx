@@ -1,4 +1,8 @@
-import type { CapabilityReportSnapshot } from "@/lib/connectors/checks/types";
+import type {
+  CapabilityReportSnapshot,
+  DraftCheckRunRequest,
+  DraftCheckRunSnapshot,
+} from "@/lib/connectors/checks/types";
 
 /** The stored report for a credential, scoped to a connector when given. */
 export function capabilityReportUrl(
@@ -31,4 +35,39 @@ export async function runCapabilityCheck(
     throw new Error(`Capability check request failed: ${response.status}`);
   }
   return response.json();
+}
+
+const DRAFT_RUNS_URL = "/api/manage/admin/connector-checks/runs";
+
+async function parseDraftRunResponse(
+  response: Response
+): Promise<DraftCheckRunSnapshot> {
+  if (!response.ok) {
+    throw new Error(`Draft check run request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
+ * Starts the capability checks for an unsaved connector form. Poll
+ * `getDraftCheckRun` with the returned `run_id` while `status` is `running`.
+ */
+export async function startDraftCheckRun(
+  request: DraftCheckRunRequest
+): Promise<DraftCheckRunSnapshot> {
+  const response = await fetch(DRAFT_RUNS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return parseDraftRunResponse(response);
+}
+
+export async function getDraftCheckRun(
+  runId: string
+): Promise<DraftCheckRunSnapshot> {
+  const response = await fetch(
+    `${DRAFT_RUNS_URL}/${encodeURIComponent(runId)}`
+  );
+  return parseDraftRunResponse(response);
 }

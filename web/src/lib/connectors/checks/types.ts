@@ -1,4 +1,4 @@
-import type { ValidSources } from "@/lib/types";
+import type { AccessType, ValidSources } from "@/lib/types";
 
 /**
  * Mirrors the backend's capability-check models
@@ -81,3 +81,79 @@ export interface CapabilityReportSnapshot {
   /** `null` until a run completes. */
   report: CredentialCapabilityReport | null;
 }
+
+// ---------------------------------------------------------------------------
+// Draft runs: checks on an unsaved connector form
+// (`onyx.connectors.capability_checks.draft_runs`)
+// ---------------------------------------------------------------------------
+
+/**
+ * State of one check in a draft run. `waiting` means a field the check reads
+ * is missing or invalid; `not_applicable` means the access type or the form
+ * excludes the check.
+ */
+export type DraftCheckState =
+  | "pending"
+  | "running"
+  | "passed"
+  | "failed"
+  | "indeterminate"
+  | "skipped"
+  | "waiting"
+  | "not_applicable";
+
+/** `superseded`: a newer run for the same draft key replaced this one. */
+export type DraftRunStatus =
+  | "running"
+  | "completed"
+  | "superseded"
+  | "failed_to_run";
+
+export interface DraftCheck {
+  check_id: string;
+  display_name: string;
+  capability: CredentialCapability;
+  required: boolean;
+  state: DraftCheckState;
+  message: string;
+  /** Config fields the check needs that the form does not provide yet. */
+  missing_fields: string[];
+  /** Config fields the check needs whose value is invalid. */
+  invalid_fields: string[];
+  remediation: string | null;
+  docs_link: string | null;
+  duration_ms: number | null;
+  from_cache: boolean;
+}
+
+export interface DraftCheckRunSnapshot {
+  run_id: string;
+  draft_key: string;
+  source: ValidSources;
+  credential_id: number;
+  access_type: AccessType | null;
+  status: DraftRunStatus;
+  /** Config field name to its validation error. */
+  form_errors: Record<string, string>;
+  unknown_fields: string[];
+  checks: DraftCheck[];
+}
+
+export interface DraftCheckRunRequest {
+  source: ValidSources;
+  credential_id: number;
+  access_type: AccessType;
+  /** One form session; a newer run with the same key supersedes the older. */
+  draft_key: string;
+  /** The `connector_specific_config` the create request would send. */
+  form_state: Record<string, unknown>;
+}
+
+/**
+ * Whether the required checks let the connector be created:
+ * - `pending`: a required check has not finished yet.
+ * - `failed`: a required check failed, or waits on an invalid field.
+ * - `ok`: no required check blocks creation.
+ * - `unavailable`: the draft run could not run; creation runs the checks.
+ */
+export type RequiredChecksStatus = "pending" | "failed" | "ok" | "unavailable";
