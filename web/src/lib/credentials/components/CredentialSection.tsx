@@ -22,7 +22,7 @@ import type {
   Credential,
 } from "@/lib/credentials/types";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { useCredentialSetup } from "@/lib/connectors/hooks";
+import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { Spinner } from "@/components/Spinner";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { isTypedFileField } from "@/lib/connectors/utils";

@@ -42,7 +42,7 @@ import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
   useGoogleDriveCredentials,
-} from "@/lib/connectors/hooks";
+} from "@/lib/credentials/hooks";
 import { Formik } from "formik";
 import { useRouter } from "next/navigation";
 import { Button } from "@opal/components";

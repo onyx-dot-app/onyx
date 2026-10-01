@@ -12,6 +12,7 @@ import type {
 } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { credentialDisplayNames } from "@/lib/credentials/templates";
+import { toast } from "@opal/layouts";
 
 // What a credential template seeds a field with: "" for a required text
 // field, null for an optional one or a file, a boolean for a checkbox.
@@ -263,3 +264,49 @@ export function createInitialValues(
 export function getDisplayNameForCredentialKey(key: string): string {
   return credentialDisplayNames[key] || key;
 }
+
+// Parse an uploaded OAuth app JSON; toasts and returns null when invalid.
+export const parseOauthAppCredentialJson = (
+  value: string
+): Record<string, unknown> | null => {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const web = parsed.web as Record<string, unknown> | undefined;
+    if (
+      !web ||
+      typeof web.client_id !== "string" ||
+      typeof web.client_secret !== "string"
+    ) {
+      toast.error(
+        "Invalid file provided - expected an OAuth app JSON key with web.client_id and web.client_secret"
+      );
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    toast.error(`Invalid file provided - ${error}`);
+    return null;
+  }
+};
+
+export const filterUploadedCredentials = <
+  T extends { authentication_method?: string },
+>(
+  credentials: Credential<T>[] | undefined
+): { credential_id: number | null; uploadedCredentials: Credential<T>[] } => {
+  let credential_id = null;
+  let uploadedCredentials: Credential<T>[] = [];
+
+  if (credentials) {
+    uploadedCredentials = credentials.filter(
+      (credential) =>
+        credential.credential_json.authentication_method !== "oauth_interactive"
+    );
+
+    if (uploadedCredentials.length > 0 && uploadedCredentials[0]) {
+      credential_id = uploadedCredentials[0].id;
+    }
+  }
+
+  return { credential_id, uploadedCredentials };
+};

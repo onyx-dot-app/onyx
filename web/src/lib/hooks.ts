@@ -5,7 +5,6 @@ import {
   Tag,
   UserGroup,
   ConnectorStatus,
-  FederatedConnectorDetail,
   ConnectorIndexingStatusLiteResponse,
   IndexingStatusRequest,
 } from "@/lib/types";
@@ -27,7 +26,6 @@ import {
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
-import type { Credential } from "@/lib/credentials/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
@@ -50,19 +48,6 @@ import {
   useLanguageModelsForAgent,
 } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-
-export const usePublicCredentials = () => {
-  const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<Credential<any>[]>(
-    SWR_KEYS.adminCredentials,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshCredentials: () => mutate(SWR_KEYS.adminCredentials),
-  };
-};
 
 const buildReactedDocsUrl = (ascending: boolean, limit: number) => {
   return `/api/manage/admin/doc-boosts?ascending=${ascending}&limit=${limit}`;
@@ -219,20 +204,6 @@ export const useConnectorStatus = (
   return {
     ...swrResponse,
     refreshIndexingStatus: enabled ? () => mutate(url) : () => {},
-  };
-};
-
-export const useFederatedConnectors = () => {
-  const { mutate } = useSWRConfig();
-  const url = SWR_KEYS.federatedConnectors;
-  const swrResponse = useSWR<FederatedConnectorDetail[]>(
-    url,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshFederatedConnectors: () => mutate(url),
   };
 };
 

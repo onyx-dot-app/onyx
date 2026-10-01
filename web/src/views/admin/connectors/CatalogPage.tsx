@@ -17,7 +17,7 @@ import {
 } from "react";
 import { InputTypeIn, Text } from "@opal/components";
 import { useGridNavigation, useHotkey } from "@opal/hooks";
-import { useFederatedConnectors } from "@/lib/hooks";
+import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import { FederatedConnectorDetail } from "@/lib/types";
 import { federatedSourceToRegularSource } from "@/lib/connectors/types/source";
 import { useSettings } from "@/lib/settings/hooks";

@@ -7,7 +7,7 @@ import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle, SvgSimpleLoader } from "@opal/icons";
 import type { Credential } from "@/lib/credentials/types";
-import { useCredentialSetup } from "@/lib/connectors/hooks";
+import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";

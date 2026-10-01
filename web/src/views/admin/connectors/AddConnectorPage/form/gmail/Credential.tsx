@@ -13,10 +13,8 @@ import { CRAFT_OAUTH_COOKIE_NAME } from "@/app/craft/v1/constants";
 import Cookies from "js-cookie";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import {
-  parseOauthAppCredentialJson,
-  refreshAllGoogleData,
-} from "@/lib/googleConnector";
+import { refreshAllGoogleData } from "@/lib/googleConnector";
+import { parseOauthAppCredentialJson } from "@/lib/credentials/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { markdown } from "@opal/utils";
 
