@@ -87,6 +87,7 @@ class AgentControl(Protocol):
         max_steps: int,
         messages: Sequence[Message],
         restoration_config: BaseModel | None = None,
+        total_timeout_s: float | None = None,
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> SpawnResult: ...
 

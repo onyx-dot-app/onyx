@@ -15,6 +15,8 @@ from onyx.agents.compaction import (
     ContextLimitError,
     compact_history,
     context_budget,
+    history_boundaries,
+    history_digest,
     request_tokens,
     working_messages,
 )
@@ -34,6 +36,7 @@ from onyx.agents.events import (
     MessageUpdateEvent,
 )
 from onyx.agents.execution_records import (
+    CompactionCheckpoint,
     ExecutionStatus,
     RunFailure,
     RunFailureKind,
@@ -86,6 +89,7 @@ from onyx.llm.models import (
     GenerationRequest,
     Message,
     ToolResult,
+    UserMessage,
     apply_generation_event,
 )
 from onyx.llm.token_budget import resolve_token_budget
@@ -1100,7 +1104,7 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         }
     )
     source = [*run._history.messages, *run._state.input_messages, *run._state.messages]
-    request = _fit_context(run, llm, source, prepared, generation_context)
+    request = _compact_context(run, llm, source, prepared, generation_context)
     message_id = f"{run._state.run_id}:{step.index}"
     started = MessageStartEvent(
         message_id=message_id,
@@ -1164,7 +1168,7 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         partial = recorded_step.message
         if partial.text or partial.tool_calls:
             raise
-        request = _fit_context(
+        request = _compact_context(
             run, llm, source, prepared, generation_context, force=True
         )
         with run._lock:
@@ -1191,7 +1195,7 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         run._state.revision += 1
 
 
-def _fit_context(
+def _compact_context(
     run: Run,
     llm: LLM,
     source: list[Message],
@@ -1215,35 +1219,83 @@ def _fit_context(
         cancellation_signal,
     )
     budget = context_budget(llm)
-    size = request_tokens(request)
-    if not force and size <= budget.trigger:
-        return _limit_output(llm, request, size)
+    original_size = request_tokens(request)
+    if not force and original_size <= budget.trigger:
+        return _limit_output(llm, request, original_size)
+
+    selected_checkpoint = None
     try:
-        checkpoint = run._work.blocking(
+        selected_checkpoint = run._work.blocking(
             lambda: compact_history(llm, source, previous, generation_context),
             cancellation_signal,
         )
-    except ContextLimitError:
-        if not force and size <= budget.input_limit:
+    except Exception:
+        cancellation_signal.check()
+        if not force and original_size <= budget.input_limit:
             logger.warning(
                 "Proactive compaction failed while request still fits",
                 exc_info=True,
             )
-            return _limit_output(llm, request, size)
-        raise
-    request = run._work.blocking(
-        lambda: prepared.generation_request(working_messages(source, checkpoint)),
-        cancellation_signal,
-    )
-    size = request_tokens(request)
-    if size > budget.input_limit:
-        raise ContextLimitError(
-            "Required instructions and recent context exceed model input limit"
+            return _limit_output(llm, request, original_size)
+        logger.warning("Compaction failed; truncating older turns", exc_info=True)
+
+    candidate_request = request
+    candidate_size = original_size
+    if selected_checkpoint is not None:
+        candidate_request = run._work.blocking(
+            lambda: prepared.generation_request(
+                working_messages(source, selected_checkpoint)
+            ),
+            cancellation_signal,
         )
+        candidate_size = request_tokens(candidate_request)
+
+    if selected_checkpoint is None or candidate_size > budget.input_limit:
+        selected_checkpoint, candidate_request, candidate_size = _truncate_context(
+            run,
+            source,
+            prepared,
+            input_limit=budget.input_limit,
+            original_size=original_size,
+        )
+
     with run._lock:
         cancellation_signal.check()
-        run._state.checkpoint = checkpoint
-    return _limit_output(llm, request, size)
+        run._state.checkpoint = selected_checkpoint
+    return _limit_output(llm, candidate_request, candidate_size)
+
+
+def _truncate_context(
+    run: Run,
+    source: list[Message],
+    prepared: PreparedStep,
+    *,
+    input_limit: int,
+    original_size: int,
+) -> tuple[CompactionCheckpoint, GenerationRequest, int]:
+    """Find the first smaller request that fits after removing older turns."""
+    cancellation_signal = run._cancellation_signal
+    boundaries = set(history_boundaries(source))
+    for index, message in enumerate(source):
+        if not isinstance(message, UserMessage) or index not in boundaries:
+            continue
+        checkpoint = CompactionCheckpoint(
+            summary="",
+            covered_count=index,
+            covered_digest=history_digest(source[:index]),
+        )
+        candidate_request = run._work.blocking(
+            lambda checkpoint=checkpoint: prepared.generation_request(
+                working_messages(source, checkpoint)
+            ),
+            cancellation_signal,
+        )
+        candidate_size = request_tokens(candidate_request)
+        if candidate_size <= input_limit and candidate_size < original_size:
+            return checkpoint, candidate_request, candidate_size
+    raise ContextLimitError(
+        "Required instructions and current turn exceed model input limit"
+    )
 
 
 def _limit_output(

@@ -67,7 +67,10 @@ def test_classify_section_relevance_timeout_falls_back() -> None:
 
     assert result == ContextExpansionType.MAIN_SECTION_ONLY
     # the bound that makes the call fail fast must actually be passed through
-    assert invoke.call_args.kwargs["context"].timeout == SECONDARY_LLM_FLOW_TIMEOUT_S
+    assert (
+        invoke.call_args.kwargs["context"].total_timeout_s
+        == SECONDARY_LLM_FLOW_TIMEOUT_S
+    )
 
 
 def test_classify_section_relevance_passes_timeout_on_success() -> None:
@@ -85,7 +88,10 @@ def test_classify_section_relevance_passes_timeout_on_success() -> None:
     )
 
     assert result == ContextExpansionType.FULL_DOCUMENT
-    assert invoke.call_args.kwargs["context"].timeout == SECONDARY_LLM_FLOW_TIMEOUT_S
+    assert (
+        invoke.call_args.kwargs["context"].total_timeout_s
+        == SECONDARY_LLM_FLOW_TIMEOUT_S
+    )
 
 
 def test_select_sections_for_expansion_timeout_falls_back() -> None:
@@ -101,7 +107,10 @@ def test_select_sections_for_expansion_timeout_falls_back() -> None:
 
     assert selected == sections
     assert doc_ids is None
-    assert invoke.call_args.kwargs["context"].timeout == SECONDARY_LLM_FLOW_TIMEOUT_S
+    assert (
+        invoke.call_args.kwargs["context"].total_timeout_s
+        == SECONDARY_LLM_FLOW_TIMEOUT_S
+    )
 
 
 def test_select_sections_for_expansion_passes_timeout_on_success() -> None:
@@ -115,4 +124,7 @@ def test_select_sections_for_expansion_passes_timeout_on_success() -> None:
     )
 
     assert selected == sections
-    assert invoke.call_args.kwargs["context"].timeout == SECONDARY_LLM_FLOW_TIMEOUT_S
+    assert (
+        invoke.call_args.kwargs["context"].total_timeout_s
+        == SECONDARY_LLM_FLOW_TIMEOUT_S
+    )

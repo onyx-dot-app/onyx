@@ -42,6 +42,7 @@ from onyx.tools.models import (
     LlmPythonExecutionResult,
     MemoryUpdated,
     PythonExecutionDelta,
+    ToolExecutionException,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
@@ -134,18 +135,14 @@ class MessageRenderer:
             return []
         if thinking:
             self.reasoning += text
-            if self.settings.mode == PresentationMode.CODING_THINKING:
-                if self.parent is None:
-                    raise ValueError("Coding output requires a parent tool placement")
-                return [
-                    packets.Packet(
-                        placement=self.parent,
-                        obj=packets.CodingAgentThinkingDelta(content=text),
-                    )
-                ]
             result = []
             if self._reasoning_placement is None:
-                self._reasoning_placement = self.layout.next_section(self.parent)
+                self._reasoning_placement = (
+                    self.parent
+                    if self.settings.mode == PresentationMode.CODING_ANSWER
+                    and self.parent is not None
+                    else self.layout.next_section(self.parent)
+                )
                 result.append(
                     packets.Packet(
                         placement=self._reasoning_placement,
@@ -159,16 +156,23 @@ class MessageRenderer:
                 )
             )
             return result
+        if self.settings.mode == PresentationMode.CODING_ANSWER:
+            # The parent tool publishes the final answer in CodingAgentFinal.
+            return []
         self.answer += text
         if self.settings.mode == PresentationMode.CODING_THINKING:
             if self.parent is None:
                 raise ValueError("Coding output requires a parent tool placement")
-            return [
+            result = self._close_reasoning()
+            if self._answer_placement is None:
+                self._answer_placement = self.layout.next_section(self.parent)
+            result.append(
                 packets.Packet(
-                    placement=self.parent,
+                    placement=self._answer_placement,
                     obj=packets.CodingAgentThinkingDelta(content=text),
                 )
-            ]
+            )
+            return result
         result = []
         if self._answer_placement is None:
             result.extend(self._close_reasoning())
@@ -217,6 +221,11 @@ class MessageRenderer:
 
     def tool_placement(self, call_id: str) -> Placement:
         if call_id not in self.tool_placements:
+            if self.settings.mode == PresentationMode.CODING_THINKING:
+                if self._answer_placement is None:
+                    self._answer_placement = self.layout.next_section(self.parent)
+                self.tool_placements[call_id] = self._answer_placement
+                return self._answer_placement
             first = next(iter(self.tool_placements.values()), None)
             self.tool_placements[call_id] = (
                 first.model_copy(update={"tab_index": len(self.tool_placements)})
@@ -588,6 +597,19 @@ class ToolRenderer:
         else:
             output = (
                 self.update(result.details, result.text) if result is not None else []
+            )
+        if (
+            self.call.name == ImageGenerationTool.NAME
+            and result is not None
+            and result.is_error
+        ):
+            output.append(
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.PacketException(
+                        exception=ToolExecutionException(result.text)
+                    ),
+                )
             )
         if self.call.name == MemoryTool.NAME and result is not None and result.is_error:
             output.append(

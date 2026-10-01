@@ -80,6 +80,7 @@ class PresentationMode(str, Enum):
     PLAN = "plan"
     REPORT = "report"
     CODING_THINKING = "coding_thinking"
+    CODING_ANSWER = "coding_answer"
     SILENT = "silent"
 
 

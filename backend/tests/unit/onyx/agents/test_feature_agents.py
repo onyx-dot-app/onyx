@@ -480,13 +480,18 @@ def test_deep_research_advances_phases_without_user_queue_messages() -> None:
     ] == ["Research"]
 
 
-def test_child_timeout_is_a_failed_tool_result(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "error", [LLMTimeoutError("Provider timeout"), ValueError("Child failed")]
+)
+def test_child_failure_is_a_failed_tool_result(
+    monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
     runs: list[Run] = []
     original_prepare = ResearchAgent.prepare_step
 
     def fail_child(self: ResearchAgent, state: StepInput) -> PreparedStep:
         if state.input_messages[0].text == "unavailable":
-            raise LLMTimeoutError("Provider timeout")
+            raise error
         return original_prepare(self, state)
 
     monkeypatch.setattr(ResearchAgent, "prepare_step", fail_child)

@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from functools import partial
 
@@ -74,9 +75,11 @@ from onyx.tracing.flows import LLMFlow
 
 MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS = 10000
 RESEARCH_STEP_OUTPUT_TOKENS = 1000
+RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 
 
 class ResearchFeatureState(BaseModel):
+    elapsed_seconds: float = 0.0
     configuration: ResearchConfiguration
     citation_sources: CitationMapping
     citation_mapping: dict[int, str]
@@ -103,6 +106,7 @@ class ResearchAgent(FeatureRestoration):
     ) -> None:
         allowed_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
         self.tools = [tool.for_agent() for tool in tools if tool.name in allowed_names]
+        self.started = time.monotonic()
         self.llm = llm
         self.is_reasoning_model = model_is_reasoning_model(
             llm.config.model_name, llm.config.model_provider
@@ -153,6 +157,7 @@ class ResearchAgent(FeatureRestoration):
 
     def capture_state(self) -> ResearchFeatureState:
         return ResearchFeatureState(
+            elapsed_seconds=max(0.0, time.monotonic() - self.started),
             configuration=ResearchConfiguration(
                 language_section=self.language_section,
                 reasoning_effort=self.reasoning_effort,
@@ -171,6 +176,7 @@ class ResearchAgent(FeatureRestoration):
             or saved.configuration.reasoning_effort != self.reasoning_effort
         ):
             raise ValueError("Research restoration configuration does not match")
+        self.started = time.monotonic() - saved.elapsed_seconds
         restore_search_state(self.tools, saved.search_tools)
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
@@ -189,6 +195,7 @@ class ResearchAgent(FeatureRestoration):
         previous = state.previous
         results = previous.tool_results if previous else []
         if previous is None:
+            self.started = time.monotonic()
             for message in state.history:
                 if isinstance(message, ToolResultMessage):
                     self._update_sources(message)
@@ -201,7 +208,10 @@ class ResearchAgent(FeatureRestoration):
             for result in results
         )
         options = GenerationOptions()
-        is_final_step = step.is_last or bool(
+        is_final_step = (
+            step.is_last
+            or time.monotonic() - self.started > RESEARCH_AGENT_FORCE_REPORT_SECONDS
+        ) or bool(
             previous
             and (
                 not previous.message.tool_calls

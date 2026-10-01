@@ -273,6 +273,15 @@ def test_chat_detail_validates_stored_request_parameters() -> None:
     detail = translate_db_message_to_chat_message_detail(message)
     assert detail.request_params is not None
     assert detail.request_params.model_dump(mode="json") == message.request_params
+    assert message.request_params is not None
+    stored_params = dict(message.request_params)
+    message.request_params = {**stored_params, "stream": True}
+    legacy_detail = translate_db_message_to_chat_message_detail(message)
+    assert legacy_detail.request_params == detail.request_params
+    assert message.request_params is not None
+    assert message.request_params["stream"] is True
+    with pytest.raises(ValidationError):
+        GenerationRequestParams.model_validate(message.request_params)
     message.request_params = None
     assert translate_db_message_to_chat_message_detail(message).request_params is None
     invalid_params: dict[str, JsonValue] = {"model_name": "incomplete"}

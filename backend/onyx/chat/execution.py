@@ -129,9 +129,6 @@ class ChatTurnExecution:
         self.user = user
         self.delivery = ChatDelivery(stream_buffer)
         self._stores: list[ChatRunStore] = []
-        self._stream_status: Future[None] | None = None
-        self._status_cleanup: Future[None] | None = None
-        self._delivery_closed = False
         self.cancellation = CancellationSignal()
         self.finished: Future[None] = Future()
         self._response_future = response_future
@@ -178,7 +175,7 @@ class ChatTurnExecution:
 
         # No control thread exists to observe cleanup for a rejected turn.
         try:
-            self._close_delivery()
+            self.delivery.finish()
         finally:
             self.delivery.finished.add_done_callback(delivery_finished)
 
@@ -239,16 +236,17 @@ class ChatTurnExecution:
     def _wait_for_completion(self) -> None:
         deadline = time.monotonic() + CHAT_RESPONSE_WAIT_TIMEOUT_S
         timed_out = False
+        processing_status_cleared = False
         while True:
             try:
                 self._poll_control()
             except Exception:
                 self.cancellation.cancel()
                 logger.exception("Chat turn control failed; draining active work")
-                self._close_delivery()
+                self.delivery.finish()
             try:
                 self._poll_responses()
-                if not self._delivery_closed and time.monotonic() >= deadline:
+                if not self.delivery.is_closing and time.monotonic() >= deadline:
                     timed_out = True
                     logger.error("Chat turn exceeded its response wait bound")
                     self.cancellation.cancel()
@@ -258,7 +256,7 @@ class ChatTurnExecution:
                 save_overdue = any(
                     writer.is_save_overdue for writer in self._response_workers.values()
                 )
-                if not self._delivery_closed and (
+                if not self.delivery.is_closing and (
                     (
                         responses_done
                         and (
@@ -276,19 +274,20 @@ class ChatTurnExecution:
                                 obj=OverallStop(stop_reason="user_cancelled"),
                             )
                         )
-                    self._close_delivery()
+                    self.delivery.finish()
             except Exception:
                 self.cancellation.cancel()
                 logger.exception("Chat turn control failed; draining active work")
-                self._close_delivery()
-            self._poll_status_cleanup()
+                self.delivery.finish()
+            if self.delivery.finished.done() and not processing_status_cleared:
+                self._clear_processing_status()
+                processing_status_cleared = True
             with self._lock:
                 stores = tuple(self._stores)
             if (
                 not self._response_workers
                 and not any(store.has_owned_work for store in stores)
-                and self._status_cleanup is not None
-                and self._status_cleanup.done()
+                and processing_status_cleared
             ):
                 self.finished.set_result(None)
                 return
@@ -343,34 +342,6 @@ class ChatTurnExecution:
                     self.delivery.report_gap()
             if persistence.outcome.done():
                 del self._response_workers[worker]
-
-    def _close_delivery(self) -> None:
-        if self._delivery_closed:
-            return
-        self._delivery_closed = True
-        self.delivery.finish()
-
-    def _poll_status_cleanup(self) -> None:
-        if (
-            not self._delivery_closed
-            or not self.delivery.finished.done()
-            or self._status_cleanup is not None
-            or (self._stream_status is not None and not self._stream_status.done())
-        ):
-            return
-        try:
-            if self._stream_status is not None:
-                self._stream_status.result()
-        except Exception:
-            logger.exception("Chat processing status update failed")
-        try:
-            self._status_cleanup = start_thread_future(
-                self._clear_processing_status, name="chat-status-cleanup"
-            )
-        except Exception:
-            logger.exception("Chat processing status cleanup could not start")
-            self._status_cleanup = Future()
-            self._status_cleanup.set_result(None)
 
     def _clear_processing_status(self) -> None:
         try:
@@ -475,15 +446,10 @@ class ChatTurnExecution:
             except Exception:
                 self.cancellation.cancel()
                 logger.exception("Chat ownership control failed; will retry")
-        if not self._delivery_closed and (
-            self._stream_status is None or self._stream_status.done()
-        ):
-            self._stream_status = start_thread_future(
-                self._poll_stream_status, name="chat-stream-status"
-            )
+        if not self.delivery.is_closing:
+            self._poll_stream_status()
 
     def _poll_stream_status(self) -> None:
-        # Ordinary cache waits must not delay ownership deadlines.
         now = time.monotonic()
         if (
             not self.cancellation.cancelled

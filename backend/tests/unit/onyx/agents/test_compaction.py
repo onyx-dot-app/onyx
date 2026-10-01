@@ -13,9 +13,9 @@ from onyx.agents.execution_records import (
     RunStatus,
 )
 from onyx.agents.models import AgentState, PreparedStep, RunState, StepInput
-from onyx.agents.runtime import Agent, Run, RunFailed, _fit_context
+from onyx.agents.runtime import Agent, Run, RunFailed, _compact_context
 from onyx.agents.tools import AgentTool, ToolInvocation
-from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMContextLimitError
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.models import (
@@ -265,7 +265,7 @@ def test_context_fitting_validates_checkpoint_once() -> None:
         )
     )
     with patch("onyx.agents.compaction.history_digest", wraps=history_digest) as digest:
-        request = _fit_context(
+        request = _compact_context(
             run,
             ContextModel(),
             source,
@@ -332,3 +332,94 @@ def test_output_budget_is_recalculated_after_compaction(
         after = model.generations[1].options.max_tokens
         assert before is not None and after is not None
         assert after > before
+
+
+@pytest.mark.parametrize("reject_first", [False, True])
+@pytest.mark.parametrize("provider_error", [False, True])
+def test_failed_summary_truncates_old_turns_without_changing_history(
+    reject_first: bool, provider_error: bool
+) -> None:
+    class FailingSummaryModel(ContextModel):
+        def invoke(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> AssistantMessage:
+            if context and context.flow == LLMFlow.CHAT_HISTORY_SUMMARIZATION:
+                self.summaries.append(request)
+                if provider_error:
+                    raise RuntimeError("Summary provider unavailable")
+                return AssistantMessage()
+            return super().invoke(request, context)
+
+    model = FailingSummaryModel(reject_first=reject_first)
+    history: list[Message] = [
+        SystemMessage(content="Preserve these instructions."),
+        UserMessage(content="Old question"),
+        AssistantMessage(content=[ToolCall(id="old", name="lookup", arguments={})]),
+        ToolResultMessage(
+            tool_call_id="old",
+            tool_name="lookup",
+            content="Old evidence " * (100 if reject_first else 1500),
+        ),
+        AssistantMessage(content=[TextContent(text="Old answer")]),
+        UserMessage(content=TASK),
+        AssistantMessage(content=[ToolCall(id="current", name="lookup", arguments={})]),
+        ToolResultMessage(
+            tool_call_id="current", tool_name="lookup", content="Current evidence"
+        ),
+    ]
+    agent = Agent(model, state=AgentState(messages=history))
+    run = agent.start(background=False, max_steps=1)
+    run.result()
+    assert model.summaries
+    request = model.generations[-1]
+    assert request.messages == [history[0], *history[5:]]
+    assert request_tokens(request) <= context_budget(model).input_limit
+    assert agent.state.messages[:-1] == history
+    checkpoint = run.snapshot().checkpoint
+    assert checkpoint is not None and checkpoint.summary == ""
+    assert checkpoint.covered_count == 5
+
+    # The same cutoff survives a resumed agent without losing recorded history.
+    reloaded = Agent(model, state=agent.state)
+    reloaded.start(background=False, max_steps=1).result()
+    assert model.generations[-1].messages[: len(request.messages)] == request.messages
+    assert reloaded.state.messages[: len(history)] == history
+
+
+def test_truncation_does_not_drop_oversized_current_tool_result() -> None:
+    model = ContextModel()
+    history: list[Message] = [
+        UserMessage(content="Old question"),
+        AssistantMessage(content=[TextContent(text="Old answer")]),
+        UserMessage(content=TASK),
+        AssistantMessage(content=[ToolCall(id="current", name="lookup", arguments={})]),
+        ToolResultMessage(
+            tool_call_id="current", tool_name="lookup", content="Evidence " * 2000
+        ),
+    ]
+    agent = Agent(model, state=AgentState(messages=history))
+    with patch(
+        "onyx.agents.runtime.compact_history", side_effect=RuntimeError("Failed")
+    ):
+        run = agent.start(background=False, max_steps=1)
+        with pytest.raises(RunFailed):
+            run.result()
+    assert not model.generations
+    assert agent.state.messages == history
+
+
+def test_failed_summary_does_not_swallow_cancellation() -> None:
+    model = ContextModel()
+    run = Run.from_snapshot(
+        RunState(run_id="run", agent_id="agent", status=RunStatus.COMPLETE, steps=[])
+    )
+    with patch("onyx.agents.runtime.compact_history", side_effect=AgentCancelled()):
+        with pytest.raises(AgentCancelled):
+            _compact_context(
+                run,
+                model,
+                [UserMessage(content="old"), UserMessage(content=TASK)],
+                PreparedStep(),
+                GenerationContext(),
+                force=True,
+            )

@@ -1,5 +1,6 @@
 """Optional, caller-owned agent discovery and execution coordination."""
 
+import math
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -968,9 +969,14 @@ class _ToolControl(AgentControl):
         max_steps: int,
         messages: Sequence[Message],
         restoration_config: BaseModel | None = None,
+        total_timeout_s: float | None = None,
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> SpawnResult:
         self._check()
+        if total_timeout_s is not None and (
+            not math.isfinite(total_timeout_s) or total_timeout_s <= 0
+        ):
+            raise ValueError("Child timeout must be positive")
         coordinator = self.owner.coordinator
         info = coordinator.register_child(
             agent,
@@ -991,6 +997,13 @@ class _ToolControl(AgentControl):
         except BaseException:
             coordinator.unregister_child(agent.id)
             raise
+        if total_timeout_s is not None:
+            timer = threading.Timer(total_timeout_s, run.cancel)
+            timer.daemon = True
+            coordinator.completion(run.id).add_done_callback(
+                lambda _future: timer.cancel()
+            )
+            timer.start()
         return SpawnResult(agent_id=agent.id, agent_path=info.path, run_id=run.id)
 
     def start_run(

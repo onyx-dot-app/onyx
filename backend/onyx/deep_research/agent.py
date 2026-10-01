@@ -5,10 +5,7 @@ from threading import Lock
 
 from pydantic import BaseModel
 
-from onyx.agents.execution_records import (
-    CompactionCheckpoint,
-    RunFailureKind,
-)
+from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.agents.models import (
     AgentState,
     PreparedStep,
@@ -48,6 +45,7 @@ from onyx.deep_research.tool_definitions import (
     get_orchestrator_tools,
 )
 from onyx.file_store.models import FileToolMetadata
+from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.models import (
@@ -82,6 +80,9 @@ from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+DEEP_RESEARCH_FORCE_REPORT_SECONDS = 30 * 60
+RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
 
 MAX_FINAL_REPORT_TOKENS = 20000
 ORCHESTRATION_OUTPUT_TOKENS = 1024
@@ -319,6 +320,8 @@ class DeepResearchAgent(FeatureRestoration):
                 if self.skip_clarification
                 else ResearchPhase.CLARIFICATION
             )
+        if time.monotonic() - self.started > DEEP_RESEARCH_FORCE_REPORT_SECONDS:
+            return ResearchPhase.REPORT
         metadata = previous.message.metadata
         if not isinstance(metadata, ResearchMessageMetadata):
             raise ValueError("Research output requires phase metadata")
@@ -377,6 +380,7 @@ class DeepResearchAgent(FeatureRestoration):
             ),
             description=task.task,
             max_steps=MAX_RESEARCH_CYCLES + 1,
+            total_timeout_s=RESEARCH_AGENT_TIMEOUT_SECONDS,
             messages=[UserMessage(content=task.task)],
             restoration_config=ResearchConfiguration(
                 language_section=self.language_section,
@@ -388,20 +392,15 @@ class DeepResearchAgent(FeatureRestoration):
         return ChildRunWait(run_ids=[submission.run_id])
 
     def _research_result_from_children(
-        self, _invocation: ToolInvocation, completed: list[RunState]
+        self, invocation: ToolInvocation, completed: list[RunState]
     ) -> ToolResult:
         if len(completed) != 1:
             raise ValueError("Research delegation requires one child result")
         try:
             output = result_from_snapshot(completed[0]).output
-        except RunFailed as error:
-            if error.failure.kind not in {
-                RunFailureKind.LLM,
-                RunFailureKind.LLM_TIMEOUT,
-                RunFailureKind.LLM_RATE_LIMIT,
-            }:
-                raise
-            logger.exception("Research child generation failed")
+        except (RunFailed, AgentCancelled):
+            invocation.cancellation.check()
+            logger.exception("Research child failed")
             return ToolResult(
                 content="Research failed. Continue with other sources or try a different task.",
                 is_error=True,

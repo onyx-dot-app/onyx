@@ -385,7 +385,7 @@ def _prompt_to_dicts(prompt: list[ChatCompletionMessage]) -> list[dict[str, Json
     LiteLLM expects messages to be dictionaries (with .get() method),
     not Pydantic models. This function serializes the messages.
     """
-    return [msg.model_dump(exclude_none=True) for msg in prompt]
+    return [msg.model_dump(mode="json", exclude_none=True) for msg in prompt]
 
 
 def _normalize_content(raw: JsonValue) -> str:

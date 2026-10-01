@@ -30,6 +30,7 @@ from onyx.server.query_and_chat.session_loading import (
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolDelta,
     OverallStop,
+    PacketException,
     SearchToolDocumentsDelta,
 )
 from onyx.tools.models import (
@@ -37,6 +38,9 @@ from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     LlmPythonExecutionResult,
+)
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -325,3 +329,22 @@ def test_empty_search_selection_survives_projection_and_reload(
         assert [doc.document_id for doc in docs] == (
             [] if select_none else ["retrieved"]
         )
+
+
+@pytest.mark.parametrize("is_error", [False, True])
+def test_image_failure_renders_error_at_tool_placement(is_error: bool) -> None:
+    placement = Placement(turn_index=2, tab_index=1, model_index=1)
+    call = ModelToolCall(id="image", name=ImageGenerationTool.NAME, arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="The image request was rejected by the content policy.",
+        is_error=is_error,
+    )
+    packets = ToolRenderer(call, placement).complete(result)
+    errors = [packet for packet in packets if isinstance(packet.obj, PacketException)]
+    assert len(errors) == int(is_error)
+    assert all(packet.placement == placement for packet in packets)
+    assert packets[-1].obj.type == "section_end"
+    if errors:
+        assert errors[0].model_dump()["obj"] == {"type": "error"}

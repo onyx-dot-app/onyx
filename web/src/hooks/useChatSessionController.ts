@@ -271,8 +271,7 @@ export default function useChatSessionController({
       async function resumeInFlightRun(
         sessionId: string,
         runId: number,
-        messageMap: Map<number, Message>,
-        isRunning: boolean
+        messageMap: Map<number, Message>
       ) {
         const node = messageMap.get(runId);
         if (!node || resumingRuns.has(runId)) {
@@ -323,7 +322,6 @@ export default function useChatSessionController({
               continue;
             }
             accumulated.push(packet);
-            if (!isRunning) continue;
             const now = Date.now();
             if (now - lastFlush >= 100) {
               lastFlush = now;
@@ -393,8 +391,7 @@ export default function useChatSessionController({
         void resumeInFlightRun(
           chatSession.chat_session_id,
           currentStream.stream_id,
-          newMessageMap,
-          currentStream.is_running
+          newMessageMap
         );
       }
 

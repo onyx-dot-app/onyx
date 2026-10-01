@@ -29,7 +29,9 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.chat.checkpoint import CheckpointBinding
+from onyx.chat.checkpoint import CheckpointBinding, _checkpoint_model_types
+from onyx.chat.models import MessageRendering, PresentationMode
+from onyx.chat.presentation import message_presentation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
@@ -154,6 +156,30 @@ def test_json_round_trip_preserves_typed_payloads_at_every_execution_location() 
     assert isinstance(result.details, SearchDetails)
     assert result.cacheable
     assert restored.agent_state.messages[0] is not captured.agent_state.messages[0]
+
+
+@pytest.mark.parametrize(
+    "mode", [PresentationMode.CODING_THINKING, PresentationMode.CODING_ANSWER]
+)
+def test_coding_rendering_survives_checkpoint_round_trip(
+    mode: PresentationMode,
+) -> None:
+    captured = checkpoint()
+    rendering = MessageRendering(mode=mode, think_tool="think_tool")
+    captured.run_state.steps[0].message.metadata = rendering
+    storage = CheckpointStorage({**codec().payload_types, **_checkpoint_model_types()})
+    serialized = storage.save(
+        captured.run_state,
+        captured.agent_state,
+        CheckpointBinding(
+            tenant_id="tenant", branch_id="branch", context_version="history-7"
+        ),
+    )
+    restored = storage.load(serialized)
+    metadata = restored.run_state.steps[0].message.metadata
+    assert isinstance(metadata, MessageRendering)
+    assert message_presentation(metadata) == rendering
+    assert restored == captured
 
 
 def test_unknown_payload_types_and_versions_fail_before_execution() -> None:

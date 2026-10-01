@@ -130,9 +130,10 @@ def working_messages(
         )
     prefix = messages[: checkpoint.covered_count]
     retained: list[Message] = [m for m in prefix if isinstance(m, SystemMessage)]
-    retained.append(
-        SystemMessage(content=f"Conversation summary:\n{checkpoint.summary}")
-    )
+    if checkpoint.summary:
+        retained.append(
+            SystemMessage(content=f"Conversation summary:\n{checkpoint.summary}")
+        )
     latest_user = next(
         (
             index
@@ -146,7 +147,7 @@ def working_messages(
     return retained + messages[checkpoint.covered_count :]
 
 
-def _history_boundaries(messages: list[Message]) -> list[int]:
+def history_boundaries(messages: list[Message]) -> list[int]:
     boundaries: list[int] = []
     pending: set[str] = set()
     for index, message in enumerate(messages):
@@ -223,7 +224,7 @@ def compact_history(
 ) -> CompactionCheckpoint:
     budget = context_budget(model)
     start = previous.covered_count if previous else 0
-    boundaries = [end for end in _history_boundaries(history) if end > start]
+    boundaries = [end for end in history_boundaries(history) if end > start]
     if not boundaries:
         raise ContextLimitError("No completed history is available for compaction")
     cutoff = boundaries[-1]

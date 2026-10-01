@@ -9,6 +9,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation
+from onyx.chat.models import MessageRendering, PresentationMode
 from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.coding_agent.tool_definitions import (
@@ -17,7 +18,10 @@ from onyx.coding_agent.tool_definitions import (
     GENERATE_ANSWER_TOOL_DESCRIPTION,
     GENERATE_ANSWER_TOOL_NAME,
 )
-from onyx.deep_research.tool_definitions import THINK_TOOL_RESPONSE_MESSAGE
+from onyx.deep_research.tool_definitions import (
+    THINK_TOOL_NAME,
+    THINK_TOOL_RESPONSE_MESSAGE,
+)
 from onyx.llm.cancellation import (
     CancellationSignal,
     cancellation_scope,
@@ -209,6 +213,12 @@ class CodingAgent:
         return PreparedStep(
             tools=tools,
             options=options,
+            output_metadata=MessageRendering(
+                mode=PresentationMode.CODING_ANSWER
+                if is_final_step
+                else PresentationMode.CODING_THINKING,
+                think_tool=THINK_TOOL_NAME if not self.is_reasoning_model else None,
+            ),
             assemble_messages=partial(
                 prepare_prompt,
                 system_prompt=SystemMessage(

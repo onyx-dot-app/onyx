@@ -187,6 +187,8 @@ def message_presentation(
     parent_tool_name: str | None = None,
 ) -> MessageRendering:
     """Resolve feature metadata into display settings retained for history replay."""
+    if isinstance(metadata, MessageRendering):
+        return metadata.model_copy(deep=True)
     presentation = MessageRendering(
         mode=PresentationMode.CODING_THINKING
         if parent_tool_name == CODING_AGENT_TOOL_NAME

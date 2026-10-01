@@ -14,6 +14,7 @@ from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
     ChatSearchResult,
+    MessageRendering,
     ResponseRecord,
 )
 from onyx.chat.prompt_formatting import PromptMetadata
@@ -52,6 +53,7 @@ def _checkpoint_model_types() -> dict[str, type[BaseModel]]:
         "deep_research.state.v1": DeepResearchFeatureState,
         "prompt.metadata.v1": PromptMetadata,
         "chat.metadata.v1": ChatMessageMetadata,
+        "chat.rendering.v1": MessageRendering,
         "chat.search.v1": ChatSearchResult,
         "search.results.v1": SearchDocsResponse,
         "research.metadata.v1": ResearchMessageMetadata,

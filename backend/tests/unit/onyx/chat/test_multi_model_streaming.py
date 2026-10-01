@@ -2199,35 +2199,6 @@ def test_rejection_returns_while_processing_status_cleanup_is_blocked() -> None:
             assert tasks.close()
 
 
-def test_completed_turn_is_released_when_status_cleanup_worker_cannot_start() -> None:
-    tasks = ActiveChatTurns()
-    outcome = Future[ChatResponseOutcome]()
-    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
-
-    def start_job[T](operation: Callable[[], T], *, name: str) -> Future[T]:
-        if name == "chat-status-cleanup":
-            raise RuntimeError("Cleanup worker unavailable")
-        return start_thread_future(operation, name=name)
-
-    with (
-        mock_model_execution(),
-        patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
-        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
-    ):
-        turn.begin()
-        tasks.start(turn)
-        try:
-            assert (
-                outcome.result(timeout=5).persistence_status == PersistenceStatus.SAVED
-            )
-            turn.finished.result(timeout=5)
-            list(turn.delivery.reader)
-            save.assert_called_once()
-        finally:
-            turn.delivery.reader.close()
-            assert tasks.close()
-
-
 def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
     setup = _make_setup(n_models=2)
     tasks = ActiveChatTurns()
@@ -2236,6 +2207,11 @@ def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
     preparation_threads: dict[int, int] = {}
     observer_threads: set[int] = set()
     lock = threading.Lock()
+    launched: list[str] = []
+
+    def start_job[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+        launched.append(name)
+        return start_thread_future(operation, name=name)
 
     def prepare(
         _setup: ChatTurnSetup,
@@ -2263,6 +2239,7 @@ def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
 
     with (
         patch("onyx.chat.execution.create_chat_agent", side_effect=prepare),
+        patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
         patch("onyx.chat.execution.ResponsePresenter") as presenter,
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
@@ -2274,6 +2251,7 @@ def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
         finally:
             reader.close()
         assert save.call_count == 2
+    assert launched == ["chat-control", "chat-response", "chat-response"]
     assert model_threads == preparation_threads
     assert len(set(model_threads.values())) == 2
     assert len(observer_threads) == 1
@@ -2372,7 +2350,7 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership() -> None:
         return False
 
     def poll_owned_runs() -> None:
-        if turn._delivery_closed:
+        if turn.delivery.is_closing:
             polled_after_completion.set()
             store.has_owned_work = False
 
@@ -2444,31 +2422,56 @@ def test_storage_ownership_failure_reports_failed_response_without_writing() -> 
             assert coordinator.close(5)
 
 
-def test_blocked_stream_status_does_not_block_ownership_polling() -> None:
+def test_stop_cache_timeout_allows_next_ownership_poll(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     setup = _make_setup()
-    entered = threading.Event()
-    release = threading.Event()
-
-    def stop_read(_key: str) -> bool:
-        entered.set()
-        assert release.wait(5)
-        return False
-
-    setup.cache.exists.side_effect = stop_read
+    setup.cache.exists.side_effect = [TimeoutError("Cache deadline exceeded"), False]
     store = MagicMock(spec=ChatRunStore)
     turn = ChatTurnExecution(setup, MagicMock())
     turn._register_store(store)
     turn._last_stop_check = 0
-    try:
-        turn._poll_control()
-        assert entered.wait(5)
-        turn._poll_control()
-        assert store.poll_control.call_count == 2
-        assert not turn.cancellation.cancelled
-    finally:
-        release.set()
-        assert turn._stream_status is not None
-        turn._stream_status.result(timeout=5)
+    turn._poll_control()
+    assert "Failed to read chat Stop request" in caplog.text
+    turn._last_stop_check = 0
+    turn._poll_control()
+    assert store.poll_control.call_count == 2
+    assert setup.cache.exists.call_count == 2
+    assert not turn.cancellation.cancelled
+
+
+def test_processing_marker_clears_after_inflight_refresh() -> None:
+    refresh_entered = threading.Event()
+    release_refresh = threading.Event()
+    values: list[bool] = []
+    turn = ChatTurnExecution(_make_setup(), MagicMock())
+    turn._last_refresh = 0
+
+    def processing_status(*, value: bool, **_kwargs: Any) -> None:
+        if value:
+            refresh_entered.set()
+            assert release_refresh.wait(5)
+        values.append(value)
+
+    with patch(
+        "onyx.chat.execution.set_processing_status", side_effect=processing_status
+    ):
+        control = start_thread_future(
+            turn._wait_for_completion, name="test-chat-control"
+        )
+        try:
+            assert refresh_entered.wait(5)
+            turn.delivery.finish()
+            assert not control.done()
+            assert not values
+            release_refresh.set()
+            control.result(timeout=5)
+            assert values == [True, False]
+            assert turn.finished.done()
+        finally:
+            release_refresh.set()
+            turn.delivery.finish()
+            control.result(timeout=5)
 
 
 def test_processing_marker_failure_does_not_cancel_chat() -> None:
@@ -2594,7 +2597,6 @@ def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain() 
 
 def test_failed_ownership_poll_does_not_starve_other_stores() -> None:
     turn = ChatTurnExecution(_make_setup(), MagicMock())
-    turn._delivery_closed = True
     failed = MagicMock(spec=ChatRunStore)
     healthy = MagicMock(spec=ChatRunStore)
     failed.poll_control.side_effect = RuntimeError("Ownership poll failed")

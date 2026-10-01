@@ -354,6 +354,11 @@ class ChatDelivery:
         self._publish_lock = threading.RLock()
         self.events = EventDispatcher(flush=self._flush_replay)
 
+    @property
+    def is_closing(self) -> bool:
+        with self._publish_lock:
+            return self._closing
+
     def start(self) -> None:
         self.events.start()
 

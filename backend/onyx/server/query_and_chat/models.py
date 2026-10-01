@@ -262,10 +262,9 @@ class SetPreferredResponseRequest(BaseModel):
 
 
 class CurrentStreamInfo(BaseModel):
-    """Buffered response with worker liveness for replay or live reconnection."""
+    """Unfinished response available for stream reconnection."""
 
     stream_id: int
-    is_running: bool
 
 
 class ChatSessionDetailResponse(BaseModel):

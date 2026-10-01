@@ -34,9 +34,6 @@ def test_image_generation_streaming(
     )
     assert image_gen_used
 
-    for packet in analyzed_response.heartbeat_packets:
-        assert packet["obj"]["type"] == "chat_heartbeat"
-
     image_tool_results = [
         tool
         for tool in analyzed_response.used_tools

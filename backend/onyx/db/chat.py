@@ -1097,7 +1097,7 @@ def translate_db_message_to_chat_message_detail(
         message=chat_message.message,
         reasoning_tokens=chat_message.reasoning_tokens,
         request_params=GenerationRequestParams.model_validate(
-            chat_message.request_params
+            chat_message.request_params, extra="ignore"
         )
         if chat_message.request_params is not None
         else None,

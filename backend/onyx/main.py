@@ -450,6 +450,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     active_chat_turns = ActiveChatTurns()
     app.state.active_chat_turns = active_chat_turns
+    # Shutdown runs even when the app exits with an error. Each step has its
+    # own try so one failure cannot skip the steps after it.
     try:
         yield
     finally:

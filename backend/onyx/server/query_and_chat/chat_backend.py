@@ -439,10 +439,7 @@ def get_chat_session(
             for message in session_messages
         )
         if stream_id is not None and not has_saved_outcome:
-            current_stream = CurrentStreamInfo(
-                stream_id=stream_id,
-                is_running=is_chat_session_processing(session_id, cache),
-            )
+            current_stream = CurrentStreamInfo(stream_id=stream_id)
     except Exception:
         logger.exception(
             "An error occurred while checking if the chat session is processing"
