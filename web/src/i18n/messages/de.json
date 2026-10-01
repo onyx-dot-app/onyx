@@ -8886,6 +8886,42 @@
         "item": "{field}: {message}"
       }
     },
+    "connectorManageAccess": {
+      "header": {
+        "title": "Verwaltungszugriff für Connector",
+        "description": "Legen Sie fest, wer den Connector betreiben (Indexierung planen und überwachen) und/oder seine Konfiguration bearbeiten darf."
+      },
+      "picker": {
+        "placeholder": "Gruppen zur Verwaltung dieses Connectors hinzufügen"
+      },
+      "role": {
+        "editor": {
+          "label": "Bearbeiter",
+          "description": "Konfigurationen aktualisieren/löschen."
+        },
+        "operator": {
+          "label": "Operator",
+          "description": "Indexierung planen/überwachen."
+        }
+      },
+      "row": {
+        "alwaysShared": "Immer freigegeben",
+        "removeAccess": "Zugriff entfernen",
+        "roleMenu": {
+          "ariaLabel": "Rolle von {name} ändern"
+        },
+        "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+        "managerCount": "{count, plural, one {# Gruppenmanager} other {# Gruppenmanager}}"
+      },
+      "footer": {
+        "note": "Nur Benutzer mit der Berechtigung „Connectors verwalten“ (Gruppenmanager-Rolle oder Gruppenberechtigungen) erhalten Zugriff, um Connectors zu betreiben und/oder zu bearbeiten."
+      },
+      "loadError": "Die Verwalter dieses Connectors konnten nicht geladen werden.",
+      "toasts": {
+        "saved": "Verwaltungszugriff aktualisiert",
+        "saveFailed": "Verwaltungszugriff konnte nicht aktualisiert werden"
+      }
+    },
     "llmGateway": {
       "header": {
         "title": "LLM Gateway",

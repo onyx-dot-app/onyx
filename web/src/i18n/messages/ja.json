@@ -8886,6 +8886,42 @@
         "item": "{field}: {message}"
       }
     },
+    "connectorManageAccess": {
+      "header": {
+        "title": "コネクターの管理アクセス",
+        "description": "コネクターを運用（インデックス作成のスケジュールと監視）できるユーザーと、設定を編集できるユーザーを管理します。"
+      },
+      "picker": {
+        "placeholder": "このコネクターを管理するグループを追加"
+      },
+      "role": {
+        "editor": {
+          "label": "編集者",
+          "description": "設定の更新・削除。"
+        },
+        "operator": {
+          "label": "オペレーター",
+          "description": "インデックス作成のスケジュール・監視。"
+        }
+      },
+      "row": {
+        "alwaysShared": "常に共有",
+        "removeAccess": "アクセスを削除",
+        "roleMenu": {
+          "ariaLabel": "{name} のロールを変更"
+        },
+        "memberCount": "{count, plural, other {#人のメンバー}}",
+        "managerCount": "{count, plural, other {#人のグループマネージャー}}"
+      },
+      "footer": {
+        "note": "「コネクターの管理」権限（グループマネージャーのロールまたはグループ権限）を持つユーザーのみが、コネクターの運用や編集のアクセス権を付与されます。"
+      },
+      "loadError": "このコネクターの管理者を読み込めませんでした。",
+      "toasts": {
+        "saved": "管理アクセスを更新しました",
+        "saveFailed": "管理アクセスを更新できませんでした"
+      }
+    },
     "llmGateway": {
       "header": {
         "title": "LLM ゲートウェイ",

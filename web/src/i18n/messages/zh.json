@@ -8886,6 +8886,42 @@
         "item": "{field}：{message}"
       }
     },
+    "connectorManageAccess": {
+      "header": {
+        "title": "连接器管理权限",
+        "description": "控制谁可以运行（计划和监控索引）和/或编辑连接器配置。"
+      },
+      "picker": {
+        "placeholder": "添加管理此连接器的群组"
+      },
+      "role": {
+        "editor": {
+          "label": "编辑者",
+          "description": "更新/删除配置。"
+        },
+        "operator": {
+          "label": "运维者",
+          "description": "计划/监控索引。"
+        }
+      },
+      "row": {
+        "alwaysShared": "始终共享",
+        "removeAccess": "移除权限",
+        "roleMenu": {
+          "ariaLabel": "更改 {name} 的角色"
+        },
+        "memberCount": "{count, plural, other {# 名成员}}",
+        "managerCount": "{count, plural, other {# 名群组管理员}}"
+      },
+      "footer": {
+        "note": "只有拥有“管理连接器”权限（群组管理员角色或群组权限）的用户才会获得运行和/或编辑连接器的权限。"
+      },
+      "loadError": "无法加载此连接器的管理者。",
+      "toasts": {
+        "saved": "管理权限已更新",
+        "saveFailed": "无法更新管理权限"
+      }
+    },
     "llmGateway": {
       "header": {
         "title": "LLM 网关",

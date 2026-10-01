@@ -8886,6 +8886,42 @@
         "item": "{field} : {message}"
       }
     },
+    "connectorManageAccess": {
+      "header": {
+        "title": "Accès de gestion du connecteur",
+        "description": "Définissez qui peut exploiter (planifier et surveiller l’indexation) et/ou modifier la configuration du connecteur."
+      },
+      "picker": {
+        "placeholder": "Ajouter des groupes pour gérer ce connecteur"
+      },
+      "role": {
+        "editor": {
+          "label": "Éditeur",
+          "description": "Mettre à jour/supprimer les configurations."
+        },
+        "operator": {
+          "label": "Opérateur",
+          "description": "Planifier/surveiller l’indexation."
+        }
+      },
+      "row": {
+        "alwaysShared": "Toujours partagé",
+        "removeAccess": "Retirer l’accès",
+        "roleMenu": {
+          "ariaLabel": "Modifier le rôle de {name}"
+        },
+        "memberCount": "{count, plural, one {# membre} other {# membres}}",
+        "managerCount": "{count, plural, one {# gestionnaire de groupe} other {# gestionnaires de groupe}}"
+      },
+      "footer": {
+        "note": "Seuls les utilisateurs disposant de l’autorisation « Gérer les connecteurs » (rôle de gestionnaire de groupe ou autorisations de groupe) pourront exploiter et/ou modifier les connecteurs."
+      },
+      "loadError": "Impossible de charger les gestionnaires de ce connecteur.",
+      "toasts": {
+        "saved": "Accès de gestion mis à jour",
+        "saveFailed": "Impossible de mettre à jour l’accès de gestion"
+      }
+    },
     "llmGateway": {
       "header": {
         "title": "LLM Gateway",

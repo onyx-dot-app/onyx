@@ -66,6 +66,9 @@ import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
 import { isPermSynced } from "@/lib/connectors/accessType";
+import { ConnectorManageAccessCard } from "@/lib/connectors/components/ConnectorManageAccessCard";
+import { useCanManageGroups } from "@/lib/permissions/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -94,6 +97,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const locale = useLocale();
   const router = useRouter();
   const { user } = useUser();
+  const settings = useSettings();
+  const canManageGroups = useCanManageGroups();
+  // Manage rows are user groups: EE, and the group APIs need Business.
+  const showManageAccess =
+    !settings.isLoading && settings.enterprise !== null && canManageGroups;
 
   const {
     data: ccPair,
@@ -695,6 +703,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
           )}
         </div>
       </Card>
+
+      {showManageAccess && can(ccPair, "operate") && (
+        <div className="mt-6">
+          <ConnectorManageAccessCard
+            ccPairId={ccPair.id}
+            canEdit={can(ccPair, "edit")}
+          />
+        </div>
+      )}
 
       {getCredentialSpec(ccPair.connector.source) && can(ccPair, "edit") && (
         <>

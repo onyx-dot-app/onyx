@@ -8886,6 +8886,42 @@
         "item": "{field}: {message}"
       }
     },
+    "connectorManageAccess": {
+      "header": {
+        "title": "Connector Manage Access",
+        "description": "Control who can operate (schedule and monitor indexing) and/or edit the connector configurations."
+      },
+      "picker": {
+        "placeholder": "Add groups to manage this connector"
+      },
+      "role": {
+        "editor": {
+          "label": "Editor",
+          "description": "Update/delete configurations."
+        },
+        "operator": {
+          "label": "Operator",
+          "description": "Schedule/monitor indexing."
+        }
+      },
+      "row": {
+        "alwaysShared": "Always shared",
+        "removeAccess": "Remove Access",
+        "roleMenu": {
+          "ariaLabel": "Change the role of {name}"
+        },
+        "memberCount": "{count, plural, one {# member} other {# members}}",
+        "managerCount": "{count, plural, one {# group manager} other {# group managers}}"
+      },
+      "footer": {
+        "note": "Only users with “Manage Connectors” permissions (group manager role or group permissions) will be granted access to operate and/or edit connectors."
+      },
+      "loadError": "Could not load who manages this connector.",
+      "toasts": {
+        "saved": "Manage access updated",
+        "saveFailed": "Could not update manage access"
+      }
+    },
     "llmGateway": {
       "header": {
         "title": "LLM Gateway",

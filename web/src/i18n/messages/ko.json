@@ -8886,6 +8886,42 @@
         "item": "{field}: {message}"
       }
     },
+    "connectorManageAccess": {
+      "header": {
+        "title": "커넥터 관리 액세스",
+        "description": "커넥터를 운영(인덱싱 예약 및 모니터링)하거나 커넥터 구성을 편집할 수 있는 사용자를 관리합니다."
+      },
+      "picker": {
+        "placeholder": "이 커넥터를 관리할 그룹 추가"
+      },
+      "role": {
+        "editor": {
+          "label": "편집자",
+          "description": "구성 업데이트/삭제."
+        },
+        "operator": {
+          "label": "운영자",
+          "description": "인덱싱 예약/모니터링."
+        }
+      },
+      "row": {
+        "alwaysShared": "항상 공유됨",
+        "removeAccess": "액세스 제거",
+        "roleMenu": {
+          "ariaLabel": "{name}의 역할 변경"
+        },
+        "memberCount": "{count, plural, other {멤버 #명}}",
+        "managerCount": "{count, plural, other {그룹 관리자 #명}}"
+      },
+      "footer": {
+        "note": "“커넥터 관리” 권한(그룹 관리자 역할 또는 그룹 권한)이 있는 사용자만 커넥터를 운영하거나 편집할 수 있는 액세스 권한을 받습니다."
+      },
+      "loadError": "이 커넥터의 관리자를 불러올 수 없습니다.",
+      "toasts": {
+        "saved": "관리 액세스가 업데이트되었습니다",
+        "saveFailed": "관리 액세스를 업데이트할 수 없습니다"
+      }
+    },
     "llmGateway": {
       "header": {
         "title": "LLM 게이트웨이",

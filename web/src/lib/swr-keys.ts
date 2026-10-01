@@ -278,6 +278,10 @@ export const SWR_KEYS = {
   ccPairIndexingErrors: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/errors`,
 
+  // ── Connector Manage Access ───────────────────────────────────────────────
+  ccPairManageAccess: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/manage-access`,
+
   // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────
   // `scheduledTaskRuns` is a base URL — the run-history table appends
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with

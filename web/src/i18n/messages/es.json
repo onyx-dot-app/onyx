@@ -8886,6 +8886,42 @@
         "item": "{field}: {message}"
       }
     },
+    "connectorManageAccess": {
+      "header": {
+        "title": "Acceso de gestión del conector",
+        "description": "Controla quién puede operar (programar y supervisar la indexación) y/o editar la configuración del conector."
+      },
+      "picker": {
+        "placeholder": "Añadir grupos para gestionar este conector"
+      },
+      "role": {
+        "editor": {
+          "label": "Editor",
+          "description": "Actualizar/eliminar configuraciones."
+        },
+        "operator": {
+          "label": "Operador",
+          "description": "Programar/supervisar la indexación."
+        }
+      },
+      "row": {
+        "alwaysShared": "Siempre compartido",
+        "removeAccess": "Quitar acceso",
+        "roleMenu": {
+          "ariaLabel": "Cambiar el rol de {name}"
+        },
+        "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
+        "managerCount": "{count, plural, one {# administrador de grupo} other {# administradores de grupo}}"
+      },
+      "footer": {
+        "note": "Solo los usuarios con permisos de «Gestionar conectores» (rol de administrador de grupo o permisos de grupo) tendrán acceso para operar y/o editar conectores."
+      },
+      "loadError": "No se pudo cargar quién gestiona este conector.",
+      "toasts": {
+        "saved": "Acceso de gestión actualizado",
+        "saveFailed": "No se pudo actualizar el acceso de gestión"
+      }
+    },
     "llmGateway": {
       "header": {
         "title": "LLM Gateway",

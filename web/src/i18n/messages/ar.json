@@ -8886,6 +8886,42 @@
         "item": "{field}: {message}"
       }
     },
+    "connectorManageAccess": {
+      "header": {
+        "title": "صلاحية إدارة الموصل",
+        "description": "تحكّم في من يمكنه تشغيل الموصل (جدولة الفهرسة ومراقبتها) و/أو تعديل إعداداته."
+      },
+      "picker": {
+        "placeholder": "أضف مجموعات لإدارة هذا الموصل"
+      },
+      "role": {
+        "editor": {
+          "label": "محرر",
+          "description": "تحديث/حذف الإعدادات."
+        },
+        "operator": {
+          "label": "مشغّل",
+          "description": "جدولة/مراقبة الفهرسة."
+        }
+      },
+      "row": {
+        "alwaysShared": "مشترك دائمًا",
+        "removeAccess": "إزالة الصلاحية",
+        "roleMenu": {
+          "ariaLabel": "تغيير دور {name}"
+        },
+        "memberCount": "{count, plural, zero {لا أعضاء} one {عضو واحد} two {عضوان} few {# أعضاء} many {# عضوًا} other {# عضو}}",
+        "managerCount": "{count, plural, zero {لا مديري مجموعات} one {مدير مجموعة واحد} two {مديرا مجموعة} few {# مديري مجموعات} many {# مدير مجموعة} other {# مدير مجموعة}}"
+      },
+      "footer": {
+        "note": "لن يحصل على صلاحية تشغيل الموصلات و/أو تعديلها إلا المستخدمون الذين لديهم صلاحية «إدارة الموصلات» (دور مدير المجموعة أو صلاحيات المجموعة)."
+      },
+      "loadError": "تعذّر تحميل من يدير هذا الموصل.",
+      "toasts": {
+        "saved": "تم تحديث صلاحية الإدارة",
+        "saveFailed": "تعذّر تحديث صلاحية الإدارة"
+      }
+    },
     "llmGateway": {
       "header": {
         "title": "بوابة LLM",
