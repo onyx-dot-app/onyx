@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Ref } from "react";
 import { Content } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { useFormatter, useTranslations } from "next-intl";
@@ -10,60 +10,124 @@ import {
   SvgCheckCircle,
   SvgChevronDown,
   SvgChevronRight,
+  SvgClock,
+  SvgCircle,
   SvgExpand,
   SvgFold,
+  SvgLoader,
   SvgMinusCircle,
+  SvgPauseCircle,
   SvgRefreshCw,
   SvgXCircle,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import type { TextColor } from "@onyx-ai/shared/contracts";
 import { cn } from "@opal/utils";
+import {
+  applicableCheckCount,
+  countCheckStates,
+  rowsFromDraft,
+  rowsFromReport,
+  summarizeCheckStates,
+  type CheckRowModel,
+} from "@/lib/connectors/checks/checkRows";
 import type {
-  CapabilityCheckResult,
-  CapabilityCheckStatus,
   CapabilityReportSnapshot,
+  DraftCheckRunSnapshot,
+  DraftCheckState,
 } from "@/lib/connectors/checks/types";
 
-export interface ConnectorsCheckCardProps {
-  /** The stored report row; `null` when no run has happened yet. */
-  snapshot: CapabilityReportSnapshot | null;
+interface ConnectorsCheckCardBaseProps {
   /** True while the first fetch is pending. */
   loading?: boolean;
-  /** True from a re-run request until the row reads `completed`. */
+  /** True from a run request until the run settles. */
   running?: boolean;
   onRerun?: () => void;
+  /** Draws the border in a status color to pull the admin's eye. */
+  highlighted?: boolean;
+  /** Config field name to its form label, for "Waiting for: …". */
+  fieldLabels?: Record<string, string>;
+  ref?: Ref<HTMLDivElement>;
 }
+
+interface ReportCardProps extends ConnectorsCheckCardBaseProps {
+  /** The stored report row; `null` when no run has happened yet. */
+  snapshot: CapabilityReportSnapshot | null;
+  draft?: never;
+}
+
+interface DraftCardProps extends ConnectorsCheckCardBaseProps {
+  /** The latest draft run of an unsaved form; `null` before the first run. */
+  draft: DraftCheckRunSnapshot | null;
+  snapshot?: never;
+}
+
+export type ConnectorsCheckCardProps = ReportCardProps | DraftCardProps;
 
 // ---------------------------------------------------------------------------
 // Status presentation
 // ---------------------------------------------------------------------------
 
-/** Group order: what blocks first, what is unknown next, then the rest. */
-const GROUP_ORDER: readonly CapabilityCheckStatus[] = [
+type CheckGroupKey =
+  | "failed"
+  | "indeterminate"
+  | "inProgress"
+  | "waiting"
+  | "passed"
+  | "skipped"
+  | "notApplicable";
+
+/** Group order: what blocks first, what is unknown or unfinished next, then
+ * the rest. Not-applicable checks come last, folded. */
+const GROUP_ORDER: readonly CheckGroupKey[] = [
   "failed",
   "indeterminate",
+  "inProgress",
+  "waiting",
   "passed",
   "skipped",
+  "notApplicable",
 ];
+
+const GROUP_OF_STATE: Record<DraftCheckState, CheckGroupKey> = {
+  failed: "failed",
+  indeterminate: "indeterminate",
+  running: "inProgress",
+  pending: "inProgress",
+  waiting: "waiting",
+  passed: "passed",
+  skipped: "skipped",
+  not_applicable: "notApplicable",
+};
 
 const GROUP_LABEL_KEYS = {
   failed: "groups.failed",
   indeterminate: "groups.indeterminate",
+  inProgress: "groups.inProgress",
+  waiting: "groups.waiting",
   passed: "groups.passed",
   skipped: "groups.skipped",
-} as const satisfies Record<CapabilityCheckStatus, string>;
+  notApplicable: "groups.notApplicable",
+} as const satisfies Record<CheckGroupKey, string>;
 
-/** Detail shown when the backend sends no message for the outcome. */
+/** Detail shown when the backend sends no message for the state. */
 const DETAIL_FALLBACK_KEYS = {
   failed: "status.failed",
   indeterminate: "status.indeterminate",
   passed: "status.passed",
   skipped: "status.skipped",
-} as const satisfies Record<CapabilityCheckStatus, string>;
+  running: "status.running",
+  pending: "status.pending",
+  waiting: "status.waiting",
+  not_applicable: "status.notApplicable",
+} as const satisfies Record<DraftCheckState, string>;
+
+function SpinningLoader({ className, ...props }: IconProps) {
+  return <SvgLoader className={cn("animate-spin", className)} {...props} />;
+}
 
 const STATUS_ICONS: Record<
-  CapabilityCheckStatus,
+  DraftCheckState,
   { icon: IconFunctionComponent; className: string }
 > = {
   failed: { icon: SvgXCircle, className: "stroke-status-error-05" },
@@ -73,13 +137,21 @@ const STATUS_ICONS: Record<
   },
   passed: { icon: SvgCheckCircle, className: "stroke-status-success-05" },
   skipped: { icon: SvgMinusCircle, className: "stroke-text-03" },
+  running: { icon: SpinningLoader, className: "stroke-text-03" },
+  pending: { icon: SvgClock, className: "stroke-text-03" },
+  waiting: { icon: SvgPauseCircle, className: "stroke-text-03" },
+  not_applicable: { icon: SvgCircle, className: "stroke-text-02" },
 };
 
-const DETAIL_COLORS: Record<CapabilityCheckStatus, TextColor> = {
+const DETAIL_COLORS: Record<DraftCheckState, TextColor> = {
   failed: "status-error-05",
   indeterminate: "text-04",
   passed: "text-05",
   skipped: "text-03",
+  running: "text-03",
+  pending: "text-03",
+  waiting: "text-03",
+  not_applicable: "text-03",
 };
 
 // ---------------------------------------------------------------------------
@@ -141,17 +213,32 @@ function ProgressRing({ passed, failed, total, className }: ProgressRingProps) {
 // CheckRow
 // ---------------------------------------------------------------------------
 
-function CheckRow({ result }: { result: CapabilityCheckResult }) {
+interface CheckRowProps {
+  result: CheckRowModel;
+  fieldLabels?: Record<string, string>;
+}
+
+function CheckRow({ result, fieldLabels }: CheckRowProps) {
   const t = useTranslations("admin.connectorChecks");
+  const format = useFormatter();
   const { icon: StatusIcon, className: iconClassName } =
-    STATUS_ICONS[result.status];
+    STATUS_ICONS[result.state];
   // A failed required check blocks the capability, so the row stands out.
-  const blocking = result.status === "failed" && result.required;
-  const detail = result.message || t(DETAIL_FALLBACK_KEYS[result.status]);
+  const blocking = result.state === "failed" && result.required;
+  // A waiting check names the form fields it needs, by their form labels.
+  const detail =
+    result.state === "waiting" && result.waiting_for.length > 0
+      ? t("waiting.fields", {
+          fields: format.list(
+            result.waiting_for.map((name) => fieldLabels?.[name] ?? name),
+            { type: "conjunction" }
+          ),
+        })
+      : result.message || t(DETAIL_FALLBACK_KEYS[result.state]);
   // Failures and unverified checks carry the detail an admin acts on, so their
   // rows expand to the full message, the fix, and the docs link.
   const expandable =
-    (result.status === "failed" || result.status === "indeterminate") &&
+    (result.state === "failed" || result.state === "indeterminate") &&
     (result.message !== "" ||
       result.remediation !== null ||
       result.docs_link !== null);
@@ -172,7 +259,7 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
         {!expanded && (
           <Text
             font="main-ui-body"
-            color={DETAIL_COLORS[result.status]}
+            color={DETAIL_COLORS[result.state]}
             maxLines={1}
           >
             {detail}
@@ -198,7 +285,7 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
 
   const details = expandable && expanded && (
     <div className="flex flex-col gap-2 pl-8 pt-2">
-      <Text font="main-ui-body" color={DETAIL_COLORS[result.status]}>
+      <Text font="main-ui-body" color={DETAIL_COLORS[result.state]}>
         {detail}
       </Text>
       {result.remediation !== null && (
@@ -257,21 +344,27 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
 // ---------------------------------------------------------------------------
 
 interface CheckGroupProps {
-  status: CapabilityCheckStatus;
-  results: CapabilityCheckResult[];
+  group: CheckGroupKey;
+  results: CheckRowModel[];
+  fieldLabels?: Record<string, string>;
 }
 
-function CheckGroup({ status, results }: CheckGroupProps) {
+function CheckGroup({ group, results, fieldLabels }: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
     <Divider
-      title={t(GROUP_LABEL_KEYS[status], { count: results.length })}
+      title={t(GROUP_LABEL_KEYS[group], { count: results.length })}
       foldable
-      defaultOpen
+      // Checks that do not apply are only context; they start folded.
+      defaultOpen={group !== "notApplicable"}
     >
       <div className="flex flex-col">
         {results.map((result) => (
-          <CheckRow key={result.check_id} result={result} />
+          <CheckRow
+            key={result.check_id}
+            result={result}
+            fieldLabels={fieldLabels}
+          />
         ))}
       </div>
     </Divider>
@@ -283,63 +376,65 @@ function CheckGroup({ status, results }: CheckGroupProps) {
 // ---------------------------------------------------------------------------
 
 /**
- * The capability-check report for one credential and connector, grouped by
- * outcome like a pull request's checks panel. The backend stores the last
- * completed run and a running flag, so a re-run shows the previous results
- * under a spinner until the new report lands.
+ * The capability checks for one credential and connector, grouped by state
+ * like a pull request's checks panel. It shows either a stored report (the
+ * last completed run, under a spinner while a re-run is in flight) or a
+ * draft run of an unsaved form, whose checks move through pending, running
+ * and waiting states as the form fills in.
  */
-export function ConnectorsCheckCard({
-  snapshot,
-  loading = false,
-  running = false,
-  onRerun,
-}: ConnectorsCheckCardProps) {
+export function ConnectorsCheckCard(props: ConnectorsCheckCardProps) {
+  const {
+    loading = false,
+    running = false,
+    onRerun,
+    highlighted = false,
+    fieldLabels,
+    ref,
+  } = props;
   const t = useTranslations("admin.connectorChecks");
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(false);
 
+  const isDraft = props.draft !== undefined;
   const results = useMemo(
-    () => snapshot?.report?.check_results ?? [],
-    [snapshot]
+    () =>
+      props.draft !== undefined
+        ? rowsFromDraft(props.draft)
+        : rowsFromReport(props.snapshot),
+    [props.draft, props.snapshot]
   );
   const groups = useMemo(
     () =>
-      GROUP_ORDER.map((status) => ({
-        status,
-        results: results.filter((result) => result.status === status),
+      GROUP_ORDER.map((group) => ({
+        group,
+        results: results.filter(
+          (result) => GROUP_OF_STATE[result.state] === group
+        ),
       })).filter((group) => group.results.length > 0),
     [results]
   );
-  const passed = results.filter((result) => result.status === "passed").length;
-  const failed = results.filter((result) => result.status === "failed").length;
-  const isRunning = running || snapshot?.run_status === "running";
+  const counts = useMemo(() => countCheckStates(results), [results]);
+  const passed = counts.passed;
+  const failed = counts.failed;
+  const total = applicableCheckCount(counts);
+  const isRunning =
+    running ||
+    props.snapshot?.run_status === "running" ||
+    props.draft?.status === "running";
   const hasReport = results.length > 0;
-  const total = results.length;
 
-  // What the fold hides, as one comma-separated line in a fixed order, e.g.
-  // "2 failed, 1 skipped, 5 successful". Zero counts are left out. The
-  // backend has no per-check progress yet, so the in-progress and expected
-  // slots stay at zero until it does.
+  // The counts as one comma-separated line in a fixed order, e.g.
+  // "1 in progress, 2 more expected, 1 skipped, 4 successful". Zero counts
+  // are left out.
   const summary = useMemo(() => {
     if (!hasReport) return isRunning ? t("running.label") : t("empty.label");
-    const count = (status: CapabilityCheckStatus) =>
-      results.filter((result) => result.status === status).length;
-    const parts: Array<[string, number]> = [
-      [t("summary.failed", { count: count("failed") }), count("failed")],
-      [
-        t("summary.unverified", { count: count("indeterminate") }),
-        count("indeterminate"),
-      ],
-      [t("summary.inProgress", { count: 0 }), 0],
-      [t("summary.expected", { count: 0 }), 0],
-      [t("summary.skipped", { count: count("skipped") }), count("skipped")],
-      [t("summary.successful", { count: count("passed") }), count("passed")],
-    ];
     return format.list(
-      parts.filter(([, n]) => n > 0).map(([label]) => label),
+      summarizeCheckStates(counts).map(({ slot, count }) =>
+        t(`summary.${slot}`, { count })
+      ),
       { type: "unit" }
     );
-  }, [hasReport, isRunning, results, t, format]);
+  }, [hasReport, isRunning, counts, t, format]);
 
   // Content wants an icon component; this one is the ring, or a spinner
   // while a run is in flight.
@@ -359,7 +454,13 @@ export function ConnectorsCheckCard({
   );
 
   return (
-    <Card border="solid" rounding={4} padding={2}>
+    <Card
+      ref={ref}
+      border="solid"
+      borderColor={highlighted ? (failed > 0 ? "error" : "info") : "default"}
+      rounding={4}
+      padding={2}
+    >
       <div className="flex flex-col gap-3">
         <div className="flex items-start gap-3">
           <GeneralLayouts.Section
@@ -373,7 +474,9 @@ export function ConnectorsCheckCard({
               title={
                 hasReport ? t("titleWithCount", { passed, total }) : t("title")
               }
-              description={collapsed ? summary : undefined}
+              // A draft run changes while the admin types, so its summary
+              // stays visible; a stored report shows it only when folded.
+              description={collapsed || isDraft ? summary : undefined}
               sizePreset="section"
               variant="section"
             />
@@ -409,9 +512,10 @@ export function ConnectorsCheckCard({
             <div className="flex flex-col gap-2">
               {groups.map((group) => (
                 <CheckGroup
-                  key={group.status}
-                  status={group.status}
+                  key={group.group}
+                  group={group.group}
                   results={group.results}
+                  fieldLabels={fieldLabels}
                 />
               ))}
             </div>

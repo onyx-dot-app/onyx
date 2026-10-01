@@ -8825,13 +8825,20 @@
         "failed": "실패 {count}개",
         "indeterminate": "미확인 {count}개",
         "passed": "완료 {count}개",
-        "skipped": "건너뜀 {count}개"
+        "skipped": "건너뜀 {count}개",
+        "inProgress": "진행 중 {count}개",
+        "waiting": "입력 대기 {count}개",
+        "notApplicable": "해당 없음 {count}개"
       },
       "status": {
         "passed": "통과",
         "failed": "실패",
         "indeterminate": "확인할 수 없음",
-        "skipped": "건너뜀"
+        "skipped": "건너뜀",
+        "running": "실행 중…",
+        "pending": "대기열에 있음",
+        "waiting": "커넥터 설정을 기다리는 중",
+        "notApplicable": "이 구성에는 적용되지 않음"
       },
       "required": {
         "label": "필수"
@@ -8867,6 +8874,9 @@
       },
       "remediation": {
         "label": "해결 방법"
+      },
+      "waiting": {
+        "fields": "대기 중: {fields}"
       }
     },
     "llmGateway": {

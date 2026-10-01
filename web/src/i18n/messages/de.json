@@ -8825,13 +8825,20 @@
         "failed": "{count} Fehlgeschlagen",
         "indeterminate": "{count} Nicht verifiziert",
         "passed": "{count} Abgeschlossen",
-        "skipped": "{count} Übersprungen"
+        "skipped": "{count} Übersprungen",
+        "inProgress": "{count} In Bearbeitung",
+        "waiting": "{count} Warten auf Eingabe",
+        "notApplicable": "{count} Nicht zutreffend"
       },
       "status": {
         "passed": "Bestanden",
         "failed": "Fehlgeschlagen",
         "indeterminate": "Konnte nicht verifiziert werden",
-        "skipped": "Übersprungen"
+        "skipped": "Übersprungen",
+        "running": "Wird ausgeführt…",
+        "pending": "In Warteschlange",
+        "waiting": "Wartet auf Connector-Einstellungen",
+        "notApplicable": "Gilt nicht für diese Konfiguration"
       },
       "required": {
         "label": "Erforderlich"
@@ -8867,6 +8874,9 @@
       },
       "remediation": {
         "label": "So beheben Sie das"
+      },
+      "waiting": {
+        "fields": "Wartet auf: {fields}"
       }
     },
     "llmGateway": {

@@ -8825,13 +8825,20 @@
         "failed": "{count} 项失败",
         "indeterminate": "{count} 项未验证",
         "passed": "{count} 项完成",
-        "skipped": "{count} 项跳过"
+        "skipped": "{count} 项跳过",
+        "inProgress": "{count} 项进行中",
+        "waiting": "{count} 项等待输入",
+        "notApplicable": "{count} 项不适用"
       },
       "status": {
         "passed": "通过",
         "failed": "失败",
         "indeterminate": "无法验证",
-        "skipped": "已跳过"
+        "skipped": "已跳过",
+        "running": "运行中…",
+        "pending": "排队中",
+        "waiting": "等待连接器设置",
+        "notApplicable": "不适用于此配置"
       },
       "required": {
         "label": "必需"
@@ -8867,6 +8874,9 @@
       },
       "remediation": {
         "label": "修复方法"
+      },
+      "waiting": {
+        "fields": "等待：{fields}"
       }
     },
     "llmGateway": {

@@ -8825,13 +8825,20 @@
         "failed": "失敗 {count} 件",
         "indeterminate": "未検証 {count} 件",
         "passed": "完了 {count} 件",
-        "skipped": "スキップ {count} 件"
+        "skipped": "スキップ {count} 件",
+        "inProgress": "実行中 {count} 件",
+        "waiting": "入力待ち {count} 件",
+        "notApplicable": "対象外 {count} 件"
       },
       "status": {
         "passed": "合格",
         "failed": "失敗",
         "indeterminate": "検証できませんでした",
-        "skipped": "スキップ"
+        "skipped": "スキップ",
+        "running": "実行中…",
+        "pending": "待機中",
+        "waiting": "コネクタ設定を待っています",
+        "notApplicable": "この構成には適用されません"
       },
       "required": {
         "label": "必須"
@@ -8867,6 +8874,9 @@
       },
       "remediation": {
         "label": "修正方法"
+      },
+      "waiting": {
+        "fields": "入力待ち: {fields}"
       }
     },
     "llmGateway": {

@@ -8825,13 +8825,20 @@
         "failed": "{count} fallidas",
         "indeterminate": "{count} sin verificar",
         "passed": "{count} completadas",
-        "skipped": "{count} omitidas"
+        "skipped": "{count} omitidas",
+        "inProgress": "{count} en curso",
+        "waiting": "{count} esperando datos",
+        "notApplicable": "{count} no aplicables"
       },
       "status": {
         "passed": "Superada",
         "failed": "Fallida",
         "indeterminate": "No se pudo verificar",
-        "skipped": "Omitida"
+        "skipped": "Omitida",
+        "running": "En ejecución…",
+        "pending": "En cola",
+        "waiting": "Esperando la configuración del conector",
+        "notApplicable": "No se aplica a esta configuración"
       },
       "required": {
         "label": "Obligatoria"
@@ -8867,6 +8874,9 @@
       },
       "remediation": {
         "label": "Cómo solucionarlo"
+      },
+      "waiting": {
+        "fields": "Esperando: {fields}"
       }
     },
     "llmGateway": {

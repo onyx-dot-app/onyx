@@ -8825,13 +8825,20 @@
         "failed": "{count} فشلت",
         "indeterminate": "{count} لم يتم التحقق منها",
         "passed": "{count} اكتملت",
-        "skipped": "{count} تم تخطيها"
+        "skipped": "{count} تم تخطيها",
+        "inProgress": "{count} قيد التنفيذ",
+        "waiting": "{count} بانتظار الإدخال",
+        "notApplicable": "{count} غير منطبقة"
       },
       "status": {
         "passed": "ناجح",
         "failed": "فاشل",
         "indeterminate": "تعذّر التحقق",
-        "skipped": "تم التخطي"
+        "skipped": "تم التخطي",
+        "running": "قيد التشغيل…",
+        "pending": "في قائمة الانتظار",
+        "waiting": "بانتظار إعدادات الموصل",
+        "notApplicable": "لا ينطبق على هذا الإعداد"
       },
       "required": {
         "label": "مطلوب"
@@ -8867,6 +8874,9 @@
       },
       "remediation": {
         "label": "طريقة الإصلاح"
+      },
+      "waiting": {
+        "fields": "بانتظار: {fields}"
       }
     },
     "llmGateway": {
