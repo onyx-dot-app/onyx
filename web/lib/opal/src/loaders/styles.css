@@ -107,6 +107,23 @@
   }
 }
 
+/* Right-to-left text is read from the right, so both waves run that way. */
+.opal-shimmer-block:dir(rtl)::after,
+.opal-text-loader-wave:dir(rtl) {
+  animation-direction: reverse;
+}
+
+/* Forced colours (e.g. Windows High Contrast) drop background images, and
+   the text's glyphs are painted only by its clipped background. Show plain
+   system-coloured text instead. */
+@media (forced-colors: active) {
+  .opal-text-loader-wave {
+    color: CanvasText;
+    background: none;
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .opal-shimmer-block::after {
     animation: none;

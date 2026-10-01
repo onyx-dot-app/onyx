@@ -3,7 +3,6 @@
 import "@opal/loaders/styles.css";
 import { useLayoutEffect, useRef } from "react";
 import { Text, type TextFont } from "@opal/components";
-import type { RichStr } from "@opal/types";
 
 // The block shimmer in loaders/styles.css (LineLoader, CardLoader) uses the
 // same wave; keep the two in step.
@@ -19,8 +18,11 @@ const CROSSING_S = 2;
 const GAP_S = 1;
 
 interface TextLoaderProps {
-  /** The text to shimmer, e.g. a status like "Thinking…". */
-  children: string | RichStr;
+  /**
+   * The text to shimmer, e.g. a status like "Thinking…". Plain text only:
+   * markdown could render blocks outside the measured inline run.
+   */
+  children: string;
 
   /** Typography preset. @default "main-ui-action" */
   font?: TextFont;

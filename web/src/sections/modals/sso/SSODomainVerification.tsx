@@ -234,7 +234,8 @@ export default function SSODomainVerification({
         )}
         {isLoading && rows.length === 0 ? (
           <Section flexDirection="row" alignItems="center" height="fit" gap={2}>
-            <IconLoader className="text-text-03" />
+            {/* The message beside it already announces the loading state. */}
+            <IconLoader aria-hidden className="text-text-03" />
             <Text font="main-ui-body" color="text-03">
               {t("domainVerification.loading.message")}
             </Text>
