@@ -10,7 +10,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import { OnyxDocument } from "@/lib/search/types";
 import { getSourceDisplayName, isValidSource } from "@/lib/sources";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 export const MAX_TITLE_LENGTH = 25;
 

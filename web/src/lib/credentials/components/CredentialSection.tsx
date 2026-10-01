@@ -1,6 +1,7 @@
 "use client";
 
-import { AccessType, ValidSources } from "@/lib/types";
+import { AccessType } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher, type ErrorResponseBody } from "@/lib/fetcher";

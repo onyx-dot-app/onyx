@@ -6,7 +6,7 @@ import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
 } from "@/lib/connectors/utils";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 function ZoomForm() {
   const config = connectorConfigs.zoom;

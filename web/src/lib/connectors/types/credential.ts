@@ -1,10 +1,8 @@
 import type { SWRResponse } from "swr";
-
 import type { CredentialCreationMethod } from "@/lib/credentials/credentialCreation";
 import type { CredentialFieldValues } from "@/lib/credentials/types";
-
-import type { ValidSources } from "@/lib/types";
-import type { TypedFile } from "../fileTypes";
+import type { ValidSources } from "@/lib/connectors/types/source";
+import type { TypedFile } from "@/lib/connectors/fileTypes";
 
 export interface OAuthAdditionalKwargDescription {
   name: string;

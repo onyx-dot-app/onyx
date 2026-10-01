@@ -15,7 +15,8 @@ import {
   CredentialCreationMethod,
   shouldRedirectToOAuth,
 } from "@/lib/credentials/credentialCreation";
-import type { AccessType, ConfigurableSources } from "@/lib/types";
+import type { AccessType } from "@/lib/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 
 export interface CredentialsConfigurerProps {
   /** The source being set up. */

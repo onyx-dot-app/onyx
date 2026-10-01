@@ -13,7 +13,7 @@ import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";

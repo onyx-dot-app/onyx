@@ -15,7 +15,7 @@ import {
   parseOauthAppCredentialJson,
   refreshAllGoogleData,
 } from "@/lib/googleConnector";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { markdown } from "@opal/utils";
 
 interface DriveCredentialSectionProps {

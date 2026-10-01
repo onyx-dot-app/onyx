@@ -5,7 +5,7 @@ import {
   BraintrustIcon,
   BoxIcon,
 } from "@/components/icons/icons";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";

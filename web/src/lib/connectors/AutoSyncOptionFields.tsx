@@ -1,5 +1,5 @@
 import { JSX } from "react";
-import { ValidAutoSyncSource } from "@/lib/types";
+import type { ValidAutoSyncSource } from "@/lib/connectors/types/source";
 
 interface AutoSyncConfig {
   notice?: string;

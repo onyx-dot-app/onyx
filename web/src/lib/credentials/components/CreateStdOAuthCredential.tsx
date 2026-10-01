@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
 
 import type { OAuthAdditionalKwargDescription } from "@/lib/connectors/types";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { FormikField } from "@/refresh-components/form/FormikField";
 
 type OAuthFormValues = Record<string, string>;

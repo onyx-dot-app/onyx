@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { toast } from "@opal/layouts";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import type {
   Credential,
   GmailCredentialJson,

@@ -1,5 +1,5 @@
 import { TextFormField } from "@/components/Field";
-import { ValidAutoSyncSource } from "@/lib/types";
+import type { ValidAutoSyncSource } from "@/lib/connectors/types/source";
 import { Divider, Text } from "@opal/components";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";
 

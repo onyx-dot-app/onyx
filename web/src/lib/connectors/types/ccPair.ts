@@ -6,8 +6,8 @@ import type {
   IndexAttemptSnapshot,
   ValidStatuses,
 } from "@/lib/types";
-import type { Connector } from "./connector";
-import type { Credential } from "./credential";
+import type { Connector } from "@/lib/connectors/types/connector";
+import type { Credential } from "@/lib/connectors/types/credential";
 
 export enum ConnectorCredentialPairStatus {
   SCHEDULED = "SCHEDULED",

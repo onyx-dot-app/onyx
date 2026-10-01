@@ -3,7 +3,7 @@ import { toast } from "@opal/layouts";
 import { FetchError, errorHandlingFetcher } from "@/lib/fetcher";
 import type { Credential } from "@/lib/connectors/types";
 import type { ConnectorSnapshot } from "@/lib/connectors/types";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import {
   refreshSourceCredentials,
   useSourceCredentials,

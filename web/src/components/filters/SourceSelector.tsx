@@ -1,5 +1,6 @@
 import React, { JSX } from "react";
-import { DocumentSetSummary, Tag, ValidSources } from "@/lib/types";
+import { DocumentSetSummary, Tag } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SourceMetadata } from "@/lib/search/types";
 import { FiBook, FiBookmark, FiMap, FiX } from "react-icons/fi";
 import { SearchDateRangeSelector } from "@/components/dateRangeSelectors/SearchDateRangeSelector";

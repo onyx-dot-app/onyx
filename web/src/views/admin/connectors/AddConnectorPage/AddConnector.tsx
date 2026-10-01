@@ -15,7 +15,10 @@ import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
 import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
-import { ConfigurableSources, ValidSources } from "@/lib/types";
+import {
+  ConfigurableSources,
+  ValidSources,
+} from "@/lib/connectors/types/source";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import type { Credential } from "@/lib/connectors/types";
 import {

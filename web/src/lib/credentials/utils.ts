@@ -11,7 +11,7 @@ import type {
   CredentialFieldValues,
   CredentialFormValues,
 } from "@/lib/credentials/types";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 // What a credential template seeds a field with: "" for a required text
 // field, null for an optional one or a file, a boolean for a checkbox.

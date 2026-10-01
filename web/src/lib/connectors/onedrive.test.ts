@@ -7,7 +7,10 @@ import {
 } from "@/lib/connectors/utils";
 import { FileTypeCategory, OneDriveScope } from "@/lib/connectors/types";
 import { getSourceDocLink, getSourceMetadata } from "@/lib/sources";
-import { ValidSources, validAutoSyncSources } from "@/lib/types";
+import {
+  ValidSources,
+  validAutoSyncSources,
+} from "@/lib/connectors/types/source";
 
 const ONE_DRIVE_USERS_REQUIRED = "Add at least one user for Specific scope";
 

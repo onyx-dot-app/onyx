@@ -4,7 +4,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { ProjectFile } from "@/lib/projects/types";
 import { BlinkingBar } from "./BlinkingBar";
 import Text from "@/refresh-components/texts/Text";
