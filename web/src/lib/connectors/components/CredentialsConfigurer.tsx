@@ -273,6 +273,8 @@ export function CredentialsConfigurer({
               <div className="p-4" data-testid="credential-form">
                 {namesMethods ? (
                   <SimpleTabs
+                    // A tab switch keeps what the user typed in the other route.
+                    keepMounted
                     tabs={credentialTabs()}
                     value={openMethod ?? defaultMethod}
                     onValueChange={(value) => {

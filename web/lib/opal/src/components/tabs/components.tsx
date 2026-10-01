@@ -3,7 +3,7 @@
 import "@opal/components/tabs/styles.css";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { mergeRefs } from "@opal/utils";
+import { cn, mergeRefs } from "@opal/utils";
 import {
   IconFunctionComponent,
   type Spacing,
@@ -296,11 +296,22 @@ interface TabsContentProps extends WithoutStyles<
 > {
   /** Additional inner padding, as a {@link Spacing} step (`N / 4` rem). @default 0 */
   padding?: Spacing;
+  /** Keep the panel mounted while inactive, hidden, so its state survives a tab switch. @default false */
+  keepMounted?: boolean;
 }
 
-function TabsContent({ padding, children, ...props }: TabsContentProps) {
+function TabsContent({
+  padding,
+  keepMounted = false,
+  children,
+  ...props
+}: TabsContentProps) {
   return (
-    <TabsPrimitive.Content {...props} className="w-full">
+    <TabsPrimitive.Content
+      {...props}
+      forceMount={keepMounted || undefined}
+      className={cn("w-full", keepMounted && "data-[state=inactive]:hidden")}
+    >
       {padding ? (
         <div style={{ padding: spacingToRem(padding) }}>{children}</div>
       ) : (

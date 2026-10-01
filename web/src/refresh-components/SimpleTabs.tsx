@@ -36,6 +36,8 @@ export interface SimpleTabsProps {
   value?: string;
   /** Callback when the active tab changes */
   onValueChange?: (value: string) => void;
+  /** Keep inactive panels mounted but hidden, so their state survives a tab switch */
+  keepMounted?: boolean;
 }
 
 /**
@@ -84,6 +86,7 @@ export default function SimpleTabs({
   defaultValue,
   value,
   onValueChange,
+  keepMounted,
 }: SimpleTabsProps) {
   const tabEntries = Object.entries(tabs);
 
@@ -112,7 +115,7 @@ export default function SimpleTabs({
       </Tabs.List>
 
       {tabEntries.map(([key, tab]) => (
-        <Tabs.Content key={key} value={key}>
+        <Tabs.Content key={key} value={key} keepMounted={keepMounted}>
           {tab.content}
         </Tabs.Content>
       ))}
