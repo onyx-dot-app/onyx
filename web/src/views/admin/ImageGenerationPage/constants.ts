@@ -17,12 +17,28 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     name: "OpenAI",
     providers: [
       {
+        image_provider_id: "openai_gpt_image_2_5_flare",
+        model_name: "gpt-image-2.5-flare",
+        provider_name: "openai",
+        title: "GPT Image 2.5 Flare",
+        description:
+          "OpenAI's latest Image Generation model with high quality and fast generation.",
+      },
+      {
+        image_provider_id: "openai_gpt_image_2_5_sunburst",
+        model_name: "gpt-image-2.5-sunburst",
+        provider_name: "openai",
+        title: "GPT Image 2.5 Sunburst",
+        description:
+          "OpenAI's premium Image Generation model for the most precise edits.",
+      },
+      {
         image_provider_id: "openai_gpt_image_2",
         model_name: "gpt-image-2",
         provider_name: "openai",
         title: "GPT Image 2",
         description:
-          "OpenAI's latest Image Generation model with the highest prompt fidelity.",
+          "OpenAI's previous-generation Image Generation model with high prompt fidelity.",
       },
       {
         image_provider_id: "openai_gpt_image_1_5",
@@ -44,6 +60,22 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
   {
     name: "Azure OpenAI",
     providers: [
+      {
+        image_provider_id: "azure_gpt_image_2_5_flare",
+        model_name: "", // Extracted from deployment in target URI
+        provider_name: "azure",
+        title: "Azure OpenAI GPT Image 2.5 Flare",
+        description:
+          "GPT Image 2.5 Flare image generation model hosted on Microsoft Azure.",
+      },
+      {
+        image_provider_id: "azure_gpt_image_2_5_sunburst",
+        model_name: "", // Extracted from deployment in target URI
+        provider_name: "azure",
+        title: "Azure OpenAI GPT Image 2.5 Sunburst",
+        description:
+          "GPT Image 2.5 Sunburst image generation model hosted on Microsoft Azure.",
+      },
       {
         image_provider_id: "azure_gpt_image_2",
         model_name: "", // Extracted from deployment in target URI

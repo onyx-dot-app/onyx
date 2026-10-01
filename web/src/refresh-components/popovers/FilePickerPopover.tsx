@@ -9,6 +9,7 @@ import { useCreateModal } from "@opal/components";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
+import { isFilePending } from "@/lib/projects/utils";
 import { toast } from "@opal/layouts";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
@@ -43,9 +44,8 @@ function FileLineItem({
 }: FileLineItemProps) {
   const showLoader = useMemo(
     () =>
-      String(projectFile.status) === UserFileStatus.PROCESSING ||
-      String(projectFile.status) === UserFileStatus.UPLOADING ||
-      String(projectFile.status) === UserFileStatus.DELETING,
+      isFilePending(projectFile.status) ||
+      projectFile.status === UserFileStatus.DELETING,
     [projectFile.status]
   );
 

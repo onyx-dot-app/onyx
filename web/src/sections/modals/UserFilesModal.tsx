@@ -8,6 +8,7 @@ import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/lib/projects/types";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
+import { isFilePending } from "@/lib/projects/utils";
 import { Modal } from "@opal/components";
 import { useModal } from "@opal/components";
 import TextSeparator from "@/refresh-components/TextSeparator";
@@ -40,7 +41,8 @@ function getIcon(
 function getDescription(file: ProjectFile): string {
   const s = String(file.status || "");
   const typeLabel = getFileExtension(file.name);
-  if (s === UserFileStatus.PROCESSING) return "Processing...";
+  if (s === UserFileStatus.PROCESSING || s === UserFileStatus.INDEXING)
+    return "Processing...";
   if (s === UserFileStatus.UPLOADING) return "Uploading...";
   if (s === UserFileStatus.DELETING) return "Deleting...";
   if (s === UserFileStatus.COMPLETED) return typeLabel;
@@ -63,9 +65,7 @@ function FileAttachment({
   onDelete,
 }: FileAttachmentProps) {
   const isProcessing =
-    String(file.status) === UserFileStatus.PROCESSING ||
-    String(file.status) === UserFileStatus.UPLOADING ||
-    String(file.status) === UserFileStatus.DELETING;
+    isFilePending(file.status) || file.status === UserFileStatus.DELETING;
 
   const Icon = getIcon(file, isProcessing);
   const description = getDescription(file);

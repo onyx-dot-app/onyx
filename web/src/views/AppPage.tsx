@@ -547,11 +547,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     setSelectedAgentFromId,
   });
 
-  const {
-    onMessageSelection,
-    currentSessionFileTokenCount,
-    sessionFetchError,
-  } = useChatSessionController({
+  const { onMessageSelection, sessionFetchError } = useChatSessionController({
     existingChatSessionId: currentChatSessionId,
     searchParams,
     filterManager,
@@ -1108,12 +1104,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         stopGenerating={stopGenerating}
                         onSubmit={handleAppInputBarSubmit}
                         chatState={currentChatState}
-                        currentSessionFileTokenCount={
-                          currentChatSessionId
-                            ? currentSessionFileTokenCount
-                            : projectContextTokenCount
-                        }
-                        availableContextTokens={availableContextTokens}
                         selectedAgent={selectedAgent || liveAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
