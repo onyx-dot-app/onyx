@@ -26,6 +26,14 @@ _METHODS = ("GET", "POST", "PATCH", "PUT", "DELETE")
 # CRM object types this helper supports (path segment under /crm/v3/objects).
 _OBJECTS = ("contacts", "companies", "deals")
 
+# Write subcommands. The CRM write scopes are requested as *optional* OAuth
+# scopes (free / read-only HubSpot tiers can't grant them), so a connected
+# account may lack them. HubSpot then rejects the write with a 401 (sometimes
+# 403) whose raw text reads like a credential-injection failure and confuses
+# the Craft agent. We translate it into actionable text instead (ENG-4263).
+_WRITE_CMDS = ("create", "update")
+_WRITE_DENIED_STATUSES = (401, 403)
+
 # Sensible default properties to fetch per object so output is useful without
 # the caller having to enumerate every property name.
 _DEFAULT_PROPERTIES: dict[str, list[str]] = {
@@ -82,6 +90,30 @@ def _properties_from_pairs(pairs: list[str]) -> dict[str, str]:
         key, value = pair.split("=", 1)
         props[key.strip()] = value
     return props
+
+
+def _write_denied_message(obj: str | None) -> str:
+    """Friendly text for a write rejected for lack of the HubSpot write scope.
+
+    A raw 401/403 here reads like a credential failure; the real cause is that
+    the connected HubSpot account was not granted the (optional) write scope
+    for this object — typically because it lacks a paid seat with write access.
+    """
+    target = f"to {obj}" if obj else "to this object"
+    return (
+        f"This action requires a paid HubSpot seat with write access {target}. "
+        "The connected HubSpot account was not granted the write scope for this "
+        "object, so create/update is unavailable. Ask a HubSpot admin for a paid "
+        "seat with write access, then reconnect HubSpot in Onyx so the write "
+        "scopes are granted. Read commands continue to work."
+    )
+
+
+def _is_write_scope_denial(cmd: str | None, status: int) -> bool:
+    """True when a write (create/update) was rejected with a 401/403, i.e. the
+    connected account lacks the write scope. Reads and other statuses keep the
+    raw upstream error unchanged."""
+    return cmd in _WRITE_CMDS and status in _WRITE_DENIED_STATUSES
 
 
 def _emit(result: dict[str, Any], raw: bool) -> int:
@@ -262,7 +294,14 @@ def main(argv: list[str]) -> int:
             )
         except ValueError:
             message = detail
-        print(json.dumps({"ok": False, "status": e.code, "error": message}))
+        # A denied write (missing optional write scope) comes back as a raw
+        # 401/403 that looks like a credential failure. Surface actionable text
+        # instead, keeping the upstream message under `detail` for debugging.
+        out: dict[str, Any] = {"ok": False, "status": e.code, "error": message}
+        if _is_write_scope_denial(a.cmd, e.code):
+            out["error"] = _write_denied_message(getattr(a, "object", None))
+            out["detail"] = message
+        print(json.dumps(out))
         return 1
     except urllib.error.URLError as e:
         print(f"network error calling HubSpot: {e.reason}", file=sys.stderr)
