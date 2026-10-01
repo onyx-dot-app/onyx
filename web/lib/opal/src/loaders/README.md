@@ -39,7 +39,7 @@ Props: `lines` (default `1`), `width` of the last line (`"full" | "3/4" | "2/3" 
 
 Props: `children` (`string | RichStr`), `font` (`TextFont`, default `"main-ui-action"`). The text rests at `text-02` and the wave peaks at `text-04`.
 
-The wave is 20% of the text's length, never narrower than 40px, and moves at 60px/s on any length of text, with a 1s pause between waves; on wrapped text it runs along each line in reading order. Those three values are constants at the top of `text-loader/components.tsx`.
+The wave is 40% of the text's length, never narrower than 40px, and moves at 60px/s on any length of text, with a 1s pause between waves; on wrapped text it runs along each line in reading order. Those three values are constants at the top of `text-loader/components.tsx`.
 
 ## IconLoader
 

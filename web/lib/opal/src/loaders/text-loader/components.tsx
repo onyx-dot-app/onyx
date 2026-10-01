@@ -8,7 +8,7 @@ import type { RichStr } from "@opal/types";
 /** The wave's narrowest, in pixels. */
 const MIN_BAND_PX = 40;
 /** On longer text the wave grows to this share of the text's length. */
-const BAND_SHARE = 0.2;
+const BAND_SHARE = 0.4;
 /** How fast the wave travels, in pixels per second, on any length of text. */
 const RATE_PX_PER_S = 60;
 /** The pause between waves, in seconds. */
