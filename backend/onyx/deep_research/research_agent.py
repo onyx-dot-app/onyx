@@ -16,8 +16,8 @@ from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcess
 from onyx.chat.citation_utils import (
     update_citation_processor_from_tool_result,
 )
-from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import CitationMode
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.context.search.models import SearchDocsResponse
@@ -120,10 +120,23 @@ class ResearchAgent(FeatureRestoration):
         self.citation_mapping = {
             number: document.document_id for number, document in (sources or {}).items()
         }
+        control_tools = [
+            AgentTool(
+                definition=definition,
+                execute=lambda _invocation, name=definition.name: ToolResult(
+                    content="Ready to produce the research report."
+                    if name == GENERATE_REPORT_TOOL_NAME
+                    else THINK_TOOL_RESPONSE_MESSAGE
+                ),
+            )
+            for definition in get_research_agent_additional_tool_definitions(
+                not self.is_reasoning_model
+            )
+        ]
         self.agent = Agent(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.tools]
-            + self._control_tools(),
+            + control_tools,
             agent_id=agent_id,
             previous_run_id=previous_run_id,
             state=AgentState(
@@ -161,21 +174,6 @@ class ResearchAgent(FeatureRestoration):
         restore_search_state(self.tools, saved.search_tools)
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
-
-    def _control_tools(self) -> list[AgentTool]:
-        return [
-            AgentTool(
-                definition=definition,
-                execute=lambda _invocation, name=definition.name: ToolResult(
-                    content="Ready to produce the research report."
-                    if name == GENERATE_REPORT_TOOL_NAME
-                    else THINK_TOOL_RESPONSE_MESSAGE
-                ),
-            )
-            for definition in get_research_agent_additional_tool_definitions(
-                not self.is_reasoning_model
-            )
-        ]
 
     def _tool_context(self) -> ToolContext:
         """Read feature state that advances only after a completed step."""

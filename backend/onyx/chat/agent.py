@@ -18,10 +18,6 @@ from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
     update_citation_processor_from_tool_result,
 )
-from onyx.chat.context import (
-    ChatContext,
-    ChatReminders,
-)
 from onyx.chat.errors import _build_empty_llm_response_error
 from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import (
@@ -31,7 +27,10 @@ from onyx.chat.models import (
     CitationMode,
     PersonaPromptConfig,
 )
-from onyx.chat.prompt_utils import prepare_prompt
+from onyx.chat.prompt_utils import (
+    build_chat_prompt,
+    prepare_prompt,
+)
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
@@ -81,7 +80,7 @@ class ChatAgent(FeatureRestoration):
         include_citations: bool = True,
         all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
         inject_memories_in_prompt: bool = True,
-        reminders: ChatReminders | None = None,
+        reminders_enabled: bool = True,
         checkpoint: CompactionCheckpoint | None = None,
         previous_run_id: str | None = None,
         agent_id: str | None = None,
@@ -115,16 +114,9 @@ class ChatAgent(FeatureRestoration):
         self.citation_mapping: dict[int, str] = {}
         self.has_called_search_tool = False
         self.ran_image_gen = False
-        self.context = ChatContext(
-            tools=self.tools,
-            persona=persona,
-            custom_prompt=custom_agent_prompt,
-            base_prompt=base_system_prompt,
-            files=context_files,
-            memory=user_memory_context,
-            reminders=reminders or ChatReminders(),
-            inject_memories=inject_memories_in_prompt,
-        )
+        self.persona = persona
+        self.base_system_prompt = base_system_prompt
+        self.reminders_enabled = reminders_enabled
         self.agent = Agent(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.tools],
@@ -145,7 +137,7 @@ class ChatAgent(FeatureRestoration):
 
     def capture_state(self) -> ChatFeatureState:
         return ChatFeatureState(
-            persona=self.context.persona,
+            persona=self.persona,
             context_files=SavedContextFiles.capture(self.context_files),
             file_metadata=self.file_metadata,
             memory=self.memory,
@@ -153,9 +145,9 @@ class ChatAgent(FeatureRestoration):
             include_citations=self.include_citations,
             inject_memories=self.inject_memories,
             forced_tool_id=self.forced_tool_id,
-            base_prompt=self.context.base_prompt,
+            base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
-            reminders_enabled=self.context.reminders.enabled,
+            reminders_enabled=self.reminders_enabled,
             elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
@@ -171,7 +163,7 @@ class ChatAgent(FeatureRestoration):
             raise ValueError("Chat restoration requires ChatFeatureState")
         saved = state.model_copy(deep=True)
         if (
-            saved.persona != self.context.persona
+            saved.persona != self.persona
             or saved.context_files != SavedContextFiles.capture(self.context_files)
             or saved.file_metadata != self.file_metadata
             or saved.memory != self.memory
@@ -179,9 +171,9 @@ class ChatAgent(FeatureRestoration):
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
             or saved.forced_tool_id != self.forced_tool_id
-            or saved.base_prompt != self.context.base_prompt
+            or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
-            or saved.reminders_enabled != self.context.reminders.enabled
+            or saved.reminders_enabled != self.reminders_enabled
         ):
             raise ValueError("Chat restoration configuration does not match")
         restore_search_state(self.tools, saved.search_tools)
@@ -257,9 +249,17 @@ class ChatAgent(FeatureRestoration):
         elif state.step.is_last or self.ran_image_gen:
             tools = []
             tool_choice = ToolChoiceOptions.NONE
-        prompt = self.context.prepare(
-            results,
-            previous.tool_results if previous else [],
+        prompt = build_chat_prompt(
+            tools=self.tools,
+            persona=self.persona,
+            custom_prompt=self.custom_agent_prompt,
+            base_prompt=self.base_system_prompt,
+            files=self.context_files,
+            memory=self.memory,
+            inject_memories=self.inject_memories,
+            reminders_enabled=self.reminders_enabled,
+            results=results,
+            previous_results=previous.tool_results if previous else [],
             is_last_step=state.step.is_last,
             ran_image_gen=self.ran_image_gen,
         )

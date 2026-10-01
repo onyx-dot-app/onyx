@@ -1,3 +1,5 @@
+"""Build chat instructions, reminders, and prompts from conversation history."""
+
 import json
 from collections.abc import Callable, Sequence
 from uuid import UUID
@@ -5,7 +7,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.chat.llm_step import (
+from onyx.chat.models import ChatPrompt, ChatReminderContext, PersonaPromptConfig
+from onyx.chat.prompt_formatting import (
     PromptMetadata,
     count_message_tokens,
     prepare_model_messages,
@@ -25,6 +28,7 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import (
     AssistantMessage,
     Message,
+    SystemMessage,
     ToolResultMessage,
     UserMessage,
 )
@@ -40,7 +44,11 @@ from onyx.prompts.chat_prompts import (
     REQUIRE_CITATION_GUIDANCE,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
-from onyx.prompts.prompt_utils import apply_prompt_placeholders, get_company_context
+from onyx.prompts.prompt_utils import (
+    apply_prompt_placeholders,
+    get_company_context,
+    substitute_user_placeholders,
+)
 from onyx.prompts.tool_prompts import (
     GENERATE_IMAGE_GUIDANCE,
     INTERNAL_SEARCH_GUIDANCE,
@@ -63,8 +71,9 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
-from onyx.tools.constants import FILE_READER_TOOL_NAME
+from onyx.tools.constants import CITEABLE_TOOLS_NAMES, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
+from onyx.tools.models import LlmPythonExecutionResult
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -77,6 +86,128 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
+
+
+def build_chat_reminder(
+    context: ChatReminderContext,
+    results: Sequence[ToolResultMessage],
+    previous_results: Sequence[ToolResultMessage],
+    *,
+    enabled: bool,
+) -> str | None:
+    if not enabled:
+        return context.persona_task_prompt
+    if context.ran_image_gen:
+        return IMAGE_GEN_REMINDER
+    # Only suggest opening URLs when this agent has the tool.
+    if (
+        context.has_open_url_tool
+        and not context.out_of_cycles
+        and any(
+            result.tool_name == WebSearchTool.NAME
+            and isinstance(result.details, SearchDocsResponse)
+            and result.details.search_docs
+            for result in previous_results
+        )
+    ):
+        return OPEN_URL_REMINDER
+    return build_reminder_message(
+        reminder_text=context.persona_task_prompt,
+        include_citation_reminder=any(
+            result.tool_name in CITEABLE_TOOLS_NAMES for result in results
+        )
+        or context.has_context_documents,
+        include_file_reminder=any(
+            result.tool_name == PythonTool.NAME
+            and isinstance(result.details, LlmPythonExecutionResult)
+            and result.details.generated_files
+            for result in results
+        ),
+        is_last_cycle=context.out_of_cycles,
+    )
+
+
+def build_chat_prompt(
+    *,
+    tools: list[Tool],
+    persona: PersonaPromptConfig | None,
+    custom_prompt: str | None,
+    base_prompt: str,
+    files: ExtractedContextFiles,
+    memory: UserMemoryContext | None,
+    inject_memories: bool,
+    reminders_enabled: bool,
+    results: Sequence[ToolResultMessage],
+    previous_results: Sequence[ToolResultMessage],
+    is_last_step: bool,
+    ran_image_gen: bool,
+) -> ChatPrompt:
+    """Select instructions and reminders before assembling conversation history."""
+    values = memory.user_info.placeholder_values if memory else {}
+
+    def substitute(text: str | None) -> str | None:
+        return substitute_user_placeholders(text, values) if text else None
+
+    custom_prompt = substitute(custom_prompt)
+    persona_system = substitute(persona.system_prompt if persona else None)
+    persona_task = substitute(persona.task_prompt if persona else None)
+    context_documents = bool(files.use_as_search_filter or files.file_texts)
+    cite = (
+        reminders_enabled
+        and any(result.tool_name in CITEABLE_TOOLS_NAMES for result in results)
+    ) or context_documents
+    datetime_aware = persona.datetime_aware if persona else True
+
+    def render(text: str | None, append_datetime: bool = False) -> str | None:
+        return (
+            process_prompt_template(
+                text,
+                datetime_aware=datetime_aware,
+                append_datetime_if_aware=append_datetime,
+                should_cite_documents=cite,
+            )
+            if text
+            else None
+        )
+
+    custom = None
+    if persona and persona.replace_base_system_prompt:
+        system = render(persona_system, True)
+    elif base_prompt:
+        memory = (
+            memory if inject_memories else memory.without_memories() if memory else None
+        )
+        system = build_system_prompt(
+            base_system_prompt=base_prompt,
+            datetime_aware=datetime_aware,
+            user_memory_context=memory,
+            tools=tools,
+            should_cite_documents=cite,
+        )
+        custom = render(custom_prompt)
+    else:
+        system = render(custom_prompt, True)
+    reminder = build_chat_reminder(
+        ChatReminderContext(
+            ran_image_gen=ran_image_gen,
+            has_open_url_tool=any(isinstance(tool, OpenURLTool) for tool in tools),
+            out_of_cycles=is_last_step,
+            persona_task_prompt=render(persona_task),
+            has_context_documents=context_documents,
+        ),
+        results,
+        previous_results,
+        enabled=reminders_enabled,
+    )
+    return ChatPrompt(
+        system_prompt=SystemMessage(content=system) if system else None,
+        custom_prompt=UserMessage(content=custom) if custom else None,
+        reminder=UserMessage(
+            content=reminder, metadata=PromptMetadata(is_reminder=True)
+        )
+        if reminder
+        else None,
+    )
 
 
 class _ContextDocument(BaseModel):
@@ -392,34 +523,6 @@ def build_system_prompt(
             system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
 
     return system_prompt
-
-
-def select_reminder_text(
-    *,
-    ran_image_gen: bool,
-    just_ran_web_search: bool,
-    has_open_url_tool: bool,
-    out_of_cycles: bool,
-    persona_task_prompt: str | None,
-    include_citation_reminder: bool,
-    include_file_reminder: bool,
-) -> str | None:
-    """Choose the reminder appended after a tool cycle.
-
-    The open_url nudge is gated on the tool actually being available; otherwise
-    the model is told to call a tool it doesn't have and leaks confusing
-    "open_url is not available" replies.
-    """
-    if ran_image_gen:
-        return IMAGE_GEN_REMINDER
-    if just_ran_web_search and has_open_url_tool and not out_of_cycles:
-        return OPEN_URL_REMINDER
-    return build_reminder_message(
-        reminder_text=persona_task_prompt,
-        include_citation_reminder=include_citation_reminder,
-        include_file_reminder=include_file_reminder,
-        is_last_cycle=out_of_cycles,
-    )
 
 
 def _deduplicate_search_passages(messages: list[Message]) -> None:

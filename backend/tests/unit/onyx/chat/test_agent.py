@@ -11,11 +11,10 @@ from onyx.agents.events import AgentEvent
 from onyx.agents.models import AgentStep, StepInput
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
-from onyx.chat.context import ChatReminders
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ExtractedContextFiles
@@ -375,7 +374,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
     replace_base: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("onyx.chat.prompt_utils.get_company_context", lambda: None)
-    monkeypatch.setattr("onyx.chat.llm_step.PROMPT_CACHE_CHAT_HISTORY", True)
+    monkeypatch.setattr("onyx.chat.prompt_formatting.PROMPT_CACHE_CHAT_HISTORY", True)
     files = ExtractedContextFiles(
         file_texts=["Attached evidence"],
         image_files=[],
@@ -399,7 +398,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         user_memory_context=None,
         llm=ScriptedLLM([]),
         token_counter=len,
-        reminders=ChatReminders(enabled=False),
+        reminders_enabled=False,
     )
     prepared = agent.prepare_step(
         StepInput(
@@ -416,7 +415,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
     original = [message.model_dump() for message in history]
     first = prepared.generation_request(history)
     files.file_texts[0] = "Changed attachment"
-    agent.context.custom_prompt = "Changed instructions"
+    agent.custom_agent_prompt = "Changed instructions"
     second = prepared.generation_request([history[-1]])
     for request in [first, second]:
         assert request.messages[0].text.startswith(

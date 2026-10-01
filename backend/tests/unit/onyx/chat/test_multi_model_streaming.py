@@ -42,6 +42,7 @@ from onyx.chat.models import (
     ReservedChatResponse,
     StreamingError,
 )
+from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.process_message import (
     _stream_chat_turn,
     gather_stream_full,
@@ -85,6 +86,7 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.server.utils import get_json_line
 from onyx.utils.threadpool_concurrency import (
     ContextThreadPoolExecutor,
+    start_thread_future,
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -1198,16 +1200,16 @@ def mock_model_execution(
 
     def execute(
         turn: ChatTurnExecution,
-        index: int,
+        persistence: ChatResponsePersistence,
         emitter: Emitter,
         *,
         startup_error: BaseException | None = None,
-    ) -> None:
+    ) -> Run | None:
         with lock:
-            captured[index] = (turn._response_futures[index], emitter)
-        original_execute(
+            captured[persistence.model_index] = (persistence.outcome, emitter)
+        return original_execute(
             turn,
-            index,
+            persistence,
             emitter,
             startup_error=startup_error,
         )
@@ -1309,7 +1311,6 @@ def test_persistence_failure_reaches_live_and_resumed_readers() -> None:
 def test_startup_failure_finishes_every_response(failure_stage: str) -> None:
     setup = _make_setup(2)
     buffer = MagicMock(truncated=False)
-    from onyx.utils.threadpool_concurrency import start_thread_future
 
     def start_job(operation: Callable[[], None], **kwargs: Any) -> Future[None]:
         name = kwargs.get("name")
@@ -2133,6 +2134,100 @@ def test_closed_chat_supervisor_rejects_without_starting_storage() -> None:
         save.assert_not_called()
 
 
+def test_rejected_turn_finishes_when_cleanup_worker_cannot_start() -> None:
+    tasks = ActiveChatTurns()
+    outcome = Future[ChatResponseOutcome]()
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    launched: list[str] = []
+
+    def start_job[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+        launched.append(name)
+        if len(launched) <= 2:
+            raise RuntimeError("Worker unavailable")
+        return start_thread_future(operation, name=name)
+
+    with (
+        patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
+    ):
+        turn.begin()
+        with pytest.raises(RuntimeError, match="Worker unavailable"):
+            tasks.start(turn)
+        turn.finished.result(timeout=5)
+        with pytest.raises(RuntimeError, match="Worker unavailable"):
+            outcome.result(timeout=1)
+        assert launched == ["chat-control", "chat-status-cleanup"]
+        save.assert_not_called()
+        assert tasks.close()
+
+
+def test_rejection_returns_while_processing_status_cleanup_is_blocked() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    tasks = ActiveChatTurns()
+    outcome = Future[ChatResponseOutcome]()
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+
+    def start_job[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+        if name == "chat-control":
+            raise RuntimeError("Control worker unavailable")
+        return start_thread_future(operation, name=name)
+
+    def processing_status(*, value: bool, **_kwargs: Any) -> None:
+        if not value:
+            entered.set()
+            assert release.wait(5)
+
+    with (
+        patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
+        patch(
+            "onyx.chat.execution.set_processing_status", side_effect=processing_status
+        ),
+        ContextThreadPoolExecutor(max_workers=1) as executor,
+    ):
+        turn.begin()
+        request = executor.submit(lambda: tasks.start(turn))
+        try:
+            assert entered.wait(5)
+            with pytest.raises(RuntimeError, match="Control worker unavailable"):
+                request.result(timeout=1)
+            assert not turn.finished.done()
+            release.set()
+            turn.finished.result(timeout=5)
+        finally:
+            release.set()
+            assert tasks.close()
+
+
+def test_completed_turn_is_released_when_status_cleanup_worker_cannot_start() -> None:
+    tasks = ActiveChatTurns()
+    outcome = Future[ChatResponseOutcome]()
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+
+    def start_job[T](operation: Callable[[], T], *, name: str) -> Future[T]:
+        if name == "chat-status-cleanup":
+            raise RuntimeError("Cleanup worker unavailable")
+        return start_thread_future(operation, name=name)
+
+    with (
+        mock_model_execution(),
+        patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
+        patch("onyx.chat.history_store.save_chat_response_to_db") as save,
+    ):
+        turn.begin()
+        tasks.start(turn)
+        try:
+            assert (
+                outcome.result(timeout=5).persistence_status == PersistenceStatus.SAVED
+            )
+            turn.finished.result(timeout=5)
+            list(turn.delivery.reader)
+            save.assert_called_once()
+        finally:
+            turn.delivery.reader.close()
+            assert tasks.close()
+
+
 def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
     setup = _make_setup(n_models=2)
     tasks = ActiveChatTurns()
@@ -2225,14 +2320,16 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once() -> Non
         ),
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
-        reader = start_chat_turn(
-            setup, MagicMock(), response_future, active_chat_turns=tasks
-        )
+        turn = ChatTurnExecution(setup, MagicMock(), response_future)
+        turn.begin()
+        tasks.start(turn)
+        reader = turn.delivery.reader
         try:
             assert started.wait(5)
             assert runs[0].wait_until_settled(5).status == RunStatus.SUSPENDED
             assert runs[0].wait_for_idle(5)
             assert not response_future.done()
+            assert not turn.finished.done()
             setup.cache.exists.return_value = True
             outcome = response_future.result(timeout=5)
             assert outcome.response.cancelled
@@ -2389,11 +2486,48 @@ def test_processing_marker_failure_does_not_cancel_chat() -> None:
         assert not turn.cancellation.cancelled
 
 
-def test_last_response_drain_settles_turn_after_status_cleanup() -> None:
-    turn = ChatTurnExecution(_make_setup(), MagicMock())
-    turn._delivery_finished = True
-    turn._finish_response(0)
-    assert turn.finished.done()
+def test_save_timeout_clears_processing_status_before_worker_drains() -> None:
+    save_started = threading.Event()
+    release_save = threading.Event()
+    status_cleared = threading.Event()
+    outcome = Future[ChatResponseOutcome]()
+    tasks = ActiveChatTurns()
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+
+    def save(**_kwargs: Any) -> None:
+        save_started.set()
+        assert release_save.wait(5)
+
+    def processing_status(*, value: bool, **_kwargs: Any) -> None:
+        if not value:
+            status_cleared.set()
+
+    with (
+        mock_model_execution(),
+        patch("onyx.chat.history_store.save_chat_response_to_db", side_effect=save),
+        patch("onyx.chat.persistence.PERSISTENCE_WAIT_SECONDS", 0.05),
+        patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
+        patch(
+            "onyx.chat.execution.set_processing_status", side_effect=processing_status
+        ),
+    ):
+        turn.begin()
+        tasks.start(turn)
+        try:
+            assert save_started.wait(5)
+            assert (
+                outcome.result(timeout=5).persistence_status
+                == PersistenceStatus.UNCONFIRMED
+            )
+            assert status_cleared.wait(5)
+            list(turn.delivery.reader)
+            assert not turn.finished.done()
+            release_save.set()
+            turn.finished.result(timeout=5)
+        finally:
+            release_save.set()
+            turn.delivery.reader.close()
+            assert tasks.close()
 
 
 def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain() -> None:

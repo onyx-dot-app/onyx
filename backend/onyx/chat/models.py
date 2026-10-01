@@ -368,6 +368,21 @@ class AvailableFiles(BaseModel):
     chat_file_ids: list[UUID] = []
 
 
+class ChatReminderContext(BaseModel):
+    ran_image_gen: bool
+    has_open_url_tool: bool
+    out_of_cycles: bool
+    persona_task_prompt: str | None
+    has_context_documents: bool
+
+
+class ChatPrompt(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    system_prompt: Message | None
+    custom_prompt: Message | None
+    reminder: Message | None
+
+
 class PersonaPromptConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 

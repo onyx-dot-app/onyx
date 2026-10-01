@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.agents.execution_records import RunStatus, messages_for_model
-from onyx.chat.llm_step import prompt_metadata
+from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.db.chat_history import (
     _build_tool_call_response_history_message,

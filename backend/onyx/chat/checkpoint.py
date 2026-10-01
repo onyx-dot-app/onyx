@@ -10,13 +10,13 @@ from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunProgress, RunState
 from onyx.agents.tools import HumanToolAnswer, InputDecision
-from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
     ChatSearchResult,
     ResponseRecord,
 )
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.chat.response import response_snapshot
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.context.search.models import SearchDocsResponse

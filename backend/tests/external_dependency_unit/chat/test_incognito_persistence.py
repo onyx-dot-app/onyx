@@ -26,8 +26,8 @@ from onyx.chat.incognito_context import (
     save_incognito_context,
     teardown_incognito_session,
 )
-from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import ResponseRecord, SavedAgentContext
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (

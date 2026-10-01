@@ -10,6 +10,7 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool, ToolContext
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.utils import (
@@ -75,7 +76,7 @@ def _normalize_queries_input(raw: Any) -> list[str]:
 class WebSearchTool(Tool):
     merge_list_argument = QUERIES_FIELD
 
-    NAME = "web_search"
+    NAME = WEB_SEARCH_TOOL_NAME
     DESCRIPTION = "Search the web for information."
     DISPLAY_NAME = "Web Search"
 

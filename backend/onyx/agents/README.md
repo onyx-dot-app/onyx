@@ -472,11 +472,15 @@ A chat request follows this path:
 6. The LLM adapter calls the configured provider and returns typed generation updates.
 
 `ChatTurnExecution` owns one user request, which can produce several model responses.
-It keeps Stop polling and delivery active while responses execute or save.
+Its control loop checks Stop, response outcomes, worker cleanup, and delivery completion.
+A suspended run can release its response worker without finishing the response.
 `Agent` supplies configuration and history. `Run` owns each execution's state and controls.
 The response worker executes the run directly; these objects do not each create a thread.
 
 Chat and research features supply prompts, tools, and step decisions to the SDK.
+`chat/prompt_utils.py` builds instructions and assembles history, reminders, and file context.
+Its `build_chat_prompt` function selects chat instructions and reminders before assembly.
+`chat/prompt_formatting.py` resolves attachments, reminder tags, and cache markers for model input.
 Chat persistence receives the tool IDs and citation metadata needed to save their output.
 
 Chat keeps accepted output in `ChatMessage`, `ChatResponseMessage`, and `ToolCall`.
@@ -489,8 +493,9 @@ Only lease renewal uses short cache timeouts. Stop checks and stream-status upda
 Transient renewal failures retry within the last confirmed lease. Owner mismatch cancels immediately.
 Without confirmation, cancellation starts five seconds before the 60-second lease expires.
 Renewal timing starts before the cache request, so response latency does not extend local ownership.
-Stream-status failures log and retry. The processing marker uses its 30-minute expiry, as on main.
-It remains active while background children or unfinished finalization retain ownership.
+Stream-status refresh failures log and retry. The processing marker uses a 30-minute expiry.
+Chat clears the marker after delivery finishes, even when a save timeout leaves workers draining.
+Execution leases remain separate and retain ownership until work drains or is explicitly transferred.
 
 `AgentDirectory` resolves agents and saved runs within an authorized conversation branch.
 `RunStore` saves terminal output. `RunOwnership` reserves execution and releases it after workers drain.

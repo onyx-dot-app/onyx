@@ -104,6 +104,7 @@ from onyx.secondary_llm_flows.query_expansion import (
 )
 from onyx.secondary_llm_flows.source_filter import SearchCycle, decide_search_scope
 from onyx.secondary_llm_flows.time_filter import TimeFilter, decide_time_filter
+from onyx.tools.constants import INTERNAL_SEARCH_TOOL_NAME
 from onyx.tools.interface import (
     CITATIONS_PER_TOOL_CALL,
     Tool,
@@ -277,7 +278,7 @@ def _trim_sections_by_tokens(
 class SearchTool(Tool):
     merge_list_argument = QUERIES_FIELD
 
-    NAME = "internal_search"
+    NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
     DESCRIPTION = "Search connected applications for information."
 

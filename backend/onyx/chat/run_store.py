@@ -397,11 +397,6 @@ class ChatRunStore(RunStore, RunOwnership):
         ):
             raise _OwnershipLost("Response ownership was lost")
 
-    def _read_stop_requests(self, run_ids: list[str]) -> list[str]:
-        return [
-            run_id for run_id in run_ids if self.cache.exists(self._stop_key(run_id))
-        ]
-
     def poll_control(self) -> None:
         """Enforce ownership deadlines independently of pending cache operations."""
         with self._lock:
@@ -415,7 +410,11 @@ class ChatRunStore(RunStore, RunOwnership):
             self._stop_check = None
         if self._stop_check is None and leases:
             self._stop_check = start_thread_future(
-                lambda: self._read_stop_requests([run_id for run_id, _ in leases]),
+                lambda: [
+                    run_id
+                    for run_id, _ in leases
+                    if self.cache.exists(self._stop_key(run_id))
+                ],
                 name="agent-stop-check",
             )
         for run_id, lease in leases:

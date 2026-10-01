@@ -22,7 +22,6 @@ from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
 )
-from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import (
     AvailableFiles,
     ChatHistoryMessage,
@@ -31,6 +30,7 @@ from onyx.chat.models import (
     PersonaPromptConfig,
     ReservedChatResponse,
 )
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.chat.prompt_utils import (
     build_language_section,
     calculate_reserved_tokens,

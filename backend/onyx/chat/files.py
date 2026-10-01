@@ -7,8 +7,8 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.llm_step import PromptMetadata
 from onyx.chat.models import AvailableFiles, SearchParams
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
 from onyx.context.search.models import SearchDoc

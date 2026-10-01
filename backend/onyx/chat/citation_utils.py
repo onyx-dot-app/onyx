@@ -5,7 +5,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ContextFileMetadata
 from onyx.llm.models import ToolResultMessage
-from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
+from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 
 
 def update_citation_processor_from_tool_result(

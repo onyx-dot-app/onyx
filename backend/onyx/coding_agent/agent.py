@@ -9,7 +9,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation
-from onyx.chat.llm_step import PromptMetadata
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_DESCRIPTION,
@@ -147,24 +147,21 @@ class CodingAgent:
         self.is_reasoning_model = model_is_reasoning_model(
             llm.config.model_name, llm.config.model_provider
         )
-        self.agent = Agent(
-            llm,
-            tools=self._build_tools(),
-            prepare_step=self.prepare_step,
-            after_step=self.after_step,
-            generation_context=GenerationContext(
-                flow=LLMFlow.CODING_AGENT, user_identity=user_identity
-            ),
-        )
-
-    def _build_tools(self) -> list[AgentTool]:
         tools = [
             self._tool(BASH_TOOL_DESCRIPTION, self._bash),
             self._tool(GENERATE_ANSWER_TOOL_DESCRIPTION, self._request_answer),
         ]
         if not self.is_reasoning_model:
             tools.append(self._tool(CODING_AGENT_THINK_TOOL_DESCRIPTION, self._think))
-        return tools
+        self.agent = Agent(
+            llm,
+            tools=tools,
+            prepare_step=self.prepare_step,
+            after_step=self.after_step,
+            generation_context=GenerationContext(
+                flow=LLMFlow.CODING_AGENT, user_identity=user_identity
+            ),
+        )
 
     def prepare_step(self, state: StepInput) -> PreparedStep:
         if state.previous is None and not self.is_sandbox_available:

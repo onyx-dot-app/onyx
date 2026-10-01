@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from onyx.agents.models import ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
-from onyx.chat.context import ChatReminders
 from onyx.chat.models import ChatFeatureState, ChatSearchResult
 from onyx.configs.constants import FileOrigin
 from onyx.deep_research.agent import DeepResearchAgent, DeepResearchFeatureState
@@ -54,7 +53,7 @@ def restore_chat_agent(
             include_citations=state.include_citations,
             all_injected_file_metadata=state.file_metadata,
             inject_memories_in_prompt=state.inject_memories,
-            reminders=ChatReminders(enabled=state.reminders_enabled),
+            reminders_enabled=state.reminders_enabled,
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,

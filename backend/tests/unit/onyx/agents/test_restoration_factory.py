@@ -5,12 +5,13 @@ import pytest
 from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import (
     AgentState,
+    AgentStep,
     ExecutionCheckpoint,
     RunProgress,
     RunState,
+    StepInput,
 )
 from onyx.chat.agent import ChatAgent
-from onyx.chat.context import ChatReminders
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.restoration import restore_chat_agent
 from onyx.db.memory import UserInfo, UserMemoryContext
@@ -63,7 +64,7 @@ def feature(
             reasoning_effort=ReasoningEffort.LOW,
             include_citations=False,
             inject_memories_in_prompt=False,
-            reminders=ChatReminders(enabled=False),
+            reminders_enabled=False,
             agent_id="retained-agent",
         )
         chat.has_called_search_tool = True
@@ -130,14 +131,18 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(name: str) -> None
     )
     if isinstance(original, ChatAgent):
         assert isinstance(rebuilt.restoration, ChatAgent)
-        assert (
-            rebuilt.restoration.context.custom_prompt == original.context.custom_prompt
+        assert rebuilt.restoration.custom_agent_prompt == original.custom_agent_prompt
+        assert rebuilt.restoration.persona == original.persona
+        prepared = rebuilt.restoration.prepare_step(
+            StepInput(
+                history=context.messages,
+                input_messages=[],
+                messages=[],
+                step=AgentStep(index=0, limit=2),
+            )
         )
-        assert (
-            rebuilt.restoration.context.persona_system
-            == original.context.persona_system
-        )
-        assert rebuilt.restoration.context.custom_prompt == "Hello {{user.role}}"
+        request = prepared.generation_request(context.messages)
+        assert request.messages[0].text.startswith("Help {{user.role}}")
     assert checkpoint == saved
     message = checkpoint.agent_state.messages[0]
     assert isinstance(message, UserMessage)

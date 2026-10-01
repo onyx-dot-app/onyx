@@ -12,8 +12,8 @@ from redis.exceptions import WatchError
 from onyx.agents.models import AgentInfo
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.llm_step import PromptMetadata, prompt_metadata
 from onyx.chat.models import MAX_DISCOVERED_AGENTS, ResponseRecord, SavedAgentContext
+from onyx.chat.prompt_formatting import PromptMetadata, prompt_metadata
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
 from onyx.configs.constants import MessageType

@@ -6,7 +6,6 @@ from concurrent.futures import Future, wait
 from contextlib import ExitStack
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.models import RunState
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import (
@@ -131,21 +130,13 @@ class ChatTurnExecution:
         self.delivery = ChatDelivery(stream_buffer)
         self._stores: list[ChatRunStore] = []
         self._stream_status: Future[None] | None = None
-        self._persistence: list[ChatResponsePersistence] = []
+        self._status_cleanup: Future[None] | None = None
         self._delivery_closed = False
-        self._completion_reported = False
         self.cancellation = CancellationSignal()
         self.finished: Future[None] = Future()
-        self._response_futures = [
-            response_future
-            if index == 0 and response_future is not None
-            else Future[ChatResponseOutcome]()
-            for index in range(len(setup.responses))
-        ]
+        self._response_future = response_future
+        self._response_workers: dict[Future[Run | None], ChatResponsePersistence] = {}
         self._lock = threading.Lock()
-        self._unfinished = set(range(len(setup.responses)))
-        self._delivery_finished = False
-        self._changed = threading.Event()
         self._auto_filters = False
         self._stopped_by_user = False
         self._last_refresh = self._last_stop_check = time.monotonic()
@@ -166,11 +157,30 @@ class ChatTurnExecution:
         )
 
     def reject(self, error: Exception) -> None:
-        for index, response_future in enumerate(self._response_futures):
-            response_future.set_exception(error)
-            self._finish_response(index)
-        self._close_delivery()
-        self._maybe_finish()
+        self.cancellation.cancel()
+        if self._response_future is not None:
+            self._response_future.set_exception(error)
+
+        def clear_status() -> None:
+            try:
+                self._clear_processing_status()
+            finally:
+                self.finished.set_result(None)
+
+        def delivery_finished(_future: Future[None]) -> None:
+            try:
+                start_thread_future(clear_status, name="chat-status-cleanup")
+            except Exception:
+                logger.exception(
+                    "Rejected chat processing status cleanup could not start"
+                )
+                self.finished.set_result(None)
+
+        # No control thread exists to observe cleanup for a rejected turn.
+        try:
+            self._close_delivery()
+        finally:
+            self.delivery.finished.add_done_callback(delivery_finished)
 
     def _publish(self, packet: Packet) -> None:
         if not self.cancellation.cancelled:
@@ -192,172 +202,199 @@ class ChatTurnExecution:
                     is_retryable=True,
                 )
             )
-        for index in range(len(self._response_futures)):
-            emitter = Emitter(self._publish, index)
+        for index, response in enumerate(self.setup.responses):
+            persistence = ChatResponsePersistence(
+                history_store=get_chat_history_store(
+                    message_id=response.message_id,
+                    chat_session_id=self.setup.chat_session_id,
+                    persist_content=record_mode_persists_content(
+                        self.setup.incognito_record_mode
+                    ),
+                ),
+                model_index=index,
+                llm=response.llm,
+                delivery=self.delivery,
+                outcome=self._response_future
+                if index == 0 and self._response_future is not None
+                else Future[ChatResponseOutcome](),
+            )
+            emitter = Emitter(self._publish, persistence.model_index)
             try:
-                start_thread_future(
-                    lambda index=index, emitter=emitter: self._run_response(
-                        index,
+                worker = start_thread_future(
+                    lambda persistence=persistence, emitter=emitter: self._run_response(
+                        persistence,
                         emitter,
                         startup_error=startup_error,
                     ),
                     name="chat-response",
                 )
             except Exception as error:
-                self._run_response(
-                    index,
-                    emitter,
-                    startup_error=error,
+                worker = Future[Run | None]()
+                worker.set_result(
+                    self._run_response(persistence, emitter, startup_error=error)
                 )
+            self._response_workers[worker] = persistence
+        self._wait_for_completion()
+
+    def _wait_for_completion(self) -> None:
         deadline = time.monotonic() + CHAT_RESPONSE_WAIT_TIMEOUT_S
         timed_out = False
-        try:
-            while True:
-                try:
-                    self._poll_control()
-                    with self._lock:
-                        writers = tuple(self._persistence)
-                    for writer in writers:
-                        writer.expire_save()
-                    with self._lock:
-                        pending = bool(self._unfinished)
-                        save_overdue = any(writer.is_save_overdue for writer in writers)
-                    if (
-                        not self._delivery_closed
-                        and not timed_out
-                        and time.monotonic() >= deadline
-                    ):
-                        timed_out = True
-                        logger.error("Chat turn exceeded its response wait bound")
-                        self.cancellation.cancel()
-                    responses_done = all(
-                        future.done() for future in self._response_futures
+        while True:
+            try:
+                self._poll_control()
+            except Exception:
+                self.cancellation.cancel()
+                logger.exception("Chat turn control failed; draining active work")
+                self._close_delivery()
+            try:
+                self._poll_responses()
+                if not self._delivery_closed and time.monotonic() >= deadline:
+                    timed_out = True
+                    logger.error("Chat turn exceeded its response wait bound")
+                    self.cancellation.cancel()
+                responses_done = all(
+                    writer.outcome.done() for writer in self._response_workers.values()
+                )
+                save_overdue = any(
+                    writer.is_save_overdue for writer in self._response_workers.values()
+                )
+                if not self._delivery_closed and (
+                    (
+                        responses_done
+                        and (
+                            not self._response_workers
+                            or self.cancellation.cancelled
+                            or save_overdue
+                        )
                     )
-                    if not self._delivery_closed and (
-                        (
-                            responses_done
-                            and (
-                                not pending
-                                or self.cancellation.cancelled
-                                or save_overdue
+                    or timed_out
+                ):
+                    if self._stopped_by_user:
+                        self.delivery.publish(
+                            Packet(
+                                placement=Placement(turn_index=0),
+                                obj=OverallStop(stop_reason="user_cancelled"),
                             )
                         )
-                        or timed_out
-                    ):
-                        if self._stopped_by_user:
-                            self.delivery.publish(
-                                Packet(
-                                    placement=Placement(turn_index=0),
-                                    obj=OverallStop(stop_reason="user_cancelled"),
-                                )
-                            )
-                        self._close_delivery()
-                except Exception:
-                    self.cancellation.cancel()
-                    logger.exception("Chat turn control failed; draining active work")
                     self._close_delivery()
-                with self._lock:
-                    pending = bool(self._unfinished)
-                    stores = tuple(self._stores)
-                if not pending and not any(store.has_owned_work for store in stores):
-                    break
-                self._changed.wait(timeout=_CANCEL_POLL_INTERVAL_S)
-                self._changed.clear()
-        finally:
-            self._close_delivery()
-            self._maybe_finish()
+            except Exception:
+                self.cancellation.cancel()
+                logger.exception("Chat turn control failed; draining active work")
+                self._close_delivery()
+            self._poll_status_cleanup()
+            with self._lock:
+                stores = tuple(self._stores)
+            if (
+                not self._response_workers
+                and not any(store.has_owned_work for store in stores)
+                and self._status_cleanup is not None
+                and self._status_cleanup.done()
+            ):
+                self.finished.set_result(None)
+                return
+            time.sleep(_CANCEL_POLL_INTERVAL_S)
 
     def _register_store(self, store: ChatRunStore) -> None:
         with self._lock:
             self._stores.append(store)
-        self._changed.set()
 
-    def _maybe_finish(self) -> None:
-        with self._lock:
-            finished = not self._unfinished and self._delivery_finished
-            stores = tuple(self._stores)
-        if finished and not any(store.has_owned_work for store in stores):
-            with self._lock:
-                if self._completion_reported:
-                    return
-                self._completion_reported = True
-            self.finished.set_result(None)
+    def _poll_responses(self) -> None:
+        for worker, persistence in tuple(self._response_workers.items()):
+            persistence.expire_save()
+            if not worker.done():
+                continue
+            failure = worker.exception()
+            if failure is not None:
+                logger.error("Chat response worker failed", exc_info=failure)
+                if not persistence.outcome.done():
+                    persistence.outcome.set_exception(failure)
+                    self.delivery.publish(
+                        chat_error(
+                            failure
+                            if isinstance(failure, Exception)
+                            else RuntimeError("Chat response worker failed"),
+                            persistence.llm,
+                            persistence.model_index,
+                        )
+                    )
+                del self._response_workers[worker]
+                continue
+            run = worker.result()
+            if run is not None:
+                coordinator = persistence.coordinator
+                if coordinator is None:
+                    raise RuntimeError("Chat response run has no coordinator")
+                completion = coordinator.completion(run.id)
+                if not completion.done():
+                    continue
+                if (
+                    completion.exception() is not None
+                    and not persistence.outcome.done()
+                ):
+                    persistence.report_save_failure(run)
+                try:
+                    if not run.wait_for_idle(timeout=0):
+                        continue
+                except Exception:
+                    # An exceptional idle future reports failed cleanup after workers drain.
+                    logger.exception("Chat response cleanup failed")
+                    self.delivery.report_gap()
+                if run.delivery_failed:
+                    self.delivery.report_gap()
+            if persistence.outcome.done():
+                del self._response_workers[worker]
 
     def _close_delivery(self) -> None:
         if self._delivery_closed:
             return
         self._delivery_closed = True
+        self.delivery.finish()
 
-        def clear_status() -> None:
-            try:
-                if self._stream_status is not None:
-                    self._stream_status.result()
-                set_processing_status(
-                    chat_session_id=self.setup.chat_session_id,
-                    cache=self.setup.cache,
-                    value=False,
-                )
-            except Exception:
-                logger.exception("Failed to clear chat processing status")
-            finally:
-                with self._lock:
-                    self._delivery_finished = True
-                self._changed.set()
-                self._maybe_finish()
-
-        def drained(_future: Future[None]) -> None:
-            start_thread_future(clear_status, name="chat-status-cleanup")
-
+    def _poll_status_cleanup(self) -> None:
+        if (
+            not self._delivery_closed
+            or not self.delivery.finished.done()
+            or self._status_cleanup is not None
+            or (self._stream_status is not None and not self._stream_status.done())
+        ):
+            return
         try:
-            self.delivery.finish()
-        finally:
-            self.delivery.finished.add_done_callback(drained)
+            if self._stream_status is not None:
+                self._stream_status.result()
+        except Exception:
+            logger.exception("Chat processing status update failed")
+        try:
+            self._status_cleanup = start_thread_future(
+                self._clear_processing_status, name="chat-status-cleanup"
+            )
+        except Exception:
+            logger.exception("Chat processing status cleanup could not start")
+            self._status_cleanup = Future()
+            self._status_cleanup.set_result(None)
 
-    def _finish_response(self, index: int) -> None:
-        with self._lock:
-            self._unfinished.remove(index)
-        self._changed.set()
-        self._maybe_finish()
-
-    def _retain_resources(self, index: int, run: Run | None) -> None:
-        def drained() -> None:
-            if run is not None and run.delivery_failed:
-                self.delivery.report_gap()
-            self._finish_response(index)
-
-        if run is None:
-            drained()
-        else:
-            run.add_idle_callback(drained)
+    def _clear_processing_status(self) -> None:
+        try:
+            set_processing_status(
+                chat_session_id=self.setup.chat_session_id,
+                cache=self.setup.cache,
+                value=False,
+            )
+        except Exception:
+            logger.exception("Failed to clear chat processing status")
 
     def _run_response(
         self,
-        index: int,
+        persistence: ChatResponsePersistence,
         emitter: Emitter,
         *,
         startup_error: BaseException | None = None,
-    ) -> None:
+    ) -> Run | None:
+        index = persistence.model_index
         cancellation = CancellationSignal()
         links = ExitStack()
         links.enter_context(self.cancellation.on_cancel(cancellation.cancel))
         chat_agent: ChatAgent | DeepResearchAgent | None = None
         coordinator: AgentCoordinator | None = None
-        persistence = ChatResponsePersistence(
-            history_store=get_chat_history_store(
-                message_id=self.setup.responses[index].message_id,
-                chat_session_id=self.setup.chat_session_id,
-                persist_content=record_mode_persists_content(
-                    self.setup.incognito_record_mode
-                ),
-            ),
-            model_index=index,
-            llm=self.setup.responses[index].llm,
-            delivery=self.delivery,
-            outcome=self._response_futures[index],
-        )
-        with self._lock:
-            self._persistence.append(persistence)
-
         try:
             if startup_error is not None:
                 raise startup_error
@@ -414,13 +451,10 @@ class ChatTurnExecution:
                     ).consume,
                 )
 
-            def finished(future: Future[RunState]) -> None:
-                if future.exception() is not None:
-                    persistence.report_save_failure(run)
-                links.close()
-                self._retain_resources(index, run)
-
-            coordinator.completion(run.id).add_done_callback(finished)
+            coordinator.completion(run.id).add_done_callback(
+                lambda _future: links.close()
+            )
+            return run
         except BaseException as failure:
             try:
                 persistence.save_failure(failure)
@@ -430,7 +464,7 @@ class ChatTurnExecution:
                 )
             finally:
                 links.close()
-                self._retain_resources(index, None)
+            return None
 
     def _poll_control(self) -> None:
         with self._lock:

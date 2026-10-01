@@ -28,7 +28,7 @@ from onyx.chat.citation_utils import (
     collapse_citations,
     extract_citation_order_from_text,
 )
-from onyx.chat.llm_step import PromptMetadata
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt, with_language_section
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
@@ -148,7 +148,21 @@ class DeepResearchAgent(FeatureRestoration):
             self._control_tool(definition, "Proceed to planning.")
             for definition in get_clarification_tool_definitions()
         ]
-        self.research_tools = self._build_research_tools()
+        self.research_tools = [
+            AgentTool(
+                definition=definition,
+                execute=self._research,
+                result_from_children=self._research_result_from_children,
+            )
+            if definition.name == RESEARCH_AGENT_TOOL_NAME
+            else self._control_tool(
+                definition,
+                "Ready to produce the final report."
+                if definition.name == GENERATE_REPORT_TOOL_NAME
+                else THINK_TOOL_RESPONSE_MESSAGE,
+            )
+            for definition in get_orchestrator_tools(not self.is_reasoning_model)
+        ]
         self.agent = Agent(
             llm,
             tools=[*self.clarification_tools, *self.research_tools],
@@ -193,23 +207,6 @@ class DeepResearchAgent(FeatureRestoration):
         with self._citation_lock:
             self.citation_mapping = saved.citation_mapping
             self.started = time.monotonic() - saved.elapsed_seconds
-
-    def _build_research_tools(self) -> list[AgentTool]:
-        return [
-            AgentTool(
-                definition=definition,
-                execute=self._research,
-                result_from_children=self._research_result_from_children,
-            )
-            if definition.name == RESEARCH_AGENT_TOOL_NAME
-            else self._control_tool(
-                definition,
-                "Ready to produce the final report."
-                if definition.name == GENERATE_REPORT_TOOL_NAME
-                else THINK_TOOL_RESPONSE_MESSAGE,
-            )
-            for definition in get_orchestrator_tools(not self.is_reasoning_model)
-        ]
 
     def prepare_step(self, state: StepInput) -> PreparedStep:
         if state.previous is None:

@@ -283,18 +283,14 @@ class AgentCoordinator:
             raise ValueError("Run is not owned by this coordinator")
         return future
 
-    def _check_physical_owner(self, run_id: str) -> None:
-        with self._state.lock:
-            archived = run_id in self._state.archived_run_ids
-        if archived:
-            raise ValueError("Physical cleanup requires a locally owned execution")
-
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
     ) -> Future[None]:
         """Clean up local resources after completion or release, once workers drain."""
         run = self.run(run_id)
-        self._check_physical_owner(run_id)
+        with self._state.lock:
+            if run_id in self._state.archived_run_ids:
+                raise ValueError("Physical cleanup requires a locally owned execution")
         completion: Future[None] = Future()
         completion.set_running_or_notify_cancel()
         with self._state.lock:
