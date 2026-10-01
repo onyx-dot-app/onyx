@@ -9,7 +9,7 @@ from onyx.context.search.models import (
     InferenceSection,
     SearchDocsResponse,
 )
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import UserMessage

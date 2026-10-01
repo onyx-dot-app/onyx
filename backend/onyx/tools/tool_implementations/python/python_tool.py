@@ -19,6 +19,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
+from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.utils import (
     build_full_frontend_file_url,
     chat_image_gen_metadata,
@@ -26,7 +27,6 @@ from onyx.file_store.utils import (
 )
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool, ToolContext, parse_tool_arguments
-from onyx.file_processing.file_types import guess_mime_type
 from onyx.tools.models import (
     ChatFile,
     LlmPythonExecutionResult,

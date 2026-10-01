@@ -1,4 +1,3 @@
-import mimetypes
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -41,6 +40,7 @@ from onyx.db.models import (
     ChatSession,
     ToolCall,
 )
+from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import (
     GenerationRequestParams,

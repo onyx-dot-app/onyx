@@ -51,7 +51,6 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
-    TopLevelBranching,
 )
 from onyx.tools.models import (
     CustomToolCallSummary,
@@ -401,14 +400,6 @@ class ResponsePresenter:
                 and call.name not in HIDDEN_TOOLS
             ]
             if calls:
-                placement = renderer.tool_placement(calls[0].id)
-                if parent is None and len(calls) > 1:
-                    output.append(
-                        Packet(
-                            placement=placement,
-                            obj=TopLevelBranching(num_parallel_branches=len(calls)),
-                        )
-                    )
                 for call in calls:
                     tool_placement = renderer.tool_placement(call.id)
                     self.tools[(event.message_id, call.id)] = ToolRenderer(

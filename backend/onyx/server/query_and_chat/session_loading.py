@@ -78,7 +78,6 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
     SectionEnd,
-    TopLevelBranching,
 )
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
@@ -603,17 +602,11 @@ def translate_assistant_message_to_packets(
                 )
 
             # Process each tool call in this turn (single pass).
-            # We buffer packets for the turn so we can conditionally prepend a TopLevelBranching
-            # packet (which must appear before any tool output in the turn).
-            research_agent_count = 0
             turn_tool_packets: list[Packet] = []
             for tool_call in tool_calls_in_turn:
                 # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
                     tool = get_tool_by_id(tool_call.tool_id, db_session)
-                    if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
-                        research_agent_count += 1
-
                     # Handle different tool types
                     if tool.in_code_tool_id in [
                         SearchTool.__name__,
@@ -823,16 +816,6 @@ def translate_assistant_message_to_packets(
                     logger.warning("Error processing tool call %s: %s", tool_call.id, e)
                     continue
 
-            if research_agent_count > 1:
-                # Emit TopLevelBranching before processing any tool output in the turn.
-                packet_list.append(
-                    Packet(
-                        placement=Placement(turn_index=turn_num),
-                        obj=TopLevelBranching(
-                            num_parallel_branches=research_agent_count
-                        ),
-                    )
-                )
             packet_list.extend(turn_tool_packets)
 
     # Determine the next turn_index for the final message
@@ -996,14 +979,6 @@ def _response_packets(
         calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
         if not calls:
             continue
-        placement = renderer.tool_placement(calls[0].id)
-        if parent is None and len(calls) > 1:
-            packets.append(
-                Packet(
-                    placement=placement,
-                    obj=TopLevelBranching(num_parallel_branches=len(calls)),
-                )
-            )
         for call in calls:
             tool_placement = renderer.tool_placement(call.id)
             record = records.get((message_id, call.id))

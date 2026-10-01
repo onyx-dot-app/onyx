@@ -14,7 +14,6 @@ import re
 from bisect import bisect_right
 from collections.abc import Generator
 from dataclasses import dataclass
-from enum import Enum
 from typing import TypeAlias
 
 from onyx.chat.models import CitationMode
