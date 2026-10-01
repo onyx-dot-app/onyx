@@ -2614,7 +2614,9 @@
           "title": "Créer un identifiant pour {source}"
         },
         "credentialsLoadFailed": {
-          "toast": "Impossible de charger les identifiants enregistrés."
+          "description": "Les identifiants ne peuvent pas être configurés pour le moment. Rechargez la page ou réessayez plus tard.",
+          "toast": "Impossible de charger les identifiants enregistrés.",
+          "title": "Impossible de charger vos identifiants"
         },
         "credentialStep": {
           "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",

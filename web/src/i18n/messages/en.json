@@ -2614,7 +2614,9 @@
           "title": "Create a {source} credential"
         },
         "credentialsLoadFailed": {
-          "toast": "Couldn't load the saved credentials."
+          "description": "Credentials can't be set up right now. Reload the page or try again later.",
+          "toast": "Couldn't load the saved credentials.",
+          "title": "Couldn't load your credentials"
         },
         "credentialStep": {
           "description": "Use a shared service account. {appName} indexes content as this account.",

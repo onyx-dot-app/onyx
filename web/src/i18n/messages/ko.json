@@ -2614,7 +2614,9 @@
           "title": "{source} 자격 증명 만들기"
         },
         "credentialsLoadFailed": {
-          "toast": "저장된 자격 증명을 불러오지 못했습니다."
+          "description": "지금은 자격 증명을 설정할 수 없습니다. 페이지를 새로고침하거나 나중에 다시 시도하세요.",
+          "toast": "저장된 자격 증명을 불러오지 못했습니다.",
+          "title": "자격 증명을 불러오지 못했습니다"
         },
         "credentialStep": {
           "description": "공유 서비스 계정을 사용합니다. {appName}이(가) 이 계정으로 콘텐츠를 인덱싱합니다.",

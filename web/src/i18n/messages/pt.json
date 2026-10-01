@@ -2614,7 +2614,9 @@
           "title": "Criar uma credencial do {source}"
         },
         "credentialsLoadFailed": {
-          "toast": "Não foi possível carregar as credenciais salvas."
+          "description": "Não é possível configurar credenciais agora. Recarregue a página ou tente novamente mais tarde.",
+          "toast": "Não foi possível carregar as credenciais salvas.",
+          "title": "Não foi possível carregar suas credenciais"
         },
         "credentialStep": {
           "description": "Use uma conta de serviço compartilhada. O {appName} indexa o conteúdo como esta conta.",

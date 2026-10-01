@@ -3,9 +3,16 @@
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
-import { Content, ContentAction, Section, toast } from "@opal/layouts";
+import {
+  Content,
+  ContentAction,
+  IllustrationContent,
+  Section,
+  toast,
+} from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle } from "@opal/icons";
+import { SvgPlugBroken } from "@opal/illustrations";
 import { CardLoader } from "@opal/loaders";
 import type { Credential } from "@/lib/credentials/types";
 import { useCredentialSetup } from "@/lib/credentials/hooks";
@@ -190,10 +197,16 @@ export function CredentialsConfigurer({
       />
 
       {/* The header always shows. Below it: a card loader in the shape of
-      the accounts card while the step loads, nothing once loading failed (a
-      toast says so), and the accounts and create card once everything
-      lands. */}
-      {failed ? null : isLoading || !credentials ? (
+      the accounts card while the step loads, an error in place of the step
+      once loading failed (no credential can be set up), and the accounts and
+      create card once everything lands. */}
+      {failed ? (
+        <IllustrationContent
+          illustration={SvgPlugBroken}
+          title={t("add.credentialsLoadFailed.title")}
+          description={t("add.credentialsLoadFailed.description")}
+        />
+      ) : isLoading || !credentials ? (
         <CardLoader color="transparent" />
       ) : (
         <Section gap={4} alignItems="stretch" width="full">
