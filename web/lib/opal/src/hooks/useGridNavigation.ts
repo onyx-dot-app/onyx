@@ -27,8 +27,13 @@ export interface UseGridNavigationReturn {
   focusFirst: () => boolean;
 }
 
-/** Set on the container while the keyboard drives; see the stylesheet. */
-const KEYBOARD_MODE_ATTRIBUTE = "data-opal-keyboard-nav";
+/**
+ * Which input last drove the container: `"keyboard"` or `"pointer"`, unset
+ * until one does. Read by this hook's stylesheet and by Interactive's.
+ */
+const NAV_MODE_ATTRIBUTE = "data-opal-nav-mode";
+
+type NavMode = "keyboard" | "pointer";
 
 const DIRECTIONS: Record<string, GridDirection> = {
   ArrowUp: "up",
@@ -92,11 +97,12 @@ function itemInDirection(
  * the one container. Keys pressed on a nested control inside an item, and
  * keys with Ctrl, ⌘ or Alt held, are left alone.
  *
- * While the keyboard moves focus between items (Tab or the arrows), the
- * container is in keyboard mode: its contents ignore the pointer, so the
- * hover under a resting pointer does not highlight a second item beside
- * the focused one. Moving the pointer, or focus leaving the container,
- * ends it.
+ * Only the input in use highlights an item, never both:
+ * - Keyboard mode (Tab or an arrow moved focus): the contents ignore the
+ *   pointer, so a resting pointer's hover does not paint a second item.
+ * - Pointer mode (the pointer moved): the focused item keeps focus, so Tab
+ *   resumes from it, but Interactive does not paint its focus.
+ * Focus leaving the container clears the mode.
  *
  * @example
  * ```tsx
@@ -147,6 +153,7 @@ export default function useGridNavigation(
       const direction = DIRECTIONS[event.key];
       if (direction) {
         event.preventDefault();
+        setMode("keyboard");
         const next = itemInDirection(items(), item, direction);
         if (next) next.focus();
         else onExit?.(direction, item);
@@ -164,6 +171,13 @@ export default function useGridNavigation(
       }
     }
 
+    function setMode(mode: NavMode | null) {
+      if (mode === null) container?.removeAttribute(NAV_MODE_ATTRIBUTE);
+      else if (container?.getAttribute(NAV_MODE_ATTRIBUTE) !== mode) {
+        container?.setAttribute(NAV_MODE_ATTRIBUTE, mode);
+      }
+    }
+
     // `:focus-visible` is the browser's own test for focus the keyboard
     // brought, so Tab and the arrows enter keyboard mode and a click does
     // not.
@@ -174,31 +188,31 @@ export default function useGridNavigation(
         item.matches(itemSelector) &&
         item.matches(":focus-visible")
       ) {
-        container?.setAttribute(KEYBOARD_MODE_ATTRIBUTE, "");
+        setMode("keyboard");
       }
-    }
-
-    function endKeyboardMode() {
-      container?.removeAttribute(KEYBOARD_MODE_ATTRIBUTE);
     }
 
     function handleFocusOut(event: FocusEvent) {
       const next = event.relatedTarget;
       if (!(next instanceof Node) || !container?.contains(next)) {
-        endKeyboardMode();
+        setMode(null);
       }
+    }
+
+    function handlePointerMove() {
+      setMode("pointer");
     }
 
     container.addEventListener("keydown", handleKeyDown);
     container.addEventListener("focusin", handleFocusIn);
     container.addEventListener("focusout", handleFocusOut);
-    container.addEventListener("pointermove", endKeyboardMode);
+    container.addEventListener("pointermove", handlePointerMove);
     return () => {
       container.removeEventListener("keydown", handleKeyDown);
       container.removeEventListener("focusin", handleFocusIn);
       container.removeEventListener("focusout", handleFocusOut);
-      container.removeEventListener("pointermove", endKeyboardMode);
-      endKeyboardMode();
+      container.removeEventListener("pointermove", handlePointerMove);
+      setMode(null);
     };
   }, [containerRef, itemSelector, enabled, items]);
 
