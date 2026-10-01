@@ -75,6 +75,13 @@ export const DriveAuthSection = ({
             })
           )}
         </Text>
+        <Text as="p" font="secondary-body" color="text-03">
+          {markdown(
+            t("gdrive.oauthOption.sharedScopesNote", {
+              docsUrl: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/oauth#using-one-credential-for-gmail-and-google-drive`,
+            })
+          )}
+        </Text>
         <InputFile
           accept="application/json"
           placeholder={t("gdrive.oauthUpload.placeholder")}

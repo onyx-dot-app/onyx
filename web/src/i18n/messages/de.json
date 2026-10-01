@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Drive Sie indizieren möchten.",
-          "title": "Option 1: OAuth-App"
+          "title": "Option 1: OAuth-App",
+          "sharedScopesNote": "Google fragt den Zugriff auf Google Drive und Gmail gemeinsam an, damit ein Konto beide Connectors versorgen kann. Um dieses Konto nur für Google Drive zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Gmail-Bereichen ([warum wir fragen]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Laden Sie die JSON-Datei Ihrer OAuth-App hoch oder fügen Sie sie ein"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Gmail Sie indizieren möchten.",
-          "title": "Option 1: OAuth-App"
+          "title": "Option 1: OAuth-App",
+          "sharedScopesNote": "Google fragt den Zugriff auf Gmail und Google Drive gemeinsam an, damit ein Konto beide Connectors versorgen kann. Um dieses Konto nur für Gmail zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Google-Drive-Bereichen ([warum wir fragen]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Laden Sie die JSON-Datei Ihrer OAuth-App hoch oder fügen Sie sie ein"

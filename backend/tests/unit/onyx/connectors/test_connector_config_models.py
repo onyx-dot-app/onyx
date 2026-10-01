@@ -7,6 +7,11 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
+from onyx.connectors.sharepoint.config import (
+    SharepointConnectorConfig,
+    SharepointCredentialBinding,
+)
+from onyx.connectors.web.config import WebConnectorConfig
 
 # (connector class, field) pairs whose model type is intentionally narrower than
 # the ``__init__`` annotation, e.g. a str Enum for a closed set of values.
@@ -73,3 +78,11 @@ def test_build_connector_kwargs_passes_invalid_config_through() -> None:
         build_connector_kwargs(DocumentSource.MOCK_CONNECTOR, invalid_config)
         == invalid_config
     )
+
+
+def test_credential_binding_class_is_the_most_specific_binding() -> None:
+    assert (
+        SharepointConnectorConfig.credential_binding_class()
+        is SharepointCredentialBinding
+    )
+    assert WebConnectorConfig.credential_binding_class() is None

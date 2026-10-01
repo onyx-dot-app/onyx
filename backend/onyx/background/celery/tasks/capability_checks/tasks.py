@@ -71,6 +71,9 @@ def run_capability_checks_task(
                 return
             input_type: InputType | None = None
             config = connector_specific_config
+            # A family credential can serve connectors of other sources, so a
+            # connector-scoped run checks the connector's source.
+            source = credential.source
             if connector_id is not None:
                 connector = fetch_connector_by_id(connector_id, db_session)
                 if connector is None:
@@ -82,10 +85,12 @@ def run_capability_checks_task(
                     )
                     return
                 input_type = connector.input_type
+                source = connector.source
                 if config is None:
                     config = connector.connector_specific_config
         report = generate_capability_report(
             credential,
+            source=source,
             connector_specific_config=config,
             connector_id=connector_id,
             input_type=input_type,
@@ -96,7 +101,7 @@ def run_capability_checks_task(
                 db_session,
                 credential_id=credential_id,
                 connector_id=connector_id,
-                source=credential.source,
+                source=source,
                 trigger=CapabilityCheckTrigger.MANUAL,
                 report=report,
                 connector_config_hash=(

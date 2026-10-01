@@ -52,6 +52,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Set by the Confluence Cloud OAuth finalize step.
+_OAUTH_SITE_KEYS = ("cloud_name", "wiki_base")
+
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -271,12 +274,21 @@ class OnyxConfluence:
 
         # we need to refresh
         logger.info("Renewing Confluence Cloud credentials...")
-        new_credentials = confluence_refresh_tokens(
-            OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
-            OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
-            credential_json["cloud_id"],
-            credential_json["confluence_refresh_token"],
-        )
+        new_credentials = {
+            # The refresh response has no site info; keep what the OAuth
+            # finalize step stored.
+            **{
+                key: credential_json[key]
+                for key in _OAUTH_SITE_KEYS
+                if key in credential_json
+            },
+            **confluence_refresh_tokens(
+                OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
+                OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
+                credential_json["cloud_id"],
+                credential_json["confluence_refresh_token"],
+            ),
+        }
 
         # store the new credentials to redis and to the db thru the provider
         # redis: we use a 5 min TTL because we are given a 10 minute grace period
