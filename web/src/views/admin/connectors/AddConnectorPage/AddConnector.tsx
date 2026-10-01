@@ -44,6 +44,7 @@ import type {
   Connector,
   ConnectorBase,
 } from "@/lib/connectors/types";
+import { buildConnectorSpecificConfig } from "@/lib/connectors/connectorFormConfig";
 import { useSettings } from "@/lib/settings/hooks";
 import { Card, Divider, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
@@ -173,11 +174,6 @@ export default function AddConnector({
     connector,
     configuration
   );
-  const formControlFieldNames = new Set(
-    [...configuration.values, ...configuration.advanced_values]
-      .filter((field) => field.type === "tab")
-      .map((field) => field.name)
-  );
 
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
@@ -281,7 +277,6 @@ export default function AddConnector({
           indexingStart,
           refreshFreq,
           auto_sync_options,
-          ...connector_specific_config
         } = values;
 
         const wireAccess = toWireAccess(formAccessType, {
@@ -295,35 +290,9 @@ export default function AddConnector({
           access_type === "private" ? data_access_group_ids : undefined;
         const manageAccess = toManageAccess(groups, group_roles);
 
-        // Apply special transforms according to application logic
-        const transformedConnectorSpecificConfig = Object.entries(
-          connector_specific_config
-        ).reduce(
-          (acc, [key, value]) => {
-            if (formControlFieldNames.has(key)) {
-              return acc;
-            }
-            // Filter out empty strings from arrays
-            if (Array.isArray(value)) {
-              value = (value as any[]).filter(
-                (item) => typeof item !== "string" || item.trim() !== ""
-              );
-            }
-            const matchingConfigValue = configuration.values.find(
-              (configValue) => configValue.name === key
-            );
-            if (
-              matchingConfigValue &&
-              "transform" in matchingConfigValue &&
-              matchingConfigValue.transform
-            ) {
-              acc[key] = matchingConfigValue.transform(value as string[]);
-            } else {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, any>
+        const transformedConnectorSpecificConfig = buildConnectorSpecificConfig(
+          values,
+          configuration
         );
 
         // Apply advanced configuration-specific transforms.
