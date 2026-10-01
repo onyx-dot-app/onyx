@@ -147,6 +147,7 @@ from onyx.tools.tool_constructor import (
     SearchToolConfig,
     construct_tools,
 )
+from onyx.utils.fleet_query_telemetry import telemetry_chat
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time, log_generator_function_time
@@ -1878,6 +1879,7 @@ def _stream_chat_turn(
 
 
 @log_generator_function_time()
+@telemetry_chat
 def handle_stream_message_objects(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -1922,6 +1924,7 @@ def _build_model_display_name(override: LLMOverride | None, llm: LLM) -> str:
 
 
 @log_generator_function_time()
+@telemetry_chat
 def handle_multi_model_stream(
     new_msg_req: SendMessageRequest,
     user: User,

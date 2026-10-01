@@ -22,6 +22,7 @@ from onyx.server.query_and_chat.models import (
     TagResponse,
 )
 from onyx.server.utils_vector_db import require_vector_db
+from onyx.utils.fleet_query_telemetry import telemetry_query
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -34,6 +35,7 @@ MAX_VALID_TAGS_LIMIT = 100
 
 
 @admin_router.post("/search", dependencies=[Depends(require_vector_db)])
+@telemetry_query(mode="search")
 def admin_search(
     question: AdminSearchRequest,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
