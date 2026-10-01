@@ -4,7 +4,9 @@ import { useState } from "react";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { credentialTemplates } from "@/lib/credentials/templates";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { adminDeleteCredential } from "@/lib/credentials/svc";
+import { adminDeleteCredential, deleteCredential } from "@/lib/credentials/svc";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import {
   CredentialCreationMethod,
   getCredentialCreationMethods,
@@ -92,9 +94,11 @@ export function useSourceCredentials(
 
 /**
  * Whether a source's saved credentials and OAuth details have loaded: one
- * verdict for both fetches. Only a fetch that never succeeded counts as
- * failed; a later refresh that fails keeps what is already shown. Disabled,
- * it fetches nothing and reports neither loading nor failed.
+ * verdict for both fetches. Only the credentials can fail it, and only if
+ * they never loaded; a later refresh that fails keeps what is shown. OAuth
+ * details that fail to load count as loaded without OAuth, so the source
+ * still offers manual setup. Disabled, it fetches nothing and reports
+ * neither loading nor failed.
  */
 export function useCredentialLoad(
   sourceType: ValidSources,
@@ -111,12 +115,13 @@ export function useCredentialLoad(
   const enabled = options.enabled ?? true;
 
   const error: Error | undefined =
-    (credentials === undefined ? credentialsError : undefined) ??
-    (oauthDetails === undefined ? oauthDetailsError : undefined);
+    credentials === undefined ? credentialsError : undefined;
+  const oauthDetailsSettled =
+    oauthDetails !== undefined || oauthDetailsError !== undefined;
   const isLoading =
     enabled &&
     error === undefined &&
-    (credentials === undefined || oauthDetails === undefined);
+    (credentials === undefined || !oauthDetailsSettled);
 
   return { credentials, oauthDetails, isLoading, error };
 }
@@ -136,6 +141,9 @@ export function useCredentialLoad(
 export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   const { credentials, oauthDetails, isLoading, error } =
     useCredentialLoad(sourceType);
+  const { isGlobalHolder } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
   const [openMethod, setOpenMethod] = useState<CredentialCreationMethod | null>(
     null
   );
@@ -198,9 +206,12 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   ): Promise<string | null> {
     let response: Response;
     try {
-      // The list holds every credential this admin manages, not only their
-      // own, so the delete goes through the admin route.
-      response = await adminDeleteCredential(credential.id);
+      // A global connector manager sees every credential and deletes any of
+      // them through the admin route. A scoped manager may not use that
+      // route; they delete through the owner route, which covers their own.
+      response = isGlobalHolder
+        ? await adminDeleteCredential(credential.id)
+        : await deleteCredential(credential.id);
     } catch (error) {
       // The request never landed, so nothing changed and nothing refreshes.
       return errorMessage(error) || failureMessage;
