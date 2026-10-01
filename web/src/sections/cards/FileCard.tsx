@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ProjectFile } from "@/lib/projects/types";
 import { UserFileStatus } from "@/lib/projects/types";
+import { isFilePending } from "@/lib/projects/utils";
 import { isImageFile } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { SvgFileText, SvgX, SvgSimpleLoader } from "@opal/icons";
@@ -129,7 +130,7 @@ function ImageFileCard({
           onFileClick && !isProcessing ? () => onFileClick(file) : undefined
         }
       >
-        {!doneUploading || !imageUrl ? (
+        {isProcessing || !imageUrl ? (
           <div className="h-full w-full flex items-center justify-center">
             <SvgSimpleLoader className={loaderSize} />
           </div>
@@ -153,14 +154,12 @@ function ImageFileCard({
 export interface FileCardProps {
   file: ProjectFile;
   removeFile?: (fileId: string) => void;
-  hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
   compactImages?: boolean;
 }
 export function FileCard({
   file,
   removeFile,
-  hideProcessingState = false,
   onFileClick,
   compactImages = false,
 }: FileCardProps) {
@@ -185,12 +184,7 @@ export function FileCard({
     return null;
   }, [isImage, file.file_id]);
 
-  const isActuallyProcessing =
-    String(file.status) === UserFileStatus.UPLOADING ||
-    String(file.status) === UserFileStatus.PROCESSING;
-
-  // When hideProcessingState is true, we treat processing files as completed for display purposes
-  const isProcessing = hideProcessingState ? false : isActuallyProcessing;
+  const isProcessing = isFilePending(file.status);
 
   const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
 

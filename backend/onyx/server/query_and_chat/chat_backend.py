@@ -93,6 +93,10 @@ from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.serving import (
+    build_content_disposition,
+    ensure_filename_extension,
+)
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.models import (
@@ -1189,7 +1193,15 @@ def fetch_chat_file(
         return JSONResponse(content=preview.model_dump(), headers=cache_headers)
 
     file_io = file_store.read_file(file_id, mode="b")
-    return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
+    content_disposition = build_content_disposition(
+        "inline",
+        ensure_filename_extension(file_record.display_name or file_id, media_type),
+    )
+    return StreamingResponse(
+        file_io,
+        media_type=media_type,
+        headers={**cache_headers, "Content-Disposition": content_disposition},
+    )
 
 
 @router.get("/search", tags=PUBLIC_API_TAGS)
