@@ -952,7 +952,6 @@ export const connectorConfigs: Record<
         name: "sites",
         optional: true,
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
-• To add several sites at once, enter them in one field separated by commas.
 • Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
 • Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
 • To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).

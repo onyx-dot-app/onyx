@@ -1,6 +1,11 @@
+import re
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, model_validator
+
+_ANY_COMMA = re.compile(",")
+# Commas followed by a scheme such as "https://", a glob like "*://", or the end.
+_COMMA_BEFORE_URL = re.compile(r",+(?=\s*(?:[^\s,/]*://|$))")
 
 
 class CredentialBinding(BaseModel):
@@ -39,8 +44,10 @@ class ConnectorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     # List fields where one entry may hold several comma-separated values, so
-    # users can paste many values into one input.
+    # users can paste many values into one input. URL fields split only at a
+    # comma that starts a new URL, since a URL path can contain a comma.
     COMMA_SEPARATED_FIELDS: ClassVar[frozenset[str]] = frozenset()
+    COMMA_SEPARATED_URL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     @model_validator(mode="before")
     @classmethod
@@ -51,22 +58,33 @@ class ConnectorConfig(BaseModel):
 
     @classmethod
     def split_comma_separated_fields(cls, config: dict[str, Any]) -> dict[str, Any]:
-        """Returns a copy of ``config`` with each comma-separated field split on
-        commas, stripped, and with empty values dropped."""
+        """Returns a copy of ``config`` with each comma-separated field split,
+        stripped, and with empty values dropped.
+
+        Raises ``ValueError`` if a non-empty list holds no values after the
+        split, since an empty list can mean "everything" to a connector."""
         result = dict(config)
-        for name in cls.COMMA_SEPARATED_FIELDS:
-            value = result.get(name)
-            if not isinstance(value, list):
-                continue
-            split_values: list[Any] = []
-            for item in value:
-                if isinstance(item, str):
-                    split_values.extend(
-                        part for raw in item.split(",") if (part := raw.strip())
-                    )
-                else:
-                    split_values.append(item)
-            result[name] = split_values
+        for names, separator in (
+            (cls.COMMA_SEPARATED_FIELDS, _ANY_COMMA),
+            (cls.COMMA_SEPARATED_URL_FIELDS, _COMMA_BEFORE_URL),
+        ):
+            for name in names:
+                value = result.get(name)
+                if not isinstance(value, list) or not value:
+                    continue
+                split_values: list[Any] = []
+                for item in value:
+                    if isinstance(item, str):
+                        split_values.extend(
+                            part
+                            for raw in separator.split(item)
+                            if (part := raw.strip())
+                        )
+                    else:
+                        split_values.append(item)
+                if not split_values:
+                    raise ValueError(f"'{name}' has entries but no values")
+                result[name] = split_values
         return result
 
     @classmethod

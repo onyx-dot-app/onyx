@@ -96,9 +96,14 @@ def test_credential_binding_class_is_the_most_specific_binding() -> None:
     list(CONNECTOR_CLASS_MAP.values()),
     ids=[source.value for source in CONNECTOR_CLASS_MAP],
 )
-def test_comma_separated_fields_are_config_fields(mapping: ConnectorMapping) -> None:
+def test_comma_separated_fields_are_list_fields(mapping: ConnectorMapping) -> None:
     config_class = mapping.config_class
-    assert config_class.COMMA_SEPARATED_FIELDS <= config_class.model_fields.keys()
+    for name in (
+        config_class.COMMA_SEPARATED_FIELDS | config_class.COMMA_SEPARATED_URL_FIELDS
+    ):
+        annotation = config_class.model_fields[name].annotation
+        members = typing.get_args(annotation) or (annotation,)
+        assert list in {typing.get_origin(member) for member in members}, name
 
 
 def test_comma_separated_fields_are_split_and_stripped() -> None:
@@ -123,3 +128,30 @@ def test_comma_separated_fields_are_split_and_stripped() -> None:
         "sites": expected_sites,
         "excluded_paths": ["Archive/a,b.docx"],
     }
+
+
+def test_url_fields_keep_commas_inside_a_url() -> None:
+    folder_url = "https://a.sharepoint.com/sites/one/Shared Documents/Q1, Q2"
+    config = {
+        "sites": [f"{folder_url}, https://a.sharepoint.com/sites/two"],
+        "excluded_sites": ["https://a.sharepoint.com/sites/x,*://*/sites/archive-*"],
+    }
+
+    assert split_comma_separated_config_fields(DocumentSource.SHAREPOINT, config) == {
+        "sites": [folder_url, "https://a.sharepoint.com/sites/two"],
+        "excluded_sites": ["https://a.sharepoint.com/sites/x", "*://*/sites/archive-*"],
+    }
+
+
+@pytest.mark.parametrize(
+    "source,config",
+    [
+        (DocumentSource.SHAREPOINT, {"sites": [" , ", ""]}),
+        (DocumentSource.ONEDRIVE, {"users": [","]}),
+    ],
+)
+def test_entries_with_no_values_are_rejected(
+    source: DocumentSource, config: dict[str, list[str]]
+) -> None:
+    with pytest.raises(ValueError):
+        split_comma_separated_config_fields(source, config)
