@@ -6,7 +6,7 @@ import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle } from "@opal/icons";
-import { IconLoader } from "@opal/loaders";
+import { CardLoader } from "@opal/loaders";
 import type { Credential } from "@/lib/credentials/types";
 import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -189,13 +189,12 @@ export function CredentialsConfigurer({
         // }
       />
 
-      {/* The header always shows. Below it: a spinner while the step
-      loads, nothing once loading failed (a toast says so), and the accounts
-      and create card once everything lands. */}
+      {/* The header always shows. Below it: a card loader in the shape of
+      the accounts card while the step loads, nothing once loading failed (a
+      toast says so), and the accounts and create card once everything
+      lands. */}
       {failed ? null : isLoading || !credentials ? (
-        <Section padding={4}>
-          <IconLoader />
-        </Section>
+        <CardLoader padding={6} />
       ) : (
         <Section gap={4} alignItems="stretch" width="full">
           <Card border="solid" rounding={4} padding={6}>
