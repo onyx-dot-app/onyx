@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/google/osv-scalibr/extractor/filesystem"
+	"github.com/google/osv-scalibr/inventory"
 )
 
 const (
@@ -160,7 +164,7 @@ func TestScanActions_matchesAdvisoriesAcrossWorkflowsAndCompositeActions(t *test
 		"docker/login-action":      {loginActionAdvisory()},
 	})
 
-	findings, err := scanActions(url)
+	findings, err := scanActions(url, false)
 	if err != nil {
 		t.Fatalf("scanActions: %v", err)
 	}
@@ -194,7 +198,7 @@ func TestScanActions_skipsTagLookupsWithoutAdvisories(t *testing.T) {
 	ghArgs := writeFakeCommand(t, bin, "gh", "exit 1")
 	_, url := startFakeOSV(t, nil)
 
-	findings, err := scanActions(url)
+	findings, err := scanActions(url, false)
 	if err != nil {
 		t.Fatalf("scanActions: %v", err)
 	}
@@ -213,7 +217,7 @@ func TestScanActions_toleratesPartialQueryFailures(t *testing.T) {
 		"docker/login-action": {loginActionAdvisory()},
 	}, "tj-actions/changed-files", "actions/checkout")
 
-	findings, err := scanActions(url)
+	findings, err := scanActions(url, false)
 	if err != nil {
 		t.Fatalf("scanActions: %v", err)
 	}
@@ -222,12 +226,81 @@ func TestScanActions_toleratesPartialQueryFailures(t *testing.T) {
 	}
 }
 
+func TestScanActions_strictFailsOnAnyPartialFailure(t *testing.T) {
+	// writeActionsRepo includes an unparseable composite action, which only the
+	// first case keeps.
+	writeParseableActionsRepo := func(t *testing.T, root string) {
+		writeActionsRepo(t, root)
+		if err := os.Remove(filepath.Join(root, ".github/actions/broken/action.yml")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("unparseable composite action", func(t *testing.T) {
+		root := chdirNewRepo(t)
+		writeActionsRepo(t, root)
+		_, url := startFakeOSV(t, nil)
+
+		_, err := scanActions(url, true)
+		if err == nil || !strings.Contains(err.Error(), "unparseable composite action .github/actions/broken/action.yml") {
+			t.Fatalf("expected the broken action to fail the scan, got %v", err)
+		}
+	})
+
+	t.Run("one failed query", func(t *testing.T) {
+		root := chdirNewRepo(t)
+		writeParseableActionsRepo(t, root)
+		_, url := startFakeOSV(t, map[string][]osvVuln{
+			"docker/login-action": {loginActionAdvisory()},
+		}, "actions/checkout")
+
+		_, err := scanActions(url, true)
+		if err == nil || !strings.Contains(err.Error(), "OSV query failed for action actions/checkout") {
+			t.Fatalf("expected the failed query to fail the scan, got %v", err)
+		}
+	})
+
+	t.Run("resolves tags up front when they load", func(t *testing.T) {
+		bin := fakeBinDir(t)
+		root := chdirNewRepo(t)
+		writeParseableActionsRepo(t, root)
+		writeFixture(t, bin, "tags.json", `[{"name":"v46.0.2","commit":{"sha":"`+changedFilesFixedSHA+`"}}]`)
+		writeFakeCommand(t, bin, "gh", `cat "$(dirname "$0")/tags.json"`)
+		_, url := startFakeOSV(t, map[string][]osvVuln{
+			"tj-actions/changed-files": {changedFilesAdvisory()},
+		})
+
+		findings, err := scanActions(url, true)
+		if err != nil {
+			t.Fatalf("scanActions: %v", err)
+		}
+		if len(findings) != 2 {
+			t.Fatalf("expected the two changed-files findings, got %+v", findings)
+		}
+	})
+
+	t.Run("failed tag lookup", func(t *testing.T) {
+		bin := fakeBinDir(t)
+		root := chdirNewRepo(t)
+		writeParseableActionsRepo(t, root)
+		writeFakeCommand(t, bin, "gh", "echo 'HTTP 502' >&2\nexit 1")
+		_, url := startFakeOSV(t, map[string][]osvVuln{
+			"tj-actions/changed-files": {changedFilesAdvisory()},
+		})
+
+		_, err := scanActions(url, true)
+		if err == nil || !strings.Contains(err.Error(), "could not resolve tags for tj-actions/changed-files") {
+			t.Fatalf("expected the failed tag lookup to fail the scan, got %v", err)
+		}
+	})
+}
+
 func TestScanActions_failsWhenEveryQueryFails(t *testing.T) {
 	root := chdirNewRepo(t)
 	writeActionsRepo(t, root)
 	_, url := startFakeOSV(t, nil, "tj-actions/changed-files", "actions/checkout", "docker/login-action")
 
-	findings, err := scanActions(url)
+	findings, err := scanActions(url, false)
 	if err == nil {
 		t.Fatalf("expected an error, got findings %+v", findings)
 	}
@@ -240,7 +313,7 @@ func TestScanActions_noActionsReferenced(t *testing.T) {
 	chdirNewRepo(t)
 	osv, url := startFakeOSV(t, nil)
 
-	findings, err := scanActions(url)
+	findings, err := scanActions(url, false)
 	if err != nil || findings != nil {
 		t.Fatalf("expected (nil, nil), got (%+v, %v)", findings, err)
 	}
@@ -252,7 +325,7 @@ func TestScanActions_noActionsReferenced(t *testing.T) {
 func TestScanActions_errors(t *testing.T) {
 	t.Run("outside a git repository", func(t *testing.T) {
 		chdirOutsideRepo(t)
-		if _, err := scanActions("http://127.0.0.1:0"); err == nil {
+		if _, err := scanActions("http://127.0.0.1:0", false); err == nil {
 			t.Fatal("expected an error outside a git repository")
 		}
 	})
@@ -261,7 +334,7 @@ func TestScanActions_errors(t *testing.T) {
 		root := chdirNewRepo(t)
 		// A file where the workflows directory belongs cannot be listed.
 		writeFixture(t, root, ".github/workflows", "not a directory")
-		if _, err := scanActions("http://127.0.0.1:0"); err == nil {
+		if _, err := scanActions("http://127.0.0.1:0", false); err == nil {
 			t.Fatal("expected an error when .github/workflows is not a directory")
 		}
 	})
@@ -284,7 +357,7 @@ func TestScanActions_errors(t *testing.T) {
 			if err := os.Symlink(filepath.Join(root, "missing.yml"), manifest); err != nil {
 				t.Fatal(err)
 			}
-			_, err := scanActions("http://127.0.0.1:0")
+			_, err := scanActions("http://127.0.0.1:0", false)
 			if !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("expected the read error for the dangling %s, got %v", rel, err)
 			}
@@ -416,7 +489,7 @@ func TestExtractCompositeActions_manifestsAreRepoRelative(t *testing.T) {
 	writeFixture(t, root, filepath.Join(".github", "actions", "b", "action.yml"), "runs:\n  using: composite\n  steps:\n    - uses: z/z@v1\n")
 	writeFixture(t, root, filepath.Join(".github", "actions", "a", "action.yml"), "runs:\n  using: composite\n  steps:\n    - uses: y/y@v2\n    - uses: x/x@v1\n")
 
-	refs, err := extractActions(root)
+	refs, err := extractActions(root, false)
 	if err != nil {
 		t.Fatalf("extractActions: %v", err)
 	}
@@ -428,5 +501,35 @@ func TestExtractCompositeActions_manifestsAreRepoRelative(t *testing.T) {
 	}
 	if !reflect.DeepEqual(refs, want) {
 		t.Fatalf("expected %+v, got %+v", want, refs)
+	}
+}
+
+// rejectingExtractor stands in for the github/actions extractor, which never
+// rejects content on its own, so the strict error paths can be exercised.
+type rejectingExtractor struct{ filesystem.Extractor }
+
+func (rejectingExtractor) Extract(context.Context, *filesystem.ScanInput) (inventory.Inventory, error) {
+	return inventory.Inventory{}, errors.New("extractor rejected the file")
+}
+
+func TestExtractActions_strictFailsWhenTheExtractorRejectsAFile(t *testing.T) {
+	root := chdirNewRepo(t)
+	writeActionsRepo(t, root)
+	if err := os.Remove(filepath.Join(root, ".github/actions/broken/action.yml")); err != nil {
+		t.Fatal(err)
+	}
+	ext := rejectingExtractor{}
+
+	if _, err := extractWorkflowActions(ext, root, false); err != nil {
+		t.Fatalf("expected rejected workflows skipped without strict, got %v", err)
+	}
+	if _, err := extractWorkflowActions(ext, root, true); err == nil || !strings.Contains(err.Error(), "unparseable workflow .github/workflows/ci.yml") {
+		t.Fatalf("expected the rejected workflow to fail the strict extraction, got %v", err)
+	}
+	if _, err := extractCompositeActions(ext, root, false); err != nil {
+		t.Fatalf("expected rejected composite actions skipped without strict, got %v", err)
+	}
+	if _, err := extractCompositeActions(ext, root, true); err == nil || !strings.Contains(err.Error(), "unparseable composite action .github/actions/setup/action.yml") {
+		t.Fatalf("expected the rejected composite action to fail the strict extraction, got %v", err)
 	}
 }

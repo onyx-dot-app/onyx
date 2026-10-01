@@ -705,7 +705,34 @@ ods audit --python --format=sarif > audit.sarif
 
 # SARIF to a file for upload, readable report to the log (used by CI gates)
 ods audit --format=sarif,text > audit.sarif
+
+# Every tracked bun.lock and uv.lock, not just the root and web ones
+ods audit --all-lockfiles --web --python
 ```
+
+#### Tracking issues for blocking findings
+
+`ods audit alert` keeps one open GitHub issue (label `cve-alert`) per package
+and branch with a blocking finding. It reads the JSON results of earlier scans, applies the
+allowlist, opens an issue for each newly blocking package, updates the issue
+when the package gains an advisory, and closes the issues of packages that no
+longer block. It prints the alerts that need announcing as JSON, including any
+still labelled `cve-alert-pending` from a run that never announced them. The
+[CVE Alerts workflow](../../.github/workflows/cve-alerts.yml) runs it daily and
+after a failed deploy audit, opens a fix PR when a pin applies, and posts each
+alert to Slack with the details in a thread.
+
+```shell
+ods audit --web --python --ignore-url "" --format=json > deps.json
+ods audit image docker.io/onyxdotapp/onyx-backend:edge --ignore-url "" --format=json > backend.json
+ods audit alert --results deps.json --results backend.json --dry-run
+```
+
+Pass the results of every scan: a package missing from all of them counts as
+resolved and has its issue closed. When a scan was skipped, pass `--keep-open`
+so no issue closes. `--scope <branch>` (default `main`) labels
+the issues with the branch the results came from, so a package's issues on
+`main` and on a release branch stay apart.
 
 #### Managing the allowlist
 
