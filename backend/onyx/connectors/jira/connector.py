@@ -3,7 +3,7 @@ import json
 import os
 from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 import requests
 from jira import JIRA
@@ -389,12 +389,32 @@ def _perform_jql_search_v2(
             raise RuntimeError(f"Found Jira object not of type Issue: {issue}")
 
 
+def _extract_issue_comments(
+    issue: Issue,
+    comment_email_blacklist: tuple[str, ...],
+    comment_extractor: Callable[[Issue], list[str]] | None,
+) -> list[str]:
+    """Extract comment text, honoring a caller-supplied extractor.
+
+    Callers with source-specific comment semantics (e.g. Jira Service
+    Management internal notes) can supply their own extractor.
+    """
+    if comment_extractor is not None:
+        return comment_extractor(issue)
+    return get_comment_strs(
+        issue=issue,
+        comment_email_blacklist=comment_email_blacklist,
+    )
+
+
 def process_jira_issue(
     jira_base_url: str,
     issue: Issue,
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
+    comment_extractor: Callable[[Issue], list[str]] | None = None,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -411,9 +431,10 @@ def process_jira_issue(
     else:
         description = extract_text_from_adf(issue.raw["fields"]["description"])
 
-    comments = get_comment_strs(
+    comments = _extract_issue_comments(
         issue=issue,
         comment_email_blacklist=comment_email_blacklist,
+        comment_extractor=comment_extractor,
     )
     ticket_content = f"{description}\n" + "\n".join(
         [f"Comment: {comment}" for comment in comments if comment]
@@ -487,7 +508,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -516,6 +537,11 @@ class JiraConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
 ):
+    # Source stamped onto every document produced by this connector. Overridable
+    # so specialized connectors (e.g. Jira Service Management) can reuse the
+    # indexing machinery while branding documents as their own source.
+    document_source: ClassVar[DocumentSource] = DocumentSource.JIRA
+
     def __init__(
         self,
         jira_base_url: str,
@@ -703,6 +729,62 @@ class JiraConnector(
         # the document belongs directly under the project in the hierarchy
         return project_key
 
+    def _process_issue(
+        self,
+        issue: Issue,
+        parent_hierarchy_raw_node_id: str | None = None,
+    ) -> Document | None:
+        """Convert a single issue into a Document.
+
+        Overridable hook for specialized connectors to adjust comment
+        handling and metadata enrichment.
+        """
+        return process_jira_issue(
+            jira_base_url=self.jira_base,
+            issue=issue,
+            comment_email_blacklist=self.comment_email_blacklist,
+            labels_to_skip=self.labels_to_skip,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            source=self.document_source,
+        )
+
+    def _process_issue_attachments(
+        self,
+        issue: Issue,  # noqa: ARG002
+        parent_hierarchy_raw_node_id: str | None,  # noqa: ARG002
+        ticket_document_id: str,  # noqa: ARG002
+    ) -> list[Document | ConnectorFailure]:
+        """Hook: attachment documents for a single issue.
+
+        The base connector indexes none. Connectors with attachment support
+        override this and gate enumeration on their own
+        ``include_attachments`` flag. Returned ``ConnectorFailure`` items are
+        recorded per attachment without failing the ticket itself.
+        """
+        return []
+
+    def _process_issue_attachments_slim(
+        self,
+        issue: Issue,  # noqa: ARG002
+        parent_hierarchy_raw_node_id: str | None,  # noqa: ARG002
+        ticket_document_id: str,  # noqa: ARG002
+        include_permissions: bool = False,  # noqa: ARG002
+        project_key: str | None = None,  # noqa: ARG002
+    ) -> list[SlimDocument]:
+        """Hook: slim counterparts of ``_process_issue_attachments``.
+
+        IDs must exactly match the main-pass attachment document IDs: extra
+        slim docs become permanent ``chunk_count IS NULL`` rows, while
+        missing ones stop pruning from cleaning up de-indexed attachments.
+
+        When ``include_permissions`` is set (permission-sync path) the slim
+        docs must carry the ticket's resolved ``external_access`` — the
+        generic doc-sync pipeline treats permission-less slim docs as an
+        error. ``project_key`` is the resolved key of the issue's project,
+        for connectors that resolve per-project access.
+        """
+        return []
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._jira_client = build_jira_client(
             credentials=credentials,
@@ -827,11 +909,8 @@ class JiraConnector(
                     else None
                 )
 
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
+                if document := self._process_issue(
                     issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
                 ):
                     # Add permission information to the document if requested
@@ -841,6 +920,21 @@ class JiraConnector(
                             add_prefix=True,  # Indexing path - prefix here
                         )
                     yield document
+
+                    # Attachment documents are children of the issue. The
+                    # base connector yields none; connectors with attachment
+                    # support override `_process_issue_attachments`.
+                    for attachment_output in self._process_issue_attachments(
+                        issue=issue,
+                        parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                        ticket_document_id=document.id,
+                    ):
+                        if isinstance(attachment_output, ConnectorFailure):
+                            yield attachment_output
+                            continue
+                        if include_permissions:
+                            attachment_output.external_access = document.external_access
+                        yield attachment_output
 
             except Exception as e:
                 yield ConnectorFailure(
@@ -994,6 +1088,23 @@ class JiraConnector(
                         ),
                         # NOTE: doc_created_at population not yet verified against live data
                         doc_created_at=time_str_to_utc(created) if created else None,
+                    )
+                )
+
+                # Attachment slim docs must mirror the main indexing pass
+                # exactly (same IDs, same admission) — see the
+                # `_process_issue_attachments_slim` contract.
+                slim_doc_batch.extend(
+                    self._process_issue_attachments_slim(
+                        issue=issue,
+                        parent_hierarchy_raw_node_id=(
+                            self._get_parent_hierarchy_raw_node_id(issue, project_key)
+                            if project_key
+                            else None
+                        ),
+                        ticket_document_id=doc_id,
+                        include_permissions=include_permissions,
+                        project_key=project_key,
                     )
                 )
                 current_offset += 1
