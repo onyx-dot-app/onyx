@@ -58,7 +58,7 @@
     transparent 65%
   );
   will-change: transform;
-  animation: opal-shimmer-slide 2.4s ease-in-out infinite;
+  animation: opal-shimmer-slide 4s ease-in-out infinite;
 }
 
 /* Browsers without text mask clipping show the base text alone. */
