@@ -11,13 +11,14 @@ This module provides a citation processor that can:
 """
 
 import re
+from bisect import bisect_right
 from collections.abc import Generator
+from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
 from onyx.configs.chat_configs import STOP_STREAM_PAT
 from onyx.context.search.models import SearchDoc
-from onyx.prompts.constants import TRIPLE_BACKTICK
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
@@ -55,10 +56,132 @@ CitationMapping: TypeAlias = dict[int, SearchDoc]
 # ============================================================================
 
 
-def in_code_block(llm_text: str) -> bool:
-    """Check if we're currently inside a code block by counting triple backticks."""
-    count = llm_text.count(TRIPLE_BACKTICK)
-    return count % 2 != 0
+_QUOTE_MARKER = re.compile(r" {0,3}> ?")
+_LIST_MARKER = re.compile(r"[ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)")
+_FENCE = re.compile(r"([ \t]*)(`{3,}|~{3,})(.*)$")
+
+
+def _strip_quotes(line: str, max_depth: int | None = None) -> tuple[int, str]:
+    depth = 0
+    while max_depth is None or depth < max_depth:
+        match = _QUOTE_MARKER.match(line)
+        if not match:
+            break
+        line = line[match.end() :]
+        depth += 1
+    return depth, line
+
+
+def _width(text: str) -> int:
+    """Column width with CommonMark tab stops (multiples of 4)."""
+    column = 0
+    for char in text:
+        column = column + 4 - column % 4 if char == "\t" else column + 1
+    return column
+
+
+def _indent(text: str) -> int:
+    return _width(text[: len(text) - len(text.lstrip(" \t"))])
+
+
+@dataclass(frozen=True)
+class _OpenFence:
+    fence: str
+    quote_depth: int
+    # Content column of the enclosing list item (0 outside lists).
+    base: int
+
+
+class CodeFenceTracker:
+    """Line-aware tracker of fenced code blocks in streamed markdown. Unlike
+    counting backticks, it ignores inline ``` in prose and respects fence char
+    and length (e.g. a ```` fence wrapping ``` lines). Simplified CommonMark:
+    handles blockquote and list containers, and closes a block when its
+    container ends."""
+
+    def __init__(self) -> None:
+        self._open: _OpenFence | None = None
+        self._partial_line = ""
+        self._line_start = 0
+        self._list_column = 0
+        # Offsets of lines that open or close a block, in order.
+        self._transitions: list[int] = []
+
+    def feed(self, text: str) -> None:
+        lines = (self._partial_line + text).split("\n")
+        self._partial_line = lines.pop()
+        for line in lines:
+            self._process_line(line)
+            self._line_start += len(line) + 1
+
+    def flush(self) -> None:
+        """End of an LLM step: finish the pending line and close any open
+        block, since the next step is a new response."""
+        self._process_line(self._partial_line)
+        self._line_start += len(self._partial_line)
+        self._partial_line = ""
+        self._list_column = 0
+        if self._open is not None:
+            self._set_open(None)
+
+    def in_code_block_at(self, offset: int) -> bool:
+        if offset >= self._line_start and self._container_ended(self._partial_line):
+            return False
+        return bisect_right(self._transitions, offset) % 2 == 1
+
+    def _container_ended(self, line: str) -> bool:
+        if self._open is None:
+            return False
+        depth, rest = _strip_quotes(line, self._open.quote_depth)
+        if not rest.strip():
+            return depth < self._open.quote_depth
+        return depth < self._open.quote_depth or _indent(rest) < self._open.base
+
+    def _process_line(self, line: str) -> None:
+        if self._open is not None:
+            if self._container_ended(line):
+                # The container ended, which ends the code block too.
+                self._set_open(None)
+            else:
+                _, rest = _strip_quotes(line, self._open.quote_depth)
+                match = _FENCE.match(rest)
+                if (
+                    match
+                    and _indent(rest) <= self._open.base + 3
+                    and match.group(2)[0] == self._open.fence[0]
+                    and len(match.group(2)) >= len(self._open.fence)
+                    and not match.group(3).strip()
+                ):
+                    self._set_open(None)
+                return
+
+        depth, rest = _strip_quotes(line)
+        if not rest.strip():
+            return
+        marker = _LIST_MARKER.match(rest)
+        if marker:
+            self._list_column = _width(marker.group())
+            match = _FENCE.match(rest, marker.end())
+            if match and match.group(1):
+                return
+        else:
+            if _indent(rest) < self._list_column:
+                self._list_column = 0
+            match = _FENCE.match(rest)
+            # 4+ spaces past the container column is an indented code block.
+            if match and _width(match.group(1)) > self._list_column + 3:
+                return
+        if not match:
+            return
+        fence, info = match.group(2), match.group(3)
+        # Backtick fences cannot have backticks in the info string.
+        if fence[0] == "`" and "`" in info:
+            return
+        self._set_open(_OpenFence(fence, depth, self._list_column))
+
+    def _set_open(self, open_fence: _OpenFence | None) -> None:
+        self._open = open_fence
+        self._transitions.append(self._line_start)
 
 
 # ============================================================================
@@ -173,6 +296,7 @@ class DynamicCitationProcessor:
 
         # Token processing state
         self.llm_out = ""  # entire output so far
+        self.code_fence_tracker = CodeFenceTracker()
         self.curr_segment = ""  # tokens held for citation processing
         self.hold = ""  # tokens held for stop token processing
         self.stop_stream = stop_stream
@@ -277,8 +401,10 @@ class DynamicCitationProcessor:
         """
         # None -> end of stream, flush remaining segment
         if token is None:
+            self.code_fence_tracker.flush()
             if self.curr_segment:
                 yield self.curr_segment
+                self.curr_segment = ""
             return
 
         # Handle stop stream token
@@ -306,31 +432,23 @@ class DynamicCitationProcessor:
 
         self.curr_segment += token
         self.llm_out += token
+        self.code_fence_tracker.feed(token)
 
-        # Handle code blocks without language tags
-        # If we see ``` followed by \n, add "plaintext" language specifier
-        if "`" in self.curr_segment:
-            if self.curr_segment.endswith("`"):
-                pass
-            elif "```" in self.curr_segment:
-                parts = self.curr_segment.split("```")
-                if len(parts) > 1 and len(parts[1]) > 0:
-                    piece_that_comes_after = parts[1][0]
-                    if piece_that_comes_after == "\n" and in_code_block(self.llm_out):
-                        # Label only this first bare fence; other fences in the
-                        # buffered segment must stay untouched.
-                        self.curr_segment = (
-                            parts[0] + "```plaintext" + "```".join(parts[1:])
-                        )
-
-        # Look for citations in current segment
-        citation_matches = list(self.citation_pattern.finditer(self.curr_segment))
+        # Look for citations in current segment, skipping ones inside code blocks
+        segment_offset = len(self.llm_out) - len(self.curr_segment)
+        citation_matches = [
+            match
+            for match in self.citation_pattern.finditer(self.curr_segment)
+            if not self.code_fence_tracker.in_code_block_at(
+                segment_offset + match.start()
+            )
+        ]
         possible_citation_found = bool(
             re.search(self.possible_citation_pattern, self.curr_segment)
         )
 
         result = ""
-        if citation_matches and not in_code_block(self.llm_out):
+        if citation_matches:
             match_idx = 0
             for match in citation_matches:
                 match_span = match.span()
