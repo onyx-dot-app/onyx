@@ -196,11 +196,13 @@ export default function ConnectorsPage() {
     },
   });
 
-  // Enter or ArrowDown moves to the first card; Escape clears the term.
+  // Enter or ArrowDown moves to the first card. Escape clears the term,
+  // then, on an empty field, leaves it.
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Escape" && rawSearchTerm !== "") {
+    if (e.key === "Escape") {
       e.preventDefault();
-      setSearchTerm("");
+      if (rawSearchTerm !== "") setSearchTerm("");
+      else e.currentTarget.blur();
       return;
     }
     if ((e.key === "Enter" || e.key === "ArrowDown") && focusFirst()) {
