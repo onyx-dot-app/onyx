@@ -21,6 +21,12 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
+from onyx.file_processing.file_types import (
+    PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MACRO_MIME_TYPE,
+    SPREADSHEET_MIME_TYPE,
+    WORD_PROCESSING_MIME_TYPE,
+)
 from onyx.file_store.utils import (
     build_full_frontend_file_url,
     chat_image_gen_metadata,
@@ -54,6 +60,24 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
+
+# Server images lack /etc/mime.types, so mimetypes cannot resolve Office files.
+_OFFICE_MIME_TYPES_BY_EXTENSION: dict[str, str] = {
+    ".xlsx": SPREADSHEET_MIME_TYPE,
+    ".xlsm": SPREADSHEET_MACRO_MIME_TYPE,
+    ".docx": WORD_PROCESSING_MIME_TYPE,
+    ".pptx": PRESENTATION_MIME_TYPE,
+}
+
+
+def guess_output_file_mime_type(filename: str) -> str:
+    extension = os.path.splitext(filename)[1].lower()
+    office_mime_type = _OFFICE_MIME_TYPES_BY_EXTENSION.get(extension)
+    if office_mime_type:
+        return office_mime_type
+    mime_type, _ = mimetypes.guess_type(filename)
+    return mime_type or "application/octet-stream"
+
 
 CODE_FIELD = "code"
 CODE_INTERPRETER_DEFAULT_FILENAME = "file"
@@ -487,9 +511,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                         # Determine MIME type from file extension
                         filename = workspace_file.path.split("/")[-1]
-                        mime_type, _ = mimetypes.guess_type(filename)
-                        # Default to binary if we can't determine the type
-                        mime_type = mime_type or "application/octet-stream"
+                        mime_type = guess_output_file_mime_type(filename)
 
                         # Save to Onyx file store
                         onyx_file_id = file_store.save_file(
