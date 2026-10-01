@@ -1,6 +1,6 @@
 "use client";
 
-import { SvgSimpleLoader } from "@opal/icons";
+import { SvgLoader } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 import { cn } from "@opal/utils";
 import {
@@ -17,19 +17,19 @@ interface IconLoaderProps {
 }
 
 /**
- * The inline spinner: `SvgSimpleLoader` at a set size. The icon itself is
- * unsized; this is where the size is decided. Holds still under
- * `prefers-reduced-motion`.
+ * The inline spinner: the static `SvgLoader` ring, spun, at a set size. The
+ * icon itself neither spins nor sizes itself; this is where both happen.
+ * Holds still under `prefers-reduced-motion`.
  */
 function IconLoader({ size = 16, color = "inherit" }: IconLoaderProps) {
   const strings = useOpalStrings();
   return (
-    <SvgSimpleLoader
+    <SvgLoader
       size={size}
       role="status"
       aria-label={strings.loading}
       className={cn(
-        "shrink-0 motion-reduce:animate-none",
+        "shrink-0 motion-safe:animate-spin",
         LOADER_COLOR_CLASS[color]
       )}
     />

@@ -10,11 +10,10 @@ const SvgLoader = ({ size, ...props }: IconProps) => (
     stroke="currentColor"
     {...props}
   >
-    {/* The track: a faint full ring the arc travels along. */}
-    <circle cx="8" cy="8" r="6.66667" strokeWidth={1.5} strokeOpacity={0.25} />
-    {/* The arc: the solid head that shows the spin. */}
+    {/* A 3/4 ring: from the bottom, round through the left and top, to the
+    right. Static; spin it with IconLoader or SvgSimpleLoader. */}
     <path
-      d="M8.00003 1.33333C9.84098 1.33333 11.5076 2.07952 12.7141 3.28595"
+      d="M8 14.6667A6.66667 6.66667 0 1 1 14.6667 8"
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"

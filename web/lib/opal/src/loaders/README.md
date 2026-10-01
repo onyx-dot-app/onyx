@@ -43,7 +43,7 @@ The wave is 40% of the text's length, never narrower than 40px. Its rate scales 
 
 ## IconLoader
 
-`SvgSimpleLoader` at a set size. The icon is unsized; `IconLoader` decides the size.
+The static `SvgLoader` ring (a 3/4 circle in `currentColor`), spun, at a set size. The icon neither spins nor sizes itself; `IconLoader` does both.
 
 ```tsx
 <IconLoader />
