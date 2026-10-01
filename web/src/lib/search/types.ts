@@ -1,5 +1,5 @@
 import { InputDateRangePickerValue } from "@opal/components";
-import { Tag } from "../types";
+import { Tag } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { Agent } from "@/lib/agents/types";
 
