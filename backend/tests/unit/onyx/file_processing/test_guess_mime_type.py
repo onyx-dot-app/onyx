@@ -7,9 +7,7 @@ from onyx.file_processing.file_types import (
     SPREADSHEET_MACRO_MIME_TYPE,
     SPREADSHEET_MIME_TYPE,
     WORD_PROCESSING_MIME_TYPE,
-)
-from onyx.tools.tool_implementations.python.python_tool import (
-    guess_output_file_mime_type,
+    guess_mime_type,
 )
 
 
@@ -28,9 +26,9 @@ def test_office_files_resolve_without_system_mime_types(
 ) -> None:
     # Simulate an image without /etc/mime.types.
     with patch("mimetypes.guess_type", return_value=(None, None)):
-        assert guess_output_file_mime_type(filename) == expected
+        assert guess_mime_type(filename) == expected
 
 
-def test_other_files_use_mimetypes_then_octet_stream() -> None:
-    assert guess_output_file_mime_type("chart.png") == "image/png"
-    assert guess_output_file_mime_type("blob.unknownext") == "application/octet-stream"
+def test_other_files_fall_back_to_mimetypes() -> None:
+    assert guess_mime_type("chart.png") == "image/png"
+    assert guess_mime_type("blob.unknownext") is None
