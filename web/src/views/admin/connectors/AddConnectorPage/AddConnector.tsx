@@ -43,7 +43,7 @@ import { Formik } from "formik";
 import { useRouter } from "next/navigation";
 import { Button } from "@opal/components";
 import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
 import { useTranslations } from "next-intl";
@@ -188,7 +188,8 @@ export default function AddConnector({
   const docsLink = getSourceDocLink(connector);
   const headerSentence = t("header.description", {
     source: displayName,
-    appName: settings.appName,
+    // Admin-set, so escaped whenever the sentence is parsed as markdown.
+    appName: docsLink ? escapeMarkdown(settings.appName) : settings.appName,
     hasDocs: docsLink ? "true" : "false",
     url: docsLink ?? "",
   });
