@@ -14,6 +14,7 @@ from onyx.natural_language_processing.search_nlp_models import (
     EmbeddingModel,
     clean_model_name,
 )
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
 
@@ -85,6 +86,56 @@ def _build_google_embed_response(
     response = MagicMock()
     response.embeddings = [MagicMock(values=embedding) for embedding in embeddings]
     return response
+
+
+@pytest.mark.asyncio
+async def test_vertex_workload_identity_embeds_each_gemini_2_input_separately() -> None:
+    client = MagicMock()
+    client.aio.models.embed_content = AsyncMock(
+        side_effect=[
+            _build_google_embed_response([[0.1, 0.2]]),
+            _build_google_embed_response([[0.3, 0.4]]),
+        ]
+    )
+    client.aio.aclose = AsyncMock()
+    with (
+        patch("google.auth.default", return_value=(MagicMock(), "cluster-project")),
+        patch("google.genai.Client", return_value=client) as genai,
+        patch("onyx.natural_language_processing.search_nlp_models.get_tokenizer"),
+    ):
+        model = EmbeddingModel(
+            server_host="localhost",
+            server_port=9000,
+            model_name="gemini-embedding-2",
+            normalize=False,
+            query_prefix=None,
+            passage_prefix=None,
+            api_key=None,
+            api_url=None,
+            provider_type=EmbeddingProvider.GOOGLE,
+            vertex_config=VertexEmbeddingConfig(
+                auth_method="workload_identity",
+                project_id="target-project",
+                location="global",
+            ),
+        )
+        response = await model._make_direct_api_call(
+            EmbedRequest(
+                model_name="gemini-embedding-2",
+                texts=["first", "second"],
+                text_type=EmbedTextType.PASSAGE,
+                max_context_length=512,
+                normalize_embeddings=False,
+            )
+        )
+    assert response.embeddings == [[0.1, 0.2], [0.3, 0.4]]
+    assert genai.call_args.kwargs["project"] == "target-project"
+    assert client.aio.models.embed_content.await_count == 2
+    assert all(
+        len(call.kwargs["contents"]) == 1
+        for call in client.aio.models.embed_content.await_args_list
+    )
+    client.aio.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio

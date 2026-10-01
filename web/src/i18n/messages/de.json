@@ -5003,6 +5003,9 @@
           "description": "Dies wird Suchanfragen vorangestellt, bevor sie an das Modell übergeben werden, sofern Ihr Embedding-Modell es erfordert. Falsche oder fehlende Präfixe verschlechtern die Qualität der Embeddings.",
           "placeholder": "z. B. 'query: '",
           "title": "Abfrage-Präfix"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Verwenden Sie die GKE-Anmeldedaten des API-Servers und der Embedding-Worker. Kein JSON-Schlüssel erforderlich."
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5249,8 @@
         "serviceAccountJsonInvalid": "Muss eine gültige JSON-Datei für ein Google-Dienstkonto sein",
         "serviceAccountJsonRequired": "Dienstkonto-JSON ist erforderlich",
         "targetUrlRequired": "Ziel-URL ist erforderlich",
-        "urlInvalid": "Muss eine gültige URL sein"
+        "urlInvalid": "Muss eine gültige URL sein",
+        "googleProjectRequired": "GCP-Projekt-ID ist erforderlich"
       },
       "vectorQuantization": {
         "description": "Speichern Sie Dokumentvektoren mit weniger Bits, um Speicher zu sparen. Weniger Bits können die Suchqualität verringern.",

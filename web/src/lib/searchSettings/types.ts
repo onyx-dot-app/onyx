@@ -148,12 +148,19 @@ export interface EmbeddingModelRequest {
 }
 
 /** Shape returned by `GET /api/admin/embedding/embedding-provider`. */
+export interface VertexEmbeddingConfig {
+  auth_method: "service_account_json" | "workload_identity";
+  project_id: string | null;
+  location: string | null;
+}
+
 export interface ConfiguredEmbeddingProvider {
   provider_type: EmbeddingProviderName;
   api_key: string | null;
   api_url: string | null;
   api_version: string | null;
   deployment_name: string | null;
+  vertex_config?: VertexEmbeddingConfig | null;
 }
 
 export interface RerankingDetails {

@@ -5003,6 +5003,9 @@
           "description": "تُضاف هذه البادئة إلى استعلامات البحث قبل تمريرها إلى النموذج، إذا تطلبها نموذج التضمين. البادئات الخاطئة أو المفقودة تضعف جودة التضمين.",
           "placeholder": "مثل 'query: '",
           "title": "بادئة الاستعلامات"
+        },
+        "googleWorkloadIdentity": {
+          "description": "استخدم بيانات اعتماد GKE لخادم API وعمال التضمين. لا يلزم مفتاح JSON."
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5249,8 @@
         "serviceAccountJsonInvalid": "يجب أن يكون ملف JSON صالحًا لحساب خدمة Google",
         "serviceAccountJsonRequired": "JSON حساب الخدمة مطلوب",
         "targetUrlRequired": "عنوان URL الهدف مطلوب",
-        "urlInvalid": "يجب أن يكون عنوان URL صالحًا"
+        "urlInvalid": "يجب أن يكون عنوان URL صالحًا",
+        "googleProjectRequired": "معرّف مشروع GCP مطلوب"
       },
       "vectorQuantization": {
         "description": "خزّن متجهات المستندات بعدد أقل من البتات لاستخدام ذاكرة أقل. قد يؤدي تقليل عدد البتات إلى خفض جودة البحث.",

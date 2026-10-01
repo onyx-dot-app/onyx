@@ -295,6 +295,18 @@ def upsert_cloud_embedding_provider(
             existing_provider.api_key,
             ApiKeyIntent.from_request_flag(provider.api_key_changed),
         )
+        if "vertex_config" not in provider.model_fields_set:
+            # Older clients do not send authentication metadata. Preserve it for
+            # unrelated edits, but a supplied credential selects legacy auth.
+            if (
+                updates["api_key"] is not None
+                and existing_provider.vertex_config is not None
+                and existing_provider.vertex_config.get("auth_method")
+                == "workload_identity"
+            ):
+                updates["vertex_config"] = None
+            else:
+                updates.pop("vertex_config")
         for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:

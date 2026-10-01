@@ -2,10 +2,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from onyx.db.models import SearchSettings
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from onyx.server.manage.embedding.api import (
     list_embedding_models,
     list_embedding_providers,
+    put_cloud_embedding_provider,
 )
+from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.utils.encryption import (
     decrypt_bytes_to_string,
     encrypt_string_to_bytes,
@@ -35,6 +38,7 @@ def _build_search_settings(raw_api_key: str) -> SimpleNamespace:
             api_url="",
             api_version=None,
             deployment_name=None,
+            vertex_config=None,
         ),
         api_url="",
     )
@@ -85,6 +89,7 @@ def test_list_embedding_providers_uses_sensitive_value_masking_once() -> None:
         api_url="",
         api_version=None,
         deployment_name=None,
+        vertex_config=None,
     )
 
     with patch(
@@ -106,3 +111,22 @@ def test_search_settings_api_key_property_returns_raw_value_for_runtime_use() ->
 
     api_key_property = SearchSettings.__dict__["api_key"]
     assert api_key_property.fget(fake_search_settings) == raw_api_key
+
+
+def test_switch_to_workload_identity_clears_stored_json_key() -> None:
+    request = CloudEmbeddingProviderCreationRequest(
+        provider_type=EmbeddingProvider.GOOGLE,
+        api_key="old key must be discarded",
+        api_key_changed=False,
+        vertex_config=VertexEmbeddingConfig(
+            auth_method="workload_identity", project_id="my-project"
+        ),
+    )
+    with patch(
+        "onyx.server.manage.embedding.api.upsert_cloud_embedding_provider"
+    ) as save:
+        put_cloud_embedding_provider(request, _=MagicMock(), db_session=MagicMock())
+    saved = save.call_args.args[1]
+    assert saved.api_key is None
+    assert saved.api_key_changed is True
+    assert saved.vertex_config == request.vertex_config

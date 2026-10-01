@@ -5003,6 +5003,9 @@
           "description": "Esto se antepone a las consultas de búsqueda antes de pasarlas al modelo, si tu modelo de embeddings lo requiere. Los prefijos incorrectos o ausentes degradan la calidad de los embeddings.",
           "placeholder": "p. ej., 'query: '",
           "title": "Prefijo de consulta"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Use las credenciales de GKE del servidor API y los trabajadores de embeddings. No se requiere una clave JSON."
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5249,8 @@
         "serviceAccountJsonInvalid": "Debe ser un archivo JSON válido de cuenta de servicio de Google",
         "serviceAccountJsonRequired": "El JSON de la cuenta de servicio es obligatorio",
         "targetUrlRequired": "La URL de destino es obligatoria",
-        "urlInvalid": "Debe ser una URL válida"
+        "urlInvalid": "Debe ser una URL válida",
+        "googleProjectRequired": "Se requiere el ID del proyecto de GCP"
       },
       "vectorQuantization": {
         "description": "Almacena los vectores de los documentos con menos bits para usar menos memoria. Menos bits pueden reducir la calidad de la búsqueda.",

@@ -5003,6 +5003,9 @@
           "description": "Ce texte est ajouté devant les requêtes de recherche avant leur envoi au modèle, si votre modèle d'embedding l'exige. Un préfixe incorrect ou manquant dégrade la qualité des embeddings.",
           "placeholder": "ex. : 'query: '",
           "title": "Préfixe de requête"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Utilisez les identifiants GKE du serveur API et des workers d’embedding. Aucune clé JSON requise."
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5249,8 @@
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",
-        "urlInvalid": "Doit être une URL valide"
+        "urlInvalid": "Doit être une URL valide",
+        "googleProjectRequired": "L’ID du projet GCP est requis"
       },
       "vectorQuantization": {
         "description": "Stockez les vecteurs des documents avec moins de bits pour utiliser moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche.",

@@ -5003,6 +5003,9 @@
           "description": "This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality.",
           "placeholder": "e.g., 'query: '",
           "title": "Query Prefix"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Use the GKE credentials of the API server and embedding workers. No JSON key is required."
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5249,8 @@
         "serviceAccountJsonInvalid": "Must be a valid Google service account JSON file",
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",
-        "urlInvalid": "Must be a valid URL"
+        "urlInvalid": "Must be a valid URL",
+        "googleProjectRequired": "GCP Project ID is required"
       },
       "vectorQuantization": {
         "description": "Store document vectors with fewer bits to use less memory. Fewer bits can lower search quality.",
