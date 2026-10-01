@@ -3,6 +3,77 @@ entries:
   onyx:
   - annotations:
       artifacthub.io/changes: |
+        - kind: removed
+          description: The legacyVespaCheck upgrade guard and the unused
+            ENABLE_OPENSEARCH_INDEXING_FOR_ONYX / ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX
+            env vars. Onyx no longer uses Vespa.
+        - kind: added
+          description: objectStore, an in-cluster SeaweedFS S3 store that replaces bundled
+            MinIO, with a Job that copies MinIO's files while both stores serve.
+        - kind: security
+          description: Default Onyx workloads to the RuntimeDefault seccomp profile and
+            allowPrivilegeEscalation false.
+        - kind: security
+          description: Warn after install when the default PostgreSQL or Redis passwords
+            are in use.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-10-01T19:35:05.217949754Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.8
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 7b01105abb0923c98ffca811e564ee31fbd3198d82d896c40b168f6bfa13830c
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.9.1/onyx-0.9.1.tgz
+    version: 0.9.1
+  - annotations:
+      artifacthub.io/changes: |
         - kind: added
           description: objectStore, an in-cluster SeaweedFS S3 store that replaces bundled
             MinIO, with a Job that copies MinIO's files while both stores serve.
@@ -8872,4 +8943,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-09-30T20:09:56.007546469Z"
+generated: "2026-10-01T19:35:05.218300009Z"
