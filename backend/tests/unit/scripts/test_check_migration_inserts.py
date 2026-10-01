@@ -156,8 +156,17 @@ def test_sql_comment_between_insert_and_into_is_flagged() -> None:
 
 
 def test_quoted_comment_marker_does_not_hide_an_insert() -> None:
-    source = "op.execute(\"RAISE NOTICE '--'; INSERT INTO t VALUES (1)\")\n"
+    source = "op.execute(\"DO $$ BEGIN RAISE NOTICE '--'; INSERT INTO t VALUES (1); END $$\")\n"
     assert check_migration_inserts.find_inserts(source) == [1]
+
+
+def test_commented_out_sql_insert_passes() -> None:
+    source = (
+        'op.execute("""\n    -- INSERT INTO tool VALUES (1)\n'
+        "    /* INSERT INTO tool VALUES (2) */\n"
+        "    UPDATE tool SET name = 'it''s'\n\"\"\")\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == []
 
 
 def test_module_level_helper_is_flagged() -> None:

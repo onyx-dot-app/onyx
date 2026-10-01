@@ -26,11 +26,7 @@ _REVISION_LINE = re.compile(r'^revision(?:\s*:[^=]+)?\s*=\s*"(\w+)"', re.MULTILI
 _DOWN_REVISION_LINE = re.compile(r"^down_revision(?:\s*:[^=]+)?\s*=(.*)$", re.MULTILINE)
 _REVISION_ID = re.compile(r'"(\w+)"')
 # downgrade may restore a seed it removed, so it is the only body not visited.
-# Comments may sit between the two words. Nothing is stripped first, so a
-# quoted `--` elsewhere in the statement cannot hide a later insert.
-_INSERT_SQL = re.compile(
-    r"\bINSERT(?:\s|--[^\n]*\n|/\*.*?\*/)+INTO\b", re.IGNORECASE | re.DOTALL
-)
+_INSERT_SQL = re.compile(r"\bINSERT\s+INTO\b", re.IGNORECASE)
 _SESSION_FACTORIES = {"Session", "sessionmaker"}
 _SESSION_WRITES = {"add_all", "merge", "bulk_save_objects", "bulk_insert_mappings"}
 
@@ -142,8 +138,38 @@ class _InsertFinder(ast.NodeVisitor):
     def visit_Constant(self, node: ast.Constant) -> None:
         if not isinstance(node.value, str):
             return
-        if _INSERT_SQL.search(node.value):
+        if _INSERT_SQL.search(_executable_sql(node.value)):
             self._flag(node)
+
+
+def _executable_sql(sql: str) -> str:
+    """Blank out comments and single-quoted literals, leaving the rest in place.
+
+    A quoted `--` is not a comment and a commented INSERT does not run. Dollar
+    quoted bodies are kept because the statements inside them do run."""
+    out: list[str] = []
+    i = 0
+    while i < len(sql):
+        if sql.startswith("--", i):
+            i = sql.find("\n", i)
+            i = len(sql) if i == -1 else i
+            out.append(" ")
+        elif sql.startswith("/*", i):
+            close = sql.find("*/", i + 2)
+            i = len(sql) if close == -1 else close + 2
+            out.append(" ")
+        elif sql[i] == "'":
+            close = i + 1
+            while close < len(sql) and (
+                sql[close] != "'" or sql.startswith("''", close)
+            ):
+                close += 2 if sql.startswith("''", close) else 1
+            i = close + 1
+            out.append(" ")
+        else:
+            out.append(sql[i])
+            i += 1
+    return "".join(out)
 
 
 def _names_session(annotation: ast.expr) -> bool:
