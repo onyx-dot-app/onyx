@@ -2613,6 +2613,9 @@
         "credentialModal": {
           "title": "{source} の認証情報を作成"
         },
+        "credentialsLoadFailed": {
+          "toast": "保存済みの認証情報を読み込めませんでした。"
+        },
         "credentialStep": {
           "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
           "title": "認証アカウント"

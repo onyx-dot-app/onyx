@@ -2613,6 +2613,9 @@
         "credentialModal": {
           "title": "إنشاء بيانات اعتماد {source}"
         },
+        "credentialsLoadFailed": {
+          "toast": "تعذّر تحميل بيانات الاعتماد المحفوظة."
+        },
         "credentialStep": {
           "description": "استخدم حساب خدمة مشتركًا. يفهرس {appName} المحتوى باسم هذا الحساب.",
           "title": "حساب المصادقة"

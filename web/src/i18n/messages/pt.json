@@ -2613,6 +2613,9 @@
         "credentialModal": {
           "title": "Criar uma credencial do {source}"
         },
+        "credentialsLoadFailed": {
+          "toast": "Não foi possível carregar as credenciais salvas."
+        },
         "credentialStep": {
           "description": "Use uma conta de serviço compartilhada. O {appName} indexa o conteúdo como esta conta.",
           "title": "Conta de autenticação"

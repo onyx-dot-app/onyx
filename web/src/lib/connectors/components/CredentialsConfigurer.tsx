@@ -1,10 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
-import { SvgPlusCircle } from "@opal/icons";
+import { SvgPlusCircle, SvgSimpleLoader } from "@opal/icons";
 import type { Credential } from "@/lib/connectors/types";
 import { useCredentialSetup } from "@/lib/connectors/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -44,6 +45,7 @@ export function CredentialsConfigurer({
   const {
     displayName,
     credentials,
+    credentialsError,
     oauthDetails,
     isLoading,
     methods,
@@ -146,9 +148,13 @@ export function CredentialsConfigurer({
     }
   }
 
-  if (!credentials) {
-    return null;
-  }
+  // Only a load that never succeeded counts as failed: a later refresh that
+  // fails keeps the list already shown. It says so once, not on every retry.
+  const credentialsFailed =
+    credentialsError !== undefined && credentials === undefined;
+  useEffect(() => {
+    if (credentialsFailed) toast.error(t("add.credentialsLoadFailed.toast"));
+  }, [credentialsFailed, t]);
 
   return (
     <Section gap={4} alignItems="stretch" width="full">
@@ -184,125 +190,138 @@ export function CredentialsConfigurer({
         // }
       />
 
-      <Section gap={4} alignItems="stretch" width="full">
-        <Card border="solid" rounding={4} padding={6}>
-          <Section gap={4} alignItems="start" width="full">
-            <ModifyCredential
-              showIfEmpty
-              accessType={accessType}
-              defaultedCredential={currentCredential!}
-              credentials={credentials}
-              onDeleteCredential={onDeleteCredential}
-              onSwitch={onSwap}
-            />
+      {/* The header always shows. Below it: a spinner while the saved
+      credentials load, nothing once loading failed (a toast says so), and
+      the accounts and create card once they land. */}
+      {credentialsFailed ? null : !credentials ? (
+        <Section padding={4}>
+          <SvgSimpleLoader />
+        </Section>
+      ) : (
+        <Section gap={4} alignItems="stretch" width="full">
+          <Card border="solid" rounding={4} padding={6}>
+            <Section gap={4} alignItems="start" width="full">
+              <ModifyCredential
+                showIfEmpty
+                accessType={accessType}
+                defaultedCredential={currentCredential!}
+                credentials={credentials}
+                onDeleteCredential={onDeleteCredential}
+                onSwitch={onSwap}
+              />
 
-            {canAuthorize && (
-              <Section
-                flexDirection="row"
-                justifyContent="start"
-                gap={1}
-                className="mt-6"
-              >
-                <Button
-                  disabled={isAuthorizing}
-                  variant="action"
-                  onClick={handleAuthorize}
+              {canAuthorize && (
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  gap={1}
+                  className="mt-6"
                 >
-                  {isAuthorizing
-                    ? t("add.authorizeButton.pendingLabel")
-                    : t("add.authorizeButton.label", {
-                        source: displayName,
-                      })}
-                </Button>
-              </Section>
-            )}
-          </Section>
-        </Card>
-
-        {/* One card creates a credential. Its header toggles it; the fold
-      below is a plain container, so a click in the open form cannot fold
-      it away. The routes into the source are tabs inside the fold. While
-      the OAuth details load the routes are unknown, so a disabled card
-      holds the place. */}
-        {isLoading ? (
-          <Card
-            border="solid"
-            color="transparent"
-            rounding={4}
-            padding={4}
-            disabled
-          >
-            <ContentAction
-              icon={SvgPlusCircle}
-              title={newAccountLabel}
-              sizePreset="main-ui"
-              variant="section"
-              padding={0}
-            />
-          </Card>
-        ) : (
-          <SelectCard
-            expandable
-            expanded={isCreating}
-            expandableContentHeight="full"
-            border="solid"
-            state={isCreating ? "filled" : "empty"}
-            rounding={4}
-            padding={2}
-            // The card is one action, so it names itself. Nothing inside the
-            // interactive half is focusable, so a role here folds no other
-            // control into that name.
-            role="button"
-            aria-label={newAccountLabel}
-            tabIndex={0}
-            expandedContent={
-              <div className="p-4" data-testid="credential-form">
-                {namesMethods ? (
-                  <Tabs
-                    value={openMethod ?? defaultMethod}
-                    onValueChange={(value) => {
-                      // Matched against the real methods rather than cast:
-                      // the tab strip hands back a plain string.
-                      const picked = methods.find((method) => method === value);
-                      if (picked) selectMethod(picked);
-                    }}
+                  <Button
+                    disabled={isAuthorizing}
+                    variant="action"
+                    onClick={handleAuthorize}
                   >
-                    <Tabs.List>
-                      {orderedMethods.map((method) => (
-                        <Tabs.Trigger key={method} value={method}>
-                          {method === CredentialCreationMethod.OAuth
-                            ? t("add.connectWithTab.label")
-                            : t("add.manualTab.label")}
-                        </Tabs.Trigger>
-                      ))}
-                    </Tabs.List>
-                    {/* A tab switch keeps what the user typed in the other
-                    route. */}
-                    {orderedMethods.map((method) => (
-                      <Tabs.Content key={method} value={method} keepMounted>
-                        {renderCredentialForm(method)}
-                      </Tabs.Content>
-                    ))}
-                  </Tabs>
-                ) : (
-                  renderCredentialForm(defaultMethod)
-                )}
-              </div>
-            }
-            onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
-          >
-            <Section padding={2} width="full">
-              <Content
+                    {isAuthorizing
+                      ? t("add.authorizeButton.pendingLabel")
+                      : t("add.authorizeButton.label", {
+                          source: displayName,
+                        })}
+                  </Button>
+                </Section>
+              )}
+            </Section>
+          </Card>
+
+          {/* One card creates a credential. Its header toggles it; the fold
+        below is a plain container, so a click in the open form cannot fold
+        it away. The routes into the source are tabs inside the fold. While
+        the OAuth details load the routes are unknown, so a disabled card
+        holds the place. */}
+          {isLoading ? (
+            <Card
+              border="solid"
+              color="transparent"
+              rounding={4}
+              padding={4}
+              disabled
+            >
+              <ContentAction
                 icon={SvgPlusCircle}
                 title={newAccountLabel}
                 sizePreset="main-ui"
-                variant="body"
-                color={isCreating ? "interactive" : "muted"}
+                variant="section"
+                padding={0}
               />
-            </Section>
-          </SelectCard>
-        )}
-      </Section>
+            </Card>
+          ) : (
+            <SelectCard
+              expandable
+              expanded={isCreating}
+              expandableContentHeight="full"
+              border="solid"
+              state={isCreating ? "filled" : "empty"}
+              rounding={4}
+              padding={2}
+              // The card is one action, so it names itself. Nothing inside the
+              // interactive half is focusable, so a role here folds no other
+              // control into that name.
+              role="button"
+              aria-label={newAccountLabel}
+              tabIndex={0}
+              expandedContent={
+                <div className="p-4" data-testid="credential-form">
+                  {namesMethods ? (
+                    <Tabs
+                      value={openMethod ?? defaultMethod}
+                      onValueChange={(value) => {
+                        // Matched against the real methods rather than cast:
+                        // the tab strip hands back a plain string.
+                        const picked = methods.find(
+                          (method) => method === value
+                        );
+                        if (picked) selectMethod(picked);
+                      }}
+                    >
+                      <Tabs.List>
+                        {orderedMethods.map((method) => (
+                          <Tabs.Trigger key={method} value={method}>
+                            {method === CredentialCreationMethod.OAuth
+                              ? t("add.connectWithTab.label")
+                              : t("add.manualTab.label")}
+                          </Tabs.Trigger>
+                        ))}
+                      </Tabs.List>
+                      {/* A tab switch keeps what the user typed in the other
+                      route. */}
+                      {orderedMethods.map((method) => (
+                        <Tabs.Content key={method} value={method} keepMounted>
+                          {renderCredentialForm(method)}
+                        </Tabs.Content>
+                      ))}
+                    </Tabs>
+                  ) : (
+                    renderCredentialForm(defaultMethod)
+                  )}
+                </div>
+              }
+              onClick={() =>
+                isCreating ? close() : selectMethod(defaultMethod)
+              }
+            >
+              <Section padding={2} width="full">
+                <Content
+                  icon={SvgPlusCircle}
+                  title={newAccountLabel}
+                  sizePreset="main-ui"
+                  variant="body"
+                  color={isCreating ? "interactive" : "muted"}
+                />
+              </Section>
+            </SelectCard>
+          )}
+        </Section>
+      )}
     </Section>
   );
 }
