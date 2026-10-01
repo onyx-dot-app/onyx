@@ -27,6 +27,7 @@ _DOWN_REVISION_LINE = re.compile(r"^down_revision(?:\s*:[^=]+)?\s*=(.*)$", re.MU
 _REVISION_ID = re.compile(r'"(\w+)"')
 # downgrade may restore a seed it removed, so it is the only body not visited.
 _INSERT_SQL = re.compile(r"\bINSERT\s+INTO\b", re.IGNORECASE)
+_SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
 _SESSION_FACTORIES = {"Session", "sessionmaker"}
 _SESSION_WRITES = {"add_all", "merge", "bulk_save_objects", "bulk_insert_mappings"}
 
@@ -51,16 +52,19 @@ class _InsertFinder(ast.NodeVisitor):
             self._statement = node
         super().visit(node)
 
-    def _flag(self) -> None:
+    def _flag(self, node: ast.expr) -> None:
+        """The marker exempts one node: on its own lines or its statement's first."""
         statement = self._statement
         if statement is None:
             return
-        end = statement.end_lineno or statement.lineno
-        if any(
-            ALLOW_MARKER in line for line in self._lines[statement.lineno - 1 : end]
-        ):
+        end = node.end_lineno or node.lineno
+        marked = [
+            self._lines[statement.lineno - 1],
+            *self._lines[node.lineno - 1 : end],
+        ]
+        if any(ALLOW_MARKER in line for line in marked):
             return
-        self.found.add(statement.lineno)
+        self.found.add(node.lineno)
 
     def _is_session_call(self, node: ast.expr) -> bool:
         if not isinstance(node, ast.Call):
@@ -118,23 +122,25 @@ class _InsertFinder(ast.NodeVisitor):
         if isinstance(func, ast.Name) and (
             func.id == "insert" or func.id in self._inserts
         ):
-            self._flag()
+            self._flag(node)
         elif isinstance(func, ast.Attribute):
             # Receivers named like a session count even when bound elsewhere.
             receiver_is_session = isinstance(func.value, ast.Name) and (
                 func.value.id in self._sessions[-1] or func.value.id.endswith("session")
             )
             if func.attr == "insert" and not _is_list_insert(node):
-                self._flag()
+                self._flag(node)
             elif func.attr == "bulk_insert" or func.attr in _SESSION_WRITES:
-                self._flag()
+                self._flag(node)
             elif func.attr == "add" and receiver_is_session:
-                self._flag()
+                self._flag(node)
         self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> None:
-        if isinstance(node.value, str) and _INSERT_SQL.search(node.value):
-            self._flag()
+        if not isinstance(node.value, str):
+            return
+        if _INSERT_SQL.search(_SQL_COMMENT.sub(" ", node.value)):
+            self._flag(node)
 
 
 def _names_session(annotation: ast.expr) -> bool:
@@ -150,9 +156,17 @@ def _is_list_insert(node: ast.Call) -> bool:
 
 
 def find_inserts(source: str) -> list[int]:
-    """One-based line numbers of statements outside downgrade that write rows."""
+    """One-based line numbers of row writes outside downgrade."""
     finder = _InsertFinder(source.splitlines())
-    finder.visit(ast.parse(source))
+    module = ast.parse(source)
+    # Module-level names are bound before any function runs, whatever the order.
+    functions = (ast.FunctionDef, ast.AsyncFunctionDef)
+    for node in module.body:
+        if not isinstance(node, functions):
+            finder.visit(node)
+    for node in module.body:
+        if isinstance(node, functions):
+            finder.visit(node)
     return sorted(finder.found)
 
 

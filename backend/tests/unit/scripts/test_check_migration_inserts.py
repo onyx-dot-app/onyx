@@ -133,6 +133,28 @@ def test_same_name_reused_as_a_set_in_another_function_passes() -> None:
     assert check_migration_inserts.find_inserts(source) == []
 
 
+def test_factory_defined_after_upgrade_is_still_known() -> None:
+    source = (
+        "def upgrade() -> None:\n    s = SessionLocal()\n    s.add(row)\n\n\n"
+        "SessionLocal = sessionmaker(bind=op.get_bind())\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == [3]
+
+
+def test_marker_exempts_only_its_own_insert() -> None:
+    source = (
+        "def upgrade() -> None:\n    op.execute(\n"
+        '        "INSERT INTO b SELECT * FROM a",  # migration-inserts: allow\n'
+        '        "INSERT INTO tool VALUES (1)",\n    )\n'
+    )
+    assert check_migration_inserts.find_inserts(source) == [4]
+
+
+def test_sql_comment_between_insert_and_into_is_flagged() -> None:
+    source = 'op.execute("""\n    INSERT -- seed\n    INTO tool VALUES (1)\n""")\n'
+    assert check_migration_inserts.find_inserts(source) == [1]
+
+
 def test_module_level_helper_is_flagged() -> None:
     source = (
         "def _seed() -> None:\n    op.bulk_insert(tool_table, rows)\n\n\n"
