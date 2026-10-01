@@ -54,7 +54,7 @@ def db_session() -> Generator[Session, None, None]:
 def full_deployment_setup() -> Generator[None, None, None]:
     """Optional fixture to perform full deployment-like setup on demand.
 
-    Import and call tests.external_dependency_unit.startup.full_setup.ensure_full_deployment_setup
+    Import and call tests.external_dependency_unit.full_setup.ensure_full_deployment_setup
     to initialize Postgres defaults and the document index.
     """
     ensure_full_deployment_setup()

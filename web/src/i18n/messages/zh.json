@@ -6116,8 +6116,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · 系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
-        "emptyDescription": "系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
+        "description": "{start} – {end} · 系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要和上下文 RAG 处理。",
+        "emptyDescription": "系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要和上下文 RAG 处理。",
         "error": {
           "title": "无法加载此期间的系统用量。"
         },
