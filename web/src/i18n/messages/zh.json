@@ -9174,6 +9174,7 @@
         "loginRequired": "您需要先通过身份提供方登录。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
         "serverError": "您的身份提供方遇到错误。请重试。",
+        "staleSignIn": "此登录链接已过期或已失效。请重新登录。",
         "temporarilyUnavailable": "您的身份提供方暂时不可用。请稍后重试。"
       },
       "credentialsIssue": {
