@@ -223,7 +223,6 @@ def generate_intermediate_report(
 
 def run_research_agent_call(
     research_agent_call: ToolCallKickoff,
-    parent_tool_call_id: str,
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -581,7 +580,7 @@ def run_research_agent_call(
                         # Research Agent is a top level tool call but the tools called by the research
                         # agent are sub-tool calls.
                         tool_call_info = ToolCallInfo(
-                            parent_tool_call_id=parent_tool_call_id,
+                            parent_tool_call_id=research_agent_call.tool_call_id,
                             # At the DB save level, there is only a turn index, no sub-turn etc.
                             # This is implied by the parent tool call's turn index and the depth
                             # of the tree traversal.
@@ -676,7 +675,6 @@ def _on_research_agent_timeout(
 
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
-    parent_tool_call_ids: list[str],
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -694,7 +692,6 @@ def run_research_agent_calls(
             run_research_agent_call,
             (
                 research_agent_call,
-                parent_tool_call_id,
                 tools,
                 emitter,
                 state_container,
@@ -706,9 +703,7 @@ def run_research_agent_calls(
                 reasoning_effort,
             ),
         )
-        for research_agent_call, parent_tool_call_id in zip(
-            research_agent_calls, parent_tool_call_ids, strict=False
-        )
+        for research_agent_call in research_agent_calls
     ]
 
     research_agent_call_results = run_functions_tuples_in_parallel(
@@ -811,7 +806,6 @@ if __name__ == "__main__":
                 tool_call_id=str(uuid4()),
                 placement=Placement(turn_index=0, tab_index=0),
             ),
-            parent_tool_call_id=str(uuid4()),
             tools=tools,
             emitter=emitter,
             state_container=state_container,
