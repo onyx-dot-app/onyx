@@ -8880,6 +8880,10 @@
       },
       "waiting": {
         "fields": "대기 중: {fields}"
+      },
+      "formErrors": {
+        "title": "일부 커넥터 설정이 올바르지 않습니다",
+        "item": "{field}: {message}"
       }
     },
     "llmGateway": {

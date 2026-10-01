@@ -8880,6 +8880,10 @@
       },
       "waiting": {
         "fields": "بانتظار: {fields}"
+      },
+      "formErrors": {
+        "title": "بعض إعدادات الموصل غير صالحة",
+        "item": "{field}: {message}"
       }
     },
     "llmGateway": {

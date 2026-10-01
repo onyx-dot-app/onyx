@@ -8880,6 +8880,10 @@
       },
       "waiting": {
         "fields": "等待：{fields}"
+      },
+      "formErrors": {
+        "title": "部分连接器设置无效",
+        "item": "{field}：{message}"
       }
     },
     "llmGateway": {

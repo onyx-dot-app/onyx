@@ -414,6 +414,11 @@ export function ConnectorsCheckCard(props: ConnectorsCheckCardProps) {
     [results]
   );
   const counts = useMemo(() => countCheckStates(results), [results]);
+  // Settings the backend rejected; the checks that read them wait.
+  const formErrors = useMemo(
+    () => Object.entries(props.draft?.form_errors ?? {}),
+    [props.draft]
+  );
   const passed = counts.passed;
   const failed = counts.failed;
   const total = applicableCheckCount(counts);
@@ -506,6 +511,24 @@ export function ConnectorsCheckCard(props: ConnectorsCheckCardProps) {
             />
           </div>
         </div>
+
+        {!collapsed && formErrors.length > 0 && (
+          <Card color="status-error-00" rounding={3} padding={2}>
+            <div className="flex flex-col gap-1">
+              <Text font="main-ui-action" color="status-error-05">
+                {t("formErrors.title")}
+              </Text>
+              {formErrors.map(([field, message]) => (
+                <Text key={field} font="secondary-body" color="text-04">
+                  {t("formErrors.item", {
+                    field: fieldLabels?.[field] ?? field,
+                    message,
+                  })}
+                </Text>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {!collapsed &&
           (hasReport ? (

@@ -8880,6 +8880,10 @@
       },
       "waiting": {
         "fields": "Esperando: {fields}"
+      },
+      "formErrors": {
+        "title": "Algunos ajustes del conector no son válidos",
+        "item": "{field}: {message}"
       }
     },
     "llmGateway": {

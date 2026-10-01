@@ -8880,6 +8880,10 @@
       },
       "waiting": {
         "fields": "入力待ち: {fields}"
+      },
+      "formErrors": {
+        "title": "一部のコネクタ設定が無効です",
+        "item": "{field}: {message}"
       }
     },
     "llmGateway": {

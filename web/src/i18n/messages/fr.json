@@ -8880,6 +8880,10 @@
       },
       "waiting": {
         "fields": "En attente de : {fields}"
+      },
+      "formErrors": {
+        "title": "Certains paramètres du connecteur ne sont pas valides",
+        "item": "{field} : {message}"
       }
     },
     "llmGateway": {
