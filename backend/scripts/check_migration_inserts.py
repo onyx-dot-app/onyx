@@ -26,8 +26,11 @@ _REVISION_LINE = re.compile(r'^revision(?:\s*:[^=]+)?\s*=\s*"(\w+)"', re.MULTILI
 _DOWN_REVISION_LINE = re.compile(r"^down_revision(?:\s*:[^=]+)?\s*=(.*)$", re.MULTILINE)
 _REVISION_ID = re.compile(r'"(\w+)"')
 # downgrade may restore a seed it removed, so it is the only body not visited.
-_INSERT_SQL = re.compile(r"\bINSERT\s+INTO\b", re.IGNORECASE)
-_SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+# Comments may sit between the two words. Nothing is stripped first, so a
+# quoted `--` elsewhere in the statement cannot hide a later insert.
+_INSERT_SQL = re.compile(
+    r"\bINSERT(?:\s|--[^\n]*\n|/\*.*?\*/)+INTO\b", re.IGNORECASE | re.DOTALL
+)
 _SESSION_FACTORIES = {"Session", "sessionmaker"}
 _SESSION_WRITES = {"add_all", "merge", "bulk_save_objects", "bulk_insert_mappings"}
 
@@ -139,7 +142,7 @@ class _InsertFinder(ast.NodeVisitor):
     def visit_Constant(self, node: ast.Constant) -> None:
         if not isinstance(node.value, str):
             return
-        if _INSERT_SQL.search(_SQL_COMMENT.sub(" ", node.value)):
+        if _INSERT_SQL.search(node.value):
             self._flag(node)
 
 

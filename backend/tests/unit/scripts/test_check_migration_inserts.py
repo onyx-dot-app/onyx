@@ -155,6 +155,11 @@ def test_sql_comment_between_insert_and_into_is_flagged() -> None:
     assert check_migration_inserts.find_inserts(source) == [1]
 
 
+def test_quoted_comment_marker_does_not_hide_an_insert() -> None:
+    source = "op.execute(\"RAISE NOTICE '--'; INSERT INTO t VALUES (1)\")\n"
+    assert check_migration_inserts.find_inserts(source) == [1]
+
+
 def test_module_level_helper_is_flagged() -> None:
     source = (
         "def _seed() -> None:\n    op.bulk_insert(tool_table, rows)\n\n\n"
