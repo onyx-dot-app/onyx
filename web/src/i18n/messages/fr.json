@@ -2636,6 +2636,9 @@
         },
         "unknownError": {
           "toast": "Une erreur inconnue est survenue"
+        },
+        "checksBlocked": {
+          "toast": "Une vérification obligatoire du connecteur a échoué. Corrigez-la avant de créer le connecteur."
         }
       },
       "credentialRequired": {

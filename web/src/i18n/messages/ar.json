@@ -2636,6 +2636,9 @@
         },
         "unknownError": {
           "toast": "حدث خطأ غير معروف"
+        },
+        "checksBlocked": {
+          "toast": "فشل فحص مطلوب للموصل. أصلحه قبل إنشاء الموصل."
         }
       },
       "credentialRequired": {

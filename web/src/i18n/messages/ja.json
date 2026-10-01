@@ -2636,6 +2636,9 @@
         },
         "unknownError": {
           "toast": "不明なエラーが発生しました"
+        },
+        "checksBlocked": {
+          "toast": "必須のコネクタチェックが失敗しました。コネクタを作成する前に修正してください。"
         }
       },
       "credentialRequired": {

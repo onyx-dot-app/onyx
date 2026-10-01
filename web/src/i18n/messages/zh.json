@@ -2636,6 +2636,9 @@
         },
         "unknownError": {
           "toast": "发生未知错误"
+        },
+        "checksBlocked": {
+          "toast": "一项必需的连接器检查失败。请在创建连接器之前修复它。"
         }
       },
       "credentialRequired": {

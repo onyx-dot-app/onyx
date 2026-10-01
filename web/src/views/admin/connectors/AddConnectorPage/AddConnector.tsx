@@ -49,6 +49,7 @@ import {
   useDraftConnectorChecks,
   type DraftCheckRunInput,
 } from "@/lib/connectors/checks/hooks";
+import { requiredChecksStatus } from "@/lib/connectors/checks/draft";
 import { DraftConnectorChecks } from "@/views/admin/connectors/AddConnectorPage/form/DraftConnectorChecks";
 import { useSettings } from "@/lib/settings/hooks";
 import { Card, Divider, MessageCard } from "@opal/components";
@@ -236,6 +237,11 @@ export default function AddConnector({
     : (linkedCredential?.id ?? null);
   const draftChecks = useDraftConnectorChecks(connector, draftCredentialId);
   const configFieldsRef = useRef<HTMLFieldSetElement>(null);
+  const checksCardRef = useRef<HTMLDivElement>(null);
+  // Set when Create was held back by the checks; the card stays highlighted
+  // until the required checks clear.
+  const [checksRevealed, setChecksRevealed] = useState(false);
+  const [checkingBeforeCreate, setCheckingBeforeCreate] = useState(false);
 
   // The draft-run input for the form values: the same config and wire access
   // type the create request sends.
@@ -246,6 +252,44 @@ export default function AddConnector({
       restriction_group_ids: values.restriction_group_ids,
     }).access_type,
   });
+
+  const revealChecksCard = () => {
+    setChecksRevealed(true);
+    const card = checksCardRef.current;
+    if (card === null) return;
+    // Center a blocking failure, else the card; the page header is sticky,
+    // so aligning to the top would hide what the admin must see.
+    const target = card.querySelector("[data-blocking]") ?? card;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.focus({ preventScroll: true });
+  };
+
+  // Resolves true when creation may go ahead with exactly this input. While a
+  // required check is unfinished or failed, it reveals the card, runs the
+  // checks for this input, and waits for them. A run that cannot start does
+  // not block: creation then runs the checks itself.
+  const clearRequiredChecks = async (
+    input: DraftCheckRunInput
+  ): Promise<boolean> => {
+    const settled = draftChecks.settledSnapshotFor(input);
+    const before = settled === null ? null : requiredChecksStatus(settled);
+    if (before === "ok" || before === "unavailable") return true;
+    revealChecksCard();
+    setCheckingBeforeCreate(true);
+    try {
+      const outcome = await draftChecks.run(input, {
+        force: before === "failed",
+      });
+      if (outcome.kind === "error") return true;
+      if (outcome.kind === "stale") return false;
+      const after = requiredChecksStatus(outcome.snapshot);
+      if (after === "ok" || after === "unavailable") return true;
+      toast.error(t("add.checksBlocked.toast"));
+      return false;
+    } finally {
+      setCheckingBeforeCreate(false);
+    }
+  };
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
@@ -337,6 +381,14 @@ export default function AddConnector({
           : values.file_locations
             ? [values.file_locations]
             : [];
+
+        if (draftCredentialId !== null) {
+          const cleared = await clearRequiredChecks({
+            formState: transformedConnectorSpecificConfig,
+            accessType: access_type,
+          });
+          if (!cleared) return;
+        }
 
         // Google sites-specific handling
         if (connector == "google_sites") {
@@ -491,7 +543,7 @@ export default function AddConnector({
       }}
     >
       {(formikProps) => {
-        const busy = uploading || creatingConnector;
+        const busy = uploading || creatingConnector || checkingBeforeCreate;
         const formCredential =
           currentCredential ||
           liveGDriveCredential ||
@@ -639,14 +691,24 @@ export default function AddConnector({
                     )}
 
                     {draftCredentialId !== null && (
-                      <DraftConnectorChecks
-                        key={draftCredentialId}
-                        checks={draftChecks}
-                        inputFor={draftInputFor}
-                        configuration={configuration}
-                        currentCredential={linkedCredential}
-                        configFieldsRef={configFieldsRef}
-                      />
+                      <div
+                        ref={checksCardRef}
+                        tabIndex={-1}
+                        className="outline-none"
+                      >
+                        <DraftConnectorChecks
+                          key={draftCredentialId}
+                          checks={draftChecks}
+                          inputFor={draftInputFor}
+                          configuration={configuration}
+                          currentCredential={linkedCredential}
+                          configFieldsRef={configFieldsRef}
+                          highlighted={
+                            checksRevealed &&
+                            draftChecks.requiredStatus !== "ok"
+                          }
+                        />
+                      </div>
                     )}
 
                     {/* The wizard could not reach these sections without a

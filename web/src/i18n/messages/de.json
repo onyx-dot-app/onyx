@@ -2636,6 +2636,9 @@
         },
         "unknownError": {
           "toast": "Ein unbekannter Fehler ist aufgetreten"
+        },
+        "checksBlocked": {
+          "toast": "Eine erforderliche Connector-Prüfung ist fehlgeschlagen. Beheben Sie den Fehler, bevor Sie den Connector erstellen."
         }
       },
       "credentialRequired": {

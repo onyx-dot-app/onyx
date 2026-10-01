@@ -2636,6 +2636,9 @@
         },
         "unknownError": {
           "toast": "알 수 없는 오류가 발생했습니다"
+        },
+        "checksBlocked": {
+          "toast": "필수 커넥터 검사가 실패했습니다. 커넥터를 만들기 전에 문제를 해결하세요."
         }
       },
       "credentialRequired": {

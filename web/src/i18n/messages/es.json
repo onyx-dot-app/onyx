@@ -2636,6 +2636,9 @@
         },
         "unknownError": {
           "toast": "Ocurrió un error desconocido"
+        },
+        "checksBlocked": {
+          "toast": "Falló una comprobación obligatoria del conector. Corrígela antes de crear el conector."
         }
       },
       "credentialRequired": {

@@ -2636,6 +2636,9 @@
         },
         "unknownError": {
           "toast": "An unknown error occurred"
+        },
+        "checksBlocked": {
+          "toast": "A required connector check failed. Fix it before you create the connector."
         }
       },
       "credentialRequired": {

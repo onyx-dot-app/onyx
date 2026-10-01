@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type Ref, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { useFormikContext } from "formik";
 import { ConnectorsCheckCard } from "@/lib/connectors/checks/ConnectorsCheckCard";
 import type {
@@ -25,7 +25,6 @@ export interface DraftConnectorChecksProps<FormValues> {
   currentCredential: Credential<unknown> | null;
   /** The connector-config fields; leaving any of them starts a run. */
   configFieldsRef: RefObject<HTMLElement | null>;
-  cardRef?: Ref<HTMLDivElement>;
   highlighted?: boolean;
 }
 
@@ -57,7 +56,6 @@ export function DraftConnectorChecks<FormValues>({
   configuration,
   currentCredential,
   configFieldsRef,
-  cardRef,
   highlighted,
 }: DraftConnectorChecksProps<FormValues>) {
   const { values } = useFormikContext<FormValues>();
@@ -115,7 +113,6 @@ export function DraftConnectorChecks<FormValues>({
 
   return (
     <ConnectorsCheckCard
-      ref={cardRef}
       draft={checks.snapshot}
       running={checks.running}
       highlighted={highlighted}
