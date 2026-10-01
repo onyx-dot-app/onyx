@@ -7,7 +7,7 @@ import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";

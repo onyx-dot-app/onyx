@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
@@ -48,7 +49,7 @@ import { Button } from "@opal/components";
 import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { useTranslations } from "next-intl";
 import { toWireAccess } from "@/lib/connectors/accessType";
 
@@ -450,7 +451,7 @@ export default function AddConnector({
                 <Button
                   key="connect"
                   disabled={!formikProps.isValid || !canCreate || busy}
-                  icon={busy ? SvgSimpleLoader : undefined}
+                  icon={busy ? IconLoader : undefined}
                   onClick={() => formikProps.handleSubmit()}
                 >
                   {t("header.connectButton.label")}

@@ -3,7 +3,7 @@
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
 import { SettingsLayouts, toast } from "@opal/layouts";

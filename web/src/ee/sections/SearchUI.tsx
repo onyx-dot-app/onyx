@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
@@ -21,7 +22,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import { Popover, PopoverMenu } from "@opal/components";
-import { SvgCheck, SvgClock, SvgTag, SvgSimpleLoader } from "@opal/icons";
+import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import { FilterButton } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
@@ -178,7 +179,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   if (state.phase === "searching") {
     return (
       <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-        <SvgSimpleLoader />
+        <IconLoader />
       </div>
     );
   }

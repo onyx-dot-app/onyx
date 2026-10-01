@@ -1,9 +1,10 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { use } from "react";
 import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import SlackChannelConfigsTable from "./SlackChannelConfigsTable";
 import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
 import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
@@ -28,7 +29,7 @@ function SlackBotEditContent({ botId }: { botId: string }) {
   } = useSlackChannelConfigsByBot(Number(botId));
 
   if (isSlackBotLoading || isSlackChannelConfigsLoading) {
-    return <SvgSimpleLoader />;
+    return <IconLoader />;
   }
 
   if (slackBotError || !slackBot) {

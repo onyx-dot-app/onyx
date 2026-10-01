@@ -3,7 +3,8 @@
 import { ChangeEvent, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { ContentAction, PageLoader, toast } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";

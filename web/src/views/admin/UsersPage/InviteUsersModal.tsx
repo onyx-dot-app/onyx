@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -9,12 +10,7 @@ import {
   Modal,
   type TagItem,
 } from "@opal/components";
-import {
-  SvgAlertTriangle,
-  SvgCheckCircle,
-  SvgSimpleLoader,
-  SvgUsers,
-} from "@opal/icons";
+import { SvgAlertTriangle, SvgCheckCircle, SvgUsers } from "@opal/icons";
 import type { ColorTypes, IconFunctionComponent } from "@opal/types";
 import { Content, toast } from "@opal/layouts";
 import { mutate } from "swr";
@@ -267,7 +263,7 @@ export default function InviteUsersModal({
             submit={
               <Button
                 disabled={isSubmitting || validCount === 0}
-                icon={isSubmitting ? SvgSimpleLoader : undefined}
+                icon={isSubmitting ? IconLoader : undefined}
                 onClick={handleInvite}
               >
                 {t("inviteModal.submitButton.label")}

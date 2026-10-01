@@ -1,6 +1,6 @@
 # PageLoader
 
-**Import:** `import { PageLoader } from "@opal/layouts";`
+**Import:** `import { PageLoader } from "@opal/loaders";`
 
 The full-page loading state: the animated `OnyxLoader` mark centered with a label beneath. This is a layout: it arranges `OnyxLoader` and a `Text` label into a centered stack.
 
@@ -15,7 +15,7 @@ Use it for page and route-level loading. For an inline or section-level loader w
 ## Usage
 
 ```tsx
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 
 if (isLoading) return <PageLoader />;
 
