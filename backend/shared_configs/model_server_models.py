@@ -25,6 +25,12 @@ class EmbedRequest(BaseModel):
     # will be ignored for other providers.
     reduced_dimension: int | None = None
 
+    # The dimension stored for a self-hosted model in its search settings. It is
+    # not a loader setting: the model server only uses it to tell a registry
+    # model from a custom model with the same name that an admin added before
+    # the registry existed. None from older API servers and for cloud models.
+    expected_dim: int | None = None
+
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 

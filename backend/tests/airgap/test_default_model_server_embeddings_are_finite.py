@@ -2,15 +2,16 @@ import json
 import math
 import urllib.request
 
-from onyx.configs.model_configs import (
-    ASYM_QUERY_PREFIX,
-    DEFAULT_DOCUMENT_ENCODER_MODEL,
-    DOC_EMBEDDING_DIM,
-)
 from shared_configs.configs import (
+    DEFAULT_DOCUMENT_ENCODER_MODEL,
     DOC_EMBEDDING_CONTEXT_SIZE,
     MODEL_SERVER_HOST,
     MODEL_SERVER_PORT,
+)
+from shared_configs.embedding_models import (
+    EmbeddingModelSpec,
+    bundled_local_model_names,
+    get_local_model_spec,
 )
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
@@ -22,16 +23,29 @@ _HTTP_POST_METHOD = "POST"
 _JSON_HEADERS = {"Content-Type": "application/json"}
 _SAMPLE_TEXT = "hello world"
 _REQUEST_TIMEOUT_SECONDS = 120
+# float32 on CPU gives norm 1.0. bf16 on a GPU normalizes in bf16: up to ~0.4% off.
+_UNIT_NORM_TOLERANCE = 1e-2
 
 
-def _embed_sample_text() -> EmbedResponse:
+def _default_model_spec() -> EmbeddingModelSpec:
+    # Fresh installs use this model, so the image must bundle it.
+    assert DEFAULT_DOCUMENT_ENCODER_MODEL in bundled_local_model_names()
+    spec = get_local_model_spec(DEFAULT_DOCUMENT_ENCODER_MODEL)
+    assert spec is not None
+    return spec
+
+
+def _embed_sample_text(
+    spec: EmbeddingModelSpec, text_type: EmbedTextType
+) -> EmbedResponse:
     embed_request = EmbedRequest(
         texts=[_SAMPLE_TEXT],
-        model_name=DEFAULT_DOCUMENT_ENCODER_MODEL,
+        model_name=spec.model_name,
         max_context_length=DOC_EMBEDDING_CONTEXT_SIZE,
-        normalize_embeddings=True,
-        text_type=EmbedTextType.QUERY,
-        manual_query_prefix=ASYM_QUERY_PREFIX,
+        normalize_embeddings=spec.normalize,
+        text_type=text_type,
+        manual_query_prefix=spec.query_prefix,
+        manual_passage_prefix=spec.passage_prefix,
     )
     request = urllib.request.Request(
         _EMBEDDING_ENDPOINT,
@@ -44,11 +58,18 @@ def _embed_sample_text() -> EmbedResponse:
 
 
 def test_default_model_server_embeddings_are_finite() -> None:
-    response = _embed_sample_text()
+    """The bundled default model embeds with no network access."""
+    spec = _default_model_spec()
+    for text_type in (EmbedTextType.QUERY, EmbedTextType.PASSAGE):
+        response = _embed_sample_text(spec, text_type)
 
-    assert len(response.embeddings) == 1
-    assert len(response.embeddings[0]) == DOC_EMBEDDING_DIM
-    assert all(math.isfinite(value) for value in response.embeddings[0])
+        assert len(response.embeddings) == 1
+        embedding = response.embeddings[0]
+        assert len(embedding) == spec.model_dim
+        assert all(math.isfinite(value) for value in embedding)
+        if spec.normalize:
+            norm = math.sqrt(sum(value * value for value in embedding))
+            assert abs(norm - 1.0) < _UNIT_NORM_TOLERANCE
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@
 
 import { type Page, type Locator, expect } from "@playwright/test";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import type { EmbeddingProviderName } from "@/lib/searchSettings/types";
 
 const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 
@@ -17,6 +18,11 @@ export class IndexSettingsPage {
   readonly viewAllModelsButton: Locator;
   readonly cloudTab: Locator;
   readonly selfHostedTab: Locator;
+  /** Toggle of the collapsed "bring your own" section (LiteLLM, Azure, custom). */
+  readonly bringYourOwnToggle: Locator;
+  /** The collapsed summary of the current embedding model. */
+  readonly currentModelSummary: Locator;
+  readonly modelSearchInput: Locator;
   readonly applyReindexButton: Locator;
   readonly applyWithoutReindexButton: Locator;
   readonly revertButton: Locator;
@@ -40,6 +46,11 @@ export class IndexSettingsPage {
     });
     this.cloudTab = page.getByRole("tab", { name: /cloud.based/i });
     this.selfHostedTab = page.getByRole("tab", { name: /self.hosted/i });
+    this.bringYourOwnToggle = page.getByRole("button", {
+      name: "Advanced: bring your own model or proxy",
+    });
+    this.currentModelSummary = page.getByTestId("current-embedding-model");
+    this.modelSearchInput = page.getByPlaceholder("Search models...");
     this.applyReindexButton = page.getByRole("button", {
       name: "Apply & Re-index",
     });
@@ -84,9 +95,113 @@ export class IndexSettingsPage {
     await this.cloudTab.click();
   }
 
+  async switchToSelfHostedTab(): Promise<void> {
+    await expect(this.selfHostedTab).toBeVisible({ timeout: 10000 });
+    await this.selfHostedTab.click();
+  }
+
+  async searchModels(query: string): Promise<void> {
+    await this.modelSearchInput.fill(query);
+  }
+
+  /** Open the collapsed "bring your own" section of the active tab. */
+  async expandBringYourOwnSection(): Promise<void> {
+    await expect(this.bringYourOwnToggle).toBeVisible({ timeout: 10000 });
+    // Control flow only: the section opens on its own when the current
+    // model is a bring-your-own model.
+    if (
+      (await this.bringYourOwnToggle.getAttribute("aria-expanded")) !== "true"
+    ) {
+      await this.bringYourOwnToggle.click();
+    }
+    await expect(this.bringYourOwnToggle).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Model cards
+  // ---------------------------------------------------------------------------
+
+  modelCard(providerName: EmbeddingProviderName, modelName: string): Locator {
+    return this.page.getByTestId(
+      `embedding-model-card:${providerName}:${modelName}`
+    );
+  }
+
+  async expectModelCardVisible(
+    providerName: EmbeddingProviderName,
+    modelName: string
+  ): Promise<void> {
+    await expect(this.modelCard(providerName, modelName)).toBeVisible({
+      timeout: 10000,
+    });
+  }
+
+  /** Legacy models that are not current are not rendered at all. */
+  async expectModelCardHidden(
+    providerName: EmbeddingProviderName,
+    modelName: string
+  ): Promise<void> {
+    await expect(this.modelCard(providerName, modelName)).toHaveCount(0);
+  }
+
+  async expectModelCardCurrent(
+    providerName: EmbeddingProviderName,
+    modelName: string
+  ): Promise<void> {
+    await expect(
+      this.modelCard(providerName, modelName).getByRole("button", {
+        name: "Current Model",
+      })
+    ).toBeVisible({ timeout: 10000 });
+  }
+
+  async expectModelCardLegacy(
+    providerName: EmbeddingProviderName,
+    modelName: string
+  ): Promise<void> {
+    await expect(
+      this.modelCard(providerName, modelName).getByText("Legacy", {
+        exact: true,
+      })
+    ).toBeVisible();
+  }
+
+  /** The collapsed current-model summary shows `modelName`, tagged if legacy. */
+  async expectCurrentModelSummary(
+    modelName: string,
+    { legacy }: { legacy: boolean }
+  ): Promise<void> {
+    await expect(this.currentModelSummary).toContainText(modelName, {
+      timeout: 10000,
+    });
+    const legacyTag = this.currentModelSummary.getByText("Legacy", {
+      exact: true,
+    });
+    const upgradeHint = this.currentModelSummary.getByText(
+      /This is a legacy model/
+    );
+    if (legacy) {
+      await expect(legacyTag).toBeVisible();
+      await expect(upgradeHint).toBeVisible();
+    } else {
+      await expect(legacyTag).toHaveCount(0);
+      await expect(upgradeHint).toHaveCount(0);
+    }
+  }
+
+  async expectNoSelfHostedResults(): Promise<void> {
+    await expect(
+      this.page.getByText("No self-hosted models found")
+    ).toBeVisible();
+  }
+
   // ---------------------------------------------------------------------------
   // Cloud-provider setup modal (LiteLLM / Azure — providers with no
-  // pre-registered models render an "Add Configuration" card)
+  // pre-registered models render an "Add Configuration" card inside the
+  // collapsed "bring your own" section)
   // ---------------------------------------------------------------------------
 
   private setupModalFor(displayName: string): Locator {
@@ -105,6 +220,7 @@ export class IndexSettingsPage {
   }
 
   async openProviderSetup(displayName: string): Promise<void> {
+    await this.expandBringYourOwnSection();
     await this.page
       .getByText(
         new RegExp(

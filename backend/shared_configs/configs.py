@@ -35,7 +35,9 @@ INDEXING_MODEL_SERVER_PORT = int(
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
 INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
-DEFAULT_DOCUMENT_ENCODER_MODEL = "nomic-ai/nomic-embed-text-v1"
+# Fresh-install default self-hosted model, baked into the model-server image.
+# Must equal shared_configs.embedding_models.DEFAULT_LOCAL_EMBEDDING_MODEL_NAME.
+DEFAULT_DOCUMENT_ENCODER_MODEL = "ibm-granite/granite-embedding-97m-multilingual-r2"
 # INTENT_MODEL_TAG = "v1.0.3"
 INTENT_MODEL_TAG: str | None = None
 # Bi-Encoder, other details
@@ -91,8 +93,9 @@ LOG_FORMAT = (os.environ.get("LOG_FORMAT") or "plain").lower()
 JSON_LOGGING = LOG_FORMAT == "json"
 
 # Timeout for API-based embedding models
-# NOTE: does not apply for Google VertexAI, since the python client doesn't
-# allow us to specify a custom timeout
+# NOTE: for Google VertexAI it applies only to models that take one content per
+# call (:embedContent, e.g. gemini-embedding-2). Other Vertex models (e.g.
+# gemini-embedding-001, text-embedding-005) keep the client's default timeout.
 API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", "600"))
 
 # Timeouts for requests to the self-hosted model server (embedding / rerank /
@@ -107,8 +110,15 @@ MODEL_SERVER_READ_TIMEOUT = int(os.environ.get("MODEL_SERVER_READ_TIMEOUT", "600
 
 # Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
 # NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
+# For models that take one content per call (e.g. gemini-embedding-2) this is the
+# window size: each text in a window is its own request.
 VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
     os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "50")
+)
+# Max concurrent Vertex embed_content calls per batch, for models that accept
+# only one content per call (e.g. gemini-embedding-2). Values below 1 become 1.
+VERTEXAI_EMBED_CONTENT_CONCURRENCY = max(
+    1, int(os.environ.get("VERTEXAI_EMBED_CONTENT_CONCURRENCY") or 4)
 )
 
 # Only used for OpenAI
