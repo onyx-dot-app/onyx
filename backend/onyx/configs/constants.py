@@ -702,6 +702,7 @@ class OnyxCeleryTask:
 
     # Credential capability checks (granular runs of the registered checks)
     RUN_CAPABILITY_CHECKS = "run_capability_checks"
+    RUN_DRAFT_CAPABILITY_CHECKS = "run_draft_capability_checks"
     CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
 
     # chat retention

@@ -1,7 +1,9 @@
 """Starting granular capability-check runs: mark the scope RUNNING, then enqueue."""
 
 from typing import Any
+from uuid import UUID, uuid4
 
+from pydantic_core import to_jsonable_python
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -11,18 +13,38 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
-from onyx.connectors.capability_checks.registry import has_named_capability_checks
+from onyx.connectors.capability_checks.draft_runs import (
+    DRAFT_RUN_TTL_SECONDS,
+    DraftCheckRunSnapshot,
+    DraftCheckState,
+    DraftCheckStateKind,
+    DraftRunStatus,
+    StoredDraftRun,
+    apply_cached_result,
+    decide_draft_check_state,
+    draft_result_cache_key,
+    get_cached_draft_result,
+    save_draft_run,
+    set_latest_draft_run,
+)
+from onyx.connectors.capability_checks.form_state import validate_form_state
+from onyx.connectors.capability_checks.models import CapabilityCheckContext
+from onyx.connectors.capability_checks.registry import (
+    get_capability_checks,
+    has_named_capability_checks,
+)
 from onyx.connectors.capability_checks.runner import (
     capability_check_run_ceiling_seconds,
     capability_check_run_stale_after,
 )
+from onyx.connectors.connector_config import ConnectorConfig
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credential_capability import (
     mark_capability_report_running,
     mark_capability_run_failed,
 )
-from onyx.db.enums import CapabilityCheckTrigger
-from onyx.db.models import CredentialCapabilityReportRow
+from onyx.db.enums import AccessType, CapabilityCheckTrigger
+from onyx.db.models import Credential, CredentialCapabilityReportRow
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -141,3 +163,103 @@ def start_capability_checks_for_new_pairing(
             credential_id,
         )
         db_session.rollback()
+
+
+def start_draft_capability_check_run(
+    *,
+    user_id: UUID,
+    credential: Credential,
+    source: DocumentSource,
+    config_class: type[ConnectorConfig],
+    access_type: AccessType | None,
+    draft_key: str,
+    form_values: dict[str, Any],
+) -> DraftCheckRunSnapshot:
+    """Decides every check's draft state, fills results from the cache, and
+    enqueues one task for the checks that are left. Does no I/O to the source.
+    The run replaces any earlier run of the same user and draft key.
+
+    Raises:
+        CapabilityRunEnqueueError: The broker did not accept the task. The run
+            is stored as FAILED_TO_RUN.
+    """
+    form_state = validate_form_state(config_class, form_values)
+    # A form with no values is config-less: config-reading checks wait.
+    connector_specific_config = (
+        form_values if form_state.provided or form_state.errors else None
+    )
+    context = CapabilityCheckContext(
+        source=source,
+        credential_json={},
+        connector_specific_config=connector_specific_config,
+        access_type=access_type,
+    )
+    checks: list[DraftCheckState] = []
+    result_cache_keys: dict[str, str] = {}
+    for check in get_capability_checks(source):
+        check_state = decide_draft_check_state(check, context)
+        checks.append(check_state)
+        if check_state.state != DraftCheckStateKind.PENDING:
+            continue
+        cache_key = draft_result_cache_key(
+            credential_id=credential.id,
+            credential_updated_at=credential.time_updated,
+            source=source,
+            access_type=access_type,
+            check=check,
+            form_values=(
+                form_state.values if connector_specific_config is not None else None
+            ),
+        )
+        if (cached := get_cached_draft_result(cache_key)) is not None:
+            apply_cached_result(check_state, cached)
+        else:
+            result_cache_keys[check.check_id] = cache_key
+
+    has_pending = any(check.state == DraftCheckStateKind.PENDING for check in checks)
+    run = StoredDraftRun(
+        user_id=user_id,
+        snapshot=DraftCheckRunSnapshot(
+            run_id=uuid4(),
+            draft_key=draft_key,
+            source=source,
+            credential_id=credential.id,
+            access_type=access_type,
+            status=DraftRunStatus.RUNNING if has_pending else DraftRunStatus.COMPLETED,
+            form_errors=form_state.errors,
+            unknown_fields=sorted(form_state.unknown),
+            checks=checks,
+        ),
+        result_cache_keys=result_cache_keys,
+    )
+    save_draft_run(run)
+    set_latest_draft_run(user_id, draft_key, run.snapshot.run_id)
+    if not has_pending:
+        return run.snapshot
+    try:
+        client_app.send_task(
+            OnyxCeleryTask.RUN_DRAFT_CAPABILITY_CHECKS,
+            kwargs={
+                "run_id": str(run.snapshot.run_id),
+                # The validated values, so the task runs on the config that
+                # the result cache keys hash.
+                "connector_specific_config": (
+                    to_jsonable_python(form_state.values)
+                    if connector_specific_config is not None
+                    else None
+                ),
+                "tenant_id": get_current_tenant_id(),
+            },
+            queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
+            priority=OnyxCeleryPriority.HIGH,
+            # The stored run expires then, so a later start is useless.
+            expires=DRAFT_RUN_TTL_SECONDS,
+        )
+    except Exception as e:
+        logger.exception(
+            "Draft capability check enqueue failed for credential %s.", credential.id
+        )
+        run.snapshot.status = DraftRunStatus.FAILED_TO_RUN
+        save_draft_run(run)
+        raise CapabilityRunEnqueueError(str(e)) from e
+    return run.snapshot
