@@ -110,9 +110,9 @@ func resolvePort(port string) (string, error) {
 	return strconv.Itoa(resolved), nil
 }
 
-// exitBackendService ends the process after runBackendService fails. A service
-// that ran and exited passes its exit code through, so the stderr it already
-// printed is not repeated.
+// exitBackendService ends the process after a command's child process fails. A
+// child that ran and exited passes its exit code through, so the stderr it
+// already printed is not repeated.
 func exitBackendService(err error) {
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {

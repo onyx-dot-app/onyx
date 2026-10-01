@@ -26,7 +26,9 @@ const osvBaseURL = "https://osv.dev/vulnerability/"
 
 // scanLockfiles runs osv-scanner (as a library) over the given lockfiles and
 // maps the results into Findings. Returns nil when there are no lockfiles.
-func scanLockfiles(lockfiles []string) ([]Finding, error) {
+// With strict, lockfiles that yield no packages fail the scan, since a caller
+// that reads absence as a fix must not trust an empty extraction.
+func scanLockfiles(lockfiles []string, strict bool) ([]Finding, error) {
 	if len(lockfiles) == 0 {
 		return nil, nil
 	}
@@ -36,7 +38,7 @@ func scanLockfiles(lockfiles []string) ([]Finding, error) {
 	if err != nil {
 		// ErrVulnerabilitiesFound is the normal "found something" path; results
 		// are still populated. ErrNoPackagesFound means nothing to scan.
-		if errors.Is(err, osvscanner.ErrNoPackagesFound) {
+		if errors.Is(err, osvscanner.ErrNoPackagesFound) && !strict {
 			return nil, nil
 		}
 		if !errors.Is(err, osvscanner.ErrVulnerabilitiesFound) {

@@ -19,6 +19,7 @@ from onyx.connectors.capability_checks.registry import (
     get_applicable_capabilities,
     get_capability_checks,
 )
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -299,16 +300,20 @@ def _instantiate_connector_isolated(
             connector_specific_config=connector_specific_config,
             credential=credential,
         )
-        credential_json = (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
+        credential_json = to_source_credential_json(
+            source,
+            (
+                credential.credential_json.get_value(apply_mask=False)
+                if credential.credential_json
+                else {}
+            ),
         )
         return connector, credential_json
 
 
 def generate_capability_report(
     credential: Credential,
+    source: DocumentSource | None = None,
     connector_specific_config: dict[str, Any] | None = None,
     connector_id: int | None = None,
     input_type: InputType | None = None,
@@ -324,9 +329,12 @@ def generate_capability_report(
     instance-requiring checks instead (see ``_missing_instance_outcome``).
     Unlike ``validate_ccpair_for_user``, no source is exempted: MOCK_CONNECTOR
     must run so integration tests can exercise the full pipeline. ``credential``
-    may be a detached instance; only loaded columns are read.
+    may be a detached instance; only loaded columns are read. ``source`` picks
+    the checks: the connector's source for a connector-scoped run, which for a
+    family credential may not be the credential's own source. It defaults to the
+    credential's source.
     """
-    source = credential.source
+    source = source or credential.source
     checks = get_capability_checks(source)
     # Fail loudly for programmer errors (a source with no connector class)
     # rather than degrading them to skips in the guarded instantiation below.
@@ -392,10 +400,13 @@ def generate_capability_report(
     credential_json = (
         fresh_credential_json
         if fresh_credential_json is not None
-        else (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
+        else to_source_credential_json(
+            source,
+            (
+                credential.credential_json.get_value(apply_mask=False)
+                if credential.credential_json
+                else {}
+            ),
         )
     )
     context = CapabilityCheckContext(

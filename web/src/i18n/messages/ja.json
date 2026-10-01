@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Drive を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ"
+          "title": "オプション 1: OAuth アプリ",
+          "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Google Drive と Gmail へのアクセスをまとめて求めます。このアカウントを Google Drive だけに使う場合は、同意画面で Gmail のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Gmail を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ"
+          "title": "オプション 1: OAuth アプリ",
+          "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Gmail と Google Drive へのアクセスをまとめて求めます。このアカウントを Gmail だけに使う場合は、同意画面で Google Drive のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
