@@ -10,6 +10,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.SLACK: "Slack.png",
     DocumentSource.WEB: "Web.png",
     DocumentSource.GOOGLE_DRIVE: "GoogleDrive.png",
+    DocumentSource.GOOGLE_CHAT: _DEFAULT_SOURCE_IMAGE_FILENAME,
     DocumentSource.GMAIL: "Gmail.png",
     DocumentSource.GITHUB: "Github.png",
     DocumentSource.GITBOOK: "Gitbook.png",

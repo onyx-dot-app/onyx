@@ -105,6 +105,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   airtable: AirtableCredentialJson;
   drupal_wiki: DrupalWikiCredentialJson;
   discord: DiscordCredentialJson;
+  google_chat: GoogleChatCredentialJson;
   google_drive: Partial<GoogleDriveCredentialJson>;
   gmail: Partial<GmailCredentialJson>;
   gitbook: GitbookCredentialJson;
@@ -406,6 +407,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
   ingestion_api: null,
   federated_slack: null,
   discord: { discord_bot_token: "" },
+  google_chat: {
+    google_chat_service_account_secret: "",
+  },
 
   // NOTE: These are Special Cases
   google_drive: { google_tokens: "" },
@@ -470,6 +474,7 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Discord
   discord_bot_token: "Discord Bot Token",
+  google_chat_service_account_secret: "Google Chat Service Account JSON",
 
   // Gmail and Google Drive
   google_tokens: "Google Oauth Tokens",

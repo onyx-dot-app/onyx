@@ -109,6 +109,10 @@ CONNECTOR_CLASS_MAP = {
         class_name="GoogleDriveConnector",
         config_class=GoogleDriveConnectorConfig,
     ),
+    DocumentSource.GOOGLE_CHAT: ConnectorMapping(
+        module_path="onyx.connectors.google_chat.connector",
+        class_name="GoogleChatConnector",
+    ),
     DocumentSource.BOOKSTACK: ConnectorMapping(
         module_path="onyx.connectors.bookstack.connector",
         class_name="BookstackConnector",
