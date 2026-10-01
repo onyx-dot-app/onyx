@@ -20,6 +20,7 @@ from onyx.configs.constants import (
 )
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
+    DraftRerunMode,
     read_draft_run_for_user,
 )
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
@@ -363,6 +364,9 @@ class DraftCheckRunRequest(BaseModel):
     # supersedes the earlier one.
     draft_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     form_state: dict[str, Any]
+    # Cached results to ignore. The client sends FAILED when the admin asks to
+    # create, so a fix made at the source is seen, and ALL to re-run every check.
+    rerun: DraftRerunMode = DraftRerunMode.NONE
 
 
 @router.post("/admin/connector-checks/runs")
@@ -405,6 +409,7 @@ def start_draft_check_run(
             access_type=request.access_type,
             draft_key=request.draft_key,
             form_values=request.form_state,
+            rerun=request.rerun,
         )
     except CapabilityRunEnqueueError as e:
         raise OnyxError(

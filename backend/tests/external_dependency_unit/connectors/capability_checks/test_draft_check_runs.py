@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks import runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
     DraftCheckStateKind,
+    DraftRerunMode,
     DraftRunStatus,
 )
 from onyx.connectors.capability_checks.models import (
@@ -24,6 +25,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential, User
@@ -143,6 +145,7 @@ def _start(
     form_state: dict[str, Any],
     draft_key: str,
     source: DocumentSource = DocumentSource.SLACK,
+    rerun: DraftRerunMode = DraftRerunMode.NONE,
 ) -> DraftCheckRunSnapshot:
     return start_draft_check_run(
         DraftCheckRunRequest(
@@ -151,6 +154,7 @@ def _start(
             access_type=AccessType.PUBLIC,
             draft_key=draft_key,
             form_state=form_state,
+            rerun=rerun,
         ),
         user=user,
         db_session=db_session,
@@ -195,6 +199,94 @@ def test_run_resolves_states_runs_pending_checks_and_reuses_cached_results(
     assert from_cache[_CHANNELS] is False
     assert _states(done)[_CHANNELS] == DraftCheckStateKind.PASSED
     assert harness.runs == [_TOKEN, _CHANNELS]
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_rerun_failed_runs_a_cached_failure_again(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+    slack_credential: Credential,
+) -> None:
+    admin, _ = users
+    draft_key = uuid4().hex
+
+    def fail() -> None:
+        raise ConnectorValidationError("missing scope")
+
+    harness.on_token_run = fail
+    first = _start(db_session, admin, slack_credential, {}, draft_key)
+    harness.run_last_task()
+    assert (
+        _states(get_draft_check_run(first.run_id, user=admin))[_TOKEN]
+        == DraftCheckStateKind.FAILED
+    )
+
+    harness.on_token_run = None
+    cached = _start(db_session, admin, slack_credential, {}, draft_key)
+    assert cached.status == DraftRunStatus.COMPLETED
+    assert _states(cached)[_TOKEN] == DraftCheckStateKind.FAILED
+    assert harness.runs == [_TOKEN]
+
+    rerun = _start(
+        db_session,
+        admin,
+        slack_credential,
+        {},
+        draft_key,
+        rerun=DraftRerunMode.FAILED,
+    )
+    assert _states(rerun)[_TOKEN] == DraftCheckStateKind.PENDING
+    harness.run_last_task()
+    assert (
+        _states(get_draft_check_run(rerun.run_id, user=admin))[_TOKEN]
+        == DraftCheckStateKind.PASSED
+    )
+    assert harness.runs == [_TOKEN, _TOKEN]
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_rerun_all_runs_a_cached_pass_again(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+    slack_credential: Credential,
+) -> None:
+    admin, _ = users
+    draft_key = uuid4().hex
+
+    first = _start(db_session, admin, slack_credential, {}, draft_key)
+    harness.run_last_task()
+    assert (
+        _states(get_draft_check_run(first.run_id, user=admin))[_TOKEN]
+        == DraftCheckStateKind.PASSED
+    )
+
+    only_failed = _start(
+        db_session,
+        admin,
+        slack_credential,
+        {},
+        draft_key,
+        rerun=DraftRerunMode.FAILED,
+    )
+    assert only_failed.status == DraftRunStatus.COMPLETED
+    assert harness.runs == [_TOKEN]
+
+    rerun = _start(
+        db_session, admin, slack_credential, {}, draft_key, rerun=DraftRerunMode.ALL
+    )
+    assert _states(rerun)[_TOKEN] == DraftCheckStateKind.PENDING
+    harness.run_last_task()
+    done = get_draft_check_run(rerun.run_id, user=admin)
+    assert _states(done)[_TOKEN] == DraftCheckStateKind.PASSED
+    assert {check.check_id: check.from_cache for check in done.checks}[_TOKEN] is False
+    assert harness.runs == [_TOKEN, _TOKEN]
+
+    # The fresh result went to the cache.
+    cached = _start(db_session, admin, slack_credential, {}, draft_key)
+    assert cached.status == DraftRunStatus.COMPLETED
+    assert harness.runs == [_TOKEN, _TOKEN]
 
 
 @pytest.mark.usefixtures("tenant_context")

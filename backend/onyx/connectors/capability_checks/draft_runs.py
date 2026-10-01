@@ -82,6 +82,14 @@ class DraftRunStatus(str, Enum):
     FAILED_TO_RUN = "failed_to_run"
 
 
+class DraftRerunMode(str, Enum):
+    """Which cached results a new draft run ignores."""
+
+    NONE = "none"
+    FAILED = "failed"
+    ALL = "all"
+
+
 class DraftCheckState(BaseModel):
     check_id: str
     display_name: str

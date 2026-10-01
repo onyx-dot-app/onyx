@@ -18,6 +18,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
     DraftCheckState,
     DraftCheckStateKind,
+    DraftRerunMode,
     DraftRunStatus,
     StoredDraftRun,
     apply_cached_result,
@@ -174,10 +175,15 @@ def start_draft_capability_check_run(
     access_type: AccessType | None,
     draft_key: str,
     form_values: dict[str, Any],
+    rerun: DraftRerunMode = DraftRerunMode.NONE,
 ) -> DraftCheckRunSnapshot:
     """Decides every check's draft state, fills results from the cache, and
     enqueues one task for the checks that are left. Does no I/O to the source.
     The run replaces any earlier run of the same user and draft key.
+
+    ``rerun`` picks the cached results to ignore: with FAILED, a cached FAILED
+    result is run again, so a fix made at the source since the last run shows;
+    with ALL, every check runs again. Fresh results still go to the cache.
 
     Raises:
         CapabilityRunEnqueueError: The broker did not accept the task. The run
@@ -211,7 +217,13 @@ def start_draft_capability_check_run(
                 form_state.values if connector_specific_config is not None else None
             ),
         )
-        if (cached := get_cached_draft_result(cache_key)) is not None:
+        cached = (
+            None if rerun == DraftRerunMode.ALL else get_cached_draft_result(cache_key)
+        )
+        if cached is not None and not (
+            rerun == DraftRerunMode.FAILED
+            and cached.state == DraftCheckStateKind.FAILED
+        ):
             apply_cached_result(check_state, cached)
         else:
             result_cache_keys[check.check_id] = cache_key
