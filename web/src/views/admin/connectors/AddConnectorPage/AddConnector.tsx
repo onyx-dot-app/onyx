@@ -457,7 +457,7 @@ export default function AddConnector({
               moreIcon2={Logo}
               title={displayName}
               // Failed, the page offers nothing to set up, so the header drops
-              // its docs pointer and the Connect button.
+              // its docs pointer; the Connect button stays, disabled.
               description={
                 credentialsFailed
                   ? t("header.description", {
@@ -478,18 +478,22 @@ export default function AddConnector({
                 >
                   {t("header.cancelButton.label")}
                 </Button>,
-                ...(credentialsFailed
-                  ? []
-                  : [
-                      <Button
-                        key="connect"
-                        disabled={!formikProps.isValid || !canCreate || busy}
-                        icon={busy ? IconLoader : undefined}
-                        onClick={() => formikProps.handleSubmit()}
-                      >
-                        {t("header.connectButton.label")}
-                      </Button>,
-                    ]),
+                // Always present; disabled while the credentials load or
+                // after they fail, since nothing can be connected then.
+                <Button
+                  key="connect"
+                  disabled={
+                    credentialsLoading ||
+                    credentialsFailed ||
+                    !formikProps.isValid ||
+                    !canCreate ||
+                    busy
+                  }
+                  icon={busy ? IconLoader : undefined}
+                  onClick={() => formikProps.handleSubmit()}
+                >
+                  {t("header.connectButton.label")}
+                </Button>,
               ]}
             >
               {hasFederatedOption && (
