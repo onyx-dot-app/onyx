@@ -49,7 +49,9 @@ _BACKFILL_BATCH_SIZE = 500
 # stays well within the request timeout. A batch always takes one document.
 _BACKFILL_MAX_CHUNKS_PER_BATCH = 5_000
 # Celery time limits do not apply in thread pools, so the loop enforces this.
-_BACKFILL_TIME_BUDGET_S = 10 * 60
+# Short, so a run holds a shared light-worker thread only briefly; the next beat
+# resumes from the stored cursor.
+_BACKFILL_TIME_BUDGET_S = 2 * 60
 _BACKFILL_LOCK_TIMEOUT_S = _BACKFILL_TIME_BUDGET_S + 5 * 60
 
 
