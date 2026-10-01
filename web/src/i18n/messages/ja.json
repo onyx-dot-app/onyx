@@ -4821,6 +4821,12 @@
         "azureGptImage2": {
           "description": "Microsoft Azure でホストされる GPT Image 2 画像生成モデルです。"
         },
+        "azureGptImage25Flare": {
+          "description": "Microsoft Azure でホストされる GPT Image 2.5 Flare 画像生成モデルです。"
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Microsoft Azure でホストされる GPT Image 2.5 Sunburst 画像生成モデルです。"
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) は速度と効率を重視して設計されたモデルです。"
         },
@@ -4837,7 +4843,13 @@
           "description": "OpenAI の従来のフラッグシップ画像生成モデルです。"
         },
         "openaiGptImage2": {
-          "description": "プロンプト忠実度が最も高い、OpenAI の最新の画像生成モデルです。"
+          "description": "プロンプト忠実度が高い、OpenAI の前世代の画像生成モデルです。"
+        },
+        "openaiGptImage25Flare": {
+          "description": "高品質かつ高速な、OpenAI の最新の画像生成モデルです。"
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
       },
       "setDefaultError": {
