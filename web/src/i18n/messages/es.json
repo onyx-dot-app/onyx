@@ -2830,10 +2830,7 @@
         "connectButton": {
           "label": "Conectar"
         },
-        "description": "Conéctate a {source} y configura el conector para {appName}.",
-        "docsLink": {
-          "text": "Ver [documentación]({url})"
-        }
+        "description": "Conéctate a {source} y configura el conector para {appName}.{hasDocs, select, true { Ver [documentación]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {

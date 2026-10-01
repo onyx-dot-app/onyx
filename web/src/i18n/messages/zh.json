@@ -2830,10 +2830,7 @@
         "connectButton": {
           "label": "连接"
         },
-        "description": "连接到 {source} 并为 {appName} 设置连接器。",
-        "docsLink": {
-          "text": "查看[文档]({url})"
-        }
+        "description": "连接到 {source} 并为 {appName} 设置连接器。{hasDocs, select, true {查看[文档]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {

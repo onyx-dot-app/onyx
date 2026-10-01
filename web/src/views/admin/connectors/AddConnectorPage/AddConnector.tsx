@@ -183,16 +183,17 @@ export default function AddConnector({
   const displayName = getSourceDisplayName(connector) || connector;
 
   // The docs sit at the end of the header sentence, so the whole page has
-  // one pointer to them rather than one per form.
+  // one pointer to them rather than one per form. One message holds both,
+  // so translators place the link.
   const docsLink = getSourceDocLink(connector);
   const headerSentence = t("header.description", {
     source: displayName,
     appName: settings.appName,
+    hasDocs: docsLink ? "true" : "false",
+    url: docsLink ?? "",
   });
   const headerDescription = docsLink
-    ? markdown(
-        `${headerSentence} ${t("header.docsLink.text", { url: docsLink })}`
-      )
+    ? markdown(headerSentence)
     : headerSentence;
   const sourceMetadata = getSourceMetadata(connector);
   const hasFederatedOption = sourceMetadata.federated === true;

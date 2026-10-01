@@ -2830,10 +2830,7 @@
         "connectButton": {
           "label": "接続"
         },
-        "description": "{source} に接続し、{appName} 用のコネクタを設定します。",
-        "docsLink": {
-          "text": "[ドキュメント]({url})を見る"
-        }
+        "description": "{source} に接続し、{appName} 用のコネクタを設定します。{hasDocs, select, true {[ドキュメント]({url})を見る} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
