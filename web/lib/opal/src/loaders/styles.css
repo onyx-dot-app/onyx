@@ -53,9 +53,9 @@
   inset: 0;
   background-image: linear-gradient(
     90deg,
-    transparent 35%,
+    transparent 40%,
     var(--shimmer-highlight) 50%,
-    transparent 65%
+    transparent 60%
   );
   will-change: transform;
   animation: opal-shimmer-text-slide 3s linear infinite;
@@ -68,15 +68,15 @@
   }
 }
 
-/* The text's band covers the middle third of its layer, so the layer only
+/* The text's band covers the middle fifth of its layer, so the layer only
    travels far enough to bring the band in from just off the left edge and
    out just past the right: no pass spends time with the band off the text. */
 @keyframes opal-shimmer-text-slide {
   from {
-    translate: -65% 0;
+    translate: -60% 0;
   }
   to {
-    translate: 65% 0;
+    translate: 60% 0;
   }
 }
 
