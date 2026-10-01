@@ -45,6 +45,11 @@ import type {
   ConnectorBase,
 } from "@/lib/connectors/types";
 import { buildConnectorSpecificConfig } from "@/lib/connectors/connectorFormConfig";
+import {
+  useDraftConnectorChecks,
+  type DraftCheckRunInput,
+} from "@/lib/connectors/checks/hooks";
+import { DraftConnectorChecks } from "@/views/admin/connectors/AddConnectorPage/form/DraftConnectorChecks";
 import { useSettings } from "@/lib/settings/hooks";
 import { Card, Divider, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
@@ -81,6 +86,8 @@ export interface AdvancedConfig {
   pruneFreq: number;
   indexingStart: string;
 }
+
+type ConnectorFormValues = ReturnType<typeof createConnectorInitialValues>;
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
@@ -220,6 +227,25 @@ export default function AddConnector({
   );
   const configUnlocked = gate?.status === "unlocked";
   const gateMessage = useBindingGateMessage(gate?.reason ?? null);
+
+  // The credential the created pairing links to; the checks run against it.
+  const linkedCredential =
+    currentCredential || liveGDriveCredential || liveGmailCredential || null;
+  const draftCredentialId = noCredentials
+    ? null
+    : (linkedCredential?.id ?? null);
+  const draftChecks = useDraftConnectorChecks(connector, draftCredentialId);
+  const configFieldsRef = useRef<HTMLFieldSetElement>(null);
+
+  // The draft-run input for the form values: the same config and wire access
+  // type the create request sends.
+  const draftInputFor = (values: ConnectorFormValues): DraftCheckRunInput => ({
+    formState: buildConnectorSpecificConfig(values, configuration),
+    accessType: toWireAccess(values.access_type, {
+      restrict_access_to_groups: values.restrict_access_to_groups,
+      restriction_group_ids: values.restriction_group_ids,
+    }).access_type,
+  });
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
@@ -612,6 +638,17 @@ export default function AddConnector({
                       />
                     )}
 
+                    {draftCredentialId !== null && (
+                      <DraftConnectorChecks
+                        key={draftCredentialId}
+                        checks={draftChecks}
+                        inputFor={draftInputFor}
+                        configuration={configuration}
+                        currentCredential={linkedCredential}
+                        configFieldsRef={configFieldsRef}
+                      />
+                    )}
+
                     {/* The wizard could not reach these sections without a
                       valid credential; on one page they stay disabled until
                       the credential and the bound fields are valid instead. */}
@@ -629,6 +666,7 @@ export default function AddConnector({
                           the tab order; the wrapper above only blocks the
                           pointer. */}
                         <fieldset
+                          ref={configFieldsRef}
                           disabled={!configUnlocked}
                           className="contents"
                           data-testid="connector-form"
