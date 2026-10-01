@@ -748,8 +748,8 @@ when the package gains an advisory, and closes the issues of packages that no
 longer block. It prints the alerts that need announcing as JSON, including any
 still labelled `cve-alert-pending` from a run that never announced them. The
 [CVE Alerts workflow](../../.github/workflows/cve-alerts.yml) runs it daily and
-after a failed deploy audit, opens a fix PR when a pin applies, and posts to
-Slack for each alert that got one.
+after a failed deploy audit, opens a fix PR when a pin applies, and posts each
+alert to Slack with the details in a thread.
 
 ```shell
 ods audit --web --python --ignore-url "" --format=json > deps.json

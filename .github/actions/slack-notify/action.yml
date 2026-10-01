@@ -24,10 +24,6 @@ inputs:
     description: "Fail the step when no webhook is set or Slack rejects the post"
     required: false
     default: "false"
-  run-context:
-    description: "Add the Ref and Run ID fields under the title"
-    required: false
-    default: "true"
 runs:
   using: "composite"
   steps:
@@ -47,7 +43,6 @@ runs:
         SERVER_URL: ${{ github.server_url }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
-        RUN_CONTEXT: ${{ inputs.run-context }}
       run: |
         if [ -z "$SLACK_WEBHOOK_URL" ]; then
           echo "webhook-url input or SLACK_WEBHOOK_URL env var is not set, skipping notification"
@@ -124,18 +119,15 @@ runs:
         PAYLOAD="${PAYLOAD}\"blocks\":[{"
         PAYLOAD="${PAYLOAD}\"type\":\"header\","
         PAYLOAD="${PAYLOAD}\"text\":{\"type\":\"plain_text\",\"text\":\"${TITLE_ESC}\"}"
-        PAYLOAD="${PAYLOAD}}"
-        if [ "$RUN_CONTEXT" != "false" ]; then
-          PAYLOAD="${PAYLOAD},{"
-          PAYLOAD="${PAYLOAD}\"type\":\"section\","
-          PAYLOAD="${PAYLOAD}\"fields\":["
-          if [ -n "$REF_NAME" ]; then
-            PAYLOAD="${PAYLOAD}{\"type\":\"mrkdwn\",\"text\":\"*Ref:*\\n${REF_NAME_ESC}\"},"
-          fi
-          PAYLOAD="${PAYLOAD}{\"type\":\"mrkdwn\",\"text\":\"*Run ID:*\\n#${RUN_NUMBER}\"}"
-          PAYLOAD="${PAYLOAD}]"
-          PAYLOAD="${PAYLOAD}}"
+        PAYLOAD="${PAYLOAD}},{"
+        PAYLOAD="${PAYLOAD}\"type\":\"section\","
+        PAYLOAD="${PAYLOAD}\"fields\":["
+        if [ -n "$REF_NAME" ]; then
+          PAYLOAD="${PAYLOAD}{\"type\":\"mrkdwn\",\"text\":\"*Ref:*\\n${REF_NAME_ESC}\"},"
         fi
+        PAYLOAD="${PAYLOAD}{\"type\":\"mrkdwn\",\"text\":\"*Run ID:*\\n#${RUN_NUMBER}\"}"
+        PAYLOAD="${PAYLOAD}]"
+        PAYLOAD="${PAYLOAD}}"
         if [ -n "$DETAILS" ]; then
           PAYLOAD="${PAYLOAD},{"
           PAYLOAD="${PAYLOAD}\"type\":\"section\","
