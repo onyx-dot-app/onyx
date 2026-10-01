@@ -82,8 +82,17 @@ const stripQuotes = (
   return { depth, rest };
 };
 
+// Column width with CommonMark tab stops (multiples of 4).
+const widthOf = (text: string): number => {
+  let column = 0;
+  for (const char of text) {
+    column = char === "\t" ? column + 4 - (column % 4) : column + 1;
+  }
+  return column;
+};
+
 const indentOf = (text: string): number =>
-  text.length - text.replace(/^[ \t]+/, "").length;
+  widthOf(/^[ \t]*/.exec(text)?.[0] ?? "");
 
 type FenceRole = "open" | "close" | "code" | "text";
 
@@ -139,16 +148,16 @@ const classifyFenceLines = (lines: string[]): FenceLine[] => {
     const { depth, rest } = stripQuotes(line);
     if (rest.trim() === "") return { role: "text" };
     const marker = LIST_MARKER_REGEX.exec(rest);
-    let fenceStart = 0;
+    const fenceStart = marker ? marker[0].length : 0;
     if (marker) {
-      listColumn = marker[0].length;
-      fenceStart = listColumn;
+      listColumn = widthOf(marker[0]);
     } else if (indentOf(rest) < listColumn) {
       listColumn = 0;
     }
     const match = FENCE_REGEX.exec(rest.slice(fenceStart));
     if (!match) return { role: "text" };
-    const indent = (match[1] ?? "").length;
+    const indentText = match[1] ?? "";
+    const indent = widthOf(indentText);
     // 4+ spaces past the container column is an indented code block.
     if (marker ? indent > 0 : indent > listColumn + 3) return { role: "text" };
     const fence = match[2] ?? "";
@@ -160,7 +169,11 @@ const classifyFenceLines = (lines: string[]): FenceLine[] => {
     return {
       role: "open",
       bareFenceEnd: bare
-        ? line.length - rest.length + fenceStart + indent + fence.length
+        ? line.length -
+          rest.length +
+          fenceStart +
+          indentText.length +
+          fence.length
         : undefined,
     };
   });

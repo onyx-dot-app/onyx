@@ -311,6 +311,14 @@ describe("labelBareCodeFences", () => {
     ).toBe("- item\n\n    ```plaintext\n    code\n\n    ```\nAfter.");
   });
 
+  it("expands tabs when checking list item indentation", () => {
+    const input = "- ```go\n\tfunc main() {\n\t\ta[1]\n\t}\n  ```\nAfter.";
+    expect(labelBareCodeFences(input)).toBe(input);
+    expect(labelBareCodeFences("- ```\n\tx\n  ```\nAfter.")).toBe(
+      "- ```plaintext\n\tx\n  ```\nAfter."
+    );
+  });
+
   it("ends a block when its blockquote or list item ends", () => {
     expect(labelBareCodeFences("> ```\n> code\nOutside\n```\nnext")).toBe(
       "> ```plaintext\n> code\nOutside\n```plaintext\nnext"

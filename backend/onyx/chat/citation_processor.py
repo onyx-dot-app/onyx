@@ -72,8 +72,16 @@ def _strip_quotes(line: str, max_depth: int | None = None) -> tuple[int, str]:
     return depth, line
 
 
+def _width(text: str) -> int:
+    """Column width with CommonMark tab stops (multiples of 4)."""
+    column = 0
+    for char in text:
+        column = column + 4 - column % 4 if char == "\t" else column + 1
+    return column
+
+
 def _indent(text: str) -> int:
-    return len(text) - len(text.lstrip(" \t"))
+    return _width(text[: len(text) - len(text.lstrip(" \t"))])
 
 
 @dataclass(frozen=True)
@@ -107,10 +115,14 @@ class CodeFenceTracker:
             self._line_start += len(line) + 1
 
     def flush(self) -> None:
-        """Treat the pending unterminated line as complete (end of a step)."""
+        """End of an LLM step: finish the pending line and close any open
+        block, since the next step is a new response."""
         self._process_line(self._partial_line)
         self._line_start += len(self._partial_line)
         self._partial_line = ""
+        self._list_column = 0
+        if self._open is not None:
+            self._set_open(None)
 
     def in_code_block_at(self, offset: int) -> bool:
         if offset >= self._line_start and self._container_ended(self._partial_line):
@@ -148,7 +160,7 @@ class CodeFenceTracker:
             return
         marker = _LIST_MARKER.match(rest)
         if marker:
-            self._list_column = marker.end()
+            self._list_column = _width(marker.group())
             match = _FENCE.match(rest, marker.end())
             if match and match.group(1):
                 return
@@ -157,7 +169,7 @@ class CodeFenceTracker:
                 self._list_column = 0
             match = _FENCE.match(rest)
             # 4+ spaces past the container column is an indented code block.
-            if match and len(match.group(1)) > self._list_column + 3:
+            if match and _width(match.group(1)) > self._list_column + 3:
                 return
         if not match:
             return

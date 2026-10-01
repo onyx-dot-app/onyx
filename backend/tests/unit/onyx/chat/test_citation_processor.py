@@ -917,6 +917,37 @@ def test_container_and_tilde_fences(
     assert len(citations) == 1
 
 
+def test_tab_indented_code_in_list_item_stays_in_block(
+    mock_search_docs: CitationMapping,
+) -> None:
+    """Tabs expand to 4-column stops, so tab-indented code stays inside a
+    list item's fence."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    text = "- ```go\n\tfunc main() {\n\t\ta[1]\n\t}\n  ```\nAfter [1].\n"
+    output, citations = process_tokens(processor, list(text))
+
+    assert "\t\ta[1]\n" in output
+    assert "After [[1]](https://example.com/doc1)." in output
+    assert len(citations) == 1
+
+
+def test_unclosed_block_at_end_of_step_does_not_leak(
+    mock_search_docs: CitationMapping,
+) -> None:
+    """A step cut off inside a code block must not keep the next step's
+    citations raw."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    process_tokens(processor, ["```python\n", "x = [1]\n"])
+    second, citations = process_tokens(processor, ["See [1]."])
+
+    assert second == "See [[1]](https://example.com/doc1)."
+    assert len(citations) == 1
+
+
 def test_four_space_indented_fence_is_not_a_fence(
     mock_search_docs: CitationMapping,
 ) -> None:
