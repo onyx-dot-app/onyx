@@ -8907,6 +8907,7 @@
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
         "serverError": "ID 공급자에서 오류가 발생했습니다. 다시 시도하세요.",
+        "staleSignIn": "이 로그인 링크가 만료되었거나 더 이상 유효하지 않습니다. 다시 로그인하세요.",
         "temporarilyUnavailable": "ID 공급자를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하세요."
       },
       "credentialsIssue": {
