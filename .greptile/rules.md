@@ -24,6 +24,10 @@ When hardcoding a boolean variable to a constant value, remove the variable enti
 
 Code changes must consider both multi-tenant and single-tenant deployments. In multi-tenant mode, preserve tenant isolation, ensure tenant context is propagated correctly, and avoid assumptions that only hold for a single shared schema or globally shared state. In single-tenant mode, avoid introducing unnecessary tenant-specific requirements or cloud-only control-plane dependencies.
 
+## Migrations Do Not Insert Rows
+
+A new revision under `backend/alembic/versions` must not insert rows anywhere but its `downgrade`: no `INSERT INTO`, `op.bulk_insert`, `insert(...)` in any form, or `session.add`. A seed row written by a revision reaches new tenants through the template snapshot but never reaches existing tenants or the single-tenant setup path. Migrations change schema and fix rows that already exist. New seed rows belong in application setup code such as `setup_onyx`. The only exception is a backfill that moves rows which already exist, marked on its line with `# migration-inserts: allow`. Flag any other new insert and ask for it to move to application code.
+
 ## Routing for New Non-/api Backend Routes
 
 Whenever a new backend route is added that does NOT start with `/api`, it must be explicitly routed in ALL nginx configs:

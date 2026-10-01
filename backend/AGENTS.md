@@ -94,6 +94,12 @@ uv run alembic -n schema_private revision -m "description"
 
 Write the migration manually and place it in the file that alembic creates when running the above command.
 
+Revisions in `alembic/versions` never insert rows outside `downgrade`. A seed row written there reaches
+new tenants through the template snapshot but never existing tenants, so new seed rows go in
+application setup code such as `setup_onyx`. A backfill of rows that already exist carries
+`# migration-inserts: allow` on its line. `scripts/check_migration_inserts.py` enforces this on
+commit for revisions newer than the rule.
+
 ## Testing Strategy
 
 Run pytest through `uv run` from the repo root — no venv activation needed (`uv run` uses the

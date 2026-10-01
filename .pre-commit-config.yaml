@@ -288,6 +288,14 @@ repos:
             (cli|tools/ods|tools/ods-audit)/pyproject\.toml
             |tools/requirements/build-constraints\.in
           )$
+      - id: migration-inserts
+        name: migrations do not insert rows
+        description: "Fail a new tenant-chain revision that seeds rows"
+        language: system
+        entry: python3 backend/scripts/check_migration_inserts.py
+        pass_filenames: true
+        stages: [pre-commit]
+        files: ^backend/alembic/versions/.*\.py$
       # Regenerate the baseline with `env_inventory.py --write-baseline`.
       - id: env-drift-baseline
         name: env drift baseline
