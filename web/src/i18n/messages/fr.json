@@ -6848,6 +6848,7 @@
         "loginRequired": "Vous devez d'abord vous connecter avec votre fournisseur d'identité.",
         "oauthUserAlreadyExists": "Un compte avec cette adresse e-mail existe déjà avec une autre méthode de connexion. Connectez-vous comme la première fois, ou demandez à votre administrateur d'associer ce fournisseur.",
         "serverError": "Votre fournisseur d'identité a rencontré une erreur. Veuillez réessayer.",
+        "staleSignIn": "Ce lien de connexion a expiré ou n'est plus valide. Veuillez vous reconnecter.",
         "temporarilyUnavailable": "Votre fournisseur d'identité est temporairement indisponible. Veuillez réessayer plus tard."
       },
       "credentialsIssue": {
