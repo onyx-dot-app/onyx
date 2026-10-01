@@ -55,6 +55,20 @@ describe("auth error page", () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
+  test("restarts again once the window has passed", async () => {
+    mockError = "ACCESS_TOKEN_DECODE_ERROR";
+    const now = jest.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const first = render(<Page />);
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
+    first.unmount();
+    now.mockReturnValue(1_000_000 + 5 * 60 * 1000);
+
+    render(<Page />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(STALE_SIGN_IN_MESSAGE)).not.toBeInTheDocument();
+  });
+
   test("shows the error when storage is blocked and the restart can't be guarded", async () => {
     mockError = "OAUTH_INVALID_STATE";
     jest.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
