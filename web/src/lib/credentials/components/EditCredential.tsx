@@ -17,7 +17,7 @@ import type {
   CredentialFieldValues,
   CredentialFormValues,
 } from "@/lib/credentials/types";
-import type { ValidSources } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 
 export interface EditCredentialProps {
   credential: Credential<CredentialFieldValues>;

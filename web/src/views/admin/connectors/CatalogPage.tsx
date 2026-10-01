@@ -17,10 +17,8 @@ import {
 } from "react";
 import { InputTypeIn, Text } from "@opal/components";
 import { useFederatedConnectors } from "@/lib/hooks";
-import {
-  FederatedConnectorDetail,
-  federatedSourceToRegularSource,
-} from "@/lib/types";
+import { FederatedConnectorDetail } from "@/lib/types";
+import { federatedSourceToRegularSource } from "@/lib/connectors/types/source";
 import { useSettings } from "@/lib/settings/hooks";
 import { ConnectorSourceCard } from "@/lib/connectors/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";

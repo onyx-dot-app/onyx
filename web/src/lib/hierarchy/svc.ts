@@ -1,5 +1,5 @@
 import type { ErrorResponseBody } from "@/lib/fetcher";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import {
   HierarchyNodesResponse,
   HierarchyNodeDocumentsRequest,

@@ -21,7 +21,8 @@ import type {
   HierarchyNodeSearchSummary,
 } from "@/lib/hierarchy/interfaces";
 import type { ProjectFile } from "@/lib/projects/types";
-import type { DocumentSetSummary, ValidSources } from "@/lib/types";
+import type { DocumentSetSummary } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import { searchDocuments } from "@/ee/lib/search/svc";
 import { Disabled } from "@opal/core";
 import { Card, InputSwitch } from "@opal/components";

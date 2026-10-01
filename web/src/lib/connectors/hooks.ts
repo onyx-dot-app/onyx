@@ -22,7 +22,7 @@ import {
   NEXT_PUBLIC_CLOUD_ENABLED,
   NEXT_PUBLIC_TEST_ENV,
 } from "@/lib/constants";
-import { oauthSupportedSources } from "@/lib/types";
+import { oauthSupportedSources } from "@/lib/connectors/types/source";
 import type {
   AnyCredential,
   Credential,
@@ -37,11 +37,13 @@ import type {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
-  ConfigurableSources,
   CredentialSchemaResponse,
   FederatedConnectorDetail,
-  ValidSources,
 } from "@/lib/types";
+import type {
+  ConfigurableSources,
+  ValidSources,
+} from "@/lib/connectors/types/source";
 
 /** How often the credential lists re-poll, in milliseconds. */
 const CREDENTIALS_REFRESH_INTERVAL_MS = 5000;

@@ -5,7 +5,7 @@ import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { getSourceMetadata } from "@/lib/sources";
 import type { ConnectedSource } from "@/lib/hierarchy/interfaces";
-import type { ValidSources } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import { Divider, LineItemButton } from "@opal/components";
 import { SvgFiles, SvgFolder } from "@opal/icons";
 

@@ -1,12 +1,9 @@
 import * as Yup from "yup";
 import type { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import type { ConnectorGroupRestrictionFormValues } from "@/lib/connectors/accessType";
-import { ValidSources } from "@/lib/types";
-import type {
-  ConfigurableSources,
-  IndexAttemptStage,
-  IndexAttemptStageMetric,
-} from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { connectorConfigs } from "@/lib/connectors/connectors";
 import { credentialDisplayNames } from "@/lib/connectors/credentials";

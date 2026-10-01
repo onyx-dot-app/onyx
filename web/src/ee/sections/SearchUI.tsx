@@ -9,7 +9,8 @@ import { EmptyMessageCard } from "@opal/components";
 import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
-import { Tag, ValidSources } from "@/lib/types";
+import { Tag } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import {
   countDocumentsBySource,
   documentMatchesAnySource,

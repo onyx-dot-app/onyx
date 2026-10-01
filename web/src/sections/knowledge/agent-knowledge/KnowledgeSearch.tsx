@@ -12,7 +12,7 @@ import type {
   HierarchyNodeSearchSummary,
 } from "@/lib/hierarchy/interfaces";
 import type { SearchDocWithContent } from "@/lib/search/types";
-import type { ValidSources } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import {
   Button,
   InputCheckbox,

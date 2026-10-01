@@ -1,4 +1,4 @@
-import { ValidSources } from "../types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import type {
   AirtableCredentialJson,
   AsanaCredentialJson,
@@ -53,7 +53,7 @@ import type {
   ZendeskCredentialJson,
   ZoomCredentialJson,
   ZulipCredentialJson,
-} from "./types";
+} from "@/lib/connectors/types";
 
 // Gmail and Google Drive use dedicated credential UIs, so their templates are partial.
 type CredentialTemplateMap = Record<ValidSources, object | null> & {

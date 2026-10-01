@@ -1,10 +1,10 @@
 import { DefaultDropdown } from "@/components/Dropdown";
+import { AccessType } from "@/lib/types";
 import {
-  AccessType,
   ValidAutoSyncSource,
   ConfigurableSources,
   validAutoSyncSources,
-} from "@/lib/types";
+} from "@/lib/connectors/types/source";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { AutoSyncOptions } from "./AutoSyncOptions";

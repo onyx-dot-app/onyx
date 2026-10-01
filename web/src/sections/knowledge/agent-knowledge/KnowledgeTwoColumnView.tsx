@@ -8,7 +8,8 @@ import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
 } from "@/lib/hierarchy/interfaces";
-import type { DocumentSetSummary, ValidSources } from "@/lib/types";
+import type { DocumentSetSummary } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import type { ProjectFile } from "@/lib/projects/types";
 
 import { KnowledgeSidebar } from "@/sections/knowledge/agent-knowledge/KnowledgeSidebar";

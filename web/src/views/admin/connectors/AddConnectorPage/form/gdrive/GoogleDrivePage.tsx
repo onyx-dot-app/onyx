@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { usePublicCredentials } from "@/lib/hooks";
 import { DriveAuthSection } from "./Credential";
 import { useUser } from "@/providers/UserProvider";

@@ -6,10 +6,10 @@ import {
   UserGroup,
   ConnectorStatus,
   FederatedConnectorDetail,
-  ValidSources,
   ConnectorIndexingStatusLiteResponse,
   IndexingStatusRequest,
 } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import {

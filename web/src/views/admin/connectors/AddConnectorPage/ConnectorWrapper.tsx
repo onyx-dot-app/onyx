@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { ConfigurableSources } from "@/lib/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import AddConnector from "./AddConnector";
 import { Button } from "@opal/components";
 import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";

@@ -1,4 +1,4 @@
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 // Sort options for document pagination
 export type DocumentSortField = "name" | "last_updated";

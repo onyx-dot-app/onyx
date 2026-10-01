@@ -1,5 +1,5 @@
 /** The `credential_json` shape of each source. */
-import type { TypedFile } from "../fileTypes";
+import type { TypedFile } from "@/lib/connectors/fileTypes";
 
 export interface GithubCredentialJson {
   github_access_token: string;

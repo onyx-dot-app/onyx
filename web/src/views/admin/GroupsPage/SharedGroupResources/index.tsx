@@ -15,7 +15,7 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import type { Agent } from "@/lib/agents/types";
-import type { ValidSources } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import ResourceContent from "@/views/admin/GroupsPage/SharedGroupResources/ResourceContent";
 import ResourcePopover from "@/views/admin/GroupsPage/SharedGroupResources/ResourcePopover";
 import type { PopoverSection } from "@/views/admin/GroupsPage/SharedGroupResources/interfaces";

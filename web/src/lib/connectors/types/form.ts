@@ -1,5 +1,5 @@
 /** The schema a connector's creation form is rendered from. */
-import type { Credential } from "./credential";
+import type { Credential } from "@/lib/connectors/types/credential";
 
 export type InputType =
   | "list"

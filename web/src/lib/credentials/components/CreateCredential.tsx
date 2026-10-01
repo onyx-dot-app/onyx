@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button as OpalButton } from "@opal/components";
-import { ValidSources, AccessType } from "@/lib/types";
+import { AccessType } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";

@@ -1,5 +1,6 @@
 import { InputDateRangePickerValue } from "@opal/components";
-import { Tag, ValidSources } from "../types";
+import { Tag } from "../types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { Agent } from "@/lib/agents/types";
 
 export const FlowType = {

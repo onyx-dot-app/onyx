@@ -7,7 +7,7 @@ import { TextFormField, MultiSelectField } from "@/components/Field";
 import ListInput from "./inputs/ListInput";
 import StringPairListInput from "./inputs/StringPairListInput";
 import FileInput from "./inputs/FileInput";
-import { ConfigurableSources } from "@/lib/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { Credential } from "@/lib/connectors/types";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { Tabs } from "@opal/components";
