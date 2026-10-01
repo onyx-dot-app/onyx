@@ -24,8 +24,9 @@ interface ParsedHotkey {
 
 function parseHotkey(hotkey: string): ParsedHotkey {
   const parts = hotkey.split("+");
-  // A trailing "+" is the plus key itself.
-  const key = hotkey.endsWith("++") ? "+" : (parts.pop() ?? "");
+  // A bare or trailing "+" is the plus key itself.
+  const key =
+    hotkey === "+" || hotkey.endsWith("++") ? "+" : (parts.pop() ?? "");
   const modifiers = new Set(parts.map((part) => part.toLowerCase()));
   return {
     key,
