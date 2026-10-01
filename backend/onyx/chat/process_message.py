@@ -5,7 +5,6 @@ An overview can be found in the README.md file in this directory.
 
 import re
 from concurrent.futures import Future
-from contextvars import Token
 from functools import partial
 from uuid import UUID
 
@@ -28,7 +27,6 @@ from onyx.chat.models import (
 )
 from onyx.chat.prepare import prepare_chat_turn
 from onyx.chat.stream_buffer import ChatStream, StreamBufferWriter
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import CHAT_RESPONSE_WAIT_TIMEOUT_S
 from onyx.context.search.models import SearchDoc
 from onyx.db.enums import record_mode_persists_content
@@ -36,7 +34,6 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
@@ -76,12 +73,7 @@ def _stream_chat_turn(
     active_chat_turns: ActiveChatTurns | None = None,
 ) -> AnswerStream:
     """Prepare one request, then read its independently owned agent stream."""
-    if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
-        raise ValueError(
-            "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
-        )
     setup: ChatTurnSetup | None = None
-    mock_token: Token[str | None] | None = None
     scope_started = False
     stream: ChatStream | None = None
     try:
@@ -119,8 +111,6 @@ def _stream_chat_turn(
                 reserved_assistant_message_id=setup.responses[0].message_id,
             )
         )
-        if new_msg_req.mock_llm_response is not None:
-            mock_token = set_llm_mock_response(new_msg_req.mock_llm_response)
         mode = setup.incognito_record_mode
         content_free = not record_mode_persists_content(mode)
         CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(mode.value if mode else None)
@@ -160,8 +150,6 @@ def _stream_chat_turn(
     finally:
         if stream is not None:
             stream.close()
-        if mock_token is not None:
-            reset_llm_mock_response(mock_token)
         if scope_started:
             CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(None)
             CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(None)

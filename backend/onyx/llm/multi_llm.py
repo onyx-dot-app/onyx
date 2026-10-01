@@ -14,7 +14,6 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 from readerwriterlock import rwlock
 
 from onyx.configs.app_configs import (
-    MOCK_LLM_RESPONSE,
     SEND_USER_METADATA_TO_LLM_PROVIDER,
 )
 from onyx.configs.chat_configs import (
@@ -110,7 +109,6 @@ from onyx.llm.models import (
     resolve_reasoning_effort,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
@@ -1257,7 +1255,6 @@ class LitellmLLM(LLM):
                         raise LLMTimeoutError("LLM call exceeded its total timeout")
                     timeout = min(timeout, remaining)
                 kwargs = dict(
-                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
                     base_url=self._api_base or None,
                     api_version=api_version,

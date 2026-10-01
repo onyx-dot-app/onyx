@@ -15,7 +15,6 @@ from pydantic import JsonValue
 import onyx.llm.model_request
 import onyx.llm.model_response
 import onyx.llm.models
-from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
@@ -282,7 +281,6 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             client=ANY,  # HTTPHandler instance created per-request
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
-            mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
         )
 
@@ -437,7 +435,6 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             client=ANY,  # HTTPHandler instance created per-stream
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
-            mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
         )
 
