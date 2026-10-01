@@ -890,8 +890,19 @@ def test_code_state_is_decided_per_citation_in_one_chunk(
         "- ```python\n  code [1]\n  ```\nAfter [1].\n",
         "> ```\n> code [1]\n> ```\nAfter [1].\n",
         "~~~python\n```\ncode [1]\n```\n~~~\nAfter [1].\n",
+        "- item\n\n    ```\n    code [1]\n\n    ```\nAfter [1].\n",
+        "> ```\n> code [1]\nAfter [1].\n",
+        "- ```\n  code [1]\nAfter [1].\n",
     ],
-    ids=["list-continuation", "list-marker", "blockquote", "tilde"],
+    ids=[
+        "list-continuation",
+        "list-marker",
+        "blockquote",
+        "tilde",
+        "list-blank-line",
+        "blockquote-ends-block",
+        "list-outdent-ends-block",
+    ],
 )
 def test_container_and_tilde_fences(
     mock_search_docs: CitationMapping, text: str
@@ -902,6 +913,20 @@ def test_container_and_tilde_fences(
     output, citations = process_tokens(processor, list(text))
 
     assert "code [1]\n" in output
+    assert "After [[1]](https://example.com/doc1)." in output
+    assert len(citations) == 1
+
+
+def test_four_space_indented_fence_is_not_a_fence(
+    mock_search_docs: CitationMapping,
+) -> None:
+    """At top level, 4+ spaces of indent make an indented code block, not a
+    fence, so it must not flip code state."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens(processor, list("    ```\n    x\nAfter [1].\n"))
+
     assert "After [[1]](https://example.com/doc1)." in output
     assert len(citations) == 1
 

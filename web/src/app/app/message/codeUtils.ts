@@ -63,81 +63,148 @@ export function extractCodeText(
   return codeText || "";
 }
 
-// Fence line, optionally inside blockquote (">") or list item ("-", "1.") containers.
-const FENCE_LINE_REGEX =
-  /^((?:[ \t]*(?:>|(?:[-*+]|\d{1,9}[.)])(?=[ \t])))*)([ \t]*)(`{3,}|~{3,})(.*)$/;
+const QUOTE_MARKER_REGEX = /^ {0,3}> ?/;
+const LIST_MARKER_REGEX = /^[ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)/;
+const FENCE_REGEX = /^([ \t]*)(`{3,}|~{3,})(.*)$/;
+
+const stripQuotes = (
+  line: string,
+  maxDepth: number = Infinity
+): { depth: number; rest: string } => {
+  let depth = 0;
+  let rest = line;
+  while (depth < maxDepth) {
+    const match = QUOTE_MARKER_REGEX.exec(rest);
+    if (!match) break;
+    rest = rest.slice(match[0].length);
+    depth++;
+  }
+  return { depth, rest };
+};
+
+const indentOf = (text: string): number =>
+  text.length - text.replace(/^[ \t]+/, "").length;
 
 type FenceRole = "open" | "close" | "code" | "text";
 
-// Classifies each line by fenced-code role. Inline ``` in prose is ignored;
-// closers need the opener's char, >= its length, no info string, and the same
-// container. A trailing unclosed block (mid-stream) stays "code".
-const classifyFenceLines = (lines: string[]): FenceRole[] => {
-  let open: { fence: string; column: number; quoteDepth: number } | null = null;
-  return lines.map((line): FenceRole => {
-    const match = FENCE_LINE_REGEX.exec(line);
-    if (!match) return open ? "code" : "text";
-    const prefix = match[1] ?? "";
-    const fence = match[3] ?? "";
-    const info = match[4] ?? "";
-    const column = prefix.length + (match[2] ?? "").length;
-    const quoteDepth = prefix.split(">").length - 1;
-    if (open === null) {
-      // Backtick fences cannot have backticks in the info string.
-      if (fence.startsWith("`") && info.includes("`")) return "text";
-      open = { fence, column, quoteDepth };
-      return "open";
-    }
-    if (
-      fence[0] === open.fence[0] &&
-      fence.length >= open.fence.length &&
-      info.trim() === "" &&
-      prefix.replace(/>/g, "").trim() === "" &&
-      quoteDepth === open.quoteDepth &&
-      column <= open.column + 3
-    ) {
+interface FenceLine {
+  role: FenceRole;
+  // For bare backtick openers: index just past the fence characters.
+  bareFenceEnd?: number;
+}
+
+interface OpenFence {
+  fence: string;
+  quoteDepth: number;
+  // Content column of the enclosing list item (0 outside lists).
+  base: number;
+}
+
+// Classifies each line by fenced-code role (simplified CommonMark). Inline
+// ``` in prose is ignored; closers need the opener's char, >= its length and
+// no info string; a block also ends when its blockquote or list item ends.
+// A trailing unclosed block (mid-stream) stays "code". Mirrors
+// CodeFenceTracker in backend/onyx/chat/citation_processor.py.
+const classifyFenceLines = (lines: string[]): FenceLine[] => {
+  let open: OpenFence | null = null;
+  let listColumn = 0;
+
+  const containerEnded = (fence: OpenFence, line: string): boolean => {
+    const { depth, rest } = stripQuotes(line, fence.quoteDepth);
+    if (rest.trim() === "") return depth < fence.quoteDepth;
+    return depth < fence.quoteDepth || indentOf(rest) < fence.base;
+  };
+
+  return lines.map((line): FenceLine => {
+    if (open !== null) {
+      if (!containerEnded(open, line)) {
+        const { rest } = stripQuotes(line, open.quoteDepth);
+        const match = FENCE_REGEX.exec(rest);
+        const fence = match?.[2] ?? "";
+        if (
+          match &&
+          indentOf(rest) <= open.base + 3 &&
+          fence[0] === open.fence[0] &&
+          fence.length >= open.fence.length &&
+          (match[3] ?? "").trim() === ""
+        ) {
+          open = null;
+          return { role: "close" };
+        }
+        return { role: "code" };
+      }
       open = null;
-      return "close";
     }
-    return "code";
+
+    const { depth, rest } = stripQuotes(line);
+    if (rest.trim() === "") return { role: "text" };
+    const marker = LIST_MARKER_REGEX.exec(rest);
+    let fenceStart = 0;
+    if (marker) {
+      listColumn = marker[0].length;
+      fenceStart = listColumn;
+    } else if (indentOf(rest) < listColumn) {
+      listColumn = 0;
+    }
+    const match = FENCE_REGEX.exec(rest.slice(fenceStart));
+    if (!match) return { role: "text" };
+    const indent = (match[1] ?? "").length;
+    // 4+ spaces past the container column is an indented code block.
+    if (marker ? indent > 0 : indent > listColumn + 3) return { role: "text" };
+    const fence = match[2] ?? "";
+    const info = match[3] ?? "";
+    // Backtick fences cannot have backticks in the info string.
+    if (fence.startsWith("`") && info.includes("`")) return { role: "text" };
+    open = { fence, quoteDepth: depth, base: listColumn };
+    const bare = fence.startsWith("`") && info.trim() === "";
+    return {
+      role: "open",
+      bareFenceEnd: bare
+        ? line.length - rest.length + fenceStart + indent + fence.length
+        : undefined,
+    };
   });
 };
 
 // Labels bare opening backtick fences as `plaintext`; closers stay bare.
 export const labelBareCodeFences = (content: string): string => {
   const lines = content.split("\n");
-  const roles = classifyFenceLines(lines);
+  const classified = classifyFenceLines(lines);
   return lines
     .map((line, i) => {
-      if (roles[i] !== "open") return line;
-      const match = FENCE_LINE_REGEX.exec(line);
-      if (!match || !match[3]?.startsWith("`") || match[4]?.trim()) {
-        return line;
-      }
-      return `${match[1]}${match[2]}${match[3]}plaintext`;
+      const end = classified[i]?.bareFenceEnd;
+      return end === undefined ? line : `${line.slice(0, end)}plaintext`;
     })
     .join("\n");
 };
 
-// Replaces each closed fenced code block with the string from `replace`.
+// Replaces each closed fenced code block with the string from `replace`;
+// an unclosed trailing block is left as is.
 const replaceFencedCodeBlocks = (
   content: string,
   replace: (block: string) => string
 ): string => {
   const lines = content.split("\n");
-  const roles = classifyFenceLines(lines);
+  const classified = classifyFenceLines(lines);
   const out: string[] = [];
   let block: string[] | null = null;
   for (const [i, line] of lines.entries()) {
-    const role = roles[i];
-    if (role === "open") {
-      block = [line];
-    } else if (block && (role === "code" || role === "close")) {
+    const role = classified[i]?.role;
+    if (block && (role === "code" || role === "close")) {
       block.push(line);
       if (role === "close") {
         out.push(replace(block.join("\n")));
         block = null;
       }
+      continue;
+    }
+    if (block) {
+      // The block ended with its container.
+      out.push(replace(block.join("\n")));
+      block = null;
+    }
+    if (role === "open") {
+      block = [line];
     } else {
       out.push(line);
     }

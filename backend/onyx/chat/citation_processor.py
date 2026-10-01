@@ -56,29 +56,47 @@ CitationMapping: TypeAlias = dict[int, SearchDoc]
 # ============================================================================
 
 
-# Fence line, optionally inside blockquote (">") or list item ("-", "1.") containers.
-_FENCE_LINE_PATTERN = re.compile(
-    r"^((?:[ \t]*(?:>|(?:[-*+]|\d{1,9}[.)])(?=[ \t])))*)([ \t]*)(`{3,}|~{3,})(.*)$"
-)
+_QUOTE_MARKER = re.compile(r" {0,3}> ?")
+_LIST_MARKER = re.compile(r"[ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)")
+_FENCE = re.compile(r"([ \t]*)(`{3,}|~{3,})(.*)$")
+
+
+def _strip_quotes(line: str, max_depth: int | None = None) -> tuple[int, str]:
+    depth = 0
+    while max_depth is None or depth < max_depth:
+        match = _QUOTE_MARKER.match(line)
+        if not match:
+            break
+        line = line[match.end() :]
+        depth += 1
+    return depth, line
+
+
+def _indent(text: str) -> int:
+    return len(text) - len(text.lstrip(" \t"))
 
 
 @dataclass(frozen=True)
 class _OpenFence:
     fence: str
-    column: int
     quote_depth: int
+    # Content column of the enclosing list item (0 outside lists).
+    base: int
 
 
 class CodeFenceTracker:
     """Line-aware tracker of fenced code blocks in streamed markdown. Unlike
     counting backticks, it ignores inline ``` in prose and respects fence char
-    and length (e.g. a ```` fence wrapping ``` lines)."""
+    and length (e.g. a ```` fence wrapping ``` lines). Simplified CommonMark:
+    handles blockquote and list containers, and closes a block when its
+    container ends."""
 
     def __init__(self) -> None:
         self._open: _OpenFence | None = None
         self._partial_line = ""
         self._line_start = 0
-        # Offsets of fence lines that open or close a block, in order.
+        self._list_column = 0
+        # Offsets of lines that open or close a block, in order.
         self._transitions: list[int] = []
 
     def feed(self, text: str) -> None:
@@ -95,31 +113,63 @@ class CodeFenceTracker:
         self._partial_line = ""
 
     def in_code_block_at(self, offset: int) -> bool:
+        if offset >= self._line_start and self._container_ended(self._partial_line):
+            return False
         return bisect_right(self._transitions, offset) % 2 == 1
 
+    def _container_ended(self, line: str) -> bool:
+        if self._open is None:
+            return False
+        depth, rest = _strip_quotes(line, self._open.quote_depth)
+        if not rest.strip():
+            return depth < self._open.quote_depth
+        return depth < self._open.quote_depth or _indent(rest) < self._open.base
+
     def _process_line(self, line: str) -> None:
-        match = _FENCE_LINE_PATTERN.match(line)
+        if self._open is not None:
+            if self._container_ended(line):
+                # The container ended, which ends the code block too.
+                self._set_open(None)
+            else:
+                _, rest = _strip_quotes(line, self._open.quote_depth)
+                match = _FENCE.match(rest)
+                if (
+                    match
+                    and _indent(rest) <= self._open.base + 3
+                    and match.group(2)[0] == self._open.fence[0]
+                    and len(match.group(2)) >= len(self._open.fence)
+                    and not match.group(3).strip()
+                ):
+                    self._set_open(None)
+                return
+
+        depth, rest = _strip_quotes(line)
+        if not rest.strip():
+            return
+        marker = _LIST_MARKER.match(rest)
+        if marker:
+            self._list_column = marker.end()
+            match = _FENCE.match(rest, marker.end())
+            if match and match.group(1):
+                return
+        else:
+            if _indent(rest) < self._list_column:
+                self._list_column = 0
+            match = _FENCE.match(rest)
+            # 4+ spaces past the container column is an indented code block.
+            if match and len(match.group(1)) > self._list_column + 3:
+                return
         if not match:
             return
-        prefix, indent, fence, info = match.groups()
-        column = len(prefix) + len(indent)
-        quote_depth = prefix.count(">")
-        if self._open is None:
-            # Backtick fences cannot have backticks in the info string.
-            if fence[0] == "`" and "`" in info:
-                return
-            self._open = _OpenFence(fence, column, quote_depth)
-            self._transitions.append(self._line_start)
-        elif (
-            fence[0] == self._open.fence[0]
-            and len(fence) >= len(self._open.fence)
-            and not info.strip()
-            and prefix.replace(">", "").strip() == ""
-            and quote_depth == self._open.quote_depth
-            and column <= self._open.column + 3
-        ):
-            self._open = None
-            self._transitions.append(self._line_start)
+        fence, info = match.group(2), match.group(3)
+        # Backtick fences cannot have backticks in the info string.
+        if fence[0] == "`" and "`" in info:
+            return
+        self._set_open(_OpenFence(fence, depth, self._list_column))
+
+    def _set_open(self, open_fence: _OpenFence | None) -> None:
+        self._open = open_fence
+        self._transitions.append(self._line_start)
 
 
 # ============================================================================

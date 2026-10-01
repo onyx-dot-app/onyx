@@ -305,6 +305,29 @@ describe("labelBareCodeFences", () => {
     );
   });
 
+  it("handles list continuation after a blank line", () => {
+    expect(
+      labelBareCodeFences("- item\n\n    ```\n    code\n\n    ```\nAfter.")
+    ).toBe("- item\n\n    ```plaintext\n    code\n\n    ```\nAfter.");
+  });
+
+  it("ends a block when its blockquote or list item ends", () => {
+    expect(labelBareCodeFences("> ```\n> code\nOutside\n```\nnext")).toBe(
+      "> ```plaintext\n> code\nOutside\n```plaintext\nnext"
+    );
+    expect(labelBareCodeFences("- ```\n  code\nOutside\n```\nnext")).toBe(
+      "- ```plaintext\n  code\nOutside\n```plaintext\nnext"
+    );
+  });
+
+  it("ignores a top-level fence indented four spaces", () => {
+    expect(labelBareCodeFences("    ```\n```\nx\n```\nAfter")).toBe(
+      "    ```\n```plaintext\nx\n```\nAfter"
+    );
+    const input = "    ```\nPrice $5\n    ```";
+    expect(labelBareCodeFences(input)).toBe(input);
+  });
+
   it("does not close a tilde fence with backticks", () => {
     const input = "~~~python\n```\ncode\n```\n~~~\n```\nnext\n```";
     expect(labelBareCodeFences(input)).toBe(
@@ -324,6 +347,18 @@ describe("labelBareCodeFences", () => {
 });
 
 describe("preprocessLaTeX fenced code", () => {
+  it("does not treat a four-space indented fence as code", () => {
+    expect(preprocessLaTeX("    ~~~\nPrice $5\n~~~")).toBe(
+      "    ~~~\nPrice \\$5\n~~~"
+    );
+  });
+
+  it("protects a blockquote code block that ends with the quote", () => {
+    expect(preprocessLaTeX("> ```\n> cost $5\nPrice $7")).toBe(
+      "> ```\n> cost $5\nPrice \\$7"
+    );
+  });
+
   it("leaves dollars inside a four-backtick block with inner fences", () => {
     const input = "````md\n```\ncost $5\n```\nalso $6\n````\nPrice $7";
     expect(preprocessLaTeX(input)).toBe(
