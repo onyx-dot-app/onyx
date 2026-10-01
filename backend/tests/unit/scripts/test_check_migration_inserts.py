@@ -41,7 +41,7 @@ def test_row_inserts_are_flagged(line: str) -> None:
         "seen.add(name)",
         "from sqlalchemy.dialects.postgresql import insert as pg_insert",
         "session = Session(bind=op.get_bind())",
-        "# the inserted rows keep their ids",
+        '"""rows inserted earlier keep their ids"""',
         'op.create_index("ix_tool_slug", "tool", ["slug"])',
         'op.execute("INSERT INTO b SELECT * FROM a")  # migration-inserts: allow',
     ],
@@ -55,7 +55,7 @@ def test_schema_changes_and_updates_pass(line: str) -> None:
 
 def test_insert_split_across_lines_is_flagged() -> None:
     source = 'op.execute("""\n    INSERT\n    INTO t\n""")\n'
-    assert check_migration_inserts.find_inserts(source) == [2]
+    assert check_migration_inserts.find_inserts(source) == [1]
 
 
 def test_only_the_downgrade_body_is_skipped() -> None:
@@ -113,6 +113,22 @@ def test_downgrade_session_name_does_not_taint_upgrade() -> None:
     source = (
         "def upgrade() -> None:\n    s = set()\n    s.add(value)\n\n\n"
         "def downgrade() -> None:\n    s = Session(bind=op.get_bind())\n    s.add(row)\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == []
+
+
+def test_session_parameter_add_is_flagged() -> None:
+    source = (
+        "def _seed(s: Session) -> None:\n    s.add(Tool(name='x'))\n\n\n"
+        "def upgrade() -> None:\n    _seed(Session(bind=op.get_bind()))\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == [2]
+
+
+def test_same_name_reused_as_a_set_in_another_function_passes() -> None:
+    source = (
+        "def _seed() -> None:\n    s = Session(bind=op.get_bind())\n    s.execute(q)\n\n\n"
+        "def upgrade() -> None:\n    s = set()\n    s.add(value)\n"
     )
     assert check_migration_inserts.find_inserts(source) == []
 

@@ -11,92 +11,149 @@ Usage, from the repo root:
     python3 backend/scripts/check_migration_inserts.py backend/alembic/versions/<rev>_*.py ...
 """
 
+import ast
 import re
 import sys
 from pathlib import Path
 
 # Head of the chain when the rule landed. Everything at or before it is history.
 _INSERTS_BANNED_AFTER = "25053020dd5a"
-# A backfill that only moves rows which already exist opts out per line.
+# A backfill that only moves rows which already exist opts out per statement.
 ALLOW_MARKER = "migration-inserts: allow"
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
 _VERSIONS_DIR = _BACKEND_DIR / "alembic" / "versions"
 _REVISION_LINE = re.compile(r'^revision(?:\s*:[^=]+)?\s*=\s*"(\w+)"', re.MULTILINE)
 _DOWN_REVISION_LINE = re.compile(r"^down_revision(?:\s*:[^=]+)?\s*=(.*)$", re.MULTILINE)
 _REVISION_ID = re.compile(r'"(\w+)"')
-# downgrade may restore a seed it removed. Everything else is scanned, so
-# module-level helpers and import aliases cannot hide an insert.
-_DOWNGRADE_BODY = re.compile(r"^def downgrade\b.*?(?=^\S|\Z)", re.MULTILINE | re.DOTALL)
-# `insert as pg_insert` renames the construct, so calls are matched by alias.
-_INSERT_ALIAS = re.compile(r"\bimport\b.*\binsert\s+as\s+(\w+)")
-# `.add(` is only a row write on an ORM session, so sessions are matched by the
-# name they are bound to, however short, through any sessionmaker factory.
-_SESSION_ROOTS = ("Session", "sessionmaker")
-_INSERT_PATTERNS = (
-    re.compile(r"\bINSERT\s+INTO\b|\bINSERT\s*$", re.IGNORECASE),
-    re.compile(r"\bop\.bulk_insert\("),
-    # Bare, module-qualified and table-method forms of the Core construct.
-    re.compile(r"(?<!\w)insert\("),
-    re.compile(r"\.(?:add_all|merge|bulk_save_objects|bulk_insert_mappings)\("),
-    re.compile(r"\b\w*session\.add\("),
-)
+# downgrade may restore a seed it removed, so it is the only body not visited.
+_INSERT_SQL = re.compile(r"\bINSERT\s+INTO\b", re.IGNORECASE)
+_SESSION_FACTORIES = {"Session", "sessionmaker"}
+_SESSION_WRITES = {"add_all", "merge", "bulk_save_objects", "bulk_insert_mappings"}
 
 
-def _downgrade_lines(source: str) -> set[int]:
-    skipped: set[int] = set()
-    for match in _DOWNGRADE_BODY.finditer(source):
-        first_line = source.count("\n", 0, match.start()) + 1
-        last_line = source.count("\n", 0, match.end() - 1) + 1
-        skipped.update(range(first_line, last_line + 1))
-    return skipped
+class _InsertFinder(ast.NodeVisitor):
+    """Collects the statements that write rows.
 
+    Names bound to the insert construct and to ORM sessions are tracked per
+    scope, so an aliased import, a sessionmaker factory or a short variable
+    name cannot hide a write, and a set named like a session elsewhere cannot
+    produce one."""
 
-def _names_pattern(names: list[str], suffix: str) -> list[re.Pattern[str]]:
-    if not names:
-        return []
-    return [re.compile(rf"(?<!\w)(?:{'|'.join(map(re.escape, names))}){suffix}")]
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+        self._inserts: set[str] = set()
+        self._sessions: list[set[str]] = [set()]
+        self._statement: ast.stmt | None = None
+        self.found: set[int] = set()
 
+    def visit(self, node: ast.AST) -> None:
+        if isinstance(node, ast.stmt):
+            self._statement = node
+        super().visit(node)
 
-def _session_names(source: str) -> list[str]:
-    """Names bound from Session, sessionmaker, or anything bound from those."""
-    names: list[str] = list(_SESSION_ROOTS)
-    while True:
-        callables = "|".join(map(re.escape, names))
-        bound = re.findall(
-            rf"(\w+)\s*=\s*(?:{callables})\(|\b(?:{callables})\(.*\)\s+as\s+(\w+)\s*:",
-            source,
+    def _flag(self) -> None:
+        statement = self._statement
+        if statement is None:
+            return
+        end = statement.end_lineno or statement.lineno
+        if any(
+            ALLOW_MARKER in line for line in self._lines[statement.lineno - 1 : end]
+        ):
+            return
+        self.found.add(statement.lineno)
+
+    def _is_session_call(self, node: ast.expr) -> bool:
+        if not isinstance(node, ast.Call):
+            return False
+        func = node.func
+        if isinstance(func, ast.Name):
+            return func.id in _SESSION_FACTORIES or func.id in self._sessions[-1]
+        return isinstance(func, ast.Attribute) and func.attr in _SESSION_FACTORIES
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        if node.name == "downgrade":
+            return
+        scope = set(self._sessions[-1])
+        # A helper taking a session parameter writes through that name.
+        scope.update(
+            arg.arg
+            for arg in node.args.args + node.args.kwonlyargs
+            if arg.annotation is not None and _names_session(arg.annotation)
         )
-        new_names = [name for pair in bound for name in pair if name not in names]
-        if not new_names:
-            return names[len(_SESSION_ROOTS) :]
-        names.extend(dict.fromkeys(new_names))
+        self._sessions.append(scope)
+        self.generic_visit(node)
+        self._sessions.pop()
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        for alias in node.names:
+            bound = alias.asname or alias.name
+            if alias.name == "insert":
+                self._inserts.add(bound)
+            if alias.name in _SESSION_FACTORIES:
+                self._sessions[-1].add(bound)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        if self._is_session_call(node.value):
+            self._sessions[-1].update(
+                target.id for target in node.targets if isinstance(target, ast.Name)
+            )
+        self.generic_visit(node)
+
+    def visit_With(self, node: ast.With) -> None:
+        for item in node.items:
+            if self._is_session_call(item.context_expr) and isinstance(
+                item.optional_vars, ast.Name
+            ):
+                self._sessions[-1].add(item.optional_vars.id)
+        self.generic_visit(node)
+
+    def visit_Expr(self, node: ast.Expr) -> None:
+        # A docstring may describe inserts without performing one.
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            return
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        func = node.func
+        if isinstance(func, ast.Name) and (
+            func.id == "insert" or func.id in self._inserts
+        ):
+            self._flag()
+        elif isinstance(func, ast.Attribute):
+            # Receivers named like a session count even when bound elsewhere.
+            receiver_is_session = isinstance(func.value, ast.Name) and (
+                func.value.id in self._sessions[-1] or func.value.id.endswith("session")
+            )
+            if func.attr == "insert" and not _is_list_insert(node):
+                self._flag()
+            elif func.attr == "bulk_insert" or func.attr in _SESSION_WRITES:
+                self._flag()
+            elif func.attr == "add" and receiver_is_session:
+                self._flag()
+        self.generic_visit(node)
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if isinstance(node.value, str) and _INSERT_SQL.search(node.value):
+            self._flag()
 
 
-def _insert_patterns(source: str) -> list[re.Pattern[str]]:
-    return [
-        *_INSERT_PATTERNS,
-        *_names_pattern(_INSERT_ALIAS.findall(source), r"\("),
-        *_names_pattern(_session_names(source), r"\.add\("),
-    ]
+def _names_session(annotation: ast.expr) -> bool:
+    name = annotation.attr if isinstance(annotation, ast.Attribute) else None
+    if isinstance(annotation, ast.Name):
+        name = annotation.id
+    return name == "Session"
+
+
+def _is_list_insert(node: ast.Call) -> bool:
+    """`items.insert(0, x)` takes an index first, the Core construct never does."""
+    return bool(node.args) and isinstance(node.args[0], ast.Constant)
 
 
 def find_inserts(source: str) -> list[int]:
-    """One-based line numbers outside downgrade where a row insert appears."""
-    skipped = _downgrade_lines(source)
-    scanned = [
-        (number, line)
-        for number, line in enumerate(source.splitlines(), start=1)
-        if number not in skipped
-    ]
-    # Names are resolved from the scanned lines only, so a downgrade session
-    # cannot turn a set.add in upgrade into a finding.
-    patterns = _insert_patterns("\n".join(line for _, line in scanned))
-    return [
-        number
-        for number, line in scanned
-        if ALLOW_MARKER not in line
-        and any(pattern.search(line) for pattern in patterns)
-    ]
+    """One-based line numbers of statements outside downgrade that write rows."""
+    finder = _InsertFinder(source.splitlines())
+    finder.visit(ast.parse(source))
+    return sorted(finder.found)
 
 
 def _parents(source: str) -> list[str]:
