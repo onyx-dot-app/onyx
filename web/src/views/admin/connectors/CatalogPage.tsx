@@ -197,6 +197,8 @@ export default function ConnectorsPage() {
   // Enter or ArrowDown moves to the first card. Escape clears the term,
   // then, on an empty field, leaves it.
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Keys that build or cancel an IME composition belong to the IME.
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Escape") {
       e.preventDefault();
       if (rawSearchTerm !== "") setSearchTerm("");

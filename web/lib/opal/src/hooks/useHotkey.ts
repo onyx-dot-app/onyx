@@ -103,7 +103,7 @@ export default function useHotkey(
     const parsed = parseHotkey(hotkey);
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || event.isComposing) return;
       if (!whileTyping && isTypingTarget(event.target)) return;
       if (!matches(event, parsed)) return;
       event.preventDefault();

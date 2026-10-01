@@ -164,7 +164,7 @@ export default function useGridNavigation(
       if (!(item instanceof HTMLElement) || !item.matches(itemSelector)) {
         return;
       }
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || event.isComposing) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const { onExit, onEscape, onTypeAhead } = optionsRef.current;
 
