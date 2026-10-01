@@ -2634,10 +2634,11 @@
         },
         "federated": {
           "tooltip": {
-            "description": "此连接器支持联合搜索选项。它会带来更高的延迟和更低的搜索质量。",
+            "description": "它会带来更高的延迟和更低的搜索质量。",
             "link": {
               "label": "改用联合搜索版本 →"
-            }
+            },
+            "title": "此连接器支持联合搜索选项。"
           }
         },
         "fileUploadFailed": {

@@ -2634,10 +2634,11 @@
         },
         "federated": {
           "tooltip": {
-            "description": "A federated search option is available for this connector. It will result in greater latency and reduced search quality.",
+            "description": "It will result in greater latency and reduced search quality.",
             "link": {
               "label": "Use federated version instead →"
-            }
+            },
+            "title": "A federated search option is available for this connector."
           }
         },
         "fileUploadFailed": {

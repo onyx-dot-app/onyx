@@ -2634,10 +2634,11 @@
         },
         "federated": {
           "tooltip": {
-            "description": "Une option de recherche fédérée est disponible pour ce connecteur. Elle entraîne une latence plus élevée et une qualité de recherche réduite.",
+            "description": "Elle entraîne une latence plus élevée et une qualité de recherche réduite.",
             "link": {
               "label": "Utiliser la version fédérée à la place →"
-            }
+            },
+            "title": "Une option de recherche fédérée est disponible pour ce connecteur."
           }
         },
         "fileUploadFailed": {

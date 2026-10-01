@@ -2634,10 +2634,11 @@
         },
         "federated": {
           "tooltip": {
-            "description": "Für diesen Konnektor ist eine föderierte Suchoption verfügbar. Sie führt zu höherer Latenz und geringerer Suchqualität.",
+            "description": "Sie führt zu höherer Latenz und geringerer Suchqualität.",
             "link": {
               "label": "Stattdessen die föderierte Version verwenden →"
-            }
+            },
+            "title": "Für diesen Konnektor ist eine föderierte Suchoption verfügbar."
           }
         },
         "fileUploadFailed": {

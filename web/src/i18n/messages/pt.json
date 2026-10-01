@@ -2634,10 +2634,11 @@
         },
         "federated": {
           "tooltip": {
-            "description": "Uma opção de pesquisa federada está disponível para este conector. Ela resulta em maior latência e menor qualidade de pesquisa.",
+            "description": "Ela resulta em maior latência e menor qualidade de pesquisa.",
             "link": {
               "label": "Usar a versão federada →"
-            }
+            },
+            "title": "Uma opção de pesquisa federada está disponível para este conector."
           }
         },
         "fileUploadFailed": {

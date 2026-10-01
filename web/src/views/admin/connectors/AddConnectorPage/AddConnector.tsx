@@ -457,7 +457,8 @@ export default function AddConnector({
               {hasFederatedOption && (
                 <MessageCard
                   variant="info"
-                  title={t("add.federated.tooltip.description")}
+                  title={t("add.federated.tooltip.title")}
+                  description={t("add.federated.tooltip.description")}
                   bottomChildren={
                     <Button
                       prominence="secondary"
