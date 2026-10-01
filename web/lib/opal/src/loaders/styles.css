@@ -27,70 +27,61 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Shimmer text: the base text renders normally; an inert clone above it is
-   masked to its own glyphs and a highlight bar slides across the clone.
+   Text shimmer (TextLoader). The wave is the background of an inline
+   element, clipped to its glyphs. An inline background is laid out as one
+   strip across all its line fragments, so the wave follows wrapped text
+   from the end of one line to the start of the next. Two layers: the wave
+   on top, the resting text colour beneath.
+
+   TextLoader sets three variables from the measured text length, so the
+   wave moves at one rate on any text:
+     --opal-text-shimmer-band      the wave's width
+     --opal-text-shimmer-tail      the distance travelled off the end, which
+                                   is the pause between waves
+     --opal-text-shimmer-duration  one pass, at the set rate
    --------------------------------------------------------------------------- */
 
-/* As wide as its text, not its row: the sweep then crosses only the text,
-   with no stretch of empty row between passes. */
-.opal-shimmer-text {
-  position: relative;
+.opal-text-loader {
   width: fit-content;
   max-width: 100%;
-  color: var(--text-02);
 }
 
-.opal-shimmer-text-overlay {
-  /* The wave's width, in absolute units: the same on any length of text. */
-  --opal-text-shimmer-band: 40px;
-  position: absolute;
-  inset: 0;
-  overflow: clip;
+.opal-text-loader-wave {
   color: transparent;
-  contain: strict;
-  /* Lets the sweep reach the text's full width with `cqw`. */
-  container-type: inline-size;
-  pointer-events: none;
-  mask-image: linear-gradient(#fff, #fff);
-  -webkit-mask-clip: text;
+  background-image:
+    linear-gradient(90deg, transparent, var(--text-04) 50%, transparent),
+    linear-gradient(var(--text-02), var(--text-02));
+  background-size:
+    var(--opal-text-shimmer-band, 40px) 100%,
+    100% 100%;
+  background-repeat: no-repeat;
+  /* At rest, and under reduced motion, the wave waits off the left edge. */
+  background-position:
+    calc(-1 * var(--opal-text-shimmer-band, 40px)) 0,
+    0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: opal-text-loader-wave var(--opal-text-shimmer-duration, 3s) linear
+    infinite;
 }
 
-.opal-shimmer-text-overlay::after {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  /* Physical, not logical: the sweep runs left to right in every language. */
-  left: 0;
-  width: var(--opal-text-shimmer-band);
-  background-image: linear-gradient(
-    90deg,
-    transparent,
-    var(--text-04) 50%,
-    transparent
-  );
-  will-change: transform;
-  animation: opal-shimmer-text-slide 3.5s linear infinite;
-}
-
-/* Browsers without text mask clipping show the base text alone. */
-@supports not (-webkit-mask-clip: text) {
-  .opal-shimmer-text-overlay {
-    display: none;
+/* From one band-width off the start to past the end by the tail. With the
+   band as the image width, `calc(100% + X)` resolves to the text length
+   minus the band plus X. */
+@keyframes opal-text-loader-wave {
+  from {
+    background-position:
+      calc(-1 * var(--opal-text-shimmer-band, 40px)) 0,
+      0 0;
   }
-}
-
-/* One 3.5s cycle: the wave crosses the text for 2.5s, from one band-width
-   off the left edge to just past the right, then waits off the text for 1s
-   before the next wave. */
-@keyframes opal-shimmer-text-slide {
-  0% {
-    translate: -100% 0;
-  }
-  71.4286% {
-    translate: 100cqw 0;
-  }
-  100% {
-    translate: 100cqw 0;
+  to {
+    background-position:
+      calc(
+          100% + var(--opal-text-shimmer-band, 40px) +
+            var(--opal-text-shimmer-tail, 60px)
+        )
+        0,
+      0 0;
   }
 }
 
@@ -104,9 +95,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .opal-shimmer-block::after,
-  .opal-shimmer-text-overlay::after {
+  .opal-shimmer-block::after {
     animation: none;
     display: none;
+  }
+
+  .opal-text-loader-wave {
+    animation: none;
   }
 }
