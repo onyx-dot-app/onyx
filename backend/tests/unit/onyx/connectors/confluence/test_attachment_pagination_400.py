@@ -20,8 +20,14 @@ from onyx.connectors.confluence.connector import (
     ConfluenceConnector,
     _extract_page_id_from_url,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import ConfluenceSearchVariant
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence as OnyxConfluence,
+)
 from onyx.connectors.models import ConnectorFailure, Document, DocumentFailure
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
+)
 
 _PAGE = {
     "id": "111",
@@ -73,9 +79,9 @@ def _fetch_with_pagination_error(
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=fake_client,
+            return_value=gateway_with_client(fake_client),
         ),
         mock.patch.object(
             connector, "_maybe_yield_page_hierarchy_node", return_value=None
@@ -155,9 +161,9 @@ def _run_reindex(attachment_error_code: int | None) -> list[Any]:
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=fake_client,
+            return_value=gateway_with_client(fake_client),
         ),
         mock.patch.object(
             connector, "_yield_space_hierarchy_nodes", return_value=iter([])
@@ -209,12 +215,12 @@ def _slim_attachments_with(side_effects: list[Any]) -> tuple[list[Any], mock.Moc
 
     with mock.patch.object(
         ConfluenceConnector,
-        "confluence_client",
+        "source_operations",
         new_callable=mock.PropertyMock,
-        return_value=fake_client,
+        return_value=gateway_with_client(fake_client),
     ):
         results = connector._retrieve_attachments_for_slim_page(
-            "111", "space", None, None
+            "111", ConfluenceSearchVariant.SLIM, "space", None, None
         )
     return results, fake_client
 

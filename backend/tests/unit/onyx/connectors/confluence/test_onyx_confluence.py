@@ -7,12 +7,17 @@ import requests
 from requests import HTTPError
 
 from onyx.connectors.confluence import onyx_confluence as onyx_confluence_module
+from onyx.connectors.confluence import source_operations as source_operations_module
 from onyx.connectors.confluence.onyx_confluence import (
+    get_user_email_from_userkey__server,
+)
+from onyx.connectors.confluence.source_operations import (
     _DEFAULT_PAGINATION_LIMIT,
     _MINIMUM_PAGINATION_LIMIT,
     ConfluenceRestSpacePermissionsNotAvailableError,
-    OnyxConfluence,
-    get_user_email_from_userkey__server,
+)
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence as OnyxConfluence,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -1493,16 +1498,16 @@ def test_token_refresh_keeps_the_oauth_site(monkeypatch: pytest.MonkeyPatch) -> 
     redis_client = mock.MagicMock()
     redis_client.get.return_value = None
     monkeypatch.setattr(
-        onyx_confluence_module, "get_redis_client", lambda **_: redis_client
+        source_operations_module, "get_redis_client", lambda **_: redis_client
     )
     monkeypatch.setattr(
-        onyx_confluence_module, "OAUTH_CONFLUENCE_CLOUD_CLIENT_ID", "id"
+        source_operations_module, "OAUTH_CONFLUENCE_CLOUD_CLIENT_ID", "id"
     )
     monkeypatch.setattr(
-        onyx_confluence_module, "OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET", "secret"
+        source_operations_module, "OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET", "secret"
     )
     monkeypatch.setattr(
-        onyx_confluence_module,
+        source_operations_module,
         "confluence_refresh_tokens",
         lambda *_: {
             "confluence_access_token": "new-access",

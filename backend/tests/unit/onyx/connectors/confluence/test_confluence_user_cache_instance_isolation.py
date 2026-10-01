@@ -8,6 +8,7 @@ run in the same multi-tenant worker process."""
 from unittest.mock import MagicMock
 
 import onyx.connectors.confluence.onyx_confluence as onyx_confluence
+import onyx.connectors.confluence.source_operations as source_operations
 
 
 def _client(url: str) -> MagicMock:
@@ -64,13 +65,13 @@ def test_userkey_email_cache_is_instance_isolated() -> None:
 
 
 def test_display_name_cache_is_instance_isolated() -> None:
-    onyx_confluence._USER_ID_TO_DISPLAY_NAME_CACHE.clear()
+    source_operations._USER_ID_TO_DISPLAY_NAME_CACHE.clear()
     user_id = "user-1"
     client_a = _client("https://a.example.com")
     client_a.get_user_details_by_userkey.return_value = {"displayName": "Alice A"}
     client_b = _client("https://b.example.com")
     client_b.get_user_details_by_userkey.return_value = {"displayName": "Bob B"}
 
-    assert onyx_confluence._get_user(client_a, user_id) == "Alice A"
+    assert source_operations._get_user(client_a, user_id) == "Alice A"
     # same id on a different instance must not see instance A's display name
-    assert onyx_confluence._get_user(client_b, user_id) == "Bob B"
+    assert source_operations._get_user(client_b, user_id) == "Bob B"

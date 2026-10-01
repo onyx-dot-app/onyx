@@ -19,12 +19,17 @@ from onyx.connectors.confluence.access import (
     get_page_restrictions_with_per_ancestor_fetch as get_page_restrictions_with_per_ancestor_fetch_shim,
 )
 from onyx.connectors.confluence.connector import ConfluenceConnector
-from onyx.connectors.confluence.onyx_confluence import (
+from onyx.connectors.confluence.source_operations import (
     Confcloud77618Error,
-    OnyxConfluence,
     _is_confcloud_77618_response,
 )
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence as OnyxConfluence,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
+)
 
 _CONFCLOUD_77618_BODY = (
     '{"statusCode":404,"data":{"authorized":false,"valid":false,'
@@ -361,9 +366,9 @@ def test_pruning_expand_skips_restrictions_but_keeps_hierarchy(
 
     with mock.patch.object(
         ConfluenceConnector,
-        "confluence_client",
+        "source_operations",
         new_callable=mock.PropertyMock,
-        return_value=fake_client,
+        return_value=gateway_with_client(fake_client),
     ):
         with mock.patch.object(
             confluence_connector,
