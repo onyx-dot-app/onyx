@@ -9174,6 +9174,7 @@
         "loginRequired": "You need to log in with your identity provider first.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
         "serverError": "Your identity provider encountered an error. Please try again.",
+        "staleSignIn": "This sign-in link has expired or is no longer valid. Please sign in again.",
         "temporarilyUnavailable": "Your identity provider is temporarily unavailable. Please try again later."
       },
       "credentialsIssue": {
