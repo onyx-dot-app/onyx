@@ -9192,6 +9192,7 @@
         "loginRequired": "Primero debes iniciar sesión con tu proveedor de identidad.",
         "oauthUserAlreadyExists": "Ya existe una cuenta con este correo con otro método de inicio de sesión. Inicia sesión como lo hiciste la primera vez, o pide a tu administrador que vincule este proveedor.",
         "serverError": "Tu proveedor de identidad encontró un error. Inténtalo de nuevo.",
+        "staleSignIn": "Este enlace de inicio de sesión caducó o ya no es válido. Vuelve a iniciar sesión.",
         "temporarilyUnavailable": "Tu proveedor de identidad no está disponible temporalmente. Inténtalo de nuevo más tarde."
       },
       "credentialsIssue": {
