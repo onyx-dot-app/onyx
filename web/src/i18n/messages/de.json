@@ -808,7 +808,7 @@
         "description": "Verbinden Sie {appName} mit Ihren Datenquellen."
       },
       "search": {
-        "placeholder": "Konnektoren suchen..."
+        "placeholder": "Konnektoren suchen oder \"/\" drücken, um zu fokussieren..."
       },
       "sourceCard": {
         "connectButton": {

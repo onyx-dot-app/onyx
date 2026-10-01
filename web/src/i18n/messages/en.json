@@ -808,7 +808,7 @@
         "description": "Connect {appName} to your data sources."
       },
       "search": {
-        "placeholder": "Search connectors..."
+        "placeholder": "Search connectors or press \"/\" to focus..."
       },
       "sourceCard": {
         "connectButton": {

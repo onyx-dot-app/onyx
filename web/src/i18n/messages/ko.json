@@ -808,7 +808,7 @@
         "description": "{appName}을(를) 데이터 소스에 연결하세요."
       },
       "search": {
-        "placeholder": "커넥터 검색..."
+        "placeholder": "커넥터를 검색하거나 \"/\"를 눌러 포커스..."
       },
       "sourceCard": {
         "connectButton": {

@@ -808,7 +808,7 @@
         "description": "اربط {appName} بمصادر بياناتك."
       },
       "search": {
-        "placeholder": "البحث في الموصلات..."
+        "placeholder": "ابحث في الموصلات أو اضغط \"/\" للتركيز..."
       },
       "sourceCard": {
         "connectButton": {
