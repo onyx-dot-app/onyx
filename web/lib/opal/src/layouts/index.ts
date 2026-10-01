@@ -109,9 +109,3 @@ export {
   ConfirmationModalLayout,
   type ConfirmationModalProps,
 } from "@opal/layouts/modal/components";
-
-/* PageLoader */
-export {
-  PageLoader,
-  type PageLoaderProps,
-} from "@opal/layouts/page-loader/components";

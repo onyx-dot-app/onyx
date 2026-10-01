@@ -13,7 +13,8 @@ import {
   createTableColumns,
 } from "@opal/components";
 import { SvgCpu, SvgX } from "@opal/icons";
-import { PageLoader, Section } from "@opal/layouts";
+import { Section } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useSystemUsage } from "@/lib/usage/hooks";
 import type { SystemUsageCategory } from "@/lib/usage/systemUsage";

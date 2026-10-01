@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import SvgSimpleLoader from "@opal/icons/simple-loader";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction, toast } from "@opal/layouts";

@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { markdown } from "@opal/utils";
 
 const meta: Meta<typeof PageLoader> = {
-  title: "opal/layouts/PageLoader",
+  title: "opal/loaders/PageLoader",
   component: PageLoader,
   tags: ["autodocs"],
 };

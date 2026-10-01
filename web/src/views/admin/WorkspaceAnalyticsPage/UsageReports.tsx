@@ -13,7 +13,8 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
+import { ContentAction, Section, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import {
   SvgCalendar,
   SvgDownload,
