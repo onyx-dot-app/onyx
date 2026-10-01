@@ -8860,6 +8860,13 @@
         "expected": "{count} أخرى متوقعة",
         "skipped": "{count} تم تخطيها",
         "successful": "{count} نجحت"
+      },
+      "details": {
+        "show": "إظهار التفاصيل",
+        "hide": "إخفاء التفاصيل"
+      },
+      "remediation": {
+        "label": "طريقة الإصلاح"
       }
     },
     "llmGateway": {

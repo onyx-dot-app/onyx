@@ -8860,6 +8860,13 @@
         "expected": "{count} a mais previstas",
         "skipped": "{count} ignoradas",
         "successful": "{count} bem-sucedidas"
+      },
+      "details": {
+        "show": "Mostrar detalhes",
+        "hide": "Ocultar detalhes"
+      },
+      "remediation": {
+        "label": "Como corrigir"
       }
     },
     "llmGateway": {

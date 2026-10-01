@@ -4,13 +4,14 @@ import { useMemo, useState } from "react";
 import { Content } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Divider, Tag, Text, Tooltip } from "@opal/components";
+import { Button, Card, Divider, Tag, Text } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
+  SvgChevronDown,
+  SvgChevronRight,
   SvgExpand,
   SvgFold,
-  SvgInfo,
   SvgMinusCircle,
   SvgRefreshCw,
   SvgXCircle,
@@ -147,11 +148,18 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
   // A failed required check blocks the capability, so the row stands out.
   const blocking = result.status === "failed" && result.required;
   const detail = result.message || t(DETAIL_FALLBACK_KEYS[result.status]);
-  const showGuidance =
+  // Failures and unverified checks carry the detail an admin acts on, so their
+  // rows expand to the full message, the fix, and the docs link.
+  const expandable =
     (result.status === "failed" || result.status === "indeterminate") &&
-    (result.remediation !== null || result.docs_link !== null);
+    (result.message !== "" ||
+      result.remediation !== null ||
+      result.docs_link !== null);
+  // A blocking failure opens on its own; the admin must act on it.
+  const [expanded, setExpanded] = useState(blocking);
+  const ChevronIcon = expanded ? SvgChevronDown : SvgChevronRight;
 
-  const row = (
+  const summary = (
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto] items-center gap-4">
       <div className="flex min-w-0 items-center gap-3">
         <StatusIcon size={20} className={cn("shrink-0", iconClassName)} />
@@ -161,46 +169,18 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
       </div>
 
       <div className="flex min-w-0 items-center gap-2">
-        <Text
-          font="main-ui-body"
-          color={DETAIL_COLORS[result.status]}
-          maxLines={1}
-        >
-          {detail}
-        </Text>
-        {showGuidance && (
-          <Tooltip
-            side="top"
-            tooltip={
-              <div className="flex flex-col gap-1">
-                {result.remediation !== null && (
-                  <Text font="secondary-body" color="inherit">
-                    {result.remediation}
-                  </Text>
-                )}
-                {result.docs_link !== null && (
-                  <a
-                    href={result.docs_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    <Text font="secondary-body" color="inherit">
-                      {t("docsLink.label")}
-                    </Text>
-                  </a>
-                )}
-              </div>
-            }
+        {!expanded && (
+          <Text
+            font="main-ui-body"
+            color={DETAIL_COLORS[result.status]}
+            maxLines={1}
           >
-            <span className="inline-flex shrink-0">
-              <SvgInfo size={16} className="stroke-status-warning-05" />
-            </span>
-          </Tooltip>
+            {detail}
+          </Text>
         )}
       </div>
 
-      <div className="justify-self-end">
+      <div className="flex items-center gap-2 justify-self-end">
         {result.required &&
           (blocking ? (
             <Tag title={t("required.label")} color="gray" />
@@ -209,8 +189,58 @@ function CheckRow({ result }: { result: CapabilityCheckResult }) {
               {t("required.label")}
             </Text>
           ))}
+        {expandable && (
+          <ChevronIcon size={16} className="shrink-0 stroke-text-03" />
+        )}
       </div>
     </div>
+  );
+
+  const details = expandable && expanded && (
+    <div className="flex flex-col gap-2 pl-8 pt-2">
+      <Text font="main-ui-body" color={DETAIL_COLORS[result.status]}>
+        {detail}
+      </Text>
+      {result.remediation !== null && (
+        <div className="flex flex-col gap-1">
+          <Text font="secondary-action" color="text-04">
+            {t("remediation.label")}
+          </Text>
+          <Text font="secondary-body" color="text-04">
+            {result.remediation}
+          </Text>
+        </div>
+      )}
+      {result.docs_link !== null && (
+        <a
+          href={result.docs_link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-fit underline"
+        >
+          <Text font="secondary-body" color="text-04">
+            {t("docsLink.label")}
+          </Text>
+        </a>
+      )}
+    </div>
+  );
+
+  const row = expandable ? (
+    <>
+      <button
+        type="button"
+        className="w-full text-left"
+        aria-expanded={expanded}
+        aria-label={expanded ? t("details.hide") : t("details.show")}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        {summary}
+      </button>
+      {details}
+    </>
+  ) : (
+    summary
   );
 
   return blocking ? (

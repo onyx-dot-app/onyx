@@ -8860,6 +8860,13 @@
         "expected": "예정 {count}개",
         "skipped": "건너뜀 {count}개",
         "successful": "성공 {count}개"
+      },
+      "details": {
+        "show": "세부 정보 표시",
+        "hide": "세부 정보 숨기기"
+      },
+      "remediation": {
+        "label": "해결 방법"
       }
     },
     "llmGateway": {

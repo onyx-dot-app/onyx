@@ -8860,6 +8860,13 @@
         "expected": "予定 {count} 件",
         "skipped": "スキップ {count} 件",
         "successful": "成功 {count} 件"
+      },
+      "details": {
+        "show": "詳細を表示",
+        "hide": "詳細を非表示"
+      },
+      "remediation": {
+        "label": "修正方法"
       }
     },
     "llmGateway": {

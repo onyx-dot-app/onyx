@@ -8860,6 +8860,13 @@
         "expected": "{count} 项待执行",
         "skipped": "{count} 项跳过",
         "successful": "{count} 项成功"
+      },
+      "details": {
+        "show": "显示详细信息",
+        "hide": "隐藏详细信息"
+      },
+      "remediation": {
+        "label": "修复方法"
       }
     },
     "llmGateway": {
