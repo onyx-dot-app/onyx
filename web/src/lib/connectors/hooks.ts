@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useFederatedConnectors, usePublicCredentials } from "@/lib/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import { credentialTemplates } from "@/lib/connectors/credentials";
+import { credentialTemplates } from "@/lib/credentials/templates";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { adminDeleteCredential } from "@/lib/credentials/svc";
 import {

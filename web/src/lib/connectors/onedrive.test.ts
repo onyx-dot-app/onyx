@@ -1,5 +1,5 @@
 import { connectorConfigs } from "@/lib/connectors/connectors";
-import { credentialTemplates } from "@/lib/connectors/credentials";
+import { credentialTemplates } from "@/lib/credentials/templates";
 import {
   createConnectorInitialValues,
   createConnectorValidationSchema,

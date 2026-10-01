@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
-import { getDisplayNameForCredentialKey } from "@/lib/connectors/utils";
+import { getDisplayNameForCredentialKey } from "@/lib/credentials/utils";
 import type { Credential } from "@/lib/credentials/types";
 import {
   createEditingValidationSchema,

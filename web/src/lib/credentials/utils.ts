@@ -1,7 +1,6 @@
 import * as Yup from "yup";
 
-import { credentialTemplates } from "@/lib/connectors/credentials";
-import { getDisplayNameForCredentialKey } from "@/lib/connectors/utils";
+import { credentialTemplates } from "@/lib/credentials/templates";
 import type {
   Credential,
   CredentialTemplateWithAuth,
@@ -12,6 +11,7 @@ import type {
   CredentialFormValues,
 } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
+import { credentialDisplayNames } from "@/lib/credentials/templates";
 
 // What a credential template seeds a field with: "" for a required text
 // field, null for an optional one or a file, a boolean for a checkbox.
@@ -257,4 +257,9 @@ export function createInitialValues(
   }
 
   return initialValues;
+}
+
+/** The label for a credential field key, falling back to the key itself. */
+export function getDisplayNameForCredentialKey(key: string): string {
+  return credentialDisplayNames[key] || key;
 }
