@@ -37,7 +37,7 @@ Props: `lines` (default `1`), `width` of the last line (`"full" | "3/4" | "2/3" 
 <TextLoader font="main-ui-body">Indexing documents…</TextLoader>
 ```
 
-Props: `children` (`string | RichStr`), `font` (`TextFont`, default `"main-ui-action"`).
+Props: `children` (`string | RichStr`), `font` (`TextFont`, default `"main-ui-action"`). The text rests at `text-02` and the wave peaks at `text-04`.
 
 ## IconLoader
 

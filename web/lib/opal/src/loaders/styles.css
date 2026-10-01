@@ -33,7 +33,7 @@
 
 .opal-shimmer-text {
   position: relative;
-  color: var(--shimmer-base);
+  color: var(--text-02);
 }
 
 .opal-shimmer-text-overlay {
@@ -54,7 +54,7 @@
   background-image: linear-gradient(
     90deg,
     transparent 40%,
-    var(--shimmer-highlight) 50%,
+    var(--text-04) 50%,
     transparent 60%
   );
   will-change: transform;
