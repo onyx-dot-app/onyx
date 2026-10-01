@@ -394,10 +394,19 @@ class _OnyxConfluence:
                 return
 
             if is_v2:
-                url = next_link
+                url = self._v2_path(next_link)
             else:
                 start += len(results)
                 url = self._build_spaces_url(is_v2, base_url, limit, space_keys, start)
+
+    def _v2_path(self, path: str) -> str:
+        """``path`` ("wiki/api/v2/..." or a v2 ``_links.next``) relative to the
+        SDK URL. A site URL already ends in ``/wiki``; the OAuth gateway URL
+        (``api.atlassian.com/ex/confluence/{cloudId}``) does not."""
+        relative = path.lstrip("/")
+        if self._sdk_url().rstrip("/").endswith("/wiki"):
+            return relative.removeprefix("wiki/")
+        return relative
 
     def retrieve_confluence_spaces(
         self,
@@ -420,7 +429,11 @@ class _OnyxConfluence:
         """
         # Determine API version once
         use_v2 = self._is_cloud and not self.scoped_token
-        base_url = _CONFLUENCE_SPACES_API_V2 if use_v2 else _CONFLUENCE_SPACES_API_V1
+        base_url = (
+            self._v2_path(_CONFLUENCE_SPACES_API_V2)
+            if use_v2
+            else _CONFLUENCE_SPACES_API_V1
+        )
 
         try:
             yield from self._paginate_spaces_for_endpoint(
@@ -1550,7 +1563,8 @@ class ConfluenceSourceOperations(SourceOperations):
         limit: int = 50,
         fast: bool = False,
     ) -> Iterator[dict[str, Any]]:
-        """Yields the visible spaces (v2 API for OAuth Cloud, else v1)."""
+        """Yields the visible spaces (v2 API on Cloud without a scoped token,
+        else v1)."""
         return self._client(fast=fast).retrieve_confluence_spaces(
             space_keys=space_keys, limit=limit
         )
