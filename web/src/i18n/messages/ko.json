@@ -10822,6 +10822,9 @@
         },
         "loading": {
           "text": "모델 불러오는 중..."
+        },
+        "loadingMore": {
+          "text": "모델 더 불러오는 중..."
         }
       },
       "modelSettingsButton": {

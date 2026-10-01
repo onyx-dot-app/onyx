@@ -10822,6 +10822,9 @@
         },
         "loading": {
           "text": "جارٍ تحميل النماذج..."
+        },
+        "loadingMore": {
+          "text": "جارٍ تحميل المزيد من النماذج..."
         }
       },
       "modelSettingsButton": {

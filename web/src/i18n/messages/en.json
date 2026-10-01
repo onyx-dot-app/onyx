@@ -10822,6 +10822,9 @@
         },
         "loading": {
           "text": "Loading models..."
+        },
+        "loadingMore": {
+          "text": "Loading more models..."
         }
       },
       "modelSettingsButton": {

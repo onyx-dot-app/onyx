@@ -10822,6 +10822,9 @@
         },
         "loading": {
           "text": "モデルを読み込み中..."
+        },
+        "loadingMore": {
+          "text": "さらにモデルを読み込み中..."
         }
       },
       "modelSettingsButton": {

@@ -17,6 +17,7 @@ import ModelSelectorContent, {
 import type {
   LLMOption,
   ModelOptionProvider,
+  ModelPaging,
 } from "@/lib/languageModels/types";
 
 export interface ModelSelectorProps {
@@ -26,6 +27,9 @@ export interface ModelSelectorProps {
   /** Limits the built-in provider list to models available to this agent. */
   agentId?: number;
   providerOptions?: ModelOptionProvider[];
+  /** Pages in the models a host-supplied `providerOptions` list left out.
+   *  Ignored when the selector fetches its own list, which pages itself. */
+  modelPaging?: ModelPaging;
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
 
@@ -63,6 +67,7 @@ export default function ModelSelector({
   onChange,
   agentId,
   providerOptions,
+  modelPaging: modelPagingProp,
   includeHiddenModels = false,
   requiresImageInput,
   renderTrigger,
@@ -81,6 +86,7 @@ export default function ModelSelector({
     llmProviders: fetchedProviderOptions,
     defaultText,
     isLoading: providersLoading,
+    modelPaging: fetchedModelPaging,
   } = useLanguageModelsForAgent(agentId);
   const {
     llmProviders: globalProviderOptions,
@@ -183,6 +189,9 @@ export default function ModelSelector({
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
           providerOptions={llmProviders}
+          modelPaging={
+            providerOptions === undefined ? fetchedModelPaging : modelPagingProp
+          }
           isLoading={isLoading}
           includeHiddenModels={includeHiddenModels}
           requiresImageInput={requiresImageInput}
