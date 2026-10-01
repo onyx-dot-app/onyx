@@ -2,9 +2,11 @@
 
 import json
 import os
+import time
 import uuid
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -107,15 +109,23 @@ def _sender() -> BoundedTelemetry:
     )
 
 
+@pytest.mark.parametrize("uptime", [0.0, 120.0])
 def test_bounded_source_pages_reconcile_all_connectors_and_safe_outcomes(
     source_schema: tuple[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    uptime: float,
 ) -> None:
+    monkeypatch.setattr(
+        "onyx.utils.fleet_telemetry_collector.time",
+        SimpleNamespace(monotonic=lambda: uptime, time=time.time),
+    )
     source_url, schema = source_schema
     sender = _sender()
     collector = FleetCollector(sender, source_url, [schema])
     try:
         collector.collect_one_schema()
         collector.collect_one_schema()
+        assert not collector.collect_one_schema()
         events = sender._take_batch() + sender._take_batch() + sender._take_batch()
         connectors = [event for event in events if event["event_type"] == "connector"]
         assert len(connectors) == 250

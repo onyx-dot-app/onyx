@@ -6,6 +6,7 @@ import time
 from collections.abc import Generator, Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
 
@@ -702,13 +703,18 @@ def test_job_progress_identity_changes_with_counts_but_terminal_identity_is_stab
     assert datetime.fromisoformat(terminal[0]["occurred_at"]) == ended
 
 
+@pytest.mark.parametrize("uptime", [0.0, 1.0])
 def test_repair_cadence_avoids_idle_reads_and_still_polls_old_active_jobs(
     monkeypatch: pytest.MonkeyPatch,
+    uptime: float,
 ) -> None:
     from onyx.utils import fleet_telemetry_collector as source
 
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
+    monkeypatch.setattr(
+        source, "time", SimpleNamespace(monotonic=lambda: uptime, time=time.time)
+    )
     connectors = Mock(return_value=[])
     attempts = Mock(return_value=[])
     monkeypatch.setattr(source, "connector_page", connectors)
@@ -860,27 +866,30 @@ def test_generic_fetch_yields_and_failures_pass_through_without_metadata_errors(
     assert raised.value is original
 
 
+@pytest.mark.parametrize("uptime", [0.0, 1.0])
 def test_failed_queue_reads_wait_for_configured_poll_interval(
     monkeypatch: pytest.MonkeyPatch,
+    uptime: float,
 ) -> None:
     from onyx.utils import fleet_telemetry_collector as source
 
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
+    monkeypatch.setattr(
+        source, "time", SimpleNamespace(monotonic=lambda: uptime, time=time.time)
+    )
     monkeypatch.setenv("ONYX_TELEMETRY_REDIS_URL", "redis://localhost:1/0")
     unavailable = Mock(side_effect=TimeoutError("PRIVATE unavailable Redis"))
     monkeypatch.setattr("redis.Redis.from_url", unavailable)
     sender = client()
     collector = FleetCollector(sender, "postgresql://unused", ["public"])
-    collector._last_aws = time.monotonic()
+    collector._last_aws = uptime
     monkeypatch.setattr(collector, "collect_one_schema", Mock(return_value=False))
     for _ in range(20):
         collector.tick()
     unavailable.assert_called_once()
     assert collector.queue_errors == 1 and sender.health["queue_errors"] == 1
-    collector._last_queues = (
-        time.monotonic() - sender.settings["queue_interval_seconds"] - 1
-    )
+    collector._last_queues = uptime - sender.settings["queue_interval_seconds"] - 1
     collector.tick()
     assert unavailable.call_count == 2 and collector.queue_errors == 2
 
@@ -903,3 +912,94 @@ def test_version_accepts_only_bounded_approved_suffix_chains(version: str) -> No
 )
 def test_version_rejects_private_or_unbounded_suffixes(version: str) -> None:
     assert not client().emit("version", {"version": version})
+
+
+@pytest.mark.parametrize("uptime", [0.0, 1.0])
+def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
+    monkeypatch: pytest.MonkeyPatch, uptime: float
+) -> None:
+    from onyx.utils import fleet_telemetry_collector as source
+
+    clock = [uptime]
+    monkeypatch.setattr(
+        source, "time", SimpleNamespace(monotonic=lambda: clock[0], time=time.time)
+    )
+    monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
+    discovery = Mock(return_value=["public"])
+    monkeypatch.setattr(source, "tenant_schemas", discovery)
+    managed = Mock(return_value=False)
+    monkeypatch.setattr("onyx.utils.fleet_telemetry_aws.collect_aws_resources", managed)
+    sender = client()
+    collector = FleetCollector(sender, "postgresql://unused", ["public"])
+    collector._discover = True
+    monkeypatch.setattr(collector, "collect_one_schema", Mock(return_value=False))
+    monkeypatch.setattr(collector, "collect_queues", Mock())
+    collector.tick()
+    initial = sender._take_batch()
+    assert len(initial) == 1 and initial[0]["event_type"] == "heartbeat"
+    assert initial[0]["data"]["aws_consecutive_errors"] == 1
+    collector.tick()
+    discovery.assert_called_once()
+    managed.assert_called_once()
+    assert not sender._take_batch()
+    clock[0] += 60
+    collector.tick()
+    assert discovery.call_count == 2 and managed.call_count == 1
+    assert sender._take_batch()[0]["event_type"] == "heartbeat"
+    clock[0] += 240
+    collector.tick()
+    assert managed.call_count == 2 and collector.aws_consecutive_errors == 2
+
+
+@pytest.mark.parametrize("uptime", [0.0, 1.0])
+def test_initial_kubernetes_reads_run_once_and_failed_reads_keep_cadence(
+    monkeypatch: pytest.MonkeyPatch, uptime: float
+) -> None:
+    from onyx.utils import fleet_telemetry_kubernetes as kubernetes
+
+    clock = [uptime]
+    monkeypatch.setattr(kubernetes, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    watcher = KubernetesCollector(client())
+    failed = Mock(return_value=None)
+    monkeypatch.setattr(watcher, "_get", failed)
+    watcher.tick()
+    assert failed.call_count == 2
+    assert failed.call_args_list[0].args[1] == {"limit": 25}
+    watcher.tick()
+    assert failed.call_count == 2
+    clock[0] += 30
+    watcher.tick()
+    assert failed.call_count == 3
+    clock[0] += 270
+    watcher.tick()
+    assert failed.call_count == 5
+
+
+@pytest.mark.parametrize("uptime", [0.0, 1.0])
+def test_sender_initial_policy_and_resources_run_once_at_low_host_uptime(
+    monkeypatch: pytest.MonkeyPatch, uptime: float
+) -> None:
+    monkeypatch.setattr(
+        fleet,
+        "time",
+        SimpleNamespace(monotonic=lambda: uptime, time=time.time, time_ns=time.time_ns),
+    )
+    sender = client()
+    policy = Mock()
+    resource = Mock()
+    monkeypatch.setattr(sender, "_poll_settings", policy)
+    monkeypatch.setattr(
+        "onyx.utils.fleet_telemetry_resources.collect_process_resource", resource
+    )
+    flushed = Mock(
+        side_effect=lambda: sender.close() if flushed.call_count == 2 else None
+    )
+    monkeypatch.setattr(sender, "flush_once", flushed)
+    monkeypatch.setattr(sender._stop, "wait", Mock())
+    sender._run()
+    policy.assert_called_once()
+    resource.assert_called_once_with(sender)
+    heartbeat = [
+        event for event in sender._take_batch() if event["event_type"] == "heartbeat"
+    ]
+    assert len(heartbeat) == 1 and flushed.call_count == 2
