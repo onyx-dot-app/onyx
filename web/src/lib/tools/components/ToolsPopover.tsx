@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
@@ -10,7 +11,7 @@ import {
   Popover,
   PopoverMenu,
 } from "@opal/components";
-import { SvgActions, SvgKey, SvgSliders, SvgSimpleLoader } from "@opal/icons";
+import { SvgActions, SvgKey, SvgSliders } from "@opal/icons";
 
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { MinimalAgent } from "@/lib/agents/types";
@@ -404,7 +405,7 @@ export default function ToolsPopover({
     <LineItemButton
       disabled={selectedMcpServerData?.isLoading}
       onClick={handleFooterReauthClick}
-      icon={selectedMcpServerData?.isLoading ? SvgSimpleLoader : SvgKey}
+      icon={selectedMcpServerData?.isLoading ? IconLoader : SvgKey}
       title={t("toolsPopover.reauthenticate.label")}
       sizePreset="main-ui"
       variant="section"

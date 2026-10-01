@@ -1,11 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Formik, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Modal } from "@opal/components";
@@ -82,7 +83,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           <Button
             disabled={!isValid || !dirty || isSubmitting}
             onClick={submitForm}
-            icon={isSubmitting ? SvgSimpleLoader : undefined}
+            icon={isSubmitting ? IconLoader : undefined}
           >
             {isEditing
               ? t("modal.updateButton.label")

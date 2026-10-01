@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { deleteChatSession } from "@/app/app/services/lib";
@@ -27,7 +28,6 @@ import {
   SvgFolder,
   SvgFolderIn,
   SvgMoreHorizontal,
-  SvgSimpleLoader,
   SvgTrash,
 } from "@opal/icons";
 import { timeAgo } from "@opal/time";
@@ -314,7 +314,7 @@ export default function ProjectChatSessionList() {
         </div>
 
         {isLoadingProjectDetails && !currentProjectDetails ? (
-          <SvgSimpleLoader size={16} className="mx-4" />
+          <IconLoader className="mx-4" />
         ) : projectChats.length === 0 ? (
           <Card rounding={3} border="dashed" color="transparent" padding={2}>
             <div className="p-1">

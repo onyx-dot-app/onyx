@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Fragment } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -21,7 +22,6 @@ import {
   SvgFiles,
   SvgCreateAgent,
   SvgManageAgent,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { InputSwitch, Divider } from "@opal/components";
@@ -86,7 +86,7 @@ function GroupPermissionsSection({
       />
       <SimpleCollapsible.Content>
         {isLoading || !registry ? (
-          <SvgSimpleLoader size={16} />
+          <IconLoader />
         ) : (
           <Card>
             {registry.map((entry, index) => {

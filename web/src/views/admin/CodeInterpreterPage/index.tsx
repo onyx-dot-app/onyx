@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts, toast } from "@opal/layouts";
@@ -10,7 +11,6 @@ import {
   SvgTerminal,
   SvgUnplug,
   SvgXOctagon,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
@@ -72,7 +72,7 @@ function CheckingStatus() {
       <Text mainUiAction text03>
         {t("status.checking.label")}
       </Text>
-      <SvgSimpleLoader size={16} />
+      <IconLoader />
     </Section>
   );
 }

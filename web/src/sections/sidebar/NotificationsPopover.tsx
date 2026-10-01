@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
   useEffect,
@@ -30,7 +31,6 @@ import {
   SvgNotificationBubble,
   SvgCheckSquare,
   SvgChevronLeft,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   Button,
@@ -347,7 +347,7 @@ export default function NotificationsPopover({
       {isLoading ? (
         <div className="h-(--notifications-popover)">
           <Section>
-            <SvgSimpleLoader size={16} />
+            <IconLoader />
           </Section>
         </div>
       ) : newNotifications.length === 0 && olderNotifications.length === 0 ? (
@@ -407,7 +407,7 @@ export default function NotificationsPopover({
               ref={sentinelRef}
               className="h-8 flex items-center justify-center transition-opacity duration-300"
             >
-              <SvgSimpleLoader
+              <IconLoader
                 size={16}
                 className={isLoadingMore ? "opacity-100" : "opacity-40"}
               />

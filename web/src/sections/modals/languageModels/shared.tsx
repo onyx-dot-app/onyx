@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, useFormikContext } from "formik";
@@ -55,7 +56,6 @@ import {
   SvgUserManage,
   SvgUsers,
   SvgX,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import { Card, EmptyMessageCard } from "@opal/components";
@@ -452,7 +452,7 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
   return (
     <Button
       prominence="tertiary"
-      icon={isFetching ? SvgSimpleLoader : SvgRefreshCw}
+      icon={isFetching ? IconLoader : SvgRefreshCw}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -1121,7 +1121,7 @@ function ModalWrapperInner({
             <Button
               disabled={!isValid || !dirty || busy}
               type="submit"
-              icon={busy ? SvgSimpleLoader : undefined}
+              icon={busy ? IconLoader : undefined}
               tooltip={disabledTooltip}
             >
               {llmProvider

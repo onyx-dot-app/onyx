@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
@@ -9,7 +10,6 @@ import {
   SvgBarChart,
   SvgWallet,
   SvgCreditCard,
-  SvgSimpleLoader,
   SvgChevronDown,
   SvgChevronRight,
   SvgChevronUp,
@@ -463,7 +463,7 @@ export default function UsageSettings() {
               alignItems="center"
               width="full"
             >
-              <SvgSimpleLoader size={16} />
+              <IconLoader />
             </Section>
           </Card>
         ) : error || !data ? (

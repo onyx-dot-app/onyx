@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -32,7 +33,6 @@ import {
   SvgUserEdit,
   SvgUserKey,
   SvgUsers,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
@@ -274,7 +274,7 @@ export default function ServiceAccountsPage() {
           divider
         />
         <SettingsLayouts.Body>
-          <SvgSimpleLoader size={16} />
+          <IconLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );

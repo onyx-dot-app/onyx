@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ProjectFile } from "@/lib/projects/types";
@@ -7,7 +8,7 @@ import { UserFileStatus } from "@/lib/projects/types";
 import { isFilePending } from "@/lib/projects/utils";
 import { isImageFile } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import { SvgFileText, SvgX, SvgSimpleLoader } from "@opal/icons";
+import { SvgFileText, SvgX } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
 import { AttachmentItemButton } from "@opal/components";
 
@@ -131,7 +132,7 @@ function ImageFileCard({
       >
         {isProcessing || !imageUrl ? (
           <div className="h-full w-full flex items-center justify-center">
-            <SvgSimpleLoader className={loaderSize} />
+            <IconLoader className={loaderSize} />
           </div>
         ) : imgError ? (
           <div className="h-full w-full flex items-center justify-center">
@@ -211,7 +212,7 @@ export function FileCard({
         <Interactive.Container border size="fit" width="full">
           <AttachmentItemButton
             presentational
-            icon={isProcessing ? SvgSimpleLoader : SvgFileText}
+            icon={isProcessing ? IconLoader : SvgFileText}
             title={file.name}
             description={
               isProcessing

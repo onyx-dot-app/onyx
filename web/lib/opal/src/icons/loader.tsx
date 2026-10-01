@@ -11,7 +11,7 @@ const SvgLoader = ({ size, ...props }: IconProps) => (
     {...props}
   >
     {/* A 3/4 ring: from the bottom, round through the left and top, to the
-    right. Static; spin it with IconLoader or SvgSimpleLoader. */}
+    right. Static and unsized; IconLoader spins and sizes it. */}
     <path
       d="M8 14.6667A6.66667 6.66667 0 1 1 14.6667 8"
       strokeWidth={1.5}

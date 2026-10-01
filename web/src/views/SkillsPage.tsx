@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -23,7 +24,6 @@ import {
   SvgBlocks,
   SvgEdit,
   SvgPlus,
-  SvgSimpleLoader,
   SvgUploadCloud,
 } from "@opal/icons";
 import { SvgGithub } from "@opal/logos";
@@ -369,7 +369,7 @@ export default function SkillsPage() {
           />
         )}
 
-        {isLoading && <SvgSimpleLoader size={16} />}
+        {isLoading && <IconLoader />}
 
         {error && !isLoading && (
           <MessageCard

@@ -118,9 +118,4 @@ function OnyxLoader({ size = 64, color = "border-02" }: OnyxLoaderProps) {
   );
 }
 
-export {
-  COLOR_CLASS as LOADER_COLOR_CLASS,
-  OnyxLoader,
-  type OnyxLoaderProps,
-  type LoaderColor,
-};
+export { OnyxLoader, type OnyxLoaderProps, type LoaderColor };

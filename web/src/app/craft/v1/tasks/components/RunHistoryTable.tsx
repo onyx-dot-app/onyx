@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
   useEffect,
@@ -18,7 +19,7 @@ import {
   createTableColumns,
 } from "@opal/components";
 import SvgLock from "@opal/icons/lock";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { markdown } from "@opal/utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { Section } from "@/layouts/general-layouts";
@@ -289,7 +290,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   if (isLoading && !data) {
     return (
       <div className="flex justify-center py-8">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }

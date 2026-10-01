@@ -1,10 +1,11 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { use } from "react";
 import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 import { useSlackChannelConfigs } from "@/app/admin/bots/[bot-id]/hooks";
@@ -62,7 +63,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
       <SettingsLayouts.Header icon={SvgSlack} title={title} divider cancel />
       <SettingsLayouts.Body>
         {isLoading ? (
-          <SvgSimpleLoader size={16} />
+          <IconLoader />
         ) : channelsError || !slackChannelConfigs ? (
           <ErrorCallout
             errorTitle={t("error.generic.title")}

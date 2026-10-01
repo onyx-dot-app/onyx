@@ -1,10 +1,11 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { use, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
@@ -42,7 +43,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
     isAgentsLoading ||
     (enterpriseTier && isStdAnswerLoading)
   ) {
-    return <SvgSimpleLoader size={16} />;
+    return <IconLoader />;
   }
 
   if (docSetsError || !documentSets) {

@@ -3,6 +3,7 @@
 // CSV text (instead of raw binary bytes); anything else (e.g. a real CSV) is
 // passed through raw by the backend and rendered as a single CSV sheet, so
 // routing here never depends solely on the file's display name.
+import { IconLoader } from "@opal/loaders";
 import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
 import { parseCSV } from "./CSVContent";
-import { SvgAlertCircle, SvgSimpleLoader } from "@opal/icons";
+import { SvgAlertCircle } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { fetchChatFile } from "@/lib/chat/svc";
@@ -263,7 +264,7 @@ function SpreadsheetContent({
   if (isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
-        <SvgSimpleLoader size={16} />
+        <IconLoader />
       </div>
     );
   }

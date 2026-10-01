@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, {
   useCallback,
   useEffect,
@@ -49,7 +50,6 @@ import {
   SvgSearch,
   SvgStop,
   SvgX,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   Button,
@@ -743,7 +743,7 @@ const AppInputBar = React.memo(
             id="onyx-chat-input-send-button"
             icon={
               isClassifying
-                ? SvgSimpleLoader
+                ? IconLoader
                 : chatState !== "input" && message.trim()
                   ? SvgArrowUp
                   : chatState === "streaming" || isVoicePlaybackControllable
@@ -1001,7 +1001,7 @@ const AppInputBar = React.memo(
                   <Button
                     disabled={!message || isClassifying || hasPendingFiles}
                     id="onyx-chat-input-send-button"
-                    icon={isClassifying ? SvgSimpleLoader : SvgSearch}
+                    icon={isClassifying ? IconLoader : SvgSearch}
                     onClick={() => {
                       if (chatState == "streaming") {
                         stopGenerating();

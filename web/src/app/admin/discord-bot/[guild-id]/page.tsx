@@ -1,9 +1,9 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
@@ -129,7 +129,7 @@ function GuildDetailContent({
           </Text>
         ) : channelsLoading ? (
           <div className="flex justify-center py-12">
-            <SvgSimpleLoader className="h-6 w-6" />
+            <IconLoader className="h-6 w-6" />
           </div>
         ) : channelsError ? (
           <ErrorCallout

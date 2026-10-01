@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { InputTypeIn } from "@opal/components";
 import { ProjectFile } from "@/lib/projects/providers";
@@ -20,7 +21,6 @@ import {
   SvgPlusCircle,
   SvgTrash,
   SvgXCircle,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import { AttachmentItemButton, Text as OpalText } from "@opal/components";
@@ -35,7 +35,7 @@ function getIcon(
   file: ProjectFile,
   isProcessing: boolean
 ): React.FunctionComponent<IconProps> {
-  if (isProcessing) return SvgSimpleLoader;
+  if (isProcessing) return IconLoader;
   const ext = getFileExtension(file.name).toLowerCase();
   if (isImageExtension(ext)) return SvgImage;
   return SvgFileText;

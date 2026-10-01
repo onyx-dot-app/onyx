@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { Form, Formik, useField } from "formik";
 import { useTranslations } from "next-intl";
@@ -12,7 +13,7 @@ import {
   type TagItem,
   Text,
 } from "@opal/components";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { InputErrorText, InputVertical, Section, toast } from "@opal/layouts";
 import type {
   SSOProviderCreateRequest,
@@ -503,7 +504,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   <Button
                     type="submit"
                     disabled={isSubmitting || !isValid || !dirty}
-                    icon={isSubmitting ? SvgSimpleLoader : undefined}
+                    icon={isSubmitting ? IconLoader : undefined}
                   >
                     {isEditing
                       ? t("modals.provider.submitButton.updateLabel")

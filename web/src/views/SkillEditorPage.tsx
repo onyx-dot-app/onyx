@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
   useEffect,
@@ -21,13 +22,7 @@ import {
   Tag,
   Tooltip,
 } from "@opal/components";
-import {
-  SvgAlertTriangle,
-  SvgBlocks,
-  SvgShare,
-  SvgSimpleLoader,
-  SvgTrash,
-} from "@opal/icons";
+import { SvgAlertTriangle, SvgBlocks, SvgShare, SvgTrash } from "@opal/icons";
 import {
   Content,
   InputHorizontal,
@@ -533,7 +528,7 @@ export default function SkillEditorPage({
         <SettingsLayouts.Body>
           {!isCreating && isLoading && (
             <div className="flex min-h-40 items-center justify-center">
-              <SvgSimpleLoader size={16} />
+              <IconLoader />
             </div>
           )}
 

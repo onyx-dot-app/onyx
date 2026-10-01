@@ -43,14 +43,15 @@ The wave is 40% of the text's length, never narrower than 40px. Its rate scales 
 
 ## IconLoader
 
-The static `SvgLoader` ring (a 3/4 circle in `currentColor`), spun, at a set size. The icon neither spins nor sizes itself; `IconLoader` does both.
+The static `SvgLoader` ring (a 3/4 circle in `currentColor`), spun, at 16px by default. It takes the same props as any icon, so use it two ways:
 
 ```tsx
-<IconLoader />
-<IconLoader size={24} color="text-03" />
+<IconLoader />                                   // on its own, 16px
+<IconLoader size={24} className="text-text-03" />
+<Button icon={isSaving ? IconLoader : SvgCheck}>Save</Button> // the Button sets the size
 ```
 
-Props: `size` (px, default `16`), `color` (`LoaderColor`, default `"inherit"`, which follows the surrounding text color).
+Colour follows `currentColor`. There is no separate spinning icon: `SvgLoader` is static and unsized, and `IconLoader` is what spins and sizes it.
 
 ## PageLoader
 
