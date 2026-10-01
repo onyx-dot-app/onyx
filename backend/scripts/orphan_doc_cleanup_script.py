@@ -9,19 +9,15 @@ from sqlalchemy.orm import Session
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-from onyx.context.search.models import IndexFilters  # noqa: E402
 from onyx.db.document import (  # noqa: E402
     delete_documents_complete__no_commit,
     get_document,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
-from onyx.db.search_settings import get_current_search_settings  # noqa: E402
+from onyx.db.search_settings import get_active_search_settings  # noqa: E402
 from onyx.db.tag import delete_orphan_tags_batched  # noqa: E402
 from onyx.document_index.factory import get_default_document_index  # noqa: E402
-from onyx.document_index.interfaces import (  # noqa: E402
-    DocumentIndex,
-    DocumentSectionRequest,
-)
+from onyx.document_index.interfaces import DocumentIndex  # noqa: E402
 
 BATCH_SIZE = 100
 
@@ -55,8 +51,12 @@ def main() -> None:
                     )
                 return
 
-            search_settings = get_current_search_settings(db_session)
-            document_index = get_default_document_index(search_settings, None)
+            # Include the secondary index so an orphan's chunks are also
+            # removed from the future index during an index swap.
+            active_search_settings = get_active_search_settings(db_session)
+            document_index = get_default_document_index(
+                active_search_settings.primary, active_search_settings.secondary
+            )
 
             # Delete chunks from the document index first
             print("Deleting orphaned document chunks from the document index")
@@ -70,26 +70,9 @@ def main() -> None:
                     document = get_document(doc_id, db_session)
                     if not document:
                         return None
-                    # Check if document exists in the document index first
-                    try:
-                        chunks = document_index.id_based_retrieval(
-                            chunk_requests=[
-                                DocumentSectionRequest(
-                                    document_id=doc_id, max_chunk_ind=2
-                                )
-                            ],
-                            filters=IndexFilters(access_control_list=None),
-                            batch_retrieval=True,
-                        )
-                        if not chunks:
-                            print(f"Document {doc_id} not found in the document index")
-                            return doc_id
-                    except Exception as e:
-                        print(
-                            f"Error checking if document {doc_id} exists in the document index: {e}"
-                        )
-                        return None
-
+                    # Delete without a lookup first: lookups read only the
+                    # primary index, and delete is a no-op for a missing
+                    # document.
                     try:
                         print(f"Deleting document {doc_id} in the document index")
                         chunks_deleted = document_index.delete(
@@ -115,6 +98,14 @@ def main() -> None:
                     doc_id = future.result()
                     if doc_id:
                         successfully_index_deleted_doc_ids.append(doc_id)
+
+            if not successfully_index_deleted_doc_ids:
+                # The next query would return the same documents, so stop
+                # instead of retrying them forever.
+                print(
+                    "Could not delete any orphaned document in this batch from the document index. Stopping."
+                )
+                break
 
             # Delete documents from Postgres
             print("Deleting orphaned documents from Postgres")

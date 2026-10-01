@@ -9,8 +9,10 @@ COMPOSE_FILE="$SCRIPT_DIR/../../deployment/docker_compose/docker-compose.yml"
 COMPOSE_DEV_FILE="$SCRIPT_DIR/../../deployment/docker_compose/docker-compose.dev.yml"
 
 stop_and_remove_containers() {
-  docker stop onyx_postgres onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
-  docker rm onyx_postgres onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+  # onyx_vespa was started by older versions of this script; remove it if it
+  # is still around.
+  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
   docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled stop opensearch 2>/dev/null || true
   docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled rm -f opensearch 2>/dev/null || true
 }
@@ -36,6 +38,14 @@ for arg in "$@"; do
         POSITIONAL_ARGS+=("$arg")
     fi
 done
+
+# The old first argument (vespa_volume) is gone. Stop on the old four-argument
+# form so a Vespa volume is never mounted as the Postgres data volume.
+if [[ ${#POSITIONAL_ARGS[@]} -gt 3 ]]; then
+    echo "Usage: $0 [postgres_volume] [redis_volume] [minio_volume] [--keep-opensearch-data]" >&2
+    echo "The vespa_volume argument was removed. Pass the Postgres volume first." >&2
+    exit 1
+fi
 
 POSTGRES_VOLUME=${POSITIONAL_ARGS[0]:-""}
 REDIS_VOLUME=${POSITIONAL_ARGS[1]:-""}
