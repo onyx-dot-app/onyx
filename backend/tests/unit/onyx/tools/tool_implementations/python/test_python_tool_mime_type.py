@@ -4,6 +4,7 @@ import pytest
 
 from onyx.file_processing.file_types import (
     PRESENTATION_MIME_TYPE,
+    SPREADSHEET_MACRO_MIME_TYPE,
     SPREADSHEET_MIME_TYPE,
     WORD_PROCESSING_MIME_TYPE,
 )
@@ -17,6 +18,7 @@ from onyx.tools.tool_implementations.python.python_tool import (
     [
         ("report.xlsx", SPREADSHEET_MIME_TYPE),
         ("REPORT.XLSX", SPREADSHEET_MIME_TYPE),
+        ("workbook.xlsm", SPREADSHEET_MACRO_MIME_TYPE),
         ("memo.docx", WORD_PROCESSING_MIME_TYPE),
         ("deck.pptx", PRESENTATION_MIME_TYPE),
     ],
