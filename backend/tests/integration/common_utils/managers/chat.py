@@ -104,7 +104,6 @@ class ChatSessionManager:
         allowed_tool_ids: list[int] | None = None,
         forced_tool_ids: list[int] | None = None,
         chat_session: DATestChatSession | None = None,
-        mock_llm_response: str | None = None,
         deep_research: bool = False,
         llm_override: LLMOverride | None = None,
     ) -> StreamedResponse:
@@ -119,7 +118,6 @@ class ChatSessionManager:
             file_descriptors=file_descriptors or [],
             allowed_tool_ids=allowed_tool_ids,
             forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
-            mock_llm_response=mock_llm_response,
             deep_research=deep_research,
             llm_override=llm_override,
         )
@@ -163,7 +161,6 @@ class ChatSessionManager:
         file_descriptors: list[FileDescriptor] | None = None,
         allowed_tool_ids: list[int] | None = None,
         forced_tool_ids: list[int] | None = None,
-        mock_llm_response: str | None = None,
         deep_research: bool = False,
         llm_override: LLMOverride | None = None,
     ) -> None:
@@ -193,7 +190,6 @@ class ChatSessionManager:
             file_descriptors=file_descriptors or [],
             allowed_tool_ids=allowed_tool_ids,
             forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
-            mock_llm_response=mock_llm_response,
             deep_research=deep_research,
             llm_override=llm_override,
         )
@@ -332,6 +328,11 @@ class ChatSessionManager:
             used_tools=list(ind_to_tool_use.values()),
             tool_call_debug=tool_call_debug,
             heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
+            packets=[
+                {"placement": dict(data["placement"]), "obj": dict(data["obj"])}
+                for data in response_data
+                if "obj" in data and "placement" in data
+            ],
             error=error,
         )
 
