@@ -44,7 +44,7 @@
   "overrides": {
     "hono": "^4.12.25",
     "path-to-regexp": "^8.4.2",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.28",
     "qs": "^6.15.2"
   }
 }
