@@ -59,20 +59,18 @@ export function useOAuthDetails(sourceType: ValidSources) {
 
 /**
  * Every credential this admin can see for one source, refreshed on a timer
- * so a credential created elsewhere appears without a reload. Pass
- * `poll: false` to fetch once, where a stale list costs nothing.
+ * so a credential created elsewhere appears without a reload.
  *
  * The endpoint already filters by permission, so everything it returns is
  * the caller's to edit or delete; there is no narrower "editable" list.
  */
 export function useSourceCredentials(
-  sourceType: ValidSources,
-  { poll = true }: { poll?: boolean } = {}
+  sourceType: ValidSources
 ): SourceCredentialsResult {
   return useSWR<AnyCredential[], Error>(
     SWR_KEYS.similarCredentials(sourceType),
     errorHandlingFetcher,
-    { refreshInterval: poll ? CREDENTIALS_REFRESH_INTERVAL_MS : 0 }
+    { refreshInterval: CREDENTIALS_REFRESH_INTERVAL_MS }
   );
 }
 

@@ -810,12 +810,6 @@
       "search": {
         "placeholder": "Pesquisar conectores..."
       },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Conector federado já configurado.</strong> Clique para editar o conector existente.",
-          "slackCredentialsFound": "<strong>Credenciais do Slack existentes encontradas.</strong> Clique para gerenciar seu conector do Slack."
-        }
-      },
       "sourceCard": {
         "connectButton": {
           "ariaLabel": "Conectar {source}"
