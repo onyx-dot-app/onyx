@@ -8,6 +8,7 @@ import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/lib/projects/types";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
+import { isFilePending } from "@/lib/projects/utils";
 import { Modal } from "@opal/components";
 import { useModal } from "@opal/components";
 import TextSeparator from "@/refresh-components/TextSeparator";
@@ -49,7 +50,8 @@ interface FileStatusLabels {
 function getDescription(file: ProjectFile, labels: FileStatusLabels): string {
   const s = String(file.status || "");
   const typeLabel = getFileExtension(file.name);
-  if (s === UserFileStatus.PROCESSING) return labels.processing;
+  if (s === UserFileStatus.PROCESSING || s === UserFileStatus.INDEXING)
+    return labels.processing;
   if (s === UserFileStatus.UPLOADING) return labels.uploading;
   if (s === UserFileStatus.DELETING) return labels.deleting;
   if (s === UserFileStatus.COMPLETED) return typeLabel;
@@ -73,9 +75,7 @@ function FileAttachment({
 }: FileAttachmentProps) {
   const t = useTranslations("chat.modals.userFiles");
   const isProcessing =
-    String(file.status) === UserFileStatus.PROCESSING ||
-    String(file.status) === UserFileStatus.UPLOADING ||
-    String(file.status) === UserFileStatus.DELETING;
+    isFilePending(file.status) || file.status === UserFileStatus.DELETING;
 
   const Icon = getIcon(file, isProcessing);
   const description = getDescription(file, {
