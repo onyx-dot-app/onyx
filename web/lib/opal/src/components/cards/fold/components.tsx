@@ -1,3 +1,5 @@
+"use client";
+
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/fold/styles.css";
 import { useEffect, useState } from "react";
