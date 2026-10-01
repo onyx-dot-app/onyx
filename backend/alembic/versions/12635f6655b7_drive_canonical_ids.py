@@ -14,6 +14,7 @@ import httpx
 from onyx.db.search_settings import SearchSettings
 from onyx.utils.logger import setup_logger
 import os
+from typing import cast
 
 logger = setup_logger()
 
@@ -28,9 +29,25 @@ DOCUMENT_ID_ENDPOINT = (
 )
 
 
+# Managed Vespa (Vespa Cloud) used mutual TLS. Self-hosted Vespa served a
+# self-signed certificate.
+_MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
+_VESPA_CLOUD_CERT_PATH = os.environ.get("VESPA_CLOUD_CERT_PATH")
+_VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
+_VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
+
+
 def get_vespa_http_client() -> httpx.Client:
-    # Self-hosted Vespa served a self-signed certificate.
-    return httpx.Client(verify=False, timeout=15, http2=True)  # noqa: S501
+    return httpx.Client(
+        cert=(
+            cast(tuple[str, str], (_VESPA_CLOUD_CERT_PATH, _VESPA_CLOUD_KEY_PATH))
+            if _MANAGED_VESPA
+            else None
+        ),
+        verify=_MANAGED_VESPA,
+        timeout=_VESPA_REQUEST_TIMEOUT,
+        http2=True,
+    )
 
 
 def replace_invalid_doc_id_characters(text: str) -> str:
