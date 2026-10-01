@@ -23,8 +23,6 @@ import {
   federatedSourceToRegularSource,
   ValidSources,
 } from "@/lib/types";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useSourceCredentials } from "@/lib/connectors/hooks";
 import type { Credential } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
