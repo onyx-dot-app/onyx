@@ -29,13 +29,17 @@ _REVISION_ID = re.compile(r'"(\w+)"')
 _DOWNGRADE_BODY = re.compile(r"^def downgrade\b.*?(?=^\S|\Z)", re.MULTILINE | re.DOTALL)
 # `insert as pg_insert` renames the construct, so calls are matched by alias.
 _INSERT_ALIAS = re.compile(r"\bimport\b.*\binsert\s+as\s+(\w+)")
+# `.add(` is only a row write on an ORM session, so sessions are matched by the
+# name they are bound to, however short.
+_SESSION_BINDINGS = (
+    re.compile(r"(\w+)\s*=\s*(?:Session|sessionmaker)\("),
+    re.compile(r"\b(?:Session|sessionmaker)\(.*\)\s+as\s+(\w+)\s*:"),
+)
 _INSERT_PATTERNS = (
     re.compile(r"\bINSERT\s+INTO\b|\bINSERT\s*$", re.IGNORECASE),
     re.compile(r"\bop\.bulk_insert\("),
     # Bare, module-qualified and table-method forms of the Core construct.
     re.compile(r"(?<!\w)insert\("),
-    # An ORM session in a migration exists to write rows, whatever it is named.
-    re.compile(r"\b(?:Session|sessionmaker)\("),
     re.compile(r"\.(?:add_all|merge|bulk_save_objects|bulk_insert_mappings)\("),
     re.compile(r"\b\w*session\.add\("),
 )
@@ -50,12 +54,21 @@ def _downgrade_lines(source: str) -> set[int]:
     return skipped
 
 
+def _names_pattern(names: list[str], suffix: str) -> list[re.Pattern[str]]:
+    if not names:
+        return []
+    return [re.compile(rf"(?<!\w)(?:{'|'.join(map(re.escape, names))}){suffix}")]
+
+
 def _insert_patterns(source: str) -> list[re.Pattern[str]]:
-    aliases = _INSERT_ALIAS.findall(source)
-    if not aliases:
-        return list(_INSERT_PATTERNS)
-    alias_call = re.compile(rf"(?<!\w)(?:{'|'.join(map(re.escape, aliases))})\(")
-    return [*_INSERT_PATTERNS, alias_call]
+    sessions = [
+        name for binding in _SESSION_BINDINGS for name in binding.findall(source)
+    ]
+    return [
+        *_INSERT_PATTERNS,
+        *_names_pattern(_INSERT_ALIAS.findall(source), r"\("),
+        *_names_pattern(sessions, r"\.add\("),
+    ]
 
 
 def find_inserts(source: str) -> list[int]:

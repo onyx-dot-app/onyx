@@ -22,7 +22,6 @@ _MARKER = "mmm"
         "op.execute(tool_table.insert().from_select(cols, query))",
         "db_session.add(Tool(name='x'))",
         "s.bulk_save_objects(rows)",
-        "session = Session(bind=op.get_bind())",
         "session.add(Tool(name='x'))",
         "session.add_all(rows)",
     ],
@@ -41,6 +40,7 @@ def test_row_inserts_are_flagged(line: str) -> None:
         "op.execute(\"DELETE FROM tool WHERE name = 'x'\")",
         "seen.add(name)",
         "from sqlalchemy.dialects.postgresql import insert as pg_insert",
+        "session = Session(bind=op.get_bind())",
         "# the inserted rows keep their ids",
         'op.create_index("ix_tool_slug", "tool", ["slug"])',
         'op.execute("INSERT INTO b SELECT * FROM a")  # migration-inserts: allow',
@@ -80,6 +80,23 @@ def test_aliased_insert_used_only_in_downgrade_passes() -> None:
         "from sqlalchemy.dialects.postgresql import insert as pg_insert\n\n\n"
         'def upgrade() -> None:\n    op.execute("DELETE FROM tool")\n\n\n'
         "def downgrade() -> None:\n    op.execute(pg_insert(tool_table).values())\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == []
+
+
+def test_short_session_name_add_is_flagged() -> None:
+    source = (
+        "def upgrade() -> None:\n    s = Session(bind=op.get_bind())\n"
+        "    s.add(Tool(name='x'))\n    s.commit()\n"
+    )
+    assert check_migration_inserts.find_inserts(source) == [3]
+
+
+def test_read_only_session_passes() -> None:
+    source = (
+        "def upgrade() -> None:\n    with Session(bind=op.get_bind()) as s:\n"
+        "        rows = s.execute(select(tool_table)).all()\n"
+        "        s.execute(delete(tool_table))\n        seen.add(rows)\n"
     )
     assert check_migration_inserts.find_inserts(source) == []
 
