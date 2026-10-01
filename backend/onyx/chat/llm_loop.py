@@ -58,7 +58,6 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     ToolCallDebug,
-    TopLevelBranching,
 )
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES, STOPPING_TOOLS_NAMES
 from onyx.tools.constants import FILE_READER_TOOL_NAME
@@ -1171,16 +1170,6 @@ def run_llm_loop(
                             ),
                         )
                     )
-
-            if len(tool_calls) > 1:
-                emitter.emit(
-                    Packet(
-                        placement=Placement(
-                            turn_index=tool_calls[0].placement.turn_index
-                        ),
-                        obj=TopLevelBranching(num_parallel_branches=len(tool_calls)),
-                    )
-                )
 
             # Quick note for why citation_mapping and citation_processors are both needed:
             # 1. Tools return lightweight string mappings, not SearchDoc objects
