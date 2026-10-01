@@ -516,11 +516,15 @@ export default function AddConnector({
               {credentialsLoading ? (
                 <PageLoader />
               ) : credentialsFailed ? (
-                <IllustrationContent
-                  illustration={SvgPlugBroken}
-                  title={t("add.credentialsLoadFailed.title")}
-                  description={t("add.credentialsLoadFailed.description")}
-                />
+                // The same centred frame as PageLoader, so loading and
+                // failure sit in one place.
+                <div className="flex min-h-[60vh] w-full items-center justify-center">
+                  <IllustrationContent
+                    illustration={SvgPlugBroken}
+                    title={t("add.credentialsLoadFailed.title")}
+                    description={t("add.credentialsLoadFailed.description")}
+                  />
+                </div>
               ) : (
                 <Section gap={4} alignItems="stretch" width="full">
                   {!noCredentials && (
