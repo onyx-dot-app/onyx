@@ -42,7 +42,8 @@ def _run_rollout_job_with_snapshot() -> None:
 
 
 def _drain_tenant_pool() -> None:
-    """Signup hands out a pool tenant first. Only an empty pool reaches the clone."""
+    """Signup hands out a pool tenant first, and tenants pooled before the snapshot
+    were built through the chain. Any refill from here on is itself a clone."""
     with get_catalog_session() as db_session:
         db_session.execute(delete(AvailableTenant))
         db_session.commit()
