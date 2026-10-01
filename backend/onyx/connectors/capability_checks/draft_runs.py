@@ -79,6 +79,7 @@ _STATE_BY_STATUS: dict[CapabilityCheckStatus, DraftCheckStateKind] = {
     CapabilityCheckStatus.INDETERMINATE: DraftCheckStateKind.INDETERMINATE,
     CapabilityCheckStatus.SKIPPED: DraftCheckStateKind.SKIPPED,
 }
+_STATUS_BY_STATE = {state: status for status, state in _STATE_BY_STATUS.items()}
 # Indeterminate results are transient, so they are not cached.
 _CACHEABLE_STATES = frozenset(
     {
@@ -150,6 +151,7 @@ class CachedDraftResult(BaseModel):
     state: DraftCheckStateKind
     message: str
     duration_ms: int | None
+    error_type: str | None = None
 
 
 def decide_draft_check_state(
@@ -253,10 +255,32 @@ def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
     if state not in _CACHEABLE_STATES:
         return
     cached = CachedDraftResult(
-        state=state, message=result.message, duration_ms=result.duration_ms
+        state=state,
+        message=result.message,
+        duration_ms=result.duration_ms,
+        error_type=result.error_type,
     )
     get_cache_backend().set(
         key, cached.model_dump_json(), ex=DRAFT_RESULT_CACHE_TTL_SECONDS
+    )
+
+
+def cached_check_result(
+    check: CapabilityCheck[Any], cached: CachedDraftResult
+) -> CapabilityCheckResult:
+    """A cached draft result as a report row, for a run that reuses it."""
+    return CapabilityCheckResult(
+        capability=check.capability,
+        check_id=check.check_id,
+        display_name=check.display_name,
+        required=check.required,
+        status=_STATUS_BY_STATE[cached.state],
+        message=cached.message,
+        error_type=cached.error_type,
+        is_fallback=check.is_fallback,
+        remediation=check.remediation,
+        docs_link=check.docs_link,
+        duration_ms=cached.duration_ms,
     )
 
 

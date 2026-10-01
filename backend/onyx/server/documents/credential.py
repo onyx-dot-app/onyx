@@ -30,7 +30,7 @@ from onyx.db.models import DocumentSource, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.capability_check_runs import (
-    start_capability_checks_for_new_pairing,
+    start_capability_checks_for_new_credential,
 )
 from onyx.server.documents.models import (
     CredentialBase,
@@ -197,11 +197,6 @@ def swap_credentials_for_connector(
         db_session=db_session,
         user=user,
     )
-    start_capability_checks_for_new_pairing(
-        db_session,
-        credential_id=new_credential_id,
-        connector_id=credential_swap_req.connector_id,
-    )
 
     return StatusResponse(
         success=True,
@@ -248,6 +243,7 @@ def create_credential_from_model(
         resource_id=credential.id,
         extra={"source": credential_info.source.value},
     )
+    start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
         credential=CredentialSnapshot.from_credential_db_model(
@@ -312,6 +308,7 @@ def create_credential_with_private_key(
         resource_id=credential.id,
         extra={"source": credential_info.source.value},
     )
+    start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
         credential=CredentialSnapshot.from_credential_db_model(
