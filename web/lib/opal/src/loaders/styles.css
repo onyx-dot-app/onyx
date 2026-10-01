@@ -31,14 +31,18 @@
    masked to its own glyphs and a highlight bar slides across the clone.
    --------------------------------------------------------------------------- */
 
+/* As wide as its text, not its row: the sweep then crosses only the text,
+   with no stretch of empty row between passes. */
 .opal-shimmer-text {
   position: relative;
+  width: fit-content;
+  max-width: 100%;
   color: var(--text-02);
 }
 
 .opal-shimmer-text-overlay {
   /* The wave's width, in absolute units: the same on any length of text. */
-  --opal-text-shimmer-band: 20px;
+  --opal-text-shimmer-band: 40px;
   position: absolute;
   inset: 0;
   overflow: clip;
@@ -65,7 +69,7 @@
     transparent
   );
   will-change: transform;
-  animation: opal-shimmer-text-slide 3s linear infinite;
+  animation: opal-shimmer-text-slide 2.5s linear infinite;
 }
 
 /* Browsers without text mask clipping show the base text alone. */
