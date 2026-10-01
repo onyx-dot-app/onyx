@@ -34,6 +34,9 @@ class LLMFlow(StrEnum):
     BUILD_SESSION_NAMING = "build_session_naming"
     CRAFT_LLM_GENERATION = "craft_llm_generation"
 
+    # Flow automations (the AI step)
+    FLOW_AI_STEP = "flow_ai_step"
+
     # LLM gateway (external clients via use:llm_gateway PATs)
     LLM_GATEWAY = "llm_gateway"
 

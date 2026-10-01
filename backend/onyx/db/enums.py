@@ -914,3 +914,128 @@ class CapabilityReportRunStatus(str, PyEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED_TO_RUN = "failed_to_run"
+
+
+class FlowStatus(str, PyEnum):
+    """Whether a flow's triggers are live.
+
+    Editing is allowed in both states; only ACTIVE flows are picked up by
+    the dispatcher, and only ACTIVE flows accept webhook deliveries.
+    """
+
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+
+
+class FlowTriggerKind(str, PyEnum):
+    SCHEDULE = "SCHEDULE"
+    WEBHOOK = "WEBHOOK"
+    MANUAL = "MANUAL"
+
+
+class FlowTriggerSource(str, PyEnum):
+    """What caused a run row to exist.
+
+    TEST runs execute the draft spec instead of a published version and are
+    hidden from the default run history.
+    """
+
+    SCHEDULE = "SCHEDULE"
+    WEBHOOK = "WEBHOOK"
+    MANUAL = "MANUAL"
+    TEST = "TEST"
+
+
+class FlowNodeKind(str, PyEnum):
+    """Node types the engine knows how to execute.
+
+    Stored both inside the spec JSON and on `flow_node_run` so run history
+    can be filtered by kind without parsing the spec.
+    """
+
+    HTTP = "HTTP"
+    TRANSFORM = "TRANSFORM"
+    CONDITION = "CONDITION"
+    AI = "AI"
+    HUMAN = "HUMAN"
+    CODE = "CODE"
+    LOOP = "LOOP"
+    RETRY = "RETRY"
+    WEBHOOK = "WEBHOOK"
+    DELAY = "DELAY"
+    FILTER = "FILTER"
+    SCHEDULE = "SCHEDULE"
+    MERGE = "MERGE"
+    SPLIT = "SPLIT"
+    PARALLEL = "PARALLEL"
+    SWITCH = "SWITCH"
+    REPEAT = "REPEAT"
+
+
+class FlowRunStatus(str, PyEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+    # Parked on a human step. Not terminal: a decision re-queues the run,
+    # which replays the completed nodes from their rows and carries on.
+    AWAITING_DECISION = "AWAITING_DECISION"
+    # Parked on a delay step until `flow_run.resume_at`. Same resume path as
+    # a decision, minus the person: a beat tick re-queues it when it is due.
+    AWAITING_DELAY = "AWAITING_DELAY"
+
+    def is_terminal(self) -> bool:
+        return self in (
+            FlowRunStatus.SUCCEEDED,
+            FlowRunStatus.FAILED,
+            FlowRunStatus.SKIPPED,
+        )
+
+
+class FlowNodeRunStatus(str, PyEnum):
+    """Per-node outcome within a run.
+
+    SKIPPED covers a node on a branch the condition did not take, which is
+    a normal outcome rather than a failure.
+    """
+
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+    def is_terminal(self) -> bool:
+        return self != FlowNodeRunStatus.RUNNING
+
+
+class FlowErrorClass(str, PyEnum):
+    """Closed vocabulary for `flow_run.error_class` and
+    `flow_node_run.error_class`, so triage queries can pivot on it.
+
+    Anything unexpected inside a node handler is NODE_EXCEPTION, with the
+    exception type and message in `error_detail`.
+    """
+
+    FLOW_MISSING = "flow_missing"
+    VERSION_MISSING = "version_missing"
+    INVALID_SPEC = "invalid_spec"
+    EXPRESSION_ERROR = "expression_error"
+    NODE_EXCEPTION = "node_exception"
+    HTTP_ERROR = "http_error"
+    CODE_ERROR = "code_error"
+    DECISION_REJECTED = "decision_rejected"
+    RETRY_EXHAUSTED = "retry_exhausted"
+    LOOP_EXHAUSTED = "loop_exhausted"
+    LLM_ERROR = "llm_error"
+    OUTPUT_MISMATCH = "output_mismatch"
+    TIMEOUT = "timeout"
+    BUDGET_EXCEEDED = "budget_exceeded"
+    STUCK = "stuck"
+
+
+class FlowSkipReason(str, PyEnum):
+    """Why the dispatcher wrote a SKIPPED run instead of dispatching."""
+
+    PREVIOUS_RUN_IN_FLIGHT = "previous_run_in_flight"
+    QUEUE_RESIDENCY_EXPIRED = "queue_residency_expired"

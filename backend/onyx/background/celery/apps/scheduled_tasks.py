@@ -135,6 +135,7 @@ celery_app.autodiscover_tasks(
             # fires don't compete for slots with `heavy` queue work
             # (pruning, perms sync, csv export).
             "onyx.background.celery.tasks.scheduled_tasks",
+            "onyx.background.celery.tasks.flows",
         ]
     )
 )

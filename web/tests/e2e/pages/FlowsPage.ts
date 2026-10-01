@@ -1,0 +1,568 @@
+/**
+ * Page Object Model for the Flows surface (/flows and /flows/[id]).
+ *
+ * The canvas derives node positions from the spec rather than storing them,
+ * so everything here is expressed against the graph the user can see — node
+ * cards, edges, the zoom readout — never against the transform matrix.
+ */
+
+import { type Locator, type Page, expect } from "@playwright/test";
+
+const LIST_PATH = "/flows";
+
+/** Outcome ring drawn around a step in the run view. */
+export type StepOutcome = "succeeded" | "failed" | "skipped";
+
+// Anchored to class boundaries on purpose. The node card also carries
+// `hover:border-border-02`, so a bare /border-border-02/ matches every card
+// whatever its outcome — an assertion that can never fail.
+const OUTCOME_BORDER: Record<StepOutcome, RegExp> = {
+  succeeded: /(?:^|\s)border-status-success-05(?:\s|$)/,
+  failed: /(?:^|\s)border-status-error-05(?:\s|$)/,
+  skipped: /(?:^|\s)border-border-02(?:\s|$)/,
+};
+const EDITOR_PATH_REGEX = /\/flows\/[0-9a-f-]{36}$/;
+
+/**
+ * How long a resumed run may take to leave AWAITING_DECISION.
+ *
+ * Answering re-queues the run, so this is a worker round trip rather than a
+ * render — the page's own poll interval is only part of it.
+ */
+const RESUME_TIMEOUT_MS = 60_000;
+
+/** The step kinds the palette offers, by their button label. */
+export type StepKind =
+  | "HTTP request"
+  | "AI"
+  | "Code"
+  | "Transform"
+  | "Condition"
+  | "Loop (batches)"
+  | "Loop (until)"
+  | "Retry"
+  | "Webhook"
+  | "Delay"
+  | "Filter"
+  | "Schedule"
+  | "Merge"
+  | "Split"
+  | "Switch"
+  | "Parallel"
+  | "Approval";
+
+export class FlowsPage {
+  readonly page: Page;
+
+  readonly newFlowButton: Locator;
+  readonly canvas: Locator;
+  readonly nodes: Locator;
+  readonly edges: Locator;
+  readonly zoomLevel: Locator;
+  readonly zoomInButton: Locator;
+  readonly zoomOutButton: Locator;
+  readonly fitButton: Locator;
+  readonly inspector: Locator;
+  readonly inspectorNameInput: Locator;
+  readonly deleteStepButton: Locator;
+  readonly saveButton: Locator;
+  readonly publishButton: Locator;
+  readonly activateButton: Locator;
+  readonly testRunButton: Locator;
+  readonly runPanel: Locator;
+  readonly runItems: Locator;
+  readonly decisionPanel: Locator;
+  readonly approveButton: Locator;
+  readonly rejectButton: Locator;
+  readonly signingSecret: Locator;
+  readonly resumesAt: Locator;
+  readonly mergeSources: Locator;
+
+  constructor(page: Page) {
+    this.page = page;
+
+    this.newFlowButton = page.getByRole("button", { name: "New flow" });
+    this.canvas = page.getByTestId("flow-canvas");
+    this.nodes = page.locator("[data-flow-node]");
+    this.edges = page.getByTestId("flow-edge");
+    this.zoomLevel = page.getByTestId("canvas-zoom-level");
+    this.zoomInButton = page.getByRole("button", { name: "Zoom in" });
+    this.zoomOutButton = page.getByRole("button", { name: "Zoom out" });
+    this.fitButton = page.getByRole("button", { name: "Fit to view" });
+    this.inspector = page.getByTestId("node-inspector");
+    this.inspectorNameInput = this.inspector.getByRole("textbox").first();
+    this.deleteStepButton = page.getByRole("button", { name: "Delete step" });
+    this.saveButton = page.getByRole("button", { name: "Save", exact: true });
+    this.publishButton = page.getByRole("button", { name: "Publish" });
+    this.activateButton = page.getByRole("button", { name: "Activate" });
+    this.testRunButton = page.getByRole("button", { name: "Test run" });
+    this.runPanel = page.locator("aside").last();
+    this.runItems = page.getByTestId("node-run-item");
+    this.decisionPanel = page.getByTestId("decision-panel");
+    this.approveButton = page.getByTestId("decision-approve");
+    this.rejectButton = page.getByTestId("decision-reject");
+    this.signingSecret = page.getByTestId("webhook-signing-secret");
+    this.resumesAt = page.getByTestId("run-resumes-at");
+    this.mergeSources = page.getByTestId("merge-sources");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
+
+  async gotoList(): Promise<void> {
+    await this.page.goto(LIST_PATH);
+    await expect(this.newFlowButton).toBeVisible();
+  }
+
+  /**
+   * Create a flow and land on its editor.
+   *
+   * The list page creates the flow through the API and redirects, so the
+   * canvas being visible is what proves the round trip worked.
+   */
+  async createFlow(): Promise<void> {
+    await this.newFlowButton.click();
+    await expect(this.page).toHaveURL(EDITOR_PATH_REGEX);
+    await expect(this.canvas).toBeVisible();
+    // A new flow opens on one HTTP step, so wait for the graph to settle
+    // before a caller starts adding to it.
+    await expect(this.nodes).toHaveCount(1);
+  }
+
+  async reload(): Promise<void> {
+    await this.page.reload();
+    await expect(this.canvas).toBeVisible();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Building the graph
+  // ---------------------------------------------------------------------------
+
+  /** Add a step, wired after whatever is selected. */
+  async addStep(kind: StepKind): Promise<void> {
+    const before = await this.nodes.count();
+    await this.page.getByRole("button", { name: kind, exact: true }).click();
+    await expect(this.nodes).toHaveCount(before + 1);
+  }
+
+  node(nodeId: string): Locator {
+    return this.page.locator(`[data-flow-node="${nodeId}"]`);
+  }
+
+  async selectNode(nodeId: string): Promise<void> {
+    await this.node(nodeId).click();
+    await expect(this.inspector).toBeVisible();
+  }
+
+  /**
+   * Click empty canvas, which clears the selection.
+   *
+   * Aimed at the top-left corner: the layout centres the graph, so that
+   * corner is reliably background even on a wide flow.
+   */
+  async clickEmptyCanvas(): Promise<void> {
+    await this.canvas.click({ position: { x: 12, y: 12 } });
+  }
+
+  async renameSelectedStep(name: string): Promise<void> {
+    await this.inspectorNameInput.fill(name);
+  }
+
+  /**
+   * One field of the inspector, by the title above it.
+   *
+   * Opal's `InputVertical` wraps its title and its control in one `<label>`,
+   * so the title is the field's accessible name and `getByLabel` finds the
+   * control under it.
+   */
+  field(title: string): Locator {
+    return this.inspector.getByLabel(title);
+  }
+
+  async fillField(title: string, value: string): Promise<void> {
+    await this.field(title).fill(value);
+  }
+
+  async expectField(title: string): Promise<void> {
+    await expect(this.field(title)).toBeVisible();
+  }
+
+  async expectFieldValue(title: string, value: string): Promise<void> {
+    await expect(this.field(title)).toHaveValue(value);
+  }
+
+  /** Text the inspector shows that is not a field, such as a note. */
+  async expectInspectorContains(text: string): Promise<void> {
+    await expect(this.inspector).toContainText(text);
+  }
+
+  async expectInspectorNotContains(text: string): Promise<void> {
+    await expect(this.inspector).not.toContainText(text);
+  }
+
+  /**
+   * The key a webhook step signs its deliveries with.
+   *
+   * Returned so a spec can check it is the same one the API serves, rather
+   * than only that some text is on screen.
+   */
+  async readSigningSecret(): Promise<string> {
+    await expect(this.signingSecret).toBeVisible();
+    return this.signingSecret.inputValue();
+  }
+
+  /** A field the selected kind does not have. */
+  async expectNoField(title: string): Promise<void> {
+    await expect(this.field(title)).toHaveCount(0);
+  }
+
+  async deleteSelectedStep(): Promise<void> {
+    const before = await this.nodes.count();
+    await this.deleteStepButton.click();
+    await expect(this.nodes).toHaveCount(before - 1);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Saving
+  // ---------------------------------------------------------------------------
+
+  async save(): Promise<void> {
+    await this.saveButton.click();
+    // The button reads "Saved" and disables once the draft matches the server.
+    await expect(
+      this.page.getByRole("button", { name: "Saved", exact: true })
+    ).toBeVisible();
+  }
+
+  async publish(): Promise<void> {
+    await this.publishButton.click();
+    await expect(this.activateButton).toBeEnabled();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Viewport
+  // ---------------------------------------------------------------------------
+
+  /** The flow being edited, from the URL the editor is on. */
+  flowIdFromUrl(): string {
+    const found = /\/flows\/([0-9a-f-]{36})/.exec(this.page.url());
+    if (found?.[1] === undefined) {
+      throw new Error(`no flow id in ${this.page.url()}`);
+    }
+    return found[1];
+  }
+
+  /** Pick a comparison operator in the inspector. */
+  async selectOperator(label: string): Promise<void> {
+    await this.field("Operator").click();
+    await this.page.getByRole("option", { name: label, exact: true }).click();
+  }
+
+  /** Current zoom as a number, for control flow rather than assertions. */
+  async currentZoomPercent(): Promise<number> {
+    const text = (await this.zoomLevel.innerText()).trim();
+    return Number.parseInt(text.replace("%", ""), 10);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Assertions
+  // ---------------------------------------------------------------------------
+
+  async expectStepCount(count: number): Promise<void> {
+    await expect(this.nodes).toHaveCount(count);
+  }
+
+  async expectEdgeCount(count: number): Promise<void> {
+    await expect(this.edges).toHaveCount(count);
+  }
+
+  /** A condition's branches are drawn and labelled. */
+  async expectBranchEdge(branch: "true" | "false"): Promise<void> {
+    await expect(
+      this.edges.filter({ has: this.page.locator(`text=${branch}`) })
+    ).toHaveCount(1);
+  }
+
+  /** The kind a step's card says it is, under its name. */
+  async expectStepKind(nodeId: string, kind: StepKind): Promise<void> {
+    await expect(this.node(nodeId)).toContainText(kind);
+  }
+
+  /** A note on a step's card, such as how it fans out. */
+  async expectStepBadge(nodeId: string, text: string): Promise<void> {
+    await expect(this.node(nodeId)).toContainText(text);
+  }
+
+  async expectStepLabelled(nodeId: string, name: string): Promise<void> {
+    await expect(this.node(nodeId)).toContainText(name);
+  }
+
+  /** A step nothing reaches is outlined rather than hidden. */
+  async expectStepUnreachable(nodeId: string): Promise<void> {
+    await expect(this.node(nodeId)).toHaveClass(/border-dashed/);
+  }
+
+  async expectStepConnected(nodeId: string): Promise<void> {
+    await expect(this.node(nodeId)).not.toHaveClass(/border-dashed/);
+  }
+
+  async expectInspectorOpen(): Promise<void> {
+    await expect(this.inspector).toBeVisible();
+  }
+
+  async expectInspectorClosed(): Promise<void> {
+    await expect(this.inspector).toBeHidden();
+  }
+
+  async expectSelectedStepNamed(name: string): Promise<void> {
+    await expect(this.inspectorNameInput).toHaveValue(name);
+  }
+
+  async expectZoomAbove(percent: number): Promise<void> {
+    await expect
+      .poll(() => this.currentZoomPercent(), {
+        message: `zoom should rise above ${percent}%`,
+      })
+      .toBeGreaterThan(percent);
+  }
+
+  async expectZoomBelow(percent: number): Promise<void> {
+    await expect
+      .poll(() => this.currentZoomPercent(), {
+        message: `zoom should fall below ${percent}%`,
+      })
+      .toBeLessThan(percent);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Run view
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Select a step on the run view.
+   *
+   * Separate from `selectNode`, which waits for the editor's inspector — the
+   * run view shows a read-only panel instead, so waiting for the inspector
+   * there would just time out.
+   */
+  async selectStepInRun(nodeId: string): Promise<void> {
+    await this.node(nodeId).click();
+  }
+
+  async gotoRun(flowId: string, runId: string): Promise<void> {
+    await this.page.goto(`${LIST_PATH}/${flowId}/runs/${runId}`);
+    await expect(this.canvas).toBeVisible();
+  }
+
+  /** Start a test run from the editor; the page follows the new run. */
+  async startTestRun(): Promise<void> {
+    await this.testRunButton.click();
+    await expect(this.page).toHaveURL(
+      /\/flows\/[0-9a-f-]{36}\/runs\/[0-9a-f-]{36}$/
+    );
+    await expect(this.canvas).toBeVisible();
+  }
+
+  async expectRunStatus(label: string, timeout?: number): Promise<void> {
+    await expect(this.page.getByTestId(`run-status-${label}`)).toBeVisible({
+      timeout,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Approvals
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Answer the approval the run is parked on.
+   *
+   * The panel disappears as soon as the run leaves AWAITING_DECISION, so
+   * waiting for that is what proves the answer reached the server rather
+   * than just that a button was clickable.
+   */
+  async decide(
+    decision: "approve" | "reject",
+    comment?: string
+  ): Promise<void> {
+    await expect(this.decisionPanel).toBeVisible();
+    if (comment !== undefined) {
+      await this.decisionPanel.getByRole("textbox").fill(comment);
+    }
+    await (
+      decision === "approve" ? this.approveButton : this.rejectButton
+    ).click();
+    await expect(this.decisionPanel).toBeHidden({ timeout: RESUME_TIMEOUT_MS });
+  }
+
+  /**
+   * Answer, and wait for the next question rather than for the panel to go.
+   *
+   * An approval inside a loop asks again on the next pass. The run can park
+   * on that question before the page even refreshes, so the panel may never
+   * be seen empty — waiting for the new question is what proves the answer
+   * went through and the loop moved on.
+   */
+  async decideAndExpectNext(
+    decision: "approve" | "reject",
+    nextQuestion: string
+  ): Promise<void> {
+    await expect(this.decisionPanel).toBeVisible();
+    await (
+      decision === "approve" ? this.approveButton : this.rejectButton
+    ).click();
+    await expect(this.decisionPanel).toContainText(nextQuestion, {
+      timeout: RESUME_TIMEOUT_MS,
+    });
+  }
+
+  async expectAwaitingDecision(question: string): Promise<void> {
+    await expect(this.decisionPanel).toBeVisible();
+    await expect(this.decisionPanel).toContainText(question);
+  }
+
+  async expectNoDecisionPanel(): Promise<void> {
+    await expect(this.decisionPanel).toBeHidden();
+  }
+
+  /** A step the run never reached has no row to show. */
+  async expectStepNotRun(nodeId: string): Promise<void> {
+    await this.selectStepInRun(nodeId);
+    await expect(this.runItems).toHaveCount(0);
+  }
+
+  /** Each step wears the outcome it had, so the graph reads as the run. */
+  async expectStepOutcome(nodeId: string, outcome: StepOutcome): Promise<void> {
+    await expect(this.node(nodeId)).toHaveClass(OUTCOME_BORDER[outcome]);
+  }
+
+  /** A skipped branch reads as muted rather than alarming. */
+  async expectStepDimmed(nodeId: string): Promise<void> {
+    await expect(this.node(nodeId)).toHaveClass(/opacity-60/);
+  }
+
+  async expectStepNotDimmed(nodeId: string): Promise<void> {
+    await expect(this.node(nodeId)).not.toHaveClass(/opacity-60/);
+  }
+
+  async expectRunItemCount(count: number): Promise<void> {
+    await expect(this.runItems).toHaveCount(count);
+  }
+
+  /** The heading over each of the selected step's rows, in order. */
+  async expectRunItemHeadings(headings: string[]): Promise<void> {
+    await expect(this.runItems).toHaveCount(headings.length);
+    for (const [position, heading] of headings.entries()) {
+      await expect(this.runItems.nth(position)).toContainText(heading);
+    }
+  }
+
+  async expectRunPanelContains(text: string): Promise<void> {
+    await expect(this.runPanel).toContainText(text);
+  }
+
+  /** A tick-box in the inspector, found by the text beside it. */
+  inspectorOption(label: string): Locator {
+    return this.inspector
+      .locator("label")
+      .filter({ hasText: label })
+      .getByRole("checkbox");
+  }
+
+  async toggleInspectorOption(label: string): Promise<void> {
+    await this.inspectorOption(label).click();
+  }
+
+  async expectOptionChecked(label: string, checked: boolean): Promise<void> {
+    const option = this.inspectorOption(label);
+    if (checked) await expect(option).toBeChecked();
+    else await expect(option).not.toBeChecked();
+  }
+
+  /**
+   * The steps a merge is offering to combine.
+   *
+   * Returned rather than asserted so a spec can say what must be there *and*
+   * what must not — the exclusion is the part worth testing, since the server
+   * rejects a source that does not lead to the merge.
+   */
+  async readMergeCandidates(): Promise<string[]> {
+    await expect(this.mergeSources).toBeVisible();
+    return this.mergeSources.locator("label").allInnerTexts();
+  }
+
+  async chooseMergeSource(stepId: string): Promise<void> {
+    await this.mergeSources
+      .locator("label")
+      .filter({ hasText: stepId })
+      .getByRole("checkbox")
+      .check();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Switch
+  // ---------------------------------------------------------------------------
+
+  /** The value box of one switch case, counted from 1 as the editor does. */
+  caseValue(number: number): Locator {
+    return this.inspector.getByLabel(`Case ${number} value`);
+  }
+
+  async fillCase(number: number, value: string): Promise<void> {
+    await this.caseValue(number).fill(value);
+  }
+
+  async addCase(): Promise<void> {
+    const before = await this.inspector.getByLabel(/^Case \d+ value$/).count();
+    await this.inspector.getByRole("button", { name: "Add case" }).click();
+    await expect(this.caseValue(before + 1)).toBeVisible();
+  }
+
+  /** A branch picker, by its label: "Case 2 goes to", or the catch-all. */
+  branchPicker(label: string): Locator {
+    return this.inspector.getByRole("combobox", { name: label });
+  }
+
+  async chooseBranchTarget(label: string, stepId: string): Promise<void> {
+    await this.branchPicker(label).click();
+    await this.page.getByRole("option", { name: stepId, exact: true }).click();
+    await this.expectBranchTarget(label, stepId);
+  }
+
+  /** The step a branch picker shows as chosen. */
+  async expectBranchTarget(label: string, stepId: string): Promise<void> {
+    await expect(this.branchPicker(label)).toHaveValue(stepId);
+  }
+
+  /**
+   * What a branch picker offers, in order.
+   *
+   * Returned rather than asserted so a spec can say what must be missing —
+   * a step before the switch would close a loop the server refuses.
+   */
+  async readBranchTargets(label: string): Promise<string[]> {
+    await this.branchPicker(label).click();
+    const options = this.page.getByRole("option");
+    await expect(options.first()).toBeVisible();
+    const offered = await options.allInnerTexts();
+    await this.page.keyboard.press("Escape");
+    await expect(options).toHaveCount(0);
+    return offered.map((text) => text.trim());
+  }
+
+  /** The words written on the canvas's edges, sorted. */
+  async readEdgeLabels(): Promise<string[]> {
+    const labels = await this.edges.locator("text").allTextContents();
+    return labels.map((label) => label.trim()).sort();
+  }
+
+  /** When a run parked on a delay will carry on. */
+  async expectResumeTimeShown(): Promise<void> {
+    await expect(this.resumesAt).toBeVisible();
+  }
+
+  /** Something the run page says outside the step panel, such as why it failed. */
+  async expectRunPageContains(text: string): Promise<void> {
+    await expect(this.page.getByText(text).first()).toBeVisible();
+  }
+}
