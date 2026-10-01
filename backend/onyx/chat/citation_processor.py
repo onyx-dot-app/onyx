@@ -17,7 +17,6 @@ from typing import TypeAlias
 
 from onyx.configs.chat_configs import STOP_STREAM_PAT
 from onyx.context.search.models import SearchDoc
-from onyx.prompts.constants import TRIPLE_BACKTICK
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
@@ -55,10 +54,45 @@ CitationMapping: TypeAlias = dict[int, SearchDoc]
 # ============================================================================
 
 
-def in_code_block(llm_text: str) -> bool:
-    """Check if we're currently inside a code block by counting triple backticks."""
-    count = llm_text.count(TRIPLE_BACKTICK)
-    return count % 2 != 0
+# CommonMark fence line: up to 3 spaces of indent, then 3+ backticks or tildes.
+_FENCE_LINE_PATTERN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+
+
+class CodeFenceTracker:
+    """Line-aware tracker of whether streamed markdown is inside a fenced code
+    block. Unlike counting backticks, it ignores inline ``` in prose and
+    respects fence char and length (e.g. a ```` fence wrapping ``` lines)."""
+
+    def __init__(self) -> None:
+        self._open_fence: str | None = None
+        self._partial_line = ""
+
+    @property
+    def in_code_block(self) -> bool:
+        return self._open_fence is not None
+
+    def feed(self, text: str) -> None:
+        lines = (self._partial_line + text).split("\n")
+        self._partial_line = lines.pop()
+        for line in lines:
+            self._process_line(line)
+
+    def _process_line(self, line: str) -> None:
+        match = _FENCE_LINE_PATTERN.match(line)
+        if not match:
+            return
+        fence, info = match.group(1), match.group(2)
+        if self._open_fence is None:
+            # Backtick fences cannot have backticks in the info string.
+            if fence[0] == "`" and "`" in info:
+                return
+            self._open_fence = fence
+        elif (
+            fence[0] == self._open_fence[0]
+            and len(fence) >= len(self._open_fence)
+            and not info.strip()
+        ):
+            self._open_fence = None
 
 
 # ============================================================================
@@ -173,6 +207,7 @@ class DynamicCitationProcessor:
 
         # Token processing state
         self.llm_out = ""  # entire output so far
+        self.code_fence_tracker = CodeFenceTracker()
         self.curr_segment = ""  # tokens held for citation processing
         self.hold = ""  # tokens held for stop token processing
         self.stop_stream = stop_stream
@@ -306,22 +341,7 @@ class DynamicCitationProcessor:
 
         self.curr_segment += token
         self.llm_out += token
-
-        # Handle code blocks without language tags
-        # If we see ``` followed by \n, add "plaintext" language specifier
-        if "`" in self.curr_segment:
-            if self.curr_segment.endswith("`"):
-                pass
-            elif "```" in self.curr_segment:
-                parts = self.curr_segment.split("```")
-                if len(parts) > 1 and len(parts[1]) > 0:
-                    piece_that_comes_after = parts[1][0]
-                    if piece_that_comes_after == "\n" and in_code_block(self.llm_out):
-                        # Label only this first bare fence; other fences in the
-                        # buffered segment must stay untouched.
-                        self.curr_segment = (
-                            parts[0] + "```plaintext" + "```".join(parts[1:])
-                        )
+        self.code_fence_tracker.feed(token)
 
         # Look for citations in current segment
         citation_matches = list(self.citation_pattern.finditer(self.curr_segment))
@@ -330,7 +350,7 @@ class DynamicCitationProcessor:
         )
 
         result = ""
-        if citation_matches and not in_code_block(self.llm_out):
+        if citation_matches and not self.code_fence_tracker.in_code_block:
             match_idx = 0
             for match in citation_matches:
                 match_span = match.span()

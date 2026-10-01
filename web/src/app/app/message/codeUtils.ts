@@ -177,6 +177,44 @@ const protectCodeFences = (
   };
 };
 
+// CommonMark fence line: up to 3 spaces of indent, then 3+ backticks or tildes.
+const FENCE_LINE_REGEX = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+
+// Labels bare opening backtick fences as `plaintext`. Scans line by line so
+// inline ``` in prose is ignored and closing fences (same char, length >=
+// opener, no info string) stay bare. A trailing unclosed fence (mid-stream)
+// counts as open.
+export const labelBareCodeFences = (content: string): string => {
+  let openFence: string | null = null;
+  return content
+    .split("\n")
+    .map((line) => {
+      const match = FENCE_LINE_REGEX.exec(line);
+      if (!match) return line;
+      const indent = match[1] ?? "";
+      const fence = match[2] ?? "";
+      const info = match[3] ?? "";
+      if (openFence === null) {
+        // Backtick fences cannot have backticks in the info string.
+        if (fence.startsWith("`") && info.includes("`")) return line;
+        openFence = fence;
+        if (fence.startsWith("`") && info.trim() === "") {
+          return `${indent}${fence}plaintext`;
+        }
+        return line;
+      }
+      if (
+        fence[0] === openFence[0] &&
+        fence.length >= openFence.length &&
+        info.trim() === ""
+      ) {
+        openFence = null;
+      }
+      return line;
+    })
+    .join("\n");
+};
+
 // Mid-stream the buffer can hold `$$x = y` with no closing `$$` yet.
 // Escape the lone `$$` to `\$\$` so the renderer shows it as literal
 // text instead of broken math. Once the closing `$$` arrives, the count

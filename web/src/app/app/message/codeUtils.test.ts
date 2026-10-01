@@ -2,6 +2,7 @@ import {
   preprocessLaTeX,
   escapeIncompleteBlockMath,
   escapeIncompleteInlineMath,
+  labelBareCodeFences,
 } from "./codeUtils";
 
 describe("preprocessLaTeX", () => {
@@ -253,6 +254,52 @@ describe("escapeIncompleteInlineMath", () => {
     const input = "Block: $$x = y$$ then $z";
     expect(escapeIncompleteInlineMath(input)).toBe(
       "Block: $$x = y$$ then \\$z"
+    );
+  });
+});
+
+describe("labelBareCodeFences", () => {
+  it("labels only bare openers and ignores inline backticks in prose", () => {
+    const input = [
+      "Wrap code in ``` fences. Example:",
+      "```python",
+      "print('a')",
+      "```",
+      "Prose between blocks.",
+      "```",
+      "plain",
+      "```",
+      "Done.",
+    ].join("\n");
+    expect(labelBareCodeFences(input)).toBe(
+      [
+        "Wrap code in ``` fences. Example:",
+        "```python",
+        "print('a')",
+        "```",
+        "Prose between blocks.",
+        "```plaintext",
+        "plain",
+        "```",
+        "Done.",
+      ].join("\n")
+    );
+  });
+
+  it("keeps a longer fence open across inner triple-backtick lines", () => {
+    const input = "````\n```\ninner\n```\n````\nAfter.";
+    expect(labelBareCodeFences(input)).toBe(
+      "````plaintext\n```\ninner\n```\n````\nAfter."
+    );
+  });
+
+  it("handles an unclosed trailing fence mid-stream", () => {
+    expect(labelBareCodeFences("Text:\n```")).toBe("Text:\n```plaintext");
+    expect(labelBareCodeFences("Text:\n```\nx = 1")).toBe(
+      "Text:\n```plaintext\nx = 1"
+    );
+    expect(labelBareCodeFences("```python\nx = 1\n```")).toBe(
+      "```python\nx = 1\n```"
     );
   });
 });

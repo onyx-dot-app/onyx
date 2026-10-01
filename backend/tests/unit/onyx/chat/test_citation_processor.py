@@ -789,39 +789,62 @@ def test_citation_inside_code_block_not_processed(
 
     # Citation inside code block should not be processed
     assert len(citations) == 0
-    # Code block should have plaintext added
-    assert "```plaintext" in output
+    assert "```plaintext" not in output
 
 
-def test_code_block_plaintext_added(
+def test_bare_fences_left_untouched(
     mock_search_docs: CitationMapping,  # noqa: ARG001
 ) -> None:
-    """Test that code blocks with ``` followed by \\n get 'plaintext' added."""
+    """Fences pass through unchanged; the frontend labels bare openers."""
     processor = DynamicCitationProcessor()
 
-    tokens: list[str | None] = ["Code:\n```\n", "def test():\n    pass\n", "```\n"]
-    output, _ = process_tokens(processor, tokens)
+    text = "A:\n```\nx\n```\nB:\n```bash\necho hi\n```\nDone.\n"
+    output, _ = process_tokens(processor, [text[:20], text[20:]])
 
-    assert "```plaintext" in output
+    assert output == text
 
 
-def test_bare_fence_labeling_does_not_corrupt_other_fences(
-    mock_search_docs: CitationMapping,  # noqa: ARG001
+def test_inline_backticks_in_prose_do_not_flip_code_state(
+    mock_search_docs: CitationMapping,
 ) -> None:
-    """Labeling a bare fence must leave the segment's other fences untouched
-    (the first token buffers three fences at labeling time)."""
+    """Inline ``` in prose must not make later closing fences look like
+    openers or suppress citations in prose."""
     processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
 
-    tokens: list[str | None] = [
-        "A:\n```\nx\n```\nB:\n```bash",
-        "\necho hi\n```\nDone.\n",
-    ]
-    output, _ = process_tokens(processor, tokens)
+    text = (
+        "Wrap code in ``` fences. Example:\n"
+        "```python\nprint('a')\n```\n"
+        "Prose between blocks [1].\n"
+        "```python\nprint('b')\n```\n"
+        "Done.\n"
+    )
+    # Stream character by character to exercise every split point.
+    output, citations = process_tokens(processor, list(text))
 
-    assert output.count("```plaintext") == 1
-    assert "x\n```\nB:" in output
-    assert "```plaintextbash" not in output
-    assert "```bash" in output
+    assert "```plaintext" not in output
+    assert output.count("```python\n") == 2
+    assert "print('a')\n```\nProse between blocks" in output
+    assert "print('b')\n```\nDone." in output
+    assert "[[1]](https://example.com/doc1)" in output
+    assert len(citations) == 1
+
+
+def test_longer_fence_wraps_triple_backticks(
+    mock_search_docs: CitationMapping,
+) -> None:
+    """A ```` fence stays open across inner ``` lines."""
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    text = "````markdown\n```\ninner [1]\n```\nstill code [1]\n````\nAfter [1].\n"
+    output, citations = process_tokens(processor, list(text))
+
+    assert "```plaintext" not in output
+    assert "inner [1]\n" in output
+    assert "still code [1]\n" in output
+    assert "After [[1]](https://example.com/doc1)" in output
+    assert len(citations) == 1
 
 
 def test_citation_outside_code_block_processed(
@@ -870,7 +893,7 @@ def test_multiple_code_blocks(mock_search_docs: CitationMapping) -> None:
     ]
     output, citations = process_tokens(processor, tokens)
 
-    assert "```plaintext" in output
+    assert "```plaintext" not in output
     assert len(citations) == 1
 
 
@@ -1174,7 +1197,7 @@ def test_complex_text_mixed_citations_code_blocks(
     assert "[[1]](https://example.com/doc1)" in output
     assert "[[2]](https://example.com/doc2)" in output
     assert "[[3]]()" in output
-    assert "```plaintext" in output
+    assert "```plaintext" not in output
     assert len(citations) == 3
 
 
