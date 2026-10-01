@@ -46,6 +46,7 @@ class IndexingEmbedder(ABC):
         deployment_name: str | None,
         reduced_dimension: int | None,
         callback: IndexingHeartbeatInterface | None,
+        embedding_model: EmbeddingModel | None = None,
     ):
         self.model_name = model_name
         self.normalize = normalize
@@ -57,7 +58,7 @@ class IndexingEmbedder(ABC):
         self.api_version = api_version
         self.deployment_name = deployment_name
 
-        self.embedding_model = EmbeddingModel(
+        self.embedding_model = embedding_model or EmbeddingModel(
             model_name=model_name,
             query_prefix=query_prefix,
             passage_prefix=passage_prefix,
@@ -99,6 +100,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         deployment_name: str | None = None,
         reduced_dimension: int | None = None,
         callback: IndexingHeartbeatInterface | None = None,
+        embedding_model: EmbeddingModel | None = None,
     ):
         super().__init__(
             model_name,
@@ -112,6 +114,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name,
             reduced_dimension,
             callback,
+            embedding_model,
         )
 
     @log_function_time()
@@ -240,6 +243,13 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name=search_settings.deployment_name,
             reduced_dimension=search_settings.reduced_dimension,
             callback=callback,
+            embedding_model=EmbeddingModel.from_db_model(
+                search_settings,
+                server_host=INDEXING_MODEL_SERVER_HOST,
+                server_port=INDEXING_MODEL_SERVER_PORT,
+                retrim_content=True,
+                callback=callback,
+            ),
         )
 
 

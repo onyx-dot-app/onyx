@@ -5031,6 +5031,9 @@
           "description": "embedding 모델에서 필요로 하는 경우, 검색 쿼리를 모델에 전달하기 전에 앞에 붙이는 문자열입니다. 접두사가 잘못되었거나 없으면 embedding 품질이 떨어집니다.",
           "placeholder": "예: 'query: '",
           "title": "쿼리 접두사"
+        },
+        "googleWorkloadIdentity": {
+          "description": "API 서버와 임베딩 작업자의 GKE 인증 정보를 사용합니다. JSON 키가 필요하지 않습니다."
         }
       },
       "forwardOnlyModal": {
@@ -5274,7 +5277,8 @@
         "serviceAccountJsonInvalid": "유효한 Google 서비스 계정 JSON 파일이어야 합니다",
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",
-        "urlInvalid": "유효한 URL이어야 합니다"
+        "urlInvalid": "유효한 URL이어야 합니다",
+        "googleProjectRequired": "GCP 프로젝트 ID가 필요합니다"
       },
       "vectorQuantization": {
         "description": "문서 벡터를 더 적은 비트로 저장하여 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다.",
@@ -5924,10 +5928,12 @@
             "title": "API 키"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Google Vertex AI 모델이 호스팅되는 리전입니다. 지원되는 리전 전체 목록은 Google Cloud에서 확인하세요.",
             "title": "Google Cloud 리전 이름"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "Vertex AI가 활성화된 GCP 프로젝트입니다. 서비스 계정 가장 환경에서는 ADC가 대상 프로젝트를 정확히 추론할 수 없으므로 필수입니다.",
             "title": "GCP 프로젝트 ID"
           },

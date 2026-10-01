@@ -31,6 +31,7 @@ from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
     CloudEmbeddingProviderCreationRequest,
@@ -295,6 +296,21 @@ def upsert_cloud_embedding_provider(
             existing_provider.api_key,
             ApiKeyIntent.from_request_flag(provider.api_key_changed),
         )
+        if "vertex_config" not in provider.model_fields_set:
+            # Older clients do not send authentication metadata. Preserve it for
+            # unrelated edits, but a supplied credential selects legacy auth.
+            if (
+                updates["api_key"] is not None
+                and existing_provider.vertex_config is not None
+                and not build_embedding_auth(
+                    existing_provider.provider_type,
+                    None,
+                    existing_provider.vertex_config,
+                ).requires_api_key
+            ):
+                updates["vertex_config"] = None
+            else:
+                updates.pop("vertex_config")
         for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:

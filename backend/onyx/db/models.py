@@ -128,6 +128,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
@@ -3759,6 +3760,9 @@ class CloudEmbeddingProvider(Base):
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(EncryptedString())
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    vertex_config: Mapped[VertexEmbeddingConfigDict | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",

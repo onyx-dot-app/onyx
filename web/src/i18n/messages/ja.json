@@ -5031,6 +5031,9 @@
           "description": "embedding モデルが必要とする場合、検索クエリをモデルに渡す前に、この文字列を先頭に追加します。プレフィックスが正しくない、または不足していると embedding の品質が低下します。",
           "placeholder": "例: 'query: '",
           "title": "クエリプレフィックス"
+        },
+        "googleWorkloadIdentity": {
+          "description": "API サーバーと埋め込みワーカーの GKE 認証情報を使用します。JSON キーは不要です。"
         }
       },
       "forwardOnlyModal": {
@@ -5274,7 +5277,8 @@
         "serviceAccountJsonInvalid": "有効な Google サービスアカウントの JSON ファイルを指定してください",
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",
-        "urlInvalid": "有効な URL を入力してください"
+        "urlInvalid": "有効な URL を入力してください",
+        "googleProjectRequired": "GCP プロジェクト ID が必要です"
       },
       "vectorQuantization": {
         "description": "ドキュメントのベクトルを少ないビット数で保存し、メモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。",
@@ -5924,10 +5928,12 @@
             "title": "API キー"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Google Vertex AI のモデルがホストされているリージョンです。対応リージョンの全一覧は Google Cloud で確認できます。",
             "title": "Google Cloud リージョン名"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "Vertex AI が有効になっている GCP プロジェクトです。サービスアカウントの権限借用では ADC が対象プロジェクトを確実に推定できないため、指定が必要です。",
             "title": "GCP プロジェクト ID"
           },

@@ -363,6 +363,7 @@ function ProviderGroup({
           <connectModal.Provider>
             <ProviderCredentialsModal
               provider={provider}
+              existingModel={pendingConnectModel ?? undefined}
               onSubmit={async (customModel) => {
                 await mutate(SWR_KEYS.embeddingProviders);
                 if (pendingConnectModel) {
@@ -378,7 +379,10 @@ function ProviderGroup({
             <ProviderCredentialsModal
               provider={provider}
               existingCredentials={existingCredentials}
-              existingModel={existingModel}
+              existingModel={
+                models.find((model) => model.modelName === selectedModelName) ??
+                existingModel
+              }
               onSubmit={async () => {
                 await mutate(SWR_KEYS.embeddingProviders);
                 editCredentialsModal.toggle(false);

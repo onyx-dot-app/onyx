@@ -5031,6 +5031,9 @@
           "description": "Ce texte est ajouté devant les requêtes de recherche avant leur envoi au modèle, si votre modèle d'embedding l'exige. Un préfixe incorrect ou manquant dégrade la qualité des embeddings.",
           "placeholder": "ex. : 'query: '",
           "title": "Préfixe de requête"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Utilisez les identifiants GKE du serveur API et des workers d’embedding. Aucune clé JSON requise."
         }
       },
       "forwardOnlyModal": {
@@ -5274,7 +5277,8 @@
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",
-        "urlInvalid": "Doit être une URL valide"
+        "urlInvalid": "Doit être une URL valide",
+        "googleProjectRequired": "L’ID du projet GCP est requis"
       },
       "vectorQuantization": {
         "description": "Stockez les vecteurs des documents avec moins de bits pour utiliser moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche.",
@@ -5924,10 +5928,12 @@
             "title": "Clé d'API"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Région où vos modèles Google Vertex AI sont hébergés. Consultez la liste complète des régions prises en charge sur Google Cloud.",
             "title": "Nom de la région Google Cloud"
           },
           "projectField": {
+            "placeholder": "mon-projet-vertex",
             "description": "Le projet GCP où Vertex AI est activé. Obligatoire, car ADC ne peut pas déduire de façon fiable le projet cible en cas d'usurpation d'identité de compte de service.",
             "title": "ID de projet GCP"
           },

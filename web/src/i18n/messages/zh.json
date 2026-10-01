@@ -5031,6 +5031,9 @@
           "description": "如果您的 embedding 模型需要，此前缀会在传给模型之前添加到搜索查询前面。前缀错误或缺失会降低 embedding 质量。",
           "placeholder": "例如 'query: '",
           "title": "查询前缀"
+        },
+        "googleWorkloadIdentity": {
+          "description": "使用 API 服务器和嵌入工作进程的 GKE 凭据。无需 JSON 密钥。"
         }
       },
       "forwardOnlyModal": {
@@ -5274,7 +5277,8 @@
         "serviceAccountJsonInvalid": "必须是有效的 Google 服务账号 JSON 文件",
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",
-        "urlInvalid": "必须是有效的 URL"
+        "urlInvalid": "必须是有效的 URL",
+        "googleProjectRequired": "必须填写 GCP 项目 ID"
       },
       "vectorQuantization": {
         "description": "使用更少的位存储文档向量，以减少内存占用。位数越少，搜索质量可能越低。",
@@ -5924,10 +5928,12 @@
             "title": "API 密钥"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "托管您的 Google Vertex AI 模型的区域。支持的区域完整列表请参见 Google Cloud。",
             "title": "Google Cloud 区域名称"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "已启用 Vertex AI 的 GCP 项目。此项必填，因为在服务账号模拟下，ADC 无法可靠地推断目标项目。",
             "title": "GCP 项目 ID"
           },
