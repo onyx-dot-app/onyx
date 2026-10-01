@@ -21,13 +21,14 @@ from onyx.connectors.confluence.access import (
     get_page_restrictions,
     get_page_restrictions_with_per_ancestor_fetch,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.source_operations import (
     Confcloud77618Error,
-    ConfluenceProbeVariant,
     ConfluenceSearchVariant,
     ConfluenceSourceOperations,
     ConfluenceSpaceNotFoundError,
+    ConfluenceSpacePermissionsVariant,
+    build_probed_confluence_gateway,
+    supports_rest_space_permissions,
 )
 from onyx.connectors.confluence.utils import (
     build_confluence_document_id,
@@ -413,17 +414,11 @@ class ConfluenceConnector(
             raise ConnectorMissingCredentialError("Confluence")
         return self._source_operations
 
-    @property
-    def _perm_sync_client(self) -> OnyxConfluence:
-        """Temporary: the EE perm-sync helpers still take the client. #15454
-        moves them to gateway operations."""
-        return self.source_operations._legacy_client()
-
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
         self.credentials_provider = credentials_provider
-        source_operations = ConfluenceSourceOperations(
+        self._source_operations = build_probed_confluence_gateway(
             credentials_provider=credentials_provider,
             connector_specific_config={
                 "wiki_base": self.wiki_base,
@@ -431,15 +426,6 @@ class ConfluenceConnector(
                 "scoped_token": self.scoped_token,
             },
         )
-        # raises exception if there's a problem
-        source_operations.probe_site(
-            variant=(
-                ConfluenceProbeVariant.SCOPED
-                if self.scoped_token
-                else ConfluenceProbeVariant.UNSCOPED
-            )
-        )
-        self._source_operations = source_operations
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError("Use set_credentials_provider with this connector.")
@@ -982,7 +968,7 @@ class ConfluenceConnector(
 
         space_level_access: dict[str, ExternalAccess] = (
             get_all_space_permissions(
-                self._perm_sync_client, self.is_cloud, add_prefix=True
+                self.source_operations, self.is_cloud, add_prefix=True
             )
             if include_permissions
             else {}
@@ -1037,7 +1023,7 @@ class ConfluenceConnector(
             if include_permissions:
                 space_key = page.get("space", {}).get("key") or ""
                 doc_or_failure.external_access = get_page_restrictions(
-                    self._perm_sync_client,
+                    self.source_operations,
                     doc_or_failure.id,
                     page.get("restrictions") or {},
                     page.get("ancestors", []),
@@ -1187,7 +1173,7 @@ class ConfluenceConnector(
         space_level_access_info: dict[str, ExternalAccess] = {}
         if include_permissions:
             space_level_access_info = get_all_space_permissions(
-                self._perm_sync_client, self.is_cloud
+                self.source_operations, self.is_cloud
             )
 
         # Yield space hierarchy nodes first
@@ -1204,7 +1190,7 @@ class ConfluenceConnector(
         ) -> ExternalAccess | None:
             if expand_per_page:
                 resolved = get_page_restrictions_with_per_ancestor_fetch(
-                    self._perm_sync_client,
+                    self.source_operations,
                     doc_id,
                     restrictions,
                     ancestors,
@@ -1212,7 +1198,7 @@ class ConfluenceConnector(
                 )
             else:
                 resolved = get_page_restrictions(
-                    self._perm_sync_client, doc_id, restrictions, ancestors
+                    self.source_operations, doc_id, restrictions, ancestors
                 )
             return resolved or (
                 space_level_access_info.get(space_key) if space_key else None
@@ -1386,14 +1372,16 @@ class ConfluenceConnector(
         permission model and is validated via its own failure modes
         during sync).
         """
-        client = self.source_operations._legacy_client(fast=True)
-        if not client.supports_rest_space_permissions():
+        source_operations = self.source_operations
+        if not supports_rest_space_permissions(
+            source_operations.get_server_version(fast=True)
+        ):
             return
 
         # Pick any visible space; the 500-vs-200 distinction is global to
         # the credential, not per-space, so the cheapest visible space works.
         try:
-            spaces_iter = client.retrieve_confluence_spaces(limit=1)
+            spaces_iter = source_operations.list_spaces(limit=1, fast=True)
             first_space = next(spaces_iter, None)
         except Exception as e:
             logger.warning(
@@ -1411,8 +1399,10 @@ class ConfluenceConnector(
         try:
             # InsufficientPermissionsError on 500 (CONFSERVER-99908); we
             # let it propagate -- that *is* the validation failure we want.
-            client.get_all_space_permissions_server_rest(
+            source_operations.get_space_permissions(
+                variant=ConfluenceSpacePermissionsVariant.DC_REST,
                 space_key=first_space_key,
+                fast=True,
             )
         except InsufficientPermissionsError:
             raise

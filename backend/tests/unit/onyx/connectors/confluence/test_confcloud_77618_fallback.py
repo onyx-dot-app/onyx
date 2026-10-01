@@ -22,9 +22,7 @@ from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.source_operations import (
     Confcloud77618Error,
     _is_confcloud_77618_response,
-)
-from onyx.connectors.confluence.source_operations import (
-    _OnyxConfluence as OnyxConfluence,
+    _OnyxConfluence,
 )
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
@@ -73,8 +71,8 @@ def mock_credentials_provider() -> mock.Mock:
 
 
 @pytest.fixture
-def cloud_client(mock_credentials_provider: mock.Mock) -> OnyxConfluence:
-    client = OnyxConfluence(
+def cloud_client(mock_credentials_provider: mock.Mock) -> _OnyxConfluence:
+    client = _OnyxConfluence(
         is_cloud=True,
         url="https://fake-cloud.atlassian.net",
         credentials_provider=mock_credentials_provider,
@@ -118,7 +116,7 @@ def test_is_confcloud_77618_response_rejects_non_404() -> None:
 
 
 def test_paginate_url_raises_confcloud_77618_on_signature_match(
-    cloud_client: OnyxConfluence,
+    cloud_client: _OnyxConfluence,
 ) -> None:
     """77618 404 + ancestor-restrictions expand -> typed exception."""
 
@@ -147,7 +145,7 @@ def test_paginate_url_raises_confcloud_77618_on_signature_match(
 
 
 def test_paginate_url_propagates_unrelated_404(
-    cloud_client: OnyxConfluence,
+    cloud_client: _OnyxConfluence,
 ) -> None:
     """Body-signature gate: unrelated 404s propagate as HTTPError so
     real auth/scope errors don't disguise as 77618 fallbacks."""
@@ -174,7 +172,7 @@ def test_paginate_url_propagates_unrelated_404(
 
 
 def test_paginate_url_does_not_raise_77618_without_ancestor_expand(
-    cloud_client: OnyxConfluence,
+    cloud_client: _OnyxConfluence,
 ) -> None:
     """URL gate: 77618 only fires when the request URL carried the
     ancestor-restrictions expand."""
@@ -202,12 +200,12 @@ def test_paginate_url_does_not_raise_77618_without_ancestor_expand(
 
 
 # ---------------------------------------------------------------------------
-# OnyxConfluence.fetch_content_read_restrictions (byOperation endpoint)
+# _OnyxConfluence.fetch_content_read_restrictions (byOperation endpoint)
 # ---------------------------------------------------------------------------
 
 
 def test_fetch_content_read_restrictions_hits_byoperation_endpoint(
-    cloud_client: OnyxConfluence,
+    cloud_client: _OnyxConfluence,
 ) -> None:
     """Dedicated `restriction/byOperation` URL, SDK-aligned."""
     captured: dict[str, str] = {}
@@ -248,7 +246,7 @@ def test_fetch_content_read_restrictions_hits_byoperation_endpoint(
 
 
 def test_fetch_content_read_restrictions_returns_none_on_403(
-    cloud_client: OnyxConfluence,
+    cloud_client: _OnyxConfluence,
 ) -> None:
     """403 = draft permission reply; silent skip."""
     cloud_client._confluence.get = mock.Mock(
@@ -260,7 +258,7 @@ def test_fetch_content_read_restrictions_returns_none_on_403(
 
 
 def test_fetch_content_read_restrictions_returns_none_on_404(
-    cloud_client: OnyxConfluence,
+    cloud_client: _OnyxConfluence,
 ) -> None:
     """404 = ancestor deleted between search and follow-up."""
     cloud_client._confluence.get = mock.Mock(
@@ -270,7 +268,7 @@ def test_fetch_content_read_restrictions_returns_none_on_404(
 
 
 def test_fetch_content_read_restrictions_raises_on_500(
-    cloud_client: OnyxConfluence,
+    cloud_client: _OnyxConfluence,
 ) -> None:
     """5xx must propagate; can't silently mask as "no restriction"."""
     cloud_client._confluence.get = mock.Mock(
@@ -361,7 +359,7 @@ def test_pruning_expand_skips_restrictions_but_keeps_hierarchy(
         captured_expands.append(kwargs.get("expand"))
         return iter([])
 
-    fake_client = mock.Mock(spec=OnyxConfluence)
+    fake_client = mock.Mock(spec=_OnyxConfluence)
     fake_client.cql_paginate_all_expansions.side_effect = fake_paginate
 
     with mock.patch.object(
@@ -407,11 +405,11 @@ def _restriction_dict(user_emails: list[str]) -> dict[str, Any]:
 
 def test_per_ancestor_fetch_short_circuits_on_page_level_restriction() -> None:
     """Page-level restriction wins outright -- never fetch ancestors."""
-    client = mock.Mock(spec=OnyxConfluence)
+    client = mock.Mock(spec=_OnyxConfluence)
     cache: dict[str, dict[str, Any] | None] = {}
 
     result = get_page_restrictions_with_per_ancestor_fetch(
-        confluence_client=client,
+        source_operations=gateway_with_client(client),
         page_id="doc/1",
         page_restrictions=_restriction_dict(["page-restricted@example.com"]),
         ancestors=[{"id": "anc-1"}, {"id": "anc-2"}],
@@ -425,7 +423,7 @@ def test_per_ancestor_fetch_short_circuits_on_page_level_restriction() -> None:
 
 def test_per_ancestor_fetch_walks_ancestors_immediate_parent_first() -> None:
     """Ancestors arrive root-first; closest restricted ancestor wins."""
-    client = mock.Mock(spec=OnyxConfluence)
+    client = mock.Mock(spec=_OnyxConfluence)
     fetch_results = {
         "root": _restriction_dict(["root@example.com"]),
         "parent": _restriction_dict(["parent@example.com"]),
@@ -436,7 +434,7 @@ def test_per_ancestor_fetch_walks_ancestors_immediate_parent_first() -> None:
 
     cache: dict[str, dict[str, Any] | None] = {}
     result = get_page_restrictions_with_per_ancestor_fetch(
-        confluence_client=client,
+        source_operations=gateway_with_client(client),
         page_id="doc/leaf",
         page_restrictions={},
         ancestors=[{"id": "root"}, {"id": "parent"}],
@@ -449,7 +447,7 @@ def test_per_ancestor_fetch_walks_ancestors_immediate_parent_first() -> None:
 def test_per_ancestor_fetch_skips_drafts_and_continues_up() -> None:
     """Unreadable ancestor doesn't terminate the walk; closest visible
     restriction wins."""
-    client = mock.Mock(spec=OnyxConfluence)
+    client = mock.Mock(spec=_OnyxConfluence)
     fetch_results: dict[str, dict[str, Any] | None] = {
         "grandparent": _restriction_dict(["gp@example.com"]),
         "parent-draft": None,
@@ -458,7 +456,7 @@ def test_per_ancestor_fetch_skips_drafts_and_continues_up() -> None:
 
     cache: dict[str, dict[str, Any] | None] = {}
     result = get_page_restrictions_with_per_ancestor_fetch(
-        confluence_client=client,
+        source_operations=gateway_with_client(client),
         page_id="doc/leaf",
         page_restrictions={},
         ancestors=[{"id": "grandparent"}, {"id": "parent-draft"}],
@@ -470,11 +468,11 @@ def test_per_ancestor_fetch_skips_drafts_and_continues_up() -> None:
 
 def test_per_ancestor_fetch_returns_none_when_no_restrictions_anywhere() -> None:
     """All ancestors unrestricted -> caller falls back to space-level."""
-    client = mock.Mock(spec=OnyxConfluence)
+    client = mock.Mock(spec=_OnyxConfluence)
     client.fetch_content_read_restrictions.return_value = {}
 
     result = get_page_restrictions_with_per_ancestor_fetch(
-        confluence_client=client,
+        source_operations=gateway_with_client(client),
         page_id="doc/leaf",
         page_restrictions={},
         ancestors=[{"id": "anc-1"}, {"id": "anc-2"}],
@@ -486,7 +484,7 @@ def test_per_ancestor_fetch_returns_none_when_no_restrictions_anywhere() -> None
 def test_per_ancestor_fetch_caches_shared_ancestors_across_calls() -> None:
     """Cache collapses shared ancestors so a tainted batch doesn't
     multiply API calls per sibling."""
-    client = mock.Mock(spec=OnyxConfluence)
+    client = mock.Mock(spec=_OnyxConfluence)
     client.fetch_content_read_restrictions.return_value = {}
     cache: dict[str, dict[str, Any] | None] = {}
 
@@ -494,7 +492,7 @@ def test_per_ancestor_fetch_caches_shared_ancestors_across_calls() -> None:
 
     for page_num in range(5):
         get_page_restrictions_with_per_ancestor_fetch(
-            confluence_client=client,
+            source_operations=gateway_with_client(client),
             page_id=f"doc/{page_num}",
             page_restrictions={},
             ancestors=shared_ancestors,
@@ -506,7 +504,7 @@ def test_per_ancestor_fetch_caches_shared_ancestors_across_calls() -> None:
 
 def test_per_ancestor_fetch_caches_none_for_drafts() -> None:
     """None results are cached -- no re-fetch for sibling pages."""
-    client = mock.Mock(spec=OnyxConfluence)
+    client = mock.Mock(spec=_OnyxConfluence)
     client.fetch_content_read_restrictions.return_value = None
     cache: dict[str, dict[str, Any] | None] = {}
 
@@ -514,7 +512,7 @@ def test_per_ancestor_fetch_caches_none_for_drafts() -> None:
 
     for page_num in range(3):
         get_page_restrictions_with_per_ancestor_fetch(
-            confluence_client=client,
+            source_operations=gateway_with_client(client),
             page_id=f"doc/{page_num}",
             page_restrictions={},
             ancestors=shared_ancestors,
@@ -537,10 +535,10 @@ def test_per_ancestor_shim_resolves_to_ee_implementation(
     `fetch_versioned_implementation` lookup must reach the EE function and
     actually run it. Catches drift between the shim's module/attr strings
     and the EE module path."""
-    client = mock.Mock(spec=OnyxConfluence)
+    client = mock.Mock(spec=_OnyxConfluence)
 
     result = get_page_restrictions_with_per_ancestor_fetch_shim(
-        confluence_client=client,
+        source_operations=gateway_with_client(client),
         page_id="doc/1",
         page_restrictions=_restriction_dict(["page-restricted@example.com"]),
         ancestors=[],

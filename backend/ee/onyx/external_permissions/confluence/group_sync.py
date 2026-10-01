@@ -4,9 +4,11 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
 from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC
-from onyx.connectors.confluence.onyx_confluence import (
-    OnyxConfluence,
-    get_user_email_from_username__server,
+from onyx.connectors.confluence.source_operations import (
+    ConfluenceSourceOperations,
+    ConfluenceUserEmailVariant,
+    build_probed_confluence_gateway,
+    user_list_variant,
 )
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -18,10 +20,12 @@ logger = setup_logger()
 
 
 def _build_group_member_email_map(
-    confluence_client: OnyxConfluence, cc_pair_id: int
+    source_operations: ConfluenceSourceOperations, cc_pair_id: int
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
-    for user in confluence_client.paginated_cql_user_retrieval():
+    for user in source_operations.list_users(
+        variant=user_list_variant(source_operations)
+    ):
         logger.info("Processing groups for user: %s", user)
 
         email = user.email
@@ -30,9 +34,8 @@ def _build_group_member_email_map(
             user_name = user.username
             # If it is present, try to get the email using a Server-specific method
             if user_name:
-                email = get_user_email_from_username__server(
-                    confluence_client=confluence_client,
-                    user_name=user_name,
+                email = source_operations.get_user_email(
+                    variant=ConfluenceUserEmailVariant.USERNAME, user=user_name
                 )
             else:
                 logger.error("user result missing username field: %s", user)
@@ -48,7 +51,7 @@ def _build_group_member_email_map(
             continue
 
         all_users_groups: set[str] = set()
-        for group in confluence_client.paginated_groups_by_user_retrieval(user.user_id):
+        for group in source_operations.list_user_groups(user_id=user.user_id):
             # group name uniqueness is enforced by Confluence, so we can use it as a group ID
             group_id = group["name"]
             group_member_emails.setdefault(group_id, set()).add(email)
@@ -72,7 +75,7 @@ def _build_group_member_email_map(
 
 
 def _build_group_member_email_map_from_onyx_users(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
 ) -> dict[str, set[str]]:
     """Hacky, but it's the only way to do this as long as the
     Confluence APIs are broken.
@@ -96,14 +99,14 @@ def _build_group_member_email_map_from_onyx_users(
         logger.info("Processing groups for user with email: %s", email)
         try:
             user_name = _infer_username_from_email(email)
-            response = confluence_client.get_user_details_by_username(user_name)
+            response = source_operations.get_user_by_username(username=user_name)
             user_key = response.get("userKey")
             if not user_key:
                 logger.error("User key not found for user with email %s", email)
                 continue
 
             all_users_groups: set[str] = set()
-            for group in confluence_client.paginated_groups_by_user_retrieval(user_key):
+            for group in source_operations.list_user_groups(user_id=user_key):
                 # group name uniqueness is enforced by Confluence, so we can use it as a group ID
                 group_id = group["name"]
                 group_member_emails.setdefault(group_id, set()).add(email)
@@ -123,7 +126,7 @@ def _build_group_member_email_map_from_onyx_users(
 
 
 def _build_final_group_to_member_email_map(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
     cc_pair_id: int,
     # if set, will infer confluence usernames from onyx users in addition to using the
     # confluence users API. This is a hacky workaround for the fact that the Confluence
@@ -131,13 +134,13 @@ def _build_final_group_to_member_email_map(
     use_onyx_users: bool = CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC,
 ) -> dict[str, set[str]]:
     group_to_member_email_map = _build_group_member_email_map(
-        confluence_client=confluence_client,
+        source_operations=source_operations,
         cc_pair_id=cc_pair_id,
     )
     group_to_member_email_map_from_onyx_users = (
         (
             _build_group_member_email_map_from_onyx_users(
-                confluence_client=confluence_client,
+                source_operations=source_operations,
             )
         )
         if use_onyx_users
@@ -164,31 +167,13 @@ def confluence_group_sync(
     provider = OnyxDBCredentialsProvider(
         tenant_id, cc_pair.connector.source, cc_pair.credential_id
     )
-    is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
-    scoped_token = cc_pair.connector.connector_specific_config.get(
-        "scoped_token", False
+    source_operations = build_probed_confluence_gateway(
+        credentials_provider=provider,
+        connector_specific_config=cc_pair.connector.connector_specific_config,
     )
-    wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
-    url = wiki_base.rstrip("/")
-
-    probe_kwargs = {
-        "max_backoff_retries": 6,
-        "max_backoff_seconds": 10,
-    }
-
-    final_kwargs = {
-        "max_backoff_retries": 10,
-        "max_backoff_seconds": 60,
-    }
-
-    confluence_client = OnyxConfluence(
-        is_cloud, url, provider, scoped_token=scoped_token
-    )
-    confluence_client._probe_connection(**probe_kwargs)
-    confluence_client._initialize_connection(**final_kwargs)
 
     group_to_member_email_map = _build_final_group_to_member_email_map(
-        confluence_client, cc_pair.id
+        source_operations, cc_pair.id
     )
 
     all_found_emails = set()

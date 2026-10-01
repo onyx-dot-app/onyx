@@ -13,7 +13,7 @@ from onyx.connectors.confluence.connector import (
     ConfluenceConnector,
 )
 from onyx.connectors.confluence.source_operations import (
-    _OnyxConfluence as OnyxConfluence,
+    _OnyxConfluence,
 )
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
@@ -49,17 +49,17 @@ def space_key() -> str:
 
 
 @pytest.fixture
-def mock_confluence_client() -> OnyxConfluence:
+def mock_confluence_client() -> _OnyxConfluence:
     """Create a mock Confluence client with proper typing"""
     # Server mode just Also updates the start value
-    return OnyxConfluence(
+    return _OnyxConfluence(
         is_cloud=False, url="test", credentials_provider=MagicMock(), timeout=None
     )
 
 
 @pytest.fixture
 def confluence_connector(
-    confluence_base_url: str, space_key: str, mock_confluence_client: OnyxConfluence
+    confluence_base_url: str, space_key: str, mock_confluence_client: _OnyxConfluence
 ) -> Generator[ConfluenceConnector, None, None]:
     """Create a Confluence connector with a mock client"""
     # NOTE: we test with is_cloud=False for all tests, which is generally fine because the behavior
