@@ -84,11 +84,17 @@ export interface CredentialSetup {
   displayName: string;
   /** Every credential this admin can see. Undefined until the first load. */
   credentials: AnyCredential[] | undefined;
-  /** Set when loading the credentials failed. */
-  credentialsError: Error | undefined;
+  /**
+   * Set when the credentials or the OAuth details never loaded. A refresh
+   * that fails after a success does not count.
+   */
+  error: Error | undefined;
   /** The source's OAuth capabilities, once known. */
   oauthDetails: OAuthDetails | undefined;
-  /** True until those capabilities land, so the ways in are not yet known. */
+  /**
+   * True until both the credentials and the OAuth details have landed, and
+   * false once either fails.
+   */
   isLoading: boolean;
   /** The ways this source accepts a credential. */
   methods: CredentialCreationMethod[];

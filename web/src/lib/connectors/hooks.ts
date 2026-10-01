@@ -91,7 +91,17 @@ export function useSourceCredentials(
 export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   const { data: credentials, error: credentialsError } =
     useSourceCredentials(sourceType);
-  const { data: oauthDetails, isLoading } = useOAuthDetails(sourceType);
+  const { data: oauthDetails, error: oauthDetailsError } =
+    useOAuthDetails(sourceType);
+
+  // One verdict for both fetches. Only a fetch that never succeeded counts:
+  // a later refresh that fails keeps what is already shown.
+  const error =
+    (credentials === undefined ? credentialsError : undefined) ??
+    (oauthDetails === undefined ? oauthDetailsError : undefined);
+  const isLoading =
+    error === undefined &&
+    (credentials === undefined || oauthDetails === undefined);
   const [openMethod, setOpenMethod] = useState<CredentialCreationMethod | null>(
     null
   );
@@ -196,7 +206,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   return {
     displayName,
     credentials,
-    credentialsError,
+    error,
     oauthDetails,
     isLoading,
     methods,
