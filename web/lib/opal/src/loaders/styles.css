@@ -37,11 +37,15 @@
 }
 
 .opal-shimmer-text-overlay {
+  /* The wave's width, in absolute units: the same on any length of text. */
+  --opal-text-shimmer-band: 20px;
   position: absolute;
   inset: 0;
   overflow: clip;
   color: transparent;
   contain: strict;
+  /* Lets the sweep reach the text's full width with `cqw`. */
+  container-type: inline-size;
   pointer-events: none;
   mask-image: linear-gradient(#fff, #fff);
   -webkit-mask-clip: text;
@@ -50,12 +54,14 @@
 .opal-shimmer-text-overlay::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: var(--opal-text-shimmer-band);
   background-image: linear-gradient(
     90deg,
-    transparent 40%,
+    transparent,
     var(--text-04) 50%,
-    transparent 60%
+    transparent
   );
   will-change: transform;
   animation: opal-shimmer-text-slide 3s linear infinite;
@@ -68,15 +74,14 @@
   }
 }
 
-/* The text's band covers the middle fifth of its layer, so the layer only
-   travels far enough to bring the band in from just off the left edge and
-   out just past the right: no pass spends time with the band off the text. */
+/* The wave starts one band-width off the left edge and ends just past the
+   right one, so no part of a pass leaves it off the text. */
 @keyframes opal-shimmer-text-slide {
   from {
-    translate: -60% 0;
+    translate: -100% 0;
   }
   to {
-    translate: 60% 0;
+    translate: 100cqw 0;
   }
 }
 
