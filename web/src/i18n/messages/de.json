@@ -4571,6 +4571,12 @@
         "azureGptImage2": {
           "description": "Bilderzeugungsmodell GPT Image 2, gehostet auf Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "Bilderzeugungsmodell GPT Image 2.5 Flare, gehostet auf Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Bilderzeugungsmodell GPT Image 2.5 Sunburst, gehostet auf Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Das Modell Gemini 2.5 Flash Image (Nano Banana) ist auf Geschwindigkeit und Effizienz ausgelegt."
         },
@@ -4587,7 +4593,13 @@
           "description": "Das bisherige Flaggschiff-Bilderzeugungsmodell von OpenAI."
         },
         "openaiGptImage2": {
-          "description": "Das neueste Bilderzeugungsmodell von OpenAI mit der höchsten Prompt-Treue."
+          "description": "Das Bilderzeugungsmodell der vorherigen Generation von OpenAI mit hoher Prompt-Treue."
+        },
+        "openaiGptImage25Flare": {
+          "description": "Das neueste Bilderzeugungsmodell von OpenAI mit hoher Qualität und schneller Erzeugung."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "Das Premium-Bilderzeugungsmodell von OpenAI für die präzisesten Bearbeitungen."
         }
       },
       "setDefaultError": {
