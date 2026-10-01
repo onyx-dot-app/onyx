@@ -5,8 +5,9 @@ import { useLayoutEffect, useRef } from "react";
 import { Text, type TextFont } from "@opal/components";
 import type { RichStr } from "@opal/types";
 
-/** The wave's width, in pixels. */
-const BAND_PX = 40;
+/** The wave's widest, in pixels. On text shorter than twice this, the wave
+ * is half the text, so a short word is never lit all at once. */
+const MAX_BAND_PX = 40;
 /** How fast the wave travels, in pixels per second, on any length of text. */
 const RATE_PX_PER_S = 60;
 /** The pause between waves, in seconds. */
@@ -46,9 +47,10 @@ function TextLoader({ children, font = "main-ui-action" }: TextLoaderProps) {
         (total, rect) => total + rect.width,
         0
       );
+      const band = Math.min(MAX_BAND_PX, length / 2);
       const tail = RATE_PX_PER_S * GAP_S;
-      const duration = (length + BAND_PX + tail) / RATE_PX_PER_S;
-      wave.style.setProperty("--opal-text-shimmer-band", `${BAND_PX}px`);
+      const duration = (length + band + tail) / RATE_PX_PER_S;
+      wave.style.setProperty("--opal-text-shimmer-band", `${band}px`);
       wave.style.setProperty("--opal-text-shimmer-tail", `${tail}px`);
       wave.style.setProperty("--opal-text-shimmer-duration", `${duration}s`);
     }
