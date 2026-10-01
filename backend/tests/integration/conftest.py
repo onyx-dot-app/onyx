@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-# Integration tests rely on this mode to enable mock_llm_response paths.
+# Enables test-only server behavior, e.g. ToolCallDebug packets.
 os.environ["INTEGRATION_TESTS_MODE"] = "true"
 
 # Backend directory (`/workspace/backend`) — root for alembic / craft / etc.
