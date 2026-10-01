@@ -15,7 +15,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import (
     Agent,
-    FeatureRestoration,
+    RestorableFeature,
     RunFailed,
     result_from_snapshot,
 )
@@ -104,7 +104,7 @@ class DeepResearchFeatureState(BaseModel):
     citation_mapping: CitationMapping
 
 
-class DeepResearchAgent(FeatureRestoration):
+class DeepResearchAgent(RestorableFeature):
     """Clarify a question, coordinate research children, and write a report."""
 
     def __init__(

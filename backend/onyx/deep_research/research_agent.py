@@ -11,7 +11,7 @@ from onyx.agents.models import (
     StepInput,
     StepResult,
 )
-from onyx.agents.runtime import Agent, FeatureRestoration
+from onyx.agents.runtime import Agent, RestorableFeature
 from onyx.agents.tools import AgentTool
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
@@ -86,7 +86,7 @@ class ResearchFeatureState(BaseModel):
     search_tools: dict[str, SearchToolState]
 
 
-class ResearchAgent(FeatureRestoration):
+class ResearchAgent(RestorableFeature):
     """Investigate one question and return a report with source references."""
 
     def __init__(

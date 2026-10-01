@@ -381,7 +381,7 @@ Unknown tags are rejected. `chat/restoration.py` constructs agents and persists 
 `run.result()` raises `RunReleased` after release; input must target a resumed execution.
 The storage adapter uses `save` and `expected_revision` to save matching state before ownership is released.
 If saving fails, the local execution remains owned and can accept input or retry the save.
-Features with private state supply `FeatureRestoration` from `runtime.py` for typed state capture and restoration.
+Features with private state supply `RestorableFeature` from `runtime.py` for typed state capture and restoration.
 This state lets a suspended run continue with its accumulated feature data.
 
 `spawn_agent(restoration_config=...)` accepts application-owned settings for rebuilding a saved child

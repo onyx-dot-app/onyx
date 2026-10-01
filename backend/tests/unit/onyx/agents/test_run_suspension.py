@@ -17,7 +17,7 @@ from onyx.agents.models import (
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, FeatureRestoration, Run, RunFailed, RunReleased
+from onyx.agents.runtime import Agent, RestorableFeature, Run, RunFailed, RunReleased
 from onyx.agents.tools import (
     AgentTool,
     HumanToolAnswer,
@@ -353,7 +353,7 @@ def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> 
         assert resumed.wait_for_idle(3)
 
 
-class _FailingRestoration(FeatureRestoration):
+class _FailingRestoration(RestorableFeature):
     def capture_state(self) -> BaseModel:
         raise RuntimeError("Feature state could not be captured")
 

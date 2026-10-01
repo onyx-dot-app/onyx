@@ -195,7 +195,7 @@ def _capture_unsettled_child(state: RunState) -> RunState:
     return snapshot
 
 
-class FeatureRestoration(Protocol):
+class RestorableFeature(Protocol):
     """Capture and restore feature-owned state at safe execution boundaries."""
 
     def capture_state(self) -> BaseModel: ...
@@ -225,7 +225,7 @@ class Agent:
         | None = None,
         agent_id: str | None = None,
         previous_run_id: str | None = None,
-        restoration: "FeatureRestoration | None" = None,
+        restoration: "RestorableFeature | None" = None,
     ) -> None:
         self._id = agent_id or str(uuid4())
         self.llm = llm
@@ -408,7 +408,7 @@ class Run:
         self._after_tool_call: (
             Callable[[ToolCallContext, ToolResult], ToolResult] | None
         ) = None
-        self._restoration: FeatureRestoration | None = None
+        self._restoration: RestorableFeature | None = None
         self._prepared_step: PreparedStep | None = None
         self._work = ExecutionWork()
         self._coordination: RunCoordination | None = None

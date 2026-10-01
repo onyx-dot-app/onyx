@@ -12,7 +12,7 @@ from onyx.agents.models import (
     StepResult,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent, FeatureRestoration
+from onyx.agents.runtime import Agent, RestorableFeature
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
@@ -59,7 +59,7 @@ from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet
 from onyx.tracing.flows import LLMFlow
 
 
-class ChatAgent(FeatureRestoration):
+class ChatAgent(RestorableFeature):
     """Chat step preparation and result handling for the shared runtime."""
 
     def __init__(
