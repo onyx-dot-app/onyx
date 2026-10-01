@@ -624,7 +624,7 @@ def read_slack_thread(
                 message = reply.get("text")
                 if not message:
                     message = (
-                        blocks[0]  # ty: ignore[possibly-unresolved-reference]
+                        (reply.get("blocks") or [{}])[0]
                         .get("text", {})
                         .get("text")
                     )
