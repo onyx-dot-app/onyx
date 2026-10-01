@@ -2718,7 +2718,8 @@
         },
         "oauthOption": {
           "description": "Sube el JSON de la app de OAuth desde la consola de Google Cloud ([instrucciones de configuración]({docsUrl})) y luego autentícate con la cuenta de Google cuyo Drive quieres indexar.",
-          "title": "Opción 1: app de OAuth"
+          "title": "Opción 1: app de OAuth",
+          "sharedScopesNote": "Google solicita acceso a Google Drive y a Gmail a la vez, para que una sola cuenta sirva a ambos conectores. Para usar esta cuenta solo con Google Drive, desmarca los permisos de Gmail en la pantalla de consentimiento ([por qué lo pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Sube o pega el JSON de tu app de OAuth"
@@ -2776,7 +2777,8 @@
         },
         "oauthOption": {
           "description": "Sube el JSON de la app de OAuth desde la consola de Google Cloud ([instrucciones de configuración]({docsUrl})) y luego autentícate con la cuenta de Google cuyo Gmail quieres indexar.",
-          "title": "Opción 1: app de OAuth"
+          "title": "Opción 1: app de OAuth",
+          "sharedScopesNote": "Google solicita acceso a Gmail y a Google Drive a la vez, para que una sola cuenta sirva a ambos conectores. Para usar esta cuenta solo con Gmail, desmarca los permisos de Google Drive en la pantalla de consentimiento ([por qué lo pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Sube o pega el JSON de tu app de OAuth"
@@ -5247,6 +5249,22 @@
         "serviceAccountJsonRequired": "El JSON de la cuenta de servicio es obligatorio",
         "targetUrlRequired": "La URL de destino es obligatoria",
         "urlInvalid": "Debe ser una URL válida"
+      },
+      "vectorQuantization": {
+        "description": "Almacena los vectores de los documentos con menos bits para usar menos memoria. Menos bits pueden reducir la calidad de la búsqueda.",
+        "none": {
+          "description": "Precisión completa de 32 bits.",
+          "label": "Ninguna"
+        },
+        "scalar1Bit": {
+          "description": "32 veces menos memoria. Requiere OpenSearch 3.6 o posterior.",
+          "label": "1 bit"
+        },
+        "scalar7Bit": {
+          "description": "4 veces menos memoria. Casi sin pérdida de calidad de búsqueda.",
+          "label": "7 bits"
+        },
+        "title": "Cuantización de vectores"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Este conector se eliminará} other {Estos # conectores se eliminarán}}",

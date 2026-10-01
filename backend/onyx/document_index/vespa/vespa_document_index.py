@@ -31,7 +31,6 @@ from onyx.configs.chat_configs import (
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
-from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.document_index_utils import (
     get_document_chunk_ids,
@@ -190,10 +189,8 @@ def _add_ngrams_to_schema(schema_content: str) -> str:
 def deploy_vespa_schemas(
     primary_index_name: str,
     primary_embedding_dim: int,
-    primary_embedding_precision: EmbeddingPrecision,
     secondary_index_name: str | None,
     secondary_embedding_dim: int | None,
-    secondary_embedding_precision: EmbeddingPrecision | None,
 ) -> None:
     """Deploys (or redeploys) the Vespa application package containing primary
     (and optionally secondary) document schemas.
@@ -265,7 +262,6 @@ def deploy_vespa_schemas(
         multi_tenant=MULTI_TENANT,
         schema_name=primary_index_name,
         dim=primary_embedding_dim,
-        embedding_precision=primary_embedding_precision.value,
     )
     schema = _add_ngrams_to_schema(schema) if needs_reindexing else schema
     zip_dict[f"schemas/{primary_index_name}.sd"] = schema.encode("utf-8")
@@ -273,13 +269,10 @@ def deploy_vespa_schemas(
     if secondary_index_name:
         if secondary_embedding_dim is None:
             raise ValueError("Secondary index embedding dimension is required")
-        if secondary_embedding_precision is None:
-            raise ValueError("Secondary index embedding precision is required")
         upcoming_schema = template.render(
             multi_tenant=MULTI_TENANT,
             schema_name=secondary_index_name,
             dim=secondary_embedding_dim,
-            embedding_precision=secondary_embedding_precision.value,
         )
         zip_dict[f"schemas/{secondary_index_name}.sd"] = upcoming_schema.encode("utf-8")
 
@@ -296,7 +289,6 @@ def deploy_vespa_schemas(
 def register_multitenant_vespa_indices(
     indices: list[str],
     embedding_dims: list[int],
-    embedding_precisions: list[EmbeddingPrecision],
 ) -> None:
     """Registers a set of multi-tenant Vespa schemas in one application deploy."""
     if not MULTI_TENANT:
@@ -357,7 +349,6 @@ def register_multitenant_vespa_indices(
 
     for i, index_name in enumerate(indices):
         embedding_dim = embedding_dims[i]
-        embedding_precision = embedding_precisions[i]
         logger.info(
             "Creating index: %s with embedding dimension: %s",
             index_name,
@@ -367,7 +358,6 @@ def register_multitenant_vespa_indices(
             multi_tenant=MULTI_TENANT,
             schema_name=index_name,
             dim=embedding_dim,
-            embedding_precision=embedding_precision.value,
         )
         schema = _add_ngrams_to_schema(schema) if needs_reindexing else schema
         zip_dict[f"schemas/{index_name}.sd"] = schema.encode("utf-8")
@@ -624,11 +614,7 @@ class VespaDocumentIndex(DocumentIndex):
             )
         self._multitenant = tenant_state.multitenant
 
-    def verify_and_create_index_if_necessary(
-        self,
-        embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,
-    ) -> None:
+    def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
         """Deploys (or redeploys) the Vespa application package containing this
         index's schema.
 
@@ -641,10 +627,8 @@ class VespaDocumentIndex(DocumentIndex):
         deploy_vespa_schemas(
             primary_index_name=self._index_name,
             primary_embedding_dim=embedding_dim,
-            primary_embedding_precision=embedding_precision,
             secondary_index_name=None,
             secondary_embedding_dim=None,
-            secondary_embedding_precision=None,
         )
 
     def index(
@@ -1245,41 +1229,31 @@ class VespaIndexPair(DocumentIndex):
         # pair rather than threading it through every retrieval call.
         secondary_index_name: str | None,
         secondary_embedding_dim: int | None,
-        secondary_embedding_precision: EmbeddingPrecision | None,
     ) -> None:
-        # All four secondary fields must be set together or all None — checked
+        # All three secondary fields must be set together or all None — checked
         # independently so a partially-set state surfaces here rather than
         # deferring to a less informative ValueError inside deploy_vespa_schemas.
         secondary_set = secondary is not None
         name_set = secondary_index_name is not None
         dim_set = secondary_embedding_dim is not None
-        precision_set = secondary_embedding_precision is not None
-        if not (secondary_set == name_set == dim_set == precision_set):
+        if not (secondary_set == name_set == dim_set):
             raise ValueError(
-                "Bug: secondary VespaDocumentIndex, secondary_index_name, "
-                "secondary_embedding_dim, and secondary_embedding_precision "
-                "must all be set together or all be None. Got: "
-                f"secondary={secondary_set}, index_name={name_set}, "
-                f"embedding_dim={dim_set}, embedding_precision={precision_set}."
+                "Bug: secondary VespaDocumentIndex, secondary_index_name, and "
+                "secondary_embedding_dim must all be set together or all be None. "
+                f"Got: secondary={secondary_set}, index_name={name_set}, "
+                f"embedding_dim={dim_set}."
             )
         self._primary = primary
         self._secondary = secondary
         self._secondary_index_name = secondary_index_name
         self._secondary_embedding_dim = secondary_embedding_dim
-        self._secondary_embedding_precision = secondary_embedding_precision
 
-    def verify_and_create_index_if_necessary(
-        self,
-        embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,
-    ) -> None:
+    def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
         deploy_vespa_schemas(
             primary_index_name=self._primary._index_name,
             primary_embedding_dim=embedding_dim,
-            primary_embedding_precision=embedding_precision,
             secondary_index_name=self._secondary_index_name,
             secondary_embedding_dim=self._secondary_embedding_dim,
-            secondary_embedding_precision=self._secondary_embedding_precision,
         )
 
     def index(

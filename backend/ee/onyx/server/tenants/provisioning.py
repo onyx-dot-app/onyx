@@ -443,9 +443,7 @@ def configure_default_api_keys(db_session: Session) -> None:
                 "No default model found for %s in recommendations",
                 ANTHROPIC_PROVIDER_NAME,
             )
-        default_model_name = (
-            default_model.name if default_model else "claude-sonnet-4-5"
-        )
+        default_model_name = default_model.name if default_model else "claude-sonnet-5"
 
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",

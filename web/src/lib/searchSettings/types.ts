@@ -41,9 +41,11 @@ export enum SwitchoverType {
   INSTANT = "instant",
 }
 
-export enum EmbeddingPrecision {
-  FLOAT = "float",
-  BFLOAT16 = "bfloat16",
+/** Mirrors backend `VectorQuantization`. Changing it needs a re-index. */
+export enum VectorQuantization {
+  NONE = "none",
+  SCALAR_7_BIT = "scalar_7_bit",
+  SCALAR_1_BIT = "scalar_1_bit",
 }
 
 // ---------------------------------------------------------------------------
@@ -170,8 +172,8 @@ export interface AdvancedSearchConfiguration {
   disable_rerank_for_streaming: boolean;
   api_url: string | null;
   num_rerank: number;
-  embedding_precision: EmbeddingPrecision;
   reduced_dimension: number | null;
+  vector_quantization: VectorQuantization;
 }
 
 export interface SavedSearchSettings

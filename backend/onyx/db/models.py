@@ -77,7 +77,6 @@ from onyx.db.enums import (
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
     DefaultAppMode,
-    EmbeddingPrecision,
     EndpointPolicy,
     ExternalAppType,
     FlowNodeKind,
@@ -128,6 +127,7 @@ from onyx.db.enums import (
     ThemePreference,
     UsageActorKind,
     UserFileStatus,
+    VectorQuantization,
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
@@ -2331,12 +2331,13 @@ class SearchSettings(Base):
         postgresql.ARRAY(Integer), nullable=True
     )
 
-    # allows for quantization -> less memory usage for a small performance hit.
-    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
-    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
-    embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False),
-        default=EmbeddingPrecision.FLOAT,
+    # OpenSearch scalar quantization of the vector fields. Part of the index
+    # mapping, so it is fixed for the life of this row's index.
+    vector_quantization: Mapped[VectorQuantization] = mapped_column(
+        Enum(VectorQuantization, native_enum=False),
+        nullable=False,
+        default=VectorQuantization.NONE,
+        server_default=VectorQuantization.NONE.name,
     )
 
     # can be used to reduce dimensionality of vectors and save memory with
@@ -4890,6 +4891,11 @@ class FileRecord(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # The legacy copy looks records up by object, once per copied file.
+    __table_args__ = (
+        Index("ix_file_record_bucket_name_object_key", "bucket_name", "object_key"),
     )
 
 

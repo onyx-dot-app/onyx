@@ -9,7 +9,6 @@ from collections.abc import Iterable
 
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
-from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.interfaces_new import (
     DocumentIndex,
     DocumentInsertionRecord,
@@ -34,7 +33,6 @@ class DisabledDocumentIndex(DocumentIndex):
     def verify_and_create_index_if_necessary(
         self,
         embedding_dim: int,  # noqa: ARG002
-        embedding_precision: EmbeddingPrecision,  # noqa: ARG002
     ) -> None:
         # No-op: there are no indices to create when the vector DB is disabled.
         return None

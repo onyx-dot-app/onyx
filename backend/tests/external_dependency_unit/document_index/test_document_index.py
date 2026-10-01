@@ -14,7 +14,7 @@ from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.models import IndexFilters, InferenceChunk
-from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import VectorQuantization
 from onyx.document_index.interfaces_new import DocumentIndex as DocumentIndexNew
 from onyx.document_index.interfaces_new import (
     DocumentSectionRequest,
@@ -84,7 +84,7 @@ def opensearch_document_index(
         ),
         index_name=test_index_name,
         embedding_dim=EMBEDDING_DIM,
-        embedding_precision=EmbeddingPrecision.FLOAT,
+        vector_quantization=VectorQuantization.NONE,
     )
 
 
@@ -310,7 +310,7 @@ class TestDocumentIndexNew:
                 tenant_state=tenant_state,
                 index_name=test_index_name,
                 embedding_dim=EMBEDDING_DIM,
-                embedding_precision=EmbeddingPrecision.FLOAT,
+                vector_quantization=VectorQuantization.NONE,
             )
             assert mock_verify_and_create_index_if_necessary.call_count == 1
 
@@ -319,7 +319,7 @@ class TestDocumentIndexNew:
                 tenant_state=tenant_state,
                 index_name=test_index_name,
                 embedding_dim=EMBEDDING_DIM,
-                embedding_precision=EmbeddingPrecision.FLOAT,
+                vector_quantization=VectorQuantization.NONE,
             )
 
             # Postcondition.

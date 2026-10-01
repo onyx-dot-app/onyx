@@ -153,7 +153,7 @@ opensearch:
 
   image:
     repository: "opensearchproject/opensearch"
-    tag: ""  # Empty uses chart's appVersion (3.4.0).
+    tag: ""  # Empty uses chart's appVersion (3.6.0).
 
   # The security plugin requires OPENSEARCH_INITIAL_ADMIN_PASSWORD for
   # OpenSearch 2.12+.
@@ -1306,6 +1306,52 @@ redis:
           requests:
             storage: 1Gi
 
+# In-cluster S3 object store (SeaweedFS), which replaces the bundled MinIO. While
+# minio.enabled is also true, writes reach both stores, reads fall back to MinIO,
+# and a Job copies MinIO's files. See MIGRATION.md.
+objectStore:
+  # Unset follows minio.enabled, so installs on external storage stay as they are.
+  enabled: null
+  # The defaults live in the chart templates, since `helm upgrade --reuse-values`
+  # keeps an older release's values, which have no objectStore. Unset, these
+  # take chrislusf/seaweedfs 4.47 by digest, S3 on port 8333, 100m CPU and 256Mi
+  # requested, a 2Gi limit, UID 1000, a read-only root file system and no
+  # capabilities. A value set here replaces the default whole. On OpenShift, set
+  # podSecurityContext: {} so the cluster assigns the UID.
+  # image: {}
+  # service: {}
+  # resources: {}
+  # podSecurityContext: {}
+  # securityContext: {}
+  # The PVC survives upgrade, rollback and uninstall, and must hold MinIO's data.
+  # Size and storage class follow minio.persistence unless set here.
+  persistence:
+    # size: 30Gi
+    # storageClass: ""
+    annotations: {}
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  # Copies the bundled MinIO's files into the object store while the app serves.
+  # Scheduling defaults to api's. The Job reruns when its spec changes. Unset, it
+  # is enabled, finishes only after a pass copies nothing and 600 seconds have
+  # passed (so writes from pods still on the old release are included), runs 16
+  # workers, retries 20 times, and takes 100m CPU and 256Mi with a 1Gi limit.
+  legacyCopy:
+    # enabled: true
+    # settleSeconds: 600
+    # workers: 16
+    # backoffLimit: 20
+    # resources: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+# Bundled MinIO, the legacy store the copy reads from. Keep it enabled until the
+# copy completes. New installs set enabled: false and objectStore.enabled: true.
 minio:
   enabled: true
   mode: standalone
@@ -1326,6 +1372,10 @@ minio:
     enabled: true
     size: 30Gi
     storageClass: ""
+    # Retiring MinIO disables this subchart, which must not delete its data.
+    annotations:
+      helm.sh/resource-policy: keep
+      argocd.argoproj.io/sync-options: Prune=false
   service:
     type: ClusterIP
     port: 9000
@@ -1667,8 +1717,8 @@ configMap:
   EMAIL_FROM: ""
   # Optional comma-separated BCC archive recipients for all emails
   EMAIL_ARCHIVE_BCC_ADDRESSES: ""
-  # MinIO/S3 Configuration override
-  S3_ENDPOINT_URL: ""  # only used if minio is not enabled
+  # External S3 configuration
+  S3_ENDPOINT_URL: ""  # ignored while objectStore or minio is enabled
   S3_FILE_STORE_BUCKET_NAME: ""
   # Azure Blob Storage file store (set FILE_STORE_BACKEND: "azure" and
   # minio.enabled: false). Auth priority: AZURE_STORAGE_CONNECTION_STRING,

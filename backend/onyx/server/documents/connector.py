@@ -47,8 +47,16 @@ from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryTask,
 )
+from onyx.connectors.credential_families import (
+    is_credential_usable_for_source,
+    to_source_credential_json,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.factory import validate_ccpair_for_user, validate_connector_config
+from onyx.connectors.factory import (
+    validate_ccpair_for_user,
+    validate_connector_config,
+    validate_connector_credential_bindings,
+)
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
@@ -250,7 +258,14 @@ def check_drive_tokens(
     if not db_credentials or not db_credentials.credential_json:
         return AuthStatus(authenticated=False)
 
-    credential_json = db_credentials.credential_json.get_value(apply_mask=False)
+    stored_json = db_credentials.credential_json.get_value(apply_mask=False)
+    if not is_credential_usable_for_source(
+        db_credentials.source, stored_json, DocumentSource.GOOGLE_DRIVE
+    ):
+        return AuthStatus(authenticated=False)
+    credential_json = to_source_credential_json(
+        DocumentSource.GOOGLE_DRIVE, stored_json
+    )
     if DB_CREDENTIALS_DICT_TOKEN_KEY not in credential_json:
         return AuthStatus(authenticated=False)
     token_json_str = str(credential_json[DB_CREDENTIALS_DICT_TOKEN_KEY])
@@ -1658,9 +1673,15 @@ def update_connector_from_model(
 ) -> ConnectorSnapshot | StatusResponse[int]:
     try:
         _validate_connector_request(connector_data)
+        validate_connector_credential_bindings(
+            connector_id,
+            connector_data.source,
+            connector_data.connector_specific_config,
+            db_session,
+        )
         connector_base = connector_data.to_connector_base()
-    except ValueError as e:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+    except (ValueError, ConnectorValidationError) as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
     # TODO(andrei, evan): Validate the updated config here like the creation
     # flows do (``validate_ccpair_for_user`` / ``validate_connector_settings``).

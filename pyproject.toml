@@ -173,7 +173,7 @@ dev = [
 # One-tool groups, installed with `--only-group` by the pre-commit hooks: each
 # tool comes from hash-verified uv.lock artifacts without a full project sync,
 # and each pin below is the only one in the repo.
-ods = ["onyx-devtools[audit]==0.13.8"]
+ods = ["onyx-devtools[audit]==0.13.9"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
@@ -253,6 +253,15 @@ all = "error"
 # own PR rather than a version bump.
 missing-override-decorator = "ignore"  # ~1.1k methods across ~250 files.
 missing-type-argument = "ignore"  # ~1k bare generics across ~350 files.
+
+# Old migrations must not change, and some pass arguments that app models later
+# dropped (e.g. dbaa756c2ccf passes embedding_precision to IndexingSetting).
+# Pydantic discards them at runtime, so silence only this rule there.
+[[tool.ty.overrides]]
+include = ["backend/alembic/versions/**"]
+
+[tool.ty.overrides.rules]
+pydantic-discarded-extra-argument = "ignore"
 
 [tool.uv.workspace]
 members = ["tools/ods"]
