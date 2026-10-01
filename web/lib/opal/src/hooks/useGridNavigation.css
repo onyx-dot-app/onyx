@@ -1,0 +1,7 @@
+/* Keyboard mode: while the keyboard moves focus through the grid, its
+   contents ignore the pointer, so the pointer's hover cannot paint a second
+   highlight beside the focused item. A pointer movement drops the flag and
+   hover returns. The same rule as the dropdown family's listbox. */
+[data-opal-keyboard-nav] * {
+  pointer-events: none;
+}

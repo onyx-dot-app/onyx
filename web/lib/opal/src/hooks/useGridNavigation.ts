@@ -1,5 +1,6 @@
 "use client";
 
+import "@opal/hooks/useGridNavigation.css";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 
 export type GridDirection = "up" | "down" | "left" | "right";
@@ -25,6 +26,9 @@ export interface UseGridNavigationReturn {
   /** Focuses the first item. Returns false when there is none. */
   focusFirst: () => boolean;
 }
+
+/** Set on the container while the keyboard drives; see the stylesheet. */
+const KEYBOARD_MODE_ATTRIBUTE = "data-opal-keyboard-nav";
 
 const DIRECTIONS: Record<string, GridDirection> = {
   ArrowUp: "up",
@@ -87,6 +91,12 @@ function itemInDirection(
  * column count and continues across several grids (e.g. sections) inside
  * the one container. Keys pressed on a nested control inside an item, and
  * keys with Ctrl, ⌘ or Alt held, are left alone.
+ *
+ * While the keyboard moves focus between items (Tab or the arrows), the
+ * container is in keyboard mode: its contents ignore the pointer, so the
+ * hover under a resting pointer does not highlight a second item beside
+ * the focused one. Moving the pointer, or focus leaving the container,
+ * ends it.
  *
  * @example
  * ```tsx
@@ -154,8 +164,42 @@ export default function useGridNavigation(
       }
     }
 
+    // `:focus-visible` is the browser's own test for focus the keyboard
+    // brought, so Tab and the arrows enter keyboard mode and a click does
+    // not.
+    function handleFocusIn(event: FocusEvent) {
+      const item = event.target;
+      if (
+        item instanceof HTMLElement &&
+        item.matches(itemSelector) &&
+        item.matches(":focus-visible")
+      ) {
+        container?.setAttribute(KEYBOARD_MODE_ATTRIBUTE, "");
+      }
+    }
+
+    function endKeyboardMode() {
+      container?.removeAttribute(KEYBOARD_MODE_ATTRIBUTE);
+    }
+
+    function handleFocusOut(event: FocusEvent) {
+      const next = event.relatedTarget;
+      if (!(next instanceof Node) || !container?.contains(next)) {
+        endKeyboardMode();
+      }
+    }
+
     container.addEventListener("keydown", handleKeyDown);
-    return () => container.removeEventListener("keydown", handleKeyDown);
+    container.addEventListener("focusin", handleFocusIn);
+    container.addEventListener("focusout", handleFocusOut);
+    container.addEventListener("pointermove", endKeyboardMode);
+    return () => {
+      container.removeEventListener("keydown", handleKeyDown);
+      container.removeEventListener("focusin", handleFocusIn);
+      container.removeEventListener("focusout", handleFocusOut);
+      container.removeEventListener("pointermove", endKeyboardMode);
+      endKeyboardMode();
+    };
   }, [containerRef, itemSelector, enabled, items]);
 
   const focusFirst = useCallback(() => {
