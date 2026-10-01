@@ -58,13 +58,25 @@
     transparent 65%
   );
   will-change: transform;
-  animation: opal-shimmer-slide 6s ease-in-out infinite;
+  animation: opal-shimmer-text-slide 3s linear infinite;
 }
 
 /* Browsers without text mask clipping show the base text alone. */
 @supports not (-webkit-mask-clip: text) {
   .opal-shimmer-text-overlay {
     display: none;
+  }
+}
+
+/* The text's band covers the middle third of its layer, so the layer only
+   travels far enough to bring the band in from just off the left edge and
+   out just past the right: no pass spends time with the band off the text. */
+@keyframes opal-shimmer-text-slide {
+  from {
+    translate: -65% 0;
+  }
+  to {
+    translate: 65% 0;
   }
 }
 
