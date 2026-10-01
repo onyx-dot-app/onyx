@@ -42,6 +42,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.connectors.slack.connector import (
     get_channels,
     get_channels_across_teams,
@@ -570,7 +571,7 @@ class _UserProfileReadCheck(CapabilityCheck):
             )
 
 
-class _ConfiguredChannelsVisibleCheck(CapabilityCheck):
+class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
     """Verifies every configured channel name is visible to the bot.
 
     Existed only as commented-out code in ``validate_connector_settings``
@@ -578,6 +579,8 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck):
     runs are acceptable. Composes the same enumeration the connector runs
     (``get_channels`` / ``get_channels_across_teams``).
     """
+
+    config_class = SlackConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -595,12 +598,12 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = context.connector_specific_config or {}
-        channels_to_include = config.get("channels")
+        config = self.config(context)
+        channels_to_include = config.channels
         if not channels_to_include:
             # No channel filter configured; whatever is visible gets indexed.
             return
-        if config.get("channel_regex_enabled"):
+        if config.channel_regex_enabled:
             # Regex includes match dynamically; existence cannot be pre-checked.
             return
         slack_client = _slack_client(context)
@@ -620,7 +623,7 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck):
                 "be verified.",
             )
         visible_names = {channel["name"] for channel in all_channels}
-        configured_names = [str(name).removeprefix("#") for name in channels_to_include]
+        configured_names = [name.removeprefix("#") for name in channels_to_include]
         missing = sorted(set(configured_names) - visible_names)
         if missing:
             raise ConnectorValidationError(

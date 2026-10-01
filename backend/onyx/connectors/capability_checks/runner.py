@@ -34,7 +34,7 @@ from onyx.connectors.source_operations import (
 )
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import CapabilityCheckTrigger
+from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
@@ -72,6 +72,7 @@ class _CheckOutcome(BaseModel):
     message: str = ""
     error_type: str | None = None
     duration_ms: int | None = None
+    applicable: bool = True
 
 
 def _build_result(
@@ -89,6 +90,7 @@ def _build_result(
         remediation=check.remediation,
         docs_link=check.docs_link,
         duration_ms=outcome.duration_ms,
+        applicable=outcome.applicable,
     )
 
 
@@ -248,17 +250,7 @@ def run_capability_checks(
     results: list[CapabilityCheckResult] = []
     outcome_by_check_id: dict[str, _CheckOutcome] = {}
     for check in checks:
-        unrunnable_outcome: _CheckOutcome | None = None
-        if (
-            check.requires_connector_config
-            and context.connector_specific_config is None
-        ):
-            unrunnable_outcome = _CheckOutcome(
-                status=CapabilityCheckStatus.SKIPPED,
-                message=_SKIP_NEEDS_CONFIG_MESSAGE,
-            )
-        elif check.requires_connector_instance and context.connector is None:
-            unrunnable_outcome = _missing_instance_outcome(context.instantiation_error)
+        unrunnable_outcome = _unrunnable_outcome(check, context)
         if unrunnable_outcome is not None:
             results.append(_build_result(check, unrunnable_outcome))
             continue
@@ -267,6 +259,60 @@ def run_capability_checks(
             outcome_by_check_id[check.check_id] = _execute_check(check, context)
         results.append(_build_result(check, outcome_by_check_id[check.check_id]))
     return results
+
+
+def _unrunnable_outcome(
+    check: CapabilityCheck[Any], context: CapabilityCheckContext
+) -> _CheckOutcome | None:
+    """The outcome of a check that must not run in this context, or None when
+    it can run. Order matters: a check that does not apply is skipped before
+    its inputs are judged."""
+    if (
+        check.access_types is not None
+        and context.access_type is not None
+        and context.access_type not in check.access_types
+    ):
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=(
+                f"Does not apply to connectors with {context.access_type.value} access."
+            ),
+            applicable=False,
+        )
+    if check.requires_connector_config and context.connector_specific_config is None:
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=_SKIP_NEEDS_CONFIG_MESSAGE,
+        )
+    form_state = context.form_state
+    if check.reads_connector_config and form_state is not None:
+        # A check that reads the config cannot trust it while a field is
+        # invalid: the invalid value would silently read as the default.
+        if form_state.errors:
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.FAILED,
+                message="Invalid connector settings: "
+                + "; ".join(
+                    f"{name}: {message}"
+                    for name, message in sorted(form_state.errors.items())
+                ),
+                error_type=ConnectorValidationError.__name__,
+            )
+        missing = form_state.missing(check.requires_fields)
+        if missing:
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED,
+                message=f"Needs connector settings: {', '.join(sorted(missing))}.",
+            )
+        if not check.applies(form_state):
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED,
+                message="Does not apply to these connector settings.",
+                applicable=False,
+            )
+    if check.requires_connector_instance and context.connector is None:
+        return _missing_instance_outcome(context.instantiation_error)
+    return None
 
 
 def _instantiate_connector_isolated(
@@ -318,6 +364,7 @@ def generate_capability_report(
     connector_id: int | None = None,
     input_type: InputType | None = None,
     trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.MANUAL,
+    access_type: AccessType | None = None,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -417,6 +464,7 @@ def generate_capability_report(
         # marked requires_connector_config must skip on config-less runs rather
         # than probe an empty dict.
         connector_specific_config=connector_specific_config,
+        access_type=access_type,
         instantiation_error=instantiation_error,
         source_operations=source_operations,
     )
