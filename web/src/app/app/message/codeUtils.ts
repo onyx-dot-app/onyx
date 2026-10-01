@@ -201,7 +201,8 @@ const replaceFencedCodeBlocks = (
   const classified = classifyFenceLines(lines);
   const out: string[] = [];
   let block: string[] | null = null;
-  for (const [i, line] of lines.entries()) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     const role = classified[i]?.role;
     if (block && (role === "code" || role === "close")) {
       block.push(line);
