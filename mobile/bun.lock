@@ -64,7 +64,7 @@
         "eslint": "^9.39.5",
         "eslint-config-expo": "~57.0.1",
         "eslint-config-prettier": "^10.1.8",
-        "jest-expo": "~57.0.4",
+        "jest-expo": "~57.0.5",
         "prettier": "3.9.6",
         "prettier-plugin-tailwindcss": "0.8.1",
         "react-test-renderer": "19.2.3",
@@ -1459,7 +1459,7 @@
 
     "jest-environment-node": ["jest-environment-node@29.7.0", "", { "dependencies": { "@jest/environment": "^29.7.0", "@jest/fake-timers": "^29.7.0", "@jest/types": "^29.6.3", "@types/node": "*", "jest-mock": "^29.7.0", "jest-util": "^29.7.0" } }, "sha512-DOSwCRqXirTOyheM+4d5YZOrWcdu0LNZ87ewUoywbcb2XR4wKgqiG8vNeYwhjFMbEkfju7wx2GYH0P2gevGvFw=="],
 
-    "jest-expo": ["jest-expo@57.0.4", "", { "dependencies": { "@jest/create-cache-key-function": "^29.2.1", "@jest/globals": "^29.2.1", "babel-jest": "^29.2.1", "jest-environment-jsdom": "^29.2.1", "jest-snapshot": "^29.2.1", "jest-watch-select-projects": "^2.0.0", "jest-watch-typeahead": "2.2.1", "json5": "^2.2.3", "lodash": "^4.17.19", "react-test-renderer": "19.2.3", "server-only": "^0.0.1", "stacktrace-js": "^2.0.2" }, "peerDependencies": { "@react-native/jest-preset": "^0.86.2", "expo": "*", "react-native": "*", "react-server-dom-webpack": "~19.0.4 || ~19.1.5 || ~19.2.4" }, "optionalPeers": ["expo", "react-server-dom-webpack"], "bin": { "jest": "bin/jest.js" } }, "sha512-EpTc8zizYWepKXHdHYuYBdEP0mZLjZfB1ldb2dyLKHug0HYFGuBnQ3Qp3gmBWCj3rSRaJYP90Lq/qPozzx2Khg=="],
+    "jest-expo": ["jest-expo@57.0.5", "", { "dependencies": { "@jest/create-cache-key-function": "^29.2.1", "@jest/globals": "^29.2.1", "babel-jest": "^29.2.1", "jest-environment-jsdom": "^29.2.1", "jest-snapshot": "^29.2.1", "jest-watch-select-projects": "^2.0.0", "jest-watch-typeahead": "2.2.1", "json5": "^2.2.3", "lodash": "^4.17.19", "react-test-renderer": "19.2.3", "server-only": "^0.0.1", "stacktrace-js": "^2.0.2" }, "peerDependencies": { "@react-native/jest-preset": "^0.86.3", "expo": "*", "react-native": "*", "react-server-dom-webpack": "~19.0.4 || ~19.1.5 || ~19.2.4" }, "optionalPeers": ["expo", "react-server-dom-webpack"], "bin": { "jest": "bin/jest.js" } }, "sha512-U08fwjaDBwnnbKnZcOA0WQbHfKqOWTCGku+IdCaekrLZmfbbZr3P1WqEsXHo6ntidQ3DmW+TT6G1aOp+ChYfKA=="],
 
     "jest-get-type": ["jest-get-type@29.6.3", "", {}, "sha512-zrteXnqYxfQh7l5FHyL38jL39di8H8rHoecLH3JNxH3BwOrBsNeabdap5e0I23lD4HHI8W5VFBZqG4Eaq5LNcw=="],
 
