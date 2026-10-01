@@ -45,7 +45,6 @@ import { Button } from "@opal/components";
 import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
-import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
 import { useTranslations } from "next-intl";
 import { toWireAccess } from "@/lib/connectors/accessType";
@@ -521,7 +520,6 @@ export default function AddConnector({
                             null
                           }
                         />
-                        <ConnectorDocsLink sourceType={connector} />
                       </Section>
                     </fieldset>
                   </Card>
