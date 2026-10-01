@@ -1,18 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
-import {
-  Content,
-  ContentAction,
-  IllustrationContent,
-  Section,
-  toast,
-} from "@opal/layouts";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle } from "@opal/icons";
-import { SvgPlugBroken } from "@opal/illustrations";
 import { CardLoader } from "@opal/loaders";
 import type { Credential } from "@/lib/credentials/types";
 import { useCredentialSetup } from "@/lib/credentials/hooks";
@@ -53,7 +45,6 @@ export function CredentialsConfigurer({
   const {
     displayName,
     credentials,
-    error,
     oauthDetails,
     isLoading,
     methods,
@@ -156,12 +147,6 @@ export function CredentialsConfigurer({
     }
   }
 
-  // A failed load says so once, not on every retry.
-  const failed = error !== undefined;
-  useEffect(() => {
-    if (failed) toast.error(t("add.credentialsLoadFailed.toast"));
-  }, [failed, t]);
-
   return (
     <Section gap={4} alignItems="stretch" width="full">
       <ContentAction
@@ -197,16 +182,10 @@ export function CredentialsConfigurer({
       />
 
       {/* The header always shows. Below it: a card loader in the shape of
-      the accounts card while the step loads, an error in place of the step
-      once loading failed (no credential can be set up), and the accounts and
-      create card once everything lands. */}
-      {failed ? (
-        <IllustrationContent
-          illustration={SvgPlugBroken}
-          title={t("add.credentialsLoadFailed.title")}
-          description={t("add.credentialsLoadFailed.description")}
-        />
-      ) : isLoading || !credentials ? (
+      the accounts card while the step loads, then the accounts and create
+      card. A failed load never reaches here: the page shows the error in
+      place of the whole form. */}
+      {isLoading || !credentials ? (
         <CardLoader color="transparent" />
       ) : (
         <Section gap={4} alignItems="stretch" width="full">

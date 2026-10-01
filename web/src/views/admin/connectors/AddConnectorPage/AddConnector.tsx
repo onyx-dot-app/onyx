@@ -41,12 +41,21 @@ import { Card, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
+  useCredentialLoad,
   useGoogleDriveCredentials,
 } from "@/lib/credentials/hooks";
 import { Formik } from "formik";
 import { useRouter } from "next/navigation";
 import { Button } from "@opal/components";
-import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
+import {
+  Content,
+  IllustrationContent,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
+import { SvgPlugBroken } from "@opal/illustrations";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
 import { SvgArrowExchange } from "@opal/icons";
@@ -180,6 +189,13 @@ export default function AddConnector({
   const noCredentials = credentialTemplate == null;
   const canCreate = noCredentials || credentialActivated != null;
 
+  // The page waits for the source's saved credentials: no connector can be
+  // set up without them. Sources without credentials fetch nothing and go
+  // straight to the form. The credential step calls the same hook; SWR
+  // shares the requests.
+  const { isLoading: credentialsLoading, error: credentialLoadError } =
+    useCredentialLoad(connector, { enabled: !noCredentials });
+
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
   };
@@ -205,6 +221,20 @@ export default function AddConnector({
   const onSuccess = () => {
     router.push("/admin/indexing-status?message=connector-created");
   };
+
+  if (credentialsLoading) {
+    return <PageLoader />;
+  }
+
+  if (credentialLoadError) {
+    return (
+      <IllustrationContent
+        illustration={SvgPlugBroken}
+        title={t("add.credentialsLoadFailed.title")}
+        description={t("add.credentialsLoadFailed.description")}
+      />
+    );
+  }
 
   return (
     <Formik

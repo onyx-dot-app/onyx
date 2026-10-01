@@ -53,10 +53,18 @@ export function useAdminCredentials() {
 /** How often the credential lists re-poll, in milliseconds. */
 const CREDENTIALS_REFRESH_INTERVAL_MS = 5000;
 
+interface CredentialFetchOptions {
+  /** Fetch only when true. A source with no credentials skips both requests. @default true */
+  enabled?: boolean;
+}
+
 /** The OAuth capabilities of a source: whether it supports OAuth, manual credentials, and any extra fields. */
-export function useOAuthDetails(sourceType: ValidSources) {
+export function useOAuthDetails(
+  sourceType: ValidSources,
+  { enabled = true }: CredentialFetchOptions = {}
+) {
   return useSWR<OAuthDetails>(
-    SWR_KEYS.connectorOAuthDetails(sourceType),
+    enabled ? SWR_KEYS.connectorOAuthDetails(sourceType) : null,
     errorHandlingFetcher,
     {
       shouldRetryOnError: false,
@@ -72,13 +80,45 @@ export function useOAuthDetails(sourceType: ValidSources) {
  * the caller's to edit or delete; there is no narrower "editable" list.
  */
 export function useSourceCredentials(
-  sourceType: ValidSources
+  sourceType: ValidSources,
+  { enabled = true }: CredentialFetchOptions = {}
 ): SourceCredentialsResult {
   return useSWR<AnyCredential[], Error>(
-    SWR_KEYS.similarCredentials(sourceType),
+    enabled ? SWR_KEYS.similarCredentials(sourceType) : null,
     errorHandlingFetcher,
     { refreshInterval: CREDENTIALS_REFRESH_INTERVAL_MS }
   );
+}
+
+/**
+ * Whether a source's saved credentials and OAuth details have loaded: one
+ * verdict for both fetches. Only a fetch that never succeeded counts as
+ * failed; a later refresh that fails keeps what is already shown. Disabled,
+ * it fetches nothing and reports neither loading nor failed.
+ */
+export function useCredentialLoad(
+  sourceType: ValidSources,
+  options: CredentialFetchOptions = {}
+) {
+  const { data: credentials, error: credentialsError } = useSourceCredentials(
+    sourceType,
+    options
+  );
+  const { data: oauthDetails, error: oauthDetailsError } = useOAuthDetails(
+    sourceType,
+    options
+  );
+  const enabled = options.enabled ?? true;
+
+  const error: Error | undefined =
+    (credentials === undefined ? credentialsError : undefined) ??
+    (oauthDetails === undefined ? oauthDetailsError : undefined);
+  const isLoading =
+    enabled &&
+    error === undefined &&
+    (credentials === undefined || oauthDetails === undefined);
+
+  return { credentials, oauthDetails, isLoading, error };
 }
 
 /**
@@ -94,19 +134,8 @@ export function useSourceCredentials(
  * is a toast, a banner or inline text.
  */
 export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
-  const { data: credentials, error: credentialsError } =
-    useSourceCredentials(sourceType);
-  const { data: oauthDetails, error: oauthDetailsError } =
-    useOAuthDetails(sourceType);
-
-  // One verdict for both fetches. Only a fetch that never succeeded counts:
-  // a later refresh that fails keeps what is already shown.
-  const error =
-    (credentials === undefined ? credentialsError : undefined) ??
-    (oauthDetails === undefined ? oauthDetailsError : undefined);
-  const isLoading =
-    error === undefined &&
-    (credentials === undefined || oauthDetails === undefined);
+  const { credentials, oauthDetails, isLoading, error } =
+    useCredentialLoad(sourceType);
   const [openMethod, setOpenMethod] = useState<CredentialCreationMethod | null>(
     null
   );

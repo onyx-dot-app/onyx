@@ -2615,7 +2615,6 @@
         },
         "credentialsLoadFailed": {
           "description": "Anmeldedaten können gerade nicht eingerichtet werden. Lade die Seite neu oder versuche es später erneut.",
-          "toast": "Die gespeicherten Anmeldedaten konnten nicht geladen werden.",
           "title": "Anmeldedaten konnten nicht geladen werden"
         },
         "credentialStep": {

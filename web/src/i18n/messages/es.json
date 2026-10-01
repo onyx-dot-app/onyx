@@ -2615,7 +2615,6 @@
         },
         "credentialsLoadFailed": {
           "description": "Ahora no se pueden configurar credenciales. Recarga la página o inténtalo más tarde.",
-          "toast": "No se pudieron cargar las credenciales guardadas.",
           "title": "No se pudieron cargar tus credenciales"
         },
         "credentialStep": {

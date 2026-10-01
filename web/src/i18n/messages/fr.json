@@ -2615,7 +2615,6 @@
         },
         "credentialsLoadFailed": {
           "description": "Les identifiants ne peuvent pas être configurés pour le moment. Rechargez la page ou réessayez plus tard.",
-          "toast": "Impossible de charger les identifiants enregistrés.",
           "title": "Impossible de charger vos identifiants"
         },
         "credentialStep": {

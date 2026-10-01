@@ -2615,7 +2615,6 @@
         },
         "credentialsLoadFailed": {
           "description": "Credentials can't be set up right now. Reload the page or try again later.",
-          "toast": "Couldn't load the saved credentials.",
           "title": "Couldn't load your credentials"
         },
         "credentialStep": {

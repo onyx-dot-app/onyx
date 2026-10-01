@@ -2615,7 +2615,6 @@
         },
         "credentialsLoadFailed": {
           "description": "現在、認証情報を設定できません。ページを再読み込みするか、後でもう一度お試しください。",
-          "toast": "保存済みの認証情報を読み込めませんでした。",
           "title": "認証情報を読み込めませんでした"
         },
         "credentialStep": {
