@@ -8,15 +8,15 @@ from typing import Any
 from unittest.mock import patch
 
 from onyx.chat.emitter import Emitter
-from onyx.coding_agent.mock_tools import (
+from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_NAME,
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
     GENERATE_ANSWER_TOOL_NAME,
 )
-from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.tool_definitions import (
     THINK_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
 )

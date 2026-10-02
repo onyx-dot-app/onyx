@@ -11,6 +11,8 @@ from requests import JSONDecodeError
 from onyx.chat.emitter import Emitter
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.model_request import serialize_tools
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolArgs,
@@ -102,7 +104,7 @@ class CustomTool(Tool[None]):
         # (e.g. "ServiceNow.GetIncident" vs "ServiceNow_GetIncident").
         return self._method_spec.raw_name
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> ToolDefinition:
         return self._tool_definition
 
     def _save_and_get_file_references(
@@ -399,9 +401,9 @@ if __name__ == "__main__":
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Can you fetch assistant with ID 10"},
         ],
-        tools=[  # ty: ignore[invalid-argument-type]
-            tool.tool_definition() for tool in tools
-        ],
+        tools=serialize_tools(  # ty: ignore[invalid-argument-type]
+            [tool.tool_definition() for tool in tools]
+        ),
     )
     choice = response.choices[0]
     if choice.message.tool_calls:

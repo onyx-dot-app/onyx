@@ -45,6 +45,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
+from onyx.llm.model_request import serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.llm.tool_parsing import looks_like_xml_tool_call_payload
 from onyx.llm.utils import model_supports_image_input
@@ -60,8 +61,8 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     ToolCallDebug,
 )
-from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES, STOPPING_TOOLS_NAMES
-from onyx.tools.constants import FILE_READER_TOOL_NAME
+from onyx.tools.built_in_tools import STOPPING_TOOLS_NAMES
+from onyx.tools.constants import CITEABLE_TOOLS_NAMES, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatFile,
@@ -1111,7 +1112,9 @@ def run_llm_loop(
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
             # It also pre-processes the tool calls in preparation for running them
-            tool_defs = [tool.tool_definition() for tool in final_tools]
+            tool_defs = serialize_tools(
+                [tool.tool_definition() for tool in final_tools]
+            )
 
             # Calculate total processing time from loop start until now
             # This measures how long the user waits before the answer starts streaming
