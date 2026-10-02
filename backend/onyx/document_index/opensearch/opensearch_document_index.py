@@ -47,6 +47,7 @@ from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_S
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
+    CC_PAIR_IDS_FIELD_NAME,
     CONTENT_FIELD_NAME,
     CREATED_AT_FIELD_NAME,
     DOCUMENT_SETS_FIELD_NAME,
@@ -241,6 +242,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         access_control_list=generate_opensearch_filtered_access_control_list(
             chunk.access
         ),
+        cc_pair_ids=chunk.cc_pair_ids or None,
         global_boost=chunk.boost,
         semantic_identifier=filtered_semantic_identifier,
         image_file_id=chunk.image_file_id,
@@ -633,6 +635,18 @@ class OpenSearchDocumentIndex(DocumentIndex):
             deleted += self._client.delete_by_query(query_body)
         return deleted
 
+    def set_cc_pair_ids(self, doc_id_to_cc_pair_ids: dict[str, list[int]]) -> int:
+        """Sets cc_pair_ids on every chunk of the given documents, without
+        needing chunk counts. Documents with no chunks are skipped. Returns the
+        number of chunks updated."""
+        if not doc_id_to_cc_pair_ids:
+            return 0
+        query_body = DocumentQuery.set_cc_pair_ids_query(
+            doc_id_to_cc_pair_ids=doc_id_to_cc_pair_ids,
+            tenant_state=self._tenant_state,
+        )
+        return self._client.update_by_query(query_body)
+
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
@@ -683,6 +697,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     generate_opensearch_filtered_access_control_list(
                         update_request.access
                     )
+                )
+            if update_request.cc_pair_ids is not None:
+                properties_to_update[CC_PAIR_IDS_FIELD_NAME] = sorted(
+                    update_request.cc_pair_ids
                 )
             if update_request.document_sets is not None:
                 properties_to_update[DOCUMENT_SETS_FIELD_NAME] = list(

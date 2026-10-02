@@ -1,5 +1,6 @@
 import contextlib
 import time
+from collections import defaultdict
 from collections.abc import Generator, Iterable, Sequence
 from datetime import datetime, timezone
 from typing import Any, NamedTuple
@@ -941,6 +942,50 @@ def get_access_info_for_documents(
     return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
 
 
+def get_cc_pair_ids_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, list[int]]:
+    """Maps each document to the sorted IDs of the cc-pairs it belongs to.
+
+    Uses the same DocumentByConnectorCredentialPair rows that document access is
+    built from (get_access_info_for_documents, fetch_user_groups_for_documents):
+    rows with has_been_indexed=False count, rows whose cc-pair is DELETING do
+    not. Documents with no such row are left out.
+    """
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id, ConnectorCredentialPair.id)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
+    )
+    doc_id_to_cc_pair_ids: dict[str, list[int]] = defaultdict(list)
+    for document_id, cc_pair_id in db_session.execute(stmt):
+        doc_id_to_cc_pair_ids[document_id].append(cc_pair_id)
+    return {
+        document_id: sorted(cc_pair_ids)
+        for document_id, cc_pair_ids in doc_id_to_cc_pair_ids.items()
+    }
+
+
+def get_last_modified_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, datetime | None]:
+    stmt = select(DbDocument.id, DbDocument.last_modified).where(
+        DbDocument.id.in_(document_ids)
+    )
+    return dict(db_session.execute(stmt).tuples().all())
+
+
 def upsert_documents(
     db_session: Session,
     document_metadata_batch: list[DocumentMetadata],
@@ -1727,6 +1772,19 @@ def fetch_chunk_counts_for_documents(
     # an unknown chunk count. Callers should handle the `None` case and fall
     # back to an existence check against the vector DB if necessary.
     return [(doc_id, chunk_counts.get(doc_id, 0)) for doc_id in document_ids]
+
+
+def fetch_known_chunk_counts_for_documents(
+    document_ids: list[str],
+    db_session: Session,
+) -> list[tuple[str, int | None]]:
+    """(document_id, chunk_count) in the order given. The count is None when the
+    document is missing or its chunk count is not known."""
+    stmt = select(DbDocument.id, DbDocument.chunk_count).where(
+        DbDocument.id.in_(document_ids)
+    )
+    chunk_counts = {str(row.id): row.chunk_count for row in db_session.execute(stmt)}
+    return [(doc_id, chunk_counts.get(doc_id)) for doc_id in document_ids]
 
 
 def fetch_chunk_count_for_document(

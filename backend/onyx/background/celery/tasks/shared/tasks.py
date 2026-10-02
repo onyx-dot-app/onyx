@@ -14,6 +14,7 @@ from onyx.db.document import (
     delete_document_by_connector_credential_pair__no_commit,
     delete_documents_complete,
     fetch_chunk_count_for_document,
+    get_cc_pair_ids_for_documents,
     get_document_connector_count,
     get_document_for_update,
     get_document_source_types,
@@ -202,6 +203,11 @@ def document_by_cc_pair_cleanup_task(
                         )
                     },
                     access=doc_access,
+                    cc_pair_ids=set(
+                        get_cc_pair_ids_for_documents(
+                            db_session=db_session, document_ids=[document_id]
+                        ).get(document_id, [])
+                    ),
                     document_sets=set(doc_sets),
                     boost=doc.boost,
                     hidden=doc.hidden,

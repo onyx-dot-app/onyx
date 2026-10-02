@@ -142,6 +142,8 @@ class MetadataUpdateRequest(BaseModel):
     doc_id_to_chunk_cnt: dict[str, int]
     # For the ones that are None, there is no update required to that field.
     access: DocumentAccess | None = None
+    # An empty set clears the field.
+    cc_pair_ids: set[int] | None = None
     document_sets: set[str] | None = None
     boost: float | None = None
     hidden: bool | None = None

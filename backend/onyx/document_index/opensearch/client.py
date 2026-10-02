@@ -68,6 +68,10 @@ _RETRYABLE_UPDATE_ERROR_TYPES = (
 
 
 logger = setup_logger(__name__)
+
+# One update-by-query can touch thousands of chunks, so it gets longer than the
+# client's default request timeout.
+_UPDATE_BY_QUERY_TIMEOUT_S = 5 * 60
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from
 # opensearch. By default it emits INFO-level logs for every request.
 # The opensearch-py library uses "opensearch" as the logger name for HTTP
@@ -1245,6 +1249,38 @@ class OpenSearchIndexClient(OpenSearchClient):
             self._index_name,
         )
         return num_deleted
+
+    def update_by_query(self, query_body: dict[str, Any]) -> int:
+        """Runs a scripted update on every document matching a query.
+
+        A chunk rewritten while the update runs (a version conflict) is
+        skipped, not retried: the caller must only use this for values that
+        every other writer of the chunk also sets. The index is refreshed
+        afterwards, so a following update-by-query sees this one's writes.
+
+        Raises:
+            Exception: There was an error updating the documents.
+
+        Returns:
+            The number of documents updated.
+        """
+        result = self._client.update_by_query(
+            index=self._index_name,
+            body=query_body,
+            refresh=True,
+            conflicts="proceed",
+            request_timeout=_UPDATE_BY_QUERY_TIMEOUT_S,
+        )
+        if result.get("timed_out", False):
+            raise RuntimeError(
+                f"Update by query timed out for index {self._index_name}."
+            )
+        if result.get("failures"):
+            raise RuntimeError(
+                f"Failed to update some or all of the documents for index {self._index_name}: "
+                f"{result['failures']}"
+            )
+        return int(result.get("updated", 0))
 
     def count_by_query(self, query_body: dict[str, Any]) -> int:
         """Counts documents matching a query for this index (the _count API).

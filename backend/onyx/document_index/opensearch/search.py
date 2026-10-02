@@ -25,6 +25,7 @@ from onyx.document_index.opensearch.constants import (
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
     ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME,
+    CC_PAIR_IDS_FIELD_NAME,
     CHUNK_INDEX_FIELD_NAME,
     CONTENT_FIELD_NAME,
     CONTENT_VECTOR_FIELD_NAME,
@@ -336,6 +337,33 @@ class DocumentQuery:
             final_delete_query["profile"] = True
 
         return final_delete_query
+
+    @staticmethod
+    def set_cc_pair_ids_query(
+        doc_id_to_cc_pair_ids: dict[str, list[int]],
+        tenant_state: TenantState,
+    ) -> dict[str, Any]:
+        """Update-by-query that sets cc_pair_ids on every chunk of the given
+        documents in this tenant, each document to its own list."""
+        filter_clauses: list[dict[str, Any]] = [
+            {"terms": {DOCUMENT_ID_FIELD_NAME: list(doc_id_to_cc_pair_ids)}},
+        ]
+        # Single-tenant indices have no tenant_id field. Mirror _get_search_filters.
+        if tenant_state.multitenant:
+            filter_clauses.append(
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            )
+        return {
+            "query": {"bool": {"filter": filter_clauses}},
+            "script": {
+                "lang": "painless",
+                "source": (
+                    f"ctx._source.{CC_PAIR_IDS_FIELD_NAME} = "
+                    f"params.ids_by_doc[ctx._source.{DOCUMENT_ID_FIELD_NAME}];"
+                ),
+                "params": {"ids_by_doc": doc_id_to_cc_pair_ids},
+            },
+        }
 
     @staticmethod
     def get_hybrid_search_query(

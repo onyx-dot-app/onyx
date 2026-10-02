@@ -309,6 +309,18 @@ if SCHEDULED_EVAL_DATASET_NAMES:
         }
     )
 
+beat_task_templates.append(
+    {
+        "name": "backfill-cc-pair-ids",
+        "task": OnyxCeleryTask.BACKFILL_CC_PAIR_IDS_TASK,
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.INDEX_RECLAIM,
+        },
+    }
+)
 # Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-indexing",
@@ -322,6 +334,7 @@ _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-index-attempt-cleanup",
     "check-for-doc-permissions-sync",
     "check-for-external-group-sync",
+    "backfill-cc-pair-ids",
 }
 
 if DISABLE_VECTOR_DB:

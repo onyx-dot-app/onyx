@@ -495,6 +495,18 @@ def get_cc_pair_ids_for_connector(db_session: Session, connector_id: int) -> set
     )
 
 
+def get_non_deleting_cc_pair_ids(db_session: Session) -> list[int]:
+    return list(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id)
+            .where(
+                ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
+            )
+            .order_by(ConnectorCredentialPair.id)
+        )
+    )
+
+
 def verify_user_can_edit_all_cc_pairs(
     cc_pair_ids: set[int],
     db_session: Session,
