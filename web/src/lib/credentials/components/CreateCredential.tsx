@@ -6,6 +6,7 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/lib/credentials/svc";
 import { Form, Formik, FormikHelpers, type FormikProps } from "formik";
 import { InputHorizontal, Section, toast } from "@opal/layouts";
+import { Disabled } from "@opal/core";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
 import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
@@ -72,42 +73,46 @@ function ShareAccountField({
     }
   }
 
+  // Until the account's own fields are filled in, the whole row is
+  // unavailable: title and description dim along with the select.
   return (
-    <InputHorizontal
-      withLabel="share"
-      title={t("credentials.create.share.title")}
-      description={t("credentials.create.share.description")}
-      center
-    >
-      <InputSingleSelect
-        value={value}
-        onValueChange={handleValueChange}
-        defaultOption={SHARE_ADMINS}
-        placeholder={t("credentials.create.share.title")}
-        disabled={!formikProps.isValid}
-        options={[
-          {
-            value: SHARE_ADMINS,
-            title: t("credentials.create.share.admins.label"),
-            icon: SvgUserManage,
-          },
-          ...(isGlobalHolder
-            ? [
-                {
-                  value: SHARE_EVERYONE,
-                  title: t("credentials.create.share.everyone.label"),
-                  icon: SvgUsers,
-                },
-              ]
-            : []),
-          ...(userGroups ?? []).map((group) => ({
-            value: `${SHARE_GROUP_PREFIX}${group.id}`,
-            title: group.name,
-            icon: SvgUsers,
-          })),
-        ]}
-      />
-    </InputHorizontal>
+    <Disabled disabled={!formikProps.isValid}>
+      <InputHorizontal
+        withLabel="share"
+        title={t("credentials.create.share.title")}
+        description={t("credentials.create.share.description")}
+        center
+      >
+        <InputSingleSelect
+          value={value}
+          onValueChange={handleValueChange}
+          defaultOption={SHARE_ADMINS}
+          placeholder={t("credentials.create.share.title")}
+          disabled={!formikProps.isValid}
+          options={[
+            {
+              value: SHARE_ADMINS,
+              title: t("credentials.create.share.admins.label"),
+              icon: SvgUserManage,
+            },
+            ...(isGlobalHolder
+              ? [
+                  {
+                    value: SHARE_EVERYONE,
+                    title: t("credentials.create.share.everyone.label"),
+                    icon: SvgUsers,
+                  },
+                ]
+              : []),
+            ...(userGroups ?? []).map((group) => ({
+              value: `${SHARE_GROUP_PREFIX}${group.id}`,
+              title: group.name,
+              icon: SvgUsers,
+            })),
+          ]}
+        />
+      </InputHorizontal>
+    </Disabled>
   );
 }
 
