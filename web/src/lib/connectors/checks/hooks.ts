@@ -16,6 +16,7 @@ import {
 import type {
   CapabilityReportSnapshot,
   DraftCheckRunRequest,
+  DraftRerunMode,
   DraftCheckRunSnapshot,
   RequiredChecksStatus,
 } from "@/lib/connectors/checks/types";
@@ -86,10 +87,11 @@ export interface DraftCheckRunOptions {
   /** Start a new run even when the last run had the same input. */
   force?: boolean;
   /**
-   * Run checks whose cached result failed again. A finished run of the same
-   * input that has a failed check does not count as the same run.
+   * Cached results the run ignores. With `failed`, a finished run of the same
+   * input that has a failed check does not count as the same run. With `all`,
+   * the run always starts again.
    */
-  rerunFailed?: boolean;
+  rerun?: DraftRerunMode;
 }
 
 /**
@@ -197,13 +199,16 @@ export function useDraftConnectorChecks(
       const lastFailed =
         last?.settled?.checks.some((check) => check.state === "failed") ??
         false;
-      const rejoin = !options.force && !(options.rerunFailed && lastFailed);
+      const rerun = options.rerun ?? "none";
+      const rejoin =
+        !options.force &&
+        rerun !== "all" &&
+        !(rerun === "failed" && lastFailed);
       if (rejoin && last !== null && last.key === key) {
         return last.promise;
       }
-      const request: DraftCheckRunRequest = options.rerunFailed
-        ? { ...base, rerun_failed: true }
-        : base;
+      const request: DraftCheckRunRequest =
+        rerun === "none" ? base : { ...base, rerun };
 
       const generation = ++generationRef.current;
       const isCurrent = () => generation === generationRef.current;

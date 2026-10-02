@@ -133,13 +133,12 @@ export function DraftConnectorChecks<FormValues>({
     [configuration, currentCredential]
   );
 
-  // Runs the checks for the current input again. Failed results run again
-  // and passed ones come from the cache; indeterminate ones are never cached.
+  // Runs every check for the current input again, without the cache.
   const rerun = () => {
     if (timerRef.current !== null) clearTimeout(timerRef.current);
     timerRef.current = null;
     const latest = latestRef.current;
-    void latest.run(latest.input, { force: true, rerunFailed: true });
+    void latest.run(latest.input, { rerun: "all" });
   };
 
   // A failed request hides the card; creation then runs the checks itself.

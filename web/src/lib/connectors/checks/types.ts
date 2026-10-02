@@ -142,6 +142,14 @@ export interface DraftCheckRunSnapshot {
   checks: DraftCheck[];
 }
 
+/**
+ * Which cached results a draft run ignores:
+ * - `none`: reuse every cached result.
+ * - `failed`: run checks whose cached result failed again.
+ * - `all`: run every check again. Fresh results still go to the cache.
+ */
+export type DraftRerunMode = "none" | "failed" | "all";
+
 export interface DraftCheckRunRequest {
   source: ValidSources;
   credential_id: number;
@@ -150,8 +158,7 @@ export interface DraftCheckRunRequest {
   draft_key: string;
   /** The `connector_specific_config` the create request would send. */
   form_state: Record<string, unknown>;
-  /** Run checks whose cached result failed again instead of reusing it. */
-  rerun_failed?: boolean;
+  rerun?: DraftRerunMode;
 }
 
 /**

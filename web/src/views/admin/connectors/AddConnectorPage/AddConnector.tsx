@@ -290,7 +290,7 @@ export default function AddConnector({
     setCheckingBeforeCreate(true);
     try {
       // Failed results are run again: the admin may have fixed the source.
-      const outcome = await draftChecks.run(input, { rerunFailed: true });
+      const outcome = await draftChecks.run(input, { rerun: "failed" });
       if (outcome.kind === "error") return true;
       if (outcome.kind === "stale") return false;
       const after = requiredChecksStatus(outcome.snapshot);
