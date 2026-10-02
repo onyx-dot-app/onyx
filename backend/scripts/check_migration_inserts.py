@@ -25,24 +25,18 @@ _VERSIONS_DIR = _BACKEND_DIR / "alembic" / "versions"
 _REVISION_LINE = re.compile(r'^revision(?:\s*:[^=]+)?\s*=\s*"(\w+)"', re.MULTILINE)
 _DOWN_REVISION_LINE = re.compile(r"^down_revision(?:\s*:[^=]+)?\s*=(.*)$", re.MULTILINE)
 _REVISION_ID = re.compile(r'"(\w+)"')
-# downgrade may restore a seed it removed, so it is the only body not visited.
 _INSERT_SQL = re.compile(r"\bINSERT\s+INTO\b", re.IGNORECASE)
-_SESSION_FACTORIES = {"Session", "sessionmaker"}
 _SESSION_WRITES = {"add_all", "merge", "bulk_save_objects", "bulk_insert_mappings"}
 
 
 class _InsertFinder(ast.NodeVisitor):
-    """Collects the statements that write rows.
-
-    Names bound to the insert construct and to ORM sessions are tracked per
-    scope, so an aliased import, a sessionmaker factory or a short variable
-    name cannot hide a write, and a set named like a session elsewhere cannot
-    produce one."""
+    """Collects row writes, erring toward flagging: any SQL text that spells
+    INSERT INTO counts, and the allow marker clears the rare false positive."""
 
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
-        self._inserts: set[str] = set()
-        self._sessions: list[set[str]] = [set()]
+        self._inserts = {"insert"}
+        self._sessions: set[str] = set()
         self._statement: ast.stmt | None = None
         self.found: set[int] = set()
 
@@ -53,62 +47,38 @@ class _InsertFinder(ast.NodeVisitor):
 
     def _flag(self, node: ast.expr) -> None:
         """The marker exempts one node: on its own lines or its statement's first."""
-        statement = self._statement
-        if statement is None:
+        if self._statement is None:
             return
         end = node.end_lineno or node.lineno
         marked = [
-            self._lines[statement.lineno - 1],
+            self._lines[self._statement.lineno - 1],
             *self._lines[node.lineno - 1 : end],
         ]
-        if any(ALLOW_MARKER in line for line in marked):
-            return
-        self.found.add(node.lineno)
+        if not any(ALLOW_MARKER in line for line in marked):
+            self.found.add(node.lineno)
 
-    def _is_session_call(self, node: ast.expr) -> bool:
-        if not isinstance(node, ast.Call):
+    def _is_session(self, receiver: ast.expr) -> bool:
+        if not isinstance(receiver, ast.Name):
             return False
-        func = node.func
-        if isinstance(func, ast.Name):
-            return func.id in _SESSION_FACTORIES or func.id in self._sessions[-1]
-        return isinstance(func, ast.Attribute) and func.attr in _SESSION_FACTORIES
+        return receiver.id in self._sessions or receiver.id.endswith("session")
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        # downgrade may restore a seed it removed.
         if node.name == "downgrade":
             return
-        scope = set(self._sessions[-1])
-        # A helper taking a session parameter writes through that name.
-        scope.update(
+        self._sessions.update(
             arg.arg
             for arg in node.args.args + node.args.kwonlyargs
-            if arg.annotation is not None and _names_session(arg.annotation)
+            if isinstance(arg.annotation, ast.Name) and arg.annotation.id == "Session"
         )
-        self._sessions.append(scope)
         self.generic_visit(node)
-        self._sessions.pop()
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        for alias in node.names:
-            bound = alias.asname or alias.name
-            if alias.name == "insert":
-                self._inserts.add(bound)
-            if alias.name in _SESSION_FACTORIES:
-                self._sessions[-1].add(bound)
-
-    def visit_Assign(self, node: ast.Assign) -> None:
-        if self._is_session_call(node.value):
-            self._sessions[-1].update(
-                target.id for target in node.targets if isinstance(target, ast.Name)
-            )
-        self.generic_visit(node)
-
-    def visit_With(self, node: ast.With) -> None:
-        for item in node.items:
-            if self._is_session_call(item.context_expr) and isinstance(
-                item.optional_vars, ast.Name
-            ):
-                self._sessions[-1].add(item.optional_vars.id)
-        self.generic_visit(node)
+        self._inserts.update(
+            alias.asname
+            for alias in node.names
+            if alias.name == "insert" and alias.asname
+        )
 
     def visit_Expr(self, node: ast.Expr) -> None:
         # A docstring may describe inserts without performing one.
@@ -118,75 +88,20 @@ class _InsertFinder(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
-        if isinstance(func, ast.Name) and (
-            func.id == "insert" or func.id in self._inserts
-        ):
+        if isinstance(func, ast.Name) and func.id in self._inserts:
             self._flag(node)
         elif isinstance(func, ast.Attribute):
-            # Receivers named like a session count even when bound elsewhere.
-            receiver_is_session = isinstance(func.value, ast.Name) and (
-                func.value.id in self._sessions[-1] or func.value.id.endswith("session")
-            )
             if func.attr == "insert" and not _is_list_insert(node):
                 self._flag(node)
             elif func.attr == "bulk_insert" or func.attr in _SESSION_WRITES:
                 self._flag(node)
-            elif func.attr == "add" and receiver_is_session:
+            elif func.attr == "add" and self._is_session(func.value):
                 self._flag(node)
         self.generic_visit(node)
 
     def visit_Constant(self, node: ast.Constant) -> None:
-        if not isinstance(node.value, str):
-            return
-        if _INSERT_SQL.search(_executable_sql(node.value)):
+        if isinstance(node.value, str) and _INSERT_SQL.search(node.value):
             self._flag(node)
-
-
-_EXECUTE = re.compile(r"\bEXECUTE\b", re.IGNORECASE)
-
-
-def _executable_sql(sql: str) -> str:
-    """Blank out comments and quoted text that Postgres does not run.
-
-    Quoted text is data, except that everything EXECUTE receives up to the
-    statement terminator is dynamic SQL and is kept, however it is spliced.
-    A `--` inside quotes is never a comment."""
-    out: list[str] = []
-    executing: bool = False
-    i = 0
-    while i < len(sql):
-        char = sql[i]
-        if sql.startswith("--", i):
-            newline = sql.find("\n", i)
-            i = len(sql) if newline == -1 else newline
-            out.append(" ")
-        elif sql.startswith("/*", i):
-            close = sql.find("*/", i + 2)
-            i = len(sql) if close == -1 else close + 2
-            out.append(" ")
-        elif char in "'\"":
-            close = i + 1
-            while close < len(sql) and (
-                sql[close] != char or sql[close + 1 : close + 2] == char
-            ):
-                close += 2 if sql[close] == char else 1
-            out.append(sql[i : close + 1] if executing and char == "'" else " ")
-            i = close + 1
-        else:
-            if char == ";":
-                executing = False
-            elif _EXECUTE.match(sql, i):
-                executing = True
-            out.append(char)
-            i += 1
-    return "".join(out)
-
-
-def _names_session(annotation: ast.expr) -> bool:
-    name = annotation.attr if isinstance(annotation, ast.Attribute) else None
-    if isinstance(annotation, ast.Name):
-        name = annotation.id
-    return name == "Session"
 
 
 def _is_list_insert(node: ast.Call) -> bool:
@@ -197,15 +112,7 @@ def _is_list_insert(node: ast.Call) -> bool:
 def find_inserts(source: str) -> list[int]:
     """One-based line numbers of row writes outside downgrade."""
     finder = _InsertFinder(source.splitlines())
-    module = ast.parse(source)
-    # Module-level names are bound before any function runs, whatever the order.
-    functions = (ast.FunctionDef, ast.AsyncFunctionDef)
-    for node in module.body:
-        if not isinstance(node, functions):
-            finder.visit(node)
-    for node in module.body:
-        if isinstance(node, functions):
-            finder.visit(node)
+    finder.visit(ast.parse(source))
     return sorted(finder.found)
 
 
