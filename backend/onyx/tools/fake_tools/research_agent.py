@@ -602,7 +602,11 @@ def run_research_agent_call(
                             or most_recent_reasoning,
                             tool_call_arguments=tc.tool_args,
                             tool_call_response=tool_response.llm_facing_response,
-                            search_docs=displayed_docs or search_docs,
+                            search_docs=(
+                                displayed_docs
+                                if displayed_docs is not None
+                                else search_docs
+                            ),
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)

@@ -6,6 +6,7 @@ from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
 import requests
+from pydantic import JsonValue, TypeAdapter
 from requests import JSONDecodeError
 
 from onyx.chat.emitter import Emitter
@@ -210,7 +211,7 @@ class CustomTool(Tool[None]):
                 response.status_code,
             )
 
-        tool_result: Any
+        tool_result: CustomToolUserFileSnapshot | JsonValue
         response_type: str
         file_ids: List[str] | None = None
         data: dict | list | str | int | float | bool | None = None
@@ -231,7 +232,7 @@ class CustomTool(Tool[None]):
 
         else:
             try:
-                tool_result = response.json()
+                tool_result = TypeAdapter(JsonValue).validate_python(response.json())
                 response_type = "json"
                 data = tool_result
             except JSONDecodeError:
@@ -261,7 +262,11 @@ class CustomTool(Tool[None]):
             )
         )
 
-        llm_facing_response = json.dumps(tool_result)
+        llm_facing_response = (
+            TypeAdapter(CustomToolUserFileSnapshot | JsonValue)
+            .dump_json(tool_result)
+            .decode()
+        )
 
         return ToolResponse(
             rich_response=CustomToolCallSummary(
