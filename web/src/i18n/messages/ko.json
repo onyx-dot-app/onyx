@@ -3267,6 +3267,344 @@
           "toast": "자격 증명 업데이트 중 오류가 발생했습니다"
         }
       },
+      "fields": {
+        "access_key_id": {
+          "title": "GCS 액세스 키 ID"
+        },
+        "account_id": {
+          "title": "R2 계정 ID"
+        },
+        "asana_api_token_secret": {
+          "title": "Asana API 토큰"
+        },
+        "authentication_method": {
+          "title": "인증 방법"
+        },
+        "aws_access_key_id": {
+          "title": "AWS 액세스 키 ID"
+        },
+        "aws_role_arn": {
+          "title": "AWS 역할 ARN"
+        },
+        "aws_secret_access_key": {
+          "title": "AWS 시크릿 액세스 키"
+        },
+        "axero_api_token": {
+          "title": "Axero API 토큰"
+        },
+        "base_url": {
+          "title": "Axero 기본 URL"
+        },
+        "bitbucket_api_token": {
+          "title": "Bitbucket API 토큰"
+        },
+        "bitbucket_email": {
+          "title": "Bitbucket 계정 이메일"
+        },
+        "bookstack_api_token_id": {
+          "title": "Bookstack API 토큰 ID"
+        },
+        "bookstack_api_token_secret": {
+          "title": "Bookstack API 토큰 시크릿"
+        },
+        "bookstack_base_url": {
+          "title": "Bookstack 기본 URL"
+        },
+        "box_client_id": {
+          "title": "Box 클라이언트 ID"
+        },
+        "box_client_secret": {
+          "title": "Box 클라이언트 시크릿"
+        },
+        "box_enterprise_id": {
+          "title": "Box 엔터프라이즈 ID"
+        },
+        "box_user_email": {
+          "description": "선택 사항입니다. 대신 접근할 Box 사용자입니다.",
+          "title": "Box 사용자 이메일"
+        },
+        "braintrust_api_key": {
+          "title": "Braintrust API 키"
+        },
+        "canvas_access_token": {
+          "title": "Canvas 액세스 토큰"
+        },
+        "clickup_api_token": {
+          "title": "ClickUp API 토큰"
+        },
+        "clickup_team_id": {
+          "title": "ClickUp 팀 ID"
+        },
+        "coda_bearer_token": {
+          "title": "Coda Bearer 토큰"
+        },
+        "confluence_access_token": {
+          "title": "Confluence 액세스 토큰"
+        },
+        "confluence_username": {
+          "title": "Confluence 사용자 이름"
+        },
+        "discord_bot_token": {
+          "title": "Discord 봇 토큰"
+        },
+        "discourse_api_key": {
+          "title": "Discourse API 키"
+        },
+        "discourse_api_username": {
+          "title": "Discourse API 사용자 이름"
+        },
+        "document360_api_token": {
+          "title": "Document360 API 토큰"
+        },
+        "dropbox_access_token": {
+          "title": "Dropbox API 키"
+        },
+        "drupal_wiki_api_token": {
+          "title": "Drupal Wiki 개인 액세스 토큰"
+        },
+        "fireflies_api_key": {
+          "title": "Fireflies API 키"
+        },
+        "freshdesk_api_key": {
+          "title": "Freshdesk API 키"
+        },
+        "freshdesk_domain": {
+          "title": "Freshdesk 도메인"
+        },
+        "gitbook_api_key": {
+          "title": "GitBook API 키"
+        },
+        "gitbook_space_id": {
+          "title": "GitBook 스페이스 ID"
+        },
+        "github_access_token": {
+          "title": "GitHub 액세스 토큰"
+        },
+        "github_base_url": {
+          "description": "선택 사항입니다. 서버 호스트를 입력하세요(예: https://github.example.com). github.com을 사용하려면 비워 두세요.",
+          "title": "GitHub Enterprise Server URL"
+        },
+        "gitlab_access_token": {
+          "title": "GitLab 액세스 토큰"
+        },
+        "gitlab_url": {
+          "title": "GitLab URL"
+        },
+        "gong_access_key": {
+          "title": "Gong 액세스 키"
+        },
+        "gong_access_key_secret": {
+          "title": "Gong 액세스 키 시크릿"
+        },
+        "gong_base_url": {
+          "description": "선택 사항입니다. 미국 외 지역의 데이터는 해당 리전의 호스트를 입력하세요(예: https://[region].api.gong.io).",
+          "title": "Gong API 기본 URL"
+        },
+        "google_primary_admin": {
+          "title": "기본 관리자 이메일"
+        },
+        "google_service_account_key": {
+          "title": "Google 서비스 계정 키"
+        },
+        "google_tokens": {
+          "title": "Google OAuth 토큰"
+        },
+        "guru_user": {
+          "title": "Guru 사용자"
+        },
+        "guru_user_token": {
+          "title": "Guru 사용자 토큰"
+        },
+        "highspot_key": {
+          "title": "Highspot 키"
+        },
+        "highspot_secret": {
+          "title": "Highspot 시크릿"
+        },
+        "highspot_url": {
+          "title": "Highspot URL"
+        },
+        "hubspot_access_token": {
+          "title": "HubSpot 액세스 토큰"
+        },
+        "imap_password": {
+          "title": "IMAP 비밀번호"
+        },
+        "imap_username": {
+          "title": "IMAP 사용자 이름"
+        },
+        "is_sandbox": {
+          "title": "샌드박스 환경 여부"
+        },
+        "jira_api_token": {
+          "title": "API 또는 개인 액세스 토큰"
+        },
+        "jira_user_email": {
+          "description": "Jira Cloud에 필요합니다.",
+          "title": "Jira 사용자 이메일"
+        },
+        "linear_api_key": {
+          "title": "Linear API 키"
+        },
+        "loopio_client_id": {
+          "title": "Loopio 클라이언트 ID"
+        },
+        "loopio_client_token": {
+          "title": "Loopio 클라이언트 토큰"
+        },
+        "loopio_subdomain": {
+          "title": "Loopio 서브도메인"
+        },
+        "lumapps_api_key": {
+          "title": "LumApps API 키"
+        },
+        "lumapps_application_id": {
+          "title": "LumApps 애플리케이션 ID"
+        },
+        "lumapps_service_user": {
+          "description": "대신 인덱싱할 사용자입니다.",
+          "title": "서비스 사용자 이메일"
+        },
+        "namespace": {
+          "title": "OCI 네임스페이스"
+        },
+        "notion_integration_token": {
+          "title": "Notion 통합 토큰"
+        },
+        "onedrive_certificate_password": {
+          "title": "OneDrive 인증서 비밀번호"
+        },
+        "onedrive_client_id": {
+          "title": "OneDrive 클라이언트 ID"
+        },
+        "onedrive_client_secret": {
+          "title": "OneDrive 클라이언트 시크릿"
+        },
+        "onedrive_directory_id": {
+          "title": "OneDrive 디렉터리 ID"
+        },
+        "onedrive_private_key": {
+          "title": "OneDrive 인증서"
+        },
+        "outline_api_token": {
+          "title": "Outline API 토큰"
+        },
+        "outline_base_url": {
+          "description": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
+          "title": "Outline 기본 URL"
+        },
+        "outlook_certificate_password": {
+          "title": "Microsoft Outlook 인증서 비밀번호"
+        },
+        "outlook_client_id": {
+          "title": "Microsoft Outlook 클라이언트 ID"
+        },
+        "outlook_client_secret": {
+          "title": "Microsoft Outlook 클라이언트 시크릿"
+        },
+        "outlook_directory_id": {
+          "title": "Microsoft Outlook 디렉터리 ID"
+        },
+        "outlook_private_key": {
+          "description": "PFX 파일입니다.",
+          "title": "Microsoft Outlook 프라이빗 키"
+        },
+        "portal_id": {
+          "title": "Document360 포털 ID"
+        },
+        "productboard_access_token": {
+          "title": "Productboard 액세스 토큰"
+        },
+        "r2_access_key_id": {
+          "title": "R2 액세스 키 ID"
+        },
+        "r2_secret_access_key": {
+          "title": "R2 시크릿 액세스 키"
+        },
+        "region": {
+          "title": "OCI 리전"
+        },
+        "secret_access_key": {
+          "title": "GCS 시크릿 액세스 키"
+        },
+        "sf_password": {
+          "title": "Salesforce 비밀번호"
+        },
+        "sf_security_token": {
+          "title": "Salesforce 보안 토큰"
+        },
+        "sf_username": {
+          "title": "Salesforce 사용자 이름"
+        },
+        "slab_bot_token": {
+          "title": "Slab 봇 토큰"
+        },
+        "slack_bot_token": {
+          "title": "Slack 봇 토큰"
+        },
+        "sp_certificate_password": {
+          "title": "SharePoint 인증서 비밀번호"
+        },
+        "sp_client_id": {
+          "title": "SharePoint 클라이언트 ID"
+        },
+        "sp_client_secret": {
+          "title": "SharePoint 클라이언트 시크릿"
+        },
+        "sp_directory_id": {
+          "title": "SharePoint 디렉터리 ID"
+        },
+        "sp_private_key": {
+          "title": "SharePoint 프라이빗 키"
+        },
+        "teams_certificate_password": {
+          "title": "Microsoft Teams 인증서 비밀번호"
+        },
+        "teams_client_id": {
+          "title": "Microsoft Teams 클라이언트 ID"
+        },
+        "teams_client_secret": {
+          "title": "Microsoft Teams 클라이언트 시크릿"
+        },
+        "teams_directory_id": {
+          "title": "Microsoft Teams 디렉터리 ID"
+        },
+        "teams_private_key": {
+          "description": "PFX 파일입니다.",
+          "title": "Microsoft Teams 프라이빗 키"
+        },
+        "testrail_api_key": {
+          "title": "TestRail API 키"
+        },
+        "testrail_base_url": {
+          "description": "예: https://yourcompany.testrail.io.",
+          "title": "TestRail 기본 URL"
+        },
+        "testrail_username": {
+          "title": "TestRail 사용자 이름 또는 이메일"
+        },
+        "zendesk_email": {
+          "title": "Zendesk 이메일"
+        },
+        "zendesk_subdomain": {
+          "title": "Zendesk 서브도메인"
+        },
+        "zendesk_token": {
+          "title": "Zendesk 토큰"
+        },
+        "zoom_account_id": {
+          "title": "Zoom 계정 ID"
+        },
+        "zoom_client_id": {
+          "title": "Zoom 클라이언트 ID"
+        },
+        "zoom_client_secret": {
+          "title": "Zoom 클라이언트 시크릿"
+        },
+        "zuliprc_content": {
+          "title": "Zuliprc 내용"
+        }
+      },
       "modal": {
         "createTitle": "{source} 자격 증명 생성",
         "editTitle": "자격 증명 편집",

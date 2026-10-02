@@ -3267,6 +3267,344 @@
           "toast": "更新凭据时出错"
         }
       },
+      "fields": {
+        "access_key_id": {
+          "title": "GCS 访问密钥 ID"
+        },
+        "account_id": {
+          "title": "R2 账户 ID"
+        },
+        "asana_api_token_secret": {
+          "title": "Asana API 令牌"
+        },
+        "authentication_method": {
+          "title": "身份验证方式"
+        },
+        "aws_access_key_id": {
+          "title": "AWS 访问密钥 ID"
+        },
+        "aws_role_arn": {
+          "title": "AWS 角色 ARN"
+        },
+        "aws_secret_access_key": {
+          "title": "AWS 秘密访问密钥"
+        },
+        "axero_api_token": {
+          "title": "Axero API 令牌"
+        },
+        "base_url": {
+          "title": "Axero 基础 URL"
+        },
+        "bitbucket_api_token": {
+          "title": "Bitbucket API 令牌"
+        },
+        "bitbucket_email": {
+          "title": "Bitbucket 账号邮箱"
+        },
+        "bookstack_api_token_id": {
+          "title": "Bookstack API 令牌 ID"
+        },
+        "bookstack_api_token_secret": {
+          "title": "Bookstack API 令牌密钥"
+        },
+        "bookstack_base_url": {
+          "title": "Bookstack 基础 URL"
+        },
+        "box_client_id": {
+          "title": "Box 客户端 ID"
+        },
+        "box_client_secret": {
+          "title": "Box 客户端密钥"
+        },
+        "box_enterprise_id": {
+          "title": "Box 企业 ID"
+        },
+        "box_user_email": {
+          "description": "可选。要模拟的 Box 用户。",
+          "title": "Box 用户邮箱"
+        },
+        "braintrust_api_key": {
+          "title": "Braintrust API 密钥"
+        },
+        "canvas_access_token": {
+          "title": "Canvas 访问令牌"
+        },
+        "clickup_api_token": {
+          "title": "ClickUp API 令牌"
+        },
+        "clickup_team_id": {
+          "title": "ClickUp 团队 ID"
+        },
+        "coda_bearer_token": {
+          "title": "Coda Bearer 令牌"
+        },
+        "confluence_access_token": {
+          "title": "Confluence 访问令牌"
+        },
+        "confluence_username": {
+          "title": "Confluence 用户名"
+        },
+        "discord_bot_token": {
+          "title": "Discord 机器人令牌"
+        },
+        "discourse_api_key": {
+          "title": "Discourse API 密钥"
+        },
+        "discourse_api_username": {
+          "title": "Discourse API 用户名"
+        },
+        "document360_api_token": {
+          "title": "Document360 API 令牌"
+        },
+        "dropbox_access_token": {
+          "title": "Dropbox API 密钥"
+        },
+        "drupal_wiki_api_token": {
+          "title": "Drupal Wiki 个人访问令牌"
+        },
+        "fireflies_api_key": {
+          "title": "Fireflies API 密钥"
+        },
+        "freshdesk_api_key": {
+          "title": "Freshdesk API 密钥"
+        },
+        "freshdesk_domain": {
+          "title": "Freshdesk 域名"
+        },
+        "gitbook_api_key": {
+          "title": "GitBook API 密钥"
+        },
+        "gitbook_space_id": {
+          "title": "GitBook 空间 ID"
+        },
+        "github_access_token": {
+          "title": "GitHub 访问令牌"
+        },
+        "github_base_url": {
+          "description": "可选。设置你的服务器主机，例如 https://github.example.com。使用 github.com 时请留空。",
+          "title": "GitHub Enterprise Server URL"
+        },
+        "gitlab_access_token": {
+          "title": "GitLab 访问令牌"
+        },
+        "gitlab_url": {
+          "title": "GitLab URL"
+        },
+        "gong_access_key": {
+          "title": "Gong 访问密钥"
+        },
+        "gong_access_key_secret": {
+          "title": "Gong 访问密钥的密文"
+        },
+        "gong_base_url": {
+          "description": "可选。美国以外的数据请设置你所在区域的主机，例如 https://[region].api.gong.io。",
+          "title": "Gong API 基础 URL"
+        },
+        "google_primary_admin": {
+          "title": "主管理员邮箱"
+        },
+        "google_service_account_key": {
+          "title": "Google 服务账号密钥"
+        },
+        "google_tokens": {
+          "title": "Google OAuth 令牌"
+        },
+        "guru_user": {
+          "title": "Guru 用户"
+        },
+        "guru_user_token": {
+          "title": "Guru 用户令牌"
+        },
+        "highspot_key": {
+          "title": "Highspot 密钥"
+        },
+        "highspot_secret": {
+          "title": "Highspot 密文"
+        },
+        "highspot_url": {
+          "title": "Highspot URL"
+        },
+        "hubspot_access_token": {
+          "title": "HubSpot 访问令牌"
+        },
+        "imap_password": {
+          "title": "IMAP 密码"
+        },
+        "imap_username": {
+          "title": "IMAP 用户名"
+        },
+        "is_sandbox": {
+          "title": "是否为沙盒环境"
+        },
+        "jira_api_token": {
+          "title": "API 或个人访问令牌"
+        },
+        "jira_user_email": {
+          "description": "Jira Cloud 必填。",
+          "title": "Jira 用户邮箱"
+        },
+        "linear_api_key": {
+          "title": "Linear API 密钥"
+        },
+        "loopio_client_id": {
+          "title": "Loopio 客户端 ID"
+        },
+        "loopio_client_token": {
+          "title": "Loopio 客户端令牌"
+        },
+        "loopio_subdomain": {
+          "title": "Loopio 子域名"
+        },
+        "lumapps_api_key": {
+          "title": "LumApps API 密钥"
+        },
+        "lumapps_application_id": {
+          "title": "LumApps 应用 ID"
+        },
+        "lumapps_service_user": {
+          "description": "要代表其建立索引的用户。",
+          "title": "服务用户邮箱"
+        },
+        "namespace": {
+          "title": "OCI 命名空间"
+        },
+        "notion_integration_token": {
+          "title": "Notion 集成令牌"
+        },
+        "onedrive_certificate_password": {
+          "title": "OneDrive 证书密码"
+        },
+        "onedrive_client_id": {
+          "title": "OneDrive 客户端 ID"
+        },
+        "onedrive_client_secret": {
+          "title": "OneDrive 客户端密钥"
+        },
+        "onedrive_directory_id": {
+          "title": "OneDrive 目录 ID"
+        },
+        "onedrive_private_key": {
+          "title": "OneDrive 证书"
+        },
+        "outline_api_token": {
+          "title": "Outline API 令牌"
+        },
+        "outline_base_url": {
+          "description": "例如 https://app.getoutline.com，或你的自托管 URL。",
+          "title": "Outline 基础 URL"
+        },
+        "outlook_certificate_password": {
+          "title": "Microsoft Outlook 证书密码"
+        },
+        "outlook_client_id": {
+          "title": "Microsoft Outlook 客户端 ID"
+        },
+        "outlook_client_secret": {
+          "title": "Microsoft Outlook 客户端密钥"
+        },
+        "outlook_directory_id": {
+          "title": "Microsoft Outlook 目录 ID"
+        },
+        "outlook_private_key": {
+          "description": "PFX 文件。",
+          "title": "Microsoft Outlook 私钥"
+        },
+        "portal_id": {
+          "title": "Document360 门户 ID"
+        },
+        "productboard_access_token": {
+          "title": "Productboard 访问令牌"
+        },
+        "r2_access_key_id": {
+          "title": "R2 访问密钥 ID"
+        },
+        "r2_secret_access_key": {
+          "title": "R2 秘密访问密钥"
+        },
+        "region": {
+          "title": "OCI 区域"
+        },
+        "secret_access_key": {
+          "title": "GCS 秘密访问密钥"
+        },
+        "sf_password": {
+          "title": "Salesforce 密码"
+        },
+        "sf_security_token": {
+          "title": "Salesforce 安全令牌"
+        },
+        "sf_username": {
+          "title": "Salesforce 用户名"
+        },
+        "slab_bot_token": {
+          "title": "Slab 机器人令牌"
+        },
+        "slack_bot_token": {
+          "title": "Slack 机器人令牌"
+        },
+        "sp_certificate_password": {
+          "title": "SharePoint 证书密码"
+        },
+        "sp_client_id": {
+          "title": "SharePoint 客户端 ID"
+        },
+        "sp_client_secret": {
+          "title": "SharePoint 客户端密钥"
+        },
+        "sp_directory_id": {
+          "title": "SharePoint 目录 ID"
+        },
+        "sp_private_key": {
+          "title": "SharePoint 私钥"
+        },
+        "teams_certificate_password": {
+          "title": "Microsoft Teams 证书密码"
+        },
+        "teams_client_id": {
+          "title": "Microsoft Teams 客户端 ID"
+        },
+        "teams_client_secret": {
+          "title": "Microsoft Teams 客户端密钥"
+        },
+        "teams_directory_id": {
+          "title": "Microsoft Teams 目录 ID"
+        },
+        "teams_private_key": {
+          "description": "PFX 文件。",
+          "title": "Microsoft Teams 私钥"
+        },
+        "testrail_api_key": {
+          "title": "TestRail API 密钥"
+        },
+        "testrail_base_url": {
+          "description": "例如 https://yourcompany.testrail.io。",
+          "title": "TestRail 基础 URL"
+        },
+        "testrail_username": {
+          "title": "TestRail 用户名或邮箱"
+        },
+        "zendesk_email": {
+          "title": "Zendesk 邮箱"
+        },
+        "zendesk_subdomain": {
+          "title": "Zendesk 子域名"
+        },
+        "zendesk_token": {
+          "title": "Zendesk 令牌"
+        },
+        "zoom_account_id": {
+          "title": "Zoom 账户 ID"
+        },
+        "zoom_client_id": {
+          "title": "Zoom 客户端 ID"
+        },
+        "zoom_client_secret": {
+          "title": "Zoom 客户端密钥"
+        },
+        "zuliprc_content": {
+          "title": "Zuliprc 内容"
+        }
+      },
       "modal": {
         "createTitle": "创建 {source} 凭据",
         "editTitle": "编辑凭据",

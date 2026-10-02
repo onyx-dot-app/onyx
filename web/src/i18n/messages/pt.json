@@ -3267,6 +3267,344 @@
           "toast": "Erro ao atualizar a credencial"
         }
       },
+      "fields": {
+        "access_key_id": {
+          "title": "ID da chave de acesso do GCS"
+        },
+        "account_id": {
+          "title": "ID da conta do R2"
+        },
+        "asana_api_token_secret": {
+          "title": "Token de API do Asana"
+        },
+        "authentication_method": {
+          "title": "Método de autenticação"
+        },
+        "aws_access_key_id": {
+          "title": "ID da chave de acesso da AWS"
+        },
+        "aws_role_arn": {
+          "title": "ARN da função da AWS"
+        },
+        "aws_secret_access_key": {
+          "title": "Chave de acesso secreta da AWS"
+        },
+        "axero_api_token": {
+          "title": "Token de API do Axero"
+        },
+        "base_url": {
+          "title": "URL base do Axero"
+        },
+        "bitbucket_api_token": {
+          "title": "Token de API do Bitbucket"
+        },
+        "bitbucket_email": {
+          "title": "E-mail da conta do Bitbucket"
+        },
+        "bookstack_api_token_id": {
+          "title": "ID do token de API do Bookstack"
+        },
+        "bookstack_api_token_secret": {
+          "title": "Segredo do token de API do Bookstack"
+        },
+        "bookstack_base_url": {
+          "title": "URL base do Bookstack"
+        },
+        "box_client_id": {
+          "title": "ID do cliente do Box"
+        },
+        "box_client_secret": {
+          "title": "Segredo do cliente do Box"
+        },
+        "box_enterprise_id": {
+          "title": "ID da empresa do Box"
+        },
+        "box_user_email": {
+          "description": "Opcional. O usuário do Box a ser representado.",
+          "title": "E-mail do usuário do Box"
+        },
+        "braintrust_api_key": {
+          "title": "Chave de API do Braintrust"
+        },
+        "canvas_access_token": {
+          "title": "Token de acesso do Canvas"
+        },
+        "clickup_api_token": {
+          "title": "Token de API do ClickUp"
+        },
+        "clickup_team_id": {
+          "title": "ID da equipe do ClickUp"
+        },
+        "coda_bearer_token": {
+          "title": "Token Bearer do Coda"
+        },
+        "confluence_access_token": {
+          "title": "Token de acesso do Confluence"
+        },
+        "confluence_username": {
+          "title": "Nome de usuário do Confluence"
+        },
+        "discord_bot_token": {
+          "title": "Token do bot do Discord"
+        },
+        "discourse_api_key": {
+          "title": "Chave de API do Discourse"
+        },
+        "discourse_api_username": {
+          "title": "Nome de usuário da API do Discourse"
+        },
+        "document360_api_token": {
+          "title": "Token de API do Document360"
+        },
+        "dropbox_access_token": {
+          "title": "Chave de API do Dropbox"
+        },
+        "drupal_wiki_api_token": {
+          "title": "Token de acesso pessoal do Drupal Wiki"
+        },
+        "fireflies_api_key": {
+          "title": "Chave de API do Fireflies"
+        },
+        "freshdesk_api_key": {
+          "title": "Chave de API do Freshdesk"
+        },
+        "freshdesk_domain": {
+          "title": "Domínio do Freshdesk"
+        },
+        "gitbook_api_key": {
+          "title": "Chave de API do GitBook"
+        },
+        "gitbook_space_id": {
+          "title": "ID do espaço do GitBook"
+        },
+        "github_access_token": {
+          "title": "Token de acesso do GitHub"
+        },
+        "github_base_url": {
+          "description": "Opcional. Defina o host do seu servidor, como https://github.example.com. Deixe em branco para github.com.",
+          "title": "URL do GitHub Enterprise Server"
+        },
+        "gitlab_access_token": {
+          "title": "Token de acesso do GitLab"
+        },
+        "gitlab_url": {
+          "title": "URL do GitLab"
+        },
+        "gong_access_key": {
+          "title": "Chave de acesso do Gong"
+        },
+        "gong_access_key_secret": {
+          "title": "Segredo da chave de acesso do Gong"
+        },
+        "gong_base_url": {
+          "description": "Opcional. Para dados fora dos EUA, defina o host da sua região, como https://[region].api.gong.io.",
+          "title": "URL base da API do Gong"
+        },
+        "google_primary_admin": {
+          "title": "E-mail do administrador principal"
+        },
+        "google_service_account_key": {
+          "title": "Chave da conta de serviço do Google"
+        },
+        "google_tokens": {
+          "title": "Tokens OAuth do Google"
+        },
+        "guru_user": {
+          "title": "Usuário do Guru"
+        },
+        "guru_user_token": {
+          "title": "Token do usuário do Guru"
+        },
+        "highspot_key": {
+          "title": "Chave do Highspot"
+        },
+        "highspot_secret": {
+          "title": "Segredo do Highspot"
+        },
+        "highspot_url": {
+          "title": "URL do Highspot"
+        },
+        "hubspot_access_token": {
+          "title": "Token de acesso do HubSpot"
+        },
+        "imap_password": {
+          "title": "Senha do IMAP"
+        },
+        "imap_username": {
+          "title": "Nome de usuário do IMAP"
+        },
+        "is_sandbox": {
+          "title": "Ambiente de sandbox"
+        },
+        "jira_api_token": {
+          "title": "Token de API ou token de acesso pessoal"
+        },
+        "jira_user_email": {
+          "description": "Obrigatório para o Jira Cloud.",
+          "title": "E-mail do usuário do Jira"
+        },
+        "linear_api_key": {
+          "title": "Chave de API do Linear"
+        },
+        "loopio_client_id": {
+          "title": "ID do cliente do Loopio"
+        },
+        "loopio_client_token": {
+          "title": "Token do cliente do Loopio"
+        },
+        "loopio_subdomain": {
+          "title": "Subdomínio do Loopio"
+        },
+        "lumapps_api_key": {
+          "title": "Chave de API do LumApps"
+        },
+        "lumapps_application_id": {
+          "title": "ID do aplicativo do LumApps"
+        },
+        "lumapps_service_user": {
+          "description": "O usuário em nome do qual indexar.",
+          "title": "E-mail do usuário de serviço"
+        },
+        "namespace": {
+          "title": "Namespace do OCI"
+        },
+        "notion_integration_token": {
+          "title": "Token de integração do Notion"
+        },
+        "onedrive_certificate_password": {
+          "title": "Senha do certificado do OneDrive"
+        },
+        "onedrive_client_id": {
+          "title": "ID do cliente do OneDrive"
+        },
+        "onedrive_client_secret": {
+          "title": "Segredo do cliente do OneDrive"
+        },
+        "onedrive_directory_id": {
+          "title": "ID do diretório do OneDrive"
+        },
+        "onedrive_private_key": {
+          "title": "Certificado do OneDrive"
+        },
+        "outline_api_token": {
+          "title": "Token de API do Outline"
+        },
+        "outline_base_url": {
+          "description": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
+          "title": "URL base do Outline"
+        },
+        "outlook_certificate_password": {
+          "title": "Senha do certificado do Microsoft Outlook"
+        },
+        "outlook_client_id": {
+          "title": "ID do cliente do Microsoft Outlook"
+        },
+        "outlook_client_secret": {
+          "title": "Segredo do cliente do Microsoft Outlook"
+        },
+        "outlook_directory_id": {
+          "title": "ID do diretório do Microsoft Outlook"
+        },
+        "outlook_private_key": {
+          "description": "Um arquivo PFX.",
+          "title": "Chave privada do Microsoft Outlook"
+        },
+        "portal_id": {
+          "title": "ID do portal do Document360"
+        },
+        "productboard_access_token": {
+          "title": "Token de acesso do Productboard"
+        },
+        "r2_access_key_id": {
+          "title": "ID da chave de acesso do R2"
+        },
+        "r2_secret_access_key": {
+          "title": "Chave de acesso secreta do R2"
+        },
+        "region": {
+          "title": "Região do OCI"
+        },
+        "secret_access_key": {
+          "title": "Chave de acesso secreta do GCS"
+        },
+        "sf_password": {
+          "title": "Senha do Salesforce"
+        },
+        "sf_security_token": {
+          "title": "Token de segurança do Salesforce"
+        },
+        "sf_username": {
+          "title": "Nome de usuário do Salesforce"
+        },
+        "slab_bot_token": {
+          "title": "Token do bot do Slab"
+        },
+        "slack_bot_token": {
+          "title": "Token do bot do Slack"
+        },
+        "sp_certificate_password": {
+          "title": "Senha do certificado do SharePoint"
+        },
+        "sp_client_id": {
+          "title": "ID do cliente do SharePoint"
+        },
+        "sp_client_secret": {
+          "title": "Segredo do cliente do SharePoint"
+        },
+        "sp_directory_id": {
+          "title": "ID do diretório do SharePoint"
+        },
+        "sp_private_key": {
+          "title": "Chave privada do SharePoint"
+        },
+        "teams_certificate_password": {
+          "title": "Senha do certificado do Microsoft Teams"
+        },
+        "teams_client_id": {
+          "title": "ID do cliente do Microsoft Teams"
+        },
+        "teams_client_secret": {
+          "title": "Segredo do cliente do Microsoft Teams"
+        },
+        "teams_directory_id": {
+          "title": "ID do diretório do Microsoft Teams"
+        },
+        "teams_private_key": {
+          "description": "Um arquivo PFX.",
+          "title": "Chave privada do Microsoft Teams"
+        },
+        "testrail_api_key": {
+          "title": "Chave de API do TestRail"
+        },
+        "testrail_base_url": {
+          "description": "Por exemplo, https://yourcompany.testrail.io.",
+          "title": "URL base do TestRail"
+        },
+        "testrail_username": {
+          "title": "Nome de usuário ou e-mail do TestRail"
+        },
+        "zendesk_email": {
+          "title": "E-mail do Zendesk"
+        },
+        "zendesk_subdomain": {
+          "title": "Subdomínio do Zendesk"
+        },
+        "zendesk_token": {
+          "title": "Token do Zendesk"
+        },
+        "zoom_account_id": {
+          "title": "ID da conta do Zoom"
+        },
+        "zoom_client_id": {
+          "title": "ID do cliente do Zoom"
+        },
+        "zoom_client_secret": {
+          "title": "Segredo do cliente do Zoom"
+        },
+        "zuliprc_content": {
+          "title": "Conteúdo do Zuliprc"
+        }
+      },
       "modal": {
         "createTitle": "Criar credencial de {source}",
         "editTitle": "Editar credencial",

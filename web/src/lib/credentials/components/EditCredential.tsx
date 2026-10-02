@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
-import { getDisplayNameForCredentialKey } from "@/lib/credentials/utils";
+import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import type { Credential } from "@/lib/credentials/types";
 import {
   createEditingValidationSchema,
@@ -38,6 +38,7 @@ export default function EditCredential({
   onUpdate,
 }: EditCredentialProps) {
   const t = useTranslations("admin");
+  const fieldCopy = useCredentialFieldCopy();
   const editableCredentialFields = getEditableCredentialFields(
     credential,
     sourceType
@@ -88,7 +89,7 @@ export default function EditCredential({
                 <TypedFileUploadFormField
                   key={key}
                   name={key}
-                  label={getDisplayNameForCredentialKey(key)}
+                  label={fieldCopy(key).title}
                 />
               ) : (
                 <TextFormField
@@ -96,7 +97,7 @@ export default function EditCredential({
                   key={key}
                   name={key}
                   placeholder={value == null ? undefined : String(value)}
-                  label={getDisplayNameForCredentialKey(key)}
+                  label={fieldCopy(key).title}
                   type={
                     key.toLowerCase().includes("token") ||
                     key.toLowerCase().includes("password") ||

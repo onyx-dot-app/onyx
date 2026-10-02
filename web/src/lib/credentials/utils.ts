@@ -11,7 +11,6 @@ import type {
   CredentialFormValues,
 } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { CREDENTIAL_DISPLAY_NAMES } from "@/lib/credentials/constants";
 import { toast } from "@opal/layouts";
 import {
   CredentialCreationMethod,
@@ -38,7 +37,7 @@ function fieldSchema(
   def: CredentialFieldSeed,
   selected?: (method: string) => boolean
 ): Yup.AnySchema {
-  const displayName = getDisplayNameForCredentialKey(key);
+  const displayName = titleFromCredentialKey(key);
   if (typeof def === "boolean") {
     return Yup.boolean()
       .nullable()
@@ -262,11 +261,6 @@ export function createInitialValues(
   }
 
   return initialValues;
-}
-
-/** The label for a credential field key, falling back to the key itself. */
-export function getDisplayNameForCredentialKey(key: string): string {
-  return CREDENTIAL_DISPLAY_NAMES[key] || key;
 }
 
 // Parse an uploaded OAuth app JSON; toasts and returns null when invalid.

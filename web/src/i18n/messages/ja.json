@@ -3267,6 +3267,344 @@
           "toast": "認証情報の更新中にエラーが発生しました"
         }
       },
+      "fields": {
+        "access_key_id": {
+          "title": "GCS アクセスキー ID"
+        },
+        "account_id": {
+          "title": "R2 アカウント ID"
+        },
+        "asana_api_token_secret": {
+          "title": "Asana API トークン"
+        },
+        "authentication_method": {
+          "title": "認証方法"
+        },
+        "aws_access_key_id": {
+          "title": "AWS アクセスキー ID"
+        },
+        "aws_role_arn": {
+          "title": "AWS ロール ARN"
+        },
+        "aws_secret_access_key": {
+          "title": "AWS シークレットアクセスキー"
+        },
+        "axero_api_token": {
+          "title": "Axero API トークン"
+        },
+        "base_url": {
+          "title": "Axero ベース URL"
+        },
+        "bitbucket_api_token": {
+          "title": "Bitbucket API トークン"
+        },
+        "bitbucket_email": {
+          "title": "Bitbucket アカウントのメールアドレス"
+        },
+        "bookstack_api_token_id": {
+          "title": "Bookstack API トークン ID"
+        },
+        "bookstack_api_token_secret": {
+          "title": "Bookstack API トークンシークレット"
+        },
+        "bookstack_base_url": {
+          "title": "Bookstack ベース URL"
+        },
+        "box_client_id": {
+          "title": "Box クライアント ID"
+        },
+        "box_client_secret": {
+          "title": "Box クライアントシークレット"
+        },
+        "box_enterprise_id": {
+          "title": "Box エンタープライズ ID"
+        },
+        "box_user_email": {
+          "description": "任意。なりすます Box ユーザーを指定します。",
+          "title": "Box ユーザーのメールアドレス"
+        },
+        "braintrust_api_key": {
+          "title": "Braintrust API キー"
+        },
+        "canvas_access_token": {
+          "title": "Canvas アクセストークン"
+        },
+        "clickup_api_token": {
+          "title": "ClickUp API トークン"
+        },
+        "clickup_team_id": {
+          "title": "ClickUp チーム ID"
+        },
+        "coda_bearer_token": {
+          "title": "Coda ベアラートークン"
+        },
+        "confluence_access_token": {
+          "title": "Confluence アクセストークン"
+        },
+        "confluence_username": {
+          "title": "Confluence ユーザー名"
+        },
+        "discord_bot_token": {
+          "title": "Discord ボットトークン"
+        },
+        "discourse_api_key": {
+          "title": "Discourse API キー"
+        },
+        "discourse_api_username": {
+          "title": "Discourse API ユーザー名"
+        },
+        "document360_api_token": {
+          "title": "Document360 API トークン"
+        },
+        "dropbox_access_token": {
+          "title": "Dropbox API キー"
+        },
+        "drupal_wiki_api_token": {
+          "title": "Drupal Wiki 個人用アクセストークン"
+        },
+        "fireflies_api_key": {
+          "title": "Fireflies API キー"
+        },
+        "freshdesk_api_key": {
+          "title": "Freshdesk API キー"
+        },
+        "freshdesk_domain": {
+          "title": "Freshdesk ドメイン"
+        },
+        "gitbook_api_key": {
+          "title": "GitBook API キー"
+        },
+        "gitbook_space_id": {
+          "title": "GitBook スペース ID"
+        },
+        "github_access_token": {
+          "title": "GitHub アクセストークン"
+        },
+        "github_base_url": {
+          "description": "任意。https://github.example.com のようにサーバーのホストを指定します。github.com を使う場合は空欄のままにします。",
+          "title": "GitHub Enterprise Server URL"
+        },
+        "gitlab_access_token": {
+          "title": "GitLab アクセストークン"
+        },
+        "gitlab_url": {
+          "title": "GitLab URL"
+        },
+        "gong_access_key": {
+          "title": "Gong アクセスキー"
+        },
+        "gong_access_key_secret": {
+          "title": "Gong アクセスキーシークレット"
+        },
+        "gong_base_url": {
+          "description": "任意。米国外のデータを使う場合は、https://[region].api.gong.io のようにリージョンのホストを指定します。",
+          "title": "Gong API ベース URL"
+        },
+        "google_primary_admin": {
+          "title": "プライマリ管理者のメールアドレス"
+        },
+        "google_service_account_key": {
+          "title": "Google サービスアカウントキー"
+        },
+        "google_tokens": {
+          "title": "Google OAuth トークン"
+        },
+        "guru_user": {
+          "title": "Guru ユーザー"
+        },
+        "guru_user_token": {
+          "title": "Guru ユーザートークン"
+        },
+        "highspot_key": {
+          "title": "Highspot キー"
+        },
+        "highspot_secret": {
+          "title": "Highspot シークレット"
+        },
+        "highspot_url": {
+          "title": "Highspot URL"
+        },
+        "hubspot_access_token": {
+          "title": "HubSpot アクセストークン"
+        },
+        "imap_password": {
+          "title": "IMAP パスワード"
+        },
+        "imap_username": {
+          "title": "IMAP ユーザー名"
+        },
+        "is_sandbox": {
+          "title": "サンドボックス環境かどうか"
+        },
+        "jira_api_token": {
+          "title": "API トークンまたは個人用アクセストークン"
+        },
+        "jira_user_email": {
+          "description": "Jira Cloud では必須です。",
+          "title": "Jira ユーザーのメールアドレス"
+        },
+        "linear_api_key": {
+          "title": "Linear API キー"
+        },
+        "loopio_client_id": {
+          "title": "Loopio クライアント ID"
+        },
+        "loopio_client_token": {
+          "title": "Loopio クライアントトークン"
+        },
+        "loopio_subdomain": {
+          "title": "Loopio サブドメイン"
+        },
+        "lumapps_api_key": {
+          "title": "LumApps API キー"
+        },
+        "lumapps_application_id": {
+          "title": "LumApps アプリケーション ID"
+        },
+        "lumapps_service_user": {
+          "description": "代理でインデックスを作成するユーザーです。",
+          "title": "サービスユーザーのメールアドレス"
+        },
+        "namespace": {
+          "title": "OCI ネームスペース"
+        },
+        "notion_integration_token": {
+          "title": "Notion インテグレーショントークン"
+        },
+        "onedrive_certificate_password": {
+          "title": "OneDrive 証明書のパスワード"
+        },
+        "onedrive_client_id": {
+          "title": "OneDrive クライアント ID"
+        },
+        "onedrive_client_secret": {
+          "title": "OneDrive クライアントシークレット"
+        },
+        "onedrive_directory_id": {
+          "title": "OneDrive ディレクトリ ID"
+        },
+        "onedrive_private_key": {
+          "title": "OneDrive 証明書"
+        },
+        "outline_api_token": {
+          "title": "Outline API トークン"
+        },
+        "outline_base_url": {
+          "description": "例: https://app.getoutline.com、またはセルフホストの URL。",
+          "title": "Outline ベース URL"
+        },
+        "outlook_certificate_password": {
+          "title": "Microsoft Outlook 証明書のパスワード"
+        },
+        "outlook_client_id": {
+          "title": "Microsoft Outlook クライアント ID"
+        },
+        "outlook_client_secret": {
+          "title": "Microsoft Outlook クライアントシークレット"
+        },
+        "outlook_directory_id": {
+          "title": "Microsoft Outlook ディレクトリ ID"
+        },
+        "outlook_private_key": {
+          "description": "PFX ファイルです。",
+          "title": "Microsoft Outlook 秘密鍵"
+        },
+        "portal_id": {
+          "title": "Document360 ポータル ID"
+        },
+        "productboard_access_token": {
+          "title": "Productboard アクセストークン"
+        },
+        "r2_access_key_id": {
+          "title": "R2 アクセスキー ID"
+        },
+        "r2_secret_access_key": {
+          "title": "R2 シークレットアクセスキー"
+        },
+        "region": {
+          "title": "OCI リージョン"
+        },
+        "secret_access_key": {
+          "title": "GCS シークレットアクセスキー"
+        },
+        "sf_password": {
+          "title": "Salesforce パスワード"
+        },
+        "sf_security_token": {
+          "title": "Salesforce セキュリティトークン"
+        },
+        "sf_username": {
+          "title": "Salesforce ユーザー名"
+        },
+        "slab_bot_token": {
+          "title": "Slab ボットトークン"
+        },
+        "slack_bot_token": {
+          "title": "Slack ボットトークン"
+        },
+        "sp_certificate_password": {
+          "title": "SharePoint 証明書のパスワード"
+        },
+        "sp_client_id": {
+          "title": "SharePoint クライアント ID"
+        },
+        "sp_client_secret": {
+          "title": "SharePoint クライアントシークレット"
+        },
+        "sp_directory_id": {
+          "title": "SharePoint ディレクトリ ID"
+        },
+        "sp_private_key": {
+          "title": "SharePoint 秘密鍵"
+        },
+        "teams_certificate_password": {
+          "title": "Microsoft Teams 証明書のパスワード"
+        },
+        "teams_client_id": {
+          "title": "Microsoft Teams クライアント ID"
+        },
+        "teams_client_secret": {
+          "title": "Microsoft Teams クライアントシークレット"
+        },
+        "teams_directory_id": {
+          "title": "Microsoft Teams ディレクトリ ID"
+        },
+        "teams_private_key": {
+          "description": "PFX ファイルです。",
+          "title": "Microsoft Teams 秘密鍵"
+        },
+        "testrail_api_key": {
+          "title": "TestRail API キー"
+        },
+        "testrail_base_url": {
+          "description": "例: https://yourcompany.testrail.io。",
+          "title": "TestRail ベース URL"
+        },
+        "testrail_username": {
+          "title": "TestRail ユーザー名またはメールアドレス"
+        },
+        "zendesk_email": {
+          "title": "Zendesk メールアドレス"
+        },
+        "zendesk_subdomain": {
+          "title": "Zendesk サブドメイン"
+        },
+        "zendesk_token": {
+          "title": "Zendesk トークン"
+        },
+        "zoom_account_id": {
+          "title": "Zoom アカウント ID"
+        },
+        "zoom_client_id": {
+          "title": "Zoom クライアント ID"
+        },
+        "zoom_client_secret": {
+          "title": "Zoom クライアントシークレット"
+        },
+        "zuliprc_content": {
+          "title": "Zuliprc の内容"
+        }
+      },
       "modal": {
         "createTitle": "{source} の認証情報を作成",
         "editTitle": "認証情報を編集",

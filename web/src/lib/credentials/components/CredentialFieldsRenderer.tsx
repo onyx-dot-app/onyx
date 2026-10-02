@@ -12,7 +12,7 @@ import { useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import { TypedFileUploadFormField } from "@/components/Field";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { titleFromCredentialKey } from "@/lib/credentials/utils";
+import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import type { CredentialTemplateWithAuth } from "@/lib/credentials/types";
 import { isTypedFileField } from "@/lib/connectors/utils";
 import type {
@@ -56,7 +56,8 @@ function CredentialField({
   const t = useTranslations("admin");
   const tokenKeys = siblingKeys.filter(isTokenKey);
   const isEmail = isEmailKey(fieldKey);
-  const label = titleFromCredentialKey(fieldKey);
+  const copy = useCredentialFieldCopy()(fieldKey);
+  const label = copy.title;
 
   // A file such as a .pfx key is binary; Opal's InputFile reads text, so
   // this field keeps the typed upload until Opal can hand back a File.
@@ -66,7 +67,11 @@ function CredentialField({
 
   if (typeof value === "boolean") {
     return (
-      <InputHorizontal withLabel={fieldKey} title={label}>
+      <InputHorizontal
+        withLabel={fieldKey}
+        title={label}
+        description={copy.description}
+      >
         <FormikField<boolean>
           name={fieldKey}
           render={(field, helper) => (
@@ -92,6 +97,7 @@ function CredentialField({
     <InputVertical
       withLabel={fieldKey}
       title={label}
+      description={copy.description}
       subDescription={
         isEmail && tokenKeys.length > 0
           ? t("credentials.create.emailField.description")

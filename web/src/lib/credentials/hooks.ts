@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useMessages } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
@@ -10,6 +11,7 @@ import { Permission } from "@/lib/types";
 import {
   getCredentialCreationMethods,
   shouldRedirectToOAuth,
+  titleFromCredentialKey,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
@@ -37,6 +39,33 @@ import type {
 } from "@/lib/credentials/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+
+/** A credential field's title, and its hint when it has one. */
+export interface CredentialFieldCopy {
+  title: string;
+  description?: string;
+}
+
+function hasOwnKey<T extends object>(
+  object: T,
+  key: string
+): key is Extract<keyof T, string> {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+/**
+ * Looks up a credential field's title and hint in the message catalog
+ * (`admin.credentials.fields.<key>`), keyed by the field's credential key.
+ * A key the catalog does not list yet falls back to a title read from the
+ * key itself, so a new connector's fields never render blank.
+ */
+export function useCredentialFieldCopy(): (key: string) => CredentialFieldCopy {
+  const fields = useMessages().admin.credentials.fields;
+  return (key) =>
+    hasOwnKey(fields, key)
+      ? fields[key]
+      : { title: titleFromCredentialKey(key) };
+}
 
 /**
  * Every credential the admin can see, across all sources. Pass

@@ -35,6 +35,8 @@ import { SvgPlusCircle } from "@opal/icons";
 interface CreateButtonProps {
   onClick: () => void;
   isSubmitting: boolean;
+  /** False while any required field is empty or malformed. */
+  isValid: boolean;
   // Only a scoped manager must land the credential in a group — GATE 2 requires
   // it of them and of nobody else.
   requiresGroup: boolean;
@@ -44,13 +46,16 @@ interface CreateButtonProps {
 function CreateButton({
   onClick,
   isSubmitting,
+  isValid,
   requiresGroup,
   groups,
 }: CreateButtonProps) {
   const t = useTranslations("admin");
   return (
     <Button
-      disabled={isSubmitting || (requiresGroup && groups.length === 0)}
+      disabled={
+        isSubmitting || !isValid || (requiresGroup && groups.length === 0)
+      }
       onClick={onClick}
       icon={SvgPlusCircle}
     >
@@ -213,6 +218,8 @@ export default function CreateCredential({
         }),
       }}
       validationSchema={validationSchema}
+      // Validate the empty form too, so Create starts disabled.
+      validateOnMount
       onSubmit={() => {}} // This will be overridden by our custom submit handlers
     >
       {(formikProps) => {
@@ -292,6 +299,7 @@ export default function CreateCredential({
                     )
                   }
                   isSubmitting={formikProps.isSubmitting}
+                  isValid={formikProps.isValid}
                   requiresGroup={isScopedManager}
                   groups={formikProps.values.groups}
                 />

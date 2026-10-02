@@ -3267,6 +3267,344 @@
           "toast": "Error updating credential"
         }
       },
+      "fields": {
+        "access_key_id": {
+          "title": "GCS Access Key ID"
+        },
+        "account_id": {
+          "title": "R2 Account ID"
+        },
+        "asana_api_token_secret": {
+          "title": "Asana API Token"
+        },
+        "authentication_method": {
+          "title": "Authentication Method"
+        },
+        "aws_access_key_id": {
+          "title": "AWS Access Key ID"
+        },
+        "aws_role_arn": {
+          "title": "AWS Role ARN"
+        },
+        "aws_secret_access_key": {
+          "title": "AWS Secret Access Key"
+        },
+        "axero_api_token": {
+          "title": "Axero API Token"
+        },
+        "base_url": {
+          "title": "Axero Base URL"
+        },
+        "bitbucket_api_token": {
+          "title": "Bitbucket API Token"
+        },
+        "bitbucket_email": {
+          "title": "Bitbucket Account Email"
+        },
+        "bookstack_api_token_id": {
+          "title": "Bookstack API Token ID"
+        },
+        "bookstack_api_token_secret": {
+          "title": "Bookstack API Token Secret"
+        },
+        "bookstack_base_url": {
+          "title": "Bookstack Base URL"
+        },
+        "box_client_id": {
+          "title": "Box Client ID"
+        },
+        "box_client_secret": {
+          "title": "Box Client Secret"
+        },
+        "box_enterprise_id": {
+          "title": "Box Enterprise ID"
+        },
+        "box_user_email": {
+          "description": "Optional. The Box user to impersonate.",
+          "title": "Box User Email"
+        },
+        "braintrust_api_key": {
+          "title": "Braintrust API Key"
+        },
+        "canvas_access_token": {
+          "title": "Canvas Access Token"
+        },
+        "clickup_api_token": {
+          "title": "ClickUp API Token"
+        },
+        "clickup_team_id": {
+          "title": "ClickUp Team ID"
+        },
+        "coda_bearer_token": {
+          "title": "Coda Bearer Token"
+        },
+        "confluence_access_token": {
+          "title": "Confluence Access Token"
+        },
+        "confluence_username": {
+          "title": "Confluence Username"
+        },
+        "discord_bot_token": {
+          "title": "Discord Bot Token"
+        },
+        "discourse_api_key": {
+          "title": "Discourse API Key"
+        },
+        "discourse_api_username": {
+          "title": "Discourse API Username"
+        },
+        "document360_api_token": {
+          "title": "Document360 API Token"
+        },
+        "dropbox_access_token": {
+          "title": "Dropbox API Key"
+        },
+        "drupal_wiki_api_token": {
+          "title": "Drupal Wiki Personal Access Token"
+        },
+        "fireflies_api_key": {
+          "title": "Fireflies API Key"
+        },
+        "freshdesk_api_key": {
+          "title": "Freshdesk API Key"
+        },
+        "freshdesk_domain": {
+          "title": "Freshdesk Domain"
+        },
+        "gitbook_api_key": {
+          "title": "GitBook API Key"
+        },
+        "gitbook_space_id": {
+          "title": "GitBook Space ID"
+        },
+        "github_access_token": {
+          "title": "GitHub Access Token"
+        },
+        "github_base_url": {
+          "description": "Optional. Set your server host, like https://github.example.com. Leave blank for github.com.",
+          "title": "GitHub Enterprise Server URL"
+        },
+        "gitlab_access_token": {
+          "title": "GitLab Access Token"
+        },
+        "gitlab_url": {
+          "title": "GitLab URL"
+        },
+        "gong_access_key": {
+          "title": "Gong Access Key"
+        },
+        "gong_access_key_secret": {
+          "title": "Gong Access Key Secret"
+        },
+        "gong_base_url": {
+          "description": "Optional. For data outside the US, set your region's host, like https://[region].api.gong.io.",
+          "title": "Gong API Base URL"
+        },
+        "google_primary_admin": {
+          "title": "Primary Admin Email"
+        },
+        "google_service_account_key": {
+          "title": "Google Service Account Key"
+        },
+        "google_tokens": {
+          "title": "Google Oauth Tokens"
+        },
+        "guru_user": {
+          "title": "Guru User"
+        },
+        "guru_user_token": {
+          "title": "Guru User Token"
+        },
+        "highspot_key": {
+          "title": "Highspot Key"
+        },
+        "highspot_secret": {
+          "title": "Highspot Secret"
+        },
+        "highspot_url": {
+          "title": "Highspot URL"
+        },
+        "hubspot_access_token": {
+          "title": "HubSpot Access Token"
+        },
+        "imap_password": {
+          "title": "IMAP Password"
+        },
+        "imap_username": {
+          "title": "IMAP Username"
+        },
+        "is_sandbox": {
+          "title": "Is Sandbox Environment"
+        },
+        "jira_api_token": {
+          "title": "API or Personal Access Token"
+        },
+        "jira_user_email": {
+          "description": "Required for Jira Cloud.",
+          "title": "Jira User Email"
+        },
+        "linear_api_key": {
+          "title": "Linear API Key"
+        },
+        "loopio_client_id": {
+          "title": "Loopio Client ID"
+        },
+        "loopio_client_token": {
+          "title": "Loopio Client Token"
+        },
+        "loopio_subdomain": {
+          "title": "Loopio Subdomain"
+        },
+        "lumapps_api_key": {
+          "title": "LumApps API Key"
+        },
+        "lumapps_application_id": {
+          "title": "LumApps Application ID"
+        },
+        "lumapps_service_user": {
+          "description": "The user to index on behalf of.",
+          "title": "Service User Email"
+        },
+        "namespace": {
+          "title": "OCI Namespace"
+        },
+        "notion_integration_token": {
+          "title": "Notion Integration Token"
+        },
+        "onedrive_certificate_password": {
+          "title": "OneDrive Certificate Password"
+        },
+        "onedrive_client_id": {
+          "title": "OneDrive Client ID"
+        },
+        "onedrive_client_secret": {
+          "title": "OneDrive Client Secret"
+        },
+        "onedrive_directory_id": {
+          "title": "OneDrive Directory ID"
+        },
+        "onedrive_private_key": {
+          "title": "OneDrive Certificate"
+        },
+        "outline_api_token": {
+          "title": "Outline API Token"
+        },
+        "outline_base_url": {
+          "description": "For example https://app.getoutline.com, or your self-hosted URL.",
+          "title": "Outline Base URL"
+        },
+        "outlook_certificate_password": {
+          "title": "Microsoft Outlook Certificate Password"
+        },
+        "outlook_client_id": {
+          "title": "Microsoft Outlook Client ID"
+        },
+        "outlook_client_secret": {
+          "title": "Microsoft Outlook Client Secret"
+        },
+        "outlook_directory_id": {
+          "title": "Microsoft Outlook Directory ID"
+        },
+        "outlook_private_key": {
+          "description": "A PFX file.",
+          "title": "Microsoft Outlook Private Key"
+        },
+        "portal_id": {
+          "title": "Document360 Portal ID"
+        },
+        "productboard_access_token": {
+          "title": "Productboard Access Token"
+        },
+        "r2_access_key_id": {
+          "title": "R2 Access Key ID"
+        },
+        "r2_secret_access_key": {
+          "title": "R2 Secret Access Key"
+        },
+        "region": {
+          "title": "OCI Region"
+        },
+        "secret_access_key": {
+          "title": "GCS Secret Access Key"
+        },
+        "sf_password": {
+          "title": "Salesforce Password"
+        },
+        "sf_security_token": {
+          "title": "Salesforce Security Token"
+        },
+        "sf_username": {
+          "title": "Salesforce Username"
+        },
+        "slab_bot_token": {
+          "title": "Slab Bot Token"
+        },
+        "slack_bot_token": {
+          "title": "Slack Bot Token"
+        },
+        "sp_certificate_password": {
+          "title": "SharePoint Certificate Password"
+        },
+        "sp_client_id": {
+          "title": "SharePoint Client ID"
+        },
+        "sp_client_secret": {
+          "title": "SharePoint Client Secret"
+        },
+        "sp_directory_id": {
+          "title": "SharePoint Directory ID"
+        },
+        "sp_private_key": {
+          "title": "SharePoint Private Key"
+        },
+        "teams_certificate_password": {
+          "title": "Microsoft Teams Certificate Password"
+        },
+        "teams_client_id": {
+          "title": "Microsoft Teams Client ID"
+        },
+        "teams_client_secret": {
+          "title": "Microsoft Teams Client Secret"
+        },
+        "teams_directory_id": {
+          "title": "Microsoft Teams Directory ID"
+        },
+        "teams_private_key": {
+          "description": "A PFX file.",
+          "title": "Microsoft Teams Private Key"
+        },
+        "testrail_api_key": {
+          "title": "TestRail API Key"
+        },
+        "testrail_base_url": {
+          "description": "For example https://yourcompany.testrail.io.",
+          "title": "TestRail Base URL"
+        },
+        "testrail_username": {
+          "title": "TestRail Username or Email"
+        },
+        "zendesk_email": {
+          "title": "Zendesk Email"
+        },
+        "zendesk_subdomain": {
+          "title": "Zendesk Subdomain"
+        },
+        "zendesk_token": {
+          "title": "Zendesk Token"
+        },
+        "zoom_account_id": {
+          "title": "Zoom Account ID"
+        },
+        "zoom_client_id": {
+          "title": "Zoom Client ID"
+        },
+        "zoom_client_secret": {
+          "title": "Zoom Client Secret"
+        },
+        "zuliprc_content": {
+          "title": "Zuliprc Content"
+        }
+      },
       "modal": {
         "createTitle": "Create {source} Credential",
         "editTitle": "Edit Credential",
