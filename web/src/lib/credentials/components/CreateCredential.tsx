@@ -78,7 +78,9 @@ function ShareAccountField({
   return (
     <Disabled disabled={!formikProps.isValid}>
       <InputHorizontal
-        withLabel="share"
+        // A bare label (no htmlFor) hands a click on the title to the select
+        // inside it, which opens the list.
+        withLabel
         title={t("credentials.create.share.title")}
         description={t("credentials.create.share.description")}
         center
