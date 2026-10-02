@@ -30,14 +30,9 @@ class RetryableFirecrawlSearchError(Exception):
 
 
 class FirecrawlSearchClient(WebSearchProvider):
-    """Web search through the Firecrawl `/v2/search` endpoint.
+    """Firecrawl `/v2/search`; page fetching lives in `open_url.firecrawl`.
 
-    This is the search half of the Firecrawl integration. Page fetching is
-    handled separately by `open_url.firecrawl.FirecrawlClient`. Both use the
-    same Firecrawl API key.
-
-    Firecrawl forwards the `site:` operator to the search engine, so the
-    inherited `supports_site_filter = True` default applies.
+    Firecrawl passes `site:` through, so `supports_site_filter` stays True.
     """
 
     def __init__(
@@ -213,8 +208,7 @@ def _parse_results(data: Any) -> list[WebSearchResult]:
                 title=_clean_string(result.get("title")),
                 link=link,
                 snippet=_clean_string(result.get("description")),
-                # Firecrawl search results do not carry author or publish date
-                # without scraping each page, so these stay unset.
+                # Search results carry no author or date without a scrape.
                 author=None,
                 published_date=None,
             )

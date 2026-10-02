@@ -227,7 +227,6 @@ def upsert_search_provider_endpoint(
                 )
                 db_session.execute(stmt)
                 db_session.flush()
-                # Keep the synced key paired with the matching endpoint.
                 if synced_config is not None and synced_config.base_url:
                     set_web_content_provider_base_url(
                         name=name,
@@ -435,7 +434,6 @@ def upsert_content_provider_endpoint(
                 )
                 db_session.execute(stmt)
                 db_session.flush()
-                # Keep the synced key paired with the matching endpoint.
                 if synced_config is not None and synced_config.get("base_url"):
                     set_web_search_provider_base_url(
                         name=name,
