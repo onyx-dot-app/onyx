@@ -3,8 +3,15 @@ from sqlalchemy.orm import Session
 from onyx.access.access import get_acl_for_user
 from onyx.access.cc_pair_access import get_cc_pair_access_mode
 from onyx.access.utils import EXTERNAL_GROUP_ACL_PREFIX, USER_EMAIL_ACL_PREFIX
-from onyx.context.search.models import CCPairAccessFilter, UserAccessFilters
-from onyx.db.connector_credential_pair import get_cc_pair_access_sets_for_user
+from onyx.context.search.models import (
+    CCPairAccessFilter,
+    CCPairAccessMode,
+    UserAccessFilters,
+)
+from onyx.db.connector_credential_pair import (
+    get_cc_pair_access_sets_for_user,
+    has_sync_restricted_cc_pairs,
+)
 from onyx.db.models import User
 
 
@@ -21,8 +28,12 @@ def _build_cc_pair_access_filter(
 ) -> CCPairAccessFilter | None:
     mode = get_cc_pair_access_mode(db_session)
     if mode is None:
-        return None
+        if not has_sync_restricted_cc_pairs(db_session):
+            return None
+        mode = CCPairAccessMode.OFF
     access_sets = get_cc_pair_access_sets_for_user(db_session, user)
+    if mode == CCPairAccessMode.OFF and not access_sets.hidden_restricted_cc_pair_ids:
+        return None
     return CCPairAccessFilter(
         mode=mode,
         open_cc_pair_ids=sorted(access_sets.open_cc_pair_ids),
@@ -32,4 +43,5 @@ def _build_cc_pair_access_filter(
             for entry in user_acl
             if entry.startswith((USER_EMAIL_ACL_PREFIX, EXTERNAL_GROUP_ACL_PREFIX))
         ),
+        hidden_restricted_cc_pair_ids=sorted(access_sets.hidden_restricted_cc_pair_ids),
     )

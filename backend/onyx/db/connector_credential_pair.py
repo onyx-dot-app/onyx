@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
 from typing import TypeVarTuple
@@ -94,11 +95,67 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
     )
 
 
+def build_user_acl_cc_pair_filter(user_id: UUID | None) -> ColumnElement[bool]:
+    """Pairs whose documents the user may see on a document ACL match ("ACL"
+    pairs): SYNC pairs, and SYNC_RESTRICTED pairs where the user is in a
+    data-access group of the pair. Anonymous users (None) get only SYNC pairs.
+    Does not exclude DELETING pairs."""
+    is_sync = ConnectorCredentialPair.access_type == AccessType.SYNC
+    if user_id is None:
+        return is_sync
+    group_access_clause_fn = fetch_versioned_implementation(
+        "onyx.db.connector_credential_pair", "_build_user_group_cc_pair_access_clause"
+    )
+    return or_(
+        is_sync,
+        and_(
+            ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+            group_access_clause_fn(user_id),
+        ),
+    )
+
+
+def build_restricted_acl_guard(
+    user_id: UUID | None,
+    has_cc_pair: Callable[[ColumnElement[bool]], ColumnElement[bool]],
+) -> ColumnElement[bool]:
+    """For readers that match a document ACL without knowing which pair grants
+    it. The match must not count for an item of a SYNC_RESTRICTED pair the user
+    can't see, unless another pair of the item grants ACL access.
+
+    has_cc_pair(clause) is an EXISTS over the item's pairs that match clause."""
+    visible_acl_pair = and_(
+        ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        build_user_acl_cc_pair_filter(user_id),
+    )
+    hidden_restricted_pair = and_(
+        ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+        ~visible_acl_pair,
+    )
+    return or_(~has_cc_pair(hidden_restricted_pair), has_cc_pair(visible_acl_pair))
+
+
+def has_sync_restricted_cc_pairs(db_session: Session) -> bool:
+    return bool(
+        db_session.scalar(
+            select(
+                select(ConnectorCredentialPair.id)
+                .where(
+                    ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED
+                )
+                .exists()
+            )
+        )
+    )
+
+
 class CCPairAccessSets(BaseModel):
     # Documents of these pairs are visible with no document ACL match.
     open_cc_pair_ids: set[int]
     # Documents of these pairs are visible if public or matching the user's ACL.
     acl_cc_pair_ids: set[int]
+    # SYNC_RESTRICTED pairs that grant the user nothing, DELETING ones included.
+    hidden_restricted_cc_pair_ids: set[int]
 
 
 def get_cc_pair_access_sets_for_user(
@@ -106,30 +163,36 @@ def get_cc_pair_access_sets_for_user(
 ) -> CCPairAccessSets:
     """The query-time access rule for a user, as sets of cc-pair ids.
 
-    Open pairs follow build_user_cc_pair_access_filter; anonymous users get
-    only PUBLIC pairs. Every user gets all perm-synced (SYNC, SYNC_RESTRICTED)
-    pairs as ACL pairs, matching the chunk ACLs written today. DELETING pairs
-    are left out of both sets."""
+    Open pairs follow build_user_cc_pair_access_filter and ACL pairs follow
+    build_user_acl_cc_pair_filter; anonymous users get only PUBLIC open pairs
+    and SYNC ACL pairs. DELETING pairs are in neither set."""
     open_clause = (
         ConnectorCredentialPair.access_type == AccessType.PUBLIC
         if user.is_anonymous
         else build_user_cc_pair_access_filter(user.id)
     )
-    is_acl_pair = ConnectorCredentialPair.access_type.in_(
-        AccessType.perm_synced_types()
-    )
+    acl_clause = build_user_acl_cc_pair_filter(None if user.is_anonymous else user.id)
+    is_live = ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
+    is_restricted = ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED
     rows = db_session.execute(
-        select(ConnectorCredentialPair.id, is_acl_pair).where(
-            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
-            or_(open_clause, is_acl_pair),
-        )
+        select(
+            ConnectorCredentialPair.id,
+            and_(is_live, acl_clause).label("is_acl"),
+            and_(is_live, open_clause).label("is_open"),
+        ).where(or_(and_(is_live, or_(open_clause, acl_clause)), is_restricted))
     ).tuples()
-    access_sets = CCPairAccessSets(open_cc_pair_ids=set(), acl_cc_pair_ids=set())
-    for cc_pair_id, is_acl in rows:
+    access_sets = CCPairAccessSets(
+        open_cc_pair_ids=set(),
+        acl_cc_pair_ids=set(),
+        hidden_restricted_cc_pair_ids=set(),
+    )
+    for cc_pair_id, is_acl, is_open in rows:
         if is_acl:
             access_sets.acl_cc_pair_ids.add(cc_pair_id)
-        else:
+        elif is_open:
             access_sets.open_cc_pair_ids.add(cc_pair_id)
+        else:
+            access_sets.hidden_restricted_cc_pair_ids.add(cc_pair_id)
     return access_sets
 
 
@@ -313,7 +376,7 @@ def _add_user_filters(
 
     where_clause = User__UG.user_id == user.id
     where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
-    where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
+    where_clause |= build_user_acl_cc_pair_filter(user.id)
 
     return stmt.where(where_clause)
 
@@ -917,7 +980,7 @@ def add_credential_to_connector(
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
 
-    if access_type == AccessType.SYNC:
+    if access_type.is_perm_synced():
         fetch_ee_implementation_or_noop(
             "onyx.utils.tier",
             "require_business_tier_for_sync_access",
@@ -928,9 +991,9 @@ def add_credential_to_connector(
             "check_if_valid_sync_source",
             noop_return_value=True,
         )(connector.source):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Connector of type {connector.source} does not support SYNC access type",
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Connector of type {connector.source} does not support permission sync",
             )
 
     if credential is None:
@@ -989,6 +1052,18 @@ def add_credential_to_connector(
                 if data_access_group_ids is not None
                 else list(manage_access)
             ),
+        )
+    elif access_type == AccessType.SYNC_RESTRICTED:
+        # With no data-access group the pair would be visible to nobody.
+        if not data_access_group_ids:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "A restricted connector needs at least one data-access group.",
+            )
+        _relate_data_access_groups_to_cc_pair__no_commit(
+            db_session=db_session,
+            cc_pair_id=association.id,
+            user_group_ids=data_access_group_ids,
         )
 
     db_session.commit()

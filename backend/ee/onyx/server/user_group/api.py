@@ -415,7 +415,8 @@ def set_user_group_data_access_cc_pairs_endpoint(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroupDataAccessCCPairs:
-    """Sets the private connectors whose documents the group's members may read."""
+    """Sets the private and restricted connectors whose documents the group's
+    members may read."""
     try:
         cc_pair_ids = set_user_group_data_access_cc_pairs(
             db_session=db_session,

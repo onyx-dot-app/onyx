@@ -308,6 +308,11 @@ class AccessType(str, PyEnum):
     def perm_synced_types(cls) -> list["AccessType"]:
         return [cls.SYNC, cls.SYNC_RESTRICTED]
 
+    @classmethod
+    def data_access_types(cls) -> list["AccessType"]:
+        """Types whose data-access groups decide who may read the documents."""
+        return [cls.PRIVATE, cls.SYNC_RESTRICTED]
+
 
 class EmbeddingPrecision(str, PyEnum):
     """Unused. Kept only because old Alembic migrations import it."""
