@@ -9784,6 +9784,10 @@
       "closeButton": {
         "tooltip": "Close Sidebar"
       },
+      "copyWithReferences": {
+        "label": "Copy with references",
+        "unavailableSource": "Source details unavailable"
+      },
       "foundSources": {
         "title": "Found Sources"
       },
