@@ -13,7 +13,7 @@ from onyx.background.celery.tasks.capability_checks.tasks import (
     run_draft_capability_checks_task,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, OnyxCeleryQueues
 from onyx.connectors.capability_checks import draft_runs, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
@@ -189,6 +189,11 @@ def test_run_resolves_states_runs_pending_checks_and_reuses_cached_results(
         _PERM_SYNC: DraftCheckStateKind.NOT_APPLICABLE,
     }
     harness.send_task.assert_called_once()
+    # The form waits on draft runs, so they skip the heavy worker's queue.
+    assert (
+        harness.send_task.call_args.kwargs["queue"]
+        == OnyxCeleryQueues.CAPABILITY_CHECKS_DRAFT
+    )
     harness.run_last_task()
     done = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
     assert done.status == DraftRunStatus.COMPLETED

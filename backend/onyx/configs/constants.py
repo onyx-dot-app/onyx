@@ -485,6 +485,9 @@ class OnyxCeleryQueues:
     # Manual credential capability check runs; probes may legitimately hang up
     # to their per-check guard, so they live with the long-running work.
     CAPABILITY_CHECKS = "capability_checks"
+    # Draft runs for an unsaved connector form. The form waits on them, so they
+    # do not share a queue with the long-running perm and group syncs.
+    CAPABILITY_CHECKS_DRAFT = "capability_checks_draft"
 
     # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
     # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.

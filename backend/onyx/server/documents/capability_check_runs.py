@@ -284,7 +284,7 @@ def start_draft_capability_check_run(
                 ),
                 "tenant_id": get_current_tenant_id(),
             },
-            queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
+            queue=OnyxCeleryQueues.CAPABILITY_CHECKS_DRAFT,
             priority=OnyxCeleryPriority.HIGH,
             # The run's lease runs out then, so a later start is useless.
             expires=DRAFT_RUN_QUEUE_EXPIRY_SECONDS,

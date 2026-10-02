@@ -179,6 +179,7 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
         "chat_ttl_deletion_queue_length": OnyxCeleryQueues.CHAT_TTL_DELETION,
         "csv_generation_queue_length": OnyxCeleryQueues.CSV_GENERATION,
         "capability_checks_queue_length": OnyxCeleryQueues.CAPABILITY_CHECKS,
+        "capability_checks_draft_queue_length": OnyxCeleryQueues.CAPABILITY_CHECKS_DRAFT,
         "user_file_processing_queue_length": OnyxCeleryQueues.USER_FILE_PROCESSING,
         "user_file_project_sync_queue_length": OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
         "user_file_delete_queue_length": OnyxCeleryQueues.USER_FILE_DELETE,
@@ -982,6 +983,9 @@ def monitor_celery_queues_helper(
     n_capability_checks = celery_get_queue_length(
         OnyxCeleryQueues.CAPABILITY_CHECKS, r_celery
     )
+    n_capability_checks_draft = celery_get_queue_length(
+        OnyxCeleryQueues.CAPABILITY_CHECKS_DRAFT, r_celery
+    )
     n_monitoring = celery_get_queue_length(OnyxCeleryQueues.MONITORING, r_celery)
     n_sandbox = celery_get_queue_length(OnyxCeleryQueues.SANDBOX, r_celery)
 
@@ -1016,6 +1020,7 @@ def monitor_celery_queues_helper(
         f"index_reclaim={n_index_reclaim} "
         f"csv_generation={n_csv_generation} "
         f"capability_checks={n_capability_checks} "
+        f"capability_checks_draft={n_capability_checks_draft} "
         f"monitoring={n_monitoring} "
         f"sandbox={n_sandbox} "
     )
