@@ -2613,6 +2613,10 @@
         "credentialModal": {
           "title": "Crear una credencial de {source}"
         },
+        "credentialsLoadFailed": {
+          "description": "Ahora no se pueden configurar credenciales. Recarga la página o inténtalo más tarde.",
+          "title": "No se pudieron cargar tus credenciales"
+        },
         "credentialStep": {
           "description": "Usa una cuenta de servicio compartida. {appName} indexa el contenido como esta cuenta.",
           "title": "Cuenta de autenticación"

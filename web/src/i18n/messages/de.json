@@ -2613,6 +2613,10 @@
         "credentialModal": {
           "title": "Anmeldedaten für {source} erstellen"
         },
+        "credentialsLoadFailed": {
+          "description": "Anmeldedaten können gerade nicht eingerichtet werden. Lade die Seite neu oder versuche es später erneut.",
+          "title": "Anmeldedaten konnten nicht geladen werden"
+        },
         "credentialStep": {
           "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
           "title": "Authentifizierungskonto"

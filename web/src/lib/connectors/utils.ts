@@ -6,7 +6,6 @@ import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { connectorConfigs } from "@/lib/connectors/connectors";
-import { credentialDisplayNames } from "@/lib/connectors/credentials";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
   PIPELINE_ORDER,
@@ -153,14 +152,6 @@ export function createConnectorValidationSchema(
   });
 
   return object;
-}
-
-// ---------------------------------------------------------------------------
-// Credentials
-// ---------------------------------------------------------------------------
-
-export function getDisplayNameForCredentialKey(key: string): string {
-  return credentialDisplayNames[key] || key;
 }
 
 // ---------------------------------------------------------------------------

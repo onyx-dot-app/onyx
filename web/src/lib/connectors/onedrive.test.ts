@@ -1,5 +1,5 @@
 import { connectorConfigs } from "@/lib/connectors/connectors";
-import { credentialTemplates } from "@/lib/connectors/credentials";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
@@ -16,7 +16,7 @@ const ONE_DRIVE_USERS_REQUIRED = "Add at least one user for Specific scope";
 
 describe("OneDrive connector metadata", () => {
   it("defines both app-only credential methods", () => {
-    expect(credentialTemplates[ValidSources.OneDrive]).toMatchObject({
+    expect(CREDENTIAL_TEMPLATES[ValidSources.OneDrive]).toMatchObject({
       authentication_method: "client_secret",
       authMethods: [
         {

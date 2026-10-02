@@ -2613,6 +2613,10 @@
         "credentialModal": {
           "title": "Create a {source} credential"
         },
+        "credentialsLoadFailed": {
+          "description": "Credentials can't be set up right now. Reload the page or try again later.",
+          "title": "Couldn't load your credentials"
+        },
         "credentialStep": {
           "description": "Use a shared service account. {appName} indexes content as this account.",
           "title": "Authentication Account"

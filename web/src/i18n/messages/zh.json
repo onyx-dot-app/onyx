@@ -2613,6 +2613,10 @@
         "credentialModal": {
           "title": "创建 {source} 凭据"
         },
+        "credentialsLoadFailed": {
+          "description": "当前无法设置凭据。请刷新页面或稍后重试。",
+          "title": "无法加载你的凭据"
+        },
         "credentialStep": {
           "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
           "title": "身份验证账户"

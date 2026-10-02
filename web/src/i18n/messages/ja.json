@@ -2613,6 +2613,10 @@
         "credentialModal": {
           "title": "{source} の認証情報を作成"
         },
+        "credentialsLoadFailed": {
+          "description": "現在、認証情報を設定できません。ページを再読み込みするか、後でもう一度お試しください。",
+          "title": "認証情報を読み込めませんでした"
+        },
         "credentialStep": {
           "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
           "title": "認証アカウント"

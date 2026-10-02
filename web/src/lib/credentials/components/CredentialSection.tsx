@@ -11,7 +11,7 @@ import {
   swapCredential,
   updateCredential,
   updateCredentialWithPrivateKey,
-} from "@/lib/credential";
+} from "@/lib/credentials/svc";
 import { Section, toast } from "@opal/layouts";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { Button, Card, Modal, Text } from "@opal/components";
@@ -20,9 +20,9 @@ import { getSourceDisplayName } from "@/lib/sources";
 import type {
   ConfluenceCredentialJson,
   Credential,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { useCredentialSetup } from "@/lib/connectors/hooks";
+import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { Spinner } from "@/components/Spinner";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { isTypedFileField } from "@/lib/connectors/utils";
@@ -31,11 +31,11 @@ import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import type { CredentialFieldValues } from "@/lib/credentials/types";
 import {
-  CredentialCreationMethod,
   getCredentialCreationActionLabel,
   getCredentialCreationMethods,
   shouldRedirectToOAuth,
-} from "@/lib/credentials/credentialCreation";
+} from "@/lib/credentials/utils";
+import { CredentialCreationMethod } from "@/lib/credentials/types";
 import EditCredential from "@/lib/credentials/components/EditCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 

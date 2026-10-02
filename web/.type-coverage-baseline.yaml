@@ -28,7 +28,7 @@ packages:
   src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/components: 97.7
-  src/components/admin: 96
+  src/components/admin: 96.2
   src/components/auth: 89.3
   src/components/chat: 97.2
   src/components/context: 100
@@ -48,7 +48,7 @@ packages:
   src/ee/hooks: 93.5
   src/ee/lib: 100
   src/ee/providers: 99.3
-  src/ee/sections: 99.7
+  src/ee/sections: 100
   src/ee/views: 99.7
   src/hooks: 98.5
   src/i18n: 99
@@ -57,18 +57,18 @@ packages:
   src/layouts: 100
   src/layouts/chromes: 99.7
   src/layouts/craft: 96.1
-  src/lib: 98.9
+  src/lib: 99.1
   src/lib/agents: 99.2
   src/lib/analytics: 99.4
   src/lib/app: 100
-  src/lib/auth: 98.1
+  src/lib/auth: 98.2
   src/lib/banner: 99.3
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 98.3
+  src/lib/connectors: 98.7
   src/lib/constants: 100
-  src/lib/credentials: 97.9
+  src/lib/credentials: 97.4
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/hierarchy: 100
@@ -81,9 +81,9 @@ packages:
   src/lib/permissions: 100
   src/lib/position: 100
   src/lib/projects: 99.7
-  src/lib/search: 99.1
+  src/lib/search: 99.2
   src/lib/searchFilters: 98.1
-  src/lib/searchSettings: 99.4
+  src/lib/searchSettings: 99.5
   src/lib/settings: 96.6
   src/lib/sidebar: 100
   src/lib/skills: 97.4
@@ -115,6 +115,7 @@ packages:
   src/sections/banners: 98.5
   src/sections/cards: 100
   src/sections/chat: 99.7
+  src/sections/connectors: 100
   src/sections/document-sidebar: 99.5
   src/sections/input: 99.8
   src/sections/knowledge: 99.7
@@ -126,5 +127,5 @@ packages:
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
-  src/views/admin: 98.3
+  src/views/admin: 98.4
   types: 100

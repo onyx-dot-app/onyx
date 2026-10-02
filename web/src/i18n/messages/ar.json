@@ -2613,6 +2613,10 @@
         "credentialModal": {
           "title": "إنشاء بيانات اعتماد {source}"
         },
+        "credentialsLoadFailed": {
+          "description": "لا يمكن إعداد بيانات الاعتماد الآن. أعد تحميل الصفحة أو حاول لاحقًا.",
+          "title": "تعذّر تحميل بيانات الاعتماد"
+        },
         "credentialStep": {
           "description": "استخدم حساب خدمة مشتركًا. يفهرس {appName} المحتوى باسم هذا الحساب.",
           "title": "حساب المصادقة"

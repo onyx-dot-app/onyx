@@ -5,16 +5,14 @@ import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle } from "@opal/icons";
-import type { Credential } from "@/lib/connectors/types";
-import { useCredentialSetup } from "@/lib/connectors/hooks";
+import type { Credential } from "@/lib/credentials/types";
+import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
-import {
-  CredentialCreationMethod,
-  shouldRedirectToOAuth,
-} from "@/lib/credentials/credentialCreation";
+import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
+import { CredentialCreationMethod } from "@/lib/credentials/types";
 import type { AccessType } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 
@@ -45,7 +43,6 @@ export function CredentialsConfigurer({
     displayName,
     credentials,
     oauthDetails,
-    isLoading,
     methods,
     canAuthorize,
     openMethod,
@@ -146,10 +143,6 @@ export function CredentialsConfigurer({
     }
   }
 
-  if (!credentials) {
-    return null;
-  }
-
   return (
     <Section gap={4} alignItems="stretch" width="full">
       <ContentAction
@@ -184,63 +177,48 @@ export function CredentialsConfigurer({
         // }
       />
 
-      <Section gap={4} alignItems="stretch" width="full">
-        <Card border="solid" rounding={4} padding={6}>
-          <Section gap={4} alignItems="start" width="full">
-            <ModifyCredential
-              showIfEmpty
-              accessType={accessType}
-              defaultedCredential={currentCredential!}
-              credentials={credentials}
-              onDeleteCredential={onDeleteCredential}
-              onSwitch={onSwap}
-            />
+      {/* The page mounts this step only once the credentials have loaded,
+      and shows its own loader and error until then; the guard only keeps
+      the types honest. */}
+      {!credentials ? null : (
+        <Section gap={4} alignItems="stretch" width="full">
+          <Card border="solid" rounding={4} padding={6}>
+            <Section gap={4} alignItems="start" width="full">
+              <ModifyCredential
+                showIfEmpty
+                accessType={accessType}
+                defaultedCredential={currentCredential!}
+                credentials={credentials}
+                onDeleteCredential={onDeleteCredential}
+                onSwitch={onSwap}
+              />
 
-            {canAuthorize && (
-              <Section
-                flexDirection="row"
-                justifyContent="start"
-                gap={1}
-                className="mt-6"
-              >
-                <Button
-                  disabled={isAuthorizing}
-                  variant="action"
-                  onClick={handleAuthorize}
+              {canAuthorize && (
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  gap={1}
+                  className="mt-6"
                 >
-                  {isAuthorizing
-                    ? t("add.authorizeButton.pendingLabel")
-                    : t("add.authorizeButton.label", {
-                        source: displayName,
-                      })}
-                </Button>
-              </Section>
-            )}
-          </Section>
-        </Card>
-
-        {/* One card creates a credential. Its header toggles it; the fold
-      below is a plain container, so a click in the open form cannot fold
-      it away. The routes into the source are tabs inside the fold. While
-      the OAuth details load the routes are unknown, so a disabled card
-      holds the place. */}
-        {isLoading ? (
-          <Card
-            border="solid"
-            color="transparent"
-            rounding={4}
-            padding={4}
-            disabled
-          >
-            <ContentAction
-              icon={SvgPlusCircle}
-              title={newAccountLabel}
-              sizePreset="main-ui"
-              variant="section"
-              padding={0}
-            />
+                  <Button
+                    disabled={isAuthorizing}
+                    variant="action"
+                    onClick={handleAuthorize}
+                  >
+                    {isAuthorizing
+                      ? t("add.authorizeButton.pendingLabel")
+                      : t("add.authorizeButton.label", {
+                          source: displayName,
+                        })}
+                  </Button>
+                </Section>
+              )}
+            </Section>
           </Card>
-        ) : (
+
+          {/* One card creates a credential. Its header toggles it; the fold
+          below is a plain container, so a click in the open form cannot fold
+          it away. The routes into the source are tabs inside the fold. */}
           <SelectCard
             expandable
             expanded={isCreating}
@@ -277,7 +255,7 @@ export function CredentialsConfigurer({
                       ))}
                     </Tabs.List>
                     {/* A tab switch keeps what the user typed in the other
-                    route. */}
+                      route. */}
                     {orderedMethods.map((method) => (
                       <Tabs.Content key={method} value={method} keepMounted>
                         {renderCredentialForm(method)}
@@ -301,8 +279,8 @@ export function CredentialsConfigurer({
               />
             </Section>
           </SelectCard>
-        )}
-      </Section>
+        </Section>
+      )}
     </Section>
   );
 }

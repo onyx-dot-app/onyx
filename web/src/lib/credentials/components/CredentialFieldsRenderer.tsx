@@ -7,8 +7,8 @@ import {
   TextFormField,
   TypedFileUploadFormField,
 } from "@/components/Field";
-import { getDisplayNameForCredentialKey } from "@/lib/connectors/utils";
-import type { CredentialTemplateWithAuth } from "@/lib/connectors/types";
+import { getDisplayNameForCredentialKey } from "@/lib/credentials/utils";
+import type { CredentialTemplateWithAuth } from "@/lib/credentials/types";
 import { isTypedFileField } from "@/lib/connectors/utils";
 import type { CredentialFieldValues } from "@/lib/credentials/types";
 

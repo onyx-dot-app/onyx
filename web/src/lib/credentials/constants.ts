@@ -53,7 +53,7 @@ import type {
   ZendeskCredentialJson,
   ZoomCredentialJson,
   ZulipCredentialJson,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 
 // Gmail and Google Drive use dedicated credential UIs, so their templates are partial.
 type CredentialTemplateMap = Record<ValidSources, object | null> & {
@@ -113,7 +113,7 @@ type CredentialTemplateMap = Record<ValidSources, object | null> & {
   testrail: TestRailCredentialJson;
 };
 
-export const credentialTemplates: Record<ValidSources, any> = {
+export const CREDENTIAL_TEMPLATES: Record<ValidSources, any> = {
   github: {
     github_access_token: "",
     github_base_url: null,
@@ -429,7 +429,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   },
 } satisfies CredentialTemplateMap;
 
-export const credentialDisplayNames: Record<string, string> = {
+export const CREDENTIAL_DISPLAY_NAMES: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
   github_base_url:

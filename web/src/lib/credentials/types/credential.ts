@@ -1,8 +1,13 @@
 import type { SWRResponse } from "swr";
-import type { CredentialCreationMethod } from "@/lib/credentials/credentialCreation";
-import type { CredentialFieldValues } from "@/lib/credentials/types";
+import type { CredentialFieldValues } from "@/lib/credentials/types/fields";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
+
+/** The ways a credential can be created for a source. */
+export enum CredentialCreationMethod {
+  OAuth = "oauth",
+  Manual = "manual",
+}
 
 export interface OAuthAdditionalKwargDescription {
   name: string;
@@ -15,6 +20,7 @@ export interface OAuthDetails {
   supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
+
 export interface AuthMethodOption<
   TFields,
   TAuthMethod extends string = string,
@@ -26,6 +32,7 @@ export interface AuthMethodOption<
   // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
   disablePermSync?: boolean;
 }
+
 export interface CredentialTemplateWithAuth<
   TFields,
   TAuthMethod extends string = string,
@@ -84,9 +91,17 @@ export interface CredentialSetup {
   displayName: string;
   /** Every credential this admin can see. Undefined until the first load. */
   credentials: AnyCredential[] | undefined;
+  /**
+   * Set when the credentials never loaded. A refresh that fails after a
+   * success does not count, and neither do OAuth details that fail to load.
+   */
+  error: Error | undefined;
   /** The source's OAuth capabilities, once known. */
   oauthDetails: OAuthDetails | undefined;
-  /** True until those capabilities land, so the ways in are not yet known. */
+  /**
+   * True until the credentials have loaded and the OAuth details have either
+   * loaded or failed; false once the credentials fail.
+   */
   isLoading: boolean;
   /** The ways this source accepts a credential. */
   methods: CredentialCreationMethod[];
@@ -125,4 +140,19 @@ export interface CredentialSetup {
   authorize: (invalidUrlMessage: string) => Promise<string | null>;
   /** True while the popup request is in flight. */
   isAuthorizing: boolean;
+}
+
+/** One credential field a federated source asks for. */
+export interface CredentialFieldSpec {
+  type: string;
+  description: string;
+  required: boolean;
+  default?: any;
+  example?: any;
+  secret: boolean;
+}
+
+/** The credential fields a federated source asks for. */
+export interface CredentialSchemaResponse {
+  credentials: Record<string, CredentialFieldSpec>;
 }

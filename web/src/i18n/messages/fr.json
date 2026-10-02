@@ -2613,6 +2613,10 @@
         "credentialModal": {
           "title": "Créer un identifiant pour {source}"
         },
+        "credentialsLoadFailed": {
+          "description": "Les identifiants ne peuvent pas être configurés pour le moment. Rechargez la page ou réessayez plus tard.",
+          "title": "Impossible de charger vos identifiants"
+        },
         "credentialStep": {
           "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",
           "title": "Compte d'authentification"

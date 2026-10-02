@@ -11,10 +11,8 @@ import { Button, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
 import { InputFile } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import {
-  parseOauthAppCredentialJson,
-  refreshAllGoogleData,
-} from "@/lib/googleConnector";
+import { refreshAllGoogleData } from "@/lib/googleConnector";
+import { parseOauthAppCredentialJson } from "@/lib/credentials/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { markdown } from "@opal/utils";
 

@@ -10,8 +10,8 @@ import {
 } from "@/lib/sources";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "@/lib/app/components";
-import { linkCredential } from "@/lib/credential";
-import { CredentialsConfigurer } from "@/lib/connectors/components";
+import { linkCredential } from "@/lib/credentials/svc";
+import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
@@ -20,8 +20,8 @@ import {
   ConfigurableSources,
   ValidSources,
 } from "@/lib/connectors/types/source";
-import { credentialTemplates } from "@/lib/connectors/credentials";
-import type { Credential } from "@/lib/connectors/types";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import type { Credential } from "@/lib/credentials/types";
 import {
   defaultRefreshFreqMinutes,
   useConnectorConfiguration,
@@ -41,12 +41,22 @@ import { Card, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
+  useCredentialLoad,
   useGoogleDriveCredentials,
-} from "@/lib/connectors/hooks";
+} from "@/lib/credentials/hooks";
 import { Formik } from "formik";
 import { useRouter } from "next/navigation";
 import { Button } from "@opal/components";
-import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
+import {
+  Content,
+  IllustrationContent,
+  PageCenter,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
+import { SvgPlugBroken } from "@opal/illustrations";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
 import { SvgArrowExchange } from "@opal/icons";
@@ -142,7 +152,7 @@ export default function AddConnector({
   );
 
   // Get credential template and configuration
-  const credentialTemplate = credentialTemplates[connector];
+  const credentialTemplate = CREDENTIAL_TEMPLATES[connector];
   const configuration: ConnectionConfiguration =
     useConnectorConfiguration(connector);
   const formControlFieldNames = new Set(
@@ -180,6 +190,13 @@ export default function AddConnector({
   const noCredentials = credentialTemplate == null;
   const canCreate = noCredentials || credentialActivated != null;
 
+  // The page body waits for the source's saved credentials: no connector
+  // can be set up without them. Sources without credentials fetch nothing and go
+  // straight to the form. The credential step calls the same hook; SWR
+  // shares the requests.
+  const { isLoading: credentialsLoading, error: credentialLoadError } =
+    useCredentialLoad(connector, { enabled: !noCredentials });
+
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
   };
@@ -205,6 +222,8 @@ export default function AddConnector({
   const onSuccess = () => {
     router.push("/admin/indexing-status?message=connector-created");
   };
+
+  const credentialsFailed = credentialLoadError !== undefined;
 
   return (
     <Formik
@@ -437,7 +456,18 @@ export default function AddConnector({
               moreIcon1={SvgArrowExchange}
               moreIcon2={Logo}
               title={displayName}
-              description={headerDescription}
+              // Failed, the page offers nothing to set up, so the header drops
+              // its docs pointer; the Connect button stays, disabled.
+              description={
+                credentialsFailed
+                  ? t("header.description", {
+                      source: displayName,
+                      appName: settings.appName,
+                      hasDocs: "false",
+                      url: "",
+                    })
+                  : headerDescription
+              }
               divider
               actions={[
                 <Button
@@ -448,9 +478,17 @@ export default function AddConnector({
                 >
                   {t("header.cancelButton.label")}
                 </Button>,
+                // Always present; disabled while the credentials load or
+                // after they fail, since nothing can be connected then.
                 <Button
                   key="connect"
-                  disabled={!formikProps.isValid || !canCreate || busy}
+                  disabled={
+                    credentialsLoading ||
+                    credentialsFailed ||
+                    !formikProps.isValid ||
+                    !canCreate ||
+                    busy
+                  }
                   icon={busy ? IconLoader : undefined}
                   onClick={() => formikProps.handleSubmit()}
                 >
@@ -480,59 +518,32 @@ export default function AddConnector({
             </SettingsLayouts.Header>
 
             <SettingsLayouts.Body>
-              <Section gap={4} alignItems="stretch" width="full">
-                {!noCredentials && (
-                  <CredentialsConfigurer
-                    connector={connector}
-                    accessType={formikProps.values.access_type}
-                    currentCredential={currentCredential}
-                    onCredentialChange={setCurrentCredential}
+              {credentialsLoading ? (
+                <PageLoader />
+              ) : credentialsFailed ? (
+                // The same frame as PageLoader, so loading and failure sit
+                // in one place.
+                <PageCenter>
+                  <IllustrationContent
+                    illustration={SvgPlugBroken}
+                    title={t("add.credentialsLoadFailed.title")}
+                    description={t("add.credentialsLoadFailed.description")}
                   />
-                )}
+                </PageCenter>
+              ) : (
+                <Section gap={4} alignItems="stretch" width="full">
+                  {!noCredentials && (
+                    <CredentialsConfigurer
+                      connector={connector}
+                      accessType={formikProps.values.access_type}
+                      currentCredential={currentCredential}
+                      onCredentialChange={setCurrentCredential}
+                    />
+                  )}
 
-                {/* The wizard could not reach these sections without a
+                  {/* The wizard could not reach these sections without a
                     credential; on one page they stay disabled until one is
                     selected instead. */}
-                <Disabled
-                  disabled={!canCreate}
-                  tooltip={t("credentialRequired.tooltip")}
-                >
-                  <Card
-                    border="solid"
-                    rounding={4}
-                    padding={6}
-                    disabled={!canCreate}
-                  >
-                    {/* A disabled fieldset also takes the controls out of the
-                        tab order; the wrapper above only blocks the pointer. */}
-                    <fieldset
-                      disabled={!canCreate}
-                      className="contents"
-                      data-testid="connector-form"
-                    >
-                      <Section gap={4} alignItems="start" width="full">
-                        <Content
-                          title={t("sections.configuration.title")}
-                          sizePreset="main-content"
-                          variant="section"
-                        />
-                        <DynamicConnectionForm
-                          values={formikProps.values}
-                          config={configuration}
-                          connector={connector}
-                          currentCredential={
-                            currentCredential ||
-                            liveGDriveCredential ||
-                            liveGmailCredential ||
-                            null
-                          }
-                        />
-                      </Section>
-                    </fieldset>
-                  </Card>
-                </Disabled>
-
-                {connector !== "file" && (
                   <Disabled
                     disabled={!canCreate}
                     tooltip={t("credentialRequired.tooltip")}
@@ -543,15 +554,56 @@ export default function AddConnector({
                       padding={6}
                       disabled={!canCreate}
                     >
-                      <fieldset disabled={!canCreate} className="contents">
-                        <AdvancedFormPage
-                          defaultPruneFreqHours={defaultPruneFreqHours}
-                        />
+                      {/* A disabled fieldset also takes the controls out of the
+                        tab order; the wrapper above only blocks the pointer. */}
+                      <fieldset
+                        disabled={!canCreate}
+                        className="contents"
+                        data-testid="connector-form"
+                      >
+                        <Section gap={4} alignItems="start" width="full">
+                          <Content
+                            title={t("sections.configuration.title")}
+                            sizePreset="main-content"
+                            variant="section"
+                          />
+                          <DynamicConnectionForm
+                            values={formikProps.values}
+                            config={configuration}
+                            connector={connector}
+                            currentCredential={
+                              currentCredential ||
+                              liveGDriveCredential ||
+                              liveGmailCredential ||
+                              null
+                            }
+                          />
+                        </Section>
                       </fieldset>
                     </Card>
                   </Disabled>
-                )}
-              </Section>
+
+                  {connector !== "file" && (
+                    <Disabled
+                      disabled={!canCreate}
+                      tooltip={t("credentialRequired.tooltip")}
+                    >
+                      <Card
+                        border="solid"
+                        rounding={4}
+                        padding={6}
+                        disabled={!canCreate}
+                      >
+                        <fieldset disabled={!canCreate} className="contents">
+                          <AdvancedFormPage
+                            defaultPruneFreqHours={defaultPruneFreqHours}
+                          />
+                        </fieldset>
+                      </Card>
+                    </Disabled>
+                  )}
+                </Section>
+              )}
             </SettingsLayouts.Body>
           </SettingsLayouts.Root>
         );

@@ -3,17 +3,17 @@ import { useTranslations } from "next-intl";
 import { Button as OpalButton } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { submitCredential } from "@/components/admin/connectors/CredentialForm";
+import { submitCredential } from "@/lib/credentials/svc";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
-import { credentialTemplates } from "@/lib/connectors/credentials";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import type {
   Credential,
   CredentialTemplateWithAuth,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
 import type {
   CredentialActionType,
@@ -27,7 +27,6 @@ import {
   IsPublicGroupSelectorFormType,
   IsPublicGroupSelector,
 } from "@/components/IsPublicGroupSelector";
-import { useUser } from "@/providers/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
@@ -193,7 +192,7 @@ export default function CreateCredential({
   }
 
   const credentialTemplate: CredentialFieldValues =
-    credentialTemplates[sourceType];
+    CREDENTIAL_TEMPLATES[sourceType];
   const validationSchema = createValidationSchema(credentialTemplate);
 
   // Set initial auth method for templates with multiple auth methods

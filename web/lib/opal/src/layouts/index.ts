@@ -109,3 +109,9 @@ export {
   ConfirmationModalLayout,
   type ConfirmationModalProps,
 } from "@opal/layouts/modal/components";
+
+/* PageCenter */
+export {
+  PageCenter,
+  type PageCenterProps,
+} from "@opal/layouts/page-center/components";
