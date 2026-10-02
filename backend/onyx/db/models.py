@@ -3211,6 +3211,8 @@ class ChatMessage(Base):
         ForeignKey("chat_message.id", ondelete="SET NULL"),
         nullable=True,
     )
+    summary_covered_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    summary_covered_digest: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # For multi-model turns: the user message points to which assistant response
     # was selected as the preferred one to continue the conversation with.

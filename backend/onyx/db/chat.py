@@ -36,6 +36,11 @@ from onyx.utils.postgres_sanitization import sanitize_string
 logger = setup_logger()
 
 
+def visible_chat_messages_filter() -> ColumnElement[bool]:
+    """Exclude context summaries from public chat history."""
+    return ChatMessage.message_type != MessageType.SUMMARY
+
+
 # Note: search/streaming packet helpers moved to streaming_utils.py
 
 
@@ -472,7 +477,9 @@ def get_chat_message(
     user_id: UUID | None,
     db_session: Session,
 ) -> ChatMessage:
-    stmt = select(ChatMessage).where(ChatMessage.id == chat_message_id)
+    stmt = select(ChatMessage).where(
+        ChatMessage.id == chat_message_id, visible_chat_messages_filter()
+    )
 
     result = db_session.execute(stmt)
     chat_message = result.scalar_one_or_none()
@@ -502,7 +509,9 @@ def get_chat_session_by_message_id(
     Get the chat session associated with a specific message ID
     Note: this ignores permission checks.
     """
-    stmt = select(ChatMessage).where(ChatMessage.id == message_id)
+    stmt = select(ChatMessage).where(
+        ChatMessage.id == message_id, visible_chat_messages_filter()
+    )
 
     result = db_session.execute(stmt)
     chat_message = result.scalar_one_or_none()
@@ -528,6 +537,7 @@ def get_chat_messages_by_sessions(
             )
     stmt = (
         select(ChatMessage)
+        .where(visible_chat_messages_filter())
         .where(ChatMessage.chat_session_id.in_(chat_session_ids))
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
@@ -623,6 +633,7 @@ def get_chat_messages_by_session(
 
     stmt = (
         select(ChatMessage)
+        .where(visible_chat_messages_filter())
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
