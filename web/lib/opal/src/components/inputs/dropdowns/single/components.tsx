@@ -85,7 +85,7 @@ function SingleDropdown({
   dropdownMaxHeight,
   search = false,
   onSearchChange,
-  onScrollEnd,
+  onReachEnd,
   ...rest
 }: WithoutStyles<SingleDropdownProps>) {
   const typeIn = trigger === "type-in";
@@ -243,6 +243,13 @@ function SingleDropdown({
     isSelected: isSelectedOption,
     searching: hasSearchTerm,
   });
+  const shownOptions = useMemo(
+    () =>
+      foldedSections
+        .filter((group) => !group.folded)
+        .flatMap((group) => group.options),
+    [foldedSections]
+  );
 
   // The keyboard's stops in render order: the create row when shown, then
   // each group's title (when foldable) and its rows.
@@ -583,7 +590,7 @@ function SingleDropdown({
           dropdownMaxHeight={dropdownMaxHeight}
           keyboardNav={isKeyboardNav}
           onToggleGroup={toggleGroup}
-          onScrollEnd={onScrollEnd}
+          onReachEnd={onReachEnd && (() => onReachEnd(shownOptions))}
           searchField={
             search
               ? {

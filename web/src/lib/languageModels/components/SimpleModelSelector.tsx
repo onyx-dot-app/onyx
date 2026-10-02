@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect } from "@opal/components";
-import type { SelectOptions } from "@opal/components/inputs/dropdowns/types";
+import type {
+  SelectOption,
+  SelectOptions,
+} from "@opal/components/inputs/dropdowns/types";
 import { optionMatchesSearch } from "@opal/components/inputs/dropdowns/shared";
 import {
   buildModelSelectOptions,
@@ -142,21 +145,42 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     return () => clearTimeout(handle);
   }, [modelPaging, trimmedQuery, options]);
 
-  // The end of the list pages the next window: of the current server
-  // search's matches while searching, of any truncated provider otherwise.
-  const loadNextWindow = useCallback(() => {
-    if (!modelPaging || modelPaging.isLoading) return;
-    if (trimmedQuery !== "") {
-      if (
-        lastServerSearchRef.current === trimmedQuery &&
-        modelPaging.searchHasMore
-      ) {
-        modelPaging.loadMoreSearch().catch(console.error);
+  // Which provider each row belongs to, so scrolling pages the providers
+  // whose rows are on show rather than one hidden behind a folded group.
+  const providerIdByValue = useMemo(() => {
+    const byValue = new Map<string, number>();
+    for (const provider of providers) {
+      for (const mc of provider.model_configurations) {
+        if (mc.id != null) byValue.set(String(mc.id), provider.id);
       }
-      return;
     }
-    if (modelPaging.hasMore) modelPaging.loadMore().catch(console.error);
-  }, [modelPaging, trimmedQuery]);
+    return byValue;
+  }, [providers]);
+
+  // The end of the list pages the next window: of the current server
+  // search's matches while searching, of a shown truncated provider otherwise.
+  const loadNextWindow = useCallback(
+    (shown: SelectOption[]) => {
+      if (!modelPaging || modelPaging.isLoading) return;
+      if (trimmedQuery !== "") {
+        if (
+          lastServerSearchRef.current === trimmedQuery &&
+          modelPaging.searchHasMore
+        ) {
+          modelPaging.loadMoreSearch().catch(console.error);
+        }
+        return;
+      }
+      if (!modelPaging.hasMore) return;
+      const shownProviderIds = [
+        ...new Set(
+          shown.flatMap((option) => providerIdByValue.get(option.value) ?? [])
+        ),
+      ];
+      modelPaging.loadMore(shownProviderIds).catch(console.error);
+    },
+    [modelPaging, trimmedQuery, providerIdByValue]
+  );
 
   // The Global Default row is what null shows as; otherwise a non-nullable
   // field's own value is its floor. Either way a re-pick is a no-op.
@@ -186,7 +210,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       placeholder={t("placeholder")}
       options={options}
       onSearchChange={modelPaging ? setQuery : undefined}
-      onScrollEnd={modelPaging ? loadNextWindow : undefined}
+      onReachEnd={modelPaging ? loadNextWindow : undefined}
     />
   );
 }

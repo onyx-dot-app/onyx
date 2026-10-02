@@ -60,7 +60,7 @@ interface SelectDropdownProps {
   /** A click on a foldable group's title. */
   onToggleGroup?: (group: OptionGroup) => void;
   /** The rows scrolled to within SCROLL_END_THRESHOLD_PX of their end. */
-  onScrollEnd?: () => void;
+  onReachEnd?: () => void;
 }
 
 const SCROLL_END_THRESHOLD_PX = 48;
@@ -95,7 +95,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       keyboardNav,
       searchField,
       onToggleGroup,
-      onScrollEnd,
+      onReachEnd,
     },
     ref
   ) => {
@@ -253,7 +253,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
           onScroll={(e) => {
             const el = e.currentTarget;
             const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
-            if (remaining <= SCROLL_END_THRESHOLD_PX) onScrollEnd?.();
+            if (remaining <= SCROLL_END_THRESHOLD_PX) onReachEnd?.();
           }}
         >
           <OptionsList

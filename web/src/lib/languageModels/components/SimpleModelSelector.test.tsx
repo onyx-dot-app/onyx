@@ -254,7 +254,8 @@ describe("SimpleModelSelector", () => {
           .getByRole("listbox")
           .querySelector(".opal-select-dropdown-scroll")!
       );
-      expect(modelPaging.loadMore).toHaveBeenCalledTimes(1);
+      // Pages the providers whose rows are on show.
+      expect(modelPaging.loadMore).toHaveBeenCalledWith([1]);
 
       const search = screen.getByRole("textbox", { name: "Search" });
       await user.type(search, "gpt");

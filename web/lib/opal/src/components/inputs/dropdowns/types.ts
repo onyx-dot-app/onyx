@@ -95,7 +95,7 @@ export type InputSingleComboBoxProps = InputSingleBaseProps & {
   defaultOption?: never;
   search?: never;
   onSearchChange?: never;
-  onScrollEnd?: never;
+  onReachEnd?: never;
   /** Trigger placeholder. */
   placeholder: string;
 };
@@ -124,8 +124,9 @@ export type InputSingleSelectProps = InputSingleBaseProps & {
   /** The search text as it changes, `""` when the list closes, for callers
    *  that fetch matches the set lacks. Stable: it is an effect dependency. */
   onSearchChange?: (query: string) => void;
-  /** The rows scrolled near their end, for callers that page more rows in. */
-  onScrollEnd?: () => void;
+  /** The rows scrolled near their end. `shown` is the rows on show, a folded
+   *  group's rows left out, so a caller pages in only what is being read. */
+  onReachEnd?: (shown: SelectOption[]) => void;
   /**
    * Shown while empty, and always the field's accessible name, so it is
    * required even with a `defaultOption` that keeps the trigger filled.
