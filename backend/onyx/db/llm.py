@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
+from sqlalchemy.orm.interfaces import LoaderOption
 
 from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
@@ -738,6 +739,14 @@ def fetch_existing_models(
     return list(db_session.scalars(models).all())
 
 
+def _load_model_configurations_with_flows() -> LoaderOption:
+    """Flows ride along with the models: views read llm_model_flow_types per
+    model, which otherwise costs one query per model."""
+    return selectinload(LLMProviderModel.model_configurations).selectinload(
+        ModelConfiguration.llm_model_flows
+    )
+
+
 def fetch_existing_llm_providers(
     db_session: Session,
     flow_type_filter: list[LLMModelFlowType],
@@ -779,7 +788,7 @@ def fetch_existing_llm_providers(
         selectinload(LLMProviderModel.personas),
     )
     if include_model_configurations:
-        stmt = stmt.options(selectinload(LLMProviderModel.model_configurations))
+        stmt = stmt.options(_load_model_configurations_with_flows())
 
     providers = list(db_session.scalars(stmt).all())
     if only_public:
@@ -1003,13 +1012,7 @@ def fetch_existing_llm_provider_by_id(
         )
     )
     if include_model_configurations:
-        # Flows ride along: consumers read llm_model_flow_types per model,
-        # which otherwise costs one query per model.
-        stmt = stmt.options(
-            selectinload(LLMProviderModel.model_configurations).selectinload(
-                ModelConfiguration.llm_model_flows
-            )
-        )
+        stmt = stmt.options(_load_model_configurations_with_flows())
 
     return db_session.scalar(stmt)
 

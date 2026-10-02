@@ -47,6 +47,9 @@ export const SWR_KEYS = {
   llmProviderModels: (providerId: number) =>
     `/api/llm/provider/${providerId}/models`,
   adminLlmProviders: "/api/admin/llm/provider",
+  adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
+  adminLlmProvider: (providerId: number) =>
+    `/api/admin/llm/provider/${providerId}`,
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",

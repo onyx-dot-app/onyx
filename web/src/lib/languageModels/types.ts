@@ -109,6 +109,9 @@ export interface LLMProviderView {
   personas: number[];
   deployment_name: string | null;
   model_configurations: ModelConfiguration[];
+  /** Set when the listing was asked to page models: the first unloaded
+   *  offset, or null when every model is included. */
+  next_model_configuration_offset?: number | null;
 }
 
 export interface VisionProvider extends LLMProviderView {

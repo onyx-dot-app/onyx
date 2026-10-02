@@ -5982,6 +5982,7 @@
       "toasts": {
         "providerDeleteFailed": "Failed to delete provider: {message}",
         "providerDeleted": "Provider deleted successfully!",
+        "providerLoadFailed": "Could not load the provider: {message}",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"

@@ -17,6 +17,7 @@ from onyx.auth.users import current_chat_accessible_user, scope_exempt
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
+    ModelConfigurationWindow,
     can_user_access_llm_provider,
     fetch_default_chat_naming_model,
     fetch_default_craft_model,
@@ -529,20 +530,57 @@ def test_default_provider(
 @admin_router.get("/provider")
 def list_llm_providers(
     include_image_gen: bool = Query(False),
+    page_models: bool = Query(
+        False,
+        description="Return each provider's first page of models plus the "
+        "workspace defaults, with next_model_configuration_offset, instead of "
+        "every model",
+    ),
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers")
 
-    llm_provider_list: list[LLMProviderView] = []
-    for llm_provider_model in fetch_existing_llm_providers(
+    providers = fetch_existing_llm_providers(
         db_session=db_session,
         flow_type_filter=[],
         exclude_image_generation_providers=not include_image_gen,
-    ):
+        include_model_configurations=not page_models,
+    )
+    default_text_model = fetch_default_llm_model(db_session)
+    default_vision_model = fetch_default_vision_model(db_session)
+    default_chat_naming_model = fetch_default_chat_naming_model(db_session)
+    default_craft_model = fetch_default_craft_model(db_session)
+    # page_models is opt-in: the admin UI takes one page per provider plus the
+    # defaults, callers that omit it still get every model.
+    windows = (
+        _page_model_windows(
+            db_session,
+            providers,
+            [
+                default_text_model,
+                default_vision_model,
+                default_chat_naming_model,
+                default_craft_model,
+            ],
+        )
+        if page_models
+        else None
+    )
+
+    llm_provider_list: list[LLMProviderView] = []
+    for llm_provider_model in providers:
         from_model_start = datetime.now(timezone.utc)
-        full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        if windows is None:
+            full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        else:
+            window = windows[llm_provider_model.id]
+            full_llm_provider = LLMProviderView.from_model(
+                llm_provider_model,
+                model_configurations=window.model_configurations,
+                next_model_configuration_offset=window.next_offset,
+            )
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
@@ -561,18 +599,10 @@ def list_llm_providers(
 
     return LLMProviderResponse[LLMProviderView].from_models(
         providers=llm_provider_list,
-        default_text=DefaultModel.from_model_config(
-            fetch_default_llm_model(db_session)
-        ),
-        default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
-        ),
-        default_chat_naming=DefaultModel.from_model_config(
-            fetch_default_chat_naming_model(db_session)
-        ),
-        default_craft=DefaultModel.from_model_config(
-            fetch_default_craft_model(db_session)
-        ),
+        default_text=DefaultModel.from_model_config(default_text_model),
+        default_vision=DefaultModel.from_model_config(default_vision_model),
+        default_chat_naming=DefaultModel.from_model_config(default_chat_naming_model),
+        default_craft=DefaultModel.from_model_config(default_craft_model),
     )
 
 
@@ -927,25 +957,35 @@ def _fetch_persona_for_listing(
     return persona
 
 
-def _build_provider_descriptors(
+def _page_model_windows(
     db_session: Session,
     providers: list[LLMProviderModel],
-    pinned_models: list[ModelConfiguration],
-) -> list[LLMProviderDescriptor]:
-    """Descriptors carrying each provider's first page of models. The listing
-    never loads a provider's full model list. The picker pages the rest in.
-    `pinned_models` (the defaults) ride along even when they sort past the
-    page, so clients can resolve them without paging."""
+    pinned_models: list[ModelConfiguration | None],
+) -> dict[int, ModelConfigurationWindow]:
+    """Each provider's first page of models, for listings whose client pages
+    the rest in. `pinned_models` (the defaults, None where unset) ride along
+    even when they sort past the page, so clients can resolve them."""
     windows = fetch_model_configurations_page(
         db_session, [provider.id for provider in providers]
     )
     for model in pinned_models:
+        if model is None:
+            continue
         window = windows.get(model.llm_provider_id)
         if window is None or any(
             mc.id == model.id for mc in window.model_configurations
         ):
             continue
         window.model_configurations.append(model)
+    return windows
+
+
+def _build_provider_descriptors(
+    db_session: Session,
+    providers: list[LLMProviderModel],
+    pinned_models: list[ModelConfiguration | None],
+) -> list[LLMProviderDescriptor]:
+    windows = _page_model_windows(db_session, providers, pinned_models)
     return [
         LLMProviderDescriptor.from_model(
             provider,
@@ -1055,14 +1095,10 @@ def list_llm_provider_basics(
             )
         ],
         [
-            model
-            for model in (
-                default_text_model,
-                default_vision_model,
-                default_chat_naming_model,
-                default_craft_model,
-            )
-            if model is not None
+            default_text_model,
+            default_vision_model,
+            default_chat_naming_model,
+            default_craft_model,
         ],
     )
 
@@ -1234,15 +1270,7 @@ def list_llm_providers_for_persona(
                 can_manage_llms=can_manage_llms,
             )
         ],
-        [
-            model
-            for model in (
-                default_text_model,
-                default_vision_model,
-                persona_default_model,
-            )
-            if model is not None
-        ],
+        [default_text_model, default_vision_model, persona_default_model],
     )
 
     end_time = datetime.now(timezone.utc)

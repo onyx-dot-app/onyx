@@ -364,8 +364,9 @@ export function useLanguageModelsForCurrentAgent() {
  * — use `useLanguageModels` instead.
  *
  * @returns
- * - `llmProviders` — The array of full provider views, or `undefined`
- *    while loading.
+ * - `llmProviders`: Provider views carrying only each provider's first page
+ *    of models (see `next_model_configuration_offset`), or `undefined` while
+ *    loading. Edit flows load the whole provider through `useAdminLanguageModel`.
  * - `defaultText` — The global default text model.
  * - `defaultVision` — The global default vision model.
  * - `defaultCraft`: the admin-configured default Craft model, or `null` if
@@ -380,7 +381,7 @@ export function useAdminLanguageModels() {
     error,
     mutate,
   } = useSWR<LLMProviderResponse<RawLLMProviderView>>(
-    SWR_KEYS.adminLlmProviders,
+    SWR_KEYS.adminLlmProvidersPaged,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -404,6 +405,27 @@ export function useAdminLanguageModels() {
     error,
     refetch: mutate,
   };
+}
+
+/** One provider with every model, for the edit modals whose PUT replaces
+ *  the model list. */
+export function useAdminLanguageModel(providerId: number | null) {
+  const {
+    data: raw,
+    error,
+    isLoading,
+  } = useSWR<RawLLMProviderView>(
+    providerId === null ? null : SWR_KEYS.adminLlmProvider(providerId),
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
+  );
+
+  const llmProvider = useMemo(
+    () => (raw ? enrichViews([raw])[0] : undefined),
+    [raw]
+  );
+
+  return { llmProvider, isLoading, error };
 }
 
 /**

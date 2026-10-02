@@ -5982,6 +5982,7 @@
       "toasts": {
         "providerDeleteFailed": "فشل حذف الموفر: {message}",
         "providerDeleted": "تم حذف الموفر بنجاح!",
+        "providerLoadFailed": "تعذر تحميل المزود: {message}",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "settingsUpdated": "تم تحديث الإعدادات",
         "unknownError": "خطأ غير معروف"
