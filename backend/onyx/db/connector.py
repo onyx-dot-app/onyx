@@ -132,12 +132,21 @@ def create_connector(
     db_session: Session,
     connector_data: ConnectorBase,
 ) -> ObjectCreationIdResponse:
-    if connector_by_name_source_exists(
-        connector_data.name, connector_data.source, db_session
-    ):
-        raise ValueError(
-            "Connector by this name already exists, duplicate naming not allowed."
+    same_name_ids = db_session.scalars(
+        select(Connector.id).where(
+            Connector.name == connector_data.name,
+            Connector.source == connector_data.source,
         )
+    ).all()
+    for existing_id in same_name_ids:
+        # A connector nobody paired is what a create whose credential link failed
+        # leaves behind. It holds no documents or access, so the retry takes the
+        # name instead of being refused.
+        if not delete_connector_if_unpaired(db_session, existing_id):
+            db_session.rollback()
+            raise ValueError(
+                "Connector by this name already exists, duplicate naming not allowed."
+            )
 
     connector = Connector(
         name=connector_data.name,
