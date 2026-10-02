@@ -5,7 +5,7 @@ Compresses long chat histories by summarizing older messages while keeping recen
 ## Architecture Decisions
 
 ### Branch-Aware via Tree Structure
-Summaries are stored as `ChatMessage` records with two key fields:
+Summaries are stored as `ChatMessage` records with `message_type=SUMMARY`, which excludes them from public chat history, and two key fields:
 - `parent_message_id` → last message when compression triggered (places summary in the tree)
 - `last_summarized_message_id` → pointer to an older message up the chain (the cutoff). Messages after this are kept verbatim.
 

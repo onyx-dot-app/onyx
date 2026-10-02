@@ -486,7 +486,7 @@ def compress_chat_history(
             with get_session_with_current_tenant() as write_session:
                 summary_message = ChatMessage(
                     chat_session_id=chat_session_id,
-                    message_type=MessageType.ASSISTANT,
+                    message_type=MessageType.SUMMARY,
                     message=summary_text,
                     token_count=summary_token_count,
                     parent_message_id=get_summary_parent_message_id(chat_history),
