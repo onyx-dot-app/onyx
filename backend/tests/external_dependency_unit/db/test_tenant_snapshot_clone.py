@@ -4,7 +4,8 @@ must catch a structural or row difference, since it gates the deploy."""
 
 import os
 import uuid
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from typing import cast
 from unittest.mock import patch
 
@@ -12,8 +13,13 @@ import pytest
 from sqlalchemy import Table, delete, func, select, text
 
 from ee.onyx.db import tenant_snapshot
+from ee.onyx.server.tenants import schema_management
 from onyx.db.engine import tenant_utils
-from onyx.db.engine.shard_registry import get_default_shard_name, get_engine_for_shard
+from onyx.db.engine.shard_registry import (
+    get_default_shard_name,
+    get_engine_for_shard,
+    get_shard_specs,
+)
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.tenant_utils import get_template_shards
 from onyx.db.models import PublicBase, TenantSchemaSnapshot, Tool
@@ -128,13 +134,11 @@ def test_deploy_gate_passes_for_the_template_snapshot(shard: str, dump: str) -> 
 def test_rollout_stores_the_template_only_at_head(shard: str) -> None:
     head = tenant_snapshot.get_head_revision()
     assert head is not None
-    try:
+    with _snapshot_rows_restored(head):
         tenant_snapshot.store_template_snapshots(head)
         assert tenant_snapshot.get_snapshot(shard, head)
         with pytest.raises(RuntimeError):
             tenant_snapshot.store_template_snapshots("not-the-head")
-    finally:
-        _delete_snapshot_rows(shard, head)
 
 
 def test_template_is_rotated_by_shard(shard: str) -> None:
@@ -145,6 +149,84 @@ def test_template_is_rotated_by_shard(shard: str) -> None:
     with tenant_snapshot.template_session(shard) as db_session:
         seeded_tools = db_session.scalar(select(func.count()).select_from(Tool))
     assert seeded_tools and seeded_tools > 0
+
+
+@contextmanager
+def _snapshot_rows_restored(head: str) -> Iterator[None]:
+    """Whatever the catalog held for this head, on every shard, is put back."""
+    before = {
+        shard_name: tenant_snapshot.get_snapshot(shard_name, head)
+        for shard_name in get_shard_specs()
+    }
+    try:
+        yield
+    finally:
+        for shard_name, dump in before.items():
+            if dump is not None:
+                tenant_snapshot.store_snapshot(shard_name, head, dump)
+            else:
+                _delete_snapshot_rows(shard_name, head)
+
+
+@pytest.fixture
+def stored_snapshot(shard: str, dump: str) -> Generator[str, None, None]:
+    head = tenant_snapshot.get_head_revision()
+    assert head is not None
+    with _snapshot_rows_restored(head):
+        tenant_snapshot.store_snapshot(shard, head, dump)
+        yield head
+
+
+@pytest.fixture
+def new_tenant(shard: str) -> Generator[str, None, None]:
+    name = tenant_snapshot.scratch_schema_name()
+    yield name
+    with tenant_snapshot._dropped_afterwards(get_engine_for_shard(shard), name):
+        pass
+
+
+def test_snapshot_builds_the_tenant_without_alembic(
+    shard: str, stored_snapshot: str, new_tenant: str
+) -> None:
+    with patch.object(schema_management, "run_alembic_migrations") as alembic:
+        schema_management.build_tenant_schema(new_tenant)
+
+    alembic.assert_not_called()
+    with get_engine_for_shard(shard).connect() as connection:
+        stamped = connection.scalar(
+            text(f'SELECT version_num FROM "{new_tenant}".alembic_version')
+        )
+        tools = connection.scalar(text(f'SELECT count(*) FROM "{new_tenant}".tool'))
+    assert stamped == stored_snapshot
+    assert tools and tools > 0
+
+
+@pytest.mark.usefixtures("stored_snapshot")
+def test_a_retried_build_resumes_through_the_chain(clone: str) -> None:
+    # The clone fixture already built the schema, as a failed first attempt would.
+    with patch.object(schema_management, "run_alembic_migrations") as alembic:
+        schema_management.build_tenant_schema(clone)
+
+    alembic.assert_called_once_with(clone)
+
+
+def test_no_snapshot_falls_back_to_the_chain(shard: str, new_tenant: str) -> None:
+    with (
+        patch.object(
+            schema_management, "get_shard_for_tenant", return_value="other-shard"
+        ),
+        patch.object(
+            schema_management,
+            "get_engine_for_shard",
+            return_value=get_engine_for_shard(shard),
+        ),
+        patch.object(schema_management, "get_snapshot", return_value=None) as lookup,
+        patch.object(schema_management, "run_alembic_migrations") as alembic,
+    ):
+        schema_management.build_tenant_schema(new_tenant)
+
+    lookup.assert_called_once_with("other-shard", tenant_snapshot.get_head_revision())
+    alembic.assert_called_once_with(new_tenant)
 
 
 def test_render_refuses_names_that_are_not_tenants(dump: str) -> None:

@@ -6,6 +6,7 @@ new tenant's name and applying it yields what an empty schema becomes after the
 whole migration chain, baseline rows included.
 """
 
+import functools
 import os
 import re
 import shutil
@@ -109,11 +110,17 @@ _QUOTED_LITERAL = re.compile(r"'[^']*'")
 _BACKEND_DIR = Path(__file__).resolve().parents[3]
 
 
+@functools.cache
 def get_head_revision() -> str | None:
+    """Head of the tenant chain, fixed for the life of the process."""
     config = Config(str(_BACKEND_DIR / "alembic.ini"))
     # The ini names the scripts folder relative to the working directory.
     config.set_main_option("script_location", str(_BACKEND_DIR / "alembic"))
     return ScriptDirectory.from_config(config).get_current_head()
+
+
+def schema_has_tables(engine: Engine, schema: str) -> bool:
+    return bool(inspect(engine).get_table_names(schema=schema))
 
 
 def scratch_schema_name() -> str:
