@@ -1,5 +1,5 @@
 import { requiredChecksStatus } from "@/lib/connectors/checks/draft";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import type {
   DraftCheck,
   DraftCheckRunSnapshot,

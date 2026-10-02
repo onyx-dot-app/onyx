@@ -1,4 +1,5 @@
-import type { AccessType, ValidSources } from "@/lib/types";
+import type { AccessType } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 
 /**
  * Mirrors the backend's capability-check models

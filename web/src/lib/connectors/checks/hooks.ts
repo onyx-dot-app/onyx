@@ -19,7 +19,8 @@ import type {
   DraftCheckRunSnapshot,
   RequiredChecksStatus,
 } from "@/lib/connectors/checks/types";
-import type { AccessType, ValidSources } from "@/lib/types";
+import type { AccessType } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 
 const RUNNING_POLL_INTERVAL_MS = 2000;
 
