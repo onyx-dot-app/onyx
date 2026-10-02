@@ -95,6 +95,13 @@ uv run alembic -n schema_private revision -m "description"
 
 Write the migration manually and place it in the file that alembic creates when running the above command.
 
+Rows a revision in `alembic/versions` inserts must be identical on every schema: fixed ids and
+literal values, no `uuid4()`, `now()`, randomness or env reads. The template snapshot is cloned
+into new tenants and compared with a fresh build on deploy, so a run-dependent value breaks the
+comparison. Schema defaults and updates to existing rows are fine.
+`scripts/check_migration_determinism.py` enforces this on commit for revisions newer than the
+rule, and `# migration-determinism: allow` marks a deliberate exception.
+
 ## Testing Strategy
 
 Run pytest through `uv run` from the repo root — no venv activation needed (`uv run` uses the
