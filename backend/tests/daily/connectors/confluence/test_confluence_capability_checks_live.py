@@ -101,3 +101,44 @@ def test_indexing_checks_pass_on_the_test_space(
     assert by_id[auth_check_id].status == CapabilityCheckStatus.PASSED
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
     assert verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.PASSED
+
+
+def _scoped_auth_result(token: str) -> CapabilityCheckStatus:
+    credential_json = {
+        "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
+        "confluence_access_token": token,
+    }
+    config = _form(True, space=_SPACE)
+    context = CapabilityCheckContext(
+        source=DocumentSource.CONFLUENCE,
+        credential_json=credential_json,
+        connector_specific_config=config,
+        source_operations=ConfluenceSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.CONFLUENCE, credential_json
+            ),
+            connector_specific_config=config,
+        ),
+    )
+    # Only the sign-in check, so each call makes one request.
+    scoped_auth = [
+        check
+        for check in build_confluence_indexing_checks()
+        if check.check_id == "confluence_scoped_token_auth"
+    ]
+    (auth,) = run_capability_checks(scoped_auth, context)
+    return auth.status
+
+
+def test_scoped_sign_in_fails_for_a_bad_token() -> None:
+    # The scoped probe signs in through the api.atlassian.com gateway, as the
+    # client does, so a bad token fails the sign-in check itself.
+    assert _scoped_auth_result("not-a-real-token") == CapabilityCheckStatus.FAILED
+
+
+def test_scoped_mode_accepts_a_classic_token(
+    test_secrets: dict[TestSecret, str],
+) -> None:
+    # The gateway accepts classic API tokens too, so this setup works.
+    token = test_secrets[TestSecret.CONFLUENCE_ACCESS_TOKEN].strip()
+    assert _scoped_auth_result(token) == CapabilityCheckStatus.PASSED

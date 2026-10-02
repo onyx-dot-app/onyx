@@ -479,32 +479,9 @@ class _OnyxConfluence:
 
         with self._credentials_provider:
             credentials, _ = self._renew_credentials()
-            if self.scoped_token:
-                # v2 endpoint doesn't always work with scoped tokens, use v1
-                token = credentials["confluence_access_token"]
-                probe_url = f"{self.base_url}/{_CONFLUENCE_SPACES_API_V1}?limit=1"
-                try:
-                    r = requests.get(
-                        probe_url,
-                        headers={"Authorization": f"Bearer {token}"},
-                        timeout=10,
-                    )
-                    r.raise_for_status()
-                except HTTPError as e:
-                    if e.response.status_code == 403:
-                        logger.warning(
-                            "scoped token authenticated but not valid for probe endpoint (spaces)"
-                        )
-                    else:
-                        if "WWW-Authenticate" in e.response.headers:
-                            logger.warning(
-                                "WWW-Authenticate: %s",
-                                e.response.headers["WWW-Authenticate"],
-                            )
-                            logger.warning("Full error: %s", e.response.text)
-                        raise e
-                return
 
+        # A scoped token probes the same way: its client already targets the
+        # api.atlassian.com gateway URL, and the spaces call uses v1 for it.
         # Initialize connection with probe timeout settings
         self._confluence = self._initialize_connection_helper(
             credentials, **merged_kwargs
