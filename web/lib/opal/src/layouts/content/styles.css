@@ -237,11 +237,6 @@
   @apply text-start w-full;
 }
 
-/* The suffix reads as part of the title: 2px from it, not the row's 4px. */
-.opal-content-md-suffix {
-  margin-inline-start: -0.125rem;
-}
-
 /* ===========================================================================
    Content — ContentLg
 
@@ -433,8 +428,8 @@
   /* min-w-0: as a flex item next to the icon, the row's automatic minimum
      width would push a clamped title past the container edge, clipping the
      ellipsis out of view. */
+  /* No gap: each Text's own 2px inline padding spaces the row. */
   @apply flex items-center w-full min-w-0;
-  gap: 0.25rem;
 }
 
 .opal-content-md-input-sizer {
