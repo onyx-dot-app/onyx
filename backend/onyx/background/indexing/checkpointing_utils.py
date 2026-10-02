@@ -19,6 +19,10 @@ from onyx.utils.object_size_check import deep_getsizeof
 
 logger = setup_logger()
 
+# Connectors should cap per-document checkpoint state well under the warn limit.
+CHECKPOINT_SIZE_WARN_BYTES = 100_000_000
+CHECKPOINT_SIZE_LIMIT_BYTES = 200_000_000
+
 _NUM_RECENT_ATTEMPTS_TO_CONSIDER = 50
 
 
@@ -208,9 +212,21 @@ def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
 
 
 def check_checkpoint_size(checkpoint: ConnectorCheckpoint) -> None:
-    """Check if the checkpoint content size exceeds the limit (200MB)"""
+    """Warn above CHECKPOINT_SIZE_WARN_BYTES; raise above CHECKPOINT_SIZE_LIMIT_BYTES.
+
+    The warning flags a connector whose per-document state is unbounded before
+    it reaches the hard limit, which fails the index attempt.
+    """
     content_size = deep_getsizeof(checkpoint.model_dump())
-    if content_size > 200_000_000:  # 200MB in bytes
+    if content_size > CHECKPOINT_SIZE_LIMIT_BYTES:
         raise ValueError(
-            f"Checkpoint content size ({content_size} bytes) exceeds 200MB limit"
+            f"Checkpoint content size ({content_size} bytes) exceeds "
+            f"{CHECKPOINT_SIZE_LIMIT_BYTES} byte limit"
+        )
+    if content_size > CHECKPOINT_SIZE_WARN_BYTES:
+        logger.warning(
+            "Checkpoint content size (%s bytes) exceeds the %s byte warn limit. "
+            "The connector should cap its per-document state.",
+            content_size,
+            CHECKPOINT_SIZE_WARN_BYTES,
         )
