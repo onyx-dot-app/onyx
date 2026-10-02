@@ -6,8 +6,8 @@ import {
   toggleSourceSelection,
   normalizeSourceSelection,
 } from "@/lib/searchFilters/utils";
-import type { SourceMetadata } from "@/lib/search/interfaces";
-import { ValidSources } from "@/lib/types";
+import type { SourceMetadata } from "@/lib/search/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 const CHAT_KEY = "onyx:tools:chat:abc";
 

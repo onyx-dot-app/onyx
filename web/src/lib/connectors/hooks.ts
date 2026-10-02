@@ -1,10 +1,33 @@
 "use client";
 
-import { useMemo } from "react";
-import { useFederatedConnectors } from "@/lib/hooks";
+import { useEffect, useMemo, useState } from "react";
+import useSWR, { useSWRConfig } from "swr";
+import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import { ValidSources } from "@/lib/types";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { FederatedConnectorDetail } from "@/lib/types";
+import type { CredentialSchemaResponse } from "@/lib/credentials/types";
+import type {
+  ConfigurableSources,
+  ValidSources,
+} from "@/lib/connectors/types/source";
+
+/** The workspace's federated connectors. */
+export function useFederatedConnectors() {
+  const { mutate } = useSWRConfig();
+  const url = SWR_KEYS.federatedConnectors;
+  const swrResponse = useSWR<FederatedConnectorDetail[]>(
+    url,
+    errorHandlingFetcher
+  );
+
+  return {
+    ...swrResponse,
+    refreshFederatedConnectors: () => mutate(url),
+  };
+}
 
 /**
  * The source types this workspace has connected — indexed connectors first,
@@ -65,4 +88,110 @@ export function useAvailableSources(): {
       !settingsLoading && ccPairsHasLoaded && federatedConnectors !== undefined,
     error: ccPairsError ?? federatedError,
   };
+}
+
+interface UseFederatedConnectorResult {
+  sourceType: ConfigurableSources | null;
+  connectorData: FederatedConnectorDetail | null;
+  credentialSchema: CredentialSchemaResponse | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+export function useFederatedConnector(
+  connectorId: string
+): UseFederatedConnectorResult {
+  const t = useTranslations("admin.federated");
+  const [sourceType, setSourceType] = useState<ConfigurableSources | null>(
+    null
+  );
+  const [connectorData, setConnectorData] =
+    useState<FederatedConnectorDetail | null>(null);
+  const [credentialSchema, setCredentialSchema] =
+    useState<CredentialSchemaResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // First, fetch connector details to get the source type
+        const connectorResponse = await fetch(`/api/federated/${connectorId}`);
+
+        if (!connectorResponse.ok) {
+          throw new Error(
+            `Failed to fetch connector: ${connectorResponse.statusText}`
+          );
+        }
+
+        const connectorData: FederatedConnectorDetail =
+          await connectorResponse.json();
+
+        // Extract source type from the federated source string (remove 'federated_' prefix)
+        const extractedSourceType = connectorData.source.replace(
+          /^federated_/,
+          ""
+        ) as ConfigurableSources;
+
+        // Now fetch credential schema and set state in parallel
+        const schemaPromise = fetch(
+          `/api/federated/sources/federated_${extractedSourceType}/credentials/schema`
+        );
+
+        // Set the data we already have
+        setConnectorData(connectorData);
+        setSourceType(extractedSourceType);
+
+        // Wait for schema fetch to complete
+        const schemaResponse = await schemaPromise;
+
+        if (!schemaResponse.ok) {
+          throw new Error(
+            `Failed to fetch schema: ${schemaResponse.statusText}`
+          );
+        }
+
+        const schemaData: CredentialSchemaResponse =
+          await schemaResponse.json();
+        setCredentialSchema(schemaData);
+      } catch (error) {
+        console.error("Error fetching federated connector data:", error);
+        setError(t("error.loadFailed", { details: String(error) }));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (connectorId) {
+      fetchData();
+    }
+  }, [connectorId, t]);
+
+  return {
+    sourceType,
+    connectorData,
+    credentialSchema,
+    isLoading,
+    error,
+  };
+}
+
+interface ConnectorGroupRestrictionsStatus {
+  enabled: boolean;
+}
+
+/**
+ * Whether connector forms offer the data-access group restriction. Set by the
+ * workspace toggle in Security and Hardening. Fails closed: hidden until the
+ * setting loads, and hidden if the request fails.
+ */
+export function useConnectorGroupRestrictionsEnabled(): boolean {
+  const { data } = useSWR<ConnectorGroupRestrictionsStatus>(
+    SWR_KEYS.connectorGroupRestrictions,
+    errorHandlingFetcher
+  );
+  return data?.enabled ?? false;
 }

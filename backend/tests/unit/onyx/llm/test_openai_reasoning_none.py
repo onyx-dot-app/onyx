@@ -9,7 +9,8 @@ from litellm.types.utils import Delta
 from onyx.configs.constants import MessageType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import openai_model_supports_reasoning_none
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
     BIFROST_API_MODE_CHAT_COMPLETIONS,

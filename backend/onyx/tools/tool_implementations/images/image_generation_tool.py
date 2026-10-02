@@ -1,6 +1,7 @@
 import json
 import threading
 from typing import Any, cast
+from uuid import UUID
 
 import requests
 from sqlalchemy.orm import Session
@@ -62,12 +63,14 @@ class ImageGenerationTool(Tool[None]):
         image_generation_credentials: ImageGenerationProviderCredentials,
         tool_id: int,
         emitter: Emitter,
+        chat_session_id: UUID,
         model: str = IMAGE_MODEL_NAME,
         provider: str = IMAGE_MODEL_PROVIDER,
         num_imgs: int = 1,
     ) -> None:
         super().__init__(emitter=emitter)
         self.model = model
+        self._chat_session_id = chat_session_id
         self.provider = provider
         self.num_imgs = num_imgs
 
@@ -392,6 +395,7 @@ class ImageGenerationTool(Tool[None]):
         file_ids = save_files(
             urls=[],
             base64_files=[img.image_data for img in image_generation_responses],
+            chat_session_id=self._chat_session_id,
         )
         generated_images_metadata = [
             GeneratedImage(

@@ -1,10 +1,11 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
-import { SvgBlocks, SvgSimpleLoader } from "@opal/icons";
+import { SvgBlocks } from "@opal/icons";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -98,12 +99,14 @@ export default function SkillPreviewModal({
         <Modal.Body>
           {isLoading && (
             <div className="flex items-center justify-center min-h-40">
-              <SvgSimpleLoader />
+              <IconLoader />
             </div>
           )}
 
           {error && !isLoading && (
             <MessageCard
+              outerPadding={1}
+              innerPadding={1}
               variant="error"
               title={t("preview.loadError.title")}
               description={t("preview.loadError.description")}
@@ -114,6 +117,8 @@ export default function SkillPreviewModal({
             <Section gap={4} alignItems="stretch">
               {displayedUnavailableReason && (
                 <MessageCard
+                  outerPadding={1}
+                  innerPadding={1}
                   variant="warning"
                   title={t("preview.unavailable.title")}
                   description={displayedUnavailableReason}

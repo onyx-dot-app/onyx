@@ -1,6 +1,6 @@
 # @opal/layouts
 
-**Import:** `import { Content, ContentAction, IllustrationContent } from "@opal/layouts";`
+**Import:** `import { Content, ContentAction, IllustrationContent, PageCenter } from "@opal/layouts";`
 
 Layout primitives for composing content blocks. These components handle sizing, font selection, icon alignment, and optional inline editing — things that are tedious to get right by hand and easy to get wrong.
 
@@ -11,6 +11,8 @@ Layout primitives for composing content blocks. These components handle sizing, 
 | [`Content`](./content/README.md)                          | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./content/README.md)                          |
 | [`ContentAction`](./content-action/README.md)             | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment with adjacent interactive elements.        | [ContentAction README](./content-action/README.md)             |
 | [`IllustrationContent`](./illustration-content/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders.                                                  | [IllustrationContent README](./illustration-content/README.md) |
+| [`PageCenter`](./page-center/README.md) | Centres a whole-body state (loading, error, empty) in the page body, both ways. | [PageCenter README](./page-center/README.md) |
+| [`StickyBox`](./sticky-box/README.md) | A block that pins to the top or bottom of its scroll container as the page scrolls past it, with an optional shadow while pinned. | [StickyBox README](./sticky-box/README.md) |
 
 ## Quick Start
 
@@ -87,11 +89,13 @@ From `@opal/layouts`:
 Content;
 ContentAction;
 IllustrationContent;
+PageCenter;
 
 // Types
 ContentProps;
 ContentActionProps;
 IllustrationContentProps;
+PageCenterProps;
 SizePreset;
 ContentVariant;
 ```

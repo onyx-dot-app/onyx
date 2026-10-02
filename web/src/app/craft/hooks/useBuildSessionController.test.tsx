@@ -13,7 +13,7 @@ jest.mock("@/app/craft/hooks/usePreProvisionPolling", () => ({
   usePreProvisionPolling: jest.fn(),
 }));
 jest.mock("@/lib/languageModels/hooks", () => ({
-  useLLMProviders: () => ({ llmProviders: [] }),
+  useLanguageModels: () => ({ llmProviders: [] }),
 }));
 jest.mock("@/app/craft/onboarding/constants", () => ({
   hasSupportedCraftProvider: () => true,

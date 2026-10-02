@@ -124,11 +124,21 @@ func TestSeverityForGroupPrefersCVSS(t *testing.T) {
 }
 
 func TestScanLockfilesEmpty(t *testing.T) {
-	findings, err := scanLockfiles(nil)
+	findings, err := scanLockfiles(nil, false)
 	if err != nil {
 		t.Fatalf("scanLockfiles(nil) error: %v", err)
 	}
 	if findings != nil {
 		t.Errorf("scanLockfiles(nil) = %v, want nil", findings)
+	}
+}
+
+func TestScanLockfiles_strictFailsWhenNothingIsExtracted(t *testing.T) {
+	empty := writeFixture(t, t.TempDir(), "uv.lock", "")
+	if _, err := scanLockfiles([]string{empty}, false); err != nil {
+		t.Fatalf("expected an empty lockfile to scan cleanly, got %v", err)
+	}
+	if _, err := scanLockfiles([]string{empty}, true); err == nil {
+		t.Fatal("expected strict mode to fail a scan that extracted no packages")
 	}
 }

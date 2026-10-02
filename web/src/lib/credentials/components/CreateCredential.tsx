@@ -1,19 +1,20 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button as OpalButton } from "@opal/components";
-import { ValidSources, AccessType } from "@/lib/types";
-import { submitCredential } from "@/components/admin/connectors/CredentialForm";
+import { AccessType } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { submitCredential } from "@/lib/credentials/svc";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
-import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
-import { Connector } from "@/lib/connectors/connectors";
-import {
+import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
+import type { Connector } from "@/lib/connectors/types";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import type {
   Credential,
   CredentialTemplateWithAuth,
-  credentialTemplates,
-} from "@/lib/connectors/credentials";
-import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
+} from "@/lib/credentials/types";
+import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
 import type {
   CredentialActionType,
   CredentialFieldValues,
@@ -26,11 +27,9 @@ import {
   IsPublicGroupSelectorFormType,
   IsPublicGroupSelector,
 } from "@/components/IsPublicGroupSelector";
-import { useUser } from "@/providers/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
-import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { SvgPlusCircle } from "@opal/icons";
@@ -65,7 +64,6 @@ type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
 };
 
 export default function CreateCredential({
-  hideSource,
   sourceType,
   accessType,
   close,
@@ -76,7 +74,6 @@ export default function CreateCredential({
   refresh = () => null,
 }: {
   // Source information
-  hideSource?: boolean; // hides docs link
   sourceType: ValidSources;
   accessType: AccessType;
 
@@ -195,7 +192,7 @@ export default function CreateCredential({
   }
 
   const credentialTemplate: CredentialFieldValues =
-    credentialTemplates[sourceType];
+    CREDENTIAL_TEMPLATES[sourceType];
   const validationSchema = createValidationSchema(credentialTemplate);
 
   // Set initial auth method for templates with multiple auth methods
@@ -228,7 +225,6 @@ export default function CreateCredential({
 
         return (
           <Form className="w-full flex items-stretch">
-            {!hideSource && <ConnectorDocsLink sourceType={sourceType} />}
             <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
               <TextFormField
                 name="name"

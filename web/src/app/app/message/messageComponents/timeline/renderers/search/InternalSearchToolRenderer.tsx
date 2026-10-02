@@ -6,8 +6,8 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/interfaces";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { OnyxDocument } from "@/lib/search/interfaces";
-import { ValidSources } from "@/lib/types";
+import { OnyxDocument } from "@/lib/search/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
   formatSearchHeader,

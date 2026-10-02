@@ -2,10 +2,11 @@ import time
 
 import pytest
 
-from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.teams.connector import TeamsConnector
-from tests.daily.connectors.teams.models import TeamsThread
+from tests.daily.connectors.teams.models import TeamsThread, readers_of
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret
 
@@ -15,56 +16,41 @@ pytestmark = pytest.mark.secrets(
     TestSecret.TEAMS_SECRET,
 )
 
-# A standard channel is visible to its team, not the tenant, so the "Public
-# Channel" threads are shared with the team's two members.
-TEAM_ACCESS = ExternalAccess(
-    external_user_emails={"test@danswerai.onmicrosoft.com", "raunak@onyx.app"},
-    external_user_group_ids=set(),
-    is_public=False,
-)
+# A thread names its channel's group and the group sync names the people in it,
+# so the readers below are the members of that group. A standard channel is
+# visible to its team, not the tenant: the team has two members.
+TEAM_READERS = {"test@danswerai.onmicrosoft.com", "raunak@onyx.app"}
 
 TEAMS_THREAD = [
     # Posted in "Public Channel"
     TeamsThread(
         thread="This is the first message in Onyx-Testing ...This is a reply!This is a second reply.Third.4th.5",
-        external_access=TEAM_ACCESS,
+        readers=TEAM_READERS,
     ),
     TeamsThread(
         thread="Testing body.",
-        external_access=TEAM_ACCESS,
+        readers=TEAM_READERS,
     ),
     TeamsThread(
         thread="Hello, world! Nice to meet you all.",
-        external_access=TEAM_ACCESS,
+        readers=TEAM_READERS,
     ),
     # Posted in "Private Channel (Raunak is excluded)"
     TeamsThread(
         thread="This is a test post. Raunak should not be able to see this!",
-        external_access=ExternalAccess(
-            external_user_emails={"test@danswerai.onmicrosoft.com"},
-            external_user_group_ids=set(),
-            is_public=False,
-        ),
+        readers={"test@danswerai.onmicrosoft.com"},
     ),
     # Posted in "Private Channel (Raunak is a member)"
     TeamsThread(
         thread="This is a test post in a private channel that Raunak does have access to! Hello, Raunak!"
         "Hello, world! I am just a member in this chat, but not an owner.",
-        external_access=ExternalAccess(
-            external_user_emails={"test@danswerai.onmicrosoft.com", "raunak@onyx.app"},
-            external_user_group_ids=set(),
-            is_public=False,
-        ),
+        readers={"test@danswerai.onmicrosoft.com", "raunak@onyx.app"},
     ),
     # Posted in "Private Channel (Raunak owns)"
     TeamsThread(
         thread="This is a test post in a private channel that Raunak is an owner of! Whoa!"
         "Hello, world! I am an owner of this chat. The power!",
-        external_access=ExternalAccess(
-            external_user_emails={"test@danswerai.onmicrosoft.com", "raunak@onyx.app"},
-            external_user_group_ids=set(),
-            is_public=False,
-        ),
+        readers={"test@danswerai.onmicrosoft.com", "raunak@onyx.app"},
     ),
 ]
 
@@ -103,16 +89,20 @@ def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
     return map
 
 
-def _assert_is_valid_external_access(
-    external_access: ExternalAccess,
-) -> None:
-    assert not external_access.external_user_group_ids, (
-        f"{external_access.external_user_group_ids=} should be empty for MS Teams"
-    )
-    assert not external_access.is_public, "No Teams channel is visible to the tenant"
-    assert external_access.external_user_emails, (
-        f"{external_access.external_user_emails=} should hold the channel's members"
-    )
+def _readers_by_group(
+    connector: TeamsConnector, for_indexing: bool
+) -> dict[str, set[str]]:
+    """The people the group sync puts in each group, under the id a document
+    names it by. Indexing stores the source prefix, and the permission sync adds
+    it to the ids its walk yields."""
+    return {
+        (
+            build_ext_group_name_for_onyx(group_id, DocumentSource.TEAMS)
+            if for_indexing
+            else group_id
+        ): set(emails)
+        for group_id, emails in connector.channel_member_groups()
+    }
 
 
 @pytest.mark.parametrize(
@@ -130,16 +120,13 @@ def test_loading_all_docs_from_teams_connector(
             end=time.time(),
         ).documents
     )
-    actual_teams_threads = [TeamsThread.from_doc(doc) for doc in docs]
+    readers_by_group = _readers_by_group(teams_connector, for_indexing=True)
+    actual_teams_threads = [TeamsThread.from_doc(doc, readers_by_group) for doc in docs]
     actual_teams_threads_map = _build_map(threads=actual_teams_threads)
     expected_teams_threads_map = _build_map(threads=expected_teams_threads)
 
-    # Assert that each thread document matches what we expect.
+    # Each thread matches, and its one group holds the readers we expect.
     assert actual_teams_threads_map == expected_teams_threads_map
-
-    # Assert that all the `ExternalAccess` instances are well-formed.
-    for thread in actual_teams_threads:
-        _assert_is_valid_external_access(external_access=thread.external_access)
 
 
 def test_slim_docs_retrieval_from_teams_connector(
@@ -150,6 +137,7 @@ def test_slim_docs_retrieval_from_teams_connector(
         for slim_doc_batch in teams_connector.retrieve_all_slim_docs_perm_sync()
         for slim_doc in slim_doc_batch
     ]
+    readers_by_group = _readers_by_group(teams_connector, for_indexing=False)
 
     for slim_doc in slim_docs:
         if isinstance(slim_doc, HierarchyNode):
@@ -157,7 +145,7 @@ def test_slim_docs_retrieval_from_teams_connector(
         assert slim_doc.external_access, (
             f"ExternalAccess should always be available, instead got {slim_doc=}"
         )
-        _assert_is_valid_external_access(external_access=slim_doc.external_access)
+        readers_of(slim_doc.external_access, readers_by_group)
 
 
 def test_load_from_checkpoint_with_perm_sync(
@@ -177,9 +165,10 @@ def test_load_from_checkpoint_with_perm_sync(
 
     # We should have at least some documents
     assert len(docs) > 0, "Expected to find at least one document"
+    readers_by_group = _readers_by_group(teams_connector, for_indexing=True)
 
     for doc in docs:
         assert doc.external_access is not None, (
             f"Document {doc.id} should have external_access when using perm sync"
         )
-        _assert_is_valid_external_access(external_access=doc.external_access)
+        readers_of(doc.external_access, readers_by_group)

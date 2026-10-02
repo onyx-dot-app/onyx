@@ -44,12 +44,19 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
-from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
-from onyx.connectors.microsoft_utils.graph_env import (
+from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
-    resolve_microsoft_environment,
 )
+from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
+from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import raise_for_auth_error
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
@@ -62,25 +69,25 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
+from onyx.connectors.outlook.config import (
+    DEFAULT_CALENDAR_FUTURE_DAYS,
+    DEFAULT_CALENDAR_PAST_DAYS,
+)
 from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
-    raise_for_auth_error,
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
-    MAILBOX_UNAVAILABLE_STATUSES,
     describe_unavailable_mailboxes,
     raise_if_unavailable,
 )
 from onyx.connectors.outlook.models import (
     EVENT_OCCURRENCE,
     OutlookAttachment,
-    OutlookAuthError,
     OutlookEvent,
     OutlookFolder,
-    OutlookGraphError,
     OutlookMailbox,
     OutlookMessage,
     OutlookRecipient,
@@ -150,11 +157,6 @@ EVENT_DOCUMENT_ID_PREFIX = "outlook-event:"
 # Attendee names written into an event's text. A company all-hands lists
 # hundreds and the rest add nothing a search would find.
 MAX_ATTENDEES_LISTED = 50
-# The calendar view needs explicit bounds. Past meetings hold the decisions
-# people search for, so the window reaches further back than ahead. Pruning
-# lists over the same window, so the index holds a rolling calendar.
-DEFAULT_CALENDAR_PAST_DAYS = 365
-DEFAULT_CALENDAR_FUTURE_DAYS = 180
 # Series ids a mailbox remembers this attempt so each master is read once.
 # Past this many, later series are read again per occurrence instead of
 # growing the checkpoint with the size of the calendar.
@@ -705,7 +707,7 @@ class OutlookConnector(
     def _mailbox_unavailable(
         self, mailbox: OutlookMailbox, error: OutlookGraphError
     ) -> Generator[ConnectorFailure, None, None]:
-        """Unlicensed, or out of the app's Exchange scope."""
+        """Unlicensed, locked, or out of the app's Exchange scope."""
         yield from self._unavailable(
             mailbox.address,
             f"Mailbox {mailbox.address} is unavailable ({error.code}). "
@@ -716,7 +718,8 @@ class OutlookConnector(
     def _calendar_unavailable(
         self, mailbox: OutlookMailbox, error: OutlookGraphError
     ) -> Generator[ConnectorFailure, None, None]:
-        """No calendar grant, or none for this mailbox. Its mail stays indexed."""
+        """No calendar grant, none for this mailbox, or locked. Its mail stays
+        indexed."""
         yield from self._unavailable(
             f"{mailbox.address} calendar",
             f"Calendar of {mailbox.address} is unavailable ({error.code}). "
@@ -1001,7 +1004,7 @@ class OutlookConnector(
             excluded = self._excluded_well_known_folder_ids(mailbox)
             tree = list(self._walk_folder_tree(mailbox, excluded))
         except OutlookGraphError as e:
-            if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
+            if not e.is_permanent_refusal:
                 raise
             yield from self._mailbox_unavailable(mailbox, e)
             return
@@ -1217,7 +1220,7 @@ class OutlookConnector(
             if e.status == 410 and checkpoint.calendar_next_link is not None:
                 checkpoint.calendar_next_link = None
                 return
-            if e.status in MAILBOX_UNAVAILABLE_STATUSES:
+            if e.is_permanent_refusal:
                 yield from self._calendar_unavailable(mailbox, e)
                 checkpoint.calendar_done = True
                 return

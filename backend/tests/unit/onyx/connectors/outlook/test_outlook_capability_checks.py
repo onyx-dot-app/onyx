@@ -27,18 +27,24 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.graph_errors import (
+    INVALID_AUTHORITY_CODE,
+    MISSING_CREDENTIAL_CODE,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
 from onyx.connectors.outlook.capability_checks import (
     build_outlook_doc_permission_sync_checks,
     build_outlook_indexing_checks,
 )
 from onyx.connectors.outlook.models import (
-    INVALID_AUTHORITY_CODE,
-    MISSING_CREDENTIAL_CODE,
-    OutlookAuthError,
     OutlookDeltaPage,
     OutlookEventPage,
     OutlookFolderPage,
-    OutlookGraphError,
     OutlookMailboxPage,
     OutlookTokenInfo,
 )
@@ -104,7 +110,7 @@ def test_token_check_reports_a_blank_credential_field() -> None:
         MISSING_CREDENTIAL_CODE, "missing outlook_client_secret"
     )
 
-    with pytest.raises(CredentialInvalidError, match="outlook_client_secret"):
+    with pytest.raises(CredentialInvalidError, match="credentials are incomplete"):
         _run("outlook_token_auth", _context(gateway))
 
 

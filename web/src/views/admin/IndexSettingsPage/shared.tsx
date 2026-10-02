@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
-import { Divider, Text } from "@opal/components";
+import { Divider, InputFile } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
 import type {
   EmbeddingProvider,
   IndexSettingsTranslator,
-} from "@/lib/indexing/types";
+} from "@/lib/searchSettings/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -72,43 +72,27 @@ export function ApiUrlField({
 
 export function GoogleCredentialsField() {
   const t = useTranslations("admin.indexSettings");
-  const [, , helpers] = useField<string>("apiKey");
-  const [fileName, setFileName] = useState("");
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    setFileName("");
-    if (!file) {
-      void helpers.setValue("");
-      void helpers.setTouched(true);
-      return;
-    }
-    setFileName(file.name);
-    try {
-      const content = JSON.parse(await file.text());
-      void helpers.setValue(JSON.stringify(content));
-    } catch {
-      void helpers.setValue("");
-    }
-    void helpers.setTouched(true);
-  };
-
+  const [, meta, helpers] = useField<string>("apiKey");
   return (
     <InputVertical
       title={t("fields.googleCredentials.title")}
       withLabel="apiKey"
     >
-      <input
+      <InputFile
         id="apiKey"
-        type="file"
+        name="apiKey"
+        error={meta.touched && !!meta.error}
+        setValue={(value) => {
+          void helpers.setValue(value);
+        }}
+        onValueSet={() => {
+          void helpers.setTouched(true);
+        }}
+        onBlur={() => {
+          void helpers.setTouched(true);
+        }}
         accept=".json"
-        onChange={handleFileUpload}
       />
-      {fileName && (
-        <Text font="secondary-body" color="text-03">
-          {fileName}
-        </Text>
-      )}
     </InputVertical>
   );
 }
@@ -175,6 +159,7 @@ export function ModelSpecFields({
   modelNameSubDescription,
 }: ModelSpecFieldsProps) {
   const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
 
   return (
     <>
@@ -183,7 +168,8 @@ export function ModelSpecFields({
         title={t("fields.modelName.title")}
         placeholder={t("fields.modelName.placeholder")}
         subDescription={
-          modelNameSubDescription ?? t("fields.modelName.selfHostedDescription")
+          modelNameSubDescription ??
+          t("fields.modelName.selfHostedDescription", { appName })
         }
       />
 

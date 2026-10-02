@@ -6,7 +6,8 @@ from unittest.mock import patch
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.models import ReasoningEffort, UserMessage, resolve_reasoning_effort
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort, resolve_reasoning_effort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,

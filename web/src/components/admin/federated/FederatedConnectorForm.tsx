@@ -1,16 +1,19 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Button, InputCheckbox, Divider, Tooltip } from "@opal/components";
 import {
-  ConfigurableSources,
-  CredentialFieldSpec,
   ConfigurationFieldSpec,
   FederatedConnectorCreateRequest,
   FederatedConnectorDetail,
-  CredentialSchemaResponse,
 } from "@/lib/types";
+import {
+  CredentialFieldSpec,
+  CredentialSchemaResponse,
+} from "@/lib/credentials/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,7 +33,7 @@ import { toast } from "@opal/layouts";
 
 import { Badge } from "@/components/ui/badge";
 import { InputList } from "@opal/components";
-import { SvgSettings, SvgSimpleLoader } from "@opal/icons";
+import { SvgSettings } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -420,7 +423,7 @@ export function FederatedConnectorForm({
         toast.success(result.message);
         // Redirect after a short delay
         setTimeout(() => {
-          router.push("/admin/indexing/status");
+          router.push("/admin/indexing-status");
         }, 500);
       } else {
         toast.error(result.message);
@@ -514,7 +517,7 @@ export function FederatedConnectorForm({
       if (result.success) {
         // Redirect after a short delay
         setTimeout(() => {
-          router.push("/admin/indexing/status");
+          router.push("/admin/indexing-status");
         }, 500);
       }
     } catch (error) {
@@ -788,7 +791,7 @@ export function FederatedConnectorForm({
 
   return (
     <div className="mx-auto w-[800px] pb-8">
-      <BackButton routerOverride="/admin/indexing/status" />
+      <BackButton routerOverride="/admin/indexing-status" />
 
       <div className="flex items-center justify-between h-16 pb-2 border-b border-neutral-200 dark:border-neutral-600">
         <div className="my-auto">
@@ -901,7 +904,7 @@ export function FederatedConnectorForm({
               <Button
                 type="submit"
                 disabled={isSubmitting || !formState.schema}
-                icon={isSubmitting ? SvgSimpleLoader : undefined}
+                icon={isSubmitting ? IconLoader : undefined}
               >
                 {isSubmitting
                   ? isEditMode

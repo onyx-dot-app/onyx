@@ -1,20 +1,23 @@
 import { DefaultDropdown } from "@/components/Dropdown";
+import { AccessType } from "@/lib/types";
 import {
-  AccessType,
   ValidAutoSyncSource,
   ConfigurableSources,
   validAutoSyncSources,
-} from "@/lib/types";
+} from "@/lib/connectors/types/source";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { AutoSyncOptions } from "./AutoSyncOptions";
+import { ConnectorGroupRestrictionPicker } from "@/sections/connectors/ConnectorGroupRestrictionPicker";
+import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
-import { Credential } from "@/lib/connectors/credentials";
-import { credentialTemplates } from "@/lib/connectors/credentials";
+import type { Credential } from "@/lib/credentials/types";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
+import { useSettings } from "@/lib/settings/hooks";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -30,6 +33,7 @@ export function AccessTypeForm({
   currentCredential?: Credential<any> | null;
 }) {
   const t = useTranslations("admin.connector.accessType");
+  const { appName } = useSettings();
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
@@ -40,6 +44,7 @@ export function AccessTypeForm({
   // both are Business+ features.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const showAutoSync = businessTier && isValidAutoSyncSource(connector);
+  const groupRestrictionsEnabled = useConnectorGroupRestrictionsEnabled();
 
   const selectedAuthMethod = currentCredential?.credential_json?.[
     "authentication_method"
@@ -47,7 +52,7 @@ export function AccessTypeForm({
 
   // If the selected auth method is one that disables sync, return true
   const isSyncDisabledByAuth = useMemo(() => {
-    const template = (credentialTemplates as any)[connector];
+    const template = (CREDENTIAL_TEMPLATES as any)[connector];
     const authMethods = template?.authMethods as
       | { value: string; disablePermSync?: boolean }[]
       | undefined; // auth methods are returned as an array of objects with a value and disablePermSync property
@@ -91,7 +96,7 @@ export function AccessTypeForm({
       built.push({
         name: t("publicOption.name"),
         value: "public",
-        description: t("publicOption.description"),
+        description: t("publicOption.description", { appName }),
         disabled: false,
         disabledReason: "",
       });
@@ -101,14 +106,21 @@ export function AccessTypeForm({
       built.push({
         name: t("autoSyncOption.name"),
         value: "sync",
-        description: t("autoSyncOption.description"),
+        description: t("autoSyncOption.description", { appName }),
         disabled: isSyncDisabledByAuth,
         disabledReason: t("autoSyncOption.disabledReason"),
       });
     }
 
     return built;
-  }, [businessTier, isScopedManager, showAutoSync, isSyncDisabledByAuth, t]);
+  }, [
+    businessTier,
+    isScopedManager,
+    showAutoSync,
+    isSyncDisabledByAuth,
+    t,
+    appName,
+  ]);
 
   useEffect(() => {
     if (!businessTier || !options.length) return;
@@ -142,6 +154,9 @@ export function AccessTypeForm({
         }
         includeDefault={false}
       />
+      {access_type.value === "sync" &&
+        showAutoSync &&
+        groupRestrictionsEnabled && <ConnectorGroupRestrictionPicker />}
       {access_type.value === "sync" && showAutoSync && (
         <AutoSyncOptions connectorType={connector as ValidAutoSyncSource} />
       )}

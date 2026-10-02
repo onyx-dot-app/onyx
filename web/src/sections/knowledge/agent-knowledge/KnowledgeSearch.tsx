@@ -10,9 +10,9 @@ import { getSourceMetadata } from "@/lib/sources";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
-import type { SearchDocWithContent } from "@/lib/search/interfaces";
-import type { ValidSources } from "@/lib/types";
+} from "@/lib/hierarchy/types";
+import type { SearchDocWithContent } from "@/lib/search/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import {
   Button,
   InputCheckbox,
@@ -30,7 +30,7 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 
-import type { KnowledgeSearchResults } from "@/sections/knowledge/agent-knowledge/interfaces";
+import type { KnowledgeSearchResults } from "@/sections/knowledge/agent-knowledge/types";
 
 interface KnowledgeSearchBarProps {
   query: string;

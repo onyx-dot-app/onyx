@@ -1471,3 +1471,59 @@ def test_get_user_email_from_userkey_caches_negative_result(
     assert first is None
     assert second is None
     assert user_details_mock.call_count == 1
+
+
+def test_token_refresh_keeps_the_oauth_site(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The refresh response has no site info, but the credential binding check
+    reads ``wiki_base``, so a refresh must not drop it."""
+    # Precondition.
+    provider = mock.Mock(spec=CredentialsProviderInterface)
+    provider.is_dynamic.return_value = True
+    provider.get_tenant_id.return_value = "test_tenant"
+    provider.get_provider_key.return_value = "test_key"
+    provider.get_credentials.return_value = {
+        "confluence_access_token": "old-access",
+        "confluence_refresh_token": "old-refresh",
+        "created_at": "2020-01-01T00:00:00+00:00",
+        "expires_in": 3600,
+        "cloud_id": "cloud",
+        "cloud_name": "acme",
+        "wiki_base": "https://acme.atlassian.net",
+    }
+    redis_client = mock.MagicMock()
+    redis_client.get.return_value = None
+    monkeypatch.setattr(
+        onyx_confluence_module, "get_redis_client", lambda **_: redis_client
+    )
+    monkeypatch.setattr(
+        onyx_confluence_module, "OAUTH_CONFLUENCE_CLOUD_CLIENT_ID", "id"
+    )
+    monkeypatch.setattr(
+        onyx_confluence_module, "OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET", "secret"
+    )
+    monkeypatch.setattr(
+        onyx_confluence_module,
+        "confluence_refresh_tokens",
+        lambda *_: {
+            "confluence_access_token": "new-access",
+            "confluence_refresh_token": "new-refresh",
+            "cloud_id": "cloud",
+        },
+    )
+    confluence = OnyxConfluence(
+        is_cloud=True, url="https://acme.atlassian.net", credentials_provider=provider
+    )
+
+    # Under test.
+    credentials, renewed = confluence._renew_credentials()
+
+    # Postcondition.
+    assert renewed is True
+    assert credentials == {
+        "confluence_access_token": "new-access",
+        "confluence_refresh_token": "new-refresh",
+        "cloud_id": "cloud",
+        "cloud_name": "acme",
+        "wiki_base": "https://acme.atlassian.net",
+    }
+    provider.set_credentials.assert_called_once_with(credentials)

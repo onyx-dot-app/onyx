@@ -1,9 +1,10 @@
 import time
 from datetime import date, timedelta
+from unittest.mock import patch
 
 import pytest
 
-from onyx.connectors.models import Document
+from onyx.connectors.models import Document, SlimDocument
 from onyx.connectors.zoom.client import MAX_LISTING_PAGES, ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
@@ -97,6 +98,15 @@ def _documents(connector: ZoomConnector) -> list[Document]:
         for item in output.items
         if isinstance(item, Document)
     ]
+
+
+def _slim_ids(connector: ZoomConnector) -> set[str]:
+    return {
+        document.id
+        for batch in connector.retrieve_all_slim_docs()
+        for document in batch
+        if isinstance(document, SlimDocument)
+    }
 
 
 def test_zoom_basic(zoom_connector: ZoomConnector) -> None:
@@ -199,3 +209,37 @@ def test_recording_listing_accepts_a_multi_month_range(
     # The test account's recordings come and go, so Zoom accepting the range is
     # the whole result.
     assert isinstance(page.recordings, list)
+
+
+def test_zoom_slim_ids_cover_every_indexed_document(
+    zoom_host_connector: ZoomConnector,
+) -> None:
+    """Pruning deletes every indexed id the slim path leaves out, so this is
+    the assertion the whole feature rests on.
+
+    A superset rather than an equality: the slim path is deliberately generous
+    about session types, and it lists a recording whose transcript indexing
+    skipped.
+    """
+    indexed = {doc.id for doc in _documents(zoom_host_connector)}
+    assert indexed, "the host has nothing indexed, so this proves nothing"
+    client = zoom_host_connector.client
+    assert client is not None
+
+    # The old fallback fetched every transcript to read an id off the finished
+    # document, which is the cost the slim path exists to remove.
+    with patch.object(
+        client, "download_transcript_vtt", side_effect=AssertionError("downloaded")
+    ):
+        assert indexed <= _slim_ids(zoom_host_connector)
+
+
+def test_zoom_slim_ids_for_a_meeting_id_connector(
+    zoom_connector: ZoomConnector,
+) -> None:
+    """The id path resolves the number to its host before it can list anything,
+    so it is the half most likely to come back empty."""
+    indexed = {doc.id for doc in _documents(zoom_connector)}
+    assert indexed
+
+    assert indexed <= _slim_ids(zoom_connector)

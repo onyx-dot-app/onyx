@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
@@ -10,13 +11,13 @@ import {
   Popover,
   PopoverMenu,
 } from "@opal/components";
-import { SvgActions, SvgKey, SvgSliders, SvgSimpleLoader } from "@opal/icons";
+import { SvgActions, SvgKey, SvgSliders } from "@opal/icons";
 
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { MinimalAgent } from "@/lib/agents/types";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { hasPermission } from "@/lib/permissions";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
@@ -26,21 +27,21 @@ import {
   type ToolConfigurationHandle,
 } from "@/lib/tools/hooks";
 import { ToolsPopoverProvider } from "@/lib/tools/providers";
-import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
+import { MCPLineItem, type MCPServer } from "@/lib/mcp/components";
 import SourcesView from "@/lib/tools/components/SourcesView";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import ToolLineItem from "@/lib/tools/components/ToolLineItem";
+import { SecondaryViewState } from "@/lib/tools/types";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
-  SecondaryViewState,
-} from "@/lib/tools/types";
+} from "@/lib/mcp/types";
 import { Permission } from "@/lib/types";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
   startMCPUserOAuth,
-} from "@/lib/tools/svc";
+} from "@/lib/mcp/svc";
 import { useUser } from "@/providers/UserProvider";
 
 /**
@@ -78,7 +79,9 @@ export default function ToolsPopover({
   const [searchTerm, setSearchTerm] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(agent.id);
+  const { llmProviders, isLoading: isLLMLoading } = useLanguageModelsForAgent(
+    agent.id
+  );
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Store MCP server auth/loading state (tools are part of agent.tools)
@@ -402,7 +405,7 @@ export default function ToolsPopover({
     <LineItemButton
       disabled={selectedMcpServerData?.isLoading}
       onClick={handleFooterReauthClick}
-      icon={selectedMcpServerData?.isLoading ? SvgSimpleLoader : SvgKey}
+      icon={selectedMcpServerData?.isLoading ? IconLoader : SvgKey}
       title={t("toolsPopover.reauthenticate.label")}
       sizePreset="main-ui"
       variant="section"

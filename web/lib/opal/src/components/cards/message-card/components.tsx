@@ -5,7 +5,6 @@ import { cn } from "@opal/utils";
 import type {
   CardColor,
   IconFunctionComponent,
-  Spacing,
   RichStr,
   StatusVariants,
 } from "@opal/types";
@@ -44,15 +43,22 @@ interface MessageCardBaseProps {
   titleMaxLines?: number;
 
   /**
-   * Padding, as a spacing step (`N / 4` rem). Narrowed on purpose — a message
-   * card is a fixed-density surface, so only these two densities are offered.
+   * Padding of the outer card, as a spacing step (`N / 4` rem). Narrowed on
+   * purpose — a message card is a fixed-density surface, so only these two
+   * densities are offered.
    *
    * @default 2
    */
-  padding?: 1 | 2;
+  outerPadding?: 1 | 2;
 
-  /** Padding around the header Content area, as a spacing step. @default 0 */
-  headerPadding?: Spacing;
+  /**
+   * Padding around the header Content area, as a spacing step. Narrowed like
+   * `outerPadding`: cards inside a modal or popover use 1 for both, cards on
+   * a page use 2 for both.
+   *
+   * @default 2
+   */
+  innerPadding?: 1 | 2;
 
   /**
    * Content rendered below a divider, under the main content area.
@@ -163,8 +169,8 @@ function MessageCard({
   title,
   description,
   titleMaxLines,
-  padding = 2,
-  headerPadding = 0,
+  outerPadding = 2,
+  innerPadding = 2,
   bottomChildren,
   rightChildren,
   onClose,
@@ -198,10 +204,10 @@ function MessageCard({
         border="solid"
         borderColor={variant}
         rounding={4}
-        padding={padding}
+        padding={outerPadding}
       >
         <div className="opal-message-card-layout">
-          <div style={{ padding: spacingToRem(headerPadding) }}>
+          <div style={{ padding: spacingToRem(innerPadding) }}>
             <ContentAction
               icon={(props) => (
                 <Icon {...props} className={cn(props.className, iconClass)} />
@@ -211,8 +217,8 @@ function MessageCard({
               titleMaxLines={titleMaxLines}
               sizePreset="main-ui"
               variant="section"
-              padding={1}
               rightChildren={right}
+              padding={0}
             />
           </div>
 

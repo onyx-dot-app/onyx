@@ -183,6 +183,7 @@ class DATestChatMessage(BaseModel):
     message: str
     message_type: MessageType | None = None
     files: list | None = None
+    reasoning_tokens: str | None = None
 
 
 class DATestChatSession(BaseModel):
@@ -230,6 +231,9 @@ class StreamedResponse(BaseModel):
 
     # Track heartbeat packets for image generation and other tools
     heartbeat_packets: list[dict[str, Any]]
+
+    # Every placed packet in stream order, as {"placement": {...}, "obj": {...}}
+    packets: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class DATestGatingType(str, Enum):

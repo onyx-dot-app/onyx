@@ -1,6 +1,7 @@
 import importlib
 from typing import Any, Type
 
+import pydantic
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
@@ -9,6 +10,8 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
+from onyx.connectors.connector_config import CredentialBinding
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
@@ -27,6 +30,9 @@ from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class ConnectorMissingException(Exception):
@@ -105,6 +111,43 @@ def identify_connector_class(
     return connector
 
 
+def validate_connector_config(
+    source: DocumentSource, connector_specific_config: dict[str, Any]
+) -> None:
+    """Raises ``pydantic.ValidationError`` (a ``ValueError``) if the config does
+    not match the source's typed config. Sources without a connector class
+    (e.g. ingestion API) are not checked."""
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    if mapping is None:
+        return
+    mapping.config_class.model_validate(connector_specific_config)
+
+
+def build_connector_kwargs(
+    source: DocumentSource, connector_specific_config: dict[str, Any]
+) -> dict[str, Any]:
+    """Validates a stored config into the ``__init__`` kwargs of the connector.
+
+    Only keys present in the stored config are passed, so constructor defaults
+    still apply. A stored config that fails validation is passed through as-is,
+    since rows written before typed configs existed may not conform.
+    """
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    if mapping is None:
+        return connector_specific_config
+    try:
+        config = mapping.config_class.model_validate(connector_specific_config)
+    except pydantic.ValidationError as e:
+        # TODO(evan-onyx): raise here once no stored config fails validation.
+        logger.warning(
+            "Stored connector config does not match its typed config; using it as-is: source=%s errors=%s",
+            source,
+            e,
+        )
+        return connector_specific_config
+    return config.model_dump(exclude_unset=True)
+
+
 def instantiate_connector(
     db_session: Session,
     source: DocumentSource,
@@ -115,7 +158,9 @@ def instantiate_connector(
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
-    connector = connector_class(**connector_specific_config)
+    connector = connector_class(
+        **build_connector_kwargs(source, connector_specific_config)
+    )
 
     if isinstance(connector, CredentialsConnector):
         provider = build_db_credentials_provider(source, credential.id)
@@ -130,15 +175,20 @@ def instantiate_connector(
                 provider=str(source),
                 row_id=credential.id,
             )
-        credential_json = (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
+        credential_json = to_source_credential_json(
+            source,
+            (
+                credential.credential_json.get_value(apply_mask=False)
+                if credential.credential_json
+                else {}
+            ),
         )
         new_credentials = connector.load_credentials(credential_json)
 
         if new_credentials is not None:
-            backend_update_credential_json(credential, new_credentials, db_session)
+            backend_update_credential_json(
+                credential, source, new_credentials, db_session
+            )
 
     connector.set_allow_images(get_image_extraction_and_analysis_enabled())
 
@@ -146,6 +196,86 @@ def instantiate_connector(
         connector.set_raw_file_callback(raw_file_callback)
 
     return connector
+
+
+def _credential_binding_class(
+    source: DocumentSource,
+) -> type[CredentialBinding] | None:
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    return mapping.config_class.credential_binding_class() if mapping else None
+
+
+def parse_credential_binding(
+    source: DocumentSource, connector_specific_config: dict[str, Any]
+) -> CredentialBinding | None:
+    """The config's credential-bound values, or ``None`` if the source has no
+    binding model or the stored config does not match it (rows written before
+    typed configs existed may not conform)."""
+    binding_class = _credential_binding_class(source)
+    if binding_class is None:
+        return None
+    try:
+        return binding_class.model_validate(connector_specific_config)
+    except pydantic.ValidationError as e:
+        logger.warning(
+            "Stored connector config does not match its binding model: source=%s errors=%s",
+            source,
+            e,
+        )
+        return None
+
+
+def _validate_credential_binding(
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+) -> None:
+    """Raises ``ConnectorValidationError`` if the config's credential-bound
+    values cannot be used with the credential, or cannot be checked because they
+    do not match the source's binding model."""
+    # A source without a connector class fails at instantiation with a clearer
+    # error.
+    binding_class = _credential_binding_class(source)
+    # Skip the decrypt when the source has no binding rule.
+    if (
+        binding_class is None
+        or binding_class.validate_credential is CredentialBinding.validate_credential
+    ):
+        return
+    try:
+        binding = binding_class.model_validate(connector_specific_config)
+    except pydantic.ValidationError as e:
+        raise ConnectorValidationError(
+            f"The connector's credential-bound settings are invalid: {e}"
+        ) from e
+    if not credential.credential_json:
+        return
+    emit_credential_access(
+        credential_type="connector", provider=str(source), row_id=credential.id
+    )
+    binding.validate_credential(
+        to_source_credential_json(
+            source, credential.credential_json.get_value(apply_mask=False)
+        )
+    )
+
+
+def validate_connector_credential_bindings(
+    connector_id: int,
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any],
+    db_session: Session,
+) -> None:
+    """Raises ``ConnectorValidationError`` if the config cannot be used with a
+    credential the connector is already paired with. Config edits call this;
+    pairing checks the binding in ``validate_ccpair_for_user``."""
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        return
+    for cc_pair in connector.credentials:
+        _validate_credential_binding(
+            source, connector_specific_config, cc_pair.credential
+        )
 
 
 def validate_ccpair_for_user(
@@ -198,6 +328,7 @@ def validate_ccpair_for_user(
         )
 
     try:
+        _validate_credential_binding(source, connector_specific_config, credential)
         runnable_connector = instantiate_connector(
             db_session=db_session,
             source=connector.source,
@@ -206,7 +337,7 @@ def validate_ccpair_for_user(
             credential=credential,
         )
         runnable_connector.validate_connector_settings()
-        if access_type == AccessType.SYNC:
+        if access_type.is_perm_synced():
             runnable_connector.validate_perm_sync()
     except ValidationError as e:
         _record_outcome(e, perm_sync_validated=False)
@@ -219,5 +350,5 @@ def validate_ccpair_for_user(
             raise ConnectorValidationError(str(e))
         return False
 
-    _record_outcome(None, perm_sync_validated=access_type == AccessType.SYNC)
+    _record_outcome(None, perm_sync_validated=access_type.is_perm_synced())
     return True

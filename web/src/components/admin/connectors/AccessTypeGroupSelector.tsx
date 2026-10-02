@@ -7,12 +7,12 @@ import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
 import { UserGroup } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
+import { AccessType } from "@/lib/types";
 import {
-  AccessType,
   ValidAutoSyncSource,
   ConfigurableSources,
   validAutoSyncSources,
-} from "@/lib/types";
+} from "@/lib/connectors/types/source";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { SvgUsers } from "@opal/icons";

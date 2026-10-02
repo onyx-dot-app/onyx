@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, useFormikContext } from "formik";
@@ -18,8 +19,8 @@ import type {
 import { InputCheckbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputTypeIn } from "@opal/components";
-import { InputComboBox } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleComboBox } from "@opal/components";
+import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -41,8 +42,8 @@ import {
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
-import { modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
@@ -55,7 +56,6 @@ import {
   SvgUserManage,
   SvgUsers,
   SvgX,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import { Card, EmptyMessageCard } from "@opal/components";
@@ -65,7 +65,6 @@ import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
-import { getProvider } from "@/lib/languageModels";
 import { useSettings } from "@/lib/settings/hooks";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
@@ -150,7 +149,9 @@ export function useApiBaseSubDescription(
   const sentences = [
     description,
     settings.is_containerized
-      ? t("setup.apiBaseField.containerizedNote")
+      ? t("setup.apiBaseField.containerizedNote", {
+          appName: settings.appName,
+        })
       : undefined,
     suffix,
   ].filter((sentence) => sentence !== undefined);
@@ -214,14 +215,14 @@ export function ModelAccessField() {
     businessTier && !userGroupsIsLoading && userGroups
       ? userGroups.map((g) => ({
           value: `${GROUP_PREFIX}${g.id}`,
-          label: g.name,
+          title: g.name,
           description: t("access.groupOption.description"),
         }))
       : [];
 
   const agentOptions = agents.map((a) => ({
     value: `${AGENT_PREFIX}${a.id}`,
-    label: a.name,
+    title: a.name,
     description: t("access.agentOption.description"),
   }));
 
@@ -285,33 +286,36 @@ export function ModelAccessField() {
           title={t("access.field.title")}
           description={t("access.field.description")}
         >
-          <InputSelect
+          <InputSingleSelect
             value={isPublic ? "public" : "private"}
             onValueChange={handleAccessChange}
-          >
-            <InputSelect.Trigger placeholder={t("access.select.placeholder")} />
-            <InputSelect.Content>
-              <InputSelect.Item value="public" icon={SvgOrganization}>
-                {t("access.public.label")}
-              </InputSelect.Item>
-              <InputSelect.Item value="private" icon={SvgUsers}>
-                {t("access.private.label")}
-              </InputSelect.Item>
-            </InputSelect.Content>
-          </InputSelect>
+            defaultOption="public"
+            placeholder={t("access.select.placeholder")}
+            options={[
+              {
+                value: "public",
+                title: t("access.public.label"),
+                icon: SvgOrganization,
+              },
+              {
+                value: "private",
+                title: t("access.private.label"),
+                icon: SvgUsers,
+              },
+            ]}
+          />
         </InputHorizontal>
       </InputPadder>
 
       {!isPublic && (
         <Card color="background-tint-00" border="none" padding={2}>
           <Section gap={2}>
-            <InputComboBox
+            <InputSingleComboBox
               placeholder={t("access.comboBox.placeholder")}
               value=""
               onChange={() => {}}
               onValueChange={handleSelect}
               options={availableOptions}
-              strict
               searchIcon
             />
 
@@ -448,7 +452,7 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
   return (
     <Button
       prominence="tertiary"
-      icon={isFetching ? SvgSimpleLoader : SvgRefreshCw}
+      icon={isFetching ? IconLoader : SvgRefreshCw}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -503,8 +507,8 @@ function countryCodeToFlag(code: string | null | undefined): string {
   return String.fromCodePoint(first, second);
 }
 
-/** Models that ship extra picker metadata (e.g. Nebius TokenFactory); most
- *  providers don't, in which case the row renders without a metadata line. */
+/** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
+ *  providers do not, and the row description then has no metadata. */
 function hasModelMetadata(model: ModelConfiguration): boolean {
   return (
     model.quantization != null ||
@@ -513,10 +517,13 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
   );
 }
 
-/** Compact "128K · 🇫🇮 · fp8 · tools, reasoning" metadata line. */
+/** Row description. Several ids can share one title, so the model id comes
+ *  first when the title is not the id. Metadata such as
+ *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
 function buildModelDescription(model: ModelConfiguration): string | undefined {
-  if (!hasModelMetadata(model)) return undefined;
-  const parts: string[] = [];
+  const id = modelDisplayName(model) === model.name ? undefined : model.name;
+  if (!hasModelMetadata(model)) return id;
+  const parts: string[] = id ? [id] : [];
   const context = formatContextSize(model.max_input_tokens);
   if (context) parts.push(context);
   const flag = countryCodeToFlag(model.country_code);
@@ -731,7 +738,7 @@ export function ModelSelectionField({
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
-  const { defaultText } = useAdminLLMProviders();
+  const { defaultText } = useAdminLanguageModels();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -1114,7 +1121,7 @@ function ModalWrapperInner({
             <Button
               disabled={!isValid || !dirty || busy}
               type="submit"
-              icon={busy ? SvgSimpleLoader : undefined}
+              icon={busy ? IconLoader : undefined}
               tooltip={disabledTooltip}
             >
               {llmProvider

@@ -129,9 +129,6 @@ from onyx.server.manage.image_generation.api import (
 from onyx.server.manage.llm.api import admin_router as llm_admin_router
 from onyx.server.manage.llm.api import basic_router as llm_router
 from onyx.server.manage.oauth_test import router as oauth_test_admin_router
-from onyx.server.manage.opensearch_migration.api import (
-    admin_router as opensearch_migration_admin_router,
-)
 from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.sso.api import admin_router as sso_admin_router
@@ -449,39 +446,51 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA)
         start_periodic_poller(POSTGRES_DEFAULT_SCHEMA)
 
-    yield
-
-    # Flush buffered per-user usage before disposing the DB engines its drain
-    # thread writes through.
-    from onyx.tracing.setup import shutdown_tracing
-
-    shutdown_tracing()
-
-    if DISABLE_VECTOR_DB:
-        from onyx.background.periodic_poller import stop_periodic_poller
-
-        stop_periodic_poller()
-
-    # Dispose every Postgres connection pool we opened in startup. Order:
-    # async first (its disposal is awaitable and can block), then the two
-    # sync engines. Each dispose() is wrapped so one failure cannot leak the
-    # remaining pools — this path runs on every uvicorn ``--reload`` worker
-    # shutdown, and any leaked pool accumulates until PG hits max_connections.
+    # Shutdown runs even when the app exits with an error. Each step has its
+    # own try so one failure cannot skip the steps after it.
     try:
-        await reset_sqlalchemy_async_engine()
-    except Exception:
-        logger.exception("Failed to dispose async SQLAlchemy engine on shutdown")
-    try:
-        SqlEngine.reset_engine()
-    except Exception:
-        logger.exception("Failed to dispose sync SQLAlchemy engine on shutdown")
-    try:
-        SqlEngine.reset_readonly_engine()
-    except Exception:
-        logger.exception("Failed to dispose readonly SQLAlchemy engine on shutdown")
+        yield
+    finally:
+        # Flush buffered per-user usage before disposing the DB engines its drain
+        # thread writes through.
+        from onyx.tracing.setup import shutdown_tracing
 
-    if RATE_LIMITING_ENABLED:
-        await close_auth_limiter()
+        try:
+            shutdown_tracing()
+        except Exception:
+            logger.exception("Failed to flush tracing on shutdown")
+
+        if DISABLE_VECTOR_DB:
+            from onyx.background.periodic_poller import stop_periodic_poller
+
+            try:
+                stop_periodic_poller()
+            except Exception:
+                logger.exception("Failed to stop periodic poller on shutdown")
+
+        # Dispose every Postgres connection pool we opened in startup. Order:
+        # async first (its disposal is awaitable and can block), then the two
+        # sync engines. Each dispose() is wrapped so one failure cannot leak the
+        # remaining pools — this path runs on every uvicorn ``--reload`` worker
+        # shutdown, and any leaked pool accumulates until PG hits max_connections.
+        try:
+            await reset_sqlalchemy_async_engine()
+        except Exception:
+            logger.exception("Failed to dispose async SQLAlchemy engine on shutdown")
+        try:
+            SqlEngine.reset_engine()
+        except Exception:
+            logger.exception("Failed to dispose sync SQLAlchemy engine on shutdown")
+        try:
+            SqlEngine.reset_readonly_engine()
+        except Exception:
+            logger.exception("Failed to dispose readonly SQLAlchemy engine on shutdown")
+
+        if RATE_LIMITING_ENABLED:
+            try:
+                await close_auth_limiter()
+            except Exception:
+                logger.exception("Failed to close auth rate limiter on shutdown")
 
 
 def log_http_error(request: Request, exc: Exception) -> JSONResponse:
@@ -501,7 +510,13 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
         error_msg += "".join(traceback.format_tb(exc.__traceback__))
         logger.error(error_msg)
 
-    detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+    elif status_code >= 500:
+        # Unhandled exception text can carry SQL, hostnames, or URLs. It is logged above.
+        detail = "An internal server error occurred."
+    else:
+        detail = str(exc)
     # Routes that raise HTTPException name no error code, so derive the
     # canonical one for the status. Clients reading "detail" are unaffected.
     return JSONResponse(
@@ -614,9 +629,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, voice_admin_router)
     include_router_with_global_prefix_prepended(application, voice_router)
     include_router_with_global_prefix_prepended(application, voice_websocket_router)
-    include_router_with_global_prefix_prepended(
-        application, opensearch_migration_admin_router
-    )
     include_router_with_global_prefix_prepended(application, cost_override_router)
     include_router_with_global_prefix_prepended(application, user_usage_router)
     include_router_with_global_prefix_prepended(application, admin_usage_router)

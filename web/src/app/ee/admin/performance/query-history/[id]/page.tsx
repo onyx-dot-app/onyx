@@ -14,7 +14,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import CardSection from "@/components/admin/CardSection";
 
 function MessageDisplay({ message }: { message: MessageSnapshot }) {

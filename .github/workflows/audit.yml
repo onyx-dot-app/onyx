@@ -35,7 +35,8 @@ jobs:
     permissions:
       contents: read # checkout + read lockfiles
       id-token: write # OIDC for fetching the S3 allowlist
-      security-events: write # SARIF upload (nightly) + read Dependabot alerts
+      security-events: write # SARIF upload (nightly)
+      vulnerability-alerts: read # read Dependabot alerts
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6

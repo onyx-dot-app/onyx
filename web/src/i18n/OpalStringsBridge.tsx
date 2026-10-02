@@ -21,6 +21,7 @@ export default function OpalStringsBridge({
     return {
       close: t("common.close"),
       loading: t("common.loading"),
+      settingsHeaderCancel: t("settingsHeader.cancel"),
       loadingPage: t("common.loadingPage"),
       copy: t("common.copy"),
       copied: t("common.copied"),
@@ -90,6 +91,9 @@ export default function OpalStringsBridge({
       comboBoxCreate: t("comboBox.create"),
       comboBoxCreateOption: (prefix, value) =>
         t("comboBox.createOption", { prefix, value }),
+      selectEmptySet: t("select.emptySet"),
+      selectInvalidOption: t("select.invalidOption"),
+      selectSearchPlaceholder: t("select.searchPlaceholder"),
       keyValueKey: t("keyValue.key"),
       keyValueValue: t("keyValue.value"),
       keyValueAddLine: t("keyValue.addLine"),

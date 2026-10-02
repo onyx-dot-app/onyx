@@ -17,6 +17,7 @@ from typing import TypedDict, cast
 
 
 class CCPairPermissions(TypedDict):
+    operate: bool
     edit: bool
     delete: bool
     publish: bool
@@ -26,16 +27,16 @@ CC_PAIR_ACTIONS: frozenset[str] = frozenset(CCPairPermissions.__annotations__)
 
 
 def cc_pair_permissions(
-    *, is_editable: bool, is_connectors_admin: bool, owns_groupless: bool = False
+    *, can_operate: bool, can_edit: bool, is_connectors_admin: bool
 ) -> dict[str, bool]:
-    """``is_editable`` is the managed-scope editable decision the write guard enforces
-    (a scoped manager may edit a managed private connector; it also gates the
-    manage-access control, so there is no separate key). ``publish`` (make org-wide
-    PUBLIC) is global-only. So is ``delete``, except for a private groupless connector
-    its creator made — mirrors the GATE 2 carve-out in create_deletion_attempt_for_connector_id."""
+    """``can_operate`` and ``can_edit`` are the OPERATE and EDIT decisions the write
+    guards enforce (CCPairAccessLevel). ``operate`` covers scheduling and indexing
+    controls; ``edit`` covers the configuration, credential and manage access.
+    ``delete`` is an Editor action. ``publish`` (make org-wide PUBLIC) is global-only."""
     result: CCPairPermissions = {
-        "edit": is_editable,
-        "delete": is_connectors_admin or owns_groupless,
+        "operate": can_operate,
+        "edit": can_edit,
+        "delete": can_edit,
         "publish": is_connectors_admin,
     }
     return cast(dict[str, bool], result)

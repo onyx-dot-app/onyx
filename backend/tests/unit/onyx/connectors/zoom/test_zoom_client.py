@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -10,6 +11,7 @@ from requests.adapters import HTTPAdapter
 
 from onyx.connectors.cross_connector_utils import rate_limit_wrapper
 from onyx.connectors.exceptions import (
+    ConnectorValidationError,
     CredentialExpiredError,
     CredentialInvalidError,
     InsufficientPermissionsError,
@@ -36,7 +38,13 @@ from onyx.connectors.zoom.endpoints import (
 from onyx.connectors.zoom.endpoints import (
     encode_identifier as _encode_meeting_identifier,
 )
-from onyx.connectors.zoom.models import ZoomTranscript
+from onyx.connectors.zoom.models import (
+    ZoomRecordingEntry,
+    ZoomRecordingFile,
+    ZoomRecordingRegistrant,
+    ZoomRegistrant,
+    ZoomShareRecording,
+)
 from onyx.connectors.zoom.rate_limit import (
     _MAX_NO_ANSWER_SLEEPS,
     _MAX_RATE_LIMIT_SLEEPS,
@@ -56,19 +64,52 @@ from onyx.connectors.zoom.recordings.models import fails_the_whole_run
 
 _ZOOM_DOWNLOAD_URL = "https://zoom.us/rec/download/abc.vtt"
 
-# Zoom's own documented example, which returns all three readiness fields at
-# once even though their field docs say that cannot happen.
-_DOCUMENTED_TRANSCRIPT = {
+# Zoom's own `recording_files` example, so the tests run on a real payload.
+_DOCUMENTED_MP4_FILE = {
+    "id": "01fc4b9b-a1b2-4c3d-9e5f-6a7b8c9d0e1f",
     "meeting_id": "uaFkQyFCSwya8iNYtkAw3A==",
+    "recording_start": "2021-03-18T05:41:36Z",
+    "recording_end": "2021-03-18T06:01:56Z",
+    "file_type": "MP4",
+    "file_extension": "MP4",
+    "file_size": 3325113,
+    "play_url": "https://zoom.example/rec/play/video",
+    "download_url": "https://zoom.example/video.mp4",
+    "status": "completed",
+    "recording_type": "shared_screen_with_speaker_view",
+}
+
+_DOCUMENTED_TRANSCRIPT_FILE = {
+    "id": "ffc44b9b-c1a2-4a9d-9c0a-1b0a01b8ff9d",
+    "meeting_id": "uaFkQyFCSwya8iNYtkAw3A==",
+    "recording_start": "2021-03-18T05:41:36Z",
+    "recording_end": "2021-03-18T06:01:56Z",
+    "file_type": "TRANSCRIPT",
+    "file_extension": "VTT",
+    "file_size": 3258,
+    "play_url": "https://zoom.example/rec/play/transcript",
+    "download_url": "https://zoom.example/t.vtt",
+    "status": "completed",
+    "recording_type": "audio_transcript",
+}
+
+# Zoom's documented `GET /meetings/{meetingId}/recordings` example. It carries
+# more than the models read, on purpose.
+_DOCUMENTED_RECORDING = {
+    "uuid": "uaFkQyFCSwya8iNYtkAw3A==",
+    "id": 84614775995,
     "account_id": "Cx3wERazSgup7ZWRHQM8-w",
-    "meeting_topic": "My Personal Meeting",
     "host_id": "_0ctZtY0REqWalTmwvrdIw",
-    "transcript_created_time": "2025-06-27T13:48:24Z",
-    "can_download": True,
+    "topic": "My Personal Meeting",
+    "type": "4",
+    "start_time": "2021-03-18T05:41:36Z",
+    "duration": 20,
+    "total_size": 3328371,
+    "recording_count": 2,
+    "recording_play_passcode": "yNj1MnFRAHf5uAvj8Ue2jP4z4Ep2Bl",
     "auto_delete": True,
     "auto_delete_date": "2052-11-07",
-    "download_url": "https://zoom.example/t.vtt",
-    "download_restriction_reason": "NOT_READY",
+    "recording_files": [_DOCUMENTED_MP4_FILE, _DOCUMENTED_TRANSCRIPT_FILE],
 }
 
 
@@ -173,17 +214,11 @@ _DOCUMENTED_PANELIST = {
 # so one body has to satisfy whichever model the endpoint builds. Pydantic drops
 # fields a model does not declare, so the documented examples merge cleanly.
 _ANY_SESSION_PAYLOAD = {
-    **_DOCUMENTED_TRANSCRIPT,
+    **_DOCUMENTED_RECORDING,
     **_DOCUMENTED_PAST_MEETING,
     **_DOCUMENTED_WEBINAR,
+    "share_recording": "publicly",
 }
-
-
-def _transcript(**overrides: Any) -> ZoomTranscript:
-    """Most fields are required, so a readiness case has to start from a whole
-    response rather than the two fields it exercises.
-    """
-    return ZoomTranscript.model_validate({**_DOCUMENTED_TRANSCRIPT, **overrides})
 
 
 def _response(
@@ -199,6 +234,7 @@ def _response(
     response.headers = {"Location": location} if location else {}
     response.json.return_value = payload if payload is not None else {}
     response.text = text
+    response.content = text.encode("utf-8")
     return response
 
 
@@ -300,6 +336,74 @@ class TestAccessToken:
         with pytest.raises(expected):
             client._get_access_token()
 
+    # Zoom's token endpoint answers 400 for a wrong secret, a wrong account id
+    # and a deactivated app alike. Only the OAuth-style body tells them apart.
+    @pytest.mark.parametrize(
+        "body, expected, fragment",
+        [
+            (
+                {
+                    "error": "invalid_client",
+                    "reason": "Invalid client_id or client_secret",
+                },
+                CredentialInvalidError,
+                "Invalid client_id or client_secret",
+            ),
+            (
+                {"error": "invalid_client", "reason": "The application is disabled"},
+                InsufficientPermissionsError,
+                "not activated",
+            ),
+            (
+                {"error": "invalid_request", "reason": "Bad Request"},
+                CredentialInvalidError,
+                "Account ID",
+            ),
+            ({}, CredentialInvalidError, "client credentials"),
+        ],
+    )
+    def test_a_400_from_the_token_endpoint_is_read_from_its_reason(
+        self, body: dict[str, str], expected: type[Exception], fragment: str
+    ) -> None:
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._session.post.return_value = _response(400, body)
+
+        with pytest.raises(expected) as exc:
+            client._get_access_token()
+
+        assert fragment in str(exc.value)
+
+    def test_a_token_endpoint_outage_is_not_typed_as_a_bad_credential(self) -> None:
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._session.post.return_value = _response(503, {"reason": "down"})
+
+        with pytest.raises(requests.HTTPError) as exc:
+            client._get_access_token()
+
+        assert not isinstance(exc.value, ConnectorValidationError)
+        assert "down" in str(exc.value)
+
+    def test_check_credentials_asks_zoom_even_with_a_token_cached(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.post.return_value = _response(
+            200, {"access_token": "t2", "expires_in": 3600}
+        )
+
+        client.check_credentials()
+
+        assert client._session.post.call_count == 1
+
+    def test_check_credentials_reports_a_wrong_secret(self) -> None:
+        client = ZoomClient(account_id="a", client_id="c", client_secret="s")
+        client._session = MagicMock()
+        client._session.post.return_value = _response(401)
+
+        with pytest.raises(CredentialInvalidError):
+            client.check_credentials()
+
 
 class TestStaleTokenIsRetried:
     """Delete the retry and a stale token starts reporting itself as a bad
@@ -313,7 +417,7 @@ class TestStaleTokenIsRetried:
         )
         client._session.request.side_effect = [_response(401), _response(200, {})]
 
-        response = client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        response = client._get(zoom_endpoints.MEETING_RECORDINGS, "1")
 
         assert response.status_code == 200
         assert client._session.request.call_count == 2
@@ -332,7 +436,7 @@ class TestStaleTokenIsRetried:
         client._session.request.return_value = _response(401)
 
         with pytest.raises(CredentialExpiredError):
-            client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+            client._get(zoom_endpoints.MEETING_RECORDINGS, "1")
 
         assert client._session.request.call_count == 2
 
@@ -389,86 +493,162 @@ class TestRetryPolicy:
 
 
 class TestRequestErrorMapping:
+    def test_a_missing_scope_arrives_as_a_400_and_is_typed(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400,
+            {
+                "code": 4711,
+                "message": "Invalid access token, does not contain scopes:"
+                "[user:read:list_users:admin].",
+            },
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as exc:
+            client.list_users()
+
+        assert "user:read:list_users:admin" in str(exc.value)
+        assert "Marketplace" in str(exc.value)
+
     def test_forbidden_raises_insufficient_permissions(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(403)
 
         with pytest.raises(InsufficientPermissionsError) as exc:
-            client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+            client._get(zoom_endpoints.MEETING_RECORDINGS, "1")
 
         # The message has to name the endpoint, since the fix is a scope change.
-        assert zoom_endpoints.MEETING_TRANSCRIPT.operation in str(exc.value)
+        assert zoom_endpoints.MEETING_RECORDINGS.operation in str(exc.value)
 
     def test_bearer_token_is_attached(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(200)
 
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        client._get(zoom_endpoints.MEETING_RECORDINGS, "1")
 
         headers = client._session.request.call_args.kwargs["headers"]
         assert headers["Authorization"] == "Bearer tok"
 
 
-class TestGetMeetingTranscript:
-    def test_parses_the_response(self) -> None:
+class TestGetRecording:
+    def test_picks_the_transcript_out_of_the_recording_files(self) -> None:
         client = _client()
         client._session = MagicMock()
-        client._session.request.return_value = _response(200, _DOCUMENTED_TRANSCRIPT)
+        client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
 
-        transcript = client.get_meeting_transcript("111")
+        transcript = client.get_recording("111").transcript
 
         assert transcript is not None
         assert transcript.download_url == "https://zoom.example/t.vtt"
-        assert transcript.download_restriction_reason == "NOT_READY"
+        assert transcript.is_downloadable
 
-    def test_keeps_the_fields_that_save_a_second_api_call(self) -> None:
+    def test_reads_the_recordings_endpoint_not_the_transcript_one(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
+
+        recording = client.get_recording("111")
+
+        url = client._session.request.call_args.args[1]
+        assert url.endswith("/meetings/111/recordings")
+        # Pruning reads the host and the occurrence off the entry itself.
+        assert recording.uuid == _DOCUMENTED_RECORDING["uuid"]
+        assert recording.host_id == _DOCUMENTED_RECORDING["host_id"]
+
+    def test_a_transcript_still_processing_is_not_downloadable(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            _DOCUMENTED_RECORDING
+            | {
+                "recording_files": [
+                    _DOCUMENTED_TRANSCRIPT_FILE | {"status": "processing"}
+                ]
+            },
+        )
+
+        transcript = client.get_recording("111").transcript
+
+        assert transcript is not None
+        assert transcript.is_ready is False
+        assert not transcript.is_downloadable
+
+    def test_a_recording_without_a_transcript_is_none(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200, _DOCUMENTED_RECORDING | {"recording_files": [_DOCUMENTED_MP4_FILE]}
+        )
+
+        assert client.get_recording("111").transcript is None
+
+    def test_keeps_the_topic_that_saves_a_second_api_call(self) -> None:
         # The topic is the only reason to call /past_meetings, and that call is
         # the one subject to Zoom's one-year limit.
         client = _client()
         client._session = MagicMock()
-        client._session.request.return_value = _response(200, _DOCUMENTED_TRANSCRIPT)
+        client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
 
-        transcript = client.get_meeting_transcript("111")
+        transcript = client.get_recording("111").transcript
 
         assert transcript is not None
         assert transcript.meeting_topic == "My Personal Meeting"
-        assert transcript.host_id == "_0ctZtY0REqWalTmwvrdIw"
-        assert transcript.transcript_created_time == "2025-06-27T13:48:24Z"
 
-    def test_keeps_every_documented_field(self) -> None:
-        # Nothing reads account_id or the auto-delete pair yet, so without this
-        # test they look like dead fields someone can safely delete.
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(200, _DOCUMENTED_TRANSCRIPT)
-
-        transcript = client.get_meeting_transcript("111")
-
-        assert transcript is not None
-        assert transcript.model_dump() == _DOCUMENTED_TRANSCRIPT
-
-    def test_404_is_reported_not_swallowed(self) -> None:
-        # A session that was never recorded answers 404. Reading that as "skip
-        # this one" is the caller's decision, so the client only reports it.
-        client = _client()
-        client._session = MagicMock()
-        client._session.request.return_value = _response(
-            404, {"code": 3322, "message": "This meeting transcript does not exist."}
+    def test_files_it_does_not_read_cannot_fail_the_recording(self) -> None:
+        # The model keeps three of Zoom's thirteen documented file fields, so
+        # the other ten have to validate and be ignored.
+        entry = ZoomRecordingEntry.model_validate(
+            _DOCUMENTED_RECORDING
+            | {
+                "recording_files": [
+                    _DOCUMENTED_MP4_FILE,
+                    _DOCUMENTED_TRANSCRIPT_FILE | {"a_field_zoom_added_later": 1},
+                ]
+            }
         )
 
-        with pytest.raises(requests.HTTPError) as exc:
-            client.get_meeting_transcript("111")
+        assert [f.file_type for f in entry.recording_files] == ["MP4", "TRANSCRIPT"]
+        assert entry.transcript is not None
+        assert entry.transcript.download_url == "https://zoom.example/t.vtt"
 
-        assert "Zoom code 3322" in str(exc.value)
+    def test_a_transcript_entry_stripped_to_its_bones_still_reads(self) -> None:
+        # A CC or TIMELINE entry arrives without id, status, file_size,
+        # recording_type or play_url.
+        entry = ZoomRecordingEntry.model_validate(
+            _DOCUMENTED_RECORDING
+            | {
+                "recording_files": [
+                    {
+                        "file_type": "TRANSCRIPT",
+                        "download_url": "https://zoom.example/t.vtt",
+                    }
+                ]
+            }
+        )
+
+        assert entry.transcript is not None
+        assert entry.transcript.is_downloadable
+
+    def test_404_is_reported_for_the_caller_to_read_as_a_skip(self) -> None:
+        # Zoom answers 404 rather than an empty list for a session it holds no
+        # cloud recording for.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        with pytest.raises(requests.HTTPError):
+            client.get_recording("111")
 
     def test_identifier_is_encoded_into_the_path(self) -> None:
         client = _client()
         client._session = MagicMock()
-        client._session.request.return_value = _response(200, _DOCUMENTED_TRANSCRIPT)
+        client._session.request.return_value = _response(200, _DOCUMENTED_RECORDING)
 
-        client.get_meeting_transcript("ab/cd==")
+        client.get_recording("ab/cd==")
 
         url = client._session.request.call_args.args[1]
         assert "ab%2Fcd%3D%3D" in url
@@ -606,6 +786,7 @@ class TestListGroupMembers:
                     },
                 ],
                 "next_page_token": "tok",
+                "total_records": 2,
             },
         )
 
@@ -616,6 +797,7 @@ class TestListGroupMembers:
             ("u2", "jack@example.com"),
         ]
         assert page.next_page_token == "tok"
+        assert page.total_records == 2
         params = client._session.request.call_args.kwargs["params"]
         assert params == {"page_size": _MAX_PAGE_SIZE}
 
@@ -705,6 +887,7 @@ class TestListUserRecordings:
                 }
             ],
             "next_page_token": "tok",
+            "total_records": 7,
         }
 
     def test_reads_the_meetings_key(self) -> None:
@@ -719,6 +902,8 @@ class TestListUserRecordings:
         assert recording.topic == "My Personal Meeting"
         assert recording.start_time == "2021-03-18T05:41:36Z"
         assert page.next_page_token == "tok"
+        # The only way a caller can tell a listing stopped early.
+        assert page.total_records == 7
 
     def test_the_integer_meeting_number_becomes_the_session_id(self) -> None:
         client = _client()
@@ -956,6 +1141,24 @@ class TestDownloadTranscriptVtt:
         headers = client._session.get.call_args.kwargs["headers"]
         assert headers["Authorization"] == "Bearer tok"
 
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
+    def test_decodes_as_utf_8_whatever_the_header_says(
+        self,
+        ssrf: MagicMock,  # noqa: ARG002
+    ) -> None:
+        # Seen live: the download carries no charset, so `.text` is Latin-1.
+        client = _client()
+        client._session = MagicMock()
+        response = _response(200)
+        response.content = "WEBVTT\n\nwait…\n".encode()
+        response.text = response.content.decode("latin-1")
+        client._session.get.return_value = response
+
+        body = client.download_transcript_vtt(_ZOOM_DOWNLOAD_URL)
+
+        assert "wait…" in body
+        assert "â€¦" not in body
+
 
 class TestDownloadUrlGuard:
     """Relax the host check and the account-wide bearer token goes to whatever
@@ -1014,45 +1217,35 @@ class TestDownloadUrlGuard:
         client._session.get.assert_not_called()
 
 
-class TestTranscriptReadiness:
-    def test_the_documented_example_is_not_treated_as_ready(self) -> None:
-        # can_download says yes while the reason says still processing.
-        transcript = ZoomTranscript.model_validate(_DOCUMENTED_TRANSCRIPT)
+class TestRecordingFileReadiness:
+    def test_a_completed_file_with_a_url_is_downloadable(self) -> None:
+        entry = ZoomRecordingEntry.model_validate(_DOCUMENTED_RECORDING)
 
-        assert transcript.is_downloadable is False
-
-    def test_ready_when_nothing_objects(self) -> None:
-        transcript = _transcript(
-            can_download=True,
-            download_url=_ZOOM_DOWNLOAD_URL,
-            download_restriction_reason=None,
-        )
-
-        assert transcript.is_downloadable is True
+        assert entry.transcript is not None
+        assert entry.transcript.is_downloadable is True
 
     @pytest.mark.parametrize(
-        "transcript",
-        [
-            _transcript(
-                can_download=False,
-                download_url=_ZOOM_DOWNLOAD_URL,
-                download_restriction_reason=None,
-            ),
-            _transcript(
-                can_download=True,
-                download_url=None,
-                download_restriction_reason=None,
-            ),
-            _transcript(
-                can_download=True,
-                download_url=_ZOOM_DOWNLOAD_URL,
-                download_restriction_reason="DELETED_OR_TRASHED",
-            ),
-        ],
-        ids=["refused", "no_url", "restricted"],
+        "overrides",
+        [{"status": "processing"}, {"download_url": None}],
+        ids=["still_processing", "no_url"],
     )
-    def test_any_single_objection_is_enough(self, transcript: ZoomTranscript) -> None:
-        assert transcript.is_downloadable is False
+    def test_either_objection_is_enough(self, overrides: dict[str, Any]) -> None:
+        entry = ZoomRecordingEntry.model_validate(
+            _DOCUMENTED_RECORDING
+            | {"recording_files": [_DOCUMENTED_TRANSCRIPT_FILE | overrides]}
+        )
+
+        assert entry.transcript is not None
+        assert entry.transcript.is_downloadable is False
+
+    def test_a_file_sent_without_a_status_counts_as_ready(self) -> None:
+        # A CC or TIMELINE entry carries no status, so a missing one cannot be
+        # read as unfinished.
+        without_status = {
+            k: v for k, v in _DOCUMENTED_TRANSCRIPT_FILE.items() if k != "status"
+        }
+
+        assert ZoomRecordingFile.model_validate(without_status).is_ready is True
 
 
 class TestZoomErrorMessages:
@@ -1270,24 +1463,264 @@ class TestListRegistrants:
 
         assert client.list_meeting_registrants("111") == []
 
+    @pytest.mark.parametrize(
+        "method, message",
+        [
+            (
+                ZoomClient.list_meeting_registrants,
+                "Registration has not been enabled for this meeting: 111.",
+            ),
+            (
+                ZoomClient.list_webinar_registrants,
+                "Registration has not been enabled for this webinar: 111.",
+            ),
+            # Zoom words the same answer differently for a recording.
+            (
+                ZoomClient.list_recording_registrants,
+                "This meeting recording has not registration required.",
+            ),
+        ],
+        ids=["meeting", "webinar", "recording"],
+    )
+    def test_registration_never_enabled_reads_as_no_registrants(
+        self,
+        method: Callable[
+            [ZoomClient, str], list[ZoomRegistrant] | list[ZoomRecordingRegistrant]
+        ],
+        message: str,
+    ) -> None:
+        # Zoom's real answer is a 400, and it used to fail the whole document.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 300, "message": message}
+        )
 
-class TestListMeetingInvitees:
+        assert method(client, "111") == []
+
+    def test_another_code_300_is_still_an_error(self) -> None:
+        # 300 is Zoom's generic bad-request code; only the message is specific.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 300, "message": "Invalid meeting id."}
+        )
+
+        with pytest.raises(requests.HTTPError):
+            client.list_meeting_registrants("111")
+
+
+# Read live on 2026-09-22 from a recording on "Only people with access". Note
+# share_recording still says "publicly"; the passcode is what the model drops.
+_SHARED_WITH_NAMED_PEOPLE = {
+    "topic": "test channel meeting",
+    "share_recording": "publicly",
+    "recording_authentication": True,
+    "authentication_option": "specialEmail",
+    "authentication_name": "Only people with access",
+    "viewer_download": True,
+    "on_demand": False,
+    "password": "hunter22",
+}
+
+# The whole answer for a recording on "Private to me", read the same day.
+_PRIVATE_TO_OWNER = {"topic": "test channel meeting", "share_recording": "none"}
+
+
+class TestGetRecordingSettings:
+    def test_it_reads_the_recording_settings_endpoint(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _SHARED_WITH_NAMED_PEOPLE)
+
+        settings = client.get_recording_settings("uuid-1")
+
+        url = client._session.request.call_args.args[1]
+        assert url.endswith("/meetings/uuid-1/recordings/settings")
+        assert settings.share_recording is ZoomShareRecording.PUBLICLY
+        assert settings.authentication_option == "specialEmail"
+        assert settings.on_demand is False
+        # The passcode never reaches the model, so it can never reach a log.
+        assert "password" not in settings.model_dump()
+        assert "hunter22" not in repr(settings)
+
+    def test_private_to_me_arrives_with_every_other_field_absent(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, _PRIVATE_TO_OWNER)
+
+        settings = client.get_recording_settings("uuid-1")
+
+        assert settings.share_recording is ZoomShareRecording.NONE
+        assert settings.recording_authentication is False
+        assert settings.authentication_option == ""
+        assert settings.on_demand is False
+
+    def test_a_share_value_outside_zooms_enum_fails_validation(self) -> None:
+        # Reading it as shared would be a guess in the open direction.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200, {"share_recording": "everyone"}
+        )
+
+        with pytest.raises(ValidationError):
+            client.get_recording_settings("uuid-1")
+
+    def test_a_session_with_no_recording_reaches_the_caller_as_a_404(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        with pytest.raises(requests.HTTPError):
+            client.get_recording_settings("uuid-1")
+
+
+class TestListRecordingRegistrants:
+    def test_it_reads_the_recording_registrants_with_the_chosen_status(
+        self,
+    ) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "registrants": [
+                    {**_DOCUMENTED_REGISTRANT, "status": "approved"},
+                    {**_DOCUMENTED_REGISTRANT, "status": "pending"},
+                ]
+            },
+        )
+
+        registrants = client.list_recording_registrants("uuid-1", status="approved")
+
+        url = client._session.request.call_args.args[1]
+        assert url.endswith("/meetings/uuid-1/recordings/registrants")
+        params = client._session.request.call_args.kwargs["params"]
+        assert params["status"] == "approved"
+        assert params["page_size"] == _MAX_PAGE_SIZE
+        assert [(r.email, r.status) for r in registrants] == [
+            ("jchill@example.com", "approved"),
+            ("jchill@example.com", "pending"),
+        ]
+
+    def test_a_limit_asks_for_that_many_and_stops_at_the_first_page(self) -> None:
+        # The creation probe only needs to see Zoom answer once.
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "registrants": [_DOCUMENTED_REGISTRANT],
+                "next_page_token": "more",
+                "total_records": 500,
+            },
+        )
+
+        registrants = client.list_recording_registrants("uuid-1", limit=1)
+
+        assert len(registrants) == 1
+        assert client._session.request.call_count == 1
+        assert client._session.request.call_args.kwargs["params"]["page_size"] == 1
+
+    @pytest.mark.parametrize("limit", [0, -1])
+    def test_a_limit_below_one_is_refused_before_zoom_is_asked(
+        self, limit: int
+    ) -> None:
+        client = _client()
+        client._session = MagicMock()
+
+        with pytest.raises(ValueError, match="at least 1"):
+            client.list_recording_registrants("uuid-1", limit=limit)
+
+        client._session.request.assert_not_called()
+
+
+class TestGetRecordingAuthenticationRules:
+    # Read live on 2026-09-22: the built-in rule and one the admin added.
+    _CATALOGUE = {
+        "recording_authentication": True,
+        "authentication_options": [
+            {
+                "id": "internally_GB7nutLVSz-Aoi3nrsxZrw",
+                "name": "Signed-in users in my account",
+                "type": "internally",
+                "default_option": True,
+                "visible": True,
+            },
+            {
+                "id": "KtK6lLjFQp24UqYxdYQQuA",
+                "name": "testing access with specified domains",
+                "type": "enforce_login_with_domains",
+                "default_option": False,
+                "visible": True,
+                "domains": "onyx.app",
+            },
+        ],
+    }
+
+    def test_it_asks_the_user_settings_endpoint_for_the_recording_rules(
+        self,
+    ) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, self._CATALOGUE)
+
+        rules = client.get_recording_authentication_rules("u1")
+
+        url = client._session.request.call_args.args[1]
+        assert url.endswith("/users/u1/settings")
+        params = client._session.request.call_args.kwargs["params"]
+        assert params == {"option": "recording_authentication"}
+        assert rules.recording_authentication is True
+        assert [(r.id, r.type, r.domains) for r in rules.authentication_options] == [
+            ("internally_GB7nutLVSz-Aoi3nrsxZrw", "internally", ""),
+            ("KtK6lLjFQp24UqYxdYQQuA", "enforce_login_with_domains", "onyx.app"),
+        ]
+
+    def test_a_rule_type_zoom_adds_later_does_not_fail_the_catalogue(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {"authentication_options": [{"id": "r1", "type": "biometric"}]},
+        )
+
+        rules = client.get_recording_authentication_rules("u1")
+
+        assert [r.type for r in rules.authentication_options] == ["biometric"]
+
+
+class TestGetMeetingDetails:
+    _SCHEDULED = {"id": 111, "topic": "Weekly Sync", "host_id": "u1"}
+
+    def test_it_reads_the_scheduled_meeting(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, self._SCHEDULED)
+
+        details = client.get_meeting_details("111")
+
+        assert details.host_id == "u1"
+        assert client._session.request.call_args.args[1].endswith("/meetings/111")
+
     def test_invitees_are_read_out_of_the_settings_block(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(
             200,
             {
+                **self._SCHEDULED,
                 "settings": {
                     "meeting_invitees": [
                         {"email": "a@example.com", "internal_user": True},
                         {"email": "b@example.com", "internal_user": False},
                     ]
-                }
+                },
             },
         )
 
-        invitees = client.list_meeting_invitees("111")
+        invitees = client.get_meeting_details("111").settings.meeting_invitees
 
         assert [i.email for i in invitees] == ["a@example.com", "b@example.com"]
         assert [i.internal_user for i in invitees] == [True, False]
@@ -1296,9 +1729,11 @@ class TestListMeetingInvitees:
         """An instant meeting was never scheduled, so there is no invite list."""
         client = _client()
         client._session = MagicMock()
-        client._session.request.return_value = _response(200, {"settings": {}})
+        client._session.request.return_value = _response(
+            200, {**self._SCHEDULED, "settings": {}}
+        )
 
-        assert client.list_meeting_invitees("111") == []
+        assert client.get_meeting_details("111").settings.meeting_invitees == []
 
     def test_a_deleted_meeting_reaches_the_caller_as_a_404(self) -> None:
         """Returning an empty list here would read as a meeting nobody was invited
@@ -1308,7 +1743,7 @@ class TestListMeetingInvitees:
         client._session.request.return_value = _response(404)
 
         with pytest.raises(requests.HTTPError):
-            client.list_meeting_invitees("111")
+            client.get_meeting_details("111")
 
 
 class TestListWebinarPanelists:
@@ -1384,7 +1819,7 @@ class TestRateLimitTiers:
     @pytest.mark.parametrize(
         "call, expected_tier",
         [
-            (lambda c: c.get_meeting_transcript("1"), ZoomRateLimitTier.MEDIUM),
+            (lambda c: c.get_recording("1"), ZoomRateLimitTier.LIGHT),
             (lambda c: c.get_past_meeting_details("1"), ZoomRateLimitTier.LIGHT),
             (lambda c: c.list_past_meeting_occurrences("1"), ZoomRateLimitTier.MEDIUM),
             (lambda c: c.get_webinar_details("1"), ZoomRateLimitTier.LIGHT),
@@ -1407,8 +1842,17 @@ class TestRateLimitTiers:
             ),
             (lambda c: c.list_meeting_registrants("1"), ZoomRateLimitTier.MEDIUM),
             (lambda c: c.list_webinar_registrants("1"), ZoomRateLimitTier.MEDIUM),
-            (lambda c: c.list_meeting_invitees("1"), ZoomRateLimitTier.LIGHT),
+            (lambda c: c.get_meeting_details("1"), ZoomRateLimitTier.LIGHT),
             (lambda c: c.list_webinar_panelists("1"), ZoomRateLimitTier.MEDIUM),
+            (lambda c: c.get_recording_settings("uuid"), ZoomRateLimitTier.LIGHT),
+            (
+                lambda c: c.list_recording_registrants("uuid"),
+                ZoomRateLimitTier.MEDIUM,
+            ),
+            (
+                lambda c: c.get_recording_authentication_rules("u"),
+                ZoomRateLimitTier.MEDIUM,
+            ),
             (
                 lambda c: c.download_transcript_vtt(_ZOOM_DOWNLOAD_URL),
                 ZoomRateLimitTier.MEDIUM,
@@ -1487,9 +1931,9 @@ class TestRateLimitTiers:
         client._session = MagicMock()
         client._session.request.return_value = _response(200)
 
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        client._get(zoom_endpoints.USER_RECORDINGS, "1")
         started = clock.now
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+        client._get(zoom_endpoints.USER_RECORDINGS, "2")
 
         assert clock.now - started >= 5.0
 
@@ -1684,9 +2128,9 @@ class TestPacing:
         client._session = MagicMock()
         client._session.request.return_value = _response(200)
 
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        client._get(zoom_endpoints.MEETING_RECORDINGS, "1")
         started = clock.now
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+        client._get(zoom_endpoints.MEETING_RECORDINGS, "2")
 
         assert clock.now - started >= _RATE_LIMIT_PERIOD_SECONDS
 
@@ -1758,7 +2202,7 @@ class TestPacing:
         client._session = MagicMock()
         client._session.request.return_value = _response(200)
 
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        client._get(zoom_endpoints.USER_RECORDINGS, "1")
         started = clock.now
         client._get(zoom_endpoints.PAST_MEETING_DETAILS, "1")
 
@@ -1824,9 +2268,9 @@ class TestPlanTier:
         client._session = MagicMock()
         client._session.request.return_value = _response(200)
 
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        client._get(zoom_endpoints.MEETING_RECORDINGS, "1")
         started = clock.now
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+        client._get(zoom_endpoints.MEETING_RECORDINGS, "2")
 
         assert (clock.now > started) is expect_a_wait
 
@@ -1879,9 +2323,9 @@ class TestRateLimitPercent:
         client._session = MagicMock()
         client._session.request.return_value = _response(200)
 
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "1")
+        client._get(zoom_endpoints.MEETING_RECORDINGS, "1")
         started = clock.now
-        client._get(zoom_endpoints.MEETING_TRANSCRIPT, "2")
+        client._get(zoom_endpoints.MEETING_RECORDINGS, "2")
 
         assert clock.now > started
 

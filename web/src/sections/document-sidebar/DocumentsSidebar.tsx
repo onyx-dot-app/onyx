@@ -1,6 +1,6 @@
 "use client";
 
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import ChatDocumentDisplay from "@/sections/document-sidebar/ChatDocumentDisplay";
 import CopyAnswerWithReferencesButton from "@/sections/document-sidebar/CopyAnswerWithReferencesButton";
 import { removeDuplicateDocs } from "@/lib/documentUtils";

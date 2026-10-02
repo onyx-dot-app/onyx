@@ -10,10 +10,10 @@ import {
   createTableColumns,
 } from "@opal/components";
 import { SvgAlertCircle, SvgPauseCircle, SvgPlayCircle } from "@opal/icons";
-import { useReindexErrors } from "@/lib/indexing/hooks";
-import { resumePausedPort } from "@/lib/indexing/svc";
+import { useReindexErrors } from "@/lib/searchSettings/hooks";
+import { resumePausedPort } from "@/lib/searchSettings/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { ReindexErrorRow } from "@/lib/indexing/types";
+import type { ReindexErrorRow } from "@/lib/searchSettings/types";
 
 function ResumeButton({ row }: { row: ReindexErrorRow }) {
   const t = useTranslations("admin.indexSettings");

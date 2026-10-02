@@ -9,7 +9,7 @@
 # pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
 # Hub rate limits. Declared before the first FROM so it applies to every base image below.
 ARG BASE_IMAGE_REGISTRY=docker.io
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 AS builder
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /bin/
 
@@ -20,7 +20,6 @@ RUN apt-get update && \
     apt-get install -y \
         cmake \
         curl \
-        zip \
         ca-certificates \
         libgnutls30 \
         libblkid1 \
@@ -55,7 +54,7 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
 # Python packages from the builder stage.
 ####################################################################################################
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 AS runtime
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS runtime
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -77,14 +76,12 @@ RUN groupadd -g 1001 onyx && \
     chown onyx:onyx /var/log/onyx
 
 # Install runtime system dependencies only (no build toolchain).
-# zip for Vespa step further down
 # ca-certificates for HTTPS
 # libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
 # Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
 # shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
 RUN apt-get update && \
     apt-get install -y \
-        zip \
         ca-certificates \
         libgnutls30 \
         libblkid1 \
@@ -136,12 +133,6 @@ RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
-
-# Pre-downloading NLTK for setups with limited egress
-RUN python -c "import nltk; \
-    nltk.download('stopwords', quiet=True); \
-    nltk.download('punkt_tab', quiet=True);"
-# nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
 
 # Pre-downloading tiktoken for setups with limited egress
 RUN python -c "import tiktoken; \
