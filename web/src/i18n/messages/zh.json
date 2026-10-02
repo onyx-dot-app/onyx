@@ -3444,6 +3444,13 @@
         "success": {
           "toast": "已更新凭据"
         }
+      },
+      "validation": {
+        "authMethodRequired": "请选择身份验证方式",
+        "empty": "{field}不能为空",
+        "fileRequired": "请选择{field}文件",
+        "invalidEmail": "请在{field}中输入有效的邮箱地址",
+        "required": "请输入{field}"
       }
     },
     "customAnalytics": {

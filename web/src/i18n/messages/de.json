@@ -3444,6 +3444,13 @@
         "success": {
           "toast": "Anmeldedaten aktualisiert"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Bitte wählen Sie eine Authentifizierungsmethode aus",
+        "empty": "{field} darf nicht leer sein",
+        "fileRequired": "Bitte wählen Sie eine Datei für {field} aus",
+        "invalidEmail": "Bitte geben Sie für {field} eine gültige E-Mail-Adresse ein",
+        "required": "Bitte geben Sie {field} ein"
       }
     },
     "customAnalytics": {

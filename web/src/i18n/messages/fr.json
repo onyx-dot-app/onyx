@@ -3444,6 +3444,13 @@
         "success": {
           "toast": "Identifiant mis à jour"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Veuillez sélectionner une méthode d'authentification",
+        "empty": "Le champ {field} ne peut pas être vide",
+        "fileRequired": "Veuillez sélectionner un fichier pour {field}",
+        "invalidEmail": "Veuillez saisir une adresse e-mail valide dans {field}",
+        "required": "Veuillez renseigner le champ {field}"
       }
     },
     "customAnalytics": {

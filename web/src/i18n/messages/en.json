@@ -3444,6 +3444,13 @@
         "success": {
           "toast": "Updated credential"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Please select an authentication method",
+        "empty": "{field} cannot be empty",
+        "fileRequired": "Please select a {field} file",
+        "invalidEmail": "Please enter a valid {field}",
+        "required": "Please enter your {field}"
       }
     },
     "customAnalytics": {

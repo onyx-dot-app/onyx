@@ -24,6 +24,7 @@ import {
   shareAccountPayload,
   type ShareAccountFormValues,
 } from "@/lib/credentials/components/ShareAccountField";
+import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgPlusCircle } from "@opal/icons";
@@ -87,6 +88,8 @@ export default function CreateCredential({
   refresh?: () => void;
 }) {
   const t = useTranslations("admin");
+  const tValidation = useTranslations("admin.credentials.validation");
+  const fieldCopy = useCredentialFieldCopy(sourceType);
   const [authMethod, setAuthMethod] = useState<string>();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
@@ -177,7 +180,14 @@ export default function CreateCredential({
   if (!spec) {
     return null;
   }
-  const validationSchema = createValidationSchema(spec);
+  const validationSchema = createValidationSchema(spec, {
+    fieldTitle: (key) => fieldCopy(key).title,
+    required: (field) => tValidation("required", { field }),
+    empty: (field) => tValidation("empty", { field }),
+    invalidEmail: (field) => tValidation("invalidEmail", { field }),
+    fileRequired: (field) => tValidation("fileRequired", { field }),
+    authMethodRequired: tValidation("authMethodRequired"),
+  });
 
   // A spec with auth methods starts on its first one.
   const initialAuthMethod = spec.methods?.[0]?.value;

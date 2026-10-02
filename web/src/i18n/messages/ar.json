@@ -3444,6 +3444,13 @@
         "success": {
           "toast": "تم تحديث بيانات الاعتماد"
         }
+      },
+      "validation": {
+        "authMethodRequired": "يُرجى اختيار طريقة المصادقة",
+        "empty": "لا يمكن ترك {field} فارغًا",
+        "fileRequired": "يُرجى اختيار ملف {field}",
+        "invalidEmail": "يُرجى إدخال بريد إلكتروني صالح في {field}",
+        "required": "يُرجى إدخال {field}"
       }
     },
     "customAnalytics": {

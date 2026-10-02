@@ -3444,6 +3444,13 @@
         "success": {
           "toast": "Credencial actualizada"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Selecciona un método de autenticación",
+        "empty": "El campo {field} no puede estar vacío",
+        "fileRequired": "Selecciona un archivo para {field}",
+        "invalidEmail": "Introduce un correo electrónico válido en {field}",
+        "required": "Introduce el valor de {field}"
       }
     },
     "customAnalytics": {

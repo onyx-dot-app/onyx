@@ -7,7 +7,6 @@ import type {
 } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { toast } from "@opal/layouts";
-import { toTitleCase } from "@opal/utils";
 import {
   CredentialCreationMethod,
   type OAuthDetails,
@@ -16,6 +15,7 @@ import type {
   CredentialSpec,
   CredentialSpecField,
   CredentialSpecMethod,
+  CredentialValidationMessages,
 } from "@/lib/credentials/types";
 import type { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
@@ -91,9 +91,10 @@ const ONEDRIVE_LEGACY_AUTHENTICATION_METHOD_KEY =
 function fieldSchema(
   key: string,
   field: CredentialSpecField,
+  messages: CredentialValidationMessages,
   selected?: (method: string) => boolean
 ): Yup.AnySchema {
-  const displayName = toTitleCase(key);
+  const title = messages.fieldTitle(key);
   if (field.kind === "toggle") {
     return Yup.boolean()
       .nullable()
@@ -102,9 +103,7 @@ function fieldSchema(
   }
   if (field.kind === "file") {
     // TypedFile fields use mixed schema instead of string.
-    const required = Yup.mixed().required(
-      `Please select a ${displayName} file`
-    );
+    const required = Yup.mixed().required(messages.fileRequired(title));
     if (!selected) return required;
     return Yup.mixed().when(AUTHENTICATION_METHOD_KEY, {
       is: selected,
@@ -114,7 +113,7 @@ function fieldSchema(
   }
   const base =
     field.kind === "email"
-      ? Yup.string().trim().email(`Please enter a valid ${displayName}`)
+      ? Yup.string().trim().email(messages.invalidEmail(title))
       : Yup.string().trim();
   if (field.optional) {
     return base
@@ -123,9 +122,7 @@ function fieldSchema(
       .notRequired();
   }
   const required = (s: Yup.StringSchema) =>
-    s
-      .min(1, `${displayName} cannot be empty`)
-      .required(`Please enter your ${displayName}`);
+    s.min(1, messages.empty(title)).required(messages.required(title));
   if (!selected) return required(base);
   return base.when(AUTHENTICATION_METHOD_KEY, {
     is: selected,
@@ -134,12 +131,15 @@ function fieldSchema(
   });
 }
 
-export function createValidationSchema(spec: CredentialSpec) {
+export function createValidationSchema(
+  spec: CredentialSpec,
+  messages: CredentialValidationMessages
+) {
   const schemaFields: Record<string, Yup.AnySchema> = {};
   const methods = spec.methods;
   if (methods) {
     schemaFields[AUTHENTICATION_METHOD_KEY] = Yup.string().required(
-      "Please select an authentication method"
+      messages.authMethodRequired
     );
   }
   for (const [key, field] of Object.entries(spec.fields)) {
@@ -151,6 +151,7 @@ export function createValidationSchema(spec: CredentialSpec) {
     schemaFields[key] = fieldSchema(
       key,
       field,
+      messages,
       fieldMethods && ((method) => fieldMethods.includes(method))
     );
   }

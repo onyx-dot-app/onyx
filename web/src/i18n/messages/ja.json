@@ -3444,6 +3444,13 @@
         "success": {
           "toast": "認証情報を更新しました"
         }
+      },
+      "validation": {
+        "authMethodRequired": "認証方式を選択してください",
+        "empty": "{field}は空にできません",
+        "fileRequired": "{field}のファイルを選択してください",
+        "invalidEmail": "{field}に有効なメールアドレスを入力してください",
+        "required": "{field}を入力してください"
       }
     },
     "customAnalytics": {
