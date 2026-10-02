@@ -237,6 +237,7 @@ export function CredentialsConfigurer({
               <div className="p-4" data-testid="credential-form">
                 {namesMethods ? (
                   <Tabs
+                    gap={4}
                     value={openMethod ?? defaultMethod}
                     onValueChange={(value) => {
                       // Matched against the real methods rather than cast:

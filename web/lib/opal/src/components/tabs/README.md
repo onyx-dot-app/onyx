@@ -111,6 +111,17 @@ When tabs overflow the available width, show navigation arrows:
 </Tabs>
 ```
 
+### Space below the tab list
+
+```tsx
+<Tabs value={activeTab} onValueChange={setActiveTab} gap={4}>
+  …
+</Tabs>
+```
+
+`gap` puts that spacing step (`N / 4` rem) between the list and the panel.
+Unset, the panel sits flush against the list.
+
 ### Content padding
 
 ```tsx
@@ -128,6 +139,7 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 | Prop            | Type                                   | Default       | Description                            |
 | --------------- | -------------------------------------- | ------------- | -------------------------------------- |
 | `variant`       | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group |
+| `gap`           | `Spacing`                              | —             | Space between the tab list and the panel (`N / 4` rem); unset, flush |
 | `defaultValue`  | `string`                               | —             | Initially active tab (uncontrolled)    |
 | `value`         | `string`                               | —             | Controlled active tab                  |
 | `onValueChange` | `(value: string) => void`              | —             | Called when active tab changes         |

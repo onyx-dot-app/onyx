@@ -136,6 +136,7 @@ export function CredentialFieldsRenderer({
   if (authMethods && authMethods.length > 1) {
     return (
       <Tabs
+        gap={4}
         value={authMethod || authMethods[0]?.value || ""}
         onValueChange={handleAuthMethodChange}
       >
