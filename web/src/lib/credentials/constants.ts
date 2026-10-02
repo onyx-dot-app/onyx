@@ -174,7 +174,7 @@ export const CREDENTIAL_SPECS = {
   github: defineCredentialSpec({
     brandName: "GitHub",
     fields: {
-      github_access_token: secret("accessToken"),
+      github_access_token: secret("apiToken"),
       github_base_url: url("enterpriseServerUrl", {
         optional: true,
         hint: { key: "githubBaseUrl" },
@@ -185,14 +185,14 @@ export const CREDENTIAL_SPECS = {
     brandName: "GitLab",
     fields: {
       gitlab_url: url("url"),
-      gitlab_access_token: secret("accessToken"),
+      gitlab_access_token: secret("apiToken"),
     },
   }),
   lumapps: defineCredentialSpec({
     brandName: "LumApps",
     fields: {
       lumapps_application_id: text("applicationId"),
-      lumapps_api_key: secret("apiKey"),
+      lumapps_api_key: secret("apiToken"),
       lumapps_service_user: email("serviceUserEmail", {
         hint: { key: "lumappsServiceUser" },
       }),
@@ -227,23 +227,23 @@ export const CREDENTIAL_SPECS = {
   confluence: defineCredentialSpec({
     brandName: "Confluence",
     fields: {
-      confluence_username: text("username"),
-      confluence_access_token: secret("accessToken"),
+      confluence_username: text("accountEmail"),
+      confluence_access_token: secret("apiToken"),
     },
   }),
   jira: defineCredentialSpec({
     brandName: "Jira",
     fields: {
-      jira_user_email: email("userEmail", {
+      jira_user_email: email("accountEmail", {
         optional: true,
         hint: { key: "jiraUserEmail" },
       }),
-      jira_api_token: secret("apiOrPersonalAccessToken"),
+      jira_api_token: secret("apiToken"),
     },
   }),
   productboard: defineCredentialSpec({
     brandName: "Productboard",
-    fields: { productboard_access_token: secret("accessToken") },
+    fields: { productboard_access_token: secret("apiToken") },
   }),
   slab: defineCredentialSpec({
     brandName: "Slab",
@@ -251,7 +251,7 @@ export const CREDENTIAL_SPECS = {
   }),
   coda: defineCredentialSpec({
     brandName: "Coda",
-    fields: { coda_bearer_token: secret("bearerToken") },
+    fields: { coda_bearer_token: secret("apiToken") },
   }),
   notion: defineCredentialSpec({
     brandName: "Notion",
@@ -260,8 +260,8 @@ export const CREDENTIAL_SPECS = {
   guru: defineCredentialSpec({
     brandName: "Guru",
     fields: {
-      guru_user: text("user"),
-      guru_user_token: secret("userToken"),
+      guru_user: text("accountEmail"),
+      guru_user_token: secret("apiToken"),
     },
   }),
   gong: defineCredentialSpec({
@@ -281,11 +281,11 @@ export const CREDENTIAL_SPECS = {
   }),
   linear: defineCredentialSpec({
     brandName: "Linear",
-    fields: { linear_api_key: secret("apiKey") },
+    fields: { linear_api_key: secret("apiToken") },
   }),
   hubspot: defineCredentialSpec({
     brandName: "HubSpot",
-    fields: { hubspot_access_token: secret("accessToken") },
+    fields: { hubspot_access_token: secret("apiToken") },
   }),
   document360: defineCredentialSpec({
     brandName: "Document360",
@@ -316,7 +316,7 @@ export const CREDENTIAL_SPECS = {
   }),
   dropbox: defineCredentialSpec({
     brandName: "Dropbox",
-    fields: { dropbox_access_token: secret("apiKey") },
+    fields: { dropbox_access_token: secret("apiToken") },
   }),
   salesforce: defineCredentialSpec({
     brandName: "Salesforce",
@@ -375,14 +375,14 @@ export const CREDENTIAL_SPECS = {
     brandName: "Zendesk",
     fields: {
       zendesk_subdomain: text("subdomain"),
-      zendesk_email: email("email"),
-      zendesk_token: secret("token"),
+      zendesk_email: email("accountEmail"),
+      zendesk_token: secret("apiToken"),
     },
   }),
   discourse: defineCredentialSpec({
     brandName: "Discourse",
     fields: {
-      discourse_api_key: secret("apiKey"),
+      discourse_api_key: secret("apiToken"),
       discourse_api_username: text("apiUsername"),
     },
   }),
@@ -450,12 +450,12 @@ export const CREDENTIAL_SPECS = {
     brandName: "Freshdesk",
     fields: {
       freshdesk_domain: text("domain"),
-      freshdesk_api_key: secret("apiKey"),
+      freshdesk_api_key: secret("apiToken"),
     },
   }),
   fireflies: defineCredentialSpec({
     brandName: "Fireflies",
-    fields: { fireflies_api_key: secret("apiKey") },
+    fields: { fireflies_api_key: secret("apiToken") },
   }),
   zoom: defineCredentialSpec({
     brandName: "Zoom",
@@ -467,26 +467,26 @@ export const CREDENTIAL_SPECS = {
   }),
   braintrust: defineCredentialSpec({
     brandName: "Braintrust",
-    fields: { braintrust_api_key: secret("apiKey") },
+    fields: { braintrust_api_key: secret("apiToken") },
   }),
   canvas: defineCredentialSpec({
     brandName: "Canvas",
-    fields: { canvas_access_token: secret("accessToken") },
+    fields: { canvas_access_token: secret("apiToken") },
   }),
   egnyte: defineCredentialSpec({
     brandName: "Egnyte",
     fields: {
       domain: text("domain"),
-      access_token: secret("accessToken"),
+      access_token: secret("apiToken"),
     },
   }),
   airtable: defineCredentialSpec({
     brandName: "Airtable",
-    fields: { airtable_access_token: secret("accessToken") },
+    fields: { airtable_access_token: secret("apiToken") },
   }),
   drupal_wiki: defineCredentialSpec({
     brandName: "Drupal Wiki",
-    fields: { drupal_wiki_api_token: secret("personalAccessToken") },
+    fields: { drupal_wiki_api_token: secret("apiToken") },
   }),
   xenforo: null,
   google_sites: null,
@@ -514,7 +514,7 @@ export const CREDENTIAL_SPECS = {
   }),
   gitbook: defineCredentialSpec({
     brandName: "GitBook",
-    fields: { gitbook_api_key: secret("apiKey") },
+    fields: { gitbook_api_key: secret("apiToken") },
   }),
   highspot: defineCredentialSpec({
     brandName: "Highspot",
@@ -535,8 +535,8 @@ export const CREDENTIAL_SPECS = {
     brandName: "TestRail",
     fields: {
       testrail_base_url: url("baseUrl", { hint: { key: "testrailBaseUrl" } }),
-      testrail_username: text("usernameOrEmail"),
-      testrail_api_key: secret("apiKey"),
+      testrail_username: text("accountEmail"),
+      testrail_api_key: secret("apiToken"),
     },
   }),
 } as const satisfies Record<ValidSources, CredentialSpec | null>;
