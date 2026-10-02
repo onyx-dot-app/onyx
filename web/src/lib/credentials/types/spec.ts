@@ -38,7 +38,7 @@ export type CredentialTextKind = "text" | "email" | "url" | "secret";
 /** One field of a credential spec. `kind` picks how it renders. */
 export type CredentialSpecField =
   | (CredentialFieldBase & { kind: CredentialTextKind })
-  | (CredentialFieldBase & { kind: "toggle" })
+  | (CredentialFieldBase & { kind: "toggle" | "checkbox" })
   | (CredentialFieldBase & { kind: "file"; fileType: FileTypeCategory });
 
 export type CredentialSpecFields = Record<string, CredentialSpecField>;
@@ -80,7 +80,7 @@ export interface DefinedCredentialSpec<
 
 // A file field is uploaded on its own; the stored JSON holds its content as a
 // string.
-type FieldValueOf<TField> = TField extends { kind: "toggle" }
+type FieldValueOf<TField> = TField extends { kind: "toggle" | "checkbox" }
   ? boolean
   : string;
 

@@ -3322,7 +3322,8 @@
         "isSandbox": "是否为沙盒环境",
         "serviceUserEmail": "服务用户邮箱",
         "zuliprcContent": "Zuliprc 内容",
-        "authenticationMethod": "身份验证方式"
+        "authenticationMethod": "身份验证方式",
+        "scopedToken": "这是带作用域的 API 令牌"
       },
       "hints": {
         "boxUserEmail": "可选。要模拟的 Box 用户。",
@@ -3332,7 +3333,8 @@
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "PFX 文件。",
-        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。"
+        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
+        "scopedToken": "带作用域的令牌需要通过 Atlassian 的 API 网关进行路由。经典令牌请保持关闭。"
       },
       "methods": {
         "labels": {

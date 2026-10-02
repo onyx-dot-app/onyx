@@ -3322,7 +3322,8 @@
         "isSandbox": "샌드박스 환경 여부",
         "serviceUserEmail": "서비스 사용자 이메일",
         "zuliprcContent": "Zuliprc 내용",
-        "authenticationMethod": "인증 방법"
+        "authenticationMethod": "인증 방법",
+        "scopedToken": "범위가 지정된 API 토큰입니다"
       },
       "hints": {
         "boxUserEmail": "선택 사항입니다. 대신 접근할 Box 사용자입니다.",
@@ -3332,7 +3333,8 @@
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "PFX 파일입니다.",
-        "testrailBaseUrl": "예: https://yourcompany.testrail.io."
+        "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
+        "scopedToken": "범위가 지정된 토큰은 Atlassian의 API 게이트웨이를 거쳐야 합니다. 클래식 토큰이면 끈 상태로 두세요."
       },
       "methods": {
         "labels": {

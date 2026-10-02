@@ -70,6 +70,13 @@ function toggle(displayName: CredentialDisplayName) {
   return { kind: "toggle", displayName } as const;
 }
 
+function checkbox<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return Object.assign({ kind: "checkbox" as const, displayName }, options);
+}
+
 function file<const TOptions extends CredentialFieldOptions = {}>(
   displayName: CredentialDisplayName,
   fileType: FileTypeCategory,
@@ -229,6 +236,7 @@ export const CREDENTIAL_SPECS = {
     fields: {
       confluence_username: email("accountEmail"),
       confluence_access_token: secret("apiToken"),
+      scoped_token: checkbox("scopedToken", { hint: { key: "scopedToken" } }),
     },
   }),
   jira: defineCredentialSpec({
@@ -239,6 +247,7 @@ export const CREDENTIAL_SPECS = {
         hint: { key: "jiraUserEmail" },
       }),
       jira_api_token: secret("apiToken"),
+      scoped_token: checkbox("scopedToken", { hint: { key: "scopedToken" } }),
     },
   }),
   productboard: defineCredentialSpec({

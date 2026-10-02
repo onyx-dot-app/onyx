@@ -3322,7 +3322,8 @@
         "isSandbox": "بيئة تجريبية (Sandbox)",
         "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
         "zuliprcContent": "محتوى Zuliprc",
-        "authenticationMethod": "طريقة المصادقة"
+        "authenticationMethod": "طريقة المصادقة",
+        "scopedToken": "هذا رمز API ذو نطاقات"
       },
       "hints": {
         "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
@@ -3332,7 +3333,8 @@
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ملف PFX.",
-        "testrailBaseUrl": "مثل https://yourcompany.testrail.io."
+        "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
+        "scopedToken": "يجب توجيه الرموز ذات النطاقات عبر بوابة API الخاصة بـ Atlassian. اتركه معطّلًا للرموز الكلاسيكية."
       },
       "methods": {
         "labels": {

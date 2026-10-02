@@ -48,7 +48,7 @@ export function getCredentialFileType(key: string): FileTypeCategory | null {
 export function initialFieldValue(
   field: CredentialSpecField
 ): string | boolean | null {
-  if (field.kind === "toggle") return false;
+  if (field.kind === "toggle" || field.kind === "checkbox") return false;
   if (field.kind === "file" || field.optional) return null;
   return "";
 }
@@ -95,7 +95,7 @@ function fieldSchema(
   selected?: (method: string) => boolean
 ): Yup.AnySchema {
   const title = messages.fieldTitle(key);
-  if (field.kind === "toggle") {
+  if (field.kind === "toggle" || field.kind === "checkbox") {
     return Yup.boolean()
       .nullable()
       .default(false)

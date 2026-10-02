@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  InputCheckbox,
   InputPasswordTypeIn,
   InputSwitch,
   InputTypeIn,
@@ -30,12 +31,29 @@ interface CredentialFieldProps {
 /** One field of a credential spec, drawn with the Opal input for its kind. */
 function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
   const t = useTranslations("admin");
-  const label = useCredentialFieldCopy(source)(fieldKey).title;
+  const copy = useCredentialFieldCopy(source)(fieldKey);
+  const label = copy.title;
 
   // A file such as a .pfx key is binary; Opal's InputFile reads text, so
   // this field keeps the typed upload until Opal can hand back a File.
   if (field.kind === "file") {
     return <TypedFileUploadFormField name={fieldKey} label={label} />;
+  }
+
+  if (field.kind === "checkbox") {
+    return (
+      <InputHorizontal withLabel title={label} description={copy.description}>
+        <FormikField<boolean>
+          name={fieldKey}
+          render={(formikField, helper) => (
+            <InputCheckbox
+              checked={!!formikField.value}
+              onCheckedChange={(checked) => helper.setValue(checked)}
+            />
+          )}
+        />
+      </InputHorizontal>
+    );
   }
 
   if (field.kind === "toggle") {

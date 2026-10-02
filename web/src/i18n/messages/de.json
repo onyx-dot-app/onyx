@@ -3322,7 +3322,8 @@
         "isSandbox": "Sandbox-Umgebung",
         "serviceUserEmail": "E-Mail-Adresse des Dienstbenutzers",
         "zuliprcContent": "Zuliprc-Inhalt",
-        "authenticationMethod": "Authentifizierungsmethode"
+        "authenticationMethod": "Authentifizierungsmethode",
+        "scopedToken": "Dies ist ein API-Token mit Bereichen"
       },
       "hints": {
         "boxUserEmail": "Optional. Der Box-Benutzer, dessen Identität übernommen wird.",
@@ -3332,7 +3333,8 @@
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indiziert wird.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
         "pfxFile": "Eine PFX-Datei.",
-        "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io."
+        "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
+        "scopedToken": "Tokens mit Bereichen müssen über das API-Gateway von Atlassian geleitet werden. Lassen Sie diese Option für klassische Tokens deaktiviert."
       },
       "methods": {
         "labels": {

@@ -3322,7 +3322,8 @@
         "isSandbox": "Environnement sandbox",
         "serviceUserEmail": "E-mail de l'utilisateur de service",
         "zuliprcContent": "Contenu de zuliprc",
-        "authenticationMethod": "Méthode d'authentification"
+        "authenticationMethod": "Méthode d'authentification",
+        "scopedToken": "Ceci est un jeton d'API avec des portées"
       },
       "hints": {
         "boxUserEmail": "Facultatif. L'utilisateur Box à usurper.",
@@ -3332,7 +3333,8 @@
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Un fichier PFX.",
-        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io."
+        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
+        "scopedToken": "Les jetons avec portées doivent passer par la passerelle d'API d'Atlassian. Laissez cette option désactivée pour les jetons classiques."
       },
       "methods": {
         "labels": {
