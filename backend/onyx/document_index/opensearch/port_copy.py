@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterable
 
 from onyx.db.models import SearchSettings
 from onyx.document_index.factory import build_opensearch_document_index
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,

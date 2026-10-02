@@ -5,7 +5,7 @@ import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
   Button,

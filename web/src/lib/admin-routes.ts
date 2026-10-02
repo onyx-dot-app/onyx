@@ -48,7 +48,6 @@ export interface FeatureFlags {
   customAnalyticsEnabled: boolean;
   hasSubscription: boolean;
   hooksEnabled: boolean;
-  opensearchEnabled: boolean;
   queryHistoryEnabled: boolean;
   craftAvailable: boolean;
 }

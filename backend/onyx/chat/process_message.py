@@ -13,7 +13,6 @@ import time
 import traceback
 from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import Token
 from enum import Enum
 from functools import partial
 from typing import Final, cast
@@ -70,7 +69,7 @@ from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.chat.stream_buffer import StreamBufferWriter
-from onyx.configs.app_configs import DEV_MODE, DISABLE_VECTOR_DB, INTEGRATION_TESTS_MODE
+from onyx.configs.app_configs import DEV_MODE, DISABLE_VECTOR_DB
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
@@ -112,7 +111,6 @@ from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.request_context import reset_llm_mock_response, set_llm_mock_response
 from onyx.llm.utils import (
     collect_credential_values,
     litellm_exception_to_safe_error,
@@ -1691,12 +1689,6 @@ def _stream_chat_turn(
         Generator yielding ``Packet`` objects — answer tokens, tool output, citations —
         followed by a terminal ``Packet`` containing ``OverallStop``.
     """
-    if new_msg_req.mock_llm_response is not None and not INTEGRATION_TESTS_MODE:
-        raise ValueError(
-            "mock_llm_response can only be used when INTEGRATION_TESTS_MODE=true"
-        )
-
-    mock_response_token: Token[str | None] | None = None
     incognito_mode_flag_set = False
     setup: ChatTurnSetup | None = None
     pre_run_packets: list[AnswerStreamPart] = []
@@ -1756,9 +1748,6 @@ def _stream_chat_turn(
             except Exception:
                 setup_db_session.rollback()
                 raise
-
-        if new_msg_req.mock_llm_response is not None:
-            mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
 
         assert setup is not None, (
             "build_chat_turn must complete before _run_models is called"
@@ -1872,8 +1861,6 @@ def _stream_chat_turn(
             )
 
     finally:
-        if mock_response_token is not None:
-            reset_llm_mock_response(mock_response_token)
         if incognito_mode_flag_set:
             CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(None)
             CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(None)

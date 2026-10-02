@@ -39,6 +39,7 @@ from onyx.llm.model_request import (
 )
 from onyx.llm.models import LLMInputBudget
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
@@ -124,13 +125,15 @@ def _make_context_files() -> ExtractedContextFiles:
     )
 
 
-def _tool_call_chunk(labels: list[str]) -> litellm.ModelResponse:
+def _tool_call_chunk(
+    labels: list[str], unknown_label: str | None = None
+) -> litellm.ModelResponse:
     delta = Delta(role="assistant", content=None)
     delta.tool_calls = [
         ChatCompletionDeltaToolCall(
             id=f"call-{label}",
             function=LiteLLMFunction(
-                name="scripted_result",
+                name="missing_tool" if label == unknown_label else "scripted_result",
                 arguments=json.dumps({"label": label}),
             ),
             type="function",
@@ -171,6 +174,7 @@ def _run_scripted_loop(
     max_input_tokens: int,
     tool_batches: list[list[str]] | None = None,
     completion_requests: list[dict[str, Any]] | None = None,
+    unknown_label: str | None = None,
 ) -> tuple[list[dict[str, Any]], ChatStateContainer]:
     llm = _make_llm(max_input_tokens)
     token_counter = get_llm_token_counter(llm)
@@ -181,7 +185,7 @@ def _run_scripted_loop(
         recorded_requests.append(kwargs)
         request_index = len(recorded_requests) - 1
         if request_index < len(batches):
-            return [_tool_call_chunk(batches[request_index])]
+            return [_tool_call_chunk(batches[request_index], unknown_label)]
         return [_answer_chunk()]
 
     user_text = "Use each scripted result, then answer."
@@ -309,6 +313,40 @@ def test_batch_of_individually_acceptable_results_shares_request_budget() -> Non
     assert [call.tool_call_response for call in state_container.get_tool_calls()] == [
         results[label] for label in results
     ]
+
+
+@pytest.mark.parametrize("labels", [["missing", "large"], ["large", "missing"]])
+def test_mixed_tool_batch_keeps_failure_within_request_budget(
+    labels: list[str],
+) -> None:
+    max_input_tokens = 1_000
+    result = "result " * 8_000
+    token_counter = get_llm_token_counter(_make_llm(max_input_tokens))
+
+    requests, state_container = _run_scripted_loop(
+        results={"large": result},
+        max_input_tokens=max_input_tokens,
+        tool_batches=[labels],
+        unknown_label="missing",
+    )
+
+    assert len(requests) == 2
+    followup = requests[1]
+    _assert_tool_call_associations(followup["messages"])
+    tool_messages = {
+        message["tool_call_id"]: message["content"]
+        for message in followup["messages"]
+        if message["role"] == "tool"
+    }
+    assert set(tool_messages) == {"call-large", "call-missing"}
+    assert tool_messages["call-missing"] == TOOL_CALL_FAILURE_PROMPT
+    assert tool_messages["call-large"] != result
+    assert "incomplete text excerpt" in tool_messages["call-large"]
+    assert _request_text_tokens(followup, token_counter) <= int(max_input_tokens * 0.95)
+    saved_calls = state_container.get_tool_calls()
+    assert len(saved_calls) == 1
+    assert saved_calls[0].tool_call_id == "call-large"
+    assert saved_calls[0].tool_call_response == result
 
 
 def test_small_tool_result_stays_unchanged() -> None:

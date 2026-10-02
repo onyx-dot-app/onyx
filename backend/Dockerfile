@@ -20,7 +20,6 @@ RUN apt-get update && \
     apt-get install -y \
         cmake \
         curl \
-        zip \
         ca-certificates \
         libgnutls30 \
         libblkid1 \
@@ -77,14 +76,12 @@ RUN groupadd -g 1001 onyx && \
     chown onyx:onyx /var/log/onyx
 
 # Install runtime system dependencies only (no build toolchain).
-# zip for Vespa step further down
 # ca-certificates for HTTPS
 # libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
 # Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
 # shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
 RUN apt-get update && \
     apt-get install -y \
-        zip \
         ca-certificates \
         libgnutls30 \
         libblkid1 \

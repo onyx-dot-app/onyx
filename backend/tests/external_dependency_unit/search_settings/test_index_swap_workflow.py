@@ -5,8 +5,9 @@ calls `delete_all_documents_for_connector_credential_pair` for each cc_pair.
 This test exercises that full workflow end-to-end and asserts that the
 attached `Document.file_id`s are also reaped — not just the document rows.
 
-Mocks Vespa (`get_all_document_indices`) since this is testing the postgres +
-file_store side effects of the swap, not the document index integration.
+Mocks the document index (`get_default_document_index`) since this is testing
+the postgres + file_store side effects of the swap, not the document index
+integration.
 """
 
 from collections.abc import Generator
@@ -132,12 +133,9 @@ class TestInstantIndexSwap:
             status=IndexModelStatus.FUTURE,
         )
 
-        # Vespa is patched out — we're testing the postgres + file_store
-        # side effects, not the document-index integration.
-        with patch(
-            "onyx.db.swap_index.get_all_document_indices",
-            return_value=[],
-        ):
+        # The document index is patched out — we're testing the postgres +
+        # file_store side effects, not the document-index integration.
+        with patch("onyx.db.swap_index.get_default_document_index"):
             old_settings = check_and_perform_index_swap(db_session)
 
         assert old_settings is not None, "INSTANT swap should have executed"
@@ -178,10 +176,7 @@ class TestInstantIndexSwap:
             status=IndexModelStatus.FUTURE,
         )
 
-        with patch(
-            "onyx.db.swap_index.get_all_document_indices",
-            return_value=[],
-        ):
+        with patch("onyx.db.swap_index.get_default_document_index"):
             old_settings = check_and_perform_index_swap(db_session)
 
         assert old_settings is not None

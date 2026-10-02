@@ -808,13 +808,7 @@
         "description": "{appName} をデータソースに接続します。"
       },
       "search": {
-        "placeholder": "コネクターを検索..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>フェデレーテッドコネクターは設定済みです。</strong> クリックすると、既存のコネクターを編集できます。",
-          "slackCredentialsFound": "<strong>既存の Slack 資格情報が見つかりました。</strong> クリックすると、Slack コネクターを管理できます。"
-        }
+        "placeholder": "コネクターを検索、または \"/\" を押してフォーカス..."
       },
       "sourceCard": {
         "connectButton": {
@@ -2604,6 +2598,12 @@
           "label": "{source} で認可",
           "pendingLabel": "認可しています..."
         },
+        "collapseButton": {
+          "ariaLabel": "折りたたむ"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "新規作成"
         },
@@ -2613,8 +2613,13 @@
         "credentialModal": {
           "title": "{source} の認証情報を作成"
         },
+        "credentialsLoadFailed": {
+          "description": "現在、認証情報を設定できません。ページを再読み込みするか、後でもう一度お試しください。",
+          "title": "認証情報を読み込めませんでした"
+        },
         "credentialStep": {
-          "title": "認証情報を選択"
+          "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
+          "title": "認証アカウント"
         },
         "credentialSwapped": {
           "toast": "認証情報を切り替えました！"
@@ -2622,16 +2627,26 @@
         "error": {
           "toast": "エラー: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "展開"
+        },
         "federated": {
           "tooltip": {
-            "description": "このコネクターではフェデレーテッド検索を利用できます。ただし、レイテンシーが大きくなり、検索品質は下がります。",
+            "description": "ただし、レイテンシーが大きくなり、検索品質は下がります。",
             "link": {
               "label": "代わりにフェデレーテッド版を使用 →"
-            }
+            },
+            "title": "このコネクターではフェデレーテッド検索を利用できます。"
           }
         },
         "fileUploadFailed": {
           "toast": "ファイルのアップロード中にエラーが発生しました"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "新しい {source} アカウント"
         },
         "oauthRedirectFailed": {
           "message": "{source} でのサインイン画面にリダイレクトできませんでした。もう一度お試しください。"
@@ -2644,6 +2659,9 @@
         },
         "retryButton": {
           "label": "再試行"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
         },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
@@ -2718,7 +2736,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Drive を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ"
+          "title": "オプション 1: OAuth アプリ",
+          "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Google Drive と Gmail へのアクセスをまとめて求めます。このアカウントを Google Drive だけに使う場合は、同意画面で Gmail のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
@@ -2776,7 +2795,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Gmail を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ"
+          "title": "オプション 1: OAuth アプリ",
+          "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Gmail と Google Drive へのアクセスをまとめて求めます。このアカウントを Gmail だけに使う場合は、同意画面で Google Drive のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
@@ -2811,7 +2831,7 @@
         "connectButton": {
           "label": "接続"
         },
-        "description": "{source} に接続し、{appName} 用のコネクタを設定します。"
+        "description": "{source} に接続し、{appName} 用のコネクタを設定します。{hasDocs, select, true {[ドキュメント]({url})を見る} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4819,6 +4839,12 @@
         "azureGptImage2": {
           "description": "Microsoft Azure でホストされる GPT Image 2 画像生成モデルです。"
         },
+        "azureGptImage25Flare": {
+          "description": "Microsoft Azure でホストされる GPT Image 2.5 Flare 画像生成モデルです。"
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Microsoft Azure でホストされる GPT Image 2.5 Sunburst 画像生成モデルです。"
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) は速度と効率を重視して設計されたモデルです。"
         },
@@ -4835,7 +4861,13 @@
           "description": "OpenAI の従来のフラッグシップ画像生成モデルです。"
         },
         "openaiGptImage2": {
-          "description": "プロンプト忠実度が最も高い、OpenAI の最新の画像生成モデルです。"
+          "description": "プロンプト忠実度が高い、OpenAI の前世代の画像生成モデルです。"
+        },
+        "openaiGptImage25Flare": {
+          "description": "高品質かつ高速な、OpenAI の最新の画像生成モデルです。"
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
       },
       "setDefaultError": {
@@ -5003,6 +5035,9 @@
           "description": "embedding モデルが必要とする場合、検索クエリをモデルに渡す前に、この文字列を先頭に追加します。プレフィックスが正しくない、または不足していると embedding の品質が低下します。",
           "placeholder": "例: 'query: '",
           "title": "クエリプレフィックス"
+        },
+        "googleWorkloadIdentity": {
+          "description": "API サーバーと埋め込みワーカーの GKE 認証情報を使用します。JSON キーは不要です。"
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5281,8 @@
         "serviceAccountJsonInvalid": "有効な Google サービスアカウントの JSON ファイルを指定してください",
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",
-        "urlInvalid": "有効な URL を入力してください"
+        "urlInvalid": "有効な URL を入力してください",
+        "googleProjectRequired": "GCP プロジェクト ID が必要です"
       },
       "vectorQuantization": {
         "description": "ドキュメントのベクトルを少ないビット数で保存し、メモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。",
@@ -5896,10 +5932,12 @@
             "title": "API キー"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Google Vertex AI のモデルがホストされているリージョンです。対応リージョンの全一覧は Google Cloud で確認できます。",
             "title": "Google Cloud リージョン名"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "Vertex AI が有効になっている GCP プロジェクトです。サービスアカウントの権限借用では ADC が対象プロジェクトを確実に推定できないため、指定が必要です。",
             "title": "GCP プロジェクト ID"
           },
@@ -6098,12 +6136,6 @@
         "imageSummarization": {
           "label": "画像要約"
         },
-        "kgDeepExtraction": {
-          "label": "ナレッジグラフ抽出"
-        },
-        "kgDocumentClassification": {
-          "label": "ナレッジグラフ分類"
-        },
         "other": {
           "label": "その他"
         },
@@ -6120,8 +6152,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
-        "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
+        "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約やコンテキスト RAG 処理があります。",
+        "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約やコンテキスト RAG 処理があります。",
         "error": {
           "title": "この期間のシステム使用状況を読み込めませんでした。"
         },
@@ -9190,6 +9222,7 @@
         "loginRequired": "先に ID プロバイダーでログインする必要があります。",
         "oauthUserAlreadyExists": "このメールアドレスのアカウントは、別のサインイン方法で既に存在します。最初に使用した方法でサインインするか、管理者にこのプロバイダーの連携を依頼してください。",
         "serverError": "ID プロバイダーでエラーが発生しました。もう一度お試しください。",
+        "staleSignIn": "このログインリンクは期限切れか、無効になっています。もう一度ログインしてください。",
         "temporarilyUnavailable": "ID プロバイダーは一時的に利用できません。しばらくしてからもう一度お試しください。"
       },
       "credentialsIssue": {
@@ -10820,6 +10853,9 @@
         },
         "loading": {
           "text": "モデルを読み込み中..."
+        },
+        "loadingMore": {
+          "text": "さらにモデルを読み込み中..."
         }
       },
       "modelSettingsButton": {

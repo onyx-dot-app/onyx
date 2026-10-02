@@ -808,13 +808,7 @@
         "description": "Connect {appName} to your data sources."
       },
       "search": {
-        "placeholder": "Search connectors..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Federated connector already configured.</strong> Click to edit the existing connector.",
-          "slackCredentialsFound": "<strong>Existing Slack credentials found.</strong> Click to manage your Slack connector."
-        }
+        "placeholder": "Search connectors or press \"/\" to focus..."
       },
       "sourceCard": {
         "connectButton": {
@@ -2604,6 +2598,12 @@
           "label": "Authorize with {source}",
           "pendingLabel": "Authorizing..."
         },
+        "collapseButton": {
+          "ariaLabel": "Collapse"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Create New"
         },
@@ -2613,8 +2613,13 @@
         "credentialModal": {
           "title": "Create a {source} credential"
         },
+        "credentialsLoadFailed": {
+          "description": "Credentials can't be set up right now. Reload the page or try again later.",
+          "title": "Couldn't load your credentials"
+        },
         "credentialStep": {
-          "title": "Select a credential"
+          "description": "Use a shared service account. {appName} indexes content as this account.",
+          "title": "Authentication Account"
         },
         "credentialSwapped": {
           "toast": "Swapped credential successfully!"
@@ -2622,16 +2627,26 @@
         "error": {
           "toast": "Error: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Expand"
+        },
         "federated": {
           "tooltip": {
-            "description": "A federated search option is available for this connector. It will result in greater latency and reduced search quality.",
+            "description": "It will result in greater latency and reduced search quality.",
             "link": {
               "label": "Use federated version instead →"
-            }
+            },
+            "title": "A federated search option is available for this connector."
           }
         },
         "fileUploadFailed": {
           "toast": "Error uploading files"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "New {source} Account"
         },
         "oauthRedirectFailed": {
           "message": "We couldn't redirect you to sign in with {source}. Please try again."
@@ -2644,6 +2659,9 @@
         },
         "retryButton": {
           "label": "Retry"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
         },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
@@ -2718,7 +2736,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Google Drive and Gmail access together, so one account can back both connectors. To use this account for Google Drive only, untick the Gmail scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2776,7 +2795,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Gmail you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Gmail and Google Drive access together, so one account can back both connectors. To use this account for Gmail only, untick the Google Drive scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2811,7 +2831,7 @@
         "connectButton": {
           "label": "Connect"
         },
-        "description": "Connect to {source} and set up the connector for {appName}."
+        "description": "Connect to {source} and set up the connector for {appName}.{hasDocs, select, true { View [docs]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4819,6 +4839,12 @@
         "azureGptImage2": {
           "description": "GPT Image 2 image generation model hosted on Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "GPT Image 2.5 Flare image generation model hosted on Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "GPT Image 2.5 Sunburst image generation model hosted on Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) model is designed for speed and efficiency."
         },
@@ -4835,7 +4861,13 @@
           "description": "OpenAI's previous flagship Image Generation model."
         },
         "openaiGptImage2": {
-          "description": "OpenAI's latest Image Generation model with the highest prompt fidelity."
+          "description": "OpenAI's previous-generation Image Generation model with high prompt fidelity."
+        },
+        "openaiGptImage25Flare": {
+          "description": "OpenAI's latest Image Generation model with high quality and fast generation."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "OpenAI's premium Image Generation model for the most precise edits."
         }
       },
       "setDefaultError": {
@@ -5003,6 +5035,9 @@
           "description": "This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality.",
           "placeholder": "e.g., 'query: '",
           "title": "Query Prefix"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Use the GKE credentials of the API server and embedding workers. No JSON key is required."
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5281,8 @@
         "serviceAccountJsonInvalid": "Must be a valid Google service account JSON file",
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",
-        "urlInvalid": "Must be a valid URL"
+        "urlInvalid": "Must be a valid URL",
+        "googleProjectRequired": "GCP Project ID is required"
       },
       "vectorQuantization": {
         "description": "Store document vectors with fewer bits to use less memory. Fewer bits can lower search quality.",
@@ -5896,10 +5932,12 @@
             "title": "API Key"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud.",
             "title": "Google Cloud Region Name"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "The GCP project where Vertex AI is enabled. Required because ADC cannot reliably infer the target project under service-account impersonation.",
             "title": "GCP Project ID"
           },
@@ -6098,12 +6136,6 @@
         "imageSummarization": {
           "label": "Image summarization"
         },
-        "kgDeepExtraction": {
-          "label": "Knowledge graph extraction"
-        },
-        "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
-        },
         "other": {
           "label": "Other"
         },
@@ -6120,8 +6152,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
-        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
+        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
         "error": {
           "title": "Failed to load system usage for this period."
         },
@@ -9190,6 +9222,7 @@
         "loginRequired": "You need to log in with your identity provider first.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
         "serverError": "Your identity provider encountered an error. Please try again.",
+        "staleSignIn": "This sign-in link has expired or is no longer valid. Please sign in again.",
         "temporarilyUnavailable": "Your identity provider is temporarily unavailable. Please try again later."
       },
       "credentialsIssue": {
@@ -10820,6 +10853,9 @@
         },
         "loading": {
           "text": "Loading models..."
+        },
+        "loadingMore": {
+          "text": "Loading more models..."
         }
       },
       "modelSettingsButton": {

@@ -4,16 +4,14 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { ValidSources } from "@/lib/types";
-import { usePublicCredentials } from "@/lib/hooks";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { useAdminCredentials } from "@/lib/credentials/hooks";
 import { DriveAuthSection } from "./Credential";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import {
-  useGoogleCredentials,
-  refreshAllGoogleData,
-} from "@/lib/googleConnector";
+import { refreshAllGoogleData } from "@/lib/googleConnector";
+import { useGoogleCredentials } from "@/lib/credentials/hooks";
 
 const GDriveMain = () => {
   const t = useTranslations("admin.connectorsList");
@@ -30,7 +28,7 @@ const GDriveMain = () => {
     isLoading: isCredentialsLoading,
     error: credentialsError,
     refreshCredentials,
-  } = usePublicCredentials();
+  } = useAdminCredentials();
 
   // Get Google Drive-specific credentials
   const {

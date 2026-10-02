@@ -1,15 +1,11 @@
 import * as Yup from "yup";
 import type { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import type { ConnectorGroupRestrictionFormValues } from "@/lib/connectors/accessType";
-import { ValidSources } from "@/lib/types";
-import type {
-  ConfigurableSources,
-  IndexAttemptStage,
-  IndexAttemptStageMetric,
-} from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { connectorConfigs } from "@/lib/connectors/connectors";
-import { credentialDisplayNames } from "@/lib/connectors/credentials";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
   PIPELINE_ORDER,
@@ -159,14 +155,6 @@ export function createConnectorValidationSchema(
 }
 
 // ---------------------------------------------------------------------------
-// Credentials
-// ---------------------------------------------------------------------------
-
-export function getDisplayNameForCredentialKey(key: string): string {
-  return credentialDisplayNames[key] || key;
-}
-
-// ---------------------------------------------------------------------------
 // Typed file uploads
 // ---------------------------------------------------------------------------
 
@@ -216,13 +204,6 @@ export function getFileTypeDefinitionForField(
 /** The cc-pair detail key; also the key `mutate` callers invalidate. */
 export function buildCCPairInfoUrl(ccPairId: string | number) {
   return SWR_KEYS.ccPair(ccPairId);
-}
-
-export function buildSimilarCredentialInfoURL(
-  source_type: ValidSources,
-  get_editable: boolean = false
-) {
-  return SWR_KEYS.similarCredentials(source_type, get_editable);
 }
 
 export function getTooltipMessage(

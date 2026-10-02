@@ -29,6 +29,7 @@ from onyx.db.enums import (
     AccessType,
     AccountType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
@@ -405,6 +406,7 @@ def make_cc_pair(
             UserGroup__ConnectorCredentialPair(
                 user_group_id=group.id,
                 cc_pair_id=cc_pair.id,
+                role=ConnectorManageRole.EDITOR,
             )
         )
         db_session.flush()

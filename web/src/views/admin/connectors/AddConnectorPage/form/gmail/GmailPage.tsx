@@ -5,21 +5,19 @@ import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { toast } from "@opal/layouts";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import type {
   Credential,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { GmailAuthSection } from "./Credential";
-import { usePublicCredentials } from "@/lib/hooks";
+import { useAdminCredentials } from "@/lib/credentials/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import {
-  useGoogleCredentials,
-  refreshAllGoogleData,
-} from "@/lib/googleConnector";
+import { refreshAllGoogleData } from "@/lib/googleConnector";
+import { useGoogleCredentials } from "@/lib/credentials/hooks";
 
 interface GmailMainProps {
   buildMode?: boolean;
@@ -42,7 +40,7 @@ export const GmailMain = ({
     isLoading: isCredentialsLoading,
     error: credentialsError,
     refreshCredentials,
-  } = usePublicCredentials();
+  } = useAdminCredentials();
 
   const {
     data: gmailCredentials,

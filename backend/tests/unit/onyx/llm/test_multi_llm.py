@@ -12,7 +12,6 @@ from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 import onyx.llm.model_request
-from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
@@ -276,7 +275,6 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
             client=ANY,  # HTTPHandler instance created per-request
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
-            mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
         )
 
@@ -432,7 +430,6 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             client=ANY,  # HTTPHandler instance created per-stream
             stream_options={"include_usage": True},
             parallel_tool_calls=True,
-            mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
         )
 

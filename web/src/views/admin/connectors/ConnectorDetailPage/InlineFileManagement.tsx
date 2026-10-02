@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
@@ -19,7 +20,6 @@ import {
 import { toast } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -147,7 +147,7 @@ export default function InlineFileManagement({
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }

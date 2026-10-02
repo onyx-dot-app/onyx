@@ -20,7 +20,7 @@ from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )

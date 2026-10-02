@@ -7,15 +7,26 @@ from sqlalchemy import cast as sa_cast
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
+from onyx.access.cc_pair_access import get_cc_pair_access_mode
 from onyx.access.models import DocumentAccess
-from onyx.access.utils import prefix_user_email
+from onyx.access.utils import (
+    EXTERNAL_GROUP_ACL_PREFIX,
+    USER_EMAIL_ACL_PREFIX,
+    prefix_user_email,
+)
 from onyx.configs.constants import (
     CHAT_SESSION_ID_FILE_METADATA_KEY,
     PUBLIC_DOC_PAT,
     DocumentSource,
     FileOrigin,
 )
-from onyx.db.document import get_access_info_for_document, get_access_info_for_documents
+from onyx.context.search.models import CCPairAccessMode
+from onyx.db.connector_credential_pair import get_cc_pair_access_sets_for_user
+from onyx.db.document import (
+    get_access_info_for_document,
+    get_access_info_for_documents,
+    get_cc_pair_ids_for_documents,
+)
 from onyx.db.models import (
     ChatMessage,
     ChatSession,
@@ -384,9 +395,32 @@ def _user_can_access_connector_file(
 
     user_acl = get_acl_for_user(user, db_session)
     doc_access = get_access_for_documents(document_ids, db_session)
-    return any(
-        not user_acl.isdisjoint(access.to_acl()) for access in doc_access.values()
-    )
+    if get_cc_pair_access_mode(db_session) != CCPairAccessMode.ENFORCE:
+        return any(
+            not user_acl.isdisjoint(access.to_acl()) for access in doc_access.values()
+        )
+
+    # The query-time cc-pair rule of the OpenSearch filter, applied in Python.
+    access_sets = get_cc_pair_access_sets_for_user(db_session, user)
+    doc_id_to_cc_pair_ids = get_cc_pair_ids_for_documents(db_session, document_ids)
+    user_acl_without_groups = {
+        entry
+        for entry in user_acl
+        if entry.startswith((USER_EMAIL_ACL_PREFIX, EXTERNAL_GROUP_ACL_PREFIX))
+    }
+    for document_id, access in doc_access.items():
+        cc_pair_ids = set(doc_id_to_cc_pair_ids.get(document_id, []))
+        if not cc_pair_ids:
+            if not user_acl.isdisjoint(access.to_acl()):
+                return True
+            continue
+        if not access_sets.open_cc_pair_ids.isdisjoint(cc_pair_ids):
+            return True
+        if not access_sets.acl_cc_pair_ids.isdisjoint(cc_pair_ids) and (
+            access.is_public or not user_acl_without_groups.isdisjoint(access.to_acl())
+        ):
+            return True
+    return False
 
 
 def _documents_from_file_connector_config(

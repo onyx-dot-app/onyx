@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useDropzone } from "react-dropzone";
@@ -20,7 +21,6 @@ import {
   SvgFiles,
   SvgFolderOpen,
   SvgPlusCircle,
-  SvgSimpleLoader,
 } from "@opal/icons";
 
 export interface ProjectContextPanelProps {
@@ -215,7 +215,7 @@ export default function ProjectContextPanel({
           <input {...getInputProps()} />
 
           {isLoadingProjectDetails && !currentProjectDetails ? (
-            <SvgSimpleLoader />
+            <IconLoader />
           ) : allCurrentProjectFiles.length > 0 ? (
             <>
               {/* Mobile / small screens: just show a button to view files */}

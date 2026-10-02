@@ -118,6 +118,27 @@ export class IndexSettingsPage {
     this.currentSetupModal = modal;
   }
 
+  async openGoogleModelSetup(modelName: string): Promise<void> {
+    await this.page.getByText(modelName, { exact: true }).click();
+    const modal = this.setupModalFor("Google");
+    await expect(modal).toBeVisible();
+    this.currentSetupModal = modal;
+  }
+
+  async fillGoogleWorkloadIdentity(
+    projectId: string,
+    location: string
+  ): Promise<void> {
+    await this.activeSetupModal.getByRole("combobox").click();
+    await this.page
+      .getByRole("option", { name: "Workload Identity (GKE)", exact: true })
+      .click();
+    await this.activeSetupModal.getByLabel(/GCP Project ID/).fill(projectId);
+    await this.activeSetupModal
+      .getByLabel(/Google Cloud Region Name/)
+      .fill(location);
+  }
+
   // Fields are targeted by input id (which equals the Formik field name) rather
   // than by label: Opal's InputVertical folds each field's subDescription into
   // its accessible name, so a label match like "Deployment Name" also matches

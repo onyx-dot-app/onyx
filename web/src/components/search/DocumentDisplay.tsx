@@ -8,7 +8,7 @@ import { WebResultIcon } from "../WebResultIcon";
 import Text from "@/refresh-components/texts/Text";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/app/interfaces";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { Card } from "@/components/ui/card";
 
 export const buildDocumentSummaryDisplay = (

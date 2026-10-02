@@ -2,14 +2,14 @@
 
 Used as a safety net when DISABLE_VECTOR_DB is True. Any code path that
 accidentally reaches the vector DB layer will fail loudly instead of timing
-out against a nonexistent Vespa/OpenSearch instance.
+out against a nonexistent OpenSearch instance.
 """
 
 from collections.abc import Iterable
 
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     DocumentSectionRequest,

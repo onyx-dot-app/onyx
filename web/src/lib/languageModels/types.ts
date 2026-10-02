@@ -121,6 +121,35 @@ export interface LLMProviderDescriptor {
   provider: string;
   provider_display_name: string;
   model_configurations: ModelConfiguration[];
+  /** First stored model the listing left out, for `ModelPaging` to continue
+   *  from. Null when every model is loaded, absent from an older backend. */
+  next_model_configuration_offset?: number | null;
+}
+
+/** One page of a provider's models past what the listing returned. */
+export interface ModelConfigurationPage {
+  model_configurations: ModelConfiguration[];
+  /** Null at the end of the list, or of the matches for a name search. */
+  next_offset: number | null;
+}
+
+/** Pulls in the models the listing left out: a provider past the server's
+ *  page size arrives truncated, so the picker loads the next page on scroll
+ *  and searches the unloaded rest on the server, into the shared list. */
+export interface ModelPaging {
+  hasMore: boolean;
+  isLoading: boolean;
+  /** Loads the next page of the first listed provider that still has
+   *  unloaded models, in the order given (any provider when omitted). */
+  loadMore: (providerIds?: number[]) => Promise<void>;
+  /** Fetches the first window of server matches for every provider with
+   *  unloaded models. Resolves false when a page load was in flight and the
+   *  search was skipped, so the caller can retry once that load settles. */
+  search: (query: string) => Promise<boolean>;
+  /** The last search left matches on the server. */
+  searchHasMore: boolean;
+  /** Fetches the next window of the last search's matches. */
+  loadMoreSearch: () => Promise<void>;
 }
 
 export interface OllamaModelResponse {
@@ -330,6 +359,8 @@ export type ModelOptionProvider = Pick<
 export interface LLMOption {
   name: string;
   provider: string;
+  /** Owning provider row, for paging that provider's remaining models. */
+  providerId?: number;
   providerDisplayName: string;
   modelName: string;
   modelConfigurationId?: number | null;

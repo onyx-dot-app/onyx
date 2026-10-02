@@ -1,9 +1,10 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Formik, Form } from "formik";
 import { useTranslations } from "next-intl";
 import * as Yup from "yup";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -257,7 +258,7 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
                   disabled={
                     (!hasNoFields && (!dirty || !isValid)) || isSubmitting
                   }
-                  icon={isSubmitting ? SvgSimpleLoader : undefined}
+                  icon={isSubmitting ? IconLoader : undefined}
                 >
                   {isEditing
                     ? t("setupModal.updateButton.label")

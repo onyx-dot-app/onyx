@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
@@ -10,7 +11,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { SvgArrowUpRight, SvgRefreshCw, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowUpRight, SvgRefreshCw } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Section } from "@/layouts/general-layouts";
 import { InputTextArea } from "@opal/components";
@@ -53,7 +54,7 @@ function BaseInstructionsPreview() {
   if (!data) {
     return (
       <div className="flex justify-center py-4">
-        <SvgSimpleLoader className="h-5 w-5" />
+        <IconLoader className="h-5 w-5" />
       </div>
     );
   }
@@ -224,7 +225,7 @@ export default function CraftPreferencesPage() {
             </Text>
           ) : (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           )}
         </SettingsLayouts.Body>

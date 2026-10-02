@@ -98,7 +98,8 @@ import { Tier } from "@/lib/settings/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { ShareAgentModal, type ShareDraftState } from "@/lib/agents/components";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { Permission, ValidSources } from "@/lib/types";
+import { Permission } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
@@ -1098,8 +1099,13 @@ export default function AgentEditorPage({
             );
 
             const hasProcessingFiles = values.user_file_ids.some(
-              (fileId: string) =>
-                fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
+              (fileId: string) => {
+                const status = fileStatusMap.get(fileId);
+                return (
+                  status === UserFileStatus.PROCESSING ||
+                  status === UserFileStatus.INDEXING
+                );
+              }
             );
             // Saved agents report their status (group ownership counts as
             // shared); unsaved ones derive it from the draft form state.

@@ -1,12 +1,12 @@
-import { ConfigurableSources } from "../types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useTranslations } from "next-intl";
 import type {
   BooleanOption,
   ConnectionConfiguration,
   ListOption,
-} from "./types";
-import { OneDriveScope } from "./types";
+} from "@/lib/connectors/types";
+import { OneDriveScope } from "@/lib/connectors/types";
 
 const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
 const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";

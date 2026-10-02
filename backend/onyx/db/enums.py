@@ -286,6 +286,14 @@ class ConnectorCredentialPairStatus(str, PyEnum):
         return self in self.active_statuses()
 
 
+class ConnectorManageRole(str, PyEnum):
+    """A group's role on a cc-pair it manages. Editors change and delete the
+    configuration; Operators schedule and monitor indexing."""
+
+    EDITOR = "editor"
+    OPERATOR = "operator"
+
+
 class AccessType(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
@@ -374,22 +382,6 @@ class SwitchoverType(str, PyEnum):
     REINDEX = "reindex"
     ACTIVE_ONLY = "active_only"
     INSTANT = "instant"
-
-
-class OpenSearchDocumentMigrationStatus(str, PyEnum):
-    """Status for Vespa to OpenSearch migration per document."""
-
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    PERMANENTLY_FAILED = "permanently_failed"
-
-
-class OpenSearchTenantMigrationStatus(str, PyEnum):
-    """Status for tenant-level OpenSearch migration."""
-
-    PENDING = "pending"
-    COMPLETED = "completed"
 
 
 # Onyx Build Mode Enums

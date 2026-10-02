@@ -20,7 +20,6 @@ from onyx.background.celery.celery_redis import (
     celery_get_queued_task_ids,
     celery_get_unacked_task_ids,
 )
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
@@ -47,12 +46,7 @@ from onyx.background.indexing.index_attempt_utils import (
     cleanup_index_attempts,
     get_old_index_attempt_ids,
 )
-from onyx.configs.app_configs import (
-    MANAGED_VESPA,
-    PERSISTENT_INDEXING,
-    VESPA_CLOUD_CERT_PATH,
-    VESPA_CLOUD_KEY_PATH,
-)
+from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_INDEXING_LOCK_TIMEOUT,
@@ -115,7 +109,6 @@ from onyx.file_store.document_batch_storage import (
     get_document_batch_storage,
 )
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import (
@@ -1689,14 +1682,6 @@ def _docprocessing_task(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     r = get_redis_client(tenant_id=tenant_id)
 
-    # 20 is the documented default for httpx max_keepalive_connections
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-        )
-    else:
-        httpx_init_vespa_pool(20)
-
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
 
@@ -1707,7 +1692,7 @@ def _docprocessing_task(
 
     try:
         # Inside the try so a failed first-use import still marks the attempt failed.
-        from onyx.document_index.factory import get_all_document_indices
+        from onyx.document_index.factory import get_default_document_index
         from onyx.indexing.adapters.document_indexing_adapter import (
             DocumentIndexingBatchAdapter,
         )
@@ -1755,7 +1740,8 @@ def _docprocessing_task(
         )
 
         # Phase 1: fast DB reads to set up the pipeline. Session closes before
-        # the slow embedding + Vespa work begins, returning the connection to the pool.
+        # the slow embedding + document index work begins, returning the connection
+        # to the pool.
         with get_session_with_current_tenant() as db_session:
             # matches parts of _run_indexing
             index_attempt = get_index_attempt(
@@ -1798,10 +1784,9 @@ def _docprocessing_task(
                 callback=callback,
             )
 
-            document_indices = get_all_document_indices(
+            document_index = get_default_document_index(
                 index_attempt.search_settings,
                 None,
-                httpx_client=HttpxPool.get("vespa"),
             )
 
             # Set up metadata for this batch
@@ -1856,7 +1841,7 @@ def _docprocessing_task(
         # real work happens here!
         index_pipeline_result = run_indexing_pipeline(
             embedder=embedding_model,
-            document_indices=document_indices,
+            document_index=document_index,
             ignore_time_skip=True,  # Documents are already filtered during extraction
             index_to_secondary=index_to_secondary,
             tenant_id=tenant_id,

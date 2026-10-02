@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
-import { ConfigurableSources, ValidSources } from "@/lib/types";
+import {
+  ConfigurableSources,
+  ValidSources,
+} from "@/lib/connectors/types/source";
 
 jest.mock("@/lib/permissions/hooks", () => ({
   usePermissionAuthority: jest.fn(),

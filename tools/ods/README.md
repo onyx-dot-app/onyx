@@ -220,6 +220,35 @@ ods backend model_server
 ods backend model_server --port 9001
 ```
 
+### `object-store migrate` - Move a Dev MinIO's Files to the Object Store
+
+The dev stack runs the object store (SeaweedFS) only: `ods compose dev` keeps
+MinIO at zero replicas and points the app at the object store, and `ods env`
+drops `S3_LEGACY_ENDPOINT_URL`. A checkout that used MinIO before the object
+store still has its files in the `<project>_minio_data` volume. This command
+moves them across once and leaves MinIO stopped, so the app writes to one
+store only.
+
+```shell
+ods object-store migrate
+```
+
+It starts MinIO on a free port and retires it with the app's legacy copy, run
+from `backend` with `.vscode/.env` loaded: every object is copied (a
+multitenant checkout keeps its file records in tenant schemas), a quiet minute
+confirms nothing still writes to MinIO alone, and the retired marker stops
+running backend processes from using it. It then drops
+`S3_LEGACY_ENDPOINT_URL` from `.vscode/.env` and stops MinIO. The infra stack
+must be running (`ods compose dev --infra`). A failed copy leaves MinIO running
+and `.vscode/.env` untouched, so fix the cause and rerun; `ods compose dev
+--infra --down` stops it too.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--keep-minio` | `false` | Leave MinIO running afterwards |
+
 ### `web` - Run Frontend Scripts
 
 Run bun scripts from `web/package.json` without manually changing directories.
@@ -705,7 +734,34 @@ ods audit --python --format=sarif > audit.sarif
 
 # SARIF to a file for upload, readable report to the log (used by CI gates)
 ods audit --format=sarif,text > audit.sarif
+
+# Every tracked bun.lock and uv.lock, not just the root and web ones
+ods audit --all-lockfiles --web --python
 ```
+
+#### Tracking issues for blocking findings
+
+`ods audit alert` keeps one open GitHub issue (label `cve-alert`) per package
+and branch with a blocking finding. It reads the JSON results of earlier scans, applies the
+allowlist, opens an issue for each newly blocking package, updates the issue
+when the package gains an advisory, and closes the issues of packages that no
+longer block. It prints the alerts that need announcing as JSON, including any
+still labelled `cve-alert-pending` from a run that never announced them. The
+[CVE Alerts workflow](../../.github/workflows/cve-alerts.yml) runs it daily and
+after a failed deploy audit, opens a fix PR when a pin applies, and posts each
+alert to Slack with the details in a thread.
+
+```shell
+ods audit --web --python --ignore-url "" --format=json > deps.json
+ods audit image docker.io/onyxdotapp/onyx-backend:edge --ignore-url "" --format=json > backend.json
+ods audit alert --results deps.json --results backend.json --dry-run
+```
+
+Pass the results of every scan: a package missing from all of them counts as
+resolved and has its issue closed. When a scan was skipped, pass `--keep-open`
+so no issue closes. `--scope <branch>` (default `main`) labels
+the issues with the branch the results came from, so a package's issues on
+`main` and on a release branch stay apart.
 
 #### Managing the allowlist
 

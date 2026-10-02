@@ -9,15 +9,18 @@ from collections.abc import Generator
 import pytest
 
 from onyx.access.models import DocumentAccess
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY, DocumentSource
 from onyx.connectors.models import Document
 from onyx.db.enums import VectorQuantization
-from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
+from onyx.document_index.interfaces import IndexingMetadata, TenantState
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
 from onyx.indexing.models import ChunkEmbedding, DocMetadataAwareIndexChunk
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.utils.special_types import JSON_ro
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -145,3 +148,26 @@ def opensearch_index(
     )
 
     yield opensearch_idx
+
+
+@pytest.fixture
+def kv_progress_restored(
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[None, None, None]:
+    """Keeps the developer's stored backfill progress unchanged."""
+    kv_store = get_kv_store()
+    saved: JSON_ro | None
+    try:
+        saved = kv_store.load(KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY)
+    except KvKeyNotFoundError:
+        saved = None
+    try:
+        yield
+    finally:
+        if saved is None:
+            try:
+                kv_store.delete(KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY)
+            except KvKeyNotFoundError:
+                pass
+        else:
+            kv_store.store(KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY, saved)

@@ -1,17 +1,22 @@
 import * as Yup from "yup";
 
-import { credentialTemplates } from "@/lib/connectors/credentials";
-import { getDisplayNameForCredentialKey } from "@/lib/connectors/utils";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import type {
   Credential,
   CredentialTemplateWithAuth,
-} from "@/lib/connectors/types";
+} from "@/lib/credentials/types";
 import { isTypedFileField } from "@/lib/connectors/utils";
 import type {
   CredentialFieldValues,
   CredentialFormValues,
 } from "@/lib/credentials/types";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { CREDENTIAL_DISPLAY_NAMES } from "@/lib/credentials/constants";
+import { toast } from "@opal/layouts";
+import {
+  CredentialCreationMethod,
+  type OAuthDetails,
+} from "@/lib/credentials/types";
 
 // What a credential template seeds a field with: "" for a required text
 // field, null for an optional one or a file, a boolean for a checkbox.
@@ -198,7 +203,7 @@ export function getEditableCredentialFields(
     return {};
   }
 
-  const credentialTemplate = credentialTemplates[sourceType] as
+  const credentialTemplate = CREDENTIAL_TEMPLATES[sourceType] as
     | CredentialFieldValues
     | null
     | undefined;
@@ -257,4 +262,93 @@ export function createInitialValues(
   }
 
   return initialValues;
+}
+
+/** The label for a credential field key, falling back to the key itself. */
+export function getDisplayNameForCredentialKey(key: string): string {
+  return CREDENTIAL_DISPLAY_NAMES[key] || key;
+}
+
+// Parse an uploaded OAuth app JSON; toasts and returns null when invalid.
+export const parseOauthAppCredentialJson = (
+  value: string
+): Record<string, unknown> | null => {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const web = parsed.web as Record<string, unknown> | undefined;
+    if (
+      !web ||
+      typeof web.client_id !== "string" ||
+      typeof web.client_secret !== "string"
+    ) {
+      toast.error(
+        "Invalid file provided - expected an OAuth app JSON key with web.client_id and web.client_secret"
+      );
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    toast.error(`Invalid file provided - ${error}`);
+    return null;
+  }
+};
+
+export const filterUploadedCredentials = <
+  T extends { authentication_method?: string },
+>(
+  credentials: Credential<T>[] | undefined
+): { credential_id: number | null; uploadedCredentials: Credential<T>[] } => {
+  let credential_id = null;
+  let uploadedCredentials: Credential<T>[] = [];
+
+  if (credentials) {
+    uploadedCredentials = credentials.filter(
+      (credential) =>
+        credential.credential_json.authentication_method !== "oauth_interactive"
+    );
+
+    if (uploadedCredentials.length > 0 && uploadedCredentials[0]) {
+      credential_id = uploadedCredentials[0].id;
+    }
+  }
+
+  return { credential_id, uploadedCredentials };
+};
+
+// ---------------------------------------------------------------------------
+// Credential creation methods
+// ---------------------------------------------------------------------------
+
+export function getCredentialCreationMethods(
+  details?: OAuthDetails
+): CredentialCreationMethod[] {
+  if (!details) {
+    return [CredentialCreationMethod.Manual];
+  }
+
+  const methods: CredentialCreationMethod[] = [];
+  if (details.oauth_enabled) {
+    methods.push(CredentialCreationMethod.OAuth);
+  }
+  if (details.supports_manual_credentials) {
+    methods.push(CredentialCreationMethod.Manual);
+  }
+  return methods;
+}
+
+export function getCredentialCreationActionLabel(
+  method: CredentialCreationMethod,
+  sourceDisplayName: string,
+  explicitMethod: boolean
+): string {
+  if (!explicitMethod) {
+    return "Create New";
+  }
+  return method === CredentialCreationMethod.OAuth
+    ? `Connect with ${sourceDisplayName}`
+    : "Enter credentials manually";
+}
+
+export function shouldRedirectToOAuth(details: OAuthDetails): boolean {
+  return details.additional_kwargs.length === 0;
 }

@@ -1,12 +1,13 @@
 import { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
-import { createCredential, linkCredential } from "@/lib/credential";
+import { createCredential, linkCredential } from "@/lib/credentials/svc";
 import { parseErrorDetail, type ErrorResponseBody } from "@/lib/fetcher";
 import type { FileUploadResponse } from "@/lib/fileConnector";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import type { FileConfig, GoogleSitesConfig } from "@/lib/connectors/types";
-import { AccessType, ValidSources } from "@/lib/types";
+import { AccessType } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 // ---------------------------------------------------------------------------
 // Indexing

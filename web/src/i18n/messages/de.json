@@ -808,13 +808,7 @@
         "description": "Verbinden Sie {appName} mit Ihren Datenquellen."
       },
       "search": {
-        "placeholder": "Konnektoren suchen..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Föderierter Konnektor bereits konfiguriert.</strong> Klicken Sie, um den vorhandenen Konnektor zu bearbeiten.",
-          "slackCredentialsFound": "<strong>Vorhandene Slack-Anmeldedaten gefunden.</strong> Klicken Sie, um Ihren Slack-Konnektor zu verwalten."
-        }
+        "placeholder": "Konnektoren suchen oder \"/\" drücken, um zu fokussieren..."
       },
       "sourceCard": {
         "connectButton": {
@@ -2604,6 +2598,12 @@
           "label": "Mit {source} autorisieren",
           "pendingLabel": "Wird autorisiert..."
         },
+        "collapseButton": {
+          "ariaLabel": "Einklappen"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Neu erstellen"
         },
@@ -2613,8 +2613,13 @@
         "credentialModal": {
           "title": "Anmeldedaten für {source} erstellen"
         },
+        "credentialsLoadFailed": {
+          "description": "Anmeldedaten können gerade nicht eingerichtet werden. Lade die Seite neu oder versuche es später erneut.",
+          "title": "Anmeldedaten konnten nicht geladen werden"
+        },
         "credentialStep": {
-          "title": "Anmeldedaten auswählen"
+          "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
+          "title": "Authentifizierungskonto"
         },
         "credentialSwapped": {
           "toast": "Anmeldedaten erfolgreich gewechselt!"
@@ -2622,16 +2627,26 @@
         "error": {
           "toast": "Fehler: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Ausklappen"
+        },
         "federated": {
           "tooltip": {
-            "description": "Für diesen Konnektor ist eine föderierte Suchoption verfügbar. Sie führt zu höherer Latenz und geringerer Suchqualität.",
+            "description": "Sie führt zu höherer Latenz und geringerer Suchqualität.",
             "link": {
               "label": "Stattdessen die föderierte Version verwenden →"
-            }
+            },
+            "title": "Für diesen Konnektor ist eine föderierte Suchoption verfügbar."
           }
         },
         "fileUploadFailed": {
           "toast": "Fehler beim Hochladen der Dateien"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "Neues {source}-Konto"
         },
         "oauthRedirectFailed": {
           "message": "Wir konnten Sie nicht zur Anmeldung bei {source} weiterleiten. Bitte versuchen Sie es erneut."
@@ -2644,6 +2659,9 @@
         },
         "retryButton": {
           "label": "Erneut versuchen"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}"
         },
         "timeout": {
           "toast": "Zeitüberschreitung des Vorgangs nach {seconds} Sekunden. Prüfen Sie Ihre Konfiguration auf Fehler."
@@ -2718,7 +2736,8 @@
         },
         "oauthOption": {
           "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Drive Sie indizieren möchten.",
-          "title": "Option 1: OAuth-App"
+          "title": "Option 1: OAuth-App",
+          "sharedScopesNote": "Google fragt den Zugriff auf Google Drive und Gmail gemeinsam an, damit ein Konto beide Connectors versorgen kann. Um dieses Konto nur für Google Drive zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Gmail-Bereichen ([warum wir fragen]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Laden Sie die JSON-Datei Ihrer OAuth-App hoch oder fügen Sie sie ein"
@@ -2776,7 +2795,8 @@
         },
         "oauthOption": {
           "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Gmail Sie indizieren möchten.",
-          "title": "Option 1: OAuth-App"
+          "title": "Option 1: OAuth-App",
+          "sharedScopesNote": "Google fragt den Zugriff auf Gmail und Google Drive gemeinsam an, damit ein Konto beide Connectors versorgen kann. Um dieses Konto nur für Gmail zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Google-Drive-Bereichen ([warum wir fragen]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Laden Sie die JSON-Datei Ihrer OAuth-App hoch oder fügen Sie sie ein"
@@ -2811,7 +2831,7 @@
         "connectButton": {
           "label": "Verbinden"
         },
-        "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein."
+        "description": "Verbinde dich mit {source} und richte den Connector für {appName} ein.{hasDocs, select, true { [Doku]({url}) ansehen} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4819,6 +4839,12 @@
         "azureGptImage2": {
           "description": "Bilderzeugungsmodell GPT Image 2, gehostet auf Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "Bilderzeugungsmodell GPT Image 2.5 Flare, gehostet auf Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Bilderzeugungsmodell GPT Image 2.5 Sunburst, gehostet auf Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Das Modell Gemini 2.5 Flash Image (Nano Banana) ist auf Geschwindigkeit und Effizienz ausgelegt."
         },
@@ -4835,7 +4861,13 @@
           "description": "Das bisherige Flaggschiff-Bilderzeugungsmodell von OpenAI."
         },
         "openaiGptImage2": {
-          "description": "Das neueste Bilderzeugungsmodell von OpenAI mit der höchsten Prompt-Treue."
+          "description": "Das Bilderzeugungsmodell der vorherigen Generation von OpenAI mit hoher Prompt-Treue."
+        },
+        "openaiGptImage25Flare": {
+          "description": "Das neueste Bilderzeugungsmodell von OpenAI mit hoher Qualität und schneller Erzeugung."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "Das Premium-Bilderzeugungsmodell von OpenAI für die präzisesten Bearbeitungen."
         }
       },
       "setDefaultError": {
@@ -5003,6 +5035,9 @@
           "description": "Dies wird Suchanfragen vorangestellt, bevor sie an das Modell übergeben werden, sofern Ihr Embedding-Modell es erfordert. Falsche oder fehlende Präfixe verschlechtern die Qualität der Embeddings.",
           "placeholder": "z. B. 'query: '",
           "title": "Abfrage-Präfix"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Verwenden Sie die GKE-Anmeldedaten des API-Servers und der Embedding-Worker. Kein JSON-Schlüssel erforderlich."
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5281,8 @@
         "serviceAccountJsonInvalid": "Muss eine gültige JSON-Datei für ein Google-Dienstkonto sein",
         "serviceAccountJsonRequired": "Dienstkonto-JSON ist erforderlich",
         "targetUrlRequired": "Ziel-URL ist erforderlich",
-        "urlInvalid": "Muss eine gültige URL sein"
+        "urlInvalid": "Muss eine gültige URL sein",
+        "googleProjectRequired": "GCP-Projekt-ID ist erforderlich"
       },
       "vectorQuantization": {
         "description": "Speichern Sie Dokumentvektoren mit weniger Bits, um Speicher zu sparen. Weniger Bits können die Suchqualität verringern.",
@@ -5896,10 +5932,12 @@
             "title": "API-Schlüssel"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Region, in der Ihre Google Vertex AI-Modelle gehostet werden. Die vollständige Liste der unterstützten Regionen finden Sie bei Google Cloud.",
             "title": "Name der Google Cloud-Region"
           },
           "projectField": {
+            "placeholder": "mein-vertex-projekt",
             "description": "Das GCP-Projekt, in dem Vertex AI aktiviert ist. Erforderlich, weil ADC das Zielprojekt bei der Identitätsübernahme eines Dienstkontos nicht zuverlässig ermitteln kann.",
             "title": "GCP-Projekt-ID"
           },
@@ -6098,12 +6136,6 @@
         "imageSummarization": {
           "label": "Bildzusammenfassung"
         },
-        "kgDeepExtraction": {
-          "label": "Knowledge-Graph-Extraktion"
-        },
-        "kgDocumentClassification": {
-          "label": "Knowledge-Graph-Klassifizierung"
-        },
         "other": {
           "label": "Sonstige"
         },
@@ -6120,8 +6152,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · Systemnutzung ist LLM-Aktivität, die {appName} im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen, kontextbezogene RAG-Verarbeitung und Knowledge-Graph-Extraktion.",
-        "emptyDescription": "Systemnutzung ist LLM-Aktivität, die {appName} im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen, kontextbezogene RAG-Verarbeitung und Knowledge-Graph-Extraktion.",
+        "description": "{start} – {end} · Systemnutzung ist LLM-Aktivität, die {appName} im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen und kontextbezogene RAG-Verarbeitung.",
+        "emptyDescription": "Systemnutzung ist LLM-Aktivität, die {appName} im Hintergrund statt für einen bestimmten Benutzer ausführt. Beispiele sind Bildzusammenfassungen und kontextbezogene RAG-Verarbeitung.",
         "error": {
           "title": "Die Systemnutzung für diesen Zeitraum konnte nicht geladen werden."
         },
@@ -9190,6 +9222,7 @@
         "loginRequired": "Sie müssen sich zuerst bei Ihrem Identitätsanbieter anmelden.",
         "oauthUserAlreadyExists": "Ein Konto mit dieser E-Mail-Adresse existiert bereits mit einer anderen Anmeldemethode. Melden Sie sich wie beim ersten Mal an, oder bitten Sie Ihren Administrator, diesen Anbieter zu verknüpfen.",
         "serverError": "Bei Ihrem Identitätsanbieter ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
+        "staleSignIn": "Dieser Anmeldelink ist abgelaufen oder nicht mehr gültig. Bitte melden Sie sich erneut an.",
         "temporarilyUnavailable": "Ihr Identitätsanbieter ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut."
       },
       "credentialsIssue": {
@@ -10820,6 +10853,9 @@
         },
         "loading": {
           "text": "Modelle werden geladen..."
+        },
+        "loadingMore": {
+          "text": "Weitere Modelle werden geladen..."
         }
       },
       "modelSettingsButton": {

@@ -4,7 +4,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
