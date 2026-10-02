@@ -49,7 +49,7 @@ func TestFindingsFromResults(t *testing.T) {
 					{
 						Package: models.PackageInfo{Name: "lodash", Version: "4.17.0", Ecosystem: "npm"},
 						Groups: []models.GroupInfo{
-							{IDs: []string{"GHSA-aaaa", "GHSA-bbbb"}, Aliases: []string{"GHSA-aaaa", "CVE-2020-1"}, MaxSeverity: "9.8"},
+							{IDs: []string{"GHSA-aaaa", "GHSA-bbbb", "GHSA-cccc"}, Aliases: []string{"GHSA-aaaa", "CVE-2020-1"}, MaxSeverity: "9.8"},
 						},
 						Vulnerabilities: []*osvschema.Vulnerability{
 							// The first record of the group names no range; the fix
@@ -78,6 +78,15 @@ func TestFindingsFromResults(t *testing.T) {
 										Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "4.17.5"}}}},
 									},
 								},
+							},
+							// A third record fixed later: every record needs its fix, so
+							// the group's version is the highest.
+							{
+								Id: "GHSA-cccc",
+								Affected: []*osvschema.Affected{{
+									Package: &osvschema.Package{Name: "lodash", Ecosystem: "npm"},
+									Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "4.18.0"}}}},
+								}},
 							},
 						},
 					},
@@ -126,8 +135,8 @@ func TestFindingsFromResults(t *testing.T) {
 	if len(npm.Aliases) != 2 {
 		t.Errorf("npm aliases = %v", npm.Aliases)
 	}
-	if npm.FixedIn != "4.17.21" {
-		t.Errorf("npm fixed_in = %q, want the lowest fixed version above 4.17.0", npm.FixedIn)
+	if npm.FixedIn != "4.18.0" {
+		t.Errorf("npm fixed_in = %q, want the highest of each record's lowest fix above 4.17.0", npm.FixedIn)
 	}
 
 	py := findings[1]

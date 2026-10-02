@@ -84,9 +84,11 @@ func findingFromGroup(group models.GroupInfo, pkg models.PackageVulns) Finding {
 	return f
 }
 
-// fixedFor returns the lowest fixed version above the installed one across
-// the group's records, for the package in its own ecosystem, so a bump to it
-// ends the finding. Empty when no record names one the comparator can place.
+// fixedFor returns the version a bump must reach to end the finding: for each
+// record in the group the lowest fixed version above the installed one, for
+// the package in its own ecosystem, and across records the highest of those,
+// since every record needs its own fix. Empty when no record names one the
+// comparator can place.
 func fixedFor(vulns []*osvschema.Vulnerability, ids []string, pkg models.PackageInfo) string {
 	installed, err := semantic.Parse(pkg.Version, pkg.Ecosystem)
 	if err != nil {
@@ -101,14 +103,35 @@ func fixedFor(vulns []*osvschema.Vulnerability, ids []string, pkg models.Package
 		if !idset[v.GetId()] {
 			continue
 		}
+		fixed := ""
 		for _, aff := range v.GetAffected() {
 			if !strings.EqualFold(aff.GetPackage().GetName(), pkg.Name) || !sameEcosystem(aff.GetPackage().GetEcosystem(), pkg.Ecosystem) {
 				continue
 			}
-			best = lowestFixedAbove(installed, aff, best, pkg.Ecosystem)
+			fixed = lowestFixedAbove(installed, aff, fixed, pkg.Ecosystem)
 		}
+		best = higherVersion(best, fixed, pkg.Ecosystem)
 	}
 	return best
+}
+
+// higherVersion returns the higher of two versions in the ecosystem's order,
+// treating an empty or unparsable one as the lower.
+func higherVersion(a, b, ecosystem string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	av, err := semantic.Parse(a, ecosystem)
+	if err != nil {
+		return b
+	}
+	if c, err := av.CompareStr(b); err == nil && c < 0 {
+		return b
+	}
+	return a
 }
 
 // sameEcosystem compares OSV ecosystem names without their release suffix,
