@@ -696,9 +696,10 @@ def get_external_access_from_sharepoint(
     add_prefix: bool = False,
     treat_sharing_link_as_public: bool = False,
     permission_cache: SharepointPermissionCache | None = None,
+    list_id: str | None = None,
 ) -> ExternalAccess:
     permission_cache = permission_cache or SharepointPermissionCache()
-    if drive_item and drive_name:
+    if drive_item and (list_id or drive_name):
         is_public = _is_public_item(drive_item, treat_sharing_link_as_public)
         if is_public:
             logger.info("Item %s is public", drive_item.id)
@@ -715,12 +716,16 @@ def get_external_access_from_sharepoint(
                 f"Failed to get SharePoint list item ID for item {drive_item.id}"
             )
 
-        if drive_name in SHARED_DOCUMENTS_MAP_REVERSE:
-            drive_name = SHARED_DOCUMENTS_MAP_REVERSE[drive_name]
-
-        item = client_context.web.lists.get_by_title(drive_name).items.get_by_id(
-            item_id
-        )
+        # The library's list title can differ from the Graph drive name
+        # (renamed or localized libraries), so prefer the stable list ID.
+        if list_id:
+            sp_list = client_context.web.lists.get_by_id(list_id)
+        elif drive_name:
+            list_name = SHARED_DOCUMENTS_MAP_REVERSE.get(drive_name, drive_name)
+            sp_list = client_context.web.lists.get_by_title(list_name)
+        else:
+            raise RuntimeError(f"No list ID or drive name for item {drive_item.id}")
+        item = sp_list.items.get_by_id(item_id)
     elif site_page:
         site_url = site_page.get("webUrl")
         # Keep percent-encoding intact so the path matches the encoding
@@ -752,6 +757,7 @@ def get_hierarchy_node_external_access_from_sharepoint(
     drive_name: str | None,
     folder_server_relative_path: str | None,
     permission_cache: SharepointPermissionCache | None = None,
+    list_id: str | None = None,
 ) -> ExternalAccess:
     """``folder_server_relative_path`` is decoded, e.g. "/sites/eng/RD Docs/API".
 
@@ -760,6 +766,8 @@ def get_hierarchy_node_external_access_from_sharepoint(
     permission_cache = permission_cache or SharepointPermissionCache()
     if node_type == HierarchyNodeType.SITE:
         securable_object = client_context.web
+    elif node_type == HierarchyNodeType.DRIVE and list_id:
+        securable_object = client_context.web.lists.get_by_id(list_id)
     elif node_type == HierarchyNodeType.DRIVE and drive_name:
         list_name = SHARED_DOCUMENTS_MAP_REVERSE.get(drive_name, drive_name)
         securable_object = client_context.web.lists.get_by_title(list_name)

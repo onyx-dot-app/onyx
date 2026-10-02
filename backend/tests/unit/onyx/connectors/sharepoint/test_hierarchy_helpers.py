@@ -212,3 +212,85 @@ def test_folder_permissions_use_library_url_not_display_name(
         f"{site_url}/R&D Docs/Plans",
         f"{site_url}/R&D Docs/Plans/Q1%20%26%20Q2",
     ]
+
+
+SITE_URL = "https://contoso.sharepoint.com/sites/eng"
+DRIVE_URL = f"{SITE_URL}/Shared%20Documents"
+
+
+@patch(
+    "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access"
+)
+def test_drive_node_permissions_use_drive_list_id(mock_get_access: MagicMock) -> None:
+    access = ExternalAccess.empty()
+    mock_get_access.return_value = access
+    connector = SharepointConnector()
+    connector._graph_client = MagicMock()
+
+    with (
+        patch.object(
+            connector, "_create_rest_client_context", return_value=MagicMock()
+        ),
+        patch.object(
+            connector, "_graph_api_get_json", return_value={"id": "list-guid"}
+        ) as mock_graph_get,
+    ):
+        node = next(
+            connector._yield_drive_hierarchy_node(
+                SITE_URL,
+                DRIVE_URL,
+                "Documents",
+                SharepointConnectorCheckpoint(has_more=True),
+                include_permissions=True,
+                drive_id="drive-1",
+            )
+        )
+
+    assert node.external_access is access
+    assert mock_get_access.call_args.kwargs["list_id"] == "list-guid"
+    assert mock_graph_get.call_args.args[0].endswith("/drives/drive-1/list")
+
+
+@patch(
+    "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access"
+)
+def test_drive_node_permission_failure_is_not_fatal(mock_get_access: MagicMock) -> None:
+    mock_get_access.side_effect = RuntimeError("List 'Documents' does not exist")
+    connector = SharepointConnector()
+    connector._graph_client = MagicMock()
+
+    with (
+        patch.object(
+            connector, "_create_rest_client_context", return_value=MagicMock()
+        ),
+        patch.object(connector, "_get_drive_list_id", return_value=None),
+    ):
+        nodes = list(
+            connector._yield_drive_hierarchy_node(
+                SITE_URL,
+                DRIVE_URL,
+                "Documents",
+                SharepointConnectorCheckpoint(has_more=True),
+                include_permissions=True,
+                drive_id="drive-1",
+            )
+        )
+
+    assert len(nodes) == 1
+    assert nodes[0].node_type == HierarchyNodeType.DRIVE
+    assert nodes[0].external_access is None
+
+
+def test_get_drive_list_id_caches_and_falls_back_on_error() -> None:
+    connector = SharepointConnector()
+
+    with patch.object(
+        connector, "_graph_api_get_json", side_effect=[{"id": "list-guid"}, Exception]
+    ) as mock_graph_get:
+        assert connector._get_drive_list_id("drive-1") == "list-guid"
+        assert connector._get_drive_list_id("drive-1") == "list-guid"
+        assert connector._get_drive_list_id("drive-2") is None
+        assert connector._get_drive_list_id("drive-2") is None
+        assert connector._get_drive_list_id(None) is None
+
+    assert mock_graph_get.call_count == 2
