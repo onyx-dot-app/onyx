@@ -110,19 +110,22 @@ def test_no_auth_template_requires_user_substitutions() -> None:
         auth_template=template,
         user_email="alice@example.com",
     )
-    connected = disconnected.model_copy(
-        update={
-            "connection_config": MCPConnectionConfig(
-                config={
-                    "headers": {},
-                    "header_substitutions": {"gateway_key": "gateway-secret"},
-                }
-            )
-        }
+    connected = ResolvedMCPCredentials(
+        connection_config=MCPConnectionConfig(
+            config={
+                "headers": {},
+                "header_substitutions": {"gateway_key": "gateway-secret"},
+            }
+        ),
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.NONE,
+        auth_template=template,
+        user_email="alice@example.com",
     )
 
     assert not disconnected.can_authenticate()
     assert connected.can_authenticate()
+    assert connected.build_headers() == {"X-Gateway-Key": "gateway-secret"}
     assert connected.build_headers() == {"X-Gateway-Key": "gateway-secret"}
 
 
