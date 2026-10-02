@@ -77,7 +77,7 @@ func runAuditGate(opts *AuditGateOptions, stdout, stderr io.Writer) error {
 			return failf("Failed to resolve the %s image: %v", component, err)
 		}
 		ref := strings.TrimSpace(string(out))
-		fmt.Fprintf(stderr, "\nScanning %s: %s\n", component, ref)
+		_, _ = fmt.Fprintf(stderr, "\nScanning %s: %s\n", component, ref)
 		res, err := runImage(audit.ImageOptions{
 			Image:     ref,
 			Format:    "text",
