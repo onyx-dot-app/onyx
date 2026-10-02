@@ -21,7 +21,7 @@ import {
 } from "@/lib/constants";
 import {
   oauthSupportedSources,
-  type ValidSources,
+  ValidSources,
 } from "@/lib/connectors/types/source";
 import type {
   AnyCredential,
@@ -38,11 +38,16 @@ import type {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
-/** Every credential the admin can see, across all sources. */
-export function useAdminCredentials() {
+/**
+ * Every credential the admin can see, across all sources. Pass
+ * `enabled: false` to skip the request on pages that do not need it.
+ */
+export function useAdminCredentials({
+  enabled = true,
+}: { enabled?: boolean } = {}) {
   const { mutate } = useSWRConfig();
   const swrResponse = useSWR<Credential<any>[]>(
-    SWR_KEYS.adminCredentials,
+    enabled ? SWR_KEYS.adminCredentials : null,
     errorHandlingFetcher
   );
 
@@ -173,6 +178,8 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
 
   function refresh() {
     refreshSourceCredentials(sourceType);
+    // The Gmail and Drive setups read the all-source list; keep it in step.
+    mutate(SWR_KEYS.adminCredentials);
   }
 
   async function open(
@@ -282,12 +289,13 @@ export function refreshSourceCredentials(
 }
 
 export const useGmailCredentials = (connector: string) => {
+  // Only the Gmail setup reads the admin list; other sources skip it.
   const {
     data: credentialsData,
     isLoading: isCredentialsLoading,
     error: credentialsError,
     refreshCredentials,
-  } = useAdminCredentials();
+  } = useAdminCredentials({ enabled: connector === ValidSources.Gmail });
 
   const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
     credentialsData?.find(
@@ -315,7 +323,10 @@ export const useGmailCredentials = (connector: string) => {
 };
 
 export const useGoogleDriveCredentials = (connector: string) => {
-  const { data: credentialsData } = useAdminCredentials();
+  // Only the Google Drive setup reads the admin list; other sources skip it.
+  const { data: credentialsData } = useAdminCredentials({
+    enabled: connector === ValidSources.GoogleDrive,
+  });
 
   const googleDrivePublicCredential:
     | Credential<GoogleDriveCredentialJson>
