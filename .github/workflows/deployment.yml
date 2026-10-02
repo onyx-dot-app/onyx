@@ -79,8 +79,9 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read # checkout + read lockfiles
-      id-token: write # OIDC for fetching the S3 allowlist
+      id-token: write # OIDC for fetching the S3 allowlist and the registry credentials
       vulnerability-alerts: read # read Dependabot alerts
+      security-events: write # SARIF uploads of the image audits
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -108,26 +109,87 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run --no-sync ods audit --fail-on=critical
 
+      # The same registry credentials the builds use, so the bases scanned are
+      # the bases shipped. Without them (forks) the public defaults apply, as
+      # in the builds.
+      - name: Get AWS Secrets
+        continue-on-error: true
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
       - name: Login to Docker Hub
+        if: env.DOCKER_USERNAME != ''
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
 
       - name: Login to the hardened base images
         uses: ./.github/actions/dhi-base-images
         with:
-          docker-username: ${{ secrets.DOCKER_USERNAME }}
-          docker-token: ${{ secrets.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       # Everything a shipped image holds outside its lockfiles: the pinned
-      # runtime base for web and model-server, the backend's apt stage built
-      # here. Scanned before any build, so one job reports every blocker.
+      # runtime base for web and model-server, the backend's os stage built
+      # here. All three are scanned before the step fails, so one run shows
+      # every blocker, and --strict keeps an empty scan from passing.
       - name: Run base image audit
         run: |
+          status=0
           for component in web model-server backend; do
-            uv run --no-sync ods audit image "$(.github/scripts/base-image-ref.sh "${component}")" --fail-on=critical
+            image="$(.github/scripts/base-image-ref.sh "${component}")"
+            uv run --no-sync ods audit image "${image}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || status=1
+            if [ ! -s "image-audit-${component}.sarif" ]; then
+              # $schema is a literal SARIF key, not a shell variable.
+              # shellcheck disable=SC2016
+              echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > "image-audit-${component}.sarif"
+            fi
           done
+          exit "${status}"
+
+      # Rolling main-HEAD builds map to refs/heads/main so the Security tab stays
+      # authoritative for main; test runs upload against their own ref. Release
+      # tags sit on older commits, so they gate without uploading.
+      - name: Upload the web image audit to the GitHub Security tab
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-web.sarif
+          category: image-audit-web
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the model-server image audit to the GitHub Security tab
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-model-server.sarif
+          category: image-audit-model-server
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the backend image audit to the GitHub Security tab
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-backend.sarif
+          category: image-audit-backend
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
 
   # Validate that a pushed release tag is versioned correctly, via
   # `ods release --check`. A cloud tag must be the tag `ods release cloud`
