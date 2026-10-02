@@ -48,6 +48,8 @@ def test_run_dependent_values_are_flagged(line: str) -> None:
         'op.add_column("tool", sa.Column("c", sa.DateTime(), server_default=func.now()))',
         'op.create_table("t", sa.Column("c", sa.DateTime(), server_default=sa.func.now()))',
         'op.alter_column("tool", "c", server_default=func.now())',
+        "op.execute(sa.update(tool).values(updated_at=sa.func.now()))",
+        "op.execute(update(tool).where(tool.c.id == 1).values(updated_at=func.now()))",
         "op.execute(\"UPDATE tool SET updated_at = now() WHERE name = 'x'\")",
         "op.execute(\"INSERT INTO tool (id, name) VALUES (1, 'x')\")",
         "op.execute(insert(tool_table).values(id=1, name='x'))",

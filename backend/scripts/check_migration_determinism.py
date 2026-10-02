@@ -47,9 +47,9 @@ _RUN_DEPENDENT_CALLS = {
     "token_urlsafe",
 }
 _CLOCKS = {"datetime", "date"}
-# Run-dependent unless it defines a column default, where it is schema, not a row.
+# Run-dependent unless it defines a column default or updates rows that exist.
 _DEFAULT_CALLS = {"now", "gen_random_uuid"}
-_SCHEMA_CALLS = {"Column", "create_table", "add_column", "alter_column"}
+_NOT_ROW_CALLS = {"Column", "create_table", "add_column", "alter_column", "update"}
 
 
 class _RunDependentFinder(ast.NodeVisitor):
@@ -59,7 +59,7 @@ class _RunDependentFinder(ast.NodeVisitor):
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
         self._statement: ast.stmt | None = None
-        self._schema_depth = 0
+        self._not_row_depth = 0
         self.found: set[int] = set()
 
     def visit(self, node: ast.AST) -> None:
@@ -102,20 +102,32 @@ class _RunDependentFinder(ast.NodeVisitor):
             name == "now" and _terminal_name(receiver) in _CLOCKS
         ):
             self._flag(node)
-        elif name in _DEFAULT_CALLS and not self._schema_depth:
+        elif name in _DEFAULT_CALLS and not self._not_row_depth:
             self._flag(node)
         elif name == "get" and _terminal_name(receiver) == "environ":
             self._flag(node)
-        schema = name in _SCHEMA_CALLS
-        self._schema_depth += schema
+        not_row = bool(_chain_names(node) & _NOT_ROW_CALLS)
+        self._not_row_depth += not_row
         self.generic_visit(node)
-        self._schema_depth -= schema
+        self._not_row_depth -= not_row
 
     def visit_Constant(self, node: ast.Constant) -> None:
         if not isinstance(node.value, str) or not _INSERT_SQL.search(node.value):
             return
         if _RUN_DEPENDENT_SQL.search(node.value):
             self._flag(node)
+
+
+def _chain_names(node: ast.expr) -> set[str]:
+    """Every name along a call chain, so `sa.update(t).values(...)` names update."""
+    names: set[str] = set()
+    while isinstance(node, ast.Call | ast.Attribute):
+        if isinstance(node, ast.Attribute):
+            names.add(node.attr)
+        node = node.func if isinstance(node, ast.Call) else node.value
+    if isinstance(node, ast.Name):
+        names.add(node.id)
+    return names
 
 
 def _terminal_name(node: ast.expr | None) -> str | None:
