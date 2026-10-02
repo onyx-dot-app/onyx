@@ -1269,6 +1269,27 @@ def test_retrieve_confluence_spaces_cloud_v2_paths_do_not_double_wiki(
     assert paths == expected_paths
 
 
+def test_retrieve_confluence_spaces_cloud_v2_caps_the_limit(
+    mock_credentials_provider: mock.Mock,
+) -> None:
+    client = _OnyxConfluence(
+        is_cloud=True,
+        url="https://acme.atlassian.net/wiki",
+        credentials_provider=mock_credentials_provider,
+    )
+    internal_client = mock.Mock()
+    internal_client.url = "https://acme.atlassian.net/wiki"
+    internal_client.get.return_value = _create_mock_response(
+        200, {"results": [{"key": "S"}], "_links": {}}
+    )
+    client._confluence = internal_client
+    client._kwargs = client.shared_base_kwargs
+
+    list(client.retrieve_confluence_spaces(limit=5000))
+
+    assert internal_client.get.call_args.args[0] == "api/v2/spaces?limit=250"
+
+
 def test_jsonrpc_websudo_html_response_raises_validation_error(
     confluence_server_client: _OnyxConfluence,
 ) -> None:

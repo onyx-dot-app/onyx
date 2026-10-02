@@ -120,6 +120,8 @@ _RATE_LIMITED_STATUS = 429
 
 _CONFLUENCE_SPACES_API_V1 = "rest/api/space"
 _CONFLUENCE_SPACES_API_V2 = "wiki/api/v2/spaces"
+# The v2 spaces API returns 400 for a larger limit; v1 caps it silently.
+_CONFLUENCE_SPACES_API_V2_MAX_LIMIT = 250
 
 # Atlassian KB documenting how Secure Administrator Sessions (WebSudo) breaks
 # admin JSON-RPC calls. Surfaced in the validation error so admins can act on
@@ -450,7 +452,10 @@ class _OnyxConfluence:
 
         try:
             yield from self._paginate_spaces_for_endpoint(
-                use_v2, base_url, limit, space_keys
+                use_v2,
+                base_url,
+                min(limit, _CONFLUENCE_SPACES_API_V2_MAX_LIMIT) if use_v2 else limit,
+                space_keys,
             )
         except HTTPError as e:
             if e.response.status_code == 404 and use_v2:
