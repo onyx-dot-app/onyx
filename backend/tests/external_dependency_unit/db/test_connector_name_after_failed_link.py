@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import Connector, ConnectorCredentialPair, Credential
 from onyx.server.documents.models import ConnectorBase
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
 def _connector_data(name: str, source: DocumentSource) -> ConnectorBase:
@@ -150,3 +152,24 @@ def test_a_paired_namesake_keeps_the_unpaired_one_too(
         )
 
     assert sorted(_ids_named(db_session, name)) == sorted([unpaired_id, paired_id])
+
+
+def _create_in_own_session(name: str) -> int | None:
+    with get_session_with_current_tenant() as session:
+        try:
+            return create_connector(
+                session, _connector_data(name, DocumentSource.MOCK_CONNECTOR)
+            ).id
+        except ValueError:
+            return None
+
+
+def test_concurrent_retries_leave_one_connector(db_session: Session, name: str) -> None:
+    create_connector(db_session, _connector_data(name, DocumentSource.MOCK_CONNECTOR))
+
+    run_functions_tuples_in_parallel(
+        [(_create_in_own_session, (name,)) for _ in range(4)], max_workers=4
+    )
+
+    db_session.expire_all()
+    assert len(_ids_named(db_session, name)) == 1
