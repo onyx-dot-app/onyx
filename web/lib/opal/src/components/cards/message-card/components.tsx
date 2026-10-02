@@ -61,6 +61,14 @@ interface MessageCardBaseProps {
   innerPadding?: 1 | 2;
 
   /**
+   * Padding of the `ContentAction` itself, inside `innerPadding`, as a
+   * spacing step.
+   *
+   * @default 0
+   */
+  contentPadding?: 0 | 1 | 2;
+
+  /**
    * Content rendered below a divider, under the main content area.
    * When provided, a `Divider` is inserted between the `ContentAction` and this node.
    */
@@ -171,6 +179,7 @@ function MessageCard({
   titleMaxLines,
   outerPadding = 2,
   innerPadding = 2,
+  contentPadding = 0,
   bottomChildren,
   rightChildren,
   onClose,
@@ -218,7 +227,7 @@ function MessageCard({
               sizePreset="main-ui"
               variant="section"
               rightChildren={right}
-              padding={0}
+              padding={contentPadding}
             />
           </div>
 

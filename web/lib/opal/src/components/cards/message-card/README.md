@@ -20,6 +20,7 @@ Both paddings move together. A card inside a modal, popover or toast uses `outer
 | `description`    | `string \| RichStr`                                                     | —           | Description below the title                                                                |
 | `outerPadding`   | `1 \| 2`                                                                | `2`         | Padding around the outer card, as a spacing step (`N / 4` rem). Narrowed to two densities. |
 | `innerPadding`   | `1 \| 2`                                                                | `2`         | Padding around the header Content area, as a spacing step (`N / 4` rem). Narrowed to two densities. |
+| `contentPadding` | `0 \| 1 \| 2`                                                           | `0`         | Padding of the `ContentAction` itself, inside `innerPadding`, as a spacing step.            |
 | `bottomChildren` | `ReactNode`                                                             | —           | Content below a divider, under the main content                                            |
 | `rightChildren`  | `ReactNode`                                                             | —           | Content on the right side. Mutually exclusive with `onClose`.                              |
 | `onClose`        | `() => void`                                                            | —           | Close button callback. When omitted, no close button is rendered.                          |
