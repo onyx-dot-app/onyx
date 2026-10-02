@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, AgentEventType
-from onyx.agents.models import AgentState, PreparedStep, RunState
+from onyx.agents.models import AgentState, PreparedStep, RunState, StepInput, StepResult
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentTool,
@@ -227,6 +227,63 @@ def test_context_transform_does_not_rewrite_durable_history() -> None:
     run_agent(agent, runs=runs, max_steps=1)
     assert isinstance(agent.state.messages[0], UserMessage)
     assert agent.state.messages[0].content == "original"
+
+
+def test_preparation_previous_output_shares_only_detached_callback_messages() -> None:
+    requests: list[GenerationRequest] = []
+    prepared_inputs: list[StepInput] = []
+    tool = echo(
+        lambda _invocation: ToolResult(
+            content="tool output", details=ToolProgress(content="detail")
+        )
+    )
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return calls() if len(requests) == 1 else answer()
+
+    def prepare(state: StepInput) -> PreparedStep:
+        prepared_inputs.append(state)
+        if state.previous is not None:
+            previous = state.previous
+            assert previous.message is state.messages[0]
+            assert previous.tool_results[0] is state.messages[1]
+            previous.message.content.clear()
+            previous.tool_results[0].content = "callback output"
+            details = previous.tool_results[0].details
+            assert isinstance(details, ToolProgress)
+            details.content = "callback detail"
+            previous.options.max_tokens = 1
+            state.history.clear()
+            state.input_messages.clear()
+        return PreparedStep(tools=[tool], options=GenerationOptions(max_tokens=128))
+
+    agent = Agent(
+        FakeModelClient(generate),
+        state=AgentState(messages=[UserMessage(content="history")]),
+        prepare_step=prepare,
+    )
+    run = agent.start(max_steps=2, messages=[UserMessage(content="question")])
+    assert run.result(3).output.text == "done"
+    assert run.wait_for_idle(3)
+    assert len(prepared_inputs) == len(requests) == 2
+    assert [message.text for message in requests[1].messages] == [
+        "history",
+        "question",
+        "",
+        "tool output",
+    ]
+    model_message = requests[1].messages[2]
+    assert isinstance(model_message, AssistantMessage)
+    assert [call.name for call in model_message.tool_calls] == ["echo"]
+    assert all(request.options.max_tokens == 128 for request in requests)
+    saved_result = run.snapshot().steps[0].tools["0"].result
+    assert saved_result is not None
+    assert saved_result.content == "tool output"
+    assert isinstance(saved_result.details, ToolProgress)
+    assert saved_result.details.content == "detail"
 
 
 def test_tool_hooks_can_block_transform_and_report_progress() -> None:
@@ -552,10 +609,20 @@ def test_current_thread_start_completes_storage_before_return() -> None:
     caller = threading.current_thread()
     visited: list[str] = []
 
+    def prepare(_input: StepInput) -> PreparedStep:
+        assert threading.current_thread() is caller
+        visited.append("prepare")
+        return PreparedStep()
+
+    def after(_result: StepResult) -> bool:
+        assert threading.current_thread() is caller
+        visited.append("after")
+        return False
+
     def generate(
         _request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
-        assert threading.current_thread() is not caller
+        assert threading.current_thread() is caller
         visited.append("model")
         return answer()
 
@@ -572,12 +639,12 @@ def test_current_thread_start_completes_storage_before_return() -> None:
         ownership=FakeRunOwnership(release=release),
     )
 
-    run = Agent(FakeModelClient(generate)).start(
-        background=False, max_steps=1, coordinator=coordinator
-    )
+    run = Agent(
+        FakeModelClient(generate), prepare_step=prepare, after_step=after
+    ).start(background=False, max_steps=1, coordinator=coordinator)
     assert run.result(0).output.text == "done"
     assert coordinator.completion(run.id).result(0).run_id == run.id
-    assert visited == ["model", "save", "release"]
+    assert visited == ["prepare", "model", "after", "save", "release"]
     assert coordinator.close(3)
 
 

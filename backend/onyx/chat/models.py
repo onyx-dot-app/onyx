@@ -12,6 +12,7 @@ from onyx.agents.execution_records import (
 )
 from onyx.agents.models import StepRecord, messages_from_steps
 from onyx.cache.interface import CacheBackend
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
@@ -462,6 +463,7 @@ class ChatTurnSetup(BaseModel):
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool
     cache: CacheBackend
+    admission: ChatTurnAdmission
     # Execution params forwarded to per-model tool construction
     slack_context: SlackContext | None
     custom_tool_additional_headers: dict[str, str] | None

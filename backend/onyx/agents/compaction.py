@@ -70,9 +70,7 @@ def message_tokens(message: Message) -> int:
         count += sum(
             count_tokens(call.model_dump_json()) for call in message.tool_calls
         )
-    elif isinstance(message, (UserMessage, ToolResultMessage)) and not isinstance(
-        message.content, str
-    ):
+    elif isinstance(message, UserMessage) and not isinstance(message.content, str):
         count += sum(
             IMAGE_TOKEN_ESTIMATE
             for part in message.content
@@ -111,22 +109,16 @@ def history_digest(messages: list[Message]) -> str:
     return digest.hexdigest()
 
 
-def checkpoint_matches(
-    messages: list[Message], checkpoint: CompactionCheckpoint
-) -> bool:
-    return (
-        checkpoint.covered_count <= len(messages)
-        and history_digest(messages[: checkpoint.covered_count])
-        == checkpoint.covered_digest
-    )
-
-
 def working_messages(
     messages: list[Message], checkpoint: CompactionCheckpoint | None
 ) -> list[Message]:
     if checkpoint is None:
         return list(messages)
-    if not checkpoint_matches(messages, checkpoint):
+    if (
+        checkpoint.covered_count > len(messages)
+        or history_digest(messages[: checkpoint.covered_count])
+        != checkpoint.covered_digest
+    ):
         raise CheckpointMismatchError(
             "Compaction checkpoint does not match its source history"
         )
@@ -222,7 +214,7 @@ def compact_history(
     model: LLM,
     history: list[Message],
     previous: CompactionCheckpoint | None,
-    execution: GenerationContext,
+    generation_context: GenerationContext,
 ) -> CompactionCheckpoint:
     budget = context_budget(model)
     start = previous.covered_count if previous else 0
@@ -261,8 +253,8 @@ def compact_history(
             raise ContextLimitError(
                 "A summary source label exceeds the available input"
             )
-        if execution.cancellation:
-            execution.cancellation.check()
+        if generation_context.cancellation:
+            generation_context.cancellation.check()
         response = model.invoke(
             GenerationRequest(
                 system_prompt=AGENT_COMPACTION_PROMPT,
@@ -277,11 +269,11 @@ def compact_history(
                     reasoning_effort=ReasoningEffort.OFF,
                 ),
             ),
-            execution.model_copy(
+            generation_context.model_copy(
                 update={
                     "flow": LLMFlow.CHAT_HISTORY_SUMMARIZATION,
                     "total_timeout_s": min(
-                        execution.total_timeout_s or SUMMARY_TIMEOUT_SECONDS,
+                        generation_context.total_timeout_s or SUMMARY_TIMEOUT_SECONDS,
                         SUMMARY_TIMEOUT_SECONDS,
                     ),
                 }

@@ -11,6 +11,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
+from pydantic import BaseModel
 
 from onyx.agents.agent_coordination import (
     AgentCoordinator,
@@ -58,6 +59,33 @@ from tests.unit.onyx.agents.fakes import (
     FakeRunStore,
     run_agent,
 )
+
+
+class MutableRestorationConfig(BaseModel):
+    sources: list[str]
+
+
+def test_discovery_isolates_nested_configuration_from_callers() -> None:
+    configuration = MutableRestorationConfig(sources=["original"])
+    info = AgentInfo(
+        id="child",
+        path="/root/child",
+        parent_id="root",
+        description="",
+        restoration_config=configuration,
+    )
+    owner = AgentCoordinator()
+    owner.register(info)
+    configuration.sources.append("caller change")
+    view = owner.view()
+    discovered = view.discover_children("root")[0]
+    exposed = discovered.restoration_config
+    assert isinstance(exposed, MutableRestorationConfig)
+    exposed.sources.append("discovery change")
+    for coordinator in (owner, view):
+        saved = coordinator.discover_children("root")[0].restoration_config
+        assert isinstance(saved, MutableRestorationConfig)
+        assert saved.sources == ["original"]
 
 
 def parent_agent(
@@ -122,16 +150,16 @@ def test_saved_failure_matches_live_failure(
 
     parent = parent_agent(retrieve)
     coordinator = AgentCoordinator(
-        agents=[
-            AgentInfo(
-                id=child.id,
-                path="/root/research",
-                parent_id=parent.id,
-                description="Research",
-                restoration_config=None,
-            )
-        ],
-        directory=FakeAgentDirectory(read_run=lambda *_: transcript),
+        directory=FakeAgentDirectory(read_run=lambda *_: transcript)
+    )
+    coordinator.register(
+        AgentInfo(
+            id=child.id,
+            path="/root/research",
+            parent_id=parent.id,
+            description="Research",
+            restoration_config=None,
+        )
     )
     run_agent(parent, max_steps=2, coordinator=coordinator)
 
@@ -203,7 +231,7 @@ def test_child_reuse_preserves_old_records_and_rejects_stale_tool_capabilities()
         assert after.child_runs[0].previous_run_id == before.child_runs[0].run_id
         assert before.child_runs[0].parent_tool_call_id == "first"
         assert after.child_runs[0].parent_message_id == f"{second.id}:0"
-        assert coordinator.discovery(parent.id)[0].id == child.id
+        assert coordinator.discover_children(parent.id)[0].id == child.id
         assert coordinator.close(timeout=3)
 
     exercise()
@@ -502,21 +530,22 @@ def test_child_cancellation_retains_provider_cleanup_ownership() -> None:
                 assert entered.wait(2)
                 assert spawned_child.wait(2)
                 run.cancel()
-                with pytest.raises(AgentCancelled):
+                with pytest.raises(RunFailed):
                     run.result(timeout=2)
                 record = run.snapshot()
-                assert record.status == RunStatus.CANCELLED
-                assert record.child_runs[0].status == RunStatus.CANCELLED
-                assert record.child_runs[0].failure is None
+                assert record.status == RunStatus.ERROR
+                assert record.child_runs[0].status == RunStatus.ERROR
+                assert record.child_runs[0].failure is not None
                 assert not run.wait_for_idle(timeout=0.01)
-                run._reusable.result(timeout=2)
-                following = parent.start(max_steps=1, coordinator=coordinator)
-                following.result(timeout=2)
-                assert following.wait_for_idle(timeout=2)
-                assert not run.wait_for_idle(timeout=0)
+                assert not run._reusable.done()
+                with pytest.raises(RuntimeError, match="already running or draining"):
+                    parent.start(max_steps=1, coordinator=coordinator)
             finally:
                 release_cleanup.set()
             assert run.wait_for_idle(timeout=2)
+            following = parent.start(max_steps=1, coordinator=coordinator)
+            following.result(timeout=2)
+            assert following.wait_for_idle(timeout=2)
             assert run.snapshot() == record
             assert coordinator.close(timeout=2)
 
@@ -772,7 +801,7 @@ def test_fresh_coordinator_view_rebinds_idle_child_and_checks_visibility() -> No
     hidden = coordinator.view(
         directory=FakeAgentDirectory(lookup_agent=lambda *_: None)
     )
-    assert hidden.discovery(parent.id) == []
+    assert hidden.discover_children(parent.id) == []
     with pytest.raises(ValueError, match="not available"):
         hidden.child_run(spawned[0].run_id, parent.id)
     assert coordinator.close(3)
@@ -839,7 +868,7 @@ def test_views_authorize_runs_independently_for_the_same_child() -> None:
             assert view.saved_run(hidden.id, parent.id, load_archive=False) is None
             assert view.child_run(visible.id, parent.id) is visible
             assert view.saved_run(visible.id, parent.id).run_id == visible.id
-        assert owner.view().loaded_child(child.id, parent.id) is child
+        assert owner.view().resolve_child(child.id, parent.id) is child
 
         def reject_stale_context(invocation: ToolInvocation) -> ToolResult:
             with pytest.raises(ValueError, match="restoration is unavailable"):
@@ -850,8 +879,8 @@ def test_views_authorize_runs_independently_for_the_same_child() -> None:
         branch_run = branch_parent.start(max_steps=2, coordinator=branch_a)
         branch_run.result(3)
         assert branch_run.wait_for_idle(3)
-        assert branch_a.discovery(parent.id)[0].latest_run_id == first.id
-        assert branch_b.discovery(parent.id)[0].latest_run_id == second.id
+        assert branch_a.discover_children(parent.id)[0].latest_run_id == first.id
+        assert branch_b.discover_children(parent.id)[0].latest_run_id == second.id
         assert owner.child_run(first.id, parent.id) is first
         assert owner.child_run(second.id, parent.id) is second
     finally:
@@ -1242,8 +1271,9 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
         ],
     )
     owner = AgentCoordinator(
-        agents=[info], directory=FakeAgentDirectory(read_run=lambda *_: archived_child)
+        directory=FakeAgentDirectory(read_run=lambda *_: archived_child)
     )
+    owner.register(info)
     resumed = parent.resume(restored.run_state, coordinator=owner)
     try:
         assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
@@ -1596,9 +1626,10 @@ def test_parent_handoff_releases_feature_and_preserves_child_dependency() -> Non
         gc.collect()
         assert reference() is None
         fresh_owner = AgentCoordinator(
-            agents=owner.registrations(),
-            directory=FakeAgentDirectory(read_run=lambda *_: child_run.snapshot()),
+            directory=FakeAgentDirectory(read_run=lambda *_: child_run.snapshot())
         )
+        for info in owner.registrations():
+            fresh_owner.register(info)
         replacement = Agent(
             FakeModelClient(
                 lambda *_: AssistantMessage(
@@ -2010,8 +2041,10 @@ def test_restoring_history_preserves_branch_latest_run(
             restored = branch.restore_completed(saved)
         assert branch.child_run(archived.run_id, "root") is restored
         assert branch.completion(archived.run_id).result(0) == archived
-        assert branch.discovery("root")[0].latest_run_id == current.latest_run_id
-        assert other.discovery("root")[0].latest_run_id == archived.run_id
+        assert (
+            branch.discover_children("root")[0].latest_run_id == current.latest_run_id
+        )
+        assert other.discover_children("root")[0].latest_run_id == archived.run_id
     finally:
         assert owner.close(3)
 
@@ -2028,28 +2061,27 @@ def test_same_scope_view_observes_completion_of_a_running_child() -> None:
         return AssistantMessage(content=[TextContent(text="done")])
 
     child = Agent(FakeModelClient(reply))
-    owner = AgentCoordinator(
-        agents=[
-            AgentInfo(
-                id=child.id,
-                path="/root/child",
-                parent_id="root",
-                description="",
-                restoration_config=None,
-                latest_run_id="previous",
-                status=RunStatus.COMPLETE,
-            )
-        ]
+    owner = AgentCoordinator()
+    owner.register(
+        AgentInfo(
+            id=child.id,
+            path="/root/child",
+            parent_id="root",
+            description="",
+            restoration_config=None,
+            latest_run_id="previous",
+            status=RunStatus.COMPLETE,
+        )
     )
     try:
         run = child.start(max_steps=1, coordinator=owner)
         assert entered.wait(3)
         view = owner.view()
-        assert view.discovery("root")[0].latest_run_id == run.id
+        assert view.discover_children("root")[0].latest_run_id == run.id
         finish.set()
         assert run.result(3).output.text == "done"
         assert run.wait_for_idle(3)
-        info = view.discovery("root")[0]
+        info = view.discover_children("root")[0]
         assert info.latest_run_id == run.id
         assert info.status == RunStatus.COMPLETE
     finally:

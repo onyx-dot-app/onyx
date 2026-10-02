@@ -98,6 +98,8 @@ class StepResult(BaseModel):
 
 
 class StepInput(BaseModel):
+    """Detached callback input; previous references its matching entries in messages."""
+
     history: list[Message]
     input_messages: list[Message]
     messages: list[Message]

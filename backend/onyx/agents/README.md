@@ -38,11 +38,12 @@ It can also suspend (`SUSPENDED`) while awaiting input, then continue with the s
 The agent and coordinator retain references to that execution. `RunState` holds its current data.
 `run.snapshot()` returns an independent `RunState` copy for inspection and storage.
 Execution functions prepare model calls, compact history, and advance steps using the run's state.
-`ToolBatch` owns parallel tool work for a step and records its results in the run.
+`ToolBatch` schedules one step's tools and finalizes their results in call order.
+It reads and updates the run's recorded step; the run tracks workers until they finish.
 Execution returns when it reaches a suspension or completion boundary.
 `Agent` combines preceding history with its latest run when starting another execution.
-A new run can start after the previous run finishes and saves its output.
-Abandoned model calls, tools, and callbacks do not block reuse; their late output is rejected.
+A new run can start after the previous run saves its output and its owned work drains.
+Cancellation rejects late output. Running tools retain ownership until they return.
 Work already started can still produce external side effects. Cancellation does not undo that work.
 
 A **step** is one model generation together with the results of any tool calls it made. A run
@@ -121,7 +122,7 @@ result = run.result(timeout=60)
 containing the final assistant message, step count, and stop reason.
 `agent.state` returns an isolated view of conversation history and its compaction checkpoint.
 An Agent accepts another run after its previous run finishes and releases execution ownership.
-Model calls, tools, and callbacks from the old run can still be draining.
+Execution ownership remains reserved until tools, callbacks, and event delivery drain.
 A suspended run keeps its conversation reserved, even after its workers become idle.
 
 Run lifecycle notifications have distinct meanings:
@@ -141,6 +142,7 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
+The input is detached from runtime state. `previous` references the matching messages within that input.
 Without this callback, the agent uses its configured instructions, tools, and model options.
 A custom callback returns the complete step configuration; the runtime does not merge agent defaults into it.
 
@@ -150,12 +152,17 @@ unless all results request termination. It stops after a final answer.
 A continuation request at the step limit produces `LIMIT`; it does not prepare or execute another step.
 Raise from `after_step` when output validation fails. The run retains the completed output and records the failure.
 
-Both callbacks run on tracked threads. Compaction does not repeat either callback.
+Both callbacks run on the execution thread. Request assembly and compaction use that thread too.
+Compaction does not repeat either callback.
+Callbacks must use bounded I/O and check cancellation during long operations.
+Cancellation waits for a synchronous callback or model read to return before execution can finish.
 `PreparedStep.assemble_messages` must be pure and repeatable: compaction can call it again with shorter history.
 Capture instructions and other step decisions during preparation. Assemble them around the history supplied by the runtime.
 Do not fetch settings, advance feature state, or capture the original history inside the assembler.
 
 `Agent.generation_context` supplies tracing identity, content policy, and execution timeouts for every step.
+The run copies these defaults at startup and binds its cancellation signal.
+Each model call receives a separate context copy. Compaction applies its own tracing flow and timeout.
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
 
@@ -183,7 +190,7 @@ The `ToolInvocation` argument provides everything the tool needs:
 - `call_id`, `call_index`, `messages` — the call's identity and logical working history.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.
 - `update(ToolProgress(...))` — the current partial output and typed result details.
-  Each update replaces the previous partial value. Return the complete value in `ToolResult`.
+  The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
 - `agents` — the subagent coordinator (next section).
 
 When a step makes several tool calls, they run in parallel, unless any called tool is marked
@@ -211,9 +218,10 @@ Batch results are recorded together before checkpoint capture; resumed runs skip
 Prompt assembly replaces exact repeated passages within a step with references to earlier results.
 
 
-The most important rule: a tool that fails should return `ToolResult(is_error=True)` so the
-model can react. A raised exception is treated as a runtime bug and fails the whole run. The
-runtime produces error results on its own for unknown tool names, malformed arguments, and
+Tools return `ToolResult(is_error=True)` when the model can respond to a failure.
+The runtime also logs ordinary tool exceptions and converts them to error results. Cancellation propagates.
+Errors in runtime coordination or tool hooks can fail the run.
+The runtime produces error results for unknown tool names, malformed arguments, and
 arguments the model truncated. The default loop stops when all results in a step set `terminate=True`.
 A custom `after_step` function chooses whether to continue.
 
@@ -241,7 +249,8 @@ A successful completion callback marks those child failures as handled.
 
 Spawning returns both an `agent_id` and a `run_id`. Use `agent_id` to start another run on that child.
 Use `run_id` to inspect, wait for, or cancel one execution. Paths are readable labels and may repeat.
-`wait_run` remains available for bounded synchronous waits; it returns `None` on timeout without cancelling the child.
+`wait_run` supports synchronous waits; it returns `None` on timeout without cancelling the child.
+Remote reads run on the calling tool thread. Their I/O timeouts bound a blocked read.
 Live and archived failures raise `RunFailed`; cancelled results raise `AgentCancelled`.
 
 Foreground children are the default. The parent waits for their terminal results and cancels them on failure or cancellation.
@@ -254,7 +263,7 @@ Register cleanup immediately after spawning the child. It runs after local execu
 Its returned future reports cleanup failures. Foreground parent cleanup and coordinator shutdown both retain this work.
 Application integration uses `Run.add_idle_callback` and `Run.wait_for_idle` to observe when local work has drained.
 A suspended run can be idle without being complete. Tool authors use `add_completion_cleanup` for resource cleanup.
-A terminal run can permit agent reuse before it becomes idle; idle still waits for all its workers.
+A terminal run permits agent reuse only after its owned work drains and ownership is released.
 Coordinator shutdown waits for these workers too, including those from earlier runs.
 
 Subscribe to a run for progress. Foreground child events also reach its ancestors; background runs require their own subscription.
@@ -444,9 +453,9 @@ Root attachments use the existing user-message file associations.
 
 ## Compaction
 
-Features never manage the context window; the runtime compacts on its own. The working
-budget is 90% of the model's `max_input_tokens`, and compaction triggers when a request
-reaches 85% of that. The runtime summarizes the oldest completed history into a
+Features never manage the context window; the runtime compacts on its own.
+The working budget is `max_input_tokens × (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)`.
+Compaction triggers when a request reaches 85% of that budget. The runtime summarizes the oldest completed history into a
 `CompactionCheckpoint` and keeps a recent tail of roughly 20% of the budget. Recorded
 messages never change — a checkpoint only changes what the model sees: the retained system
 messages, the summary, the latest user message, and the tail.
@@ -494,6 +503,12 @@ Chat persistence receives the tool IDs and citation metadata needed to save thei
 Chat keeps accepted output in `ChatMessage`, `ChatResponseMessage`, and `ToolCall`.
 A response's `run_id` connects live SDK handles to that same history.
 Chat uses one execution worker per active agent, one turn control worker, and one event-delivery worker.
+The execution worker consumes model streams directly.
+Cancellation takes effect when a blocked provider read returns or times out; the run retains ownership until then.
+Total generation deadlines are checked between events. They do not interrupt a blocked synchronous read.
+Stop puts the input in “Stopping…” until execution, foreground child work, tools, and saves finish.
+Drafts remain editable; sending and queued follow-ups wait for the session to become idle.
+Current chat tools use foreground children. Background chat execution needs separate admission and control ownership.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
 The control worker checks ownership, reads Stop, and refreshes the processing marker in sequence.
@@ -502,13 +517,26 @@ Lease renewal runs separately and uses short cache timeouts.
 Transient renewal failures retry within the last confirmed lease. Owner mismatch cancels immediately.
 Control polling cancels unconfirmed ownership when it reaches the five-second margin before the 60-second lease expires.
 Renewal timing starts before the cache request, so response latency does not extend local ownership.
-Stream-status refresh failures log and retry. The processing marker uses a 30-minute expiry.
-Chat clears the marker after delivery finishes, even when a save timeout leaves workers draining.
+Stream-status refresh failures log and retry. Active session admission expires after 60 seconds without renewal.
+Preparation retains a 30-minute lease because its synchronous file loading has no heartbeat. A preparation crash can retain that lease until expiry.
+Chat releases session admission after workers, saves, and delivery finish. Save-timeout warnings do not release admission.
+Admission is claimed before loading history. Another tab or pod cannot start a turn while that claim remains active.
+The browser checks session readiness after stream errors and reloads; stream closure alone does not confirm completion.
 Execution leases remain separate and retain ownership until work drains or is explicitly transferred.
 
-`AgentDirectory` resolves agents and saved runs within an authorized conversation branch.
-`RunStore` saves terminal output. `RunOwnership` reserves execution and releases it after workers drain.
-Chat binds ownership when durable checkpoints are enabled. Saving output does not require ownership support.
+`AgentCoordinator` tracks local agents and runs. Its application interfaces provide access to saved data and execution ownership:
+
+| Interface | Responsibility |
+| --- | --- |
+| `AgentDirectory` | Authorize agent lookup, restore saved agents, and read or cancel runs on the selected branch. |
+| `RunStore` | Save terminal output before dependent runs receive completion. |
+| `RunOwnership` | Reserve execution before starting work; release it after workers drain. |
+
+Chat supplies `ChatRunStore` for both saving and ownership when durable checkpoints are enabled.
+Without checkpoints, `ChatResponsePersistence` supplies saving alone. Saved output can be available before worker cleanup finishes.
+
+Within the SDK, `RunCoordination` tracks one parent's foreground children, consumed child failures, and cancellation links.
+Tools access child controls through their invocation. They do not construct this internal object.
 
 `ChatRunStore` uses the tenant-scoped cache for live ownership and Stop delivery.
 It allocates child responses before execution so another API pod can discover their history.

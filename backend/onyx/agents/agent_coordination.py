@@ -77,14 +77,19 @@ class AgentDirectory(Protocol):
     def cancel_run(self, run_id: str, parent_id: str) -> None: ...
 
 
+class _LoadedAgent:
+    def __init__(self, agent: Agent, view_id: UUID) -> None:
+        self.agent = agent
+        self.view_id = view_id
+
+
 class _CoordinatorState:
     """Execution ownership shared by coordinators with different branch access."""
 
     def __init__(self) -> None:
         # Shared identity metadata supports ancestry and saved response projection.
         self.registrations: dict[str, AgentInfo] = {}
-        self.agents: dict[str, Agent] = {}
-        self.agent_views: dict[str, UUID] = {}
+        self.agents: dict[str, _LoadedAgent] = {}
         self.bindings: dict[str, RunCoordination] = {}
         self.runs: dict[str, Run] = {}
         self.archived_run_ids: set[str] = set()
@@ -99,12 +104,11 @@ class _CoordinatorState:
 
 
 class AgentCoordinator:
-    """Own agent identities, loaded conversations, and their active or saved runs."""
+    """Coordinate local executions and access saved agents within an authorized branch."""
 
     def __init__(
         self,
         *,
-        agents: Sequence[AgentInfo] = (),
         directory: AgentDirectory | None = None,
         store: RunStore | None = None,
         ownership: RunOwnership | None = None,
@@ -117,10 +121,6 @@ class AgentCoordinator:
         self._directory = directory
         self._store = store
         self._ownership = ownership
-        for info in agents:
-            if info.id in self._state.registrations:
-                raise ValueError("Duplicate agent identity")
-            self.register(info)
 
     def view(
         self,
@@ -159,8 +159,7 @@ class AgentCoordinator:
         with self._state.lock:
             info = self._state.registrations[agent.id]
             if info.parent_id is not None:
-                self._state.agents[agent.id] = agent
-                self._state.agent_views[agent.id] = self._view_id
+                self._state.agents[agent.id] = _LoadedAgent(agent, self._view_id)
 
     def release_execution(self, run: Run) -> None:
         """Forget local execution; dependencies retain only its ID and completion."""
@@ -169,7 +168,6 @@ class AgentCoordinator:
             binding = self._state.bindings.pop(run.id, None)
             self._state.runs.pop(run.id, None)
             self._state.agents.pop(run.agent_id, None)
-            self._state.agent_views.pop(run.agent_id, None)
             self._state.latest[run.agent_id] = snapshot
             has_waiters = any(
                 run.id in owner.children for owner in self._state.bindings.values()
@@ -357,8 +355,9 @@ class AgentCoordinator:
             existing = self._state.registrations.get(info.id)
             if existing is not None and existing.parent_id != info.parent_id:
                 raise ValueError("Agent registration changes its parent")
-            self._state.registrations[info.id] = info.model_copy(deep=True)
-            self._visible_agents[info.id] = info.model_copy(deep=True)
+            registered = info.model_copy(deep=True)
+            self._state.registrations[info.id] = registered
+            self._visible_agents[info.id] = registered
 
     def registration(self, agent_id: str) -> AgentInfo | None:
         with self._state.lock:
@@ -372,41 +371,36 @@ class AgentCoordinator:
                 for info in self._state.registrations.values()
             ]
 
-    def discovery(self, parent_id: str) -> list[AgentInfo]:
+    def discover_children(self, parent_id: str) -> list[AgentInfo]:
         # Never acquire a run lock under the coordinator lock. Starts use the reverse order.
         with self._state.lock:
             active_runs = {
                 binding.run.agent_id: binding.run
                 for binding in self._state.bindings.values()
             }
-            registrations = [
-                info.model_copy(deep=True)
+            agent_ids = [
+                info.id
                 for info in self._state.registrations.values()
                 if info.parent_id == parent_id
             ]
             latest = dict(self._state.latest)
             visible_runs = set(self._visible_run_ids)
         result: list[AgentInfo] = []
-        for registered in registrations:
-            info = self._lookup(registered.id, parent_id)
+        for agent_id in agent_ids:
+            info = self._lookup(agent_id, parent_id)
             if info is None:
                 continue
             active = active_runs.get(info.id)
             saved = latest.get(info.id)
             if active is not None and active.id in visible_runs:
-                result.append(
-                    info.model_copy(
-                        update={"latest_run_id": active.id, "status": active.status}
-                    )
+                info = info.model_copy(
+                    update={"latest_run_id": active.id, "status": active.status}
                 )
             elif saved is not None and saved.run_id in visible_runs:
-                result.append(
-                    info.model_copy(
-                        update={"latest_run_id": saved.run_id, "status": saved.status}
-                    )
+                info = info.model_copy(
+                    update={"latest_run_id": saved.run_id, "status": saved.status}
                 )
-            else:
-                result.append(info)
+            result.append(info.model_copy(deep=True))
         return result
 
     def bind(self, run: Run) -> "RunCoordination":
@@ -510,7 +504,6 @@ class AgentCoordinator:
             return False
         with self._state.lock:
             self._state.agents.clear()
-            self._state.agent_views.clear()
             self._state.bindings.clear()
             self._state.latest.clear()
         return True
@@ -555,29 +548,17 @@ class AgentCoordinator:
                 description=description,
                 restoration_config=restoration_config,
             )
-            self._state.registrations[agent.id] = info.model_copy(deep=True)
-            self._visible_agents[agent.id] = info.model_copy(deep=True)
-            self._state.agents[agent.id] = agent
-            self._state.agent_views[agent.id] = self._view_id
+            registered = info.model_copy(deep=True)
+            self._state.registrations[agent.id] = registered
+            self._visible_agents[agent.id] = registered
+            self._state.agents[agent.id] = _LoadedAgent(agent, self._view_id)
             return info
 
     def unregister_child(self, agent_id: str) -> None:
         with self._state.lock:
             self._state.agents.pop(agent_id)
-            self._state.agent_views.pop(agent_id, None)
             self._state.registrations.pop(agent_id)
             self._visible_agents.pop(agent_id, None)
-
-    def loaded_child(self, agent_id: str, parent_id: str) -> Agent | None:
-        if self._lookup(agent_id, parent_id) is None:
-            raise ValueError("Agent is not available to this parent")
-        with self._state.lock:
-            agent = self._state.agents.get(agent_id)
-            if self._state.agent_views.get(agent_id) != self._view_id:
-                agent = None
-            if agent is None and self._directory is None:
-                raise ValueError("Agent restoration is unavailable")
-            return agent
 
     def active_run(self, agent_id: str) -> Run | None:
         with self._state.lock:
@@ -604,25 +585,25 @@ class AgentCoordinator:
         return run
 
     def release(self, run: Run) -> None:
-        snapshot = run.snapshot()
         with self._state.lock:
-            if snapshot.status == RunStatus.RUNNING:
+            is_child = self._state.registrations[run.agent_id].parent_id is not None
+        snapshot = run.snapshot() if is_child else None
+        status = snapshot.status if snapshot is not None else run.status
+        with self._state.lock:
+            if status == RunStatus.RUNNING:
                 self._state.runs.pop(run.id, None)
                 previous = self._state.latest.get(run.agent_id)
                 if previous is None or previous.run_id != run.id:
                     self._state.completions.pop(run.id, None)
-            if (
-                self._state.registrations[run.agent_id].parent_id is not None
-                and snapshot.status != RunStatus.RUNNING
-            ):
+            if snapshot is not None and status != RunStatus.RUNNING:
                 self._state.latest[run.agent_id] = snapshot
             self._state.bindings.pop(run.id, None)
             info = self._visible_agents.get(run.agent_id)
-            if info is not None and snapshot.status != RunStatus.RUNNING:
+            if info is not None and status != RunStatus.RUNNING:
                 self._visible_agents[run.agent_id] = info.model_copy(
                     update={
                         "latest_run_id": run.id,
-                        "status": snapshot.status,
+                        "status": status,
                     }
                 )
 
@@ -635,6 +616,8 @@ class AgentCoordinator:
                 if info.id != agent_id:
                     raise ValueError("Archive returned a different agent")
                 self.register(info)
+                with self._state.lock:
+                    info = self._visible_agents[agent_id]
         if info is not None and info.parent_id != parent_id:
             raise ValueError("Agent is not available to this parent")
         return info
@@ -643,9 +626,9 @@ class AgentCoordinator:
         if self._lookup(agent_id, parent_id) is None:
             raise ValueError("Agent is not available to this parent")
         with self._state.lock:
-            if self._state.agent_views.get(agent_id) == self._view_id:
-                if agent := self._state.agents.get(agent_id):
-                    return agent
+            loaded = self._state.agents.get(agent_id)
+            if loaded is not None and loaded.view_id == self._view_id:
+                return loaded.agent
             if (
                 agent_id not in self._state.agents
                 and len(self._state.agents) >= MAX_LOADED_AGENTS
@@ -658,9 +641,9 @@ class AgentCoordinator:
             raise ValueError("Restoration returned a different agent")
         with self._state.lock:
             self.check_open()
-            if self._state.agent_views.get(agent_id) == self._view_id:
-                if existing := self._state.agents.get(agent_id):
-                    return existing
+            loaded = self._state.agents.get(agent_id)
+            if loaded is not None and loaded.view_id == self._view_id:
+                return loaded.agent
             if any(
                 binding.run.agent_id == agent_id
                 for binding in self._state.bindings.values()
@@ -671,8 +654,7 @@ class AgentCoordinator:
                 and len(self._state.agents) >= MAX_LOADED_AGENTS
             ):
                 raise ValueError("Loaded agent limit exceeded")
-            self._state.agents[agent_id] = restored
-            self._state.agent_views[agent_id] = self._view_id
+            self._state.agents[agent_id] = _LoadedAgent(restored, self._view_id)
         return restored
 
     def _read_visible_run(
@@ -735,11 +717,6 @@ class AgentCoordinator:
         )
 
 
-class _ChildDependency(BaseModel):
-    run_id: str
-    observed: bool = False
-
-
 class RunCoordination:
     """Track foreground dependencies and cancellation links for one parent execution."""
 
@@ -750,7 +727,8 @@ class RunCoordination:
     ) -> None:
         self.coordinator = coordinator
         self.run = run
-        self.children: dict[str, _ChildDependency] = {}
+        # Map foreground run IDs to whether their failure was handled by a tool.
+        self.children: dict[str, bool] = {}
         self._links = ExitStack()
         self._finished = False
         self._lock = run._lock
@@ -788,14 +766,11 @@ class RunCoordination:
             with self._lock:
                 if self._finished:
                     run.cancel()
-                    self._track_child_cleanup(run)
+                    self.run._work.track_operation(run._idle)
                 else:
                     self._include_predecessors(run)
                     self._attach(run)
         return run
-
-    def _track_child_cleanup(self, child: Run) -> None:
-        self.run._work.track_operation(child._idle)
 
     def _include_predecessors(self, run: Run) -> None:
         """Retain completed background history consumed by this foreground child."""
@@ -814,13 +789,11 @@ class RunCoordination:
             predecessors.append(previous)
             previous_id = previous.previous_run_id
         for previous in reversed(predecessors):
-            child = _ChildDependency(run_id=previous.id)
-            child.observed = True
-            self.children[previous.id] = child
+            self.children[previous.id] = True
 
     def _attach(self, run: Run) -> None:
         run_id = run.id
-        self.children[run_id] = _ChildDependency(run_id=run_id)
+        self.children[run_id] = False
         self._links.enter_context(
             self.run._cancellation_signal.on_cancel(
                 lambda: self.coordinator.cancel_child(run_id, self.run.agent_id)
@@ -839,13 +812,12 @@ class RunCoordination:
         """Mark failures consumed by a successful delegation completion callback."""
         with self._lock:
             for run_id in run_ids:
-                child = self.children.get(run_id)
-                if child is not None:
-                    child.observed = True
+                if run_id in self.children:
+                    self.children[run_id] = True
 
     def observed_children(self) -> list[str]:
         with self._lock:
-            return [run_id for run_id, child in self.children.items() if child.observed]
+            return [run_id for run_id, observed in self.children.items() if observed]
 
     def child_runs(self, run_ids: Sequence[str]) -> list[Run]:
         """Resolve tool dependencies within this parent's authorized child view."""
@@ -879,15 +851,15 @@ class RunCoordination:
     def finish(self, cancel: bool) -> list[RunState]:
         with self._lock:
             self._finished = True
-            children = list(self.children.values())
+            child_run_ids = list(self.children)
         if cancel:
-            for child in children:
-                self.coordinator.cancel_child(child.run_id, self.run.agent_id)
-        for child in children:
-            local = self.coordinator.child_run(child.run_id, self.run.agent_id)
+            for run_id in child_run_ids:
+                self.coordinator.cancel_child(run_id, self.run.agent_id)
+        for run_id in child_run_ids:
+            local = self.coordinator.child_run(run_id, self.run.agent_id)
             if local is not None:
-                self._track_child_cleanup(local)
-            for cleanup in self.coordinator._cleanup_for(child.run_id):
+                self.run._work.track_operation(local._idle)
+            for cleanup in self.coordinator._cleanup_for(run_id):
                 self.run._work.track_operation(cleanup)
         deadline = time.monotonic() + (
             CHILD_TERMINAL_TIMEOUT_SECONDS if cancel else OPERATION_TIMEOUT_SECONDS
@@ -895,9 +867,9 @@ class RunCoordination:
         failure: RunFailed | None = None
         records: list[RunState] = []
         try:
-            for child in children:
+            for run_id in child_run_ids:
                 try:
-                    future = self.coordinator.completion(child.run_id)
+                    future = self.coordinator.completion(run_id)
                     if not cancel:
                         wait_operation(
                             future,
@@ -908,14 +880,16 @@ class RunCoordination:
                     records.append(state)
                     validate_run_completion(state)
                 except RunFailed as error:
-                    if not child.observed and not cancel and failure is None:
+                    with self._lock:
+                        observed = self.children.get(run_id, False)
+                    if not observed and not cancel and failure is None:
                         failure = error
                 except AgentCancelled:
                     if not cancel:
                         self.run._cancellation_signal.check()
-                    logger.debug("Child execution was cancelled: %s", child.run_id)
+                    logger.debug("Child execution was cancelled: %s", run_id)
                 except TimeoutError as error:
-                    self.coordinator.cancel_child(child.run_id, self.run.agent_id)
+                    self.coordinator.cancel_child(run_id, self.run.agent_id)
                     if not cancel:
                         raise
                     raise TimeoutError(
@@ -961,9 +935,9 @@ class _ToolControl(AgentControl):
             raise RuntimeError("Coordination requires an active tool invocation")
         self.owner.coordinator.check_open()
 
-    def discovery(self) -> list[AgentInfo]:
+    def discover_children(self) -> list[AgentInfo]:
         self._check()
-        return self.owner.coordinator.discovery(self.owner.run.agent_id)
+        return self.owner.coordinator.discover_children(self.owner.run.agent_id)
 
     def spawn_agent(
         self,
@@ -1018,19 +992,11 @@ class _ToolControl(AgentControl):
     ) -> str:
         self._check()
         coordinator = self.owner.coordinator
-        agent = coordinator.loaded_child(agent_id, self.owner.run.agent_id)
-        if agent is None:
-            agent = self.owner.run._work.blocking(
-                lambda: coordinator.resolve_child(agent_id, self.owner.run.agent_id),
-                self.owner.run._cancellation_signal,
-            )
+        agent = coordinator.resolve_child(agent_id, self.owner.run.agent_id)
         self._check()
         previous = coordinator.active_run(agent_id)
         if previous is not None and previous.status.is_terminal:
-            self.owner.run._work.blocking(
-                lambda: previous._reusable.result(timeout=OPERATION_TIMEOUT_SECONDS),
-                self.owner.run._cancellation_signal,
-            )
+            wait_operation(previous._reusable, self.owner.run._cancellation_signal)
         self._check()
         return self.owner.start_child(
             agent,
@@ -1047,25 +1013,19 @@ class _ToolControl(AgentControl):
         self._check()
         if not 0 <= timeout <= OPERATION_TIMEOUT_SECONDS:
             raise ValueError("Wait timeout is outside its allowed bounds")
-        with self.owner._lock:
-            child = self.owner.children.get(run_id)
         run = self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
         if run is not None:
             try:
-                result = wait_operation(
+                wait_operation(
                     run._completed, self.owner.run._cancellation_signal, timeout
                 )
                 result = run.result(timeout=0)
             except TimeoutError:
                 return None
             except (RunFailed, AgentCancelled):
-                if child is not None:
-                    with self.owner._lock:
-                        child.observed = True
+                self.owner.observe_children([run_id])
                 raise
-            if child is not None:
-                with self.owner._lock:
-                    child.observed = True
+            self.owner.observe_children([run_id])
             return result
         coordinator = self.owner.coordinator
         latest = coordinator.saved_run(
@@ -1077,18 +1037,21 @@ class _ToolControl(AgentControl):
         if timeout == 0:
             return None
 
-        def wait_remote() -> RunResult | None:
+        try:
             deadline = time.monotonic() + timeout
             while True:
                 self.owner.run._cancellation_signal.check()
                 if coordinator._remote_status(
                     run_id, self.owner.run.agent_id
                 ).is_terminal:
-                    return result_from_snapshot(
+                    result = result_from_snapshot(
                         coordinator._read_visible_run(run_id, self.owner.run.agent_id)
                     )
+                    self._check()
+                    return result
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
+                    self._check()
                     return None
                 try:
                     wait_operation(
@@ -1099,32 +1062,13 @@ class _ToolControl(AgentControl):
                 except TimeoutError:
                     continue
 
-        try:
-            return self.owner.run._work.blocking(
-                wait_remote, self.owner.run._cancellation_signal, timeout=timeout
-            )
         except TimeoutError:
             return None
 
     def cancel_run(self, run_id: str) -> None:
         self._check()
-        run = self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
-        if run is not None:
-            run.cancel()
-            return
-        coordinator = self.owner.coordinator
-
-        def cancel_remote() -> None:
-            record = coordinator._read_visible_run(run_id, self.owner.run.agent_id)
-            if record.status.is_terminal:
-                return
-            if coordinator._directory is None:
-                raise ValueError("Remote run cancellation is unavailable")
-            coordinator._directory.cancel_run(run_id, self.owner.run.agent_id)
-
-        self.owner.run._work.blocking(
-            cancel_remote, self.owner.run._cancellation_signal
-        )
+        self.owner.coordinator.cancel_child(run_id, self.owner.run.agent_id)
+        self._check()
 
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]

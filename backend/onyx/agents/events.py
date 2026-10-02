@@ -55,7 +55,6 @@ class InputRequiredEvent(_AgentEvent):
 
 
 class AgentEndEvent(_AgentEvent):
-    answer_message_id: str | None = None
     type: Literal[AgentEventType.AGENT_END] = AgentEventType.AGENT_END
     outcome: Literal[
         RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR

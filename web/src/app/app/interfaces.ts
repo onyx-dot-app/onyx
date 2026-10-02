@@ -26,6 +26,8 @@ export type ChatState =
   | "input"
   | "loading"
   | "streaming"
+  | "cancelling"
+  | "unconfirmed"
   | "toolBuilding"
   | "uploading";
 export interface RegenerationState {
@@ -205,6 +207,7 @@ export interface BackendChatSession {
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
   current_stream?: { stream_id: number } | null;
+  is_processing?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
 }

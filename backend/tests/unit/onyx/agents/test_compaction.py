@@ -1,5 +1,6 @@
 """Context pressure preserves the task, tool effects, and recorded history."""
 
+import threading
 from collections.abc import Generator
 from unittest.mock import patch
 
@@ -49,6 +50,7 @@ class ContextModel(LLM):
         self.generations: list[GenerationRequest] = []
         self.summaries: list[GenerationRequest] = []
         self.contexts: list[GenerationContext] = []
+        self.threads: list[threading.Thread] = []
 
     @property
     def config(self) -> LLMConfig:
@@ -65,6 +67,7 @@ class ContextModel(LLM):
     def invoke(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
+        self.threads.append(threading.current_thread())
         if context:
             self.contexts.append(context.model_copy())
         if context and context.cancellation:
@@ -122,17 +125,20 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
     model = ContextModel(tool_rounds=5)
     calls: list[str] = []
     prepared: list[int] = []
+    execution_threads: list[threading.Thread] = []
 
     def execute(invocation: ToolInvocation) -> ToolResult:
         calls.append(invocation.call_id)
         return ToolResult(content="Evidence [1] 東京 " * 180)
 
     def prepare(decision: StepInput) -> PreparedStep:
+        execution_threads.append(threading.current_thread())
         step = decision.step
         prepared.append(step.index)
         return PreparedStep(tools=tools, assemble_messages=render)
 
     def render(messages: list[Message]) -> list[Message]:
+        assert threading.current_thread() is execution_threads[0]
         return [*messages, SystemMessage(content="Use the required report format.")]
 
     tools = [
@@ -152,6 +158,8 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
     run.result()
     assert run.wait_for_idle(2)
     assert len(model.summaries) >= 2
+    assert all(thread is execution_threads[0] for thread in model.threads)
+    assert all(thread is execution_threads[0] for thread in execution_threads)
     for summary_request in model.summaries:
         assert "tool_result lookup (call-" in summary_request.messages[0].text
         assert "\ufffd" not in summary_request.messages[0].text
@@ -206,12 +214,13 @@ def test_provider_context_rejection_preserves_execution_settings(
         return PreparedStep(stall_timeout_s=step_timeout)
 
     signal = CancellationSignal()
+    default_signal = CancellationSignal()
     identity = LLMUserIdentity(user_id="user", session_id="session")
     agent = Agent(
         model,
         state=AgentState(messages=history),
         generation_context=GenerationContext(
-            cancellation=signal,
+            cancellation=default_signal,
             stall_timeout_s=23,
             total_timeout_s=71,
             user_identity=identity,
@@ -221,7 +230,9 @@ def test_provider_context_rejection_preserves_execution_settings(
         prepare_step=prepare,
     )
     events: list[AgentEvent] = []
-    run = agent.start(background=False, max_steps=1, on_event=events.append)
+    run = agent.start(
+        background=False, max_steps=1, cancellation=signal, on_event=events.append
+    )
     result = run.result()
     assert run.wait_for_idle(2)
     starts = [event for event in events if event.type == "message_start"]
@@ -248,6 +259,36 @@ def test_provider_context_rejection_preserves_execution_settings(
     assert result.steps == 1
     assert len(agent.state.messages) == len(history) + 1
     assert result.output.text.endswith("[1].")
+
+    assert agent.generation_context.cancellation is default_signal
+    assert agent.generation_context.stall_timeout_s == 23
+    assert agent.generation_context.flow == LLMFlow.RESEARCH_AGENT
+
+
+def test_step_timeout_override_does_not_change_later_steps() -> None:
+    model = ContextModel(tool_rounds=1)
+    tool = AgentTool(
+        definition=ToolDefinition(
+            name="lookup", description="Lookup evidence", parameters={"type": "object"}
+        ),
+        execute=lambda _invocation: ToolResult(content="Evidence"),
+    )
+
+    def prepare(state: StepInput) -> PreparedStep:
+        return PreparedStep(
+            tools=[tool], stall_timeout_s=37 if state.step.index == 0 else None
+        )
+
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(stall_timeout_s=23),
+        prepare_step=prepare,
+    )
+    run = agent.start(background=False, max_steps=2)
+    run.result()
+    assert run.wait_for_idle(2)
+    assert [context.stall_timeout_s for context in model.contexts] == [37, 23]
+    assert agent.generation_context.stall_timeout_s == 23
 
 
 def test_oversized_required_instruction_fails_without_losing_snapshot() -> None:

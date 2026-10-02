@@ -9852,7 +9852,9 @@
           "speakingPlaceholder": "{appName} is speaking..."
         },
         "sendButton": {
-          "processingFilesTooltip": "Waiting for attached file(s) to finish processing"
+          "processingFilesTooltip": "Waiting for attached file(s) to finish processing",
+          "stoppingLabel": "Stopping…",
+          "reloadLabel": "Check again"
         },
         "tabReadingButton": {
           "readLabel": "Read this tab",
@@ -11150,6 +11152,10 @@
       "incognito": {
         "title": "You're incognito"
       }
+    },
+    "readiness": {
+      "stopFailed": "Could not stop the response. Try again.",
+      "checkFailed": "Could not confirm that the response finished. Check again before sending another message."
     }
   },
   "common": {

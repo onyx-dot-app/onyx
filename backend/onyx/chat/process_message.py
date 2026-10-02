@@ -8,6 +8,7 @@ from concurrent.futures import Future
 from functools import partial
 from uuid import UUID
 
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.errors import chat_error
 from onyx.chat.execution import (
     ActiveChatTurns,
@@ -76,6 +77,7 @@ def _stream_chat_turn(
     setup: ChatTurnSetup | None = None
     scope_started = False
     stream: ChatStream | None = None
+    pending_admission: ChatTurnAdmission | None = None
     try:
         setup = prepare_chat_turn(
             new_msg_req=new_msg_req,
@@ -87,6 +89,7 @@ def _stream_chat_turn(
             slack_context=slack_context,
             additional_context=additional_context,
         )
+        pending_admission = setup.admission
         initial_packets: list[AnswerStreamPart] = []
         if new_msg_req.chat_session_id is None:
             initial_packets.append(
@@ -131,6 +134,8 @@ def _stream_chat_turn(
         )
         for packet in initial_packets:
             stream_buffer.append_line(get_json_line(packet.model_dump()))
+        # Execution owns admission cleanup, including startup rejection.
+        pending_admission = None
         stream = start_chat_turn(
             setup,
             user,
@@ -148,11 +153,15 @@ def _stream_chat_turn(
             logger.exception("Chat request failed")
         yield chat_error(error, setup.responses[0].llm if setup else None)
     finally:
-        if stream is not None:
-            stream.close()
-        if scope_started:
-            CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(None)
-            CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(None)
+        try:
+            if pending_admission is not None:
+                pending_admission.release()
+        finally:
+            if stream is not None:
+                stream.close()
+            if scope_started:
+                CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(None)
+                CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.set(None)
 
 
 @log_generator_function_time()

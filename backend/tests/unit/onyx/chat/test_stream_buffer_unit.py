@@ -14,10 +14,10 @@ from onyx.agents.concurrency import EventDelivery
 from onyx.agents.events import AgentEvent, AgentStartEvent
 from onyx.chat import stream_buffer
 from onyx.chat.chat_processing_checker import (
-    FENCE_TTL,
+    ACTIVE_LEASE_SECONDS,
+    ChatTurnAdmission,
     get_processing_stream_id,
     is_chat_session_processing,
-    set_processing_status,
 )
 from onyx.chat.models import StreamingError
 from onyx.chat.stream_buffer import (
@@ -314,12 +314,14 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
 def test_delayed_refresh_does_not_mark_stream_inactive() -> None:
     cache = FakeCache()
     session_id = uuid4()
-    set_processing_status(session_id, cache, True, stream_id=_STREAM_ID)
+    admission = ChatTurnAdmission(cache)
+    admission.claim(session_id)
+    admission.publish(_STREAM_ID)
     for key in cache.expiries:
-        cache.expiries[key] = FENCE_TTL - 120
+        cache.expiries[key] = ACTIVE_LEASE_SECONDS - 20
     assert is_chat_session_processing(session_id, cache)
     assert get_processing_stream_id(session_id, cache) == _STREAM_ID
-    set_processing_status(session_id, cache, False)
+    admission.release()
     assert not is_chat_session_processing(session_id, cache)
 
 

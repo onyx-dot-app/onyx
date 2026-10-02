@@ -9852,7 +9852,9 @@
           "speakingPlaceholder": "{appName} parle..."
         },
         "sendButton": {
-          "processingFilesTooltip": "En attente de la fin du traitement des fichiers joints"
+          "processingFilesTooltip": "En attente de la fin du traitement des fichiers joints",
+          "stoppingLabel": "Arrêt en cours…",
+          "reloadLabel": "Vérifier à nouveau"
         },
         "tabReadingButton": {
           "readLabel": "Lire cet onglet",
@@ -11150,6 +11152,10 @@
       "incognito": {
         "title": "Vous êtes en navigation privée"
       }
+    },
+    "readiness": {
+      "stopFailed": "Impossible d’arrêter la réponse. Réessayez.",
+      "checkFailed": "Impossible de confirmer la fin de la réponse. Vérifiez à nouveau avant d’envoyer un autre message."
     }
   },
   "common": {

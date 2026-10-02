@@ -9852,7 +9852,9 @@
           "speakingPlaceholder": "{appName} 正在朗读..."
         },
         "sendButton": {
-          "processingFilesTooltip": "正在等待附件处理完成"
+          "processingFilesTooltip": "正在等待附件处理完成",
+          "stoppingLabel": "正在停止…",
+          "reloadLabel": "再次检查"
         },
         "tabReadingButton": {
           "readLabel": "读取此标签页",
@@ -11150,6 +11152,10 @@
       "incognito": {
         "title": "您处于无痕模式"
       }
+    },
+    "readiness": {
+      "stopFailed": "无法停止回复。请重试。",
+      "checkFailed": "无法确认回复是否已完成。请再次检查后再发送消息。"
     }
   },
   "common": {

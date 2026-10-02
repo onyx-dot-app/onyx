@@ -108,6 +108,6 @@ def test_child_reuse_preserves_context_with_a_fresh_budget(db_session: Session) 
     snapshot = run_parent()
     first, following = snapshot.child_runs
     assert first.agent_id == following.agent_id == child.id
-    assert coordinator.discovery(parent.id)[0].path == "/root/research"
+    assert coordinator.discover_children(parent.id)[0].path == "/root/research"
     assert first.run_id != following.run_id
     assert first.status == following.status == "complete"

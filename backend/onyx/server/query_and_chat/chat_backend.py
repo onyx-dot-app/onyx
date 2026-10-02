@@ -125,6 +125,7 @@ from onyx.server.query_and_chat.models import (
     ChatSessionDetailResponse,
     ChatSessionDetails,
     ChatSessionGroup,
+    ChatSessionProcessingStatus,
     ChatSessionsResponse,
     ChatSessionSummary,
     ChatSessionUpdateRequest,
@@ -428,22 +429,12 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
-    current_stream: CurrentStreamInfo | None = None
-    try:
-        cache = get_cache_backend()
-        stream_id = get_processing_stream_id(session_id, cache)
-        has_saved_outcome = any(
-            message.id == stream_id
-            and message.response_status is not None
-            and message.response_status.is_terminal
-            for message in session_messages
-        )
-        if stream_id is not None and not has_saved_outcome:
-            current_stream = CurrentStreamInfo(stream_id=stream_id)
-    except Exception:
-        logger.exception(
-            "An error occurred while checking if the chat session is processing"
-        )
+    cache = get_cache_backend()
+    is_processing = is_chat_session_processing(session_id, cache)
+    stream_id = get_processing_stream_id(session_id, cache)
+    current_stream = (
+        CurrentStreamInfo(stream_id=stream_id) if stream_id is not None else None
+    )
 
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
@@ -470,6 +461,7 @@ def get_chat_session(
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_stream=current_stream,
+        is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
     )
 
@@ -1306,6 +1298,27 @@ def search_chats(
 # ~32 KiB decompressed per chunk → ~1 MiB peak per read; a full-buffer replay
 # would otherwise materialize up to the whole decompressed buffer at once.
 _RESUME_MAX_CHUNKS_PER_READ = 32
+
+
+@router.get("/chat-session/{session_id}/status")
+def get_chat_session_processing_status(
+    session_id: UUID,
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> ChatSessionProcessingStatus:
+    with get_session_with_current_tenant() as db_session:
+        try:
+            get_chat_session_by_id(
+                chat_session_id=session_id,
+                user_id=user.id,
+                db_session=db_session,
+            )
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
+    return ChatSessionProcessingStatus(
+        is_processing=is_chat_session_processing(session_id, get_cache_backend())
+    )
 
 
 @router.get("/chat-session/{session_id}/resume-stream")

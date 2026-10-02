@@ -58,7 +58,6 @@ from onyx.agents.models import (
     StepRecord,
     StepResult,
     ToolCallContext,
-    messages_from_steps,
 )
 from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import (
@@ -382,13 +381,14 @@ class Run:
         history: AgentState | None = None,
         event_parent: EventDelivery | None = None,
     ) -> None:
+        """Take ownership of the supplied run state and detached history."""
         if state.agent_id is None:
             raise ValueError("Executable run requires an agent identity")
         self.id = state.run_id
         self.agent_id = state.agent_id
         self._lock = threading.RLock()
         self._state = state
-        self._history = history.snapshot() if history is not None else AgentState()
+        self._history = history if history is not None else AgentState()
         self._cancellation_signal = cancellation_signal
         self._completed: Future[None] = Future()
         self._idle: Future[None] = Future()
@@ -632,6 +632,7 @@ class Run:
             )
             self._generation_context = agent.generation_context.model_copy(
                 update={
+                    "cancellation": self._cancellation_signal,
                     "user_identity": agent.generation_context.user_identity.model_copy()
                     if agent.generation_context.user_identity
                     else None,
@@ -642,9 +643,7 @@ class Run:
             self._before_tool_call = agent.before_tool_call
             self._after_tool_call = agent.after_tool_call
             self._restoration = agent._restoration
-            self._work = ExecutionWork()
             self._thread_context = copy_context()
-            self._cancellation_link = ExitStack()
             if coordinator is not None:
                 self._coordination = coordinator.bind(self)
                 coordinator.bind_agent(agent)
@@ -759,7 +758,7 @@ class Run:
                 self._cancellation_signal.check()
                 if not self._state.steps:
                     self._publish_event(AgentStartEvent(**self._ancestry))
-                boundary = _advance_steps(self, llm)
+                boundary = _advance_loop(self, llm)
                 if boundary == RunStatus.SUSPENDED or self._await_children():
                     self._suspend()
                     suspended = True
@@ -806,9 +805,9 @@ class Run:
 
     def _suspend(self) -> None:
         if self._restoration is not None:
-            feature_state = self._work.blocking(
-                self._restoration.capture_state, self._cancellation_signal
-            )
+            self._cancellation_signal.check()
+            feature_state = self._restoration.capture_state()
+            self._cancellation_signal.check()
             with self._lock:
                 self._progress.feature_state = feature_state.model_copy(deep=True)
         if self._coordination is not None:
@@ -866,11 +865,9 @@ class Run:
                 outcome = RunStatus.ERROR
                 children = [
                     _capture_unsettled_child(
-                        self._coordination.coordinator.run_state(
-                            child.run_id, self.agent_id
-                        )
+                        self._coordination.coordinator.run_state(run_id, self.agent_id)
                     )
-                    for child in self._coordination.children.values()
+                    for run_id in self._coordination.children
                 ]
                 with self._lock:
                     self._state.failure = _failure(error, llm)
@@ -878,25 +875,36 @@ class Run:
                 self._state.child_runs = children
         with self._lock:
             for index, step in enumerate(self._state.steps):
-                if step.generation_status != ExecutionStatus.RUNNING:
-                    continue
-                partial = step.message
-                partial.stop_reason = (
-                    "aborted" if outcome == RunStatus.CANCELLED else "error"
-                )
-                if partial.id is None:
-                    raise RuntimeError("Recorded generation has no message ID")
-                if self._delivery:
-                    self._delivery.publish(
-                        MessageEndEvent(
-                            **self._ancestry,
-                            message_id=partial.id,
-                            step_index=index,
-                            message=partial,
-                            status=ExecutionStatus(outcome.value),
-                        )
+                if step.generation_status == ExecutionStatus.RUNNING:
+                    partial = step.message
+                    partial.stop_reason = (
+                        "aborted" if outcome == RunStatus.CANCELLED else "error"
                     )
-            self._record_terminal_outcome(outcome)
+                    if partial.id is None:
+                        raise RuntimeError("Recorded generation has no message ID")
+                    if self._delivery:
+                        self._delivery.publish(
+                            MessageEndEvent(
+                                **self._ancestry,
+                                message_id=partial.id,
+                                step_index=index,
+                                message=partial,
+                                status=ExecutionStatus(outcome.value),
+                            )
+                        )
+                    step.generation_status = ExecutionStatus(outcome.value)
+                for execution in step.tools.values():
+                    if execution.status == ExecutionStatus.RUNNING:
+                        execution.status = ExecutionStatus(outcome.value)
+            self._state.status = outcome
+            if self._delivery:
+                self._delivery.publish(
+                    AgentEndEvent(
+                        **self._ancestry,
+                        outcome=outcome,
+                    )
+                )
+            self._state.revision += 1
         self._completed.set_result(None)
         if not self._settled.done():
             self._settled.set_result(None)
@@ -909,34 +917,6 @@ class Run:
             logger.exception("Agent output persistence failed")
         finally:
             self._drain_workers()
-
-    def _record_terminal_outcome(
-        self,
-        outcome: Literal[
-            RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR
-        ],
-    ) -> None:
-        with self._lock:
-            self._state.status = outcome
-            answer_message_id = None
-            if self._state.answer_step_index is not None:
-                answer_message_id = self._state.steps[
-                    self._state.answer_step_index
-                ].message.id
-            terminal = AgentEndEvent(
-                **self._ancestry,
-                outcome=outcome,
-                answer_message_id=answer_message_id,
-            )
-            for step in self._state.steps:
-                if step.generation_status == ExecutionStatus.RUNNING:
-                    step.generation_status = ExecutionStatus(outcome.value)
-                for execution in step.tools.values():
-                    if execution.status == ExecutionStatus.RUNNING:
-                        execution.status = ExecutionStatus(outcome.value)
-            if self._delivery:
-                self._delivery.publish(terminal)
-            self._state.revision += 1
 
     def _clear_execution_config(self) -> None:
         self._llm = None
@@ -954,19 +934,19 @@ class Run:
         if delivery is not None:
             self._work.tracker.follow(delivery.tracker)
 
-        # Saved terminal output permits reuse; abandoned work retains its own run.
-        try:
-            if self._coordination is not None:
-                self._coordination._links.close()
-                self._coordination.coordinator.finish(self)
-        except Exception as error:
-            logger.exception("Agent ownership release failed")
-            self._reusable.set_exception(error)
-        else:
-            self._reusable.set_result(None)
+        if self._coordination is not None:
+            self._coordination._links.close()
         self._execution_active = False
 
         def finish_cleanup() -> None:
+            try:
+                if self._coordination is not None:
+                    self._coordination.coordinator.finish(self)
+            except Exception as error:
+                logger.exception("Agent ownership release failed")
+                self._reusable.set_exception(error)
+            else:
+                self._reusable.set_result(None)
             if delivery is not None:
                 self._delivery_failed = delivery.failed.is_set()
                 self._delivery = None
@@ -1043,7 +1023,7 @@ class Run:
                 self._delivery.publish(event)
 
 
-def _advance_steps(
+def _advance_loop(
     run: Run, llm: LLM
 ) -> Literal[RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.SUSPENDED]:
     cancellation_signal = run._cancellation_signal
@@ -1077,33 +1057,24 @@ def _advance_steps(
                     else None
                 )
                 decision = StepInput(
-                    history=[m.model_copy(deep=True) for m in run._history.messages],
-                    input_messages=[
-                        m.model_copy(deep=True) for m in run._state.input_messages
-                    ],
-                    messages=[m.model_copy(deep=True) for m in run._state.messages],
+                    history=run._history.messages,
+                    input_messages=run._state.input_messages,
+                    messages=run._state.messages,
                     step=step,
                     previous=previous,
-                )
-                prepared = run._work.blocking(
-                    lambda prepare=prepare, decision=decision: prepare(decision),
-                    cancellation_signal,
-                )
-            _generate_step(run, llm, prepared, step)
+                ).model_copy(deep=True)
+                prepared = prepare(decision)
+                cancellation_signal.check()
+            _advance_step(run, llm, prepared, step)
         if progress.action == RunAction.TOOLS:
             if not _execute_tools(run):
                 return RunStatus.SUSPENDED
         if progress.action == RunAction.AFTER_STEP:
-            completed = _step_result(
-                run,
-                progress.options,
-                progress.step_index,
-            )
-            _complete_step(run, completed)
+            _complete_step(run)
     raise RuntimeError("Run exhausted its steps without a terminal decision")
 
 
-def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -> None:
+def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -> None:
     cancellation_signal = run._cancellation_signal
     if len({tool.name for tool in prepared.tools}) != len(prepared.tools):
         raise ValueError("Tool names must be unique")
@@ -1119,7 +1090,6 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
     run._prepared_step = prepared
     generation_context = run._generation_context.model_copy(
         update={
-            "cancellation": cancellation_signal,
             "stall_timeout_s": prepared.stall_timeout_s
             or run._generation_context.stall_timeout_s,
         }
@@ -1148,12 +1118,26 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         if run._delivery:
             run._delivery.publish(started)
 
+    timeout = generation_context.total_timeout_s
+    deadline = time.monotonic() + min(
+        timeout if timeout is not None else OPERATION_TIMEOUT_SECONDS,
+        OPERATION_TIMEOUT_SECONDS,
+    )
+
     def generate() -> None:
+        cancellation_signal.check()
+        if time.monotonic() >= deadline:
+            raise LLMTimeoutError("Model generation exceeded its total timeout")
         completed = False
         try:
             with closing(llm.stream(request, generation_context)) as events:
                 for event in events:
                     cancellation_signal.check()
+                    # Socket timeouts bound blocked reads; check the total budget between events.
+                    if time.monotonic() >= deadline:
+                        raise LLMTimeoutError(
+                            "Model generation exceeded its total timeout"
+                        )
                     with run._lock:
                         if not run._accepting:
                             raise AgentCancelled()
@@ -1183,26 +1167,8 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         if not completed:
             raise RuntimeError("Model stream ended without completed output")
 
-    # Stop waiting promptly, but keep the provider worker tracked until cleanup ends.
-    timeout = generation_context.total_timeout_s
-    deadline = time.monotonic() + min(
-        timeout if timeout is not None else OPERATION_TIMEOUT_SECONDS,
-        OPERATION_TIMEOUT_SECONDS,
-    )
-
-    def wait_for_generation() -> None:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise LLMTimeoutError("Model generation exceeded its total timeout")
-        try:
-            run._work.blocking(generate, cancellation_signal, timeout=remaining)
-        except TimeoutError as error:
-            raise LLMTimeoutError(
-                "Model generation exceeded its total timeout"
-            ) from error
-
     try:
-        wait_for_generation()
+        generate()
     except LLMContextLimitError:
         partial = recorded_step.message
         if partial.text or partial.tool_calls:
@@ -1214,7 +1180,7 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
             recorded_step.message = AssistantMessage(
                 id=message_id, metadata=recorded_step.message.metadata
             )
-        wait_for_generation()
+        generate()
     with run._lock:
         cancellation_signal.check()
         recorded_step.generation_status = ExecutionStatus.COMPLETE
@@ -1227,7 +1193,6 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         )
         if run._delivery:
             run._delivery.publish(ended)
-    with run._lock:
         run._progress.options = request.options.model_copy(deep=True)
         run._progress.tools = [tool.model_copy(deep=True) for tool in request.tools]
         run._progress.action = RunAction.TOOLS
@@ -1253,10 +1218,9 @@ def _compact_context(
         messages = list(source)
         with run._lock:
             run._state.checkpoint = None
-    request = run._work.blocking(
-        lambda: prepared.generation_request(messages),
-        cancellation_signal,
-    )
+    cancellation_signal.check()
+    request = prepared.generation_request(messages)
+    cancellation_signal.check()
     budget = context_budget(llm)
     original_size = request_tokens(request)
     if not force and original_size <= budget.trigger:
@@ -1264,10 +1228,8 @@ def _compact_context(
 
     selected_checkpoint = None
     try:
-        selected_checkpoint = run._work.blocking(
-            lambda: compact_history(llm, source, previous, generation_context),
-            cancellation_signal,
-        )
+        selected_checkpoint = compact_history(llm, source, previous, generation_context)
+        cancellation_signal.check()
     except Exception:
         cancellation_signal.check()
         if not force and original_size <= budget.input_limit:
@@ -1281,17 +1243,16 @@ def _compact_context(
     candidate_request = request
     candidate_size = original_size
     if selected_checkpoint is not None:
-        candidate_request = run._work.blocking(
-            lambda: prepared.generation_request(
-                working_messages(source, selected_checkpoint)
-            ),
-            cancellation_signal,
+        cancellation_signal.check()
+        candidate_request = prepared.generation_request(
+            working_messages(source, selected_checkpoint)
         )
+        cancellation_signal.check()
         candidate_size = request_tokens(candidate_request)
 
     if selected_checkpoint is None or candidate_size > budget.input_limit:
         selected_checkpoint, candidate_request, candidate_size = _truncate_context(
-            run,
+            cancellation_signal,
             source,
             prepared,
             input_limit=budget.input_limit,
@@ -1305,7 +1266,7 @@ def _compact_context(
 
 
 def _truncate_context(
-    run: Run,
+    cancellation_signal: CancellationSignal,
     source: list[Message],
     prepared: PreparedStep,
     *,
@@ -1313,7 +1274,6 @@ def _truncate_context(
     original_size: int,
 ) -> tuple[CompactionCheckpoint, GenerationRequest, int]:
     """Find the first smaller request that fits after removing older turns."""
-    cancellation_signal = run._cancellation_signal
     boundaries = set(history_boundaries(source))
     for index, message in enumerate(source):
         if not isinstance(message, UserMessage) or index not in boundaries:
@@ -1323,12 +1283,11 @@ def _truncate_context(
             covered_count=index,
             covered_digest=history_digest(source[:index]),
         )
-        candidate_request = run._work.blocking(
-            lambda checkpoint=checkpoint: prepared.generation_request(
-                working_messages(source, checkpoint)
-            ),
-            cancellation_signal,
+        cancellation_signal.check()
+        candidate_request = prepared.generation_request(
+            working_messages(source, checkpoint)
         )
+        cancellation_signal.check()
         candidate_size = request_tokens(candidate_request)
         if candidate_size <= input_limit and candidate_size < original_size:
             return checkpoint, candidate_request, candidate_size
@@ -1352,8 +1311,9 @@ def _limit_output(
 
 def _execute_tools(run: Run) -> bool:
     progress = run._progress
-    completed = _step_result(run, progress.options, progress.step_index)
     if run._prepared_step is None:
+        if progress.options is None:
+            raise ValueError("Saved step is missing generation options")
         available = {tool.name: tool for tool in run._defaults.tools}
         tools: list[AgentTool] = []
         for declaration in progress.tools:
@@ -1361,23 +1321,8 @@ def _execute_tools(run: Run) -> bool:
             if tool is None or tool.definition != declaration:
                 raise ValueError("Restored tools do not match the saved step")
             tools.append(tool)
-        run._prepared_step = PreparedStep(tools=tools, options=completed.options)
-    result = ToolBatch(
-        run,
-        run._prepared_step,
-        completed,
-        working_messages(
-            [
-                *run._history.messages,
-                *run._state.input_messages,
-                *messages_from_steps(run._state.steps[: progress.step_index]),
-            ],
-            run._state.checkpoint,
-        ),
-        before_tool_call=run._before_tool_call,
-        after_tool_call=run._after_tool_call,
-    ).execute()
-    if result is None:
+        run._prepared_step = PreparedStep(tools=tools, options=progress.options)
+    if not ToolBatch(run).execute():
         return False
     with run._lock:
         progress.action = RunAction.AFTER_STEP
@@ -1385,24 +1330,31 @@ def _execute_tools(run: Run) -> bool:
     return True
 
 
-def _complete_step(run: Run, completed: StepResult) -> None:
+def _complete_step(run: Run) -> None:
     cancellation_signal = run._cancellation_signal
     after_step = run._after_step
-    should_continue = (
-        run._work.blocking(
-            lambda after_step=after_step, completed=completed: after_step(completed),
-            cancellation_signal,
+    cancellation_signal.check()
+    progress = run._progress
+    if after_step is not None:
+        should_continue = after_step(
+            _step_result(run, progress.options, progress.step_index).model_copy(
+                deep=True
+            )
         )
-        if after_step
-        else bool(completed.message.tool_calls)
-        and not (
-            completed.tool_results
-            and all(result.terminate for result in completed.tool_results)
+    else:
+        step = run._state.steps[progress.step_index]
+        calls = step.message.tool_calls
+        results = [
+            execution.result
+            for call in calls
+            if (execution := step.tools.get(call.id)) is not None
+            and execution.result is not None
+        ]
+        should_continue = bool(calls) and not (
+            results and all(result.terminate for result in results)
         )
-    )
     cancellation_signal.check()
     with run._lock:
-        progress = run._progress
         progress.previous_options = progress.options
         if not should_continue or progress.step_index + 1 >= progress.step_limit:
             progress.outcome = (
@@ -1424,17 +1376,18 @@ def _complete_step(run: Run, completed: StepResult) -> None:
 def _step_result(
     run: Run, options: GenerationOptions | None, step_index: int
 ) -> StepResult:
+    """Reference recorded output; callers copy it before invoking feature callbacks."""
     if options is None:
         raise ValueError("Saved step is missing generation options")
     step = run._state.steps[step_index]
     return StepResult(
         step=AgentStep(index=step_index, limit=run._progress.step_limit),
-        message=step.message.model_copy(deep=True),
+        message=step.message,
         tool_results=[
-            execution.result.model_copy(deep=True)
+            execution.result
             for call in step.message.tool_calls
             if (execution := step.tools.get(call.id)) is not None
             and execution.result is not None
         ],
-        options=options.model_copy(deep=True),
+        options=options,
     )

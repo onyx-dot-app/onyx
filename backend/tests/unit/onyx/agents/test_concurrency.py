@@ -3,6 +3,7 @@
 import threading
 from concurrent.futures import Future
 from contextvars import ContextVar
+from unittest.mock import patch
 
 import pytest
 
@@ -66,30 +67,18 @@ def test_registered_completion_remains_tracked_after_cancellation() -> None:
     assert work.tracker.wait_idle(1)
 
 
-@pytest.mark.parametrize("fails", [False, True])
-def test_cancelled_job_keeps_ownership_and_reports_late_failure(
-    fails: bool, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_cancelled_wait_keeps_job_tracked_until_completion() -> None:
     work = ExecutionWork()
     signal = CancellationSignal()
     entered, release = threading.Event(), threading.Event()
-    reported = threading.Event()
-    report = concurrency._report_abandoned_worker
-
-    def report_and_notify(future: Future[None]) -> None:
-        report(future)
-        reported.set()
-
-    monkeypatch.setattr(concurrency, "_report_abandoned_worker", report_and_notify)
 
     def operation() -> None:
         entered.set()
         assert release.wait(3)
-        if fails:
-            raise ValueError("late worker failure")
 
+    job = work.start(operation)
     waiting = start_thread_future(
-        lambda: work.blocking(operation, signal), name="test-wait"
+        lambda: concurrency.wait_operation(job, signal), name="test-wait"
     )
     try:
         assert entered.wait(2)
@@ -99,12 +88,8 @@ def test_cancelled_job_keeps_ownership_and_reports_late_failure(
         assert not work.tracker.wait_idle(0)
     finally:
         release.set()
+    job.result(2)
     assert work.tracker.wait_idle(2)
-    assert reported.wait(2)
-    assert sum(
-        record.message == "Agent worker failed after its caller stopped waiting"
-        for record in caplog.records
-    ) == int(fails)
 
 
 def test_nested_parallel_children_and_grandchildren_keep_context() -> None:
@@ -194,7 +179,7 @@ def test_thread_start_failure_releases_job_ownership(
         with pytest.raises(RuntimeError, match="cannot start thread"):
             work.start(lambda: None)
     assert work.tracker.wait_idle(timeout=0)
-    assert work.blocking(lambda: "usable", CancellationSignal()) == "usable"
+    assert work.start(lambda: "usable").result(2) == "usable"
 
 
 def test_child_thread_start_failure_rolls_back_registration(
@@ -332,16 +317,15 @@ def test_discovery_reads_run_status_without_holding_coordinator_lock(
         return AssistantMessage(content=[TextContent(text="done")])
 
     agent = Agent(FakeModelClient(reply))
-    coordinator = AgentCoordinator(
-        agents=[
-            AgentInfo(
-                id=agent.id,
-                path="/root/child",
-                parent_id="root",
-                description="",
-                restoration_config=None,
-            )
-        ]
+    coordinator = AgentCoordinator()
+    coordinator.register(
+        AgentInfo(
+            id=agent.id,
+            path="/root/child",
+            parent_id="root",
+            description="",
+            restoration_config=None,
+        )
     )
     run = agent.start(max_steps=1, coordinator=coordinator)
 
@@ -352,7 +336,7 @@ def test_discovery_reads_run_status_without_holding_coordinator_lock(
 
     monkeypatch.setattr(Run, "status", property(status))
     discovery = start_thread_future(
-        lambda: coordinator.discovery("root"), name="test-discovery"
+        lambda: coordinator.discover_children("root"), name="test-discovery"
     )
     try:
         assert status_entered.wait(2)
@@ -623,4 +607,32 @@ def test_progress_delivery_isolates_producer_and_listeners() -> None:
     finally:
         release.set()
         delivery.close()
+        dispatcher.close()
+
+
+def test_child_delivery_copies_only_for_actual_listeners() -> None:
+    dispatcher = concurrency.EventDispatcher()
+    parent = concurrency.EventDelivery(dispatcher)
+    child = concurrency.EventDelivery(parent=parent)
+    grandchild = concurrency.EventDelivery(parent=child)
+    received: list[str] = []
+    parent.subscribe(lambda event: received.append(event.run_id))
+    try:
+        with patch.object(
+            AgentStartEvent,
+            "model_copy",
+            autospec=True,
+            side_effect=AgentStartEvent.model_copy,
+        ) as copy_event:
+            grandchild.publish(AgentStartEvent(run_id="grandchild"))
+            assert grandchild.tracker.wait_idle(2)
+            assert child.tracker.wait_idle(2)
+            assert parent.tracker.wait_idle(2)
+            assert received == ["grandchild"]
+            # Queue ownership requires one copy; empty delivery channels require none.
+            assert copy_event.call_count == 1
+    finally:
+        grandchild.close()
+        child.close()
+        parent.close()
         dispatcher.close()

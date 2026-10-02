@@ -80,7 +80,6 @@ import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
-  useCurrentChatState,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
@@ -91,6 +90,8 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { getConfiguredSources } from "@/lib/sources";
+import { settleChatSession } from "@/lib/chat/settleChatSession";
+import { useTranslations } from "next-intl";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -230,7 +231,7 @@ export default function useChatController({
   // Use custom hooks for accessing store data
   const currentMessageTree = useCurrentMessageTree();
   const currentMessageHistory = useCurrentMessageHistory();
-  const currentChatState = useCurrentChatState();
+  const tReadiness = useTranslations("chat.readiness");
 
   const navigatingAway = useRef(false);
 
@@ -371,7 +372,17 @@ export default function useChatController({
 
   const stopGenerating = useCallback(async () => {
     const currentSession = getCurrentSessionId();
-    const lastMessage = currentMessageHistory[currentMessageHistory.length - 1];
+    const store = useChatSessionStore.getState();
+    const session = store.sessions.get(currentSession);
+    const previousState = session?.chatState;
+    const controller = session?.abortController;
+    if (
+      !previousState ||
+      previousState === "input" ||
+      previousState === "cancelling"
+    )
+      return;
+    store.updateChatState(currentSession, "cancelling");
 
     // Call the backend stop endpoint to set the Redis fence
     // This signals the backend to stop processing as soon as possible
@@ -380,29 +391,19 @@ export default function useChatController({
       await stopChatSession(currentSession);
     } catch (error) {
       console.error("Failed to stop chat session:", error);
-      // Continue with UI cleanup even if backend call fails
+      const current = useChatSessionStore
+        .getState()
+        .sessions.get(currentSession);
+      if (current?.abortController !== controller) return;
+      if (current?.chatState === "cancelling") {
+        updateChatStateAction(currentSession, previousState);
+      }
+      toast.error(tReadiness("stopFailed"));
+      return;
     }
 
-    // Clean up incomplete tool calls for immediate UI feedback
-    if (
-      lastMessage &&
-      lastMessage.type === "assistant" &&
-      lastMessage.toolCall &&
-      lastMessage.toolCall.tool_result === undefined
-    ) {
-      const newMessageTree = new Map(currentMessageTree);
-      const updatedMessage = { ...lastMessage, toolCall: null };
-      newMessageTree.set(lastMessage.nodeId, updatedMessage);
-      updateSessionMessageTree(currentSession, newMessageTree);
-    }
-
-    // Update chat state to input immediately for good UX
-    // The stream will close naturally when the backend sends the STOP packet
-    setStreamingStartTime(currentSession, null);
-    updateChatStateAction(currentSession, "input");
-    // On stop nothing else flips the queue gate, so release it here or queued follow-ups never auto-send.
-    setLatestMessageRenderComplete(currentSession, true);
-  }, [currentMessageHistory, currentMessageTree]);
+    // The stream and readiness check release the session after storage settles.
+  }, [currentSessionId, existingChatSessionId, tReadiness]);
 
   const onSubmit = useCallback(
     async ({
@@ -418,6 +419,17 @@ export default function useChatController({
       additionalContext,
       selectedModels,
     }: OnSubmitProps) => {
+      const submissionStore = useChatSessionStore.getState();
+      if (
+        (submissionStore.sessions.get(getCurrentSessionId())?.chatState ??
+          "input") !== "input"
+      )
+        return;
+      const controller = new AbortController();
+      submissionStore.setAbortController(getCurrentSessionId(), controller);
+      submissionStore.updateSessionData(getCurrentSessionId(), {
+        queuedMessagesPaused: false,
+      });
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
       const isMultiModel =
@@ -518,16 +530,6 @@ export default function useChatController({
         lastMessage = currentHistory[currentHistory.length - 1];
       }
 
-      if (currentChatState != "input") {
-        if (currentChatState == "uploading") {
-          toast.error("Please wait for the content to upload");
-        } else {
-          toast.error("Please wait for the response to complete");
-        }
-
-        return;
-      }
-
       // Auto-pin the agent to sidebar when sending a message if not already pinned
       if (activeAgent) {
         const isAlreadyPinned = pinnedAgents.some(
@@ -624,7 +626,6 @@ export default function useChatController({
         !sessions.get(currChatSessionId)?.description;
 
       // set the ability to cancel the request
-      const controller = new AbortController();
       setAbortController(currChatSessionId, controller);
 
       const messageToResend = currentHistory.find(
@@ -1023,6 +1024,7 @@ export default function useChatController({
       }
 
       let streamSucceeded = false;
+      let saveFailed = false;
 
       try {
         // Selection-time override writes are best-effort. Await confirmation
@@ -1168,7 +1170,12 @@ export default function useChatController({
 
             // We've processed initial packets and are starting to stream content.
             // Transition from 'loading' to 'streaming'.
-            updateChatStateAction(frozenSessionId, "streaming");
+            if (
+              useChatSessionStore.getState().sessions.get(frozenSessionId)
+                ?.chatState !== "cancelling"
+            ) {
+              updateChatStateAction(frozenSessionId, "streaming");
+            }
             // Only set start time once (guard prevents reset on each packet)
             // Use getState() to avoid stale closure - sessions captured at render time becomes stale in async loop
             if (
@@ -1250,6 +1257,8 @@ export default function useChatController({
               (packet as any).error != null
             ) {
               const streamingError = packet as StreamingError;
+              saveFailed ||=
+                streamingError.error_code === "RESPONSE_SAVE_ERROR";
 
               // In multi-model mode, route per-model errors to the specific model's
               // node instead of killing the entire stream. Other models keep streaming.
@@ -1312,7 +1321,6 @@ export default function useChatController({
                 errorDetails = streamingError.details || null;
 
                 setUncaughtError(frozenSessionId, streamingError.error);
-                updateChatStateAction(frozenSessionId, "input");
                 updateSubmittedMessage(getCurrentSessionId(), "");
 
                 throw new Error(streamingError.error);
@@ -1462,6 +1470,7 @@ export default function useChatController({
           : [
               {
                 nodeId: initialAgentNode.nodeId,
+                messageId: newAgentMessageId ?? undefined,
                 message: errorMsg,
                 type: "error" as const,
                 files: aiMessageImages || [],
@@ -1496,14 +1505,21 @@ export default function useChatController({
 
       resetRegenerationState(frozenSessionId);
       setStreamingStartTime(frozenSessionId, null);
-      updateChatStateAction(frozenSessionId, "input");
-      // Error paths replace the streaming node with an empty-packets error
-      // node, so MessageTextRenderer never fires streamFullyDisplayed and
-      // never flips the queue gate back to true. Reset it here so queued
-      // follow-ups aren't silently dropped after a stream failure.
-      if (!streamSucceeded) {
-        setLatestMessageRenderComplete(frozenSessionId, true);
+      if (saveFailed || !streamSucceeded) {
+        useChatSessionStore
+          .getState()
+          .updateSessionData(frozenSessionId, { queuedMessagesPaused: true });
       }
+      const wasCancelling =
+        useChatSessionStore.getState().sessions.get(frozenSessionId)
+          ?.chatState === "cancelling";
+      await settleChatSession({
+        sessionId: frozenSessionId,
+        controller,
+        errorMessage: tReadiness("checkFailed"),
+        refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
+        completeRendering: !streamSucceeded || wasCancelling,
+      });
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)
       if (shouldAutoNameChatSessionAfterResponse) {
@@ -1526,7 +1542,7 @@ export default function useChatController({
       resetInputBar,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
-      currentChatState,
+      tReadiness,
       // Ensure the configuration the chat was given is what gets sent
       toolConfiguration,
       // Keep tool preference-derived values fresh
@@ -1559,13 +1575,23 @@ export default function useChatController({
         );
         return;
       }
-      updateChatStateAction(getCurrentSessionId(), "uploading");
+      const uploadSessionId = getCurrentSessionId();
+      const managesChatState =
+        (useChatSessionStore.getState().sessions.get(uploadSessionId)
+          ?.chatState ?? "input") === "input";
+      if (managesChatState) updateChatStateAction(uploadSessionId, "uploading");
       const uploadedMessageFiles = await beginUpload(
         Array.from(acceptedFiles),
         null
       );
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
-      updateChatStateAction(getCurrentSessionId(), "input");
+      if (
+        managesChatState &&
+        useChatSessionStore.getState().sessions.get(uploadSessionId)
+          ?.chatState === "uploading"
+      ) {
+        updateChatStateAction(uploadSessionId, "input");
+      }
     },
     [activeAgent, llmManager, toolConfiguration]
   );
@@ -1577,7 +1603,6 @@ export default function useChatController({
       const abortController = sessions.get(currentSession)?.abortController;
       if (abortController) {
         abortController.abort();
-        setAbortController(currentSession, new AbortController());
       }
     };
   }, [pathname]);

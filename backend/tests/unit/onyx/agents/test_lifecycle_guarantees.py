@@ -51,7 +51,7 @@ def wait_entered(event: threading.Event) -> None:
 
 
 @pytest.mark.parametrize("during_completion", [False, True])
-def test_cancelled_callback_does_not_prevent_reuse(
+def test_cancelled_callback_reserves_agent_until_it_returns(
     during_completion: bool,
 ) -> None:
     entered = threading.Event()
@@ -79,19 +79,22 @@ def test_cancelled_callback_does_not_prevent_reuse(
     try:
         wait_entered(entered)
         run.cancel()
-        with pytest.raises(AgentCancelled):
-            run.result(1)
-        run._reusable.result(timeout=2)
-        assert not run.wait_for_idle(0.02)
-        agent.prepare_step = None
-        agent.after_step = None
-        following = agent.start(max_steps=1, messages=[UserMessage(content="Continue")])
-        assert following.result(timeout=2).output.text == "answer"
-        assert following.wait_for_idle(2)
+        with pytest.raises(TimeoutError):
+            run.result(0.05)
+        assert not run._reusable.done()
         assert not run.wait_for_idle(0)
+        with pytest.raises(RuntimeError, match="already running or draining"):
+            agent.start(max_steps=1)
     finally:
         release.set()
+    with pytest.raises(AgentCancelled):
+        run.result(2)
     assert run.wait_for_idle(2)
+    agent.prepare_step = None
+    agent.after_step = None
+    following = agent.start(max_steps=1, messages=[UserMessage(content="Continue")])
+    assert following.result(timeout=2).output.text == "answer"
+    assert following.wait_for_idle(2)
     assert writes == ["finished"]
     assert [message.text for message in run.snapshot().messages] == (
         ["answer"] if during_completion else []
@@ -216,13 +219,15 @@ def test_observer_backlog_preserves_output_and_cleanup_ownership(
         frozen = run.snapshot()
         assert result.output.text == "large " * 100
         assert not run.wait_for_idle(0.05)
-        run._reusable.result(timeout=2)
-        following = agent.start(max_steps=1)
-        assert following.result(timeout=2).output.text == "large " * 100
-        assert following.wait_for_idle(2)
+        assert not run._reusable.done()
+        with pytest.raises(RuntimeError, match="already running or draining"):
+            agent.start(max_steps=1)
     finally:
         release.set()
     assert run.wait_for_idle(2)
+    following = agent.start(max_steps=1)
+    assert following.result(timeout=2).output.text == "large " * 100
+    assert following.wait_for_idle(2)
     assert run.delivery_failed
     assert run.snapshot() == frozen
 
@@ -548,12 +553,14 @@ def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
         old.cancel()
         with pytest.raises(AgentCancelled):
             old.result(timeout=2)
-        old._reusable.result(timeout=2)
-        new = agent.start(max_steps=1)
-        assert new.result(timeout=2).output.text == "New answer"
-        assert new.wait_for_idle(2)
+        assert not old._reusable.done()
+        with pytest.raises(RuntimeError, match="already running or draining"):
+            agent.start(max_steps=1)
         assert not old.wait_for_idle(0)
     finally:
         release.set()
     assert old.wait_for_idle(2)
+    new = agent.start(max_steps=1)
+    assert new.result(timeout=2).output.text == "New answer"
+    assert new.wait_for_idle(2)
     assert executed == []

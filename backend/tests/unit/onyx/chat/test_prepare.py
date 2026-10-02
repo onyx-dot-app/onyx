@@ -368,3 +368,70 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
             pending.result(timeout=5)
     assert reservation_attempted
     assert active_sessions == 0
+
+
+def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    from onyx.chat.chat_processing_checker import is_chat_session_processing
+    from onyx.server.query_and_chat.models import SendMessageRequest
+    from tests.unit.fakes import FakeCache
+
+    cache = FakeCache()
+    session_id = uuid4()
+    request = SendMessageRequest(message="hello", chat_session_id=session_id)
+
+    def fail_model_setup(*_args: object) -> None:
+        assert is_chat_session_processing(session_id, cache)
+        raise RuntimeError("model setup failed")
+
+    with (
+        patch("onyx.chat.prepare.get_cache_backend", return_value=cache),
+        patch("onyx.chat.prepare.get_session_with_current_tenant"),
+        patch(
+            "onyx.chat.prepare._load_session",
+            return_value=SimpleNamespace(id=session_id, persona=None),
+        ),
+        patch("onyx.chat.prepare._select_models", side_effect=fail_model_setup),
+        pytest.raises(RuntimeError, match="model setup failed"),
+    ):
+        prepare_chat_turn(request, MagicMock(), llm_overrides=None)
+    assert not is_chat_session_processing(session_id, cache)
+
+
+def test_busy_session_rejects_before_model_or_history_setup() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    from onyx.chat.chat_processing_checker import (
+        ChatTurnAdmission,
+        is_chat_session_processing,
+    )
+    from onyx.server.query_and_chat.models import SendMessageRequest
+    from tests.unit.fakes import FakeCache
+
+    cache = FakeCache()
+    session_id = uuid4()
+    admitted = ChatTurnAdmission(cache)
+    admitted.claim(session_id)
+    request = SendMessageRequest(message="hello", chat_session_id=session_id)
+    with (
+        patch("onyx.chat.prepare.get_cache_backend", return_value=cache),
+        patch("onyx.chat.prepare.get_session_with_current_tenant"),
+        patch(
+            "onyx.chat.prepare._load_session",
+            return_value=SimpleNamespace(id=session_id, persona=None),
+        ),
+        patch("onyx.chat.prepare._select_models") as select_models,
+        patch("onyx.chat.prepare._accept_message") as accept_message,
+        pytest.raises(OnyxError) as error,
+    ):
+        prepare_chat_turn(request, MagicMock(), llm_overrides=None)
+    assert error.value.error_code is OnyxErrorCode.CONFLICT
+    select_models.assert_not_called()
+    accept_message.assert_not_called()
+    assert is_chat_session_processing(session_id, cache)
+    admitted.release()

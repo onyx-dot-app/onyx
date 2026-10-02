@@ -96,14 +96,6 @@ class ChatResponsePersistence(RunStore):
                 )
             )
 
-    @property
-    def is_save_overdue(self) -> bool:
-        with self._lock:
-            return (
-                self._pending_save is not None
-                and self._pending_save.deadline <= time.monotonic()
-            )
-
     def expire_save(self) -> None:
         with self._lock:
             pending = self._pending_save

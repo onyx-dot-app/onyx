@@ -2,7 +2,7 @@
 
 import pytest
 
-from onyx.agents.compaction import checkpoint_matches, history_digest, working_messages
+from onyx.agents.compaction import history_digest, working_messages
 from onyx.agents.execution_records import CompactionCheckpoint
 from onyx.chat.prompt_formatting import PromptMetadata, prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
@@ -231,7 +231,6 @@ def test_historical_tool_filter_preserves_checkpoint_and_current_evidence() -> N
     )
     assert prior_result.text == "Old evidence"
     assert history_digest(history) == original_digest
-    assert checkpoint_matches(history, checkpoint)
 
 
 @pytest.mark.parametrize(

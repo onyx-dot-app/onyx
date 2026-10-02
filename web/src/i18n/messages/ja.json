@@ -9852,7 +9852,9 @@
           "speakingPlaceholder": "{appName} が話しています..."
         },
         "sendButton": {
-          "processingFilesTooltip": "添付ファイルの処理が完了するのを待っています"
+          "processingFilesTooltip": "添付ファイルの処理が完了するのを待っています",
+          "stoppingLabel": "停止中…",
+          "reloadLabel": "もう一度確認"
         },
         "tabReadingButton": {
           "readLabel": "このタブを読み取る",
@@ -11150,6 +11152,10 @@
       "incognito": {
         "title": "シークレットモードです"
       }
+    },
+    "readiness": {
+      "stopFailed": "応答を停止できませんでした。もう一度お試しください。",
+      "checkFailed": "応答の完了を確認できませんでした。次のメッセージを送信する前に、もう一度確認してください。"
     }
   },
   "common": {

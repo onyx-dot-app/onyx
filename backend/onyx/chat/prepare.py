@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
+from onyx.chat.chat_processing_checker import (
+    ADMISSION_CACHE_TIMEOUT_S,
+    ChatTurnAdmission,
+)
 from onyx.chat.files import (
     _collect_available_file_ids,
     _convert_loaded_files_to_chat_files,
@@ -322,8 +326,10 @@ def _prepare_chat_data(
     db_session: Session,
     llm_overrides: list[LLMOverride] | None,
     litellm_additional_headers: dict[str, str] | None,
+    admission: ChatTurnAdmission,
 ) -> _ChatPreparation:
     chat_session = _load_session(request, user, db_session)
+    admission.claim(chat_session.id)
     persona = chat_session.persona
     selected_models = _select_models(
         request,
@@ -521,96 +527,105 @@ def prepare_chat_turn(
     additional_context: str | None = None,
 ) -> ChatTurnSetup:
     """Capture configuration, load files, then reserve responses before execution."""
-    with get_session_with_current_tenant() as session:
-        prepared = _prepare_chat_data(
-            new_msg_req,
-            user,
-            session,
-            llm_overrides,
-            litellm_additional_headers,
-        )
-    token_counter = get_llm_token_counter(prepared.selected_models[0][0])
-    extracted_files = extract_context_files(
-        user_files=prepared.context_user_files,
-        llm_max_context_window=min(
-            llm.config.max_input_tokens for llm, _ in prepared.selected_models
-        ),
-        reserved_token_count=prepared.reserved_token_count,
+    admission = ChatTurnAdmission(
+        get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     )
-    search_params = determine_search_params(
-        prepared.persona_id, prepared.project_id, extracted_files
-    )
-    forced_tool_id = prepared.forced_tool_id
-    if (
-        search_params.search_usage == SearchToolUsage.DISABLED
-        and forced_tool_id == prepared.search_tool_id
-    ):
-        forced_tool_id = None
-    history = _prepare_history(
-        prepared,
-        extracted_files,
-        token_counter,
-        additional_context or new_msg_req.additional_context,
-    )
-    with get_session_with_current_tenant() as session:
-        response_ids = reserve_chat_response_ids(
-            db_session=session,
-            chat_session_id=prepared.session_id,
-            parent_message_id=prepared.user_message_id,
-            model_display_names=[name for _, name in prepared.selected_models],
-        )
-    models = [
-        ReservedChatResponse(llm=llm, display_name=name, message_id=message_id)
-        for (llm, name), message_id in zip(
-            prepared.selected_models, response_ids, strict=True
-        )
-    ]
-    is_multi = bool(llm_overrides)
-    return ChatTurnSetup(
-        new_msg_req=new_msg_req,
-        chat_session_id=prepared.session_id,
-        chat_session_project_id=prepared.project_id,
-        incognito_record_mode=prepared.incognito_record_mode,
-        persona_id=prepared.persona_id,
-        persona=prepared.persona,
-        base_system_prompt=prepared.base_system_prompt,
-        tool_configuration=prepared.tool_configuration,
-        research_tool_id=prepared.research_tool_id,
-        checkpoint=next(
-            (
-                message.checkpoint
-                for message in reversed(prepared.history)
-                if message.checkpoint is not None
+    try:
+        with get_session_with_current_tenant() as session:
+            prepared = _prepare_chat_data(
+                new_msg_req,
+                user,
+                session,
+                llm_overrides,
+                litellm_additional_headers,
+                admission,
+            )
+        token_counter = get_llm_token_counter(prepared.selected_models[0][0])
+        extracted_files = extract_context_files(
+            user_files=prepared.context_user_files,
+            llm_max_context_window=min(
+                llm.config.max_input_tokens for llm, _ in prepared.selected_models
             ),
-            None,
-        ),
-        user_message_id=prepared.user_message_id,
-        user_identity=LLMUserIdentity(
-            user_id="anonymous_user"
-            if user.is_anonymous
-            else user.email or str(user.id),
-            session_id=str(prepared.session_id),
-        ),
-        responses=models,
-        messages=history.history.messages[:-1],
-        input_messages=history.history.messages[-1:],
-        previous_run_id=history.previous_run_id,
-        extracted_context_files=extracted_files,
-        stream_id=prepared.user_message_id if is_multi else models[0].message_id,
-        reasoning_effort=prepared.reasoning_effort,
-        search_params=search_params,
-        all_injected_file_metadata=history.history.all_injected_file_metadata,
-        available_files=prepared.available_files,
-        forced_tool_id=forced_tool_id,
-        chat_files_for_tools=history.files,
-        custom_agent_prompt=prepared.custom_agent_prompt,
-        user_memory_context=prepared.user_memory_context,
-        skip_clarification=prepared.skip_clarification,
-        cache=get_cache_backend(),
-        slack_context=slack_context,
-        custom_tool_additional_headers=custom_tool_additional_headers,
-        mcp_headers=mcp_headers,
-    )
+            reserved_token_count=prepared.reserved_token_count,
+        )
+        search_params = determine_search_params(
+            prepared.persona_id, prepared.project_id, extracted_files
+        )
+        forced_tool_id = prepared.forced_tool_id
+        if (
+            search_params.search_usage == SearchToolUsage.DISABLED
+            and forced_tool_id == prepared.search_tool_id
+        ):
+            forced_tool_id = None
+        history = _prepare_history(
+            prepared,
+            extracted_files,
+            token_counter,
+            additional_context or new_msg_req.additional_context,
+        )
+        with get_session_with_current_tenant() as session:
+            response_ids = reserve_chat_response_ids(
+                db_session=session,
+                chat_session_id=prepared.session_id,
+                parent_message_id=prepared.user_message_id,
+                model_display_names=[name for _, name in prepared.selected_models],
+            )
+        models = [
+            ReservedChatResponse(llm=llm, display_name=name, message_id=message_id)
+            for (llm, name), message_id in zip(
+                prepared.selected_models, response_ids, strict=True
+            )
+        ]
+        is_multi = bool(llm_overrides)
+        return ChatTurnSetup(
+            new_msg_req=new_msg_req,
+            chat_session_id=prepared.session_id,
+            chat_session_project_id=prepared.project_id,
+            incognito_record_mode=prepared.incognito_record_mode,
+            persona_id=prepared.persona_id,
+            persona=prepared.persona,
+            base_system_prompt=prepared.base_system_prompt,
+            tool_configuration=prepared.tool_configuration,
+            research_tool_id=prepared.research_tool_id,
+            checkpoint=next(
+                (
+                    message.checkpoint
+                    for message in reversed(prepared.history)
+                    if message.checkpoint is not None
+                ),
+                None,
+            ),
+            user_message_id=prepared.user_message_id,
+            user_identity=LLMUserIdentity(
+                user_id="anonymous_user"
+                if user.is_anonymous
+                else user.email or str(user.id),
+                session_id=str(prepared.session_id),
+            ),
+            responses=models,
+            messages=history.history.messages[:-1],
+            input_messages=history.history.messages[-1:],
+            previous_run_id=history.previous_run_id,
+            extracted_context_files=extracted_files,
+            stream_id=prepared.user_message_id if is_multi else models[0].message_id,
+            reasoning_effort=prepared.reasoning_effort,
+            search_params=search_params,
+            all_injected_file_metadata=history.history.all_injected_file_metadata,
+            available_files=prepared.available_files,
+            forced_tool_id=forced_tool_id,
+            chat_files_for_tools=history.files,
+            custom_agent_prompt=prepared.custom_agent_prompt,
+            user_memory_context=prepared.user_memory_context,
+            skip_clarification=prepared.skip_clarification,
+            cache=get_cache_backend(),
+            admission=admission,
+            slack_context=slack_context,
+            custom_tool_additional_headers=custom_tool_additional_headers,
+            mcp_headers=mcp_headers,
+        )
+    except BaseException:
+        admission.release()
+        raise
 
 
 def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:

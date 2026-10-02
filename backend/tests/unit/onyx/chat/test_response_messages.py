@@ -2,7 +2,6 @@
 
 import pytest
 
-from onyx.agents.events import AgentEndEvent, AgentEvent
 from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import StepResult
 from onyx.agents.runtime import Agent, Run
@@ -27,15 +26,10 @@ def test_harness_selects_answer_and_message_ids_survive_restore() -> None:
         FakeModelClient(lambda _request, _signal: next(replies)), after_step=after_step
     )
     runs: list[Run] = []
-    events: list[AgentEvent] = []
-    run_agent(agent, max_steps=2, runs=runs, listener=events.append)
+    run_agent(agent, max_steps=2, runs=runs)
     snapshot = runs[0].snapshot()
     record = response_record(snapshot)
     assert record.answer_step_index == 1
-    terminal = next(event for event in events if isinstance(event, AgentEndEvent))
-    answer = snapshot.messages[1]
-    assert isinstance(answer, AssistantMessage)
-    assert terminal.answer_message_id == answer.id
     restored = response_snapshot(record)
     assert restored.messages == snapshot.messages
     assert restored.steps == snapshot.steps

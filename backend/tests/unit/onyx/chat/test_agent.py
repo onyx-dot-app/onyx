@@ -222,7 +222,7 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
     assert projected.tool_calls[0].result_metadata == search
 
 
-def test_source_file_staging_does_not_block_cancelled_snapshot(
+def test_cancelled_source_file_staging_drains_before_completion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     entered = threading.Event()
@@ -296,15 +296,18 @@ def test_source_file_staging_does_not_block_cancelled_snapshot(
         try:
             assert entered.wait(2)
             signal.cancel()
-            with pytest.raises(AgentCancelled):
-                run.result(timeout=0.5)
-            snapshot = project(run.snapshot())
-            assert snapshot.response is not None
-            assert snapshot.response.status == "cancelled"
+            with pytest.raises(TimeoutError):
+                run.result(timeout=0.05)
             assert not run.wait_for_idle(timeout=0)
+            assert not run._reusable.done()
         finally:
             release.set()
-            assert run.wait_for_idle(timeout=2)
+        with pytest.raises(AgentCancelled):
+            run.result(timeout=2)
+        assert run.wait_for_idle(timeout=2)
+        snapshot = project(run.snapshot())
+        assert snapshot.response is not None
+        assert snapshot.response.status == "cancelled"
 
     exercise()
     assert stage_calls == 1

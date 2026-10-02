@@ -6,9 +6,9 @@ from concurrent.futures import Future, wait
 from contextlib import ExitStack
 
 from onyx.agents.runtime import Run
+from onyx.cache.interface import CacheLockLostError
 from onyx.chat.chat_processing_checker import (
     PROCESSING_REFRESH_INTERVAL_S,
-    set_processing_status,
 )
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
@@ -103,7 +103,11 @@ def start_chat_turn(
     *,
     active_chat_turns: ActiveChatTurns | None = None,
 ) -> ChatStream:
-    turn = ChatTurnExecution(setup, user, response_future, stream_buffer)
+    try:
+        turn = ChatTurnExecution(setup, user, response_future, stream_buffer)
+    except BaseException:
+        setup.admission.release()
+        raise
     startup_error: Exception | None = None
     try:
         turn.begin()
@@ -144,12 +148,7 @@ class ChatTurnExecution:
             self.setup.cache,
             stream_id=self.setup.stream_id,
         )
-        set_processing_status(
-            chat_session_id=self.setup.chat_session_id,
-            cache=self.setup.cache,
-            value=True,
-            stream_id=self.setup.stream_id,
-        )
+        self.setup.admission.publish(self.setup.stream_id)
 
     def reject(self, error: Exception) -> None:
         self.cancellation.cancel()
@@ -169,7 +168,7 @@ class ChatTurnExecution:
                 logger.exception(
                     "Rejected chat processing status cleanup could not start"
                 )
-                self.finished.set_result(None)
+                clear_status()
 
         # No control thread exists to observe cleanup for a rejected turn.
         try:
@@ -234,37 +233,27 @@ class ChatTurnExecution:
     def _wait_for_completion(self) -> None:
         deadline = time.monotonic() + CHAT_RESPONSE_WAIT_TIMEOUT_S
         timed_out = False
-        processing_status_cleared = False
         while True:
             try:
                 self._poll_control()
             except Exception:
                 self.cancellation.cancel()
                 logger.exception("Chat turn control failed; draining active work")
-                self.delivery.finish()
             try:
                 self._poll_responses()
-                if not self.delivery.is_closing and time.monotonic() >= deadline:
-                    timed_out = True
-                    logger.error("Chat turn exceeded its response wait bound")
-                    self.cancellation.cancel()
-                responses_done = all(
-                    writer.outcome.done() for writer in self._response_workers.values()
-                )
-                save_overdue = any(
-                    writer.is_save_overdue for writer in self._response_workers.values()
-                )
-                if not self.delivery.is_closing and (
-                    (
-                        responses_done
-                        and (
-                            not self._response_workers
-                            or self.cancellation.cancelled
-                            or save_overdue
-                        )
-                    )
-                    or timed_out
-                ):
+            except Exception:
+                self.cancellation.cancel()
+                logger.exception("Chat response polling failed; draining active work")
+            if not timed_out and time.monotonic() >= deadline:
+                timed_out = True
+                logger.error("Chat turn exceeded its response wait bound")
+                self.cancellation.cancel()
+            with self._lock:
+                stores = tuple(self._stores)
+            if not self._response_workers and not any(
+                store.has_owned_work for store in stores
+            ):
+                if not self.delivery.is_closing:
                     if self._stopped_by_user:
                         self.delivery.publish(
                             Packet(
@@ -273,22 +262,9 @@ class ChatTurnExecution:
                             )
                         )
                     self.delivery.finish()
-            except Exception:
-                self.cancellation.cancel()
-                logger.exception("Chat turn control failed; draining active work")
-                self.delivery.finish()
-            if self.delivery.finished.done() and not processing_status_cleared:
-                self._clear_processing_status()
-                processing_status_cleared = True
-            with self._lock:
-                stores = tuple(self._stores)
-            if (
-                not self._response_workers
-                and not any(store.has_owned_work for store in stores)
-                and processing_status_cleared
-            ):
-                self.finished.set_result(None)
-                return
+                if self.delivery.finished.done() and self._clear_processing_status():
+                    self.finished.set_result(None)
+                    return
             time.sleep(_CANCEL_POLL_INTERVAL_S)
 
     def _register_store(self, store: ChatRunStore) -> None:
@@ -354,15 +330,13 @@ class ChatTurnExecution:
                     continue
             del self._response_workers[worker]
 
-    def _clear_processing_status(self) -> None:
+    def _clear_processing_status(self) -> bool:
         try:
-            set_processing_status(
-                chat_session_id=self.setup.chat_session_id,
-                cache=self.setup.cache,
-                value=False,
-            )
+            self.setup.admission.release()
+            return True
         except Exception:
-            logger.exception("Failed to clear chat processing status")
+            logger.exception("Failed to clear chat processing status; will retry")
+            return False
 
     def _run_response(
         self,
@@ -459,8 +433,7 @@ class ChatTurnExecution:
             except Exception:
                 self.cancellation.cancel()
                 logger.exception("Chat ownership control failed; will retry")
-        if not self.delivery.is_closing:
-            self._poll_stream_status()
+        self._poll_stream_status()
 
     def _poll_stream_status(self) -> None:
         now = time.monotonic()
@@ -472,7 +445,7 @@ class ChatTurnExecution:
             try:
                 if is_stop_requested(
                     self.setup.chat_session_id,
-                    self.setup.cache,
+                    self.setup.admission.cache,
                     stream_id=self.setup.stream_id,
                 ):
                     self._stopped_by_user = True
@@ -482,11 +455,11 @@ class ChatTurnExecution:
         if now - self._last_refresh >= PROCESSING_REFRESH_INTERVAL_S:
             self._last_refresh = now
             try:
-                set_processing_status(
-                    chat_session_id=self.setup.chat_session_id,
-                    cache=self.setup.cache,
-                    value=True,
-                    stream_id=self.setup.stream_id,
+                self.setup.admission.refresh()
+            except CacheLockLostError:
+                self.cancellation.cancel()
+                logger.exception(
+                    "Chat session admission was lost; draining active work"
                 )
             except Exception:
                 logger.exception("Failed to refresh chat processing status; will retry")

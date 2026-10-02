@@ -346,6 +346,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
         )
     setup.incognito_record_mode = None
     setup.cache.exists.return_value = False
+    setup.admission.cache = setup.cache
     # Fields consumed by SearchToolConfig / CustomToolConfig / FileReaderToolConfig
     # constructors during model preparation — must be typed correctly for Pydantic.
     setup.new_msg_req.deep_research = False
@@ -428,7 +429,13 @@ def _start_chat_turn(
 def _collect_chat_turn(setup: MagicMock) -> list:
     """Collect packets until chat delivery finishes."""
 
-    return list(_start_chat_turn(setup, MagicMock()))
+    tasks = ActiveChatTurns()
+    reader = start_chat_turn(setup, MagicMock(), active_chat_turns=tasks)
+    try:
+        return list(reader)
+    finally:
+        reader.close()
+        assert tasks.close()
 
 
 class TestRunModels:
@@ -1464,6 +1471,8 @@ def test_stop_reaches_other_model_before_blocked_storage_resumes(
 
     from onyx.server.query_and_chat.streaming_models import heartbeat_packet
 
+    tasks = ActiveChatTurns()
+    outcome = Future[ChatResponseOutcome]()
     setup = _make_setup(2)
     buffer = MagicMock(truncated=False)
     provider_started = threading.Event()
@@ -1514,7 +1523,13 @@ def test_stop_reaches_other_model_before_blocked_storage_resumes(
             ) as persist,
             patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
         ):
-            reader = _start_chat_turn(setup, MagicMock(), stream_buffer=buffer)
+            reader = start_chat_turn(
+                setup,
+                MagicMock(),
+                response_future=outcome,
+                stream_buffer=buffer,
+                active_chat_turns=tasks,
+            )
             try:
                 assert storage_started.wait(2)
                 stop_requested.set()
@@ -1522,7 +1537,8 @@ def test_stop_reaches_other_model_before_blocked_storage_resumes(
             finally:
                 stop_requested.set()
                 release_storage.set()
-                packets = list(reader)
+                list(reader)
+                assert tasks.close()
         assert cancelled_before_release, (
             "Storage must not block Stop delivery to the provider"
         )
@@ -1531,9 +1547,8 @@ def test_stop_reaches_other_model_before_blocked_storage_resumes(
             1000,
             1001,
         }
-        errors = [packet for packet in packets if isinstance(packet, StreamingError)]
-        assert [error.error_code for error in errors] == (
-            ["RESPONSE_SAVE_ERROR"] if save_fails else []
+        assert outcome.result(timeout=2).persistence_status == (
+            PersistenceStatus.FAILED if save_fails else PersistenceStatus.SAVED
         )
         buffer.mark_done.assert_called_once()
     finally:
@@ -1845,6 +1860,11 @@ def test_full_response_reports_save_outcome_after_delivery_ends(
             assert response.error_msg == (
                 "\n".join(expected_errors) if expected_errors else "Delivery gap"
             )
+            if is_late:
+                assert not save_finished.is_set()
+                release_save.set()
+                assert save_finished.wait(2)
+                assert response_future.result() is outcome
             packets = list(reader)
             save_errors = [
                 packet
@@ -1853,11 +1873,6 @@ def test_full_response_reports_save_outcome_after_delivery_ends(
                 and packet.error_code == "RESPONSE_SAVE_ERROR"
             ]
             assert len(save_errors) == (0 if expected == PersistenceStatus.SAVED else 1)
-            if is_late:
-                assert not save_finished.is_set()
-                release_save.set()
-                assert save_finished.wait(2)
-                assert response_future.result() is outcome
         finally:
             release_save.set()
             assert save_finished.wait(2)
@@ -2156,6 +2171,7 @@ def test_rejected_turn_finishes_when_cleanup_worker_cannot_start() -> None:
 
     with (
         patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
+        patch.object(turn.setup.admission, "release") as release_admission,
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
         turn.begin()
@@ -2165,6 +2181,7 @@ def test_rejected_turn_finishes_when_cleanup_worker_cannot_start() -> None:
         with pytest.raises(RuntimeError, match="Worker unavailable"):
             outcome.result(timeout=1)
         assert launched == ["chat-control", "chat-status-cleanup"]
+        release_admission.assert_called_once()
         save.assert_not_called()
         assert tasks.close()
 
@@ -2188,8 +2205,10 @@ def test_rejection_returns_while_processing_status_cleanup_is_blocked() -> None:
 
     with (
         patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
-        patch(
-            "onyx.chat.execution.set_processing_status", side_effect=processing_status
+        patch.object(
+            turn.setup.admission,
+            "release",
+            side_effect=lambda: processing_status(value=False),
         ),
         ContextThreadPoolExecutor(max_workers=1) as executor,
     ):
@@ -2260,8 +2279,7 @@ def test_response_workers_track_generations_and_share_one_event_consumer() -> No
             reader.close()
         assert save.call_count == 2
     assert launched == ["chat-control", "chat-response", "chat-response"]
-    assert model_threads.keys() == preparation_threads.keys()
-    assert set(model_threads.values()).isdisjoint(preparation_threads.values())
+    assert model_threads == preparation_threads
     assert len(set(model_threads.values())) == 2
     assert len(observer_threads) == 1
     assert observer_threads.isdisjoint(model_threads.values())
@@ -2359,7 +2377,7 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership() -> None:
         return False
 
     def poll_owned_runs() -> None:
-        if turn.delivery.is_closing:
+        if outcome.done():
             polled_after_completion.set()
             store.has_owned_work = False
 
@@ -2375,7 +2393,7 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership() -> None:
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
         patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
         patch("onyx.chat.execution.PROCESSING_REFRESH_INTERVAL_S", 0),
-        patch("onyx.chat.execution.set_processing_status") as processing,
+        patch.object(turn.setup.admission, "release") as release_admission,
     ):
         turn.begin()
         tasks.start(turn)
@@ -2388,11 +2406,8 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership() -> None:
             assert polled_after_completion.wait(5)
             turn.finished.result(timeout=5)
             assert save.call_count == 1
-            processing_values = [
-                call.kwargs["value"] for call in processing.call_args_list
-            ]
-            assert processing_values[-1] is False
-            assert False not in processing_values[:-1]
+            release_admission.assert_called_once()
+
         finally:
             turn.delivery.reader.close()
             assert tasks.close()
@@ -2435,7 +2450,9 @@ def test_stop_cache_timeout_allows_next_ownership_poll(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     setup = _make_setup()
-    setup.cache.exists.side_effect = [TimeoutError("Cache deadline exceeded"), False]
+    control_cache = MagicMock()
+    control_cache.exists.side_effect = [TimeoutError("Cache deadline exceeded"), False]
+    setup.admission.cache = control_cache
     store = MagicMock(spec=ChatRunStore)
     turn = ChatTurnExecution(setup, MagicMock())
     turn._register_store(store)
@@ -2445,7 +2462,8 @@ def test_stop_cache_timeout_allows_next_ownership_poll(
     turn._last_stop_check = 0
     turn._poll_control()
     assert store.poll_control.call_count == 2
-    assert setup.cache.exists.call_count == 2
+    assert control_cache.exists.call_count == 2
+    setup.cache.exists.assert_not_called()
     assert not turn.cancellation.cancelled
 
 
@@ -2462,8 +2480,17 @@ def test_processing_marker_clears_after_inflight_refresh() -> None:
             assert release_refresh.wait(5)
         values.append(value)
 
-    with patch(
-        "onyx.chat.execution.set_processing_status", side_effect=processing_status
+    with (
+        patch.object(
+            turn.setup.admission,
+            "refresh",
+            side_effect=lambda: processing_status(value=True),
+        ),
+        patch.object(
+            turn.setup.admission,
+            "release",
+            side_effect=lambda: processing_status(value=False),
+        ),
     ):
         control = start_thread_future(
             turn._wait_for_completion, name="test-chat-control"
@@ -2485,8 +2512,9 @@ def test_processing_marker_clears_after_inflight_refresh() -> None:
 
 def test_processing_marker_failure_does_not_cancel_chat() -> None:
     turn = ChatTurnExecution(_make_setup(), MagicMock())
-    with patch(
-        "onyx.chat.execution.set_processing_status",
+    with patch.object(
+        turn.setup.admission,
+        "refresh",
         side_effect=[ConnectionError("offline"), None],
     ) as processing:
         turn._last_refresh = 0
@@ -2498,7 +2526,7 @@ def test_processing_marker_failure_does_not_cancel_chat() -> None:
         assert not turn.cancellation.cancelled
 
 
-def test_save_timeout_clears_processing_status_before_worker_drains() -> None:
+def test_save_timeout_retains_processing_status_until_worker_drains() -> None:
     save_started = threading.Event()
     release_save = threading.Event()
     status_cleared = threading.Event()
@@ -2519,8 +2547,10 @@ def test_save_timeout_clears_processing_status_before_worker_drains() -> None:
         patch("onyx.chat.history_store.save_chat_response_to_db", side_effect=save),
         patch("onyx.chat.persistence.PERSISTENCE_WAIT_SECONDS", 0.05),
         patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
-        patch(
-            "onyx.chat.execution.set_processing_status", side_effect=processing_status
+        patch.object(
+            turn.setup.admission,
+            "release",
+            side_effect=lambda: processing_status(value=False),
         ),
     ):
         turn.begin()
@@ -2531,11 +2561,13 @@ def test_save_timeout_clears_processing_status_before_worker_drains() -> None:
                 outcome.result(timeout=5).persistence_status
                 == PersistenceStatus.UNCONFIRMED
             )
-            assert status_cleared.wait(5)
-            list(turn.delivery.reader)
+            assert not status_cleared.is_set()
+            assert not turn.delivery.finished.done()
             assert not turn.finished.done()
             release_save.set()
             turn.finished.result(timeout=5)
+            assert status_cleared.is_set()
+            list(turn.delivery.reader)
         finally:
             release_save.set()
             turn.delivery.reader.close()
@@ -2678,3 +2710,107 @@ def test_failed_completion_lookup_cancels_run_and_drains_other_responses() -> No
     turn._poll_responses()
     assert not turn._response_workers
     persistence.coordinator.completion.assert_called_once()
+
+
+def test_stop_waits_for_model_read_and_persistence_before_ending_delivery() -> None:
+    entered, release = threading.Event(), threading.Event()
+    outcome = Future[ChatResponseOutcome]()
+    tasks = ActiveChatTurns()
+
+    def generate(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        entered.set()
+        assert release.wait(5)
+        return AssistantMessage(content=[TextContent(text="Late output")])
+
+    agent = _chat_agent(Agent(FakeModelClient(generate)))
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    with (
+        patch.object(turn.setup.admission, "release") as release_admission,
+        patch("onyx.chat.execution.create_chat_agent", return_value=agent),
+        patch("onyx.chat.history_store.save_chat_response_to_db"),
+        patch(
+            "onyx.chat.execution.is_stop_requested",
+            side_effect=lambda *_args, **_kwargs: entered.is_set(),
+        ),
+        patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
+    ):
+        turn.begin()
+        tasks.start(turn)
+        try:
+            assert entered.wait(3)
+            reader = start_thread_future(
+                lambda: list(turn.delivery.reader), name="test-reader"
+            )
+            with pytest.raises(TimeoutError):
+                reader.result(timeout=0.1)
+            assert turn.cancellation.cancelled
+            assert not turn.finished.done()
+            assert not outcome.done()
+            release_admission.assert_not_called()
+            release.set()
+            assert outcome.result(timeout=3).response.cancelled
+            turn.finished.result(timeout=3)
+            packets = reader.result(timeout=2)
+            assert any(
+                isinstance(packet, Packet)
+                and isinstance(packet.obj, OverallStop)
+                and packet.obj.stop_reason == "user_cancelled"
+                for packet in packets
+            )
+            release_admission.assert_called_once()
+        finally:
+            release.set()
+            turn.delivery.reader.close()
+            assert tasks.close()
+
+
+@pytest.mark.parametrize("construction_fails", [False, True])
+def test_stream_start_failure_releases_admission_once(construction_fails: bool) -> None:
+    setup = _make_setup()
+    tasks = ActiveChatTurns()
+    assert tasks.close()
+    released = threading.Event()
+    setup.admission.release.side_effect = released.set
+    constructor = (
+        patch(
+            "onyx.chat.execution.ChatTurnExecution", side_effect=RuntimeError("failed")
+        )
+        if construction_fails
+        else nullcontext()
+    )
+    with (
+        patch("onyx.chat.process_message.prepare_chat_turn", return_value=setup),
+        patch("onyx.chat.process_message.StreamBufferWriter"),
+        constructor,
+    ):
+        packets = list(
+            _stream_chat_turn(_make_request(), MagicMock(), active_chat_turns=tasks)
+        )
+        assert released.wait(5)
+    assert any(isinstance(packet, StreamingError) for packet in packets)
+    setup.admission.release.assert_called_once()
+
+
+def test_preparation_cleanup_failure_resets_request_context() -> None:
+    from shared_configs.contextvars import (
+        CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR,
+        CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR,
+    )
+
+    setup = _make_setup()
+    setup.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    setup.admission.release.side_effect = RuntimeError("release failed")
+    with (
+        patch("onyx.chat.process_message.prepare_chat_turn", return_value=setup),
+        patch(
+            "onyx.chat.process_message.StreamBufferWriter",
+            side_effect=RuntimeError("buffer failed"),
+        ),
+        pytest.raises(RuntimeError, match="release failed"),
+    ):
+        list(_stream_chat_turn(_make_request(), MagicMock()))
+    setup.admission.release.assert_called_once()
+    assert CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.get() is None
+    assert CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.get() is None

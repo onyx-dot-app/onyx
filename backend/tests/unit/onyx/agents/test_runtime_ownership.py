@@ -90,7 +90,7 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
         )
 
     def inspect(invocation: ToolInvocation) -> ToolResult:
-        discovered = invocation.agents.discovery()
+        discovered = invocation.agents.discover_children()
         assert [info.latest_run_id for info in discovered] == (
             ["saved"] if in_discovery else []
         )
@@ -114,7 +114,6 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
         status=RunStatus.COMPLETE,
     )
     coordinator = AgentCoordinator(
-        agents=[info] if in_discovery else [],
         directory=FakeAgentDirectory(
             lookup_agent=lambda agent_id, parent_id: (
                 info if agent_id == info.id and parent_id == parent.id else None
@@ -123,26 +122,18 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
             read_run=lambda run_id, parent_id: (
                 archived if run_id == "saved" and parent_id == parent.id else None
             ),
-        ),
+        )
     )
+    if in_discovery:
+        coordinator.register(info)
     handles: list[Run] = []
     run_agent(parent, max_steps=2, coordinator=coordinator, runs=handles)
     assert handles[0].snapshot().child_runs[0].previous_run_id == "saved"
 
 
-@pytest.mark.parametrize("kind", ["model", "tool"])
-def test_cancelled_work_remains_tracked_without_reserving_agent(kind: str) -> None:
+def test_cancelled_tool_reserves_agent_until_owned_work_drains() -> None:
     entered, release = Event(), Event()
     effects: list[str] = []
-
-    def generate(
-        _request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        if entered.is_set():
-            return AssistantMessage(content=[TextContent(text="New answer")])
-        entered.set()
-        assert release.wait(5)
-        return AssistantMessage(content=[TextContent(text="Late")])
 
     def tool(_invocation: ToolInvocation) -> ToolResult:
         entered.set()
@@ -151,26 +142,22 @@ def test_cancelled_work_remains_tracked_without_reserving_agent(kind: str) -> No
         _invocation.update(ToolProgress(content="Late"))
         return ToolResult(content="Late")
 
-    agent = (
-        Agent(FakeModelClient(generate))
-        if kind == "model"
-        else Agent(
-            FakeModelClient(
-                lambda *_: AssistantMessage(
-                    content=[TextContent(text="New answer")]
-                    if entered.is_set()
-                    else [ToolCall(id="blocked", name="blocked", arguments={})]
-                )
-            ),
-            tools=[
-                AgentTool(
-                    definition=ToolDefinition(
-                        name="blocked", description="Wait", parameters={}
-                    ),
-                    execute=tool,
-                )
-            ],
-        )
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[TextContent(text="New answer")]
+                if entered.is_set()
+                else [ToolCall(id="blocked", name="blocked", arguments={})]
+            )
+        ),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="blocked", description="Wait", parameters={}
+                ),
+                execute=tool,
+            )
+        ],
     )
 
     def exercise() -> None:
@@ -182,27 +169,28 @@ def test_cancelled_work_remains_tracked_without_reserving_agent(kind: str) -> No
             with pytest.raises(AgentCancelled):
                 run.result(timeout=3)
             assert not run.wait_for_idle(timeout=0.01)
-            run._reusable.result(timeout=2)
-            assert coordinator.active_run(agent.id) is None
+            assert not run._reusable.done()
+            assert coordinator.active_run(agent.id) is run
             snapshot = run.snapshot()
-            following = agent.start(max_steps=1, coordinator=coordinator)
-            assert following.result(timeout=2).output.text == "New answer"
-            assert following.wait_for_idle(timeout=2)
-            assert not run.wait_for_idle(timeout=0)
+            with pytest.raises(RuntimeError, match="already running or draining"):
+                agent.start(max_steps=1, coordinator=coordinator)
             assert not effects
-            assert not coordinator.close(timeout=0.01)
         finally:
             release.set()
         assert run.wait_for_idle(timeout=3)
+        assert coordinator.active_run(agent.id) is None
+        following = agent.start(max_steps=1, coordinator=coordinator)
+        assert following.result(timeout=2).output.text == "New answer"
+        assert following.wait_for_idle(timeout=2)
         assert coordinator.close(timeout=3)
         assert run.snapshot() == snapshot
         assert agent.state.messages[-1].text == "New answer"
-        assert effects == (["Old side effect"] if kind == "tool" else [])
+        assert effects == ["Old side effect"]
 
     exercise()
 
 
-def test_generation_deadline_retains_worker_and_rejects_late_output() -> None:
+def test_generation_deadline_rejects_output_when_blocked_read_returns() -> None:
     entered, release = Event(), Event()
 
     def generate(
@@ -219,50 +207,61 @@ def test_generation_deadline_retains_worker_and_rejects_late_output() -> None:
     run = agent.start(max_steps=1)
     try:
         assert entered.wait(2)
+        with pytest.raises(TimeoutError):
+            run.result(timeout=0.2)
+        assert not run.wait_for_idle(0)
+        release.set()
         with pytest.raises(RunFailed):
             run.result(timeout=2)
         snapshot = run.snapshot()
         assert snapshot.status == RunStatus.ERROR
         assert snapshot.failure is not None
         assert snapshot.failure.kind == RunFailureKind.LLM_TIMEOUT
-        assert not run.wait_for_idle(0)
-        run._reusable.result(timeout=2)
+        assert not snapshot.messages[-1].text
     finally:
         release.set()
     assert run.wait_for_idle(2)
-    assert run.snapshot() == snapshot
 
 
-def test_archive_timeout_does_not_cancel_parent_or_release_its_work_early() -> None:
+def test_archive_timeout_waits_for_owned_io_before_returning() -> None:
     entered, release, finished = Event(), Event(), Event()
+    tool_thread: list[threading.Thread] = []
 
     def read(_run_id: str, _parent_id: str) -> RunState | None:
+        assert threading.current_thread() is tool_thread[0]
         entered.set()
         try:
             assert release.wait(3)
-            return None
+            return RunState(run_id="saved", status=RunStatus.RUNNING)
         finally:
             finished.set()
 
     def inspect(invocation: ToolInvocation) -> ToolResult:
-        try:
-            assert invocation.agents.wait_run("saved", timeout=0) is None
-            assert not entered.is_set()
-            assert invocation.agents.wait_run("saved", timeout=0.05) is None
-            assert entered.is_set() and not finished.is_set()
-            assert not invocation.cancellation.cancelled
-        finally:
-            release.set()
+        tool_thread.append(threading.current_thread())
+        assert invocation.agents.wait_run("saved", timeout=0) is None
+        assert not entered.is_set()
+        assert invocation.agents.wait_run("saved", timeout=0.05) is None
+        assert finished.is_set()
+        assert not invocation.cancellation.cancelled
         return ToolResult(content="timed out")
 
     parent = parent_agent(inspect)
-
-    run_agent(
-        parent,
-        max_steps=2,
-        coordinator=AgentCoordinator(directory=FakeAgentDirectory(read_run=read)),
+    coordinator = AgentCoordinator(directory=FakeAgentDirectory(read_run=read))
+    run = parent.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert entered.wait(2)
+        with pytest.raises(TimeoutError):
+            run.result(timeout=0.1)
+        assert not run.wait_for_idle(0)
+    finally:
+        release.set()
+    assert run.result(2).output.text == "first finished"
+    assert not any(
+        isinstance(message, ToolResultMessage) and message.is_error
+        for message in run.snapshot().messages
     )
-    assert finished.is_set()
+    assert run.wait_for_idle(2)
+    assert coordinator.close(2)
 
 
 def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
@@ -296,7 +295,7 @@ def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
         ]
         assert len(errors) == 1
         assert "loaded agent limit exceeded" in errors[0].content
-        assert len(coordinator.discovery(parent.id)) == 1
+        assert len(coordinator.discover_children(parent.id)) == 1
         assert coordinator.close(timeout=3)
 
     with patch("onyx.agents.agent_coordination.MAX_LOADED_AGENTS", 1):
@@ -467,14 +466,14 @@ def test_child_cancel_does_not_need_a_free_blocking_worker() -> None:
     )
 
 
-def test_child_restart_does_not_wait_for_its_timed_out_archive_read() -> None:
+def test_child_restart_waits_for_cancelled_archive_read() -> None:
     entered, release = Event(), Event()
     calls = 0
 
     def read(_run_id: str, _parent_id: str) -> RunState | None:
         entered.set()
         assert release.wait(5)
-        return None
+        return RunState(run_id="archived", status=RunStatus.RUNNING)
 
     def inspect(invocation: ToolInvocation) -> ToolResult:
         nonlocal calls
@@ -483,24 +482,42 @@ def test_child_restart_does_not_wait_for_its_timed_out_archive_read() -> None:
             assert invocation.agents.wait_run("archived", timeout=0.05) is None
         return ToolResult(content="Done")
 
-    child = parent_agent(inspect)
+    child = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="inspect", name="inspect", arguments={})]
+            )
+        ),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="inspect", description="", parameters={}
+                ),
+                execute=inspect,
+            )
+        ],
+    )
 
     def delegate(invocation: ToolInvocation) -> ToolResult:
         submitted = invocation.agents.spawn_agent(
-            child, name="research", description="Task", messages=[], max_steps=2
+            child, name="research", description="Task", messages=[], max_steps=1
         )
-        assert invocation.agents.wait_run(submitted.run_id, timeout=2) is not None
-        assert entered.is_set()
+        assert entered.wait(2)
+        invocation.agents.cancel_run(submitted.run_id)
+        with pytest.raises(AgentCancelled):
+            invocation.agents.wait_run(submitted.run_id, timeout=2)
         restarting = start_thread_future(
             name="test-restart",
             operation=lambda: invocation.agents.start_run(
-                child.id, messages=[], max_steps=2
+                child.id, messages=[], max_steps=1
             ),
         )
-        run_id = restarting.result(2)
-        assert invocation.agents.wait_run(run_id, timeout=2) is not None
+        with pytest.raises(TimeoutError):
+            restarting.result(0.05)
         assert not release.is_set()
         release.set()
+        run_id = restarting.result(2)
+        assert invocation.agents.wait_run(run_id, timeout=2) is not None
         return ToolResult(content="Done")
 
     try:
@@ -565,7 +582,7 @@ def test_final_validation_failure_preserves_completed_output() -> None:
 
 @pytest.mark.parametrize("coordinated", [False, True])
 @pytest.mark.parametrize("timeout", [False, True])
-def test_new_run_does_not_wait_for_discarded_generation(
+def test_agent_remains_reserved_until_model_read_returns(
     coordinated: bool, timeout: bool
 ) -> None:
     entered, release = Event(), Event()
@@ -592,17 +609,20 @@ def test_new_run_does_not_wait_for_discarded_generation(
         assert entered.wait(2)
         if not timeout:
             old.cancel()
+        with pytest.raises(TimeoutError):
+            old.result(timeout=0.2)
+        assert not old.wait_for_idle(timeout=0)
+        with pytest.raises(RuntimeError, match="already running or draining"):
+            agent.start(max_steps=1, coordinator=coordinator)
+        release.set()
         with pytest.raises(RunFailed if timeout else AgentCancelled):
             old.result(timeout=2)
         old._reusable.result(timeout=2)
         saved = old.snapshot()
-        assert not old.wait_for_idle(timeout=0)
         new = agent.start(max_steps=1, coordinator=coordinator)
         assert new.result(timeout=2).output.text == "New answer"
         assert new.wait_for_idle(2)
         assert new.previous_run_id == old.id
-        if coordinator is not None:
-            assert not coordinator.close(timeout=0)
     finally:
         release.set()
     assert old.wait_for_idle(2)

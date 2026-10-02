@@ -49,6 +49,7 @@ interface ChatSessionData {
 
   // Queued messages
   queuedMessages: QueuedMessage[];
+  queuedMessagesPaused: boolean;
 
   // True once the latest assistant message has fully rendered to the
   // user (backend stream done AND smooth-streaming typewriter caught up).
@@ -204,6 +205,7 @@ const createInitialSessionData = (
   lastAccessed: new Date(),
   isLoaded: false,
   queuedMessages: [],
+  queuedMessagesPaused: false,
   latestMessageRenderComplete: true,
   isStreamDraining: false,
   ...initialData,

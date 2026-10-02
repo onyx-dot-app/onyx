@@ -94,17 +94,6 @@ def wait_operation[T](
         return future.result()
 
 
-def _report_abandoned_worker[T](future: Future[T]) -> None:
-    if future.cancelled():
-        return
-    error = future.exception()
-    if error is not None and not isinstance(error, AgentCancelled):
-        logger.error(
-            "Agent worker failed after its caller stopped waiting",
-            exc_info=(type(error), error, error.__traceback__),
-        )
-
-
 class ExecutionWork:
     """Track a run's jobs independently of its terminal result."""
 
@@ -120,28 +109,6 @@ class ExecutionWork:
             raise
         future.add_done_callback(lambda _future: self.tracker.finished())
         return future
-
-    def blocking[T](
-        self,
-        operation: Callable[[], T],
-        signal: CancellationSignal,
-        *,
-        timeout: float = OPERATION_TIMEOUT_SECONDS,
-    ) -> T:
-        signal.check()
-
-        def execute() -> T:
-            signal.check()
-            return operation()
-
-        future = self.start(execute)
-        try:
-            return wait_operation(future, signal, timeout)
-        except BaseException as error:
-            if future.done() and not future.cancelled() and future.exception() is error:
-                raise
-            future.add_done_callback(_report_abandoned_worker)
-            raise
 
     def track_operation(self, future: Future[None]) -> None:
         self.tracker.started()
@@ -240,9 +207,8 @@ class EventDispatcher:
                     for index, channel in enumerate(channels):
                         channel._context.run(
                             channel._send,
-                            event
-                            if index == len(channels) - 1
-                            else event.model_copy(deep=True),
+                            event,
+                            owns_event=index == len(channels) - 1,
                         )
                 finally:
                     with self._condition:
@@ -339,7 +305,7 @@ class EventDelivery:
     def is_dispatch_thread(self) -> bool:
         return self.dispatcher.is_dispatch_thread
 
-    def _send(self, event: AgentEvent) -> None:
+    def _send(self, event: AgentEvent, *, owns_event: bool) -> None:
         with self._lock:
             listeners = tuple(self._listeners)
         for index, listener in enumerate(listeners):
@@ -347,10 +313,10 @@ class EventDelivery:
                 if listener not in self._listeners:
                     continue
             try:
-                # The queue owns this copy; its last listener can consume it directly.
+                # Only the final channel's last listener can consume the queued event.
                 listener(
                     event
-                    if index == len(listeners) - 1
+                    if owns_event and index == len(listeners) - 1
                     else event.model_copy(deep=True)
                 )
             except AgentCancelled:
