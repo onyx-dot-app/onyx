@@ -23,6 +23,7 @@ from onyx.connectors.capability_checks.runner import (
 )
 from onyx.connectors.models import InputType
 from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.credential_capability import (
     get_sources_with_running_capability_runs,
     mark_capability_run_failed,
@@ -31,7 +32,7 @@ from onyx.db.credential_capability import (
 )
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import CapabilityCheckTrigger
+from onyx.db.enums import AccessType, CapabilityCheckTrigger
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -75,6 +76,7 @@ def run_capability_checks_task(
                 )
                 return
             input_type: InputType | None = None
+            access_type: AccessType | None = None
             config = connector_specific_config
             # A family credential can serve connectors of other sources, so a
             # connector-scoped run checks the connector's source.
@@ -93,6 +95,13 @@ def run_capability_checks_task(
                 source = connector.source
                 if config is None:
                     config = connector.connector_specific_config
+                # Checks outside the pair's access type are skipped as not
+                # applicable. A run before the pair exists runs them all.
+                cc_pair = get_connector_credential_pair(
+                    db_session, connector_id, credential_id
+                )
+                if cc_pair is not None:
+                    access_type = cc_pair.access_type
         report = generate_capability_report(
             credential,
             source=source,
@@ -100,6 +109,7 @@ def run_capability_checks_task(
             connector_id=connector_id,
             input_type=input_type,
             trigger=parsed_trigger,
+            access_type=access_type,
         )
         with get_session_with_current_tenant() as db_session:
             completed_row = upsert_completed_capability_report(
