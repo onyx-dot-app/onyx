@@ -1,10 +1,9 @@
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
-
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
 from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.models import LLMErrorInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.redaction import scrub_sensitive_values
 
@@ -12,12 +11,6 @@ if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
 
 logger = setup_logger()
-
-
-class LLMErrorInfo(BaseModel):
-    message: str
-    error_code: str
-    is_retryable: bool
 
 
 class ClassifiedLLMError(RuntimeError):

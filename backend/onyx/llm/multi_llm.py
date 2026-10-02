@@ -1271,9 +1271,13 @@ class LitellmLLM(LLM):
 
     def redact_error(self, text: str) -> str:
         config = self.config
-        return scrub_sensitive_values(
-            text, collect_credential_values(config.api_key, config.custom_config)
-        )
+        credentials = collect_credential_values(config.api_key, config.custom_config)
+        # custom_config can map a key to model_kwargs["api_key"] under a name
+        # that is_sensitive_custom_config_key does not match.
+        effective_key = self._model_kwargs.get("api_key")
+        if isinstance(effective_key, str):
+            credentials.append(effective_key)
+        return scrub_sensitive_values(text, credentials)
 
     @property
     def config(self) -> LLMConfig:

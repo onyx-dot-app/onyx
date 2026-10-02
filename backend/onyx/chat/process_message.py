@@ -107,10 +107,10 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
 )
-from onyx.llm.exceptions import LLMErrorInfo, litellm_exception_to_safe_error
+from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext

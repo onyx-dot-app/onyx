@@ -36,6 +36,7 @@ class _StubLLM(LitellmLLM):
         self._config = config
         self._api_key = config.api_key
         self._custom_config = config.custom_config
+        self._model_kwargs: dict[str, Any] = {}
         self._raise_on_invoke = raise_on_invoke
         self.invoke_calls = 0
 

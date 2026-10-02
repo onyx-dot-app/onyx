@@ -4,6 +4,12 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
+class LLMErrorInfo(BaseModel):
+    message: str
+    error_code: str
+    is_retryable: bool
+
+
 class ToolChoiceOptions(str, Enum):
     REQUIRED = "required"
     AUTO = "auto"

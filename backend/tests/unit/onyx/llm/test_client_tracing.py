@@ -56,3 +56,16 @@ def test_invoke_failure_marks_span_without_exposing_credentials() -> None:
         {"message": client.redact_error(f"TimeoutError: {failure}"), "data": None}
     )
     assert "synthetic-provider-secret" not in str(span.set_error.call_args)
+
+
+def test_redact_error_covers_custom_config_mapped_api_key() -> None:
+    client = LitellmLLM(
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        api_key=None,
+        custom_config={"OPENAIAPIKEY": "mapped-provider-secret"},
+        max_input_tokens=1000,
+    )
+    assert "mapped-provider-secret" not in client.redact_error(
+        "failed with mapped-provider-secret"
+    )
