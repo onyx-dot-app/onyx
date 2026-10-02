@@ -3227,6 +3227,16 @@
         "emailField": {
           "placeholder": "email@company.com"
         },
+        "share": {
+          "admins": {
+            "label": "관리자"
+          },
+          "description": "그룹이 이 계정을 재사용하여 커넥터를 만들 수 있도록 허용합니다.",
+          "everyone": {
+            "label": "모든 사용자"
+          },
+          "title": "이 계정 공유"
+        },
         "submitError": {
           "toast": "자격 증명 제출 중 오류가 발생했습니다"
         }

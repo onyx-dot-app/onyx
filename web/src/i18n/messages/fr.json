@@ -3227,6 +3227,16 @@
         "emailField": {
           "placeholder": "email@company.com"
         },
+        "share": {
+          "admins": {
+            "label": "Administrateurs"
+          },
+          "description": "Autorisez les groupes à réutiliser ce compte pour créer des connecteurs.",
+          "everyone": {
+            "label": "Tout le monde"
+          },
+          "title": "Partager ce compte"
+        },
         "submitError": {
           "toast": "Erreur lors de l'envoi de l'identifiant"
         }

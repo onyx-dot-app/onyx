@@ -3227,6 +3227,16 @@
         "emailField": {
           "placeholder": "email@company.com"
         },
+        "share": {
+          "admins": {
+            "label": "管理者"
+          },
+          "description": "グループがこのアカウントを再利用してコネクターを作成できるようにします。",
+          "everyone": {
+            "label": "全員"
+          },
+          "title": "このアカウントを共有"
+        },
         "submitError": {
           "toast": "認証情報の送信中にエラーが発生しました"
         }

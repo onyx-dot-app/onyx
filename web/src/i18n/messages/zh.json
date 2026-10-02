@@ -3227,6 +3227,16 @@
         "emailField": {
           "placeholder": "email@company.com"
         },
+        "share": {
+          "admins": {
+            "label": "管理员"
+          },
+          "description": "允许群组复用此账号来创建连接器。",
+          "everyone": {
+            "label": "所有人"
+          },
+          "title": "共享此账号"
+        },
         "submitError": {
           "toast": "提交凭据时出错"
         }

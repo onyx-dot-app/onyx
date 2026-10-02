@@ -3227,6 +3227,16 @@
         "emailField": {
           "placeholder": "email@company.com"
         },
+        "share": {
+          "admins": {
+            "label": "المسؤولون"
+          },
+          "description": "اسمح للمجموعات بإعادة استخدام هذا الحساب لإنشاء الموصلات.",
+          "everyone": {
+            "label": "الجميع"
+          },
+          "title": "مشاركة هذا الحساب"
+        },
         "submitError": {
           "toast": "حدث خطأ أثناء إرسال بيانات الاعتماد"
         }

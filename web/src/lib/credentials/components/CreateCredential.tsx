@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Divider } from "@opal/components";
+import { Button, Divider, InputSingleSelect } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/lib/credentials/svc";
-import { Form, Formik, FormikHelpers } from "formik";
-import { Section, toast } from "@opal/layouts";
+import { Form, Formik, FormikHelpers, type FormikProps } from "formik";
+import { InputHorizontal, Section, toast } from "@opal/layouts";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
 import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
@@ -21,16 +21,96 @@ import type {
 import { createValidationSchema } from "@/lib/credentials/utils";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import {
-  IsPublicGroupSelectorFormType,
-  IsPublicGroupSelector,
-} from "@/components/IsPublicGroupSelector";
+import type { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelector";
+import { useUserGroups } from "@/lib/hooks";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import { SvgPlusCircle } from "@opal/icons";
+import { SvgPlusCircle, SvgUserManage, SvgUsers } from "@opal/icons";
+const SHARE_ADMINS = "admins";
+const SHARE_EVERYONE = "everyone";
+const SHARE_GROUP_PREFIX = "group:";
+
+interface ShareAccountFieldProps {
+  formikProps: FormikProps<CreateCredentialFormValues>;
+  /** Only a global connector manager may share with everyone. */
+  isGlobalHolder: boolean;
+}
+
+/**
+ * Who may reuse the new credential: admins only, everyone, or one user
+ * group. One select over the form's `is_public` and `groups`, disabled until
+ * the rest of the form is valid.
+ */
+function ShareAccountField({
+  formikProps,
+  isGlobalHolder,
+}: ShareAccountFieldProps) {
+  const t = useTranslations("admin");
+  const { data: userGroups } = useUserGroups();
+  const { is_public: isPublic, groups } = formikProps.values;
+
+  const value = isPublic
+    ? SHARE_EVERYONE
+    : groups[0] !== undefined
+      ? `${SHARE_GROUP_PREFIX}${groups[0]}`
+      : SHARE_ADMINS;
+
+  function handleValueChange(next: string) {
+    if (next === SHARE_EVERYONE) {
+      formikProps.setFieldValue("is_public", true);
+      formikProps.setFieldValue("groups", []);
+    } else if (next.startsWith(SHARE_GROUP_PREFIX)) {
+      formikProps.setFieldValue("is_public", false);
+      formikProps.setFieldValue("groups", [
+        Number(next.slice(SHARE_GROUP_PREFIX.length)),
+      ]);
+    } else {
+      formikProps.setFieldValue("is_public", false);
+      formikProps.setFieldValue("groups", []);
+    }
+  }
+
+  return (
+    <InputHorizontal
+      withLabel="share"
+      title={t("credentials.create.share.title")}
+      description={t("credentials.create.share.description")}
+      center
+    >
+      <InputSingleSelect
+        value={value}
+        onValueChange={handleValueChange}
+        defaultOption={SHARE_ADMINS}
+        placeholder={t("credentials.create.share.title")}
+        disabled={!formikProps.isValid}
+        options={[
+          {
+            value: SHARE_ADMINS,
+            title: t("credentials.create.share.admins.label"),
+            icon: SvgUserManage,
+          },
+          ...(isGlobalHolder
+            ? [
+                {
+                  value: SHARE_EVERYONE,
+                  title: t("credentials.create.share.everyone.label"),
+                  icon: SvgUsers,
+                },
+              ]
+            : []),
+          ...(userGroups ?? []).map((group) => ({
+            value: `${SHARE_GROUP_PREFIX}${group.id}`,
+            title: group.name,
+            icon: SvgUsers,
+          })),
+        ]}
+      />
+    </InputHorizontal>
+  );
+}
+
 interface CreateButtonProps {
   onClick: () => void;
   isSubmitting: boolean;
@@ -103,7 +183,6 @@ export default function CreateCredential({
   refresh?: () => void;
 }) {
   const t = useTranslations("admin");
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [authMethod, setAuthMethod] = useState<string>();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
@@ -245,31 +324,14 @@ export default function CreateCredential({
               and the Create button. */}
               <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-              <Section
-                flexDirection="row"
-                justifyContent="between"
-                alignItems="end"
-                gap={4}
-              >
-                <Section alignItems="start" width="full">
-                  {businessTier && (
-                    <Section alignItems="start" gap={2}>
-                      {isGlobalHolder && (
-                        <AdvancedOptionsToggle
-                          showAdvancedOptions={showAdvancedOptions}
-                          setShowAdvancedOptions={setShowAdvancedOptions}
-                        />
-                      )}
-                      {(showAdvancedOptions || !isGlobalHolder) && (
-                        <IsPublicGroupSelector
-                          formikProps={formikProps}
-                          objectName="credential"
-                          isGlobalHolder={isGlobalHolder}
-                        />
-                      )}
-                    </Section>
-                  )}
-                </Section>
+              {businessTier && (
+                <ShareAccountField
+                  formikProps={formikProps}
+                  isGlobalHolder={isGlobalHolder}
+                />
+              )}
+
+              <Section flexDirection="row" justifyContent="end">
                 <CreateButton
                   onClick={() =>
                     handleSubmit(

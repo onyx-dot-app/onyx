@@ -3227,6 +3227,16 @@
         "emailField": {
           "placeholder": "email@company.com"
         },
+        "share": {
+          "admins": {
+            "label": "Admins"
+          },
+          "description": "Erlaube Gruppen, dieses Konto zum Erstellen von Konnektoren wiederzuverwenden.",
+          "everyone": {
+            "label": "Alle"
+          },
+          "title": "Dieses Konto teilen"
+        },
         "submitError": {
           "toast": "Fehler beim Übermitteln der Anmeldedaten"
         }
