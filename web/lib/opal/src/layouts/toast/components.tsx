@@ -88,7 +88,9 @@ function ToastCard({
     <div
       ref={ref}
       className={cn(
-        "w-full",
+        // The same lift as a pinned StickyBox: a drop-shadow follows the
+        // card's rounded shape, where a box-shadow would square it off.
+        "w-full drop-shadow-[0px_2px_12px_var(--shadow-02)]",
         t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
       )}
     >
@@ -177,7 +179,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   return (
     <div
       data-testid="toast-container"
-      className="fixed bottom-4 end-4 z-(--z-toast) flex w-full max-w-(--toast-width) flex-col items-end gap-2"
+      className="fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center gap-2"
     >
       {visible.map((t) => (
         <ToastCard
@@ -201,7 +203,7 @@ interface ToastProviderProps {
 }
 
 /**
- * Renders the app's toast stack bottom-right, driven by the module-level
+ * Renders the app's toast stack top-centre, 0.5rem from the top, driven by the module-level
  * store in `toast/store` (fire toasts from anywhere via `toast(...)` or the
  * `useToast` hook). A title that overflows its one line gets a chevron that
  * shows and hides the full message.
