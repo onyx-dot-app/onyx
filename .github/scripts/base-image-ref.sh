@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 # Prints the image that holds everything the component's runtime image ships
-# outside its lockfiles: the pinned runtime base for web and model-server, and
-# for backend its apt stage, built here from the checked-out Dockerfile.
+# outside its lockfiles: the pinned hardened runtime base for web and
+# model-server, and for backend its apt stage, built here from the checked-out
+# Dockerfile.
 #
 # usage: base-image-ref.sh <web|model-server|backend>
 #
-# The DHI digests come from the environment the dhi-base-images action exports;
-# without it the Dockerfile's public default applies, as in the build itself.
+# The hardened digests come from the environment the dhi-base-images action
+# exports in CI, or straight from that action's file otherwise (a local run),
+# so both scan the base the release ships. Pulling it needs `docker login
+# dhi.io`.
 set -euo pipefail
+
+dhi_action=.github/actions/dhi-base-images/action.yml
 
 component="$1"
 case "${component}" in
   web)
     ref="$(printf '%s\n' "${DHI_NODE_BUILD_ARGS:-}" | sed -n 's/^NODE_RUNTIME_IMAGE=//p')"
-    [ -n "${ref}" ] || ref="$(sed -n 's/^ARG NODE_RUNTIME_IMAGE=//p' web/Dockerfile)"
+    [ -n "${ref}" ] || ref="$(sed -n 's/^ *echo "NODE_RUNTIME_IMAGE=\(.*\)"$/\1/p' "${dhi_action}")"
     ;;
   model-server)
     ref="$(printf '%s\n' "${DHI_PYTHON_BUILD_ARGS:-}" | sed -n 's/^PYTHON_RUNTIME_IMAGE=//p')"
-    [ -n "${ref}" ] || ref="$(sed -n 's/^ARG PYTHON_RUNTIME_IMAGE=//p' backend/Dockerfile.model_server)"
+    [ -n "${ref}" ] || ref="$(sed -n 's/^ *echo "PYTHON_RUNTIME_IMAGE=\(.*\)"$/\1/p' "${dhi_action}")"
     ;;
   backend)
     docker build --quiet --target os --tag onyx-backend-os:audit backend >&2
@@ -28,4 +33,5 @@ case "${component}" in
     exit 2
     ;;
 esac
-printf '%s\n' "${ref//\$\{BASE_IMAGE_REGISTRY\}/docker.io}"
+[ -n "${ref}" ] || { echo "no runtime base found for ${component}" >&2; exit 1; }
+printf '%s\n' "${ref}"

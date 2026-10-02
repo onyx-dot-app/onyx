@@ -109,11 +109,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run --no-sync ods audit --fail-on=critical
 
-      # The same registry credentials the builds use, so the bases scanned are
-      # the bases shipped. Without them (forks) the public defaults apply, as
-      # in the builds.
+      # The same registry credentials the builds use, fetched the same way, so
+      # the bases scanned are the bases shipped. Missing credentials fail the
+      # gate, since the builds would ship hardened bases the gate never saw.
       - name: Get AWS Secrets
-        continue-on-error: true
         uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
         with:
           secret-ids: |
@@ -122,7 +121,6 @@ jobs:
           parse-json-secrets: true
 
       - name: Login to Docker Hub
-        if: env.DOCKER_USERNAME != ''
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           username: ${{ env.DOCKER_USERNAME }}
