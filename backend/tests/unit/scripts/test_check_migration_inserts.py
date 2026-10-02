@@ -98,9 +98,10 @@ def test_module_level_helper_is_flagged() -> None:
     assert check_migration_inserts.find_inserts(source) == [2]
 
 
-def test_session_parameter_add_is_flagged() -> None:
+@pytest.mark.parametrize("annotation", ["Session", "orm.Session"])
+def test_session_parameter_add_is_flagged(annotation: str) -> None:
     source = (
-        "def _seed(s: Session) -> None:\n    s.add(Tool(name='x'))\n\n\n"
+        f"def _seed(s: {annotation}) -> None:\n    s.add(Tool(name='x'))\n\n\n"
         "def upgrade() -> None:\n    _seed(Session(bind=op.get_bind()))\n"
     )
     assert check_migration_inserts.find_inserts(source) == [2]

@@ -35,7 +35,7 @@ class _InsertFinder(ast.NodeVisitor):
 
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
-        self._inserts = {"insert"}
+        self._inserts: set[str] = {"insert"}
         self._sessions: set[str] = set()
         self._statement: ast.stmt | None = None
         self.found: set[int] = set()
@@ -69,7 +69,7 @@ class _InsertFinder(ast.NodeVisitor):
         self._sessions.update(
             arg.arg
             for arg in node.args.args + node.args.kwonlyargs
-            if isinstance(arg.annotation, ast.Name) and arg.annotation.id == "Session"
+            if arg.annotation is not None and _names_session(arg.annotation)
         )
         self.generic_visit(node)
 
@@ -102,6 +102,13 @@ class _InsertFinder(ast.NodeVisitor):
     def visit_Constant(self, node: ast.Constant) -> None:
         if isinstance(node.value, str) and _INSERT_SQL.search(node.value):
             self._flag(node)
+
+
+def _names_session(annotation: ast.expr) -> bool:
+    """`Session` or `orm.Session`, however the module is imported."""
+    if isinstance(annotation, ast.Name):
+        return annotation.id == "Session"
+    return isinstance(annotation, ast.Attribute) and annotation.attr == "Session"
 
 
 def _is_list_insert(node: ast.Call) -> bool:
