@@ -145,7 +145,12 @@ def to_stored_credential_json(
         # A KeyError names the missing key only, and family models hide input
         # values, so no secret reaches the message.
         raise ValueError(f"This is not a valid {source.value} credential: {e}") from e
-    _reject_dropped_keys(source, source_json, codec.from_family(family_credential))
+    _reject_dropped_keys(
+        source,
+        source_json,
+        codec.from_family(family_credential),
+        set(codec.family_model.model_fields),
+    )
     return {
         **family_credential.model_dump(mode="json"),
         CREDENTIAL_FAMILY_KEY: codec.family.value,
@@ -156,19 +161,21 @@ def _reject_dropped_keys(
     source: DocumentSource,
     source_json: dict[str, Any],
     round_tripped_json: dict[str, Any],
+    family_fields: set[str],
 ) -> None:
     """Raises ``ValueError`` if a key with a value does not survive the round
     trip through the family shape, e.g. another source's keys sent to this
     source. Storing it would silently drop the value. Names keys only, never
     values."""
-    # An unset flag (False) carries no value either: the family shape stores
-    # it as its default, and the source shape leaves it out.
+    # An unset family flag (False, e.g. Atlassian's scoped_token) carries no
+    # value either: the family stores it as its default and the source shape
+    # leaves it out. Any other key set to False is still rejected.
     dropped = sorted(
         key
         for key, value in source_json.items()
         if value is not None
         and value != ""
-        and value is not False
+        and not (value is False and key in family_fields)
         and key not in round_tripped_json
     )
     if dropped:

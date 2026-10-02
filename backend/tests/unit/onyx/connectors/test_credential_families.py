@@ -200,6 +200,15 @@ def test_unscoped_flag_is_accepted_and_left_out_of_the_source_shape() -> None:
     }
 
 
+def test_a_false_key_outside_the_family_is_still_rejected() -> None:
+    with pytest.raises(ValueError, match="jira_api_token"):
+        to_stored_credential_json(
+            DocumentSource.CONFLUENCE,
+            {**_CONFLUENCE_JSON, "jira_api_token": False},
+            None,
+        )
+
+
 def test_malformed_family_credential_is_not_usable_by_other_sources() -> None:
     stored = {"email": "user@example.com", CREDENTIAL_FAMILY_KEY: "atlassian"}
 
