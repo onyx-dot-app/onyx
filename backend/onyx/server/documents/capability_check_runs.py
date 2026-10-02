@@ -14,7 +14,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.capability_checks.draft_runs import (
-    DRAFT_RUN_TTL_SECONDS,
+    DRAFT_RUN_QUEUE_EXPIRY_SECONDS,
     DraftCheckRunSnapshot,
     DraftCheckState,
     DraftCheckStateKind,
@@ -24,6 +24,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     apply_cached_result,
     decide_draft_check_state,
     draft_result_cache_key,
+    draft_run_start_lock,
     get_cached_draft_result,
     save_draft_run,
     set_latest_draft_run,
@@ -46,10 +47,16 @@ from onyx.db.credential_capability import (
 )
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.db.models import Credential, CredentialCapabilityReportRow
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+_ENQUEUE_MARGIN_SECONDS = 60
+# How long a draft start waits for a concurrent start of the same draft key.
+_DRAFT_START_LOCK_WAIT_SECONDS = 10
 
 
 class CapabilityRunEnqueueError(Exception):
@@ -188,6 +195,8 @@ def start_draft_capability_check_run(
     Raises:
         CapabilityRunEnqueueError: The broker did not accept the task. The run
             is stored as FAILED_TO_RUN.
+        OnyxError: A concurrent start of the same draft key held the start
+            lock for too long.
     """
     form_state = validate_form_state(config_class, form_values)
     # A form with no values is config-less: config-reading checks wait.
@@ -244,8 +253,21 @@ def start_draft_capability_check_run(
         ),
         result_cache_keys=result_cache_keys,
     )
-    save_draft_run(run)
-    set_latest_draft_run(user_id, draft_key, run.snapshot.run_id)
+    if has_pending:
+        # The task can wait in the queue this long, plus a margin for the
+        # enqueue itself.
+        run.renew_lease(DRAFT_RUN_QUEUE_EXPIRY_SECONDS + _ENQUEUE_MARGIN_SECONDS)
+    start_lock = draft_run_start_lock(user_id, draft_key)
+    if not start_lock.acquire(blocking_timeout=_DRAFT_START_LOCK_WAIT_SECONDS):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Another check run for this form is starting; try again shortly.",
+        )
+    try:
+        save_draft_run(run)
+        set_latest_draft_run(user_id, draft_key, run.snapshot.run_id)
+    finally:
+        start_lock.release()
     if not has_pending:
         return run.snapshot
     try:
@@ -264,8 +286,8 @@ def start_draft_capability_check_run(
             },
             queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
             priority=OnyxCeleryPriority.HIGH,
-            # The stored run expires then, so a later start is useless.
-            expires=DRAFT_RUN_TTL_SECONDS,
+            # The run's lease runs out then, so a later start is useless.
+            expires=DRAFT_RUN_QUEUE_EXPIRY_SECONDS,
         )
     except Exception as e:
         logger.exception(

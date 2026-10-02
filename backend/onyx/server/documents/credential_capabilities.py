@@ -424,11 +424,17 @@ def get_draft_check_run(
     user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
+    db_session: Session = Depends(get_session),
 ) -> DraftCheckRunSnapshot:
     """Returns a draft run's per-check progress. Only the user who started the
-    run may read it."""
+    run may read it, and only while they can still see its credential."""
     snapshot = read_draft_run_for_user(run_id, user.id)
-    if snapshot is None:
+    # GATE 2 again: the check messages come from the credential.
+    if (
+        snapshot is None
+        or fetch_credential_by_id_for_user(snapshot.credential_id, user, db_session)
+        is None
+    ):
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"Capability check run {run_id} does not exist or has expired.",

@@ -120,11 +120,30 @@ def test_instance_check_runs_only_on_a_complete_config() -> None:
     assert _state(check, {"channels": ["eng"]}).state == DraftCheckStateKind.PENDING
 
 
-def _key(check: _SlackCheck, form_values: dict[str, Any] | None) -> str:
+class _CredentialOnlyCheck(CapabilityCheck):
+    """Reads no config itself; only the source's gateway may."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="test_credential_check",
+            display_name="Credential check",
+            requires_connector_instance=False,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        pass
+
+
+def _key(
+    check: CapabilityCheck[Any],
+    form_values: dict[str, Any] | None,
+    source: DocumentSource = DocumentSource.SLACK,
+) -> str:
     return draft_result_cache_key(
         credential_id=1,
         credential_updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        source=DocumentSource.SLACK,
+        source=source,
         access_type=AccessType.PUBLIC,
         check=check,
         form_values=form_values,
@@ -132,10 +151,35 @@ def _key(check: _SlackCheck, form_values: dict[str, Any] | None) -> str:
 
 
 def test_cache_key_ignores_form_edits_for_config_independent_checks() -> None:
-    check = _SlackCheck()
+    check = _CredentialOnlyCheck()
 
     assert _key(check, {"channels": ["eng"]}) == _key(check, {"channels": ["ops"]})
     assert _key(check, {"channels": ["eng"]}) == _key(check, None)
+
+
+@pytest.mark.parametrize("source", [DocumentSource.OUTLOOK, DocumentSource.ONEDRIVE])
+def test_cache_key_follows_the_hosts_that_the_gateway_reads(
+    source: DocumentSource,
+) -> None:
+    check = _CredentialOnlyCheck()
+    default = {"authority_host": "", "users": ["a@contoso.com"]}
+
+    assert _key(check, default, source) == _key(check, None, source)
+    assert _key(check, {**default, "users": ["b@contoso.com"]}, source) == _key(
+        check, default, source
+    )
+    assert _key(
+        check, {**default, "authority_host": "https://login.microsoftonline.us"}, source
+    ) != _key(check, default, source)
+    assert _key(
+        check, {**default, "graph_api_host": "https://graph.microsoft.us"}, source
+    ) != _key(check, default, source)
+
+
+def test_cache_key_follows_the_form_for_a_check_with_a_config_class() -> None:
+    check = _SlackCheck()
+
+    assert _key(check, {"channels": ["eng"]}) != _key(check, {"channels": ["ops"]})
 
 
 def test_cache_key_follows_form_edits_for_config_reading_checks() -> None:

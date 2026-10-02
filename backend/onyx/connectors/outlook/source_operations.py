@@ -311,6 +311,7 @@ class OutlookSourceOperations(SourceOperations):
     # msal reaches this directory only through the shared package, and requests
     # is fenced so the connector cannot bypass the gateway with a raw call.
     sdk_modules = ("msal", "requests")
+    config_keys = frozenset({CONFIG_AUTHORITY_HOST, CONFIG_GRAPH_API_HOST})
 
     # Built lazily on first use so the credential is decrypted at the first
     # remote call, not at construction.

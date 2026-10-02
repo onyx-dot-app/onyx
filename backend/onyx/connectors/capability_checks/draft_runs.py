@@ -7,7 +7,7 @@ terminal results are cached so that a form edit re-runs only the checks the
 edit can change.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from pydantic_core import to_jsonable_python
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -29,14 +30,20 @@ from onyx.connectors.capability_checks.runner import (
     CheckReadinessKind,
     decide_check_readiness,
 )
+from onyx.connectors.source_operations import get_source_operations_class
 from onyx.db.enums import AccessType
 
 DRAFT_RUN_TTL_SECONDS = 30 * 60
+# A queued draft task that has not started by then is dropped; the admin is
+# waiting on the form.
+DRAFT_RUN_QUEUE_EXPIRY_SECONDS = 5 * 60
+_DRAFT_START_LOCK_TIMEOUT_SECONDS = 30
 DRAFT_RESULT_CACHE_TTL_SECONDS = 10 * 60
 
 _DRAFT_RUN_KEY_PREFIX = "capability_check_draft_run"
 _DRAFT_LATEST_RUN_KEY_PREFIX = "capability_check_draft_latest_run"
 _DRAFT_RESULT_KEY_PREFIX = "capability_check_draft_result"
+_DRAFT_START_LOCK_PREFIX = "capability_check_draft_start"
 # The config-hash part of the result cache key for checks that never read the
 # config, so that their results survive form edits.
 _CONFIG_INDEPENDENT_HASH = "config_independent"
@@ -123,6 +130,12 @@ class StoredDraftRun(BaseModel):
     snapshot: DraftCheckRunSnapshot
     # check_id to its result cache key, for the checks the run task executes.
     result_cache_keys: dict[str, str]
+    # While RUNNING: the time by which the task writes the run again. A RUNNING
+    # run read after it has no live task.
+    lease_expires_at: datetime | None = None
+
+    def renew_lease(self, seconds: float) -> None:
+        self.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
 
 
 class CachedDraftResult(BaseModel):
@@ -184,19 +197,41 @@ def draft_result_cache_key(
 ) -> str:
     """The result cache key of one check. A check that reads the config,
     directly or through a connector instance, keys on the validated form
-    values; any other check keys on the credential alone."""
-    reads_config = check.requires_connector_config or check.requires_connector_instance
-    config_hash = (
-        compute_connector_config_hash(to_jsonable_python(form_values))
-        if reads_config and form_values is not None
-        else _CONFIG_INDEPENDENT_HASH
-    )
+    values. Any other check keys on the form values that the source's gateway
+    reads, and on the credential."""
+    config_hash = _CONFIG_INDEPENDENT_HASH
+    if form_values is not None:
+        if check.reads_connector_config or check.requires_connector_instance:
+            config_hash = _config_hash(form_values)
+        else:
+            gateway_class = get_source_operations_class(source)
+            gateway_keys = (
+                gateway_class.config_keys if gateway_class is not None else frozenset()
+            )
+            gateway_values = (
+                form_values
+                if gateway_keys is None
+                else {
+                    key: value
+                    for key, value in form_values.items()
+                    if key in gateway_keys and value not in (None, "")
+                }
+            )
+            if gateway_values:
+                config_hash = _config_hash(gateway_values)
     access = access_type.value if access_type is not None else "none"
     return (
         f"{_DRAFT_RESULT_KEY_PREFIX}:{credential_id}:"
         f"{credential_updated_at.isoformat()}:{source.value}:{check.check_id}:"
         f"{access}:{config_hash}"
     )
+
+
+def _config_hash(values: dict[str, Any]) -> str:
+    config_hash = compute_connector_config_hash(to_jsonable_python(values))
+    if config_hash is None:
+        raise ValueError("A config hash needs a config.")
+    return config_hash
 
 
 def get_cached_draft_result(key: str) -> CachedDraftResult | None:
@@ -243,16 +278,33 @@ def _latest_run_key(user_id: UUID, draft_key: str) -> str:
 
 
 def save_draft_run(run: StoredDraftRun) -> None:
-    get_cache_backend().set(
+    """Stores the run. While the run is the latest of its draft key, this also
+    renews the latest-run marker, so the marker lives as long as the run."""
+    cache = get_cache_backend()
+    cache.set(
         _run_key(run.snapshot.run_id),
         run.model_dump_json(),
         ex=DRAFT_RUN_TTL_SECONDS,
+    )
+    cache.renew_if_value(
+        _latest_run_key(run.user_id, run.snapshot.draft_key),
+        str(run.snapshot.run_id).encode(),
+        DRAFT_RUN_TTL_SECONDS,
     )
 
 
 def load_draft_run(run_id: UUID) -> StoredDraftRun | None:
     raw = get_cache_backend().get(_run_key(run_id))
     return StoredDraftRun.model_validate_json(raw) if raw is not None else None
+
+
+def draft_run_start_lock(user_id: UUID, draft_key: str) -> CacheLock:
+    """Serializes the save and the latest-run update of concurrent starts for
+    one draft key, so the run saved last is also the latest."""
+    return get_cache_backend().lock(
+        f"{_DRAFT_START_LOCK_PREFIX}:{user_id}:{draft_key}",
+        timeout=_DRAFT_START_LOCK_TIMEOUT_SECONDS,
+    )
 
 
 def set_latest_draft_run(user_id: UUID, draft_key: str, run_id: UUID) -> None:
@@ -262,11 +314,13 @@ def set_latest_draft_run(user_id: UUID, draft_key: str, run_id: UUID) -> None:
 
 
 def is_superseded(run: StoredDraftRun) -> bool:
-    """True when a newer run for the same user and draft key has started."""
+    """True when a newer run for the same user and draft key has started. A
+    missing marker counts too: the marker lives as long as the latest run, so
+    it is missing only when that run expired."""
     latest = get_cache_backend().get(
         _latest_run_key(run.user_id, run.snapshot.draft_key)
     )
-    return latest is not None and latest.decode() != str(run.snapshot.run_id)
+    return latest is None or latest.decode() != str(run.snapshot.run_id)
 
 
 def read_draft_run_for_user(
@@ -274,11 +328,18 @@ def read_draft_run_for_user(
 ) -> DraftCheckRunSnapshot | None:
     """The run's snapshot, or None when it expired or another user started it.
     A RUNNING run that a newer run replaced reads as SUPERSEDED, also before its
-    task notices."""
+    task notices. A RUNNING run whose lease ran out reads as FAILED_TO_RUN: its
+    task stopped or never started."""
     run = load_draft_run(run_id)
     if run is None or run.user_id != user_id:
         return None
     snapshot = run.snapshot
-    if snapshot.status == DraftRunStatus.RUNNING and is_superseded(run):
-        snapshot.status = DraftRunStatus.SUPERSEDED
+    if snapshot.status == DraftRunStatus.RUNNING:
+        if is_superseded(run):
+            snapshot.status = DraftRunStatus.SUPERSEDED
+        elif (
+            run.lease_expires_at is not None
+            and datetime.now(timezone.utc) > run.lease_expires_at
+        ):
+            snapshot.status = DraftRunStatus.FAILED_TO_RUN
     return snapshot

@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.tasks.capability_checks.tasks import (
     run_draft_capability_checks_task,
 )
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks import runner
+from onyx.connectors.capability_checks import draft_runs, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
     DraftCheckStateKind,
@@ -45,8 +46,6 @@ _PERM_SYNC = "fake_perm_sync"
 
 
 class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
-    config_class = SlackConnectorConfig
-
     def __init__(
         self,
         check_id: str,
@@ -72,6 +71,10 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
             self._on_run()
 
 
+class _FakeConfigCheck(_FakeCheck):
+    config_class = SlackConnectorConfig
+
+
 class _Harness:
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.runs: list[str] = []
@@ -87,7 +90,9 @@ class _Harness:
         assert source == DocumentSource.SLACK
         return [
             _FakeCheck(_TOKEN, self.runs, on_run=lambda: self._token_hook()),
-            _FakeCheck(_CHANNELS, self.runs, requires_fields=frozenset({"channels"})),
+            _FakeConfigCheck(
+                _CHANNELS, self.runs, requires_fields=frozenset({"channels"})
+            ),
             _FakeCheck(
                 _PERM_SYNC,
                 self.runs,
@@ -185,7 +190,7 @@ def test_run_resolves_states_runs_pending_checks_and_reuses_cached_results(
     }
     harness.send_task.assert_called_once()
     harness.run_last_task()
-    done = get_draft_check_run(started.run_id, user=admin)
+    done = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
     assert done.status == DraftRunStatus.COMPLETED
     assert _states(done)[_TOKEN] == DraftCheckStateKind.PASSED
     assert harness.runs == [_TOKEN]
@@ -193,7 +198,7 @@ def test_run_resolves_states_runs_pending_checks_and_reuses_cached_results(
     edited = _start(db_session, admin, slack_credential, {"channels": ["a"]}, draft_key)
     harness.run_last_task()
 
-    done = get_draft_check_run(edited.run_id, user=admin)
+    done = get_draft_check_run(edited.run_id, user=admin, db_session=db_session)
     from_cache = {check.check_id: check.from_cache for check in done.checks}
     assert from_cache[_TOKEN] is True
     assert from_cache[_CHANNELS] is False
@@ -218,7 +223,9 @@ def test_rerun_failed_runs_a_cached_failure_again(
     first = _start(db_session, admin, slack_credential, {}, draft_key)
     harness.run_last_task()
     assert (
-        _states(get_draft_check_run(first.run_id, user=admin))[_TOKEN]
+        _states(get_draft_check_run(first.run_id, user=admin, db_session=db_session))[
+            _TOKEN
+        ]
         == DraftCheckStateKind.FAILED
     )
 
@@ -239,7 +246,9 @@ def test_rerun_failed_runs_a_cached_failure_again(
     assert _states(rerun)[_TOKEN] == DraftCheckStateKind.PENDING
     harness.run_last_task()
     assert (
-        _states(get_draft_check_run(rerun.run_id, user=admin))[_TOKEN]
+        _states(get_draft_check_run(rerun.run_id, user=admin, db_session=db_session))[
+            _TOKEN
+        ]
         == DraftCheckStateKind.PASSED
     )
     assert harness.runs == [_TOKEN, _TOKEN]
@@ -258,7 +267,9 @@ def test_rerun_all_runs_a_cached_pass_again(
     first = _start(db_session, admin, slack_credential, {}, draft_key)
     harness.run_last_task()
     assert (
-        _states(get_draft_check_run(first.run_id, user=admin))[_TOKEN]
+        _states(get_draft_check_run(first.run_id, user=admin, db_session=db_session))[
+            _TOKEN
+        ]
         == DraftCheckStateKind.PASSED
     )
 
@@ -278,7 +289,7 @@ def test_rerun_all_runs_a_cached_pass_again(
     )
     assert _states(rerun)[_TOKEN] == DraftCheckStateKind.PENDING
     harness.run_last_task()
-    done = get_draft_check_run(rerun.run_id, user=admin)
+    done = get_draft_check_run(rerun.run_id, user=admin, db_session=db_session)
     assert _states(done)[_TOKEN] == DraftCheckStateKind.PASSED
     assert {check.check_id: check.from_cache for check in done.checks}[_TOKEN] is False
     assert harness.runs == [_TOKEN, _TOKEN]
@@ -307,7 +318,7 @@ def test_newer_run_supersedes_the_older_one_mid_run(
 
     run_draft_capability_checks_task(**first_task_kwargs)
 
-    snapshot = get_draft_check_run(first.run_id, user=admin)
+    snapshot = get_draft_check_run(first.run_id, user=admin, db_session=db_session)
     assert snapshot.status == DraftRunStatus.SUPERSEDED
     # The task stopped before the check after the supersede.
     assert harness.runs == [_TOKEN]
@@ -325,7 +336,7 @@ def test_only_the_starting_user_reads_the_run(
     started = _start(db_session, admin, slack_credential, {}, uuid4().hex)
 
     with pytest.raises(OnyxError) as error:
-        get_draft_check_run(started.run_id, user=other)
+        get_draft_check_run(started.run_id, user=other, db_session=db_session)
 
     assert error.value.error_code == OnyxErrorCode.NOT_FOUND
     harness.send_task.assert_called_once()
@@ -343,3 +354,68 @@ def test_credential_of_another_source_is_rejected(
         _start(db_session, admin, web_credential, {}, uuid4().hex)
 
     assert error.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+@pytest.mark.usefixtures("tenant_context", "harness")
+def test_get_hides_a_run_whose_credential_the_user_can_no_longer_see(
+    db_session: Session,
+    users: tuple[User, User],
+) -> None:
+    admin, _ = users
+    credential = Credential(
+        source=DocumentSource.SLACK, credential_json={}, admin_public=True
+    )
+    db_session.add(credential)
+    db_session.commit()
+    started = _start(db_session, admin, credential, {}, uuid4().hex)
+    db_session.delete(credential)
+    db_session.commit()
+
+    with pytest.raises(OnyxError) as error:
+        get_draft_check_run(started.run_id, user=admin, db_session=db_session)
+
+    assert error.value.error_code == OnyxErrorCode.NOT_FOUND
+
+
+@pytest.mark.usefixtures("tenant_context", "harness")
+def test_run_without_a_live_task_reads_as_failed_to_run(
+    db_session: Session,
+    users: tuple[User, User],
+    slack_credential: Credential,
+) -> None:
+    admin, _ = users
+    started = _start(db_session, admin, slack_credential, {}, uuid4().hex)
+    run = draft_runs.load_draft_run(started.run_id)
+    assert run is not None and run.lease_expires_at is not None
+    run.renew_lease(-1)
+    draft_runs.save_draft_run(run)
+
+    snapshot = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
+
+    assert snapshot.status == DraftRunStatus.FAILED_TO_RUN
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_latest_run_marker_lives_as_long_as_the_run(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+    slack_credential: Credential,
+) -> None:
+    admin, _ = users
+    draft_key = uuid4().hex
+    started = _start(db_session, admin, slack_credential, {}, draft_key)
+    run = draft_runs.load_draft_run(started.run_id)
+    assert run is not None
+    marker_key = draft_runs._latest_run_key(admin.id, draft_key)
+    cache = get_cache_backend()
+
+    cache.expire(marker_key, 5)
+    draft_runs.save_draft_run(run)
+    assert cache.ttl(marker_key) > 5
+
+    # A run without a marker is not the latest: its task stops.
+    cache.delete(marker_key)
+    harness.run_last_task()
+    assert draft_runs.load_draft_run(started.run_id) is not None
+    assert harness.runs == []

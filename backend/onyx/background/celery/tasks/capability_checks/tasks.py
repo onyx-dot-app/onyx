@@ -30,7 +30,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     compute_connector_config_hash,
 )
+from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
+    CAPABILITY_CHECK_TIMEOUT_SECONDS,
     capability_check_run_stale_after,
     generate_capability_report,
 )
@@ -189,6 +191,10 @@ def run_draft_capability_checks_task(
     pending = [
         check for check in snapshot.checks if check.state == DraftCheckStateKind.PENDING
     ]
+    timeout_by_check_id = {
+        check.check_id: check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+        for check in get_capability_checks(snapshot.source)
+    }
 
     def mark_next_running() -> None:
         if (
@@ -197,6 +203,14 @@ def run_draft_capability_checks_task(
             )
         ) is not None:
             next_check.state = DraftCheckStateKind.RUNNING
+            # The check's hang guard, plus the guard of a connector
+            # instantiation that can run before it.
+            run.renew_lease(
+                timeout_by_check_id.get(
+                    next_check.check_id, CAPABILITY_CHECK_TIMEOUT_SECONDS
+                )
+                + CAPABILITY_CHECK_TIMEOUT_SECONDS
+            )
 
     def on_result(results: Sequence[CapabilityCheckResult]) -> None:
         result = results[-1]
