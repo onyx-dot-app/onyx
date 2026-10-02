@@ -2127,12 +2127,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           ref=main
           if [[ "${TAG}" =~ ^v([0-9]+\.[0-9]+)\. ]] && gh api "repos/${REPO}/branches/release/v${BASH_REMATCH[1]}" > /dev/null 2>&1; then
             ref="release/v${BASH_REMATCH[1]}"
           fi
-          gh workflow run cve-alerts.yml --repo "${REPO}" --ref "${ref}"
+          gh workflow run cve-alerts.yml --repo "${REPO}" --ref "${ref}" -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
   notify-slack-on-failure:
     needs:

@@ -4,9 +4,11 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/google/osv-scalibr/semantic"
 	"github.com/google/osv-scanner/v2/pkg/models"
 	"github.com/google/osv-scanner/v2/pkg/osvscanner"
 	"github.com/ossf/osv-schema/bindings/go/osvschema"
@@ -77,7 +79,138 @@ func findingFromGroup(group models.GroupInfo, pkg models.PackageVulns) Finding {
 	if vuln := findVuln(pkg.Vulnerabilities, group.IDs); vuln != nil {
 		f.Title = vulnTitle(vuln)
 	}
+	f.FixedIn = fixedFor(pkg.Vulnerabilities, group.IDs, pkg.Package)
 	return f
+}
+
+// fixedFor returns the lowest version above the installed one that no record
+// in the group still lists as affected, so a bump to it ends every advisory
+// of the finding. Candidates are the records' fixed versions for the package
+// in its own ecosystem. Empty when no record names one the comparator can
+// place.
+func fixedFor(vulns []*osvschema.Vulnerability, ids []string, pkg models.PackageInfo) string {
+	installed, err := semantic.Parse(pkg.Version, pkg.Ecosystem)
+	if err != nil {
+		return ""
+	}
+	idset := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		idset[id] = true
+	}
+	var affected []*osvschema.Affected
+	var candidates []string
+	for _, v := range vulns {
+		if !idset[v.GetId()] {
+			continue
+		}
+		for _, aff := range v.GetAffected() {
+			if !strings.EqualFold(aff.GetPackage().GetName(), pkg.Name) || !sameEcosystem(aff.GetPackage().GetEcosystem(), pkg.Ecosystem) {
+				continue
+			}
+			affected = append(affected, aff)
+			for _, r := range aff.GetRanges() {
+				for _, e := range r.GetEvents() {
+					if fixed := e.GetFixed(); fixed != "" {
+						if c, err := installed.CompareStr(fixed); err == nil && c < 0 {
+							candidates = append(candidates, fixed)
+						}
+					}
+				}
+			}
+		}
+	}
+	slices.SortFunc(candidates, func(a, b string) int { return compareVersions(a, b, pkg.Ecosystem) })
+	for _, candidate := range candidates {
+		if !slices.ContainsFunc(affected, func(aff *osvschema.Affected) bool { return affectedAt(aff, candidate, pkg.Ecosystem) }) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// compareVersions orders two versions in the ecosystem's order, with an
+// unparsable one first.
+func compareVersions(a, b, ecosystem string) int {
+	av, err := semantic.Parse(a, ecosystem)
+	if err != nil {
+		return -1
+	}
+	c, err := av.CompareStr(b)
+	if err != nil {
+		return 1
+	}
+	return c
+}
+
+// affectedAt reports whether the entry holds version: listed among its
+// versions, or inside a range it sits below the limits of, where each
+// "introduced" opens an interval that the next "fixed" closes exclusively or
+// the next "last_affected" closes inclusively, and an open interval runs on.
+func affectedAt(aff *osvschema.Affected, version, ecosystem string) bool {
+	v, err := semantic.Parse(version, ecosystem)
+	if err != nil {
+		return false
+	}
+	for _, listed := range aff.GetVersions() {
+		if c, err := v.CompareStr(listed); err == nil && c == 0 {
+			return true
+		}
+	}
+	for _, r := range aff.GetRanges() {
+		if !beforeLimits(r, v) {
+			continue
+		}
+		open := false
+		for _, e := range r.GetEvents() {
+			switch {
+			case e.GetIntroduced() != "":
+				c, err := v.CompareStr(e.GetIntroduced())
+				open = err == nil && c >= 0
+			case e.GetFixed() != "":
+				if c, err := v.CompareStr(e.GetFixed()); open && err == nil && c < 0 {
+					return true
+				}
+				open = false
+			case e.GetLastAffected() != "":
+				if c, err := v.CompareStr(e.GetLastAffected()); open && err == nil && c <= 0 {
+					return true
+				}
+				open = false
+			}
+		}
+		if open {
+			return true
+		}
+	}
+	return false
+}
+
+// beforeLimits reports whether version sits below one of the range's "limit"
+// events, which cap it: a range with none runs on, "*" is unbounded, and a
+// limit the comparator cannot place keeps the range in force.
+func beforeLimits(r *osvschema.Range, v semantic.Version) bool {
+	limited := false
+	for _, e := range r.GetEvents() {
+		limit := e.GetLimit()
+		if limit == "" {
+			continue
+		}
+		limited = true
+		if limit == "*" {
+			return true
+		}
+		if c, err := v.CompareStr(limit); err != nil || c < 0 {
+			return true
+		}
+	}
+	return !limited
+}
+
+// sameEcosystem compares OSV ecosystem names without their release suffix,
+// so "Debian:13" and "Debian" match.
+func sameEcosystem(a, b string) bool {
+	base := func(s string) string { return strings.ToLower(strings.SplitN(s, ":", 2)[0]) }
+	return base(a) == base(b)
 }
 
 // vulnTitle returns a one-line title for an advisory, preferring the summary
