@@ -3232,11 +3232,7 @@
         },
         "emailField": {
           "description": "Use the account email that owns the API token.",
-          "placeholder": "email@company.com",
-          "title": "{source} Account Email"
-        },
-        "tokenField": {
-          "title": "API Token"
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "Error submitting credential"

@@ -3232,11 +3232,7 @@
         },
         "emailField": {
           "description": "Use o e-mail da conta proprietária do token de API.",
-          "placeholder": "email@company.com",
-          "title": "E-mail da conta {source}"
-        },
-        "tokenField": {
-          "title": "Token de API"
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "Erro ao enviar a credencial"

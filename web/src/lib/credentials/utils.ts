@@ -352,3 +352,16 @@ export function getCredentialCreationActionLabel(
 export function shouldRedirectToOAuth(details: OAuthDetails): boolean {
   return details.additional_kwargs.length === 0;
 }
+
+/**
+ * A credential field's title, read straight from its key:
+ * `confluence_username` → "Confluence Username". The key is what the backend
+ * reads, so the title always names the field it fills.
+ */
+export function titleFromCredentialKey(key: string): string {
+  return key
+    .split("_")
+    .filter((word) => word !== "")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}

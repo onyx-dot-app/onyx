@@ -3232,11 +3232,7 @@
         },
         "emailField": {
           "description": "请使用拥有该 API 令牌的账号邮箱。",
-          "placeholder": "email@company.com",
-          "title": "{source} 账号邮箱"
-        },
-        "tokenField": {
-          "title": "API 令牌"
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "提交凭据时出错"

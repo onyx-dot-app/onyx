@@ -12,7 +12,7 @@ import { useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import { TypedFileUploadFormField } from "@/components/Field";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { getDisplayNameForCredentialKey } from "@/lib/credentials/utils";
+import { titleFromCredentialKey } from "@/lib/credentials/utils";
 import type { CredentialTemplateWithAuth } from "@/lib/credentials/types";
 import { isTypedFileField } from "@/lib/connectors/utils";
 import type {
@@ -43,10 +43,8 @@ function isSecretKey(key: string): boolean {
 interface CredentialFieldProps {
   fieldKey: string;
   value: CredentialFieldValue;
-  /** Every field key shown beside this one, so titles can read the set. */
+  /** Every field key shown beside this one, so the subtext can read the set. */
   siblingKeys: string[];
-  /** The source's name, for titles such as "Jira Account Email". */
-  sourceName: string;
 }
 
 /** One field of a credential template, drawn with the Opal input for its type. */
@@ -54,19 +52,11 @@ function CredentialField({
   fieldKey,
   value,
   siblingKeys,
-  sourceName,
 }: CredentialFieldProps) {
   const t = useTranslations("admin");
   const tokenKeys = siblingKeys.filter(isTokenKey);
   const isEmail = isEmailKey(fieldKey);
-  // A source's one token is its API token. A source with several (an id and
-  // a secret, say) keeps each token's own name.
-  const isSoleToken = isTokenKey(fieldKey) && tokenKeys.length === 1;
-  const label = isEmail
-    ? t("credentials.create.emailField.title", { source: sourceName })
-    : isSoleToken
-      ? t("credentials.create.tokenField.title")
-      : getDisplayNameForCredentialKey(fieldKey);
+  const label = titleFromCredentialKey(fieldKey);
 
   // A file such as a .pfx key is binary; Opal's InputFile reads text, so
   // this field keeps the typed upload until Opal can hand back a File.
@@ -134,15 +124,12 @@ function CredentialField({
 
 interface CredentialFieldsRendererProps {
   credentialTemplate: CredentialFieldValues;
-  /** The source's display name, for field titles. */
-  sourceName: string;
   authMethod?: string;
   setAuthMethod?: (method: string) => void;
 }
 
 export function CredentialFieldsRenderer({
   credentialTemplate,
-  sourceName,
   authMethod,
   setAuthMethod,
 }: CredentialFieldsRendererProps) {
@@ -193,7 +180,6 @@ export function CredentialFieldsRenderer({
                   fieldKey={key}
                   value={value as CredentialFieldValue}
                   siblingKeys={Object.keys(method.fields)}
-                  sourceName={sourceName}
                 />
               ))}
             </Section>
@@ -216,7 +202,6 @@ export function CredentialFieldsRenderer({
             fieldKey={key}
             value={value}
             siblingKeys={fieldKeys}
-            sourceName={sourceName}
           />
         )
       )}
