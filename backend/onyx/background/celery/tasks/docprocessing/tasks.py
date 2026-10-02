@@ -24,6 +24,7 @@ from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
     try_creating_docfetching_task,
+    try_dispatching_waiting_attempt,
 )
 from onyx.background.celery.tasks.docprocessing.heartbeat import (
     start_heartbeat,
@@ -60,6 +61,7 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
     OnyxRedisSignals,
 )
+from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
 from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_alerts import (
@@ -82,10 +84,13 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt import (
     IndexAttemptError,
+    cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
+    get_active_index_attempts_without_task,
     get_index_attempt,
     get_index_attempt_errors_for_cc_pair,
     get_stale_not_started_index_attempts,
+    get_waiting_index_attempt,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
@@ -737,6 +742,50 @@ class _KickoffResult:
         )
 
 
+def _dispatch_pair_waiting_attempt(
+    celery_app: Celery,
+    db_session: Session,
+    *,
+    cc_pair_id: int,
+    search_settings: SearchSettings,
+    redis_client: TenantRedisClient,
+    tenant_id: str,
+) -> bool:
+    """Sends the task of the pair's attempt that waits for the capability
+    checks, when they pass. False when no attempt waits or it still waits."""
+    waiting = get_waiting_index_attempt(db_session, cc_pair_id, search_settings.id)
+    if waiting is None:
+        return False
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if cc_pair is None:
+        task_logger.debug(
+            f"Waiting index attempt has no cc_pair: index_attempt={waiting.id} "
+            f"cc_pair={cc_pair_id}"
+        )
+        return False
+    # Most beats find the hold still in place; check it before taking the
+    # creation lock. The dispatch checks it again under the lock.
+    if get_first_indexing_hold(db_session, cc_pair) is not None:
+        return False
+    dispatched = try_dispatching_waiting_attempt(
+        celery_app,
+        cc_pair,
+        search_settings,
+        waiting.id,
+        db_session,
+        redis_client,
+        tenant_id,
+    )
+    if dispatched:
+        task_logger.info(
+            f"Waiting index attempt dispatched: index_attempt={waiting.id} "
+            f"cc_pair={cc_pair_id} search_settings={search_settings.id}"
+        )
+    return dispatched
+
+
 def _kickoff_indexing_tasks(
     celery_app: Celery,
     db_session: Session,
@@ -762,7 +811,19 @@ def _kickoff_indexing_tasks(
             search_settings_id=search_settings.id,
             db_session=db_session,
         ):
-            result.skipped_active += 1
+            # A first attempt that waits for the capability checks starts here
+            # once they pass.
+            if _dispatch_pair_waiting_attempt(
+                celery_app,
+                db_session,
+                cc_pair_id=cc_pair_id,
+                search_settings=search_settings,
+                redis_client=redis_client,
+                tenant_id=tenant_id,
+            ):
+                result.created += 1
+            else:
+                result.skipped_active += 1
             continue
 
         cc_pair = get_connector_credential_pair_from_id(
@@ -836,6 +897,38 @@ def _kickoff_indexing_tasks(
             result.failed_to_create += 1
 
     return result
+
+
+def fail_inconsistent_index_attempts(db_session: Session, lock_beat: RedisLock) -> None:
+    """Fails active attempts without a Celery task. A first attempt that waits
+    for the capability checks has no task by design, so it is left alone."""
+    for attempt in get_active_index_attempts_without_task(db_session):
+        lock_beat.reacquire()
+
+        # Double-check the attempt still has the inconsistent state
+        fresh_attempt = get_index_attempt(db_session, attempt.id)
+        if (
+            not fresh_attempt
+            or fresh_attempt.celery_task_id
+            or fresh_attempt.status.is_terminal()
+        ):
+            continue
+        if (
+            fresh_attempt.status == IndexingStatus.NOT_STARTED
+            and not cc_pair_has_dispatched_index_attempts(
+                db_session, fresh_attempt.connector_credential_pair_id
+            )
+        ):
+            continue
+
+        failure_reason = (
+            f"Inconsistent index attempt found - active status without Celery task: "
+            f"index_attempt={attempt.id} "
+            f"cc_pair={attempt.connector_credential_pair_id} "
+            f"search_settings={attempt.search_settings_id}"
+        )
+        task_logger.error(failure_reason)
+        mark_attempt_failed(attempt.id, db_session, failure_reason=failure_reason)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -1088,42 +1181,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         # This can happen if attempt creation fails partway through
         lock_beat.reacquire()
         with get_session_with_current_tenant() as db_session:
-            inconsistent_attempts = (
-                db_session.execute(
-                    select(IndexAttempt).where(
-                        IndexAttempt.status.in_(
-                            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                        ),
-                        IndexAttempt.celery_task_id.is_(None),
-                        IndexAttempt.targeted_reindex_job_id.is_(None),
-                    )
-                )
-                .scalars()
-                .all()
-            )
-
-            for attempt in inconsistent_attempts:
-                lock_beat.reacquire()
-
-                # Double-check the attempt still has the inconsistent state
-                fresh_attempt = get_index_attempt(db_session, attempt.id)
-                if (
-                    not fresh_attempt
-                    or fresh_attempt.celery_task_id
-                    or fresh_attempt.status.is_terminal()
-                ):
-                    continue
-
-                failure_reason = (
-                    f"Inconsistent index attempt found - active status without Celery task: "
-                    f"index_attempt={attempt.id} "
-                    f"cc_pair={attempt.connector_credential_pair_id} "
-                    f"search_settings={attempt.search_settings_id}"
-                )
-                task_logger.error(failure_reason)
-                mark_attempt_failed(
-                    attempt.id, db_session, failure_reason=failure_reason
-                )
+            fail_inconsistent_index_attempts(db_session, lock_beat)
 
         lock_beat.reacquire()
         # we want to run this less frequently than the overall task

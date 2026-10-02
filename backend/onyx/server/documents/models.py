@@ -15,6 +15,7 @@ from pydantic import (
 
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
@@ -529,6 +530,9 @@ class CCPairFullInfo(BaseModel):
     auto_sync_options: dict[str, Any] | None
     processing_mode: ProcessingMode
 
+    # Set while the first index attempt waits on the capability checks.
+    indexing_hold: IndexingHold | None = None
+
     @classmethod
     def _get_last_full_permission_sync(
         cls, cc_pair_model: ConnectorCredentialPair
@@ -588,6 +592,7 @@ class CCPairFullInfo(BaseModel):
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
         supports_targeted_reindex: bool = False,
+        indexing_hold: IndexingHold | None = None,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -655,6 +660,7 @@ class CCPairFullInfo(BaseModel):
             groups=groups or [],
             auto_sync_options=cc_pair_model.auto_sync_options,
             processing_mode=cc_pair_model.processing_mode,
+            indexing_hold=indexing_hold,
         )
 
 
