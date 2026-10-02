@@ -3226,7 +3226,7 @@
         },
         "name": {
           "label": "Name:",
-          "placeholder": "(Optional) Name der Anmeldedaten..."
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "Fehler beim Übermitteln der Anmeldedaten"

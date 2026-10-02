@@ -3226,7 +3226,7 @@
         },
         "name": {
           "label": "Name:",
-          "placeholder": "(Optional) credential name.."
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "Error submitting credential"

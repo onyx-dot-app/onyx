@@ -3226,7 +3226,7 @@
         },
         "name": {
           "label": "Nom :",
-          "placeholder": "(Facultatif) nom de l'identifiant..."
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "Erreur lors de l'envoi de l'identifiant"

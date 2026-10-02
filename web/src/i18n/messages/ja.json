@@ -3226,7 +3226,7 @@
         },
         "name": {
           "label": "名前:",
-          "placeholder": "(任意) 認証情報の名前..."
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "認証情報の送信中にエラーが発生しました"

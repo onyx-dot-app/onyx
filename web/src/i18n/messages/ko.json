@@ -3226,7 +3226,7 @@
         },
         "name": {
           "label": "이름:",
-          "placeholder": "(선택 사항) 자격 증명 이름..."
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "자격 증명 제출 중 오류가 발생했습니다"

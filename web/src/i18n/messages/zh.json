@@ -3226,7 +3226,7 @@
         },
         "name": {
           "label": "名称:",
-          "placeholder": "(可选) 凭据名称..."
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "提交凭据时出错"

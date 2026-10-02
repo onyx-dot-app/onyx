@@ -3226,7 +3226,7 @@
         },
         "name": {
           "label": "الاسم:",
-          "placeholder": "(اختياري) اسم بيانات الاعتماد..."
+          "placeholder": "email@company.com"
         },
         "submitError": {
           "toast": "حدث خطأ أثناء إرسال بيانات الاعتماد"
