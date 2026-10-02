@@ -3224,12 +3224,6 @@
         "created": {
           "toast": "Neue Anmeldedaten erstellt!"
         },
-        "displayName": {
-          "description": "Dient zur Identifizierung dieses Anbieters in der App.",
-          "optionalSuffix": "optional",
-          "placeholder": "Anzeigename",
-          "title": "Anzeigename"
-        },
         "emailField": {
           "description": "Verwende die E-Mail-Adresse des Kontos, dem das API-Token gehört.",
           "placeholder": "email@company.com"

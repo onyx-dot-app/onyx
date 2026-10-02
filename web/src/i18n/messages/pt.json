@@ -3224,12 +3224,6 @@
         "created": {
           "toast": "Nova credencial criada!"
         },
-        "displayName": {
-          "description": "Usado para identificar este provedor no aplicativo.",
-          "optionalSuffix": "opcional",
-          "placeholder": "Nome de exibição",
-          "title": "Nome de exibição"
-        },
         "emailField": {
           "description": "Use o e-mail da conta proprietária do token de API.",
           "placeholder": "email@company.com"

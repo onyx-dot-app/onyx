@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Divider, InputTypeIn } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/lib/credentials/svc";
 import { Form, Formik, FormikHelpers } from "formik";
-import { InputVertical, Section, toast } from "@opal/layouts";
-import { FormikField } from "@/refresh-components/form/FormikField";
+import { Section, toast } from "@opal/layouts";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
 import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
@@ -242,28 +241,9 @@ export default function CreateCredential({
                 setAuthMethod={setAuthMethod}
               />
 
-              {/* Above: the fields the source needs. Below: niceties. */}
+              {/* Above: the fields the source needs. Below: optional sharing
+              and the Create button. */}
               <Divider paddingParallel={0} paddingPerpendicular={0} />
-
-              <InputVertical
-                withLabel="name"
-                title={t("credentials.create.displayName.title")}
-                suffix={t("credentials.create.displayName.optionalSuffix")}
-                subDescription={t("credentials.create.displayName.description")}
-              >
-                <FormikField<string>
-                  name="name"
-                  render={(field, _helper, _meta, status) => (
-                    <InputTypeIn
-                      {...field}
-                      placeholder={t(
-                        "credentials.create.displayName.placeholder"
-                      )}
-                      variant={status === "error" ? "error" : "primary"}
-                    />
-                  )}
-                />
-              </InputVertical>
 
               <Section
                 flexDirection="row"

@@ -3224,12 +3224,6 @@
         "created": {
           "toast": "¡Nueva credencial creada!"
         },
-        "displayName": {
-          "description": "Se usa para identificar este proveedor en la app.",
-          "optionalSuffix": "opcional",
-          "placeholder": "Nombre visible",
-          "title": "Nombre visible"
-        },
         "emailField": {
           "description": "Usa el correo de la cuenta propietaria del token de API.",
           "placeholder": "email@company.com"

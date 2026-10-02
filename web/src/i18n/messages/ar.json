@@ -3224,12 +3224,6 @@
         "created": {
           "toast": "تم إنشاء بيانات اعتماد جديدة!"
         },
-        "displayName": {
-          "description": "يُستخدم لتمييز هذا الموفر في التطبيق.",
-          "optionalSuffix": "اختياري",
-          "placeholder": "اسم العرض",
-          "title": "اسم العرض"
-        },
         "emailField": {
           "description": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API.",
           "placeholder": "email@company.com"

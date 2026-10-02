@@ -3224,12 +3224,6 @@
         "created": {
           "toast": "已创建新凭据!"
         },
-        "displayName": {
-          "description": "用于在应用中标识此提供商。",
-          "optionalSuffix": "可选",
-          "placeholder": "显示名称",
-          "title": "显示名称"
-        },
         "emailField": {
           "description": "请使用拥有该 API 令牌的账号邮箱。",
           "placeholder": "email@company.com"
