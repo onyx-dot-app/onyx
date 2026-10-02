@@ -208,11 +208,14 @@ func beforeLimits(r *osvschema.Range, v semantic.Version) bool {
 	return !limited
 }
 
-// sameEcosystem compares OSV ecosystem names without their release suffix,
-// so "Debian:13" and "Debian" match.
+// sameEcosystem compares OSV ecosystem names: equal release suffixes match,
+// and a name without one ("Debian") matches any release of it, while
+// "Debian:12" and "Debian:13" stay apart so one release's ranges never
+// decide another's fix.
 func sameEcosystem(a, b string) bool {
-	base := func(s string) string { return strings.ToLower(strings.SplitN(s, ":", 2)[0]) }
-	return base(a) == base(b)
+	an, ar, _ := strings.Cut(strings.ToLower(a), ":")
+	bn, br, _ := strings.Cut(strings.ToLower(b), ":")
+	return an == bn && (ar == "" || br == "" || ar == br)
 }
 
 // vulnTitle returns a one-line title for an advisory, preferring the summary
