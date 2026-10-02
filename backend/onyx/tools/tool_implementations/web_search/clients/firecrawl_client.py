@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 import requests
-from fastapi import HTTPException
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
     WebSearchResult,
@@ -132,11 +133,11 @@ class FirecrawlSearchClient(WebSearchProvider):
         try:
             test_results = self.search("test")
             if not test_results or not any(result.link for result in test_results):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Firecrawl API key validation failed: search returned no results.",
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "Firecrawl API key validation failed: search returned no results.",
                 )
-        except HTTPException:
+        except OnyxError:
             raise
         except (ValueError, requests.RequestException) as e:
             error_msg = str(e)
@@ -147,23 +148,23 @@ class FirecrawlSearchClient(WebSearchProvider):
                 or "api key" in lower
                 or "unauthorized" in lower
             ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid Firecrawl API key: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Invalid Firecrawl API key: {error_msg}",
                 ) from e
             if "status 402" in lower or "payment" in lower or "credits" in lower:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Firecrawl account has insufficient credits: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Firecrawl account has insufficient credits: {error_msg}",
                 ) from e
             if "status 429" in lower or "rate limit" in lower:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Firecrawl API rate limit exceeded: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Firecrawl API rate limit exceeded: {error_msg}",
                 ) from e
-            raise HTTPException(
-                status_code=400,
-                detail=f"Firecrawl API key validation failed: {error_msg}",
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Firecrawl API key validation failed: {error_msg}",
             ) from e
 
         logger.info("Web search provider test succeeded for Firecrawl.")

@@ -13,17 +13,23 @@ from onyx.db.web_search import (
     deactivate_web_search_provider,
     delete_web_content_provider,
     delete_web_search_provider,
+    fetch_web_content_provider_by_id,
     fetch_web_content_provider_by_name,
     fetch_web_content_provider_by_type,
     fetch_web_content_providers,
+    fetch_web_search_provider_by_id,
     fetch_web_search_provider_by_name,
     fetch_web_search_provider_by_type,
     fetch_web_search_providers,
     set_active_web_content_provider,
     set_active_web_search_provider,
+    set_web_content_provider_base_url,
+    set_web_search_provider_base_url,
     upsert_web_content_provider,
     upsert_web_search_provider,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.web_search.models import (
     WebContentProviderTestRequest,
     WebContentProviderUpsertRequest,
@@ -115,6 +121,24 @@ def _synced_search_config(
     return {"base_url": search_url} if search_url else None
 
 
+def _require_stored_key_target_unchanged(
+    *,
+    stored_type: str,
+    stored_base_url: str | None,
+    request_type: str,
+    request_base_url: str | None,
+) -> None:
+    """On cloud, a stored key may only be reused against the endpoint it was saved for."""
+    if not MULTI_TENANT:
+        return
+    if stored_type != request_type or stored_base_url != request_base_url:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Provider type and base URL cannot differ from the stored provider "
+            "when using the stored API key",
+        )
+
+
 @admin_router.get("/search-providers", response_model=list[WebSearchProviderView])
 def list_search_providers(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -155,6 +179,16 @@ def upsert_search_provider_endpoint(
             detail=f"A search provider named '{request.name}' already exists.",
         )
 
+    if request.id is not None and not request.api_key_changed:
+        existing = fetch_web_search_provider_by_id(request.id, db_session)
+        if existing is not None and existing.api_key:
+            _require_stored_key_target_unchanged(
+                stored_type=existing.provider_type,
+                stored_base_url=(existing.config or {}).get("base_url"),
+                request_type=request.provider_type.value,
+                request_base_url=(request.config or {}).get("base_url"),
+            )
+
     provider = upsert_web_search_provider(
         provider_id=request.id,
         name=request.name,
@@ -170,7 +204,7 @@ def upsert_search_provider_endpoint(
     if request.api_key_changed and request.api_key:
         for search_type, name, content_type in _SEARCH_TO_CONTENT_SYNC:
             if request.provider_type == search_type:
-                # Config is only seeded on insert; an existing row keeps its own.
+                synced_config = _synced_content_config(content_type, request.config)
                 stmt = (
                     insert(InternetContentProvider)
                     .values(
@@ -178,7 +212,7 @@ def upsert_search_provider_endpoint(
                         provider_type=content_type.value,
                         api_key=request.api_key,
                         is_active=False,
-                        config=_synced_content_config(content_type, request.config),
+                        config=synced_config,
                     )
                     .on_conflict_do_update(
                         index_elements=["name"],
@@ -187,6 +221,13 @@ def upsert_search_provider_endpoint(
                 )
                 db_session.execute(stmt)
                 db_session.flush()
+                # Keep the synced key paired with the matching endpoint.
+                if synced_config is not None and synced_config.base_url:
+                    set_web_content_provider_base_url(
+                        name=name,
+                        base_url=synced_config.base_url,
+                        db_session=db_session,
+                    )
                 break
 
     db_session.commit()
@@ -266,14 +307,12 @@ def test_search_provider(
                 status_code=400,
                 detail="No stored API key found for this provider type.",
             )
-        if MULTI_TENANT:
-            stored_base_url = (existing_provider.config or {}).get("base_url")
-            request_base_url = (request.config or {}).get("base_url")
-            if request_base_url != stored_base_url:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Base URL cannot differ from stored provider when using stored API key",
-                )
+        _require_stored_key_target_unchanged(
+            stored_type=existing_provider.provider_type,
+            stored_base_url=(existing_provider.config or {}).get("base_url"),
+            request_type=request.provider_type.value,
+            request_base_url=(request.config or {}).get("base_url"),
+        )
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if requires_key and not api_key:
@@ -299,7 +338,7 @@ def test_search_provider(
     # Run the API client's test_connection method to ensure the connection is valid.
     try:
         return provider.test_connection()
-    except HTTPException:
+    except (HTTPException, OnyxError):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -345,6 +384,16 @@ def upsert_content_provider_endpoint(
             detail=f"A content provider named '{request.name}' already exists.",
         )
 
+    if request.id is not None and not request.api_key_changed:
+        existing = fetch_web_content_provider_by_id(request.id, db_session)
+        if existing is not None and existing.api_key:
+            _require_stored_key_target_unchanged(
+                stored_type=existing.provider_type,
+                stored_base_url=existing.config.base_url if existing.config else None,
+                request_type=request.provider_type.value,
+                request_base_url=request.config.base_url if request.config else None,
+            )
+
     provider = upsert_web_content_provider(
         provider_id=request.id,
         name=request.name,
@@ -360,7 +409,7 @@ def upsert_content_provider_endpoint(
     if request.api_key_changed and request.api_key:
         for content_type, name, search_type in _CONTENT_TO_SEARCH_SYNC:
             if request.provider_type == content_type:
-                # Config is only seeded on insert; an existing row keeps its own.
+                synced_config = _synced_search_config(search_type, request.config)
                 stmt = (
                     insert(InternetSearchProvider)
                     .values(
@@ -368,7 +417,7 @@ def upsert_content_provider_endpoint(
                         provider_type=search_type.value,
                         api_key=request.api_key,
                         is_active=False,
-                        config=_synced_search_config(search_type, request.config),
+                        config=synced_config,
                     )
                     .on_conflict_do_update(
                         index_elements=["name"],
@@ -377,6 +426,13 @@ def upsert_content_provider_endpoint(
                 )
                 db_session.execute(stmt)
                 db_session.flush()
+                # Keep the synced key paired with the matching endpoint.
+                if synced_config is not None and synced_config.get("base_url"):
+                    set_web_search_provider_base_url(
+                        name=name,
+                        base_url=synced_config["base_url"],
+                        db_session=db_session,
+                    )
                 break
 
     db_session.commit()
@@ -469,17 +525,14 @@ def test_content_provider(
                 status_code=400,
                 detail="No stored API key found for this provider type.",
             )
-        if MULTI_TENANT:
-            stored_base_url = (
+        _require_stored_key_target_unchanged(
+            stored_type=existing_provider.provider_type,
+            stored_base_url=(
                 existing_provider.config.base_url if existing_provider.config else None
-            )
-            request_base_url = request.config.base_url
-            if request_base_url != stored_base_url:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Base URL cannot differ from stored provider when using stored API key",
-                )
-
+            ),
+            request_type=request.provider_type.value,
+            request_base_url=request.config.base_url,
+        )
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if not api_key:

@@ -4,9 +4,9 @@ from typing import Any, cast
 
 import pytest
 import requests
-from fastapi import HTTPException
 
 import onyx.tools.tool_implementations.web_search.clients.firecrawl_client as firecrawl_module
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.clients.firecrawl_client import (
     FIRECRAWL_SEARCH_URL,
     FirecrawlSearchClient,
@@ -350,7 +350,7 @@ def test_test_connection_maps_invalid_key_errors(
 
     monkeypatch.setattr(client, "search", _mock_search)
 
-    with pytest.raises(HTTPException, match="Invalid Firecrawl API key"):
+    with pytest.raises(OnyxError, match="Invalid Firecrawl API key"):
         client.test_connection()
 
 
@@ -364,7 +364,7 @@ def test_test_connection_maps_insufficient_credit_errors(
 
     monkeypatch.setattr(client, "search", _mock_search)
 
-    with pytest.raises(HTTPException, match="insufficient credits"):
+    with pytest.raises(OnyxError, match="insufficient credits"):
         client.test_connection()
 
 
@@ -378,7 +378,7 @@ def test_test_connection_maps_rate_limit_errors(
 
     monkeypatch.setattr(client, "search", _mock_search)
 
-    with pytest.raises(HTTPException, match="rate limit exceeded"):
+    with pytest.raises(OnyxError, match="rate limit exceeded"):
         client.test_connection()
 
 
@@ -392,7 +392,7 @@ def test_test_connection_fails_on_empty_results(
 
     monkeypatch.setattr(client, "search", _mock_search)
 
-    with pytest.raises(HTTPException, match="returned no results"):
+    with pytest.raises(OnyxError, match="returned no results"):
         client.test_connection()
 
 
