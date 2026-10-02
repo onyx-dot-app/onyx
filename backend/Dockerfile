@@ -135,11 +135,8 @@ COPY --from=builder \
     /usr/local/bin/
 
 # Install the Chromium build used by Playwright; its OS-level runtime libraries came with the os
-# stage. Must run after the site-packages copy above so the playwright CLI is available.
-#
-# `--only-shell` installs the headless shell and skips the full headed Chromium build (~364 MB). Every
-# launch site in the backend passes headless=True with no channel, so Playwright picks the shell.
-# Remove the flag if a call site ever needs a headed browser or a branded channel.
+# stage. Must run after the site-packages copy above so the playwright CLI is available. This
+# release line ships the full Chromium build, as it always has.
 RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install chromium
 
