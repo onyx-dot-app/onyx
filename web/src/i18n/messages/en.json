@@ -3637,6 +3637,10 @@
         "retryButton": {
           "label": "Retry"
         },
+        "signIn": {
+          "description": "{appName} requires read-only scopes for the site provided above.",
+          "title": "Sign in with {source}"
+        },
         "startError": {
           "message": "Unable to start OAuth"
         }

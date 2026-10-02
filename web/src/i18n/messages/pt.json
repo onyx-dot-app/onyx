@@ -3637,6 +3637,10 @@
         "retryButton": {
           "label": "Tentar novamente"
         },
+        "signIn": {
+          "description": "{appName} requer escopos somente leitura para o site informado acima.",
+          "title": "Entrar com {source}"
+        },
         "startError": {
           "message": "Não foi possível iniciar o OAuth"
         }

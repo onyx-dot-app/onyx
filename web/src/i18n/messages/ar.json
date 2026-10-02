@@ -3637,6 +3637,10 @@
         "retryButton": {
           "label": "إعادة المحاولة"
         },
+        "signIn": {
+          "description": "يتطلب {appName} نطاقات للقراءة فقط للموقع المُدخل أعلاه.",
+          "title": "تسجيل الدخول باستخدام {source}"
+        },
         "startError": {
           "message": "تعذر بدء OAuth"
         }
