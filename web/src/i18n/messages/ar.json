@@ -3225,7 +3225,6 @@
           "toast": "تم إنشاء بيانات اعتماد جديدة!"
         },
         "emailField": {
-          "description": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API.",
           "placeholder": "email@company.com"
         },
         "submitError": {

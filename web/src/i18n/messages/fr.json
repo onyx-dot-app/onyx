@@ -3225,7 +3225,6 @@
           "toast": "Nouvel identifiant créé !"
         },
         "emailField": {
-          "description": "Utilisez l'e-mail du compte propriétaire du jeton d'API.",
           "placeholder": "email@company.com"
         },
         "submitError": {

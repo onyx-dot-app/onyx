@@ -3225,7 +3225,6 @@
           "toast": "새 자격 증명을 생성했습니다!"
         },
         "emailField": {
-          "description": "API 토큰을 소유한 계정의 이메일을 사용하세요.",
           "placeholder": "email@company.com"
         },
         "submitError": {

@@ -20,11 +20,6 @@ import type {
   CredentialFieldValues,
 } from "@/lib/credentials/types";
 
-/** Whether a credential key is a token. */
-function isTokenKey(key: string): boolean {
-  return key.toLowerCase().includes("token");
-}
-
 /** Whether a credential key holds an email address. */
 function isEmailKey(key: string): boolean {
   return key.toLowerCase().includes("email");
@@ -43,18 +38,11 @@ function isSecretKey(key: string): boolean {
 interface CredentialFieldProps {
   fieldKey: string;
   value: CredentialFieldValue;
-  /** Every field key shown beside this one, so the subtext can read the set. */
-  siblingKeys: string[];
 }
 
 /** One field of a credential template, drawn with the Opal input for its type. */
-function CredentialField({
-  fieldKey,
-  value,
-  siblingKeys,
-}: CredentialFieldProps) {
+function CredentialField({ fieldKey, value }: CredentialFieldProps) {
   const t = useTranslations("admin");
-  const tokenKeys = siblingKeys.filter(isTokenKey);
   const isEmail = isEmailKey(fieldKey);
   const copy = useCredentialFieldCopy()(fieldKey);
   const label = copy.title;
@@ -67,11 +55,7 @@ function CredentialField({
 
   if (typeof value === "boolean") {
     return (
-      <InputHorizontal
-        withLabel={fieldKey}
-        title={label}
-        description={copy.description}
-      >
+      <InputHorizontal withLabel={fieldKey} title={label}>
         <FormikField<boolean>
           name={fieldKey}
           render={(field, helper) => (
@@ -85,8 +69,8 @@ function CredentialField({
     );
   }
 
-  // An email field shows an example address and, beside a token, says which
-  // account it means; any other field shows its template's placeholder.
+  // An email field shows an example address; any other field shows its
+  // template's placeholder, if it has one.
   const placeholder = isEmail
     ? t("credentials.create.emailField.placeholder")
     : typeof value === "string" && value !== ""
@@ -94,16 +78,7 @@ function CredentialField({
       : undefined;
 
   return (
-    <InputVertical
-      withLabel={fieldKey}
-      title={label}
-      description={copy.description}
-      subDescription={
-        isEmail && tokenKeys.length > 0
-          ? t("credentials.create.emailField.description")
-          : undefined
-      }
-    >
+    <InputVertical withLabel={fieldKey} title={label}>
       <FormikField<string>
         name={fieldKey}
         render={(field, _helper, _meta, status) =>
@@ -185,7 +160,6 @@ export function CredentialFieldsRenderer({
                   key={key}
                   fieldKey={key}
                   value={value as CredentialFieldValue}
-                  siblingKeys={Object.keys(method.fields)}
                 />
               ))}
             </Section>
@@ -195,20 +169,12 @@ export function CredentialFieldsRenderer({
     );
   }
 
-  const fieldKeys = Object.keys(credentialTemplate).filter(
-    (key) => key !== "authentication_method" && key !== "authMethods"
-  );
   return (
     <>
       {Object.entries(credentialTemplate).map(([key, value]) =>
         // Auth-method metadata is not a field.
         key === "authentication_method" || key === "authMethods" ? null : (
-          <CredentialField
-            key={key}
-            fieldKey={key}
-            value={value}
-            siblingKeys={fieldKeys}
-          />
+          <CredentialField key={key} fieldKey={key} value={value} />
         )
       )}
     </>

@@ -3225,7 +3225,6 @@
           "toast": "Nova credencial criada!"
         },
         "emailField": {
-          "description": "Use o e-mail da conta proprietária do token de API.",
           "placeholder": "email@company.com"
         },
         "submitError": {

@@ -3225,7 +3225,6 @@
           "toast": "新しい認証情報を作成しました!"
         },
         "emailField": {
-          "description": "API トークンを所有するアカウントのメールアドレスを使用してください。",
           "placeholder": "email@company.com"
         },
         "submitError": {
