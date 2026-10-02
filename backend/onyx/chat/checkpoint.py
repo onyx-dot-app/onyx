@@ -3,7 +3,6 @@
 import hashlib
 import json
 from collections.abc import Mapping
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
 
@@ -14,7 +13,10 @@ from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
     ChatSearchResult,
+    CheckpointBinding,
+    MessagePayload,
     MessageRendering,
+    ResponseCheckpoint,
     ResponseRecord,
 )
 from onyx.chat.prompt_formatting import PromptMetadata
@@ -24,7 +26,7 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.agent import DeepResearchFeatureState
 from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
 from onyx.deep_research.research_agent import ResearchFeatureState
-from onyx.llm.models import GenerationRequestParams, Message, ToolResult
+from onyx.llm.models import Message, ToolResult
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
@@ -36,15 +38,6 @@ from onyx.tools.models import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
-
-
-class CheckpointBinding(BaseModel):
-    """Application identity; validating this record does not authorize access."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    tenant_id: str
-    branch_id: str
-    context_version: str
 
 
 def _checkpoint_model_types() -> dict[str, type[BaseModel]]:
@@ -177,26 +170,6 @@ class _CheckpointSerializer:
             key: self.decode_answer(answer) for key, answer in _object(answers).items()
         }
         return progress
-
-
-class MessagePayload(BaseModel):
-    metadata: JsonValue = None
-    details: JsonValue = None
-    cacheable: bool = False
-
-
-class ResponseCheckpoint(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    version: Literal[1] = 1
-    history_digest: str
-    response_digest: str
-    binding: CheckpointBinding
-    revision: int
-    progress: dict[str, JsonValue]
-    # Request display settings are saved by chat finalization, after execution ends.
-    request_params: GenerationRequestParams | None
-    message_payloads: list[MessagePayload]
-    input_payloads: list[MessagePayload]
 
 
 def _digest(context: AgentState, serializer: _CheckpointSerializer) -> str:

@@ -21,12 +21,8 @@ from onyx.agents.models import AgentInfo, AgentState, ExecutionCheckpoint, RunSt
 from onyx.agents.runtime import Agent, Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
-from onyx.chat.checkpoint import (
-    CheckpointBinding,
-    deserialize_checkpoint,
-    serialize_checkpoint,
-)
-from onyx.chat.models import ResponseRecord, SavedAgentContext
+from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
+from onyx.chat.models import CheckpointBinding, ResponseRecord, SavedAgentContext
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.db.chat_checkpoint import (

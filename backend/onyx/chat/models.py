@@ -1,9 +1,16 @@
 from collections.abc import Iterator
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_serializer,
+    field_validator,
+)
 
 from onyx.agents.execution_records import (
     CompactionCheckpoint,
@@ -468,3 +475,32 @@ class ChatTurnSetup(BaseModel):
     slack_context: SlackContext | None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None
+
+
+class CheckpointBinding(BaseModel):
+    """Application identity; validating this record does not authorize access."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    tenant_id: str
+    branch_id: str
+    context_version: str
+
+
+class MessagePayload(BaseModel):
+    metadata: JsonValue = None
+    details: JsonValue = None
+    cacheable: bool = False
+
+
+class ResponseCheckpoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: Literal[1] = 1
+    history_digest: str
+    response_digest: str
+    binding: CheckpointBinding
+    revision: int
+    progress: dict[str, JsonValue]
+    # Request display settings are saved by chat finalization, after execution ends.
+    request_params: GenerationRequestParams | None
+    message_payloads: list[MessagePayload]
+    input_payloads: list[MessagePayload]

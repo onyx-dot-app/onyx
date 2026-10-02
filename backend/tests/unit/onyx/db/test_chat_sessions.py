@@ -12,7 +12,8 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.chat import create_chat_session_from_request, get_chat_sessions_by_user
+from onyx.chat.chat_utils import create_chat_session_from_request
+from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.models import ChatSession, User
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 
@@ -227,7 +228,7 @@ def test_anonymous_chat_creation_checks_persona_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     access = MagicMock(return_value=False)
-    monkeypatch.setattr("onyx.db.chat.user_can_access_persona", access)
+    monkeypatch.setattr("onyx.chat.chat_utils.user_can_access_persona", access)
     user = MagicMock(spec=User)
     user.is_anonymous = True
     db_session = MagicMock(spec=Session)

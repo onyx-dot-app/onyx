@@ -8,8 +8,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 
 from onyx.agents.execution_records import RunFailure, RunFailureKind, RunStatus
 from onyx.agents.models import AgentInfo
-from onyx.chat.checkpoint import ResponseCheckpoint
-from onyx.chat.models import ResponseRecord
+from onyx.chat.models import ResponseCheckpoint, ResponseRecord
 from onyx.db.chat_history import checkpoint_from_summary, find_summary_for_ancestry
 from onyx.db.chat_response import (
     _ResponseWriter,

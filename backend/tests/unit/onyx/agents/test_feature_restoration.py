@@ -29,8 +29,8 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.chat.agent import ChatAgent
-from onyx.chat.checkpoint import CheckpointBinding, _checkpoint_model_types
-from onyx.chat.models import ChatFeatureState, ChatSearchResult
+from onyx.chat.checkpoint import _checkpoint_model_types
+from onyx.chat.models import ChatFeatureState, ChatSearchResult, CheckpointBinding
 from onyx.coding_agent.agent import CodingAgent
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME
 from onyx.configs.constants import DocumentSource

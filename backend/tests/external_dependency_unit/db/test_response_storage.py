@@ -32,6 +32,7 @@ from onyx.agents.models import (
     messages_from_steps,
 )
 from onyx.agents.tools import ToolProgress
+from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import ChatResponseSnapshot, MessageRendering, ResponseRecord
@@ -52,9 +53,7 @@ from onyx.db.chat_checkpoint import (
     save_response_record__no_commit,
 )
 from onyx.db.chat_history import (
-    capture_chat_history,
     checkpoint_from_summary,
-    convert_chat_history,
     find_summary_for_ancestry,
     load_message_branch,
 )

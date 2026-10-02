@@ -32,6 +32,10 @@ from onyx.chat.chat_processing_checker import (
     get_processing_stream_id,
     is_chat_session_processing,
 )
+from onyx.chat.chat_utils import (
+    convert_chat_history_basic,
+    create_chat_session_from_request,
+)
 from onyx.chat.execution import ActiveChatTurns
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
@@ -61,7 +65,6 @@ from onyx.configs.constants import (
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
-    create_chat_session_from_request,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
@@ -75,7 +78,7 @@ from onyx.db.chat import (
     translate_db_message_to_chat_message_detail,
     update_chat_session,
 )
-from onyx.db.chat_history import convert_chat_history_basic, create_chat_history_chain
+from onyx.db.chat_history import create_chat_history_chain
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission, record_mode_persists_content

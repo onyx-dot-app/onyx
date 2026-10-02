@@ -14,16 +14,13 @@ from onyx.agents.execution_records import (
 from onyx.agents.models import StepRecord, ToolExecutionRecord
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
 from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_db_search_doc
-from onyx.db.chat_history import (
-    capture_chat_history,
-    convert_chat_history,
-)
 from onyx.db.chat_response import save_response_content
 from onyx.db.chat_subagents import (
     load_agent_history,

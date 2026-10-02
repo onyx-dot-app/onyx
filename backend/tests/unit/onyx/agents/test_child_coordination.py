@@ -33,7 +33,7 @@ from onyx.agents.tools import (
     SpawnResult,
     ToolInvocation,
 )
-from onyx.chat.checkpoint import CheckpointBinding
+from onyx.chat.models import CheckpointBinding
 from onyx.chat.presentation import project_response
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMTimeoutError

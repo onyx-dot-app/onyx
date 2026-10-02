@@ -29,8 +29,8 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.chat.checkpoint import CheckpointBinding, _checkpoint_model_types
-from onyx.chat.models import MessageRendering, PresentationMode
+from onyx.chat.checkpoint import _checkpoint_model_types
+from onyx.chat.models import CheckpointBinding, MessageRendering, PresentationMode
 from onyx.chat.presentation import message_presentation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (

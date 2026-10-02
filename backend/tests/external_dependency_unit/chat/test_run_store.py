@@ -32,9 +32,9 @@ from onyx.agents.tools import (
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
-from onyx.chat.checkpoint import CheckpointBinding, _checkpoint_model_types
+from onyx.chat.checkpoint import _checkpoint_model_types
 from onyx.chat.history_store import get_chat_history_store
-from onyx.chat.models import ChatFeatureState
+from onyx.chat.models import ChatFeatureState, CheckpointBinding
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.chat.run_store import ChatRunStore

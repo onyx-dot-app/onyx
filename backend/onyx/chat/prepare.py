@@ -10,6 +10,12 @@ from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     ChatTurnAdmission,
 )
+from onyx.chat.chat_utils import (
+    capture_chat_history,
+    convert_chat_history,
+    create_chat_session_from_request,
+    is_last_assistant_message_clarification,
+)
 from onyx.chat.files import (
     _collect_available_file_ids,
     _convert_loaded_files_to_chat_files,
@@ -47,17 +53,13 @@ from onyx.configs.constants import (
 )
 from onyx.context.search.models import BaseFilters
 from onyx.db.chat import (
-    create_chat_session_from_request,
     create_new_chat_message,
     get_chat_session_by_id,
     reserve_chat_response_ids,
 )
 from onyx.db.chat_history import (
-    capture_chat_history,
     checkpoint_from_summary,
-    convert_chat_history,
     find_summary_for_branch,
-    is_last_assistant_message_clarification,
     load_message_branch,
 )
 from onyx.db.document_set import filter_document_set_names_by_user_access

@@ -8,13 +8,11 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 from onyx.agents.execution_records import RunStatus
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.chat.checkpoint import (
-    CheckpointBinding,
-    ResponseCheckpoint,
     _CheckpointSerializer,
     deserialize_checkpoint,
     serialize_checkpoint,
 )
-from onyx.chat.models import ResponseRecord
+from onyx.chat.models import CheckpointBinding, ResponseCheckpoint, ResponseRecord
 from onyx.chat.response import response_record, response_snapshot
 from onyx.llm.models import Message, ToolResult
 
