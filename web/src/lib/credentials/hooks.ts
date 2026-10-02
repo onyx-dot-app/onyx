@@ -70,7 +70,10 @@ export function useCredentialFieldCopy(
         source: spec.brandName,
       }),
       description: field.hint
-        ? t(`hints.${field.hint.key}`, field.hint.values)
+        ? t(`hints.${field.hint.key}`, {
+            source: spec.brandName,
+            ...field.hint.values,
+          })
         : undefined,
     };
   };

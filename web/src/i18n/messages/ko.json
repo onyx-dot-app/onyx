@@ -3337,7 +3337,7 @@
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "PFX 파일입니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
-        "scopedToken": "범위가 지정된 토큰은 Atlassian의 API 게이트웨이를 거쳐야 합니다. 클래식 토큰이면 끈 상태로 두세요."
+        "scopedToken": "범위가 지정된 토큰은 {source}의 API 게이트웨이를 거쳐야 합니다. 클래식 토큰이면 끈 상태로 두세요."
       },
       "methods": {
         "labels": {

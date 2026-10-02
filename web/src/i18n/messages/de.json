@@ -3337,7 +3337,7 @@
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
         "pfxFile": "Eine PFX-Datei.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
-        "scopedToken": "Tokens mit Bereichen müssen über das API-Gateway von Atlassian geleitet werden. Lassen Sie diese Option für klassische Tokens deaktiviert."
+        "scopedToken": "Tokens mit Bereichen müssen über das API-Gateway von {source} geleitet werden. Lassen Sie diese Option für klassische Tokens deaktiviert."
       },
       "methods": {
         "labels": {

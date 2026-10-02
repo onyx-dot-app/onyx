@@ -3337,7 +3337,7 @@
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Un fichier PFX.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
-        "scopedToken": "Les jetons avec portées doivent passer par la passerelle d'API d'Atlassian. Laissez cette option désactivée pour les jetons classiques."
+        "scopedToken": "Les jetons avec portées doivent passer par la passerelle d'API de {source}. Laissez cette option désactivée pour les jetons classiques."
       },
       "methods": {
         "labels": {

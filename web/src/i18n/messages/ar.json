@@ -3337,7 +3337,7 @@
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ملف PFX.",
         "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
-        "scopedToken": "يجب توجيه الرموز ذات النطاقات عبر بوابة API الخاصة بـ Atlassian. اتركه معطّلًا للرموز الكلاسيكية."
+        "scopedToken": "يجب توجيه الرموز ذات النطاقات عبر بوابة API الخاصة بـ {source}. اتركه معطّلًا للرموز الكلاسيكية."
       },
       "methods": {
         "labels": {

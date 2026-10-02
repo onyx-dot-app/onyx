@@ -3337,7 +3337,7 @@
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "PFX 文件。",
         "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
-        "scopedToken": "带作用域的令牌需要通过 Atlassian 的 API 网关进行路由。经典令牌请保持关闭。"
+        "scopedToken": "带作用域的令牌需要通过 {source} 的 API 网关进行路由。经典令牌请保持关闭。"
       },
       "methods": {
         "labels": {

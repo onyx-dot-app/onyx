@@ -3337,7 +3337,7 @@
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "PFX ファイルです。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
-        "scopedToken": "スコープ付きトークンは Atlassian の API ゲートウェイを経由する必要があります。クラシックトークンの場合はオフのままにしてください。"
+        "scopedToken": "スコープ付きトークンは {source} の API ゲートウェイを経由する必要があります。クラシックトークンの場合はオフのままにしてください。"
       },
       "methods": {
         "labels": {
