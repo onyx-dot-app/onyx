@@ -112,3 +112,41 @@ def test_same_name_under_another_source_is_left_alone(
     ).id
 
     assert sorted(_ids_named(db_session, name)) == sorted([first_id, second_id])
+
+
+def test_a_paired_namesake_keeps_the_unpaired_one_too(
+    db_session: Session, name: str
+) -> None:
+    unpaired = Connector(
+        name=name,
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={},
+    )
+    paired = Connector(
+        name=name,
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={},
+    )
+    credential = Credential(source=DocumentSource.MOCK_CONNECTOR, credential_json={})
+    db_session.add_all([unpaired, paired, credential])
+    db_session.flush()
+    db_session.add(
+        ConnectorCredentialPair(
+            name=name,
+            connector_id=paired.id,
+            credential_id=credential.id,
+            status=ConnectorCredentialPairStatus.ACTIVE,
+            access_type=AccessType.PUBLIC,
+        )
+    )
+    db_session.commit()
+    unpaired_id, paired_id = unpaired.id, paired.id
+
+    with pytest.raises(ValueError, match="duplicate naming not allowed"):
+        create_connector(
+            db_session, _connector_data(name, DocumentSource.MOCK_CONNECTOR)
+        )
+
+    assert sorted(_ids_named(db_session, name)) == sorted([unpaired_id, paired_id])
