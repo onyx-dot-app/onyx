@@ -145,9 +145,9 @@ func compareVersions(a, b, ecosystem string) int {
 }
 
 // affectedAt reports whether the entry holds version: listed among its
-// versions, or inside a range, where each "introduced" opens an interval that
-// the next "fixed" closes exclusively or the next "last_affected" closes
-// inclusively, and an open interval runs on.
+// versions, or inside a range it sits below the limits of, where each
+// "introduced" opens an interval that the next "fixed" closes exclusively or
+// the next "last_affected" closes inclusively, and an open interval runs on.
 func affectedAt(aff *osvschema.Affected, version, ecosystem string) bool {
 	v, err := semantic.Parse(version, ecosystem)
 	if err != nil {
@@ -159,6 +159,9 @@ func affectedAt(aff *osvschema.Affected, version, ecosystem string) bool {
 		}
 	}
 	for _, r := range aff.GetRanges() {
+		if !beforeLimits(r, v) {
+			continue
+		}
 		open := false
 		for _, e := range r.GetEvents() {
 			switch {
@@ -182,6 +185,27 @@ func affectedAt(aff *osvschema.Affected, version, ecosystem string) bool {
 		}
 	}
 	return false
+}
+
+// beforeLimits reports whether version sits below one of the range's "limit"
+// events, which cap it: a range with none runs on, "*" is unbounded, and a
+// limit the comparator cannot place keeps the range in force.
+func beforeLimits(r *osvschema.Range, v semantic.Version) bool {
+	limited := false
+	for _, e := range r.GetEvents() {
+		limit := e.GetLimit()
+		if limit == "" {
+			continue
+		}
+		limited = true
+		if limit == "*" {
+			return true
+		}
+		if c, err := v.CompareStr(limit); err != nil || c < 0 {
+			return true
+		}
+	}
+	return !limited
 }
 
 // sameEcosystem compares OSV ecosystem names without their release suffix,

@@ -197,6 +197,25 @@ func TestFixedFor_skipsVersionsAnotherRecordStillLists(t *testing.T) {
 	if got := fixedFor(open, []string{"GHSA-4"}, pkg); got != "" {
 		t.Fatalf("fixedFor = %q, want none while a range stays open past every fix", got)
 	}
+	// A limit caps a range, so a fix past it stands; "*" caps nothing.
+	limited := func(limit string) []*osvschema.Vulnerability {
+		return []*osvschema.Vulnerability{
+			{Id: "GHSA-6", Affected: []*osvschema.Affected{{
+				Package: &osvschema.Package{Name: "pkg", Ecosystem: "npm"},
+				Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Limit: limit}}}},
+			}}},
+			{Id: "GHSA-7", Affected: []*osvschema.Affected{{
+				Package: &osvschema.Package{Name: "pkg", Ecosystem: "npm"},
+				Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "2.1.0"}}}},
+			}}},
+		}
+	}
+	if got := fixedFor(limited("2.0.0"), []string{"GHSA-6", "GHSA-7"}, pkg); got != "2.1.0" {
+		t.Fatalf("fixedFor = %q, want 2.1.0, past the other range's limit", got)
+	}
+	if got := fixedFor(limited("*"), []string{"GHSA-6", "GHSA-7"}, pkg); got != "" {
+		t.Fatalf("fixedFor = %q, want none under an unbounded limit", got)
+	}
 }
 
 func TestSeverityForGroupPrefersCVSS(t *testing.T) {
