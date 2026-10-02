@@ -928,8 +928,9 @@ class TestEmptyAnswerRecovery:
         from unittest.mock import patch
 
         from onyx.chat import llm_step as _llm_step_module
-        from onyx.chat.citation_processor import CitationMode, DynamicCitationProcessor
+        from onyx.chat.citation_processor import DynamicCitationProcessor
         from onyx.chat.llm_step import run_llm_step_pkt_generator
+        from onyx.chat.models import CitationMode
 
         llm = self._make_llm()
         llm.stream_raw = self._content_stream(chunks)

@@ -12,15 +12,17 @@ from onyx.chat.chat_utils import (
 )
 from onyx.chat.citation_processor import (
     CitationMapping,
-    CitationMode,
     DynamicCitationProcessor,
 )
-from onyx.chat.citation_utils import update_citation_processor_from_tool_response
+from onyx.chat.citation_utils import (
+    build_context_file_citation_mapping,
+    update_citation_processor_from_tool_response,
+)
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text, run_llm_step
 from onyx.chat.models import (
     ChatMessageSimple,
-    ContextFileMetadata,
+    CitationMode,
     ExtractedContextFiles,
     FileToolMetadata,
     LlmStepResult,
@@ -32,10 +34,9 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
     process_prompt_template,
 )
-from onyx.chat.token_budget import resolve_chat_token_budget
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
-from onyx.configs.constants import DocumentSource, MessageType
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
@@ -46,6 +47,7 @@ from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
+from onyx.llm.token_budget import resolve_token_budget
 from onyx.llm.tool_parsing import looks_like_xml_tool_call_payload
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
@@ -309,43 +311,6 @@ def _try_fallback_tool_extraction(
 # Cycle 6: No more tools available, forced to answer
 # Override via the MAX_LLM_CYCLES env var when running with tool-heavy MCPs
 # that legitimately need more turns. Imported from chat_configs.
-
-
-def _build_context_file_citation_mapping(
-    file_metadata: list[ContextFileMetadata],
-    starting_citation_num: int = 1,
-) -> CitationMapping:
-    """Build citation mapping for context files.
-
-    Converts context file metadata into SearchDoc objects that can be cited.
-    Citation numbers start from the provided starting number.
-
-    Args:
-        file_metadata: List of context file metadata
-        starting_citation_num: Starting citation number (default: 1)
-
-    Returns:
-        Dictionary mapping citation numbers to SearchDoc objects
-    """
-    citation_mapping: CitationMapping = {}
-
-    for idx, file_meta in enumerate(file_metadata, start=starting_citation_num):
-        search_doc = SearchDoc(
-            document_id=file_meta.file_id,
-            chunk_ind=0,
-            semantic_identifier=file_meta.filename,
-            link=None,
-            blurb=file_meta.file_content,
-            source_type=DocumentSource.FILE,
-            boost=1,
-            hidden=False,
-            metadata={},
-            score=0.0,
-            match_highlights=[file_meta.file_content],
-        )
-        citation_mapping[idx] = search_doc
-
-    return citation_mapping
 
 
 def _build_project_message(
@@ -860,7 +825,7 @@ def run_llm_loop(
         # Add project file citation mappings if project files are present
         project_citation_mapping: CitationMapping = {}
         if context_files.file_metadata:
-            project_citation_mapping = _build_context_file_citation_mapping(
+            project_citation_mapping = build_context_file_citation_mapping(
                 context_files.file_metadata
             )
             citation_processor.update_citation_mapping(project_citation_mapping)
@@ -873,7 +838,7 @@ def run_llm_loop(
             finish_reason=None,
         )
 
-        token_budget = resolve_chat_token_budget(llm)
+        token_budget = resolve_token_budget(llm)
         available_tokens = token_budget.input_tokens
         # When the model takes no image input, history images are replayed as
         # short text markers (translate_history_to_llm_format) — budget them

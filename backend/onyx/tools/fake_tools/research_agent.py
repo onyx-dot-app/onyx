@@ -7,7 +7,6 @@ from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import (
     CitationMapping,
-    CitationMode,
     DynamicCitationProcessor,
 )
 from onyx.chat.citation_utils import (
@@ -17,7 +16,12 @@ from onyx.chat.citation_utils import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
-from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
+from onyx.chat.models import (
+    ChatMessageSimple,
+    CitationMode,
+    LlmStepResult,
+    ToolCallSimple,
+)
 from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType

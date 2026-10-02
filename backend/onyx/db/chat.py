@@ -8,8 +8,13 @@ from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 
+from onyx.chat.incognito import (
+    incognito_allowed_for_user,
+    resolve_incognito_record_mode,
+)
+from onyx.chat.incognito_context import incognito_context_available
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
+from onyx.configs.constants import ANONYMOUS_USER_UUID, DEFAULT_PERSONA_ID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
@@ -23,13 +28,16 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.models import SearchDoc as DBSearchDoc
-from onyx.db.persona import get_best_persona_id_for_user
+from onyx.db.persona import get_best_persona_id_for_user, user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride, PromptOverride
-from onyx.server.query_and_chat.models import ChatMessageDetail
+from onyx.server.query_and_chat.models import (
+    ChatMessageDetail,
+    ChatSessionCreationRequest,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -1175,3 +1183,73 @@ def update_db_session_with_messages(
         db_session.flush()
 
     return chat_message
+
+
+def create_chat_session_from_request(
+    chat_session_request: ChatSessionCreationRequest,
+    user: User,
+    db_session: Session,
+) -> ChatSession:
+    """Authorize the project and persona, then create a session with its recording policy.
+
+    ``user`` is never None. Anonymous users arrive as a User with is_anonymous=True,
+    and the access-check helpers handle that case. A real User is required so the
+    persona access check always runs — do not introduce a None-tolerant caller.
+    """
+    from onyx.db.projects import check_project_ownership
+
+    project_id = chat_session_request.project_id
+    if project_id:
+        if not check_project_ownership(project_id, user.id, db_session):
+            raise ValueError("User does not have access to project")
+
+    persona_id = chat_session_request.persona_id
+    if persona_id != DEFAULT_PERSONA_ID:
+        if not user_can_access_persona(
+            db_session=db_session,
+            persona_id=persona_id,
+            user=user,
+            get_editable=False,
+        ):
+            raise ValueError("User does not have access to persona")
+
+    # Pinned at creation so a later setting change cannot alter a live session.
+    # Availability decides server-side, never the client flag. A refusal
+    # errors: degrading would silently persist a believed-incognito chat.
+    # The capability is checked first so a deployment that cannot hold the
+    # context says so, rather than reporting it as a permission the admin
+    # could grant.
+    incognito_mode: IncognitoRecordMode | None = None
+    if chat_session_request.incognito:
+        if not incognito_context_available():
+            raise OnyxError(
+                OnyxErrorCode.DEPLOYMENT_UNSUPPORTED,
+                "Incognito chat is not supported on this deployment.",
+            )
+        if not incognito_allowed_for_user(user, db_session, cached=False):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHORIZED,
+                "Incognito chat is not enabled for this user.",
+            )
+        incognito_mode = resolve_incognito_record_mode()
+
+    # A caller-supplied title is conversation-derived, so a content-free
+    # session stores none of it.
+    description = (
+        chat_session_request.description or ""
+        if record_mode_persists_content(incognito_mode)
+        else ""
+    )
+
+    chat_session = create_chat_session(
+        db_session=db_session,
+        description=description,
+        user_id=user.id,
+        persona_id=chat_session_request.persona_id,
+        project_id=chat_session_request.project_id,
+        incognito_record_mode=incognito_mode,
+        session_id=(
+            chat_session_request.incognito_session_id if incognito_mode else None
+        ),
+    )
+    return chat_session
