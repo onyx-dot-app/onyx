@@ -60,7 +60,7 @@ Like pill but without the filled active background — only the underline indica
 
 ### Animation
 
-Every variant has one active-state element (contained card, pill background, underline bar) that slides from the old tab to the new one. It moves with a `transform`, holds still on its first placement and while the tabs scroll, and turns off for reduced motion. Panels (`Tabs.Content`) swap without animation.
+The active state slides from the old tab to the new one: in `contained` the white card, in `pill` both the filled background and the underline bar, in `underline` the bar. It moves with a `transform`, holds still on its first placement and while the tabs scroll, and turns off for reduced motion. Panels (`Tabs.Content`) swap without animation.
 
 A string label renders as an Opal `Content` with `color="interactive"`: each tab is an interactive surface whose state sets `--interactive-foreground` and `--interactive-foreground-icon`, so title and icon colours fade with the slide. Contained labels use the `main-ui` size (16px icon); pill and underline use `secondary` (12px icon).
 

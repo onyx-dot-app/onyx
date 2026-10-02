@@ -85,7 +85,6 @@ function TabsList({
     measured,
   } = useTabIndicator(
     listRef,
-    true,
     enableScrollArrows ? tabsContainerRef : undefined
   );
   // The indicators slide between tabs, but not on their first placement and

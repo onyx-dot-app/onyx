@@ -42,7 +42,6 @@ export interface IndicatorStyle {
  */
 export function useTabIndicator(
   listRef: React.RefObject<HTMLElement | null>,
-  enabled: boolean,
   scrollContainerRef?: React.RefObject<HTMLElement | null>
 ): { style: IndicatorStyle; isScrolling: boolean; measured: boolean } {
   const [style, setStyle] = useState<IndicatorStyle>({
@@ -60,8 +59,6 @@ export function useTabIndicator(
   // cleanup. The rule cannot trace handler-created timers.
   // oxlint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
-    if (!enabled) return;
-
     const list = listRef.current;
     if (!list) return;
 
@@ -126,7 +123,7 @@ export function useTabIndicator(
         scrollContainer.removeEventListener("scroll", handleScroll);
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
-  }, [enabled, listRef, scrollContainerRef]);
+  }, [listRef, scrollContainerRef]);
 
   return { style, isScrolling, measured };
 }
