@@ -1665,7 +1665,7 @@
 
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
 
-    "fflate": ["fflate@0.4.8", "", {}, "sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA=="],
+    "fflate": ["fflate@0.4.9", "", {}, "sha512-zdxgIEddhfsyCaWpJ2SdXEP8ZMrKJ6+5jl4OupODcywU0IhRk6gdXuVGcPICyfx2H97hVK7xmJtRLPjkxAX8Vw=="],
 
     "file-selector": ["file-selector@4.1.0", "", {}, "sha512-Io1mP8CI3zec5Bxy3P3TxdrKnt35Cm8vNIHnZsvyj43l4YFjD4NRInBp240S5bDJQ0EP1jnh7nCAwXsO818OCg=="],
 
