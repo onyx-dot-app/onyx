@@ -7,6 +7,9 @@
    rounded shape. The grid row is the toast's space in the stack. */
 .opal-toast {
   display: grid;
+  /* minmax(0, 1fr): the column must not grow to fit a long title, or the
+     title's one-line clamp would never cut it off. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;
   width: 100%;
   filter: drop-shadow(0px 2px 12px var(--shadow-02));
@@ -20,9 +23,10 @@
   animation: opal-toast-leave 400ms ease-in-out;
 }
 
-/* No clipping: min-height 0 lets the row reach 0, and nothing visible ever
-   sits outside it. */
+/* No clipping: min-height 0 lets the row reach 0, and min-width 0 keeps a
+   long title from widening the toast. */
 .opal-toast-body {
+  min-width: 0;
   min-height: 0;
 }
 
