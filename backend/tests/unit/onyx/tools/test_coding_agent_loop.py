@@ -29,7 +29,7 @@ from onyx.llm.model_response import (
     ResponseFunctionCall,
     StreamingChoice,
 )
-from onyx.llm.models import ReasoningEffort, ToolChoice
+from onyx.llm.models import LLMInputBudget, ReasoningEffort, ToolChoice
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -132,7 +132,9 @@ class ScriptedLLM(LitellmLLM):
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
         operation: ProviderOperation | None = None,  # noqa: ARG002
+        input_budget: LLMInputBudget | None = None,
     ) -> Iterator[ModelResponseStream]:
+        del input_budget
         self.prompts.append(prompt)
         if not self._steps:
             raise AssertionError("LLM called more times than scripted")

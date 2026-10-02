@@ -22,7 +22,7 @@ from onyx.llm.model_response import (
     ResponseFunctionCall,
     StreamingChoice,
 )
-from onyx.llm.models import ReasoningEffort, ToolChoice
+from onyx.llm.models import LLMInputBudget, ReasoningEffort, ToolChoice
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 
 T = TypeVar("T")
@@ -301,6 +301,12 @@ class MockLLM(LitellmLLM, MockLLMController):
             max_input_tokens=1000000000,
         )
 
+    def prepare_messages(
+        self, prompt: list[ChatCompletionMessage], has_tools: bool
+    ) -> list[dict[str, Any]]:
+        del has_tools
+        return [message.model_dump(exclude_none=True) for message in prompt]
+
     def invoke_raw(
         self,
         prompt: list[ChatCompletionMessage],
@@ -326,7 +332,9 @@ class MockLLM(LitellmLLM, MockLLMController):
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
         operation: ProviderOperation | None = None,  # noqa: ARG002
+        input_budget: LLMInputBudget | None = None,
     ) -> Iterator[ModelResponseStream]:
+        del input_budget
         if not self.stream_controller:
             return
 
