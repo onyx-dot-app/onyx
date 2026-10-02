@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button as OpalButton } from "@opal/components";
+import { Button, InputTypeIn } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/lib/credentials/svc";
-import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
-import { toast } from "@opal/layouts";
+import { InputVertical, Section, toast } from "@opal/layouts";
+import { FormikField } from "@/refresh-components/form/FormikField";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
 import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
@@ -27,36 +27,37 @@ import {
   IsPublicGroupSelectorFormType,
   IsPublicGroupSelector,
 } from "@/components/IsPublicGroupSelector";
-import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { SvgPlusCircle } from "@opal/icons";
-const CreateButton = ({
-  onClick,
-  isSubmitting,
-  requiresGroup,
-  groups,
-}: {
+interface CreateButtonProps {
   onClick: () => void;
   isSubmitting: boolean;
   // Only a scoped manager must land the credential in a group — GATE 2 requires
   // it of them and of nobody else.
   requiresGroup: boolean;
   groups: number[];
-}) => {
+}
+
+function CreateButton({
+  onClick,
+  isSubmitting,
+  requiresGroup,
+  groups,
+}: CreateButtonProps) {
   const t = useTranslations("admin");
   return (
-    <OpalButton
+    <Button
       disabled={isSubmitting || (requiresGroup && groups.length === 0)}
       onClick={onClick}
       icon={SvgPlusCircle}
     >
       {t("credentials.create.createButton.label")}
-    </OpalButton>
+    </Button>
   );
-};
+}
 
 type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
   name: string;
@@ -224,13 +225,25 @@ export default function CreateCredential({
         }
 
         return (
-          <Form className="w-full flex items-stretch">
-            <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
-              <TextFormField
-                name="name"
-                placeholder={t("credentials.create.name.placeholder")}
-                label={t("credentials.create.name.label")}
-              />
+          // No card of its own: the form sits directly in its host (the
+          // credential step's create card, or a modal).
+          <Form className="w-full">
+            <Section alignItems="stretch" gap={6}>
+              <InputVertical
+                withLabel="name"
+                title={t("credentials.create.name.label")}
+              >
+                <FormikField<string>
+                  name="name"
+                  render={(field, _helper, _meta, status) => (
+                    <InputTypeIn
+                      {...field}
+                      placeholder={t("credentials.create.name.placeholder")}
+                      variant={status === "error" ? "error" : "primary"}
+                    />
+                  )}
+                />
+              </InputVertical>
 
               <CredentialFieldsRenderer
                 credentialTemplate={credentialTemplate}
@@ -238,10 +251,15 @@ export default function CreateCredential({
                 setAuthMethod={setAuthMethod}
               />
 
-              <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
-                <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                alignItems="end"
+                gap={4}
+              >
+                <Section alignItems="start" width="full">
                   {businessTier && (
-                    <div className="flex flex-col items-start">
+                    <Section alignItems="start" gap={2}>
                       {isGlobalHolder && (
                         <AdvancedOptionsToggle
                           showAdvancedOptions={showAdvancedOptions}
@@ -255,9 +273,9 @@ export default function CreateCredential({
                           isGlobalHolder={isGlobalHolder}
                         />
                       )}
-                    </div>
+                    </Section>
                   )}
-                </div>
+                </Section>
                 <CreateButton
                   onClick={() =>
                     handleSubmit(
@@ -270,8 +288,8 @@ export default function CreateCredential({
                   requiresGroup={isScopedManager}
                   groups={formikProps.values.groups}
                 />
-              </div>
-            </CardSection>
+              </Section>
+            </Section>
           </Form>
         );
       }}
