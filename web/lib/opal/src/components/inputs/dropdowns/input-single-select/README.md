@@ -67,11 +67,17 @@ nothing selected, every group starts closed.
 ## Search
 
 With `search` a search field sits at the top of the list and filters the
-rows by title or value; a term that matches a divider's title keeps that
+rows by title, value or `keywords`; a term that matches a divider's title keeps that
 whole section. It takes focus when the list opens, so typing starts at once;
 arrows, Enter, Escape and Tab work from it as from the trigger. Escape closes
 the list and returns focus to the trigger; a Tab on a closed list moves on to the
 next field, as it would from the trigger.
+
+A set too large to hold at once pages in from outside: `onSearchChange`
+reports the search text so the caller can fetch matches the set lacks, and
+`onReachEnd` fires as the rows scroll near their end, with the rows on show
+(a folded group's rows left out), so the caller can append more where the user
+is reading. New rows flow in through `options` and filter like the rest.
 
 ## Foldable dividers
 
@@ -103,6 +109,8 @@ leave the keyboard order.
 | `onValueChange` | `(value: string) => void`           | —       | Fires on a pick, and with `""` on an unpick                     |
 | `options`       | `SelectOptions` | `[]`    | Loose options and dividers, in order                        |
 | `search`    | `boolean`                           | `false` | A search field at the top of the list filters the rows          |
+| `onSearchChange` | `(query: string) => void`      | —       | The search text as it changes, `""` when the list closes        |
+| `onReachEnd`   | `(shown: SelectOption[]) => void`   | —       | The rows scrolled near their end, with the unfolded rows on show |
 | `defaultOption` | `string`                            | —       | Option value an empty `value` resolves to; never empties then   |
 | `placeholder`   | `string`                            | —       | Shown while empty; always the accessible name (required)        |
 | `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |

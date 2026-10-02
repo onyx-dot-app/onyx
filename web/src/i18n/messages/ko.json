@@ -5982,6 +5982,7 @@
       "toasts": {
         "providerDeleteFailed": "제공자를 삭제하지 못했습니다: {message}",
         "providerDeleted": "제공자를 삭제했습니다!",
+        "providerLoadFailed": "제공자를 불러올 수 없습니다: {message}",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "settingsUpdated": "설정을 업데이트했습니다",
         "unknownError": "알 수 없는 오류"

@@ -6,6 +6,8 @@ import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-ty
 export type SelectOption = {
   value: string;
   title: string;
+  /** Further text a search matches, such as an identifier the title prettifies. */
+  keywords?: string[];
   description?: string | RichStr;
   icon?: IconFunctionComponent;
   disabled?: boolean;
@@ -92,6 +94,8 @@ export type InputSingleComboBoxProps = InputSingleBaseProps & {
   showOtherOptions?: boolean;
   defaultOption?: never;
   search?: never;
+  onSearchChange?: never;
+  onReachEnd?: never;
   /** Trigger placeholder. */
   placeholder: string;
 };
@@ -117,6 +121,12 @@ export type InputSingleSelectProps = InputSingleBaseProps & {
    * back to the trigger.
    */
   search?: boolean;
+  /** The search text as it changes, `""` when the list closes, for callers
+   *  that fetch matches the set lacks. Stable: it is an effect dependency. */
+  onSearchChange?: (query: string) => void;
+  /** The rows scrolled near their end. `shown` is the rows on show, a folded
+   *  group's rows left out, so a caller pages in only what is being read. */
+  onReachEnd?: (shown: SelectOption[]) => void;
   /**
    * Shown while empty, and always the field's accessible name, so it is
    * required even with a `defaultOption` that keeps the trigger filled.

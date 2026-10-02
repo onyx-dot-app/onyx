@@ -5982,6 +5982,7 @@
       "toasts": {
         "providerDeleteFailed": "プロバイダーを削除できませんでした：{message}",
         "providerDeleted": "プロバイダーを削除しました。",
+        "providerLoadFailed": "プロバイダーを読み込めませんでした: {message}",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"

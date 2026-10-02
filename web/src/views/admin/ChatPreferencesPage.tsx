@@ -745,6 +745,7 @@ export default function ChatPreferencesPage() {
   const {
     llmProviders,
     defaultChatNaming,
+    modelPaging,
     refetch: refetchLlmProviders,
   } = useAdminLanguageModels();
 
@@ -1143,6 +1144,7 @@ export default function ChatPreferencesPage() {
                     })}
                     value={chatNamingModelConfigId}
                     grouped={!settings.hide_provider_grouping}
+                    modelPaging={modelPaging}
                     onChange={(modelConfigurationId) => {
                       const opt = findLlmOptionById(
                         llmProviders,

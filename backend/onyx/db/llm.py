@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
+from sqlalchemy.orm.interfaces import LoaderOption
 
 from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
@@ -738,12 +739,21 @@ def fetch_existing_models(
     return list(db_session.scalars(models).all())
 
 
+def _load_model_configurations_with_flows() -> LoaderOption:
+    """Flows ride along with the models: views read llm_model_flow_types per
+    model, which otherwise costs one query per model."""
+    return selectinload(LLMProviderModel.model_configurations).selectinload(
+        ModelConfiguration.llm_model_flows
+    )
+
+
 def fetch_existing_llm_providers(
     db_session: Session,
     flow_type_filter: list[LLMModelFlowType],
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
     include_model_configurations: bool = True,
+    include_model_flows: bool = False,
 ) -> list[LLMProviderModel]:
     """Fetch all LLM providers with optional filtering.
 
@@ -756,6 +766,8 @@ def fetch_existing_llm_providers(
         include_model_configurations: If False, leave model_configurations
             unloaded. A provider can hold tens of thousands of rows, so callers
             that only need a page use fetch_model_configurations_page instead.
+        include_model_flows: Load each model's flows with it, for callers that
+            build LLMProviderView per model. Needs include_model_configurations.
     """
     stmt = select(LLMProviderModel)
 
@@ -779,7 +791,11 @@ def fetch_existing_llm_providers(
         selectinload(LLMProviderModel.personas),
     )
     if include_model_configurations:
-        stmt = stmt.options(selectinload(LLMProviderModel.model_configurations))
+        stmt = stmt.options(
+            _load_model_configurations_with_flows()
+            if include_model_flows
+            else selectinload(LLMProviderModel.model_configurations)
+        )
 
     providers = list(db_session.scalars(stmt).all())
     if only_public:
@@ -949,7 +965,9 @@ def fetch_all_llm_providers_accessible_in_any_context(
             include_slack_bot_personas=True,
         )
     }
-    provider_models = fetch_existing_llm_providers(db_session, [])
+    provider_models = fetch_existing_llm_providers(
+        db_session, [], include_model_flows=True
+    )
     user_group_ids = fetch_user_group_ids(db_session, user)
     can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
 
@@ -1003,13 +1021,7 @@ def fetch_existing_llm_provider_by_id(
         )
     )
     if include_model_configurations:
-        # Flows ride along: consumers read llm_model_flow_types per model,
-        # which otherwise costs one query per model.
-        stmt = stmt.options(
-            selectinload(LLMProviderModel.model_configurations).selectinload(
-                ModelConfiguration.llm_model_flows
-            )
-        )
+        stmt = stmt.options(_load_model_configurations_with_flows())
 
     return db_session.scalar(stmt)
 

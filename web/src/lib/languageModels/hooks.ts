@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { isAuthPath } from "@/lib/auth/paths";
@@ -60,12 +60,19 @@ type SearchWindows = {
   nextOffsets: Record<number, number | null>;
 };
 
+/** What model paging reads off a listed provider, admin view or descriptor. */
+type PageableProvider = {
+  id: number;
+  model_configurations: RawModelConfiguration[];
+  next_model_configuration_offset?: number | null;
+};
+
 // ---------------------------------------------------------------------------
 // Model paging helpers
 // ---------------------------------------------------------------------------
 
 /** True while the listing holds only part of the provider's models. */
-function hasUnloadedModels(provider: RawLLMProviderDescriptor): boolean {
+function hasUnloadedModels(provider: PageableProvider): boolean {
   return provider.next_model_configuration_offset != null;
 }
 
@@ -84,12 +91,12 @@ function fetchModelConfigurationPage(
 
 /** The listing with one provider's page appended, deduplicated by id. Only
  *  an offset page moves the provider's next offset. */
-function mergeModelConfigurationPage(
-  response: LLMProviderResponse<RawLLMProviderDescriptor>,
+function mergeModelConfigurationPage<P extends PageableProvider>(
+  response: LLMProviderResponse<P>,
   providerId: number,
   page: RawModelConfigurationPage,
   params: ModelPageParams
-): LLMProviderResponse<RawLLMProviderDescriptor> {
+): LLMProviderResponse<P> {
   const provider = response.providers.find((p) => p.id === providerId);
   if (!provider) return response;
   const loadedIds = new Set(provider.model_configurations.map((mc) => mc.id));
@@ -104,7 +111,7 @@ function mergeModelConfigurationPage(
   ) {
     return response;
   }
-  const merged: RawLLMProviderDescriptor = {
+  const merged: P = {
     ...provider,
     model_configurations: [...provider.model_configurations, ...added],
     next_model_configuration_offset: nextOffset,
@@ -115,83 +122,16 @@ function mergeModelConfigurationPage(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Enrichment — private helpers
-// ---------------------------------------------------------------------------
-
-function enrichModelConfiguration(
-  mc: RawModelConfiguration
-): ModelConfiguration {
-  return {
-    ...mc,
-    effectiveDisplayName: mc.custom_display_name || mc.display_name || mc.name,
-  };
-}
-
-function enrichDescriptors(
-  providers: RawLLMProviderDescriptor[]
-): LLMProviderDescriptor[] {
-  return providers.map((p) => ({
-    ...p,
-    model_configurations: p.model_configurations.map(enrichModelConfiguration),
-  }));
-}
-
-function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
-  return providers.map((p) => ({
-    ...p,
-    model_configurations: p.model_configurations.map(enrichModelConfiguration),
-  }));
-}
-
-// ---------------------------------------------------------------------------
-
 /**
- * The user-scoped provider request behind the public list hooks. Private:
- * callers pick a named hook below so the list they get is in the name.
- *
- * Hits the **non-admin** endpoints which return `LLMProviderDescriptor`
- * (no `id` or sensitive fields like `api_key`):
- * - No `agentId` → `GET /api/llm/provider`, all public providers plus
- *   restricted providers the user can access via group membership.
- * - With `agentId` → `GET /api/llm/persona/{agentId}/providers`, providers
- *   scoped to that agent, respecting RBAC restrictions.
- *
- * The backend wraps the provider list in an `LLMProviderResponse` envelope
- * that also carries the global defaults; those are exposed as returned.
+ * The `ModelPaging` over a cached provider listing: pages and server searches
+ * merge into that listing through `mutate`, so every reader of it sees the
+ * new models. `agentId` scopes the page requests like the listing itself.
  */
-function useLanguageModelsRequest(agentId?: number) {
-  // No chat on /auth/* routes, where an unauthenticated caller would 403.
-  const onAuthPath = isAuthPath(usePathname());
-  const url = onAuthPath
-    ? null
-    : agentId !== undefined
-      ? SWR_KEYS.llmProvidersForAgent(agentId)
-      : SWR_KEYS.llmProviders;
-
-  // `revalidateIfStale` is intentionally left at its default (true), unlike
-  // `useAdminLanguageModels` below. Admin edits call `refreshLlmProviderCaches`,
-  // but agent-scoped keys are orphaned when that runs, so `mutate` on them
-  // is a no-op. Mount-time revalidation picks up the edits on next nav.
-  // `dedupingInterval: 60000` keeps this off the hot path.
-  const {
-    data: raw,
-    error,
-    mutate,
-  } = useSWR<LLMProviderResponse<RawLLMProviderDescriptor>>(
-    url,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000,
-    }
-  );
-
-  const data = useMemo(
-    () => (raw ? { ...raw, providers: enrichDescriptors(raw.providers) } : raw),
-    [raw]
-  );
-
+function useModelPaging<P extends PageableProvider>(
+  raw: LLMProviderResponse<P> | undefined,
+  mutate: KeyedMutator<LLMProviderResponse<P>>,
+  agentId?: number
+): ModelPaging {
   // One page request at a time, later calls are dropped: a scroll burst or
   // keystroke storm must not fan out into parallel fetches.
   const pageInFlightRef = useRef(false);
@@ -232,7 +172,7 @@ function useLanguageModelsRequest(agentId?: number) {
   const [searchWindows, setSearchWindows] = useState<SearchWindows | null>(
     null
   );
-  const modelPaging = useMemo<ModelPaging>(
+  return useMemo<ModelPaging>(
     () => ({
       hasMore: truncatedProviders.length > 0,
       isLoading: isLoadingPage,
@@ -284,6 +224,85 @@ function useLanguageModelsRequest(agentId?: number) {
     }),
     [truncatedProviders, isLoadingPage, applyModelPage, searchWindows]
   );
+}
+
+// ---------------------------------------------------------------------------
+// Enrichment, private helpers
+// ---------------------------------------------------------------------------
+
+function enrichModelConfiguration(
+  mc: RawModelConfiguration
+): ModelConfiguration {
+  return {
+    ...mc,
+    effectiveDisplayName: mc.custom_display_name || mc.display_name || mc.name,
+  };
+}
+
+function enrichDescriptors(
+  providers: RawLLMProviderDescriptor[]
+): LLMProviderDescriptor[] {
+  return providers.map((p) => ({
+    ...p,
+    model_configurations: p.model_configurations.map(enrichModelConfiguration),
+  }));
+}
+
+function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
+  return providers.map((p) => ({
+    ...p,
+    model_configurations: p.model_configurations.map(enrichModelConfiguration),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The user-scoped provider request behind the public list hooks. Private:
+ * callers pick a named hook below so the list they get is in the name.
+ *
+ * Hits the **non-admin** endpoints which return `LLMProviderDescriptor`
+ * (no `id` or sensitive fields like `api_key`):
+ * - No `agentId` → `GET /api/llm/provider`, all public providers plus
+ *   restricted providers the user can access via group membership.
+ * - With `agentId` → `GET /api/llm/persona/{agentId}/providers`, providers
+ *   scoped to that agent, respecting RBAC restrictions.
+ *
+ * The backend wraps the provider list in an `LLMProviderResponse` envelope
+ * that also carries the global defaults. Those are exposed as returned.
+ */
+function useLanguageModelsRequest(agentId?: number) {
+  // No chat on /auth/* routes, where an unauthenticated caller would 403.
+  const onAuthPath = isAuthPath(usePathname());
+  const url = onAuthPath
+    ? null
+    : agentId !== undefined
+      ? SWR_KEYS.llmProvidersForAgent(agentId)
+      : SWR_KEYS.llmProviders;
+
+  // `revalidateIfStale` is intentionally left at its default (true), unlike
+  // `useAdminLanguageModels` below. Admin edits call `refreshLlmProviderCaches`,
+  // but agent-scoped keys are orphaned when that runs, so `mutate` on them
+  // is a no-op. Mount-time revalidation picks up the edits on next nav.
+  // `dedupingInterval: 60000` keeps this off the hot path.
+  const {
+    data: raw,
+    error,
+    mutate,
+  } = useSWR<LLMProviderResponse<RawLLMProviderDescriptor>>(
+    url,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  const data = useMemo(
+    () => (raw ? { ...raw, providers: enrichDescriptors(raw.providers) } : raw),
+    [raw]
+  );
+  const modelPaging = useModelPaging(raw, mutate, agentId);
 
   return {
     llmProviders: data?.providers,
@@ -364,8 +383,11 @@ export function useLanguageModelsForCurrentAgent() {
  * — use `useLanguageModels` instead.
  *
  * @returns
- * - `llmProviders` — The array of full provider views, or `undefined`
- *    while loading.
+ * - `llmProviders`: Provider views carrying only each provider's first page
+ *    of models (see `next_model_configuration_offset`), or `undefined` while
+ *    loading. Edit flows load the whole provider through `useAdminLanguageModel`.
+ * - `modelPaging`: pages and searches the rest into `llmProviders`, for the
+ *    admin model pickers.
  * - `defaultText` — The global default text model.
  * - `defaultVision` — The global default vision model.
  * - `defaultCraft`: the admin-configured default Craft model, or `null` if
@@ -380,7 +402,7 @@ export function useAdminLanguageModels() {
     error,
     mutate,
   } = useSWR<LLMProviderResponse<RawLLMProviderView>>(
-    SWR_KEYS.adminLlmProviders,
+    SWR_KEYS.adminLlmProvidersPaged,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -393,6 +415,7 @@ export function useAdminLanguageModels() {
     () => (raw ? { ...raw, providers: enrichViews(raw.providers) } : raw),
     [raw]
   );
+  const modelPaging = useModelPaging(raw, mutate);
 
   return {
     llmProviders: data?.providers,
@@ -402,8 +425,30 @@ export function useAdminLanguageModels() {
     defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
     error,
+    modelPaging,
     refetch: mutate,
   };
+}
+
+/** One provider with every model, for the edit modals whose PUT replaces
+ *  the model list. */
+export function useAdminLanguageModel(providerId: number | null) {
+  const {
+    data: raw,
+    error,
+    isLoading,
+  } = useSWR<RawLLMProviderView>(
+    providerId === null ? null : SWR_KEYS.adminLlmProvider(providerId),
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
+  );
+
+  const llmProvider = useMemo(
+    () => (raw ? enrichViews([raw])[0] : undefined),
+    [raw]
+  );
+
+  return { llmProvider, isLoading, error };
 }
 
 /**

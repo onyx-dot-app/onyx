@@ -190,13 +190,21 @@ class LLMProviderView(LLMProvider):
 
     id: int
     model_configurations: list["ModelConfigurationView"]
+    # Set when the response holds only a page of the models (the admin
+    # listing with page_models). None means every model is included.
+    next_model_configuration_offset: int | None = None
 
     @classmethod
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
         include_api_key: bool = True,
+        model_configurations: list["ModelConfigurationModel"] | None = None,
+        next_model_configuration_offset: int | None = None,
     ) -> "LLMProviderView":
+        # ``model_configurations`` is one page of the provider's rows when the
+        # caller paged them, otherwise the loaded relationship is used.
+
         # ``include_api_key=False`` skips the decrypt + credential-access audit
         # for callers that only need catalog metadata (e.g. the Craft gateway
         # model list, which never uses the real key — the proxy injects it).
@@ -244,12 +252,17 @@ class LLMProviderView(LLMProvider):
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations,
+                (
+                    llm_provider_model.model_configurations
+                    if model_configurations is None
+                    else model_configurations
+                ),
                 provider,
                 use_stored_display_name=llm_provider_model.custom_config is not None,
                 custom_config=llm_provider_model.custom_config,
                 deployment_name=llm_provider_model.deployment_name,
             ),
+            next_model_configuration_offset=next_model_configuration_offset,
         )
 
 

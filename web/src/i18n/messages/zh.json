@@ -5982,6 +5982,7 @@
       "toasts": {
         "providerDeleteFailed": "删除提供商失败：{message}",
         "providerDeleted": "提供商已成功删除！",
+        "providerLoadFailed": "无法加载提供商：{message}",
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"

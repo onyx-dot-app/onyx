@@ -1,7 +1,12 @@
 import React from "react";
-import { render, screen, setupUser } from "@tests/setup/test-utils";
-import SimpleModelSelector from "@/lib/languageModels/components/SimpleModelSelector";
-import type { ModelOptionProvider } from "@/lib/languageModels/types";
+import { fireEvent, render, screen, setupUser } from "@tests/setup/test-utils";
+import SimpleModelSelector, {
+  SERVER_SEARCH_DEBOUNCE_MS,
+} from "@/lib/languageModels/components/SimpleModelSelector";
+import type {
+  ModelOptionProvider,
+  ModelPaging,
+} from "@/lib/languageModels/types";
 
 // The listbox renders through a portal; keep it inside the test container.
 jest.mock("react-dom", () => ({
@@ -220,6 +225,57 @@ describe("SimpleModelSelector", () => {
     );
     await user.click(screen.getByRole("combobox"));
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  });
+
+  test("modelPaging: the end of the list loads more, a miss searches the server", async () => {
+    jest.useFakeTimers();
+    const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
+    const modelPaging: ModelPaging = {
+      hasMore: true,
+      isLoading: false,
+      loadMore: jest.fn().mockResolvedValue(undefined),
+      search: jest.fn().mockResolvedValue(true),
+      searchHasMore: false,
+      loadMoreSearch: jest.fn().mockResolvedValue(undefined),
+    };
+    try {
+      render(
+        <SimpleModelSelector
+          providers={providers}
+          value={11}
+          onChange={jest.fn()}
+          modelPaging={modelPaging}
+        />
+      );
+      await user.click(screen.getByRole("combobox"));
+      // jsdom lays nothing out, so any scroll lands at the end of the rows.
+      fireEvent.scroll(
+        screen
+          .getByRole("listbox")
+          .querySelector(".opal-select-dropdown-scroll")!
+      );
+      // One page request per scroll, for the providers whose rows are on show.
+      expect(modelPaging.loadMore).toHaveBeenCalledTimes(1);
+      expect(modelPaging.loadMore).toHaveBeenCalledWith([1]);
+
+      const search = screen.getByRole("textbox", { name: "Search" });
+      await user.type(search, "gpt");
+      jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
+      expect(modelPaging.search).not.toHaveBeenCalled();
+
+      await user.clear(search);
+      await user.type(search, "claude");
+      jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
+      expect(modelPaging.search).toHaveBeenCalledWith("claude");
+
+      // Clearing forgets the query, so the same miss searches again.
+      await user.clear(search);
+      await user.type(search, "claude");
+      jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
+      expect(modelPaging.search).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("renders an empty list without options", async () => {

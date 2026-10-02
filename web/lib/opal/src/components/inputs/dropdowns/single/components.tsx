@@ -84,6 +84,8 @@ function SingleDropdown({
   showOtherOptions = false,
   dropdownMaxHeight,
   search = false,
+  onSearchChange,
+  onReachEnd,
   ...rest
 }: WithoutStyles<SingleDropdownProps>) {
   const typeIn = trigger === "type-in";
@@ -166,8 +168,10 @@ function SingleDropdown({
   // with the list.
   const [searchText, setSearchText] = useState("");
   useEffect(() => {
-    if (!isOpen) setSearchText("");
-  }, [isOpen]);
+    if (isOpen) return;
+    setSearchText("");
+    onSearchChange?.("");
+  }, [isOpen, onSearchChange]);
   const filterText = typeIn ? inputValue : search ? searchText : "";
 
   // Filtering: each section filters independently; empty ones disappear.
@@ -239,6 +243,13 @@ function SingleDropdown({
     isSelected: isSelectedOption,
     searching: hasSearchTerm,
   });
+  const shownOptions = useMemo(
+    () =>
+      foldedSections
+        .filter((group) => !group.folded)
+        .flatMap((group) => group.options),
+    [foldedSections]
+  );
 
   // The keyboard's stops in render order: the create row when shown, then
   // each group's title (when foldable) and its rows.
@@ -579,12 +590,14 @@ function SingleDropdown({
           dropdownMaxHeight={dropdownMaxHeight}
           keyboardNav={isKeyboardNav}
           onToggleGroup={toggleGroup}
+          onReachEnd={onReachEnd && (() => onReachEnd(shownOptions))}
           searchField={
             search
               ? {
                   value: searchText,
                   onChange: (next) => {
                     setSearchText(next);
+                    onSearchChange?.(next);
                     // Typing never highlights; only walking the list does.
                     setHighlightedIndex(-1);
                     setIsKeyboardNav(false);
