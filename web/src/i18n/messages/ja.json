@@ -3388,7 +3388,6 @@
           "label": "再試行"
         },
         "signIn": {
-          "description": "{appName} には、上で指定したサイトに対する読み取り専用のスコープが必要です。",
           "title": "{source} でサインイン"
         },
         "startError": {

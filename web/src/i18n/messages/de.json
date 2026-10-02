@@ -3388,7 +3388,6 @@
           "label": "Erneut versuchen"
         },
         "signIn": {
-          "description": "{appName} benötigt Lesezugriff für die oben angegebene Site.",
           "title": "Mit {source} anmelden"
         },
         "startError": {

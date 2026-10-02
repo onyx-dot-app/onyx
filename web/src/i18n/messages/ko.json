@@ -3388,7 +3388,6 @@
           "label": "다시 시도"
         },
         "signIn": {
-          "description": "{appName}에는 위에 입력한 사이트에 대한 읽기 전용 범위가 필요합니다.",
           "title": "{source}(으)로 로그인"
         },
         "startError": {

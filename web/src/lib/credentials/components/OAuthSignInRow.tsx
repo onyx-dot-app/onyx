@@ -4,7 +4,6 @@ import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { InputHorizontal } from "@opal/layouts";
 import { SvgArrowExchange } from "@opal/icons";
-import { useSettings } from "@/lib/settings/hooks";
 
 interface OAuthSignInRowProps {
   /** The source's display name, e.g. "Confluence". */
@@ -15,7 +14,7 @@ interface OAuthSignInRowProps {
 }
 
 /**
- * The OAuth route's action row: what signing in grants on the left, the
+ * The OAuth route's action row: "Sign in with {source}" on the left, the
  * Connect button on the right. Inside a form, the button submits it.
  */
 export function OAuthSignInRow({
@@ -24,13 +23,8 @@ export function OAuthSignInRow({
   disabled,
 }: OAuthSignInRowProps) {
   const t = useTranslations("admin.credentials.oauth");
-  const { appName } = useSettings();
   return (
-    <InputHorizontal
-      title={t("signIn.title", { source })}
-      description={t("signIn.description", { appName })}
-      center
-    >
+    <InputHorizontal title={t("signIn.title", { source })} center>
       <Button
         icon={SvgArrowExchange}
         disabled={disabled}
