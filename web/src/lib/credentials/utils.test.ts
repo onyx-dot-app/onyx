@@ -1,4 +1,4 @@
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 import type { Credential } from "@/lib/credentials/types";
 import type { CredentialFieldValues } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -119,9 +119,7 @@ describe("credential edit helpers", () => {
 });
 
 describe("createValidationSchema", () => {
-  const schema = createValidationSchema(
-    CREDENTIAL_TEMPLATES[ValidSources.Outlook]
-  );
+  const schema = createValidationSchema(CREDENTIAL_SPECS[ValidSources.Outlook]);
   const ids = {
     outlook_client_id: "client-id",
     outlook_directory_id: "directory-id",
@@ -163,7 +161,7 @@ describe("createValidationSchema", () => {
 
   it("requires the SharePoint app ids under both of its methods", () => {
     const sharepointSchema = createValidationSchema(
-      CREDENTIAL_TEMPLATES[ValidSources.Sharepoint]
+      CREDENTIAL_SPECS[ValidSources.Sharepoint]
     );
     const sharepointIds = {
       sp_client_id: "client-id",

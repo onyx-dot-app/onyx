@@ -13,54 +13,39 @@ import { useTranslations } from "next-intl";
 import { TypedFileUploadFormField } from "@/components/Field";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
-import type { CredentialTemplateWithAuth } from "@/lib/credentials/types";
-import { isTypedFileField } from "@/lib/connectors/utils";
+import { methodFields } from "@/lib/credentials/utils";
 import type {
-  CredentialFieldValue,
   CredentialFieldValues,
+  CredentialSpec,
+  CredentialSpecField,
 } from "@/lib/credentials/types";
-
-/** Whether a credential key holds an email address. */
-function isEmailKey(key: string): boolean {
-  return key.toLowerCase().includes("email");
-}
-
-/** Whether a credential key holds a secret, so its input masks the value. */
-function isSecretKey(key: string): boolean {
-  const lower = key.toLowerCase();
-  return (
-    lower.includes("token") ||
-    lower.includes("password") ||
-    lower.includes("secret")
-  );
-}
+import type { ValidSources } from "@/lib/connectors/types/source";
 
 interface CredentialFieldProps {
+  source: ValidSources;
   fieldKey: string;
-  value: CredentialFieldValue;
+  field: CredentialSpecField;
 }
 
-/** One field of a credential template, drawn with the Opal input for its type. */
-function CredentialField({ fieldKey, value }: CredentialFieldProps) {
+/** One field of a credential spec, drawn with the Opal input for its kind. */
+function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
   const t = useTranslations("admin");
-  const isEmail = isEmailKey(fieldKey);
-  const copy = useCredentialFieldCopy()(fieldKey);
-  const label = copy.title;
+  const label = useCredentialFieldCopy(source)(fieldKey).title;
 
   // A file such as a .pfx key is binary; Opal's InputFile reads text, so
   // this field keeps the typed upload until Opal can hand back a File.
-  if (isTypedFileField(fieldKey)) {
+  if (field.kind === "file") {
     return <TypedFileUploadFormField name={fieldKey} label={label} />;
   }
 
-  if (typeof value === "boolean") {
+  if (field.kind === "toggle") {
     return (
       <InputHorizontal withLabel title={label}>
         <FormikField<boolean>
           name={fieldKey}
-          render={(field, helper) => (
+          render={(formikField, helper) => (
             <InputSwitch
-              checked={!!field.value}
+              checked={!!formikField.value}
               onCheckedChange={(checked) => helper.setValue(checked)}
             />
           )}
@@ -69,12 +54,9 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
     );
   }
 
-  // An email field shows an example address; any other field shows its
-  // template's placeholder, if it has one.
-  const placeholder = isEmail
-    ? t("credentials.create.emailField.placeholder")
-    : typeof value === "string" && value !== ""
-      ? value
+  const placeholder =
+    field.kind === "email"
+      ? t("credentials.create.emailField.placeholder")
       : undefined;
 
   return (
@@ -83,20 +65,20 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
     <InputVertical withLabel={fieldKey} title={label}>
       <FormikField<string>
         name={fieldKey}
-        render={(field, _helper, _meta, status) =>
-          isSecretKey(fieldKey) ? (
+        render={(formikField, _helper, _meta, status) =>
+          field.kind === "secret" ? (
             <InputPasswordTypeIn
-              {...field}
+              {...formikField}
               id={fieldKey}
-              value={field.value ?? ""}
+              value={formikField.value ?? ""}
               placeholder={placeholder}
               error={status === "error"}
             />
           ) : (
             <InputTypeIn
-              {...field}
+              {...formikField}
               id={fieldKey}
-              value={field.value ?? ""}
+              value={formikField.value ?? ""}
               placeholder={placeholder}
               variant={status === "error" ? "error" : "primary"}
             />
@@ -108,63 +90,71 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
 }
 
 interface CredentialFieldsRendererProps {
-  credentialTemplate: CredentialFieldValues;
+  source: ValidSources;
+  spec: CredentialSpec;
   authMethod?: string;
   setAuthMethod?: (method: string) => void;
 }
 
 export function CredentialFieldsRenderer({
-  credentialTemplate,
+  source,
+  spec,
   authMethod,
   setAuthMethod,
 }: CredentialFieldsRendererProps) {
-  const templateWithAuth =
-    credentialTemplate as CredentialTemplateWithAuth<any>;
-  const { values, setValues } = useFormikContext<any>();
+  const t = useTranslations("admin");
+  const { values, setValues } = useFormikContext<CredentialFieldValues>();
+  const methods = spec.methods;
 
-  // Switching auth method drops the other methods' fields from the values.
+  // Switching auth method drops the fields only the other methods use.
   function handleAuthMethodChange(newMethod: string) {
-    const cleaned = { ...values, authentication_method: newMethod };
-    templateWithAuth.authMethods?.forEach((method) => {
-      if (method.value !== newMethod) {
-        Object.keys(method.fields).forEach((fieldKey) => {
-          delete cleaned[fieldKey];
-        });
-      }
+    const kept = new Set(
+      methods?.find((method) => method.value === newMethod)?.fields
+    );
+    const cleaned: CredentialFieldValues = {
+      ...values,
+      authentication_method: newMethod,
+    };
+    Object.keys(spec.fields).forEach((fieldKey) => {
+      if (!kept.has(fieldKey)) delete cleaned[fieldKey];
     });
     setValues(cleaned);
     setAuthMethod?.(newMethod);
   }
 
-  const authMethods = templateWithAuth.authMethods;
-  if (authMethods && authMethods.length > 1) {
+  if (methods && methods.length > 1) {
     return (
       <Tabs
         gap={4}
-        value={authMethod || authMethods[0]?.value || ""}
+        value={authMethod || methods[0]?.value || ""}
         onValueChange={handleAuthMethodChange}
       >
         <Tabs.List>
-          {authMethods.map((method) => (
+          {methods.map((method) => (
             <Tabs.Trigger key={method.value} value={method.value}>
-              {method.label}
+              {t(`credentials.methods.labels.${method.label}`)}
             </Tabs.Trigger>
           ))}
         </Tabs.List>
 
-        {authMethods.map((method) => (
+        {methods.map((method) => (
           <Tabs.Content key={method.value} value={method.value}>
             <Section alignItems="stretch" gap={4}>
               {/* A method with nothing to fill in explains itself instead. */}
-              {Object.keys(method.fields).length === 0 &&
-                method.description && (
-                  <MessageCard variant="info" title={method.description} />
-                )}
-              {Object.entries(method.fields).map(([key, value]) => (
+              {method.fields.length === 0 && method.description && (
+                <MessageCard
+                  variant="info"
+                  title={t(
+                    `credentials.methods.descriptions.${method.description}`
+                  )}
+                />
+              )}
+              {methodFields(spec, method).map(([key, field]) => (
                 <CredentialField
                   key={key}
+                  source={source}
                   fieldKey={key}
-                  value={value as CredentialFieldValue}
+                  field={field}
                 />
               ))}
             </Section>
@@ -176,12 +166,14 @@ export function CredentialFieldsRenderer({
 
   return (
     <>
-      {Object.entries(credentialTemplate).map(([key, value]) =>
-        // Auth-method metadata is not a field.
-        key === "authentication_method" || key === "authMethods" ? null : (
-          <CredentialField key={key} fieldKey={key} value={value} />
-        )
-      )}
+      {Object.entries(spec.fields).map(([key, field]) => (
+        <CredentialField
+          key={key}
+          source={source}
+          fieldKey={key}
+          field={field}
+        />
+      ))}
     </>
   );
 }

@@ -3270,342 +3270,88 @@
           "toast": "Fehler beim Aktualisieren der Anmeldedaten"
         }
       },
-      "fields": {
-        "access_key_id": {
-          "title": "GCS-Zugriffsschlüssel-ID"
-        },
-        "account_id": {
-          "title": "R2-Konto-ID"
-        },
-        "asana_api_token_secret": {
-          "title": "Asana-API-Token"
-        },
-        "authentication_method": {
-          "title": "Authentifizierungsmethode"
-        },
-        "aws_access_key_id": {
-          "title": "AWS-Zugriffsschlüssel-ID"
-        },
-        "aws_role_arn": {
-          "title": "AWS-Rollen-ARN"
-        },
-        "aws_secret_access_key": {
-          "title": "Geheimer AWS-Zugriffsschlüssel"
-        },
-        "axero_api_token": {
-          "title": "Axero-API-Token"
-        },
-        "base_url": {
-          "title": "Axero-Basis-URL"
-        },
-        "bitbucket_api_token": {
-          "title": "Bitbucket-API-Token"
-        },
-        "bitbucket_email": {
-          "title": "E-Mail-Adresse des Bitbucket-Kontos"
-        },
-        "bookstack_api_token_id": {
-          "title": "Bookstack-API-Token-ID"
-        },
-        "bookstack_api_token_secret": {
-          "title": "Bookstack-API-Token-Geheimnis"
-        },
-        "bookstack_base_url": {
-          "title": "Bookstack-Basis-URL"
-        },
-        "box_client_id": {
-          "title": "Box-Client-ID"
-        },
-        "box_client_secret": {
-          "title": "Box-Client-Secret"
-        },
-        "box_enterprise_id": {
-          "title": "Box-Enterprise-ID"
-        },
-        "box_user_email": {
-          "description": "Optional. Der Box-Benutzer, dessen Identität übernommen wird.",
-          "title": "Box-Benutzer-E-Mail"
-        },
-        "braintrust_api_key": {
-          "title": "Braintrust-API-Schlüssel"
-        },
-        "canvas_access_token": {
-          "title": "Canvas-Zugriffstoken"
-        },
-        "clickup_api_token": {
-          "title": "ClickUp-API-Token"
-        },
-        "clickup_team_id": {
-          "title": "ClickUp-Team-ID"
-        },
-        "coda_bearer_token": {
-          "title": "Coda-Bearer-Token"
-        },
-        "confluence_access_token": {
-          "title": "Confluence-Zugriffstoken"
-        },
-        "confluence_username": {
-          "title": "Confluence-Benutzername"
-        },
-        "discord_bot_token": {
-          "title": "Discord-Bot-Token"
-        },
-        "discourse_api_key": {
-          "title": "Discourse-API-Schlüssel"
-        },
-        "discourse_api_username": {
-          "title": "Discourse-API-Benutzername"
-        },
-        "document360_api_token": {
-          "title": "Document360-API-Token"
-        },
-        "dropbox_access_token": {
-          "title": "Dropbox-API-Schlüssel"
-        },
-        "drupal_wiki_api_token": {
-          "title": "Drupal-Wiki-Persönliches-Zugriffstoken"
-        },
-        "fireflies_api_key": {
-          "title": "Fireflies-API-Schlüssel"
-        },
-        "freshdesk_api_key": {
-          "title": "Freshdesk-API-Schlüssel"
-        },
-        "freshdesk_domain": {
-          "title": "Freshdesk-Domain"
-        },
-        "gitbook_api_key": {
-          "title": "GitBook-API-Schlüssel"
-        },
-        "gitbook_space_id": {
-          "title": "GitBook-Space-ID"
-        },
-        "github_access_token": {
-          "title": "GitHub-Zugriffstoken"
-        },
-        "github_base_url": {
-          "description": "Optional. Gib den Host deines Servers an, z. B. https://github.example.com. Für github.com leer lassen.",
-          "title": "GitHub-Enterprise-Server-URL"
-        },
-        "gitlab_access_token": {
-          "title": "GitLab-Zugriffstoken"
-        },
-        "gitlab_url": {
-          "title": "GitLab-URL"
-        },
-        "gong_access_key": {
-          "title": "Gong-Zugriffsschlüssel"
-        },
-        "gong_access_key_secret": {
-          "title": "Gong-Zugriffsschlüssel-Geheimnis"
-        },
-        "gong_base_url": {
-          "description": "Optional. Für Daten außerhalb der USA gib den Host deiner Region an, z. B. https://[region].api.gong.io.",
-          "title": "Gong-API-Basis-URL"
-        },
-        "google_primary_admin": {
-          "title": "E-Mail-Adresse des primären Admins"
-        },
-        "google_service_account_key": {
-          "title": "Google-Dienstkontoschlüssel"
-        },
-        "google_tokens": {
-          "title": "Google-OAuth-Tokens"
-        },
-        "guru_user": {
-          "title": "Guru-Benutzer"
-        },
-        "guru_user_token": {
-          "title": "Guru-Benutzer-Token"
-        },
-        "highspot_key": {
-          "title": "Highspot-Schlüssel"
-        },
-        "highspot_secret": {
-          "title": "Highspot-Geheimnis"
-        },
-        "highspot_url": {
-          "title": "Highspot-URL"
-        },
-        "hubspot_access_token": {
-          "title": "HubSpot-Zugriffstoken"
-        },
-        "imap_password": {
-          "title": "IMAP-Passwort"
-        },
-        "imap_username": {
-          "title": "IMAP-Benutzername"
-        },
-        "is_sandbox": {
-          "title": "Sandbox-Umgebung"
-        },
-        "jira_api_token": {
-          "title": "API- oder persönliches Zugriffstoken"
-        },
-        "jira_user_email": {
-          "description": "Erforderlich für Jira Cloud.",
-          "title": "Jira-Benutzer-E-Mail"
-        },
-        "linear_api_key": {
-          "title": "Linear-API-Schlüssel"
-        },
-        "loopio_client_id": {
-          "title": "Loopio-Client-ID"
-        },
-        "loopio_client_token": {
-          "title": "Loopio-Client-Token"
-        },
-        "loopio_subdomain": {
-          "title": "Loopio-Subdomain"
-        },
-        "lumapps_api_key": {
-          "title": "LumApps-API-Schlüssel"
-        },
-        "lumapps_application_id": {
-          "title": "LumApps-Anwendungs-ID"
-        },
-        "lumapps_service_user": {
-          "description": "Der Benutzer, in dessen Namen indiziert wird.",
-          "title": "E-Mail-Adresse des Dienstbenutzers"
-        },
-        "namespace": {
-          "title": "OCI-Namespace"
-        },
-        "notion_integration_token": {
-          "title": "Notion-Integrationstoken"
-        },
-        "onedrive_certificate_password": {
-          "title": "OneDrive-Zertifikatspasswort"
-        },
-        "onedrive_client_id": {
-          "title": "OneDrive-Client-ID"
-        },
-        "onedrive_client_secret": {
-          "title": "OneDrive-Client-Secret"
-        },
-        "onedrive_directory_id": {
-          "title": "OneDrive-Verzeichnis-ID"
-        },
-        "onedrive_private_key": {
-          "title": "OneDrive-Zertifikat"
-        },
-        "outline_api_token": {
-          "title": "Outline-API-Token"
-        },
-        "outline_base_url": {
-          "description": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
-          "title": "Outline-Basis-URL"
-        },
-        "outlook_certificate_password": {
-          "title": "Microsoft-Outlook-Zertifikatspasswort"
-        },
-        "outlook_client_id": {
-          "title": "Microsoft-Outlook-Client-ID"
-        },
-        "outlook_client_secret": {
-          "title": "Microsoft-Outlook-Client-Secret"
-        },
-        "outlook_directory_id": {
-          "title": "Microsoft-Outlook-Verzeichnis-ID"
-        },
-        "outlook_private_key": {
-          "description": "Eine PFX-Datei.",
-          "title": "Privater Schlüssel für Microsoft Outlook"
-        },
-        "portal_id": {
-          "title": "Document360-Portal-ID"
-        },
-        "productboard_access_token": {
-          "title": "Productboard-Zugriffstoken"
-        },
-        "r2_access_key_id": {
-          "title": "R2-Zugriffsschlüssel-ID"
-        },
-        "r2_secret_access_key": {
-          "title": "Geheimer R2-Zugriffsschlüssel"
-        },
-        "region": {
-          "title": "OCI-Region"
-        },
-        "secret_access_key": {
-          "title": "Geheimer GCS-Zugriffsschlüssel"
-        },
-        "sf_password": {
-          "title": "Salesforce-Passwort"
-        },
-        "sf_security_token": {
-          "title": "Salesforce-Sicherheitstoken"
-        },
-        "sf_username": {
-          "title": "Salesforce-Benutzername"
-        },
-        "slab_bot_token": {
-          "title": "Slab-Bot-Token"
-        },
-        "slack_bot_token": {
-          "title": "Slack-Bot-Token"
-        },
-        "sp_certificate_password": {
-          "title": "SharePoint-Zertifikatspasswort"
-        },
-        "sp_client_id": {
-          "title": "SharePoint-Client-ID"
-        },
-        "sp_client_secret": {
-          "title": "SharePoint-Client-Secret"
-        },
-        "sp_directory_id": {
-          "title": "SharePoint-Verzeichnis-ID"
-        },
-        "sp_private_key": {
-          "title": "Privater SharePoint-Schlüssel"
-        },
-        "teams_certificate_password": {
-          "title": "Microsoft-Teams-Zertifikatspasswort"
-        },
-        "teams_client_id": {
-          "title": "Microsoft-Teams-Client-ID"
-        },
-        "teams_client_secret": {
-          "title": "Microsoft-Teams-Client-Secret"
-        },
-        "teams_directory_id": {
-          "title": "Microsoft-Teams-Verzeichnis-ID"
-        },
-        "teams_private_key": {
-          "description": "Eine PFX-Datei.",
-          "title": "Privater Schlüssel für Microsoft Teams"
-        },
-        "testrail_api_key": {
-          "title": "TestRail-API-Schlüssel"
-        },
-        "testrail_base_url": {
-          "description": "Zum Beispiel https://yourcompany.testrail.io.",
-          "title": "TestRail-Basis-URL"
-        },
-        "testrail_username": {
-          "title": "TestRail-Benutzername oder E-Mail"
-        },
-        "zendesk_email": {
-          "title": "Zendesk-E-Mail"
-        },
-        "zendesk_subdomain": {
-          "title": "Zendesk-Subdomain"
-        },
-        "zendesk_token": {
-          "title": "Zendesk-Token"
-        },
-        "zoom_account_id": {
-          "title": "Zoom-Konto-ID"
-        },
-        "zoom_client_id": {
-          "title": "Zoom-Client-ID"
-        },
-        "zoom_client_secret": {
-          "title": "Zoom-Client-Secret"
-        },
-        "zuliprc_content": {
-          "title": "Zuliprc-Inhalt"
+      "displayNames": {
+        "accessKeyId": "{source}-Zugriffsschlüssel-ID",
+        "secretAccessKey": "Geheimer {source}-Zugriffsschlüssel",
+        "accountId": "{source}-Konto-ID",
+        "apiKey": "{source}-API-Schlüssel",
+        "apiToken": "{source}-API-Token",
+        "accessToken": "{source}-Zugriffstoken",
+        "clientId": "{source}-Client-ID",
+        "clientSecret": "{source}-Client-Secret",
+        "clientToken": "{source}-Client-Token",
+        "directoryId": "{source}-Verzeichnis-ID",
+        "certificatePassword": "{source}-Zertifikatspasswort",
+        "privateKey": "Privater Schlüssel für {source}",
+        "certificate": "{source}-Zertifikat",
+        "baseUrl": "{source}-Basis-URL",
+        "apiBaseUrl": "{source}-API-Basis-URL",
+        "url": "{source}-URL",
+        "enterpriseServerUrl": "{source}-Enterprise-Server-URL",
+        "botToken": "{source}-Bot-Token",
+        "username": "{source}-Benutzername",
+        "apiUsername": "{source}-API-Benutzername",
+        "usernameOrEmail": "{source}-Benutzername oder E-Mail",
+        "user": "{source}-Benutzer",
+        "userToken": "{source}-Benutzer-Token",
+        "userEmail": "{source}-Benutzer-E-Mail",
+        "email": "{source}-E-Mail",
+        "accountEmail": "E-Mail-Adresse des {source}-Kontos",
+        "password": "{source}-Passwort",
+        "subdomain": "{source}-Subdomain",
+        "domain": "{source}-Domain",
+        "enterpriseId": "{source}-Enterprise-ID",
+        "teamId": "{source}-Team-ID",
+        "applicationId": "{source}-Anwendungs-ID",
+        "apiTokenId": "{source}-API-Token-ID",
+        "apiTokenSecret": "{source}-API-Token-Geheimnis",
+        "securityToken": "{source}-Sicherheitstoken",
+        "integrationToken": "{source}-Integrationstoken",
+        "bearerToken": "{source}-Bearer-Token",
+        "accessKey": "{source}-Zugriffsschlüssel",
+        "accessKeySecret": "{source}-Zugriffsschlüssel-Geheimnis",
+        "key": "{source}-Schlüssel",
+        "secret": "{source}-Geheimnis",
+        "roleArn": "{source}-Rollen-ARN",
+        "namespace": "{source}-Namespace",
+        "region": "{source}-Region",
+        "portalId": "{source}-Portal-ID",
+        "token": "{source}-Token",
+        "personalAccessToken": "Persönliches Zugriffstoken für {source}",
+        "oauthTokens": "{source}-OAuth-Tokens",
+        "isSandbox": "Sandbox-Umgebung",
+        "apiOrPersonalAccessToken": "API- oder persönliches Zugriffstoken",
+        "serviceUserEmail": "E-Mail-Adresse des Dienstbenutzers",
+        "zuliprcContent": "Zuliprc-Inhalt",
+        "authenticationMethod": "Authentifizierungsmethode"
+      },
+      "hints": {
+        "boxUserEmail": "Optional. Der Box-Benutzer, dessen Identität übernommen wird.",
+        "githubBaseUrl": "Optional. Gib den Host deines Servers an, z. B. https://github.example.com. Für github.com leer lassen.",
+        "gongBaseUrl": "Optional. Für Daten außerhalb der USA gib den Host deiner Region an, z. B. https://[region].api.gong.io.",
+        "jiraUserEmail": "Erforderlich für Jira Cloud.",
+        "lumappsServiceUser": "Der Benutzer, in dessen Namen indiziert wird.",
+        "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
+        "pfxFile": "Eine PFX-Datei.",
+        "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Client-Secret",
+          "certificateAuthentication": "Zertifikatsauthentifizierung",
+          "certificate": "Zertifikat",
+          "accessKeyAndSecret": "Zugriffsschlüssel und Secret",
+          "iamRole": "IAM-Rolle",
+          "assumeRole": "Rolle übernehmen"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "In diesem Modus authentifiziert sich der SharePoint-Connector mit einem Client-Secret. Geben Sie die Client-ID und das Client-Secret an.",
+          "sharepointCertificate": "In diesem Modus authentifiziert sich der SharePoint-Connector mit einem Zertifikat. Geben Sie die Client-ID, die Verzeichnis-ID, das Zertifikatspasswort und die PFX-Daten an.",
+          "teamsClientSecret": "Der Connector meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an. Nur Kanalnachrichten und Mitglieder: SharePoint lehnt ein Secret ab, daher benötigt „Anhänge einbeziehen“ die Zertifikatsoption.",
+          "teamsCertificate": "Der Connector meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an. Erforderlich für „Anhänge einbeziehen“, das Kanaldateien und ihre Leser aus SharePoint liest.",
+          "outlookClientSecret": "Der Connector meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an.",
+          "outlookCertificate": "Der Connector meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an.",
+          "s3AssumeRole": "In diesem Modus übernimmt die Amazon-EC2-Instanz ihre vorhandene Rolle, um auf S3 zuzugreifen. Es sind keine weiteren Anmeldedaten erforderlich."
         }
       },
       "modal": {

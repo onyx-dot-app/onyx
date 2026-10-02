@@ -9,17 +9,14 @@ import { InputHorizontal, Section, toast } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
-import type {
-  Credential,
-  CredentialTemplateWithAuth,
-} from "@/lib/credentials/types";
+import type { Credential } from "@/lib/credentials/types";
 import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
-import type {
-  CredentialActionType,
-  CredentialFieldValues,
-} from "@/lib/credentials/types";
-import { createValidationSchema } from "@/lib/credentials/utils";
+import type { CredentialActionType } from "@/lib/credentials/types";
+import {
+  createValidationSchema,
+  getCredentialSpec,
+  initialCredentialValues,
+} from "@/lib/credentials/utils";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import type { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelector";
@@ -281,19 +278,19 @@ export default function CreateCredential({
     return <GDriveMain />;
   }
 
-  const credentialTemplate: CredentialFieldValues =
-    CREDENTIAL_TEMPLATES[sourceType];
-  const validationSchema = createValidationSchema(credentialTemplate);
+  const spec = getCredentialSpec(sourceType);
+  if (!spec) {
+    return null;
+  }
+  const validationSchema = createValidationSchema(spec);
 
-  // Set initial auth method for templates with multiple auth methods
-  const templateWithAuth =
-    credentialTemplate as CredentialTemplateWithAuth<CredentialFieldValues>;
-  const initialAuthMethod =
-    templateWithAuth?.authMethods?.[0]?.value || undefined;
+  // A spec with auth methods starts on its first one.
+  const initialAuthMethod = spec.methods?.[0]?.value;
 
   return (
     <Formik<CreateCredentialFormValues>
       initialValues={{
+        ...initialCredentialValues(spec),
         is_public: isGlobalHolder || !businessTier,
         groups: [],
         ...(initialAuthMethod && {
@@ -320,7 +317,8 @@ export default function CreateCredential({
           <Form className="w-full">
             <Section alignItems="stretch" gap={4}>
               <CredentialFieldsRenderer
-                credentialTemplate={credentialTemplate}
+                source={sourceType}
+                spec={spec}
                 authMethod={authMethod || initialAuthMethod}
                 setAuthMethod={setAuthMethod}
               />

@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useMessages } from "next-intl";
+import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { adminDeleteCredential, deleteCredential } from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
   getCredentialCreationMethods,
+  getCredentialSpec,
   shouldRedirectToOAuth,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
@@ -27,7 +27,6 @@ import {
 import type {
   AnyCredential,
   Credential,
-  CredentialFieldValues,
   CredentialSetup,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
@@ -46,23 +45,35 @@ export interface CredentialFieldCopy {
   description?: string;
 }
 
-function hasOwnKey<T extends object>(
-  object: T,
-  key: string
-): key is Extract<keyof T, string> {
-  return Object.prototype.hasOwnProperty.call(object, key);
-}
-
 /**
- * Looks up a credential field's title and hint in the message catalog
- * (`admin.credentials.fields.<key>`), keyed by the field's credential key.
- * A key the catalog does not list yet falls back to a title read from the
- * key itself, so a new connector's fields never render blank.
+ * Looks up a credential field's title and hint from the source's spec. A key
+ * the spec does not list (a stored key of an older credential) falls back to
+ * a title read from the key itself, so no field renders blank.
  */
-export function useCredentialFieldCopy(): (key: string) => CredentialFieldCopy {
-  const fields = useMessages().admin.credentials.fields;
-  return (key) =>
-    hasOwnKey(fields, key) ? fields[key] : { title: toTitleCase(key) };
+export function useCredentialFieldCopy(
+  source: ValidSources
+): (key: string) => CredentialFieldCopy {
+  const t = useTranslations("admin.credentials");
+  const spec = getCredentialSpec(source);
+  return (key) => {
+    const field = spec?.fields[key];
+    if (!spec || !field) {
+      return {
+        title:
+          key === "authentication_method"
+            ? t("displayNames.authenticationMethod")
+            : toTitleCase(key),
+      };
+    }
+    return {
+      title: t(`displayNames.${field.displayName}`, {
+        source: spec.brandName,
+      }),
+      description: field.hint
+        ? t(`hints.${field.hint.key}`, field.hint.values)
+        : undefined,
+    };
+  };
 }
 
 /**
@@ -183,9 +194,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
 
   const displayName = getSourceDisplayName(sourceType) || sourceType;
   const methods = getCredentialCreationMethods(oauthDetails);
-  const template = CREDENTIAL_TEMPLATES[sourceType] as
-    | CredentialFieldValues
-    | undefined;
+  const spec = getCredentialSpec(sourceType);
 
   // Two gates used to be kept apart and could disagree: the source list and
   // the source's own metadata flag. A source has to pass both.
@@ -290,7 +299,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     isLoading,
     methods,
     namesMethods: methods.length > 1,
-    template,
+    spec,
     canAuthorize,
     openMethod,
     open,

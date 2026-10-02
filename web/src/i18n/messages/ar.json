@@ -3270,342 +3270,88 @@
           "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
         }
       },
-      "fields": {
-        "access_key_id": {
-          "title": "معرّف مفتاح الوصول إلى GCS"
-        },
-        "account_id": {
-          "title": "معرّف حساب R2"
-        },
-        "asana_api_token_secret": {
-          "title": "رمز API لـ Asana"
-        },
-        "authentication_method": {
-          "title": "طريقة المصادقة"
-        },
-        "aws_access_key_id": {
-          "title": "معرّف مفتاح الوصول إلى AWS"
-        },
-        "aws_role_arn": {
-          "title": "ARN لدور AWS"
-        },
-        "aws_secret_access_key": {
-          "title": "مفتاح الوصول السري إلى AWS"
-        },
-        "axero_api_token": {
-          "title": "رمز API لـ Axero"
-        },
-        "base_url": {
-          "title": "عنوان URL الأساسي لـ Axero"
-        },
-        "bitbucket_api_token": {
-          "title": "رمز API لـ Bitbucket"
-        },
-        "bitbucket_email": {
-          "title": "بريد حساب Bitbucket الإلكتروني"
-        },
-        "bookstack_api_token_id": {
-          "title": "معرّف رمز API لـ Bookstack"
-        },
-        "bookstack_api_token_secret": {
-          "title": "السر الخاص برمز API لـ Bookstack"
-        },
-        "bookstack_base_url": {
-          "title": "عنوان URL الأساسي لـ Bookstack"
-        },
-        "box_client_id": {
-          "title": "معرّف عميل Box"
-        },
-        "box_client_secret": {
-          "title": "سر عميل Box"
-        },
-        "box_enterprise_id": {
-          "title": "معرّف مؤسسة Box"
-        },
-        "box_user_email": {
-          "description": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
-          "title": "بريد مستخدم Box الإلكتروني"
-        },
-        "braintrust_api_key": {
-          "title": "مفتاح API لـ Braintrust"
-        },
-        "canvas_access_token": {
-          "title": "رمز الوصول إلى Canvas"
-        },
-        "clickup_api_token": {
-          "title": "رمز API لـ ClickUp"
-        },
-        "clickup_team_id": {
-          "title": "معرّف فريق ClickUp"
-        },
-        "coda_bearer_token": {
-          "title": "رمز Bearer لـ Coda"
-        },
-        "confluence_access_token": {
-          "title": "رمز الوصول إلى Confluence"
-        },
-        "confluence_username": {
-          "title": "اسم مستخدم Confluence"
-        },
-        "discord_bot_token": {
-          "title": "رمز بوت Discord"
-        },
-        "discourse_api_key": {
-          "title": "مفتاح API لـ Discourse"
-        },
-        "discourse_api_username": {
-          "title": "اسم مستخدم API لـ Discourse"
-        },
-        "document360_api_token": {
-          "title": "رمز API لـ Document360"
-        },
-        "dropbox_access_token": {
-          "title": "مفتاح API لـ Dropbox"
-        },
-        "drupal_wiki_api_token": {
-          "title": "رمز الوصول الشخصي لـ Drupal Wiki"
-        },
-        "fireflies_api_key": {
-          "title": "مفتاح API لـ Fireflies"
-        },
-        "freshdesk_api_key": {
-          "title": "مفتاح API لـ Freshdesk"
-        },
-        "freshdesk_domain": {
-          "title": "نطاق Freshdesk"
-        },
-        "gitbook_api_key": {
-          "title": "مفتاح API لـ GitBook"
-        },
-        "gitbook_space_id": {
-          "title": "معرّف مساحة GitBook"
-        },
-        "github_access_token": {
-          "title": "رمز الوصول إلى GitHub"
-        },
-        "github_base_url": {
-          "description": "اختياري. حدد مضيف الخادم لديك، مثل https://github.example.com. اتركه فارغًا لاستخدام github.com.",
-          "title": "عنوان URL لخادم GitHub Enterprise"
-        },
-        "gitlab_access_token": {
-          "title": "رمز الوصول إلى GitLab"
-        },
-        "gitlab_url": {
-          "title": "عنوان URL لـ GitLab"
-        },
-        "gong_access_key": {
-          "title": "مفتاح الوصول إلى Gong"
-        },
-        "gong_access_key_secret": {
-          "title": "سر مفتاح الوصول إلى Gong"
-        },
-        "gong_base_url": {
-          "description": "اختياري. للبيانات خارج الولايات المتحدة، حدد مضيف منطقتك، مثل https://[region].api.gong.io.",
-          "title": "عنوان URL الأساسي لـ Gong API"
-        },
-        "google_primary_admin": {
-          "title": "بريد المسؤول الرئيسي"
-        },
-        "google_service_account_key": {
-          "title": "مفتاح حساب خدمة Google"
-        },
-        "google_tokens": {
-          "title": "رموز Google OAuth"
-        },
-        "guru_user": {
-          "title": "مستخدم Guru"
-        },
-        "guru_user_token": {
-          "title": "رمز مستخدم Guru"
-        },
-        "highspot_key": {
-          "title": "مفتاح Highspot"
-        },
-        "highspot_secret": {
-          "title": "سر Highspot"
-        },
-        "highspot_url": {
-          "title": "عنوان URL لـ Highspot"
-        },
-        "hubspot_access_token": {
-          "title": "رمز الوصول إلى HubSpot"
-        },
-        "imap_password": {
-          "title": "كلمة مرور IMAP"
-        },
-        "imap_username": {
-          "title": "اسم مستخدم IMAP"
-        },
-        "is_sandbox": {
-          "title": "بيئة تجريبية (Sandbox)"
-        },
-        "jira_api_token": {
-          "title": "رمز API أو رمز الوصول الشخصي"
-        },
-        "jira_user_email": {
-          "description": "مطلوب لـ Jira Cloud.",
-          "title": "بريد مستخدم Jira الإلكتروني"
-        },
-        "linear_api_key": {
-          "title": "مفتاح API لـ Linear"
-        },
-        "loopio_client_id": {
-          "title": "معرّف عميل Loopio"
-        },
-        "loopio_client_token": {
-          "title": "رمز عميل Loopio"
-        },
-        "loopio_subdomain": {
-          "title": "النطاق الفرعي لـ Loopio"
-        },
-        "lumapps_api_key": {
-          "title": "مفتاح API لـ LumApps"
-        },
-        "lumapps_application_id": {
-          "title": "معرّف تطبيق LumApps"
-        },
-        "lumapps_service_user": {
-          "description": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
-          "title": "بريد مستخدم الخدمة الإلكتروني"
-        },
-        "namespace": {
-          "title": "مساحة أسماء OCI"
-        },
-        "notion_integration_token": {
-          "title": "رمز تكامل Notion"
-        },
-        "onedrive_certificate_password": {
-          "title": "كلمة مرور شهادة OneDrive"
-        },
-        "onedrive_client_id": {
-          "title": "معرّف عميل OneDrive"
-        },
-        "onedrive_client_secret": {
-          "title": "سر عميل OneDrive"
-        },
-        "onedrive_directory_id": {
-          "title": "معرّف الدليل في OneDrive"
-        },
-        "onedrive_private_key": {
-          "title": "شهادة OneDrive"
-        },
-        "outline_api_token": {
-          "title": "رمز API لـ Outline"
-        },
-        "outline_base_url": {
-          "description": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
-          "title": "عنوان URL الأساسي لـ Outline"
-        },
-        "outlook_certificate_password": {
-          "title": "كلمة مرور شهادة Microsoft Outlook"
-        },
-        "outlook_client_id": {
-          "title": "معرّف عميل Microsoft Outlook"
-        },
-        "outlook_client_secret": {
-          "title": "سر عميل Microsoft Outlook"
-        },
-        "outlook_directory_id": {
-          "title": "معرّف الدليل في Microsoft Outlook"
-        },
-        "outlook_private_key": {
-          "description": "ملف PFX.",
-          "title": "المفتاح الخاص لـ Microsoft Outlook"
-        },
-        "portal_id": {
-          "title": "معرّف بوابة Document360"
-        },
-        "productboard_access_token": {
-          "title": "رمز الوصول إلى Productboard"
-        },
-        "r2_access_key_id": {
-          "title": "معرّف مفتاح الوصول إلى R2"
-        },
-        "r2_secret_access_key": {
-          "title": "مفتاح الوصول السري إلى R2"
-        },
-        "region": {
-          "title": "منطقة OCI"
-        },
-        "secret_access_key": {
-          "title": "مفتاح الوصول السري إلى GCS"
-        },
-        "sf_password": {
-          "title": "كلمة مرور Salesforce"
-        },
-        "sf_security_token": {
-          "title": "رمز الأمان لـ Salesforce"
-        },
-        "sf_username": {
-          "title": "اسم مستخدم Salesforce"
-        },
-        "slab_bot_token": {
-          "title": "رمز بوت Slab"
-        },
-        "slack_bot_token": {
-          "title": "رمز بوت Slack"
-        },
-        "sp_certificate_password": {
-          "title": "كلمة مرور شهادة SharePoint"
-        },
-        "sp_client_id": {
-          "title": "معرّف عميل SharePoint"
-        },
-        "sp_client_secret": {
-          "title": "سر عميل SharePoint"
-        },
-        "sp_directory_id": {
-          "title": "معرّف الدليل في SharePoint"
-        },
-        "sp_private_key": {
-          "title": "المفتاح الخاص لـ SharePoint"
-        },
-        "teams_certificate_password": {
-          "title": "كلمة مرور شهادة Microsoft Teams"
-        },
-        "teams_client_id": {
-          "title": "معرّف عميل Microsoft Teams"
-        },
-        "teams_client_secret": {
-          "title": "سر عميل Microsoft Teams"
-        },
-        "teams_directory_id": {
-          "title": "معرّف الدليل في Microsoft Teams"
-        },
-        "teams_private_key": {
-          "description": "ملف PFX.",
-          "title": "المفتاح الخاص لـ Microsoft Teams"
-        },
-        "testrail_api_key": {
-          "title": "مفتاح API لـ TestRail"
-        },
-        "testrail_base_url": {
-          "description": "مثل https://yourcompany.testrail.io.",
-          "title": "عنوان URL الأساسي لـ TestRail"
-        },
-        "testrail_username": {
-          "title": "اسم مستخدم TestRail أو بريده الإلكتروني"
-        },
-        "zendesk_email": {
-          "title": "بريد Zendesk الإلكتروني"
-        },
-        "zendesk_subdomain": {
-          "title": "النطاق الفرعي لـ Zendesk"
-        },
-        "zendesk_token": {
-          "title": "رمز Zendesk"
-        },
-        "zoom_account_id": {
-          "title": "معرّف حساب Zoom"
-        },
-        "zoom_client_id": {
-          "title": "معرّف عميل Zoom"
-        },
-        "zoom_client_secret": {
-          "title": "سر عميل Zoom"
-        },
-        "zuliprc_content": {
-          "title": "محتوى Zuliprc"
+      "displayNames": {
+        "accessKeyId": "معرّف مفتاح الوصول إلى {source}",
+        "secretAccessKey": "مفتاح الوصول السري إلى {source}",
+        "accountId": "معرّف حساب {source}",
+        "apiKey": "مفتاح API لـ {source}",
+        "apiToken": "رمز API لـ {source}",
+        "accessToken": "رمز الوصول إلى {source}",
+        "clientId": "معرّف عميل {source}",
+        "clientSecret": "سر عميل {source}",
+        "clientToken": "رمز عميل {source}",
+        "directoryId": "معرّف الدليل في {source}",
+        "certificatePassword": "كلمة مرور شهادة {source}",
+        "privateKey": "المفتاح الخاص لـ {source}",
+        "certificate": "شهادة {source}",
+        "baseUrl": "عنوان URL الأساسي لـ {source}",
+        "apiBaseUrl": "عنوان URL الأساسي لـ {source} API",
+        "url": "عنوان URL لـ {source}",
+        "enterpriseServerUrl": "عنوان URL لخادم {source} Enterprise",
+        "botToken": "رمز بوت {source}",
+        "username": "اسم مستخدم {source}",
+        "apiUsername": "اسم مستخدم API لـ {source}",
+        "usernameOrEmail": "اسم مستخدم {source} أو بريده الإلكتروني",
+        "user": "مستخدم {source}",
+        "userToken": "رمز مستخدم {source}",
+        "userEmail": "بريد مستخدم {source} الإلكتروني",
+        "email": "بريد {source} الإلكتروني",
+        "accountEmail": "بريد حساب {source} الإلكتروني",
+        "password": "كلمة مرور {source}",
+        "subdomain": "النطاق الفرعي لـ {source}",
+        "domain": "نطاق {source}",
+        "enterpriseId": "معرّف مؤسسة {source}",
+        "teamId": "معرّف فريق {source}",
+        "applicationId": "معرّف تطبيق {source}",
+        "apiTokenId": "معرّف رمز API لـ {source}",
+        "apiTokenSecret": "السر الخاص برمز API لـ {source}",
+        "securityToken": "رمز الأمان لـ {source}",
+        "integrationToken": "رمز تكامل {source}",
+        "bearerToken": "رمز Bearer لـ {source}",
+        "accessKey": "مفتاح الوصول إلى {source}",
+        "accessKeySecret": "سر مفتاح الوصول إلى {source}",
+        "key": "مفتاح {source}",
+        "secret": "سر {source}",
+        "roleArn": "ARN لدور {source}",
+        "namespace": "مساحة أسماء {source}",
+        "region": "منطقة {source}",
+        "portalId": "معرّف بوابة {source}",
+        "token": "رمز {source}",
+        "personalAccessToken": "رمز الوصول الشخصي لـ {source}",
+        "oauthTokens": "رموز {source} OAuth",
+        "isSandbox": "بيئة تجريبية (Sandbox)",
+        "apiOrPersonalAccessToken": "رمز API أو رمز الوصول الشخصي",
+        "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
+        "zuliprcContent": "محتوى Zuliprc",
+        "authenticationMethod": "طريقة المصادقة"
+      },
+      "hints": {
+        "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
+        "githubBaseUrl": "اختياري. حدد مضيف الخادم لديك، مثل https://github.example.com. اتركه فارغًا لاستخدام github.com.",
+        "gongBaseUrl": "اختياري. للبيانات خارج الولايات المتحدة، حدد مضيف منطقتك، مثل https://[region].api.gong.io.",
+        "jiraUserEmail": "مطلوب لـ Jira Cloud.",
+        "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
+        "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
+        "pfxFile": "ملف PFX.",
+        "testrailBaseUrl": "مثل https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "سر العميل",
+          "certificateAuthentication": "المصادقة بالشهادة",
+          "certificate": "الشهادة",
+          "accessKeyAndSecret": "مفتاح الوصول والسر",
+          "iamRole": "دور IAM",
+          "assumeRole": "تولّي الدور"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint سر العميل للمصادقة. ستحتاج إلى تقديم معرّف العميل وسر العميل.",
+          "sharepointCertificate": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint شهادة للمصادقة. ستحتاج إلى تقديم معرّف العميل ومعرّف الدليل وكلمة مرور الشهادة وبيانات PFX.",
+          "teamsClientSecret": "يسجّل الموصل الدخول باستخدام سر العميل الخاص بتسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل والسر. رسائل القنوات وأعضاؤها فقط: يرفض SharePoint السر، لذا يتطلب خيار تضمين المرفقات استخدام الشهادة.",
+          "teamsCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها. مطلوب لخيار تضمين المرفقات، الذي يقرأ ملفات القنوات وقرّاءها من SharePoint.",
+          "outlookClientSecret": "يسجّل الموصل الدخول باستخدام سر العميل الخاص بتسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل والسر.",
+          "outlookCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها.",
+          "s3AssumeRole": "إذا اخترت هذا الوضع، فسيتولّى مثيل Amazon EC2 دوره الحالي للوصول إلى S3. لا حاجة إلى بيانات اعتماد إضافية."
         }
       },
       "modal": {

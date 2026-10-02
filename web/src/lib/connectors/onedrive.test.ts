@@ -1,10 +1,10 @@
 import { connectorConfigs } from "@/lib/connectors/connectors";
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
-  getFileTypeDefinitionForField,
 } from "@/lib/connectors/utils";
+import { getCredentialFileType } from "@/lib/credentials/utils";
 import { FileTypeCategory, OneDriveScope } from "@/lib/connectors/types";
 import { getSourceDocLink, getSourceMetadata } from "@/lib/sources";
 import {
@@ -16,28 +16,25 @@ const ONE_DRIVE_USERS_REQUIRED = "Add at least one user for Specific scope";
 
 describe("OneDrive connector metadata", () => {
   it("defines both app-only credential methods", () => {
-    expect(CREDENTIAL_TEMPLATES[ValidSources.OneDrive]).toMatchObject({
-      authentication_method: "client_secret",
-      authMethods: [
-        {
-          value: "client_secret",
-          fields: {
-            onedrive_client_id: "",
-            onedrive_directory_id: "",
-            onedrive_client_secret: "",
-          },
-        },
-        {
-          value: "certificate",
-          fields: {
-            onedrive_client_id: "",
-            onedrive_directory_id: "",
-            onedrive_certificate_password: "",
-            onedrive_private_key: null,
-          },
-        },
-      ],
-    });
+    expect(CREDENTIAL_SPECS[ValidSources.OneDrive].methods).toMatchObject([
+      {
+        value: "client_secret",
+        fields: [
+          "onedrive_client_id",
+          "onedrive_directory_id",
+          "onedrive_client_secret",
+        ],
+      },
+      {
+        value: "certificate",
+        fields: [
+          "onedrive_client_id",
+          "onedrive_directory_id",
+          "onedrive_certificate_password",
+          "onedrive_private_key",
+        ],
+      },
+    ]);
   });
 
   it("uses the OneDrive logo, PKCS12 upload type, and sync controls", () => {
@@ -47,7 +44,7 @@ describe("OneDrive connector metadata", () => {
     expect(getSourceDocLink(ValidSources.OneDrive)).toBe(
       "https://docs.onyx.app/admins/connectors/official/onedrive"
     );
-    expect(getFileTypeDefinitionForField("onedrive_private_key")).toBe(
+    expect(getCredentialFileType("onedrive_private_key")).toBe(
       FileTypeCategory.ONEDRIVE_PFX_FILE
     );
     expect(validAutoSyncSources).toContain(ValidSources.OneDrive);

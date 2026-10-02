@@ -1,5 +1,5 @@
 import type { SWRResponse } from "swr";
-import type { CredentialFieldValues } from "@/lib/credentials/types/fields";
+import type { CredentialSpec } from "@/lib/credentials/types/spec";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
 
@@ -19,26 +19,6 @@ export interface OAuthDetails {
   oauth_enabled: boolean;
   supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
-}
-
-export interface AuthMethodOption<
-  TFields,
-  TAuthMethod extends string = string,
-> {
-  value: TAuthMethod;
-  label: string;
-  fields: TFields;
-  description?: string;
-  // UI-only: if true, hide/disable the "Auto Sync Permissions" access type when this auth is used
-  disablePermSync?: boolean;
-}
-
-export interface CredentialTemplateWithAuth<
-  TFields,
-  TAuthMethod extends string = string,
-> {
-  authentication_method?: TAuthMethod;
-  authMethods?: AuthMethodOption<Partial<TFields>, TAuthMethod>[];
 }
 
 export interface CredentialBase<T> {
@@ -107,8 +87,8 @@ export interface CredentialSetup {
   methods: CredentialCreationMethod[];
   /** True when there is more than one way in, so each needs naming. */
   namesMethods: boolean;
-  /** The source's credential field template, absent for a source with none. */
-  template: CredentialFieldValues | undefined;
+  /** The source's credential spec, null for a source with none. */
+  spec: CredentialSpec | null;
   /** Whether this deployment offers the hosted Authorize flow for the source. */
   canAuthorize: boolean;
   /** The method whose creation form is showing, if any. */

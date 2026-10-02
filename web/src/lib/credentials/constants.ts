@@ -1,399 +1,493 @@
-import { ValidSources } from "@/lib/connectors/types/source";
+import type { ValidSources } from "@/lib/connectors/types/source";
+import { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import type {
-  AirtableCredentialJson,
-  AsanaCredentialJson,
-  AxeroCredentialJson,
-  BitbucketCredentialJson,
-  BookstackCredentialJson,
-  BoxCredentialJson,
-  BraintrustCredentialJson,
-  CanvasCredentialJson,
-  ClickupCredentialJson,
-  CodaCredentialJson,
-  ConfluenceCredentialJson,
-  CredentialTemplateWithAuth,
-  DiscordCredentialJson,
-  DiscourseCredentialJson,
-  Document360CredentialJson,
-  DropboxCredentialJson,
-  DrupalWikiCredentialJson,
-  EgnyteCredentialJson,
-  FirefliesCredentialJson,
-  FreshdeskCredentialJson,
-  GCSCredentialJson,
-  GitbookCredentialJson,
-  GithubCredentialJson,
-  GitlabCredentialJson,
-  GmailCredentialJson,
-  GongCredentialJson,
-  GoogleDriveCredentialJson,
-  GuruCredentialJson,
-  HighspotCredentialJson,
-  HubSpotCredentialJson,
-  ImapCredentialJson,
-  JiraCredentialJson,
-  LinearCredentialJson,
-  LoopioCredentialJson,
-  LumAppsCredentialJson,
-  NotionCredentialJson,
-  OCICredentialJson,
-  OneDriveAuthenticationMethod,
-  OneDriveCredentialJson,
-  OutlineCredentialJson,
-  OutlookCredentialJson,
-  ProductboardCredentialJson,
-  R2CredentialJson,
-  S3CredentialJson,
-  SalesforceCredentialJson,
-  SharepointCredentialJson,
-  SlabCredentialJson,
-  SlackCredentialJson,
-  TeamsCredentialJson,
-  TestRailCredentialJson,
-  ZendeskCredentialJson,
-  ZoomCredentialJson,
-  ZulipCredentialJson,
+  CredentialDisplayName,
+  CredentialFieldOptions,
+  CredentialHint,
+  CredentialJsonOf,
+  CredentialMethodDescription,
+  CredentialMethodLabel,
+  CredentialSpec,
+  CredentialSpecFields,
+  CredentialTextKind,
+  DefinedCredentialSpec,
+  MethodsOf,
 } from "@/lib/credentials/types";
 
-// Gmail and Google Drive use dedicated credential UIs, so their templates are partial.
-type CredentialTemplateMap = Record<ValidSources, object | null> & {
-  github: GithubCredentialJson;
-  gitlab: GitlabCredentialJson;
-  lumapps: LumAppsCredentialJson;
-  bitbucket: BitbucketCredentialJson;
-  slack: SlackCredentialJson;
-  bookstack: BookstackCredentialJson;
-  outline: OutlineCredentialJson;
-  confluence: ConfluenceCredentialJson;
-  jira: JiraCredentialJson;
-  productboard: ProductboardCredentialJson;
-  slab: SlabCredentialJson;
-  coda: CodaCredentialJson;
-  notion: NotionCredentialJson;
-  guru: GuruCredentialJson;
-  gong: GongCredentialJson;
-  zulip: ZulipCredentialJson;
-  linear: LinearCredentialJson;
-  hubspot: HubSpotCredentialJson;
-  document360: Document360CredentialJson;
-  loopio: LoopioCredentialJson;
-  box: BoxCredentialJson;
-  dropbox: DropboxCredentialJson;
-  salesforce: SalesforceCredentialJson;
-  sharepoint: CredentialTemplateWithAuth<SharepointCredentialJson>;
-  onedrive: CredentialTemplateWithAuth<
-    OneDriveCredentialJson,
-    OneDriveAuthenticationMethod
+/** Checks that each method only names fields the spec declares. */
+function defineCredentialSpec<
+  const TFields extends CredentialSpecFields,
+  const TMethods extends MethodsOf<TFields> | undefined = undefined,
+>(spec: {
+  brandName: string;
+  fields: TFields;
+  methods?: TMethods;
+}): DefinedCredentialSpec<TFields, TMethods> {
+  // SAFETY: an omitted `methods` leaves TMethods at its `undefined` default.
+  return { ...spec, methods: spec.methods as TMethods };
+}
+
+// ---------------------------------------------------------------------------
+// Field builders
+// ---------------------------------------------------------------------------
+
+function textField<
+  const TKind extends CredentialTextKind,
+  const TOptions extends CredentialFieldOptions = {},
+>(kind: TKind, displayName: CredentialDisplayName, options?: TOptions) {
+  return Object.assign({ kind, displayName }, options);
+}
+
+function text<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("text", displayName, options);
+}
+
+function email<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("email", displayName, options);
+}
+
+function url<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("url", displayName, options);
+}
+
+function secret<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("secret", displayName, options);
+}
+
+function toggle(displayName: CredentialDisplayName) {
+  return { kind: "toggle", displayName } as const;
+}
+
+function file<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  fileType: FileTypeCategory,
+  options?: TOptions
+) {
+  return Object.assign(
+    { kind: "file" as const, displayName, fileType },
+    options
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Family factories
+// ---------------------------------------------------------------------------
+
+type MicrosoftAppFields<TPrefix extends string> = {
+  [K in `${TPrefix}_client_id` | `${TPrefix}_directory_id`]: ReturnType<
+    typeof text
   >;
-  asana: AsanaCredentialJson;
-  teams: CredentialTemplateWithAuth<TeamsCredentialJson>;
-  outlook: CredentialTemplateWithAuth<OutlookCredentialJson>;
-  zendesk: ZendeskCredentialJson;
-  discourse: DiscourseCredentialJson;
-  axero: AxeroCredentialJson;
-  clickup: ClickupCredentialJson;
-  s3: CredentialTemplateWithAuth<S3CredentialJson>;
-  r2: R2CredentialJson;
-  google_cloud_storage: GCSCredentialJson;
-  oci_storage: OCICredentialJson;
-  freshdesk: FreshdeskCredentialJson;
-  fireflies: FirefliesCredentialJson;
-  zoom: ZoomCredentialJson;
-  braintrust: BraintrustCredentialJson;
-  canvas: CanvasCredentialJson;
-  egnyte: EgnyteCredentialJson;
-  airtable: AirtableCredentialJson;
-  drupal_wiki: DrupalWikiCredentialJson;
-  discord: DiscordCredentialJson;
-  google_drive: Partial<GoogleDriveCredentialJson>;
-  gmail: Partial<GmailCredentialJson>;
-  gitbook: GitbookCredentialJson;
-  highspot: HighspotCredentialJson;
-  imap: ImapCredentialJson;
-  testrail: TestRailCredentialJson;
+} & {
+  [K in
+    | `${TPrefix}_client_secret`
+    | `${TPrefix}_certificate_password`]: ReturnType<typeof secret>;
+} & {
+  [K in `${TPrefix}_private_key`]: ReturnType<typeof file>;
 };
 
-export const CREDENTIAL_TEMPLATES: Record<ValidSources, any> = {
-  github: {
-    github_access_token: "",
-    github_base_url: null,
-  },
-  gitlab: {
-    gitlab_url: "",
-    gitlab_access_token: "",
-  },
-  lumapps: {
-    lumapps_application_id: "",
-    lumapps_api_key: "",
-    lumapps_service_user: "",
-  },
-  bitbucket: {
-    bitbucket_email: "",
-    bitbucket_api_token: "",
-  },
-  slack: { slack_bot_token: "" },
-  bookstack: {
-    bookstack_base_url: "",
-    bookstack_api_token_id: "",
-    bookstack_api_token_secret: "",
-  },
-  outline: {
-    outline_base_url: "",
-    outline_api_token: "",
-  },
-  confluence: {
-    confluence_username: "",
-    confluence_access_token: "",
-  },
-  jira: {
-    jira_user_email: null,
-    jira_api_token: "",
-  },
-  productboard: { productboard_access_token: "" },
-  slab: { slab_bot_token: "" },
-  coda: { coda_bearer_token: "" },
-  notion: { notion_integration_token: "" },
-  guru: { guru_user: "", guru_user_token: "" },
-  gong: {
-    gong_access_key: "",
-    gong_access_key_secret: "",
-    gong_base_url: null,
-  },
-  zulip: { zuliprc_content: "" },
-  linear: { linear_api_key: "" },
-  hubspot: { hubspot_access_token: "" },
-  document360: {
-    portal_id: "",
-    document360_api_token: "",
-  },
-  loopio: {
-    loopio_subdomain: "",
-    loopio_client_id: "",
-    loopio_client_token: "",
-  },
-  box: {
-    box_client_id: "",
-    box_client_secret: "",
-    box_enterprise_id: "",
-    box_user_email: null,
-  },
-  dropbox: { dropbox_access_token: "" },
-  salesforce: {
-    sf_username: "",
-    sf_password: "",
-    sf_security_token: "",
-    is_sandbox: false,
-  },
-  // SAFETY: the certificate template seeds sp_private_key with null, which TypedFile does not allow.
-  sharepoint: {
-    authentication_method: "client_credentials",
-    authMethods: [
-      {
-        value: "client_secret",
-        label: "Client Secret",
-        fields: {
-          sp_client_id: "",
-          sp_client_secret: "",
-          sp_directory_id: "",
-        },
-        description:
-          "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
-        disablePermSync: true,
-      },
-      {
-        value: "certificate",
-        label: "Certificate Authentication",
-        fields: {
-          sp_client_id: "",
-          sp_directory_id: "",
-          sp_certificate_password: "",
-          sp_private_key: null,
-        },
-        description:
-          "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
-        disablePermSync: false,
-      },
-    ],
-  } as CredentialTemplateWithAuth<SharepointCredentialJson>,
-  onedrive: {
-    authentication_method: "client_secret",
-    authMethods: [
-      {
-        value: "client_secret",
-        label: "Client Secret",
-        fields: {
-          onedrive_client_id: "",
-          onedrive_directory_id: "",
-          onedrive_client_secret: "",
-        },
-      },
-      {
-        value: "certificate",
-        label: "Certificate",
-        fields: {
-          onedrive_client_id: "",
-          onedrive_directory_id: "",
-          onedrive_certificate_password: "",
-          onedrive_private_key: null,
-        },
-      },
-    ],
-  } satisfies CredentialTemplateWithAuth<
-    OneDriveCredentialJson,
-    OneDriveAuthenticationMethod
-  >,
-  asana: {
-    asana_api_token_secret: "",
-  },
-  // SAFETY: the certificate template seeds teams_private_key with null, which TypedFile does not allow.
-  teams: {
-    authentication_method: "client_secret",
-    authMethods: [
-      {
-        value: "client_secret",
-        label: "Client Secret",
-        fields: {
-          teams_client_id: "",
-          teams_client_secret: "",
-          teams_directory_id: "",
-        },
-        description:
-          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Channel messages and members only: SharePoint refuses a secret, so Include Attachments needs the certificate option.",
-      },
-      {
-        value: "certificate",
-        label: "Certificate Authentication",
-        fields: {
-          teams_client_id: "",
-          teams_directory_id: "",
-          teams_certificate_password: "",
-          teams_private_key: null,
-        },
-        description:
-          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
-      },
-    ],
-  } as CredentialTemplateWithAuth<TeamsCredentialJson>,
-  // SAFETY: the certificate template seeds outlook_private_key with null, which TypedFile does not allow.
-  outlook: {
-    authentication_method: "client_secret",
-    authMethods: [
-      {
-        value: "client_secret",
-        label: "Client Secret",
-        fields: {
-          outlook_client_id: "",
-          outlook_client_secret: "",
-          outlook_directory_id: "",
-        },
-        description:
-          "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
-      },
-      {
-        value: "certificate",
-        label: "Certificate Authentication",
-        fields: {
-          outlook_client_id: "",
-          outlook_directory_id: "",
-          outlook_certificate_password: "",
-          outlook_private_key: null,
-        },
-        description:
-          "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
-      },
-    ],
-  } as CredentialTemplateWithAuth<OutlookCredentialJson>,
-  zendesk: {
-    zendesk_subdomain: "",
-    zendesk_email: "",
-    zendesk_token: "",
-  },
-  discourse: {
-    discourse_api_key: "",
-    discourse_api_username: "",
-  },
-  axero: {
-    base_url: "",
-    axero_api_token: "",
-  },
-  clickup: {
-    clickup_api_token: "",
-    clickup_team_id: "",
-  },
+interface MicrosoftAppSpecOptions {
+  brandName: string;
+  fileType: FileTypeCategory;
+  privateKeyDisplayName: CredentialDisplayName;
+  privateKeyHint?: CredentialHint;
+  certificateLabel: CredentialMethodLabel;
+  descriptions?: {
+    clientSecret: CredentialMethodDescription;
+    certificate: CredentialMethodDescription;
+  };
+  /** A client secret cannot read permissions, so it hides Auto Sync. */
+  clientSecretDisablesPermSync?: boolean;
+}
 
-  s3: {
-    authentication_method: "access_key",
-    authMethods: [
+/**
+ * A Microsoft app registration (SharePoint, OneDrive, Outlook, Teams): a
+ * client id and directory id, plus either a client secret or a PFX
+ * certificate. Keys take the source's prefix, like `sp_client_id`.
+ */
+function microsoftAppSpec<const TPrefix extends string>(
+  prefix: TPrefix,
+  options: MicrosoftAppSpecOptions
+): DefinedCredentialSpec<
+  MicrosoftAppFields<TPrefix>,
+  MethodsOf<MicrosoftAppFields<TPrefix>>
+> {
+  const key = <TName extends string>(name: TName) =>
+    `${prefix}_${name}` as const;
+  // SAFETY: computed keys widen to `string`; these are exactly the keys of
+  // MicrosoftAppFields<TPrefix>.
+  const fields = {
+    [key("client_id")]: text("clientId"),
+    [key("directory_id")]: text("directoryId"),
+    [key("client_secret")]: secret("clientSecret"),
+    [key("certificate_password")]: secret("certificatePassword"),
+    [key("private_key")]: file(
+      options.privateKeyDisplayName,
+      options.fileType,
+      options.privateKeyHint ? { hint: options.privateKeyHint } : {}
+    ),
+  } as MicrosoftAppFields<TPrefix>;
+
+  return {
+    brandName: options.brandName,
+    fields,
+    methods: [
+      {
+        value: "client_secret",
+        label: "clientSecret",
+        description: options.descriptions?.clientSecret,
+        fields: [key("client_id"), key("directory_id"), key("client_secret")],
+        disablePermSync: options.clientSecretDisablesPermSync,
+      },
+      {
+        value: "certificate",
+        label: options.certificateLabel,
+        description: options.descriptions?.certificate,
+        fields: [
+          key("client_id"),
+          key("directory_id"),
+          key("certificate_password"),
+          key("private_key"),
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * The credential each source asks for. Field keys are the exact
+ * `credential_json` keys the backend reads. A source with no credential, or
+ * one whose credential is set up elsewhere, maps to `null`.
+ */
+export const CREDENTIAL_SPECS = {
+  github: defineCredentialSpec({
+    brandName: "GitHub",
+    fields: {
+      github_access_token: secret("accessToken"),
+      github_base_url: url("enterpriseServerUrl", {
+        optional: true,
+        hint: { key: "githubBaseUrl" },
+      }),
+    },
+  }),
+  gitlab: defineCredentialSpec({
+    brandName: "GitLab",
+    fields: {
+      gitlab_url: url("url"),
+      gitlab_access_token: secret("accessToken"),
+    },
+  }),
+  lumapps: defineCredentialSpec({
+    brandName: "LumApps",
+    fields: {
+      lumapps_application_id: text("applicationId"),
+      lumapps_api_key: secret("apiKey"),
+      lumapps_service_user: email("serviceUserEmail", {
+        hint: { key: "lumappsServiceUser" },
+      }),
+    },
+  }),
+  bitbucket: defineCredentialSpec({
+    brandName: "Bitbucket",
+    fields: {
+      bitbucket_email: email("accountEmail"),
+      bitbucket_api_token: secret("apiToken"),
+    },
+  }),
+  slack: defineCredentialSpec({
+    brandName: "Slack",
+    fields: { slack_bot_token: secret("botToken") },
+  }),
+  bookstack: defineCredentialSpec({
+    brandName: "Bookstack",
+    fields: {
+      bookstack_base_url: url("baseUrl"),
+      bookstack_api_token_id: text("apiTokenId"),
+      bookstack_api_token_secret: secret("apiTokenSecret"),
+    },
+  }),
+  outline: defineCredentialSpec({
+    brandName: "Outline",
+    fields: {
+      outline_base_url: url("baseUrl", { hint: { key: "outlineBaseUrl" } }),
+      outline_api_token: secret("apiToken"),
+    },
+  }),
+  confluence: defineCredentialSpec({
+    brandName: "Confluence",
+    fields: {
+      confluence_username: text("username"),
+      confluence_access_token: secret("accessToken"),
+    },
+  }),
+  jira: defineCredentialSpec({
+    brandName: "Jira",
+    fields: {
+      jira_user_email: email("userEmail", {
+        optional: true,
+        hint: { key: "jiraUserEmail" },
+      }),
+      jira_api_token: secret("apiOrPersonalAccessToken"),
+    },
+  }),
+  productboard: defineCredentialSpec({
+    brandName: "Productboard",
+    fields: { productboard_access_token: secret("accessToken") },
+  }),
+  slab: defineCredentialSpec({
+    brandName: "Slab",
+    fields: { slab_bot_token: secret("botToken") },
+  }),
+  coda: defineCredentialSpec({
+    brandName: "Coda",
+    fields: { coda_bearer_token: secret("bearerToken") },
+  }),
+  notion: defineCredentialSpec({
+    brandName: "Notion",
+    fields: { notion_integration_token: secret("integrationToken") },
+  }),
+  guru: defineCredentialSpec({
+    brandName: "Guru",
+    fields: {
+      guru_user: text("user"),
+      guru_user_token: secret("userToken"),
+    },
+  }),
+  gong: defineCredentialSpec({
+    brandName: "Gong",
+    fields: {
+      gong_access_key: text("accessKey"),
+      gong_access_key_secret: secret("accessKeySecret"),
+      gong_base_url: url("apiBaseUrl", {
+        optional: true,
+        hint: { key: "gongBaseUrl" },
+      }),
+    },
+  }),
+  zulip: defineCredentialSpec({
+    brandName: "Zulip",
+    fields: { zuliprc_content: secret("zuliprcContent") },
+  }),
+  linear: defineCredentialSpec({
+    brandName: "Linear",
+    fields: { linear_api_key: secret("apiKey") },
+  }),
+  hubspot: defineCredentialSpec({
+    brandName: "HubSpot",
+    fields: { hubspot_access_token: secret("accessToken") },
+  }),
+  document360: defineCredentialSpec({
+    brandName: "Document360",
+    fields: {
+      portal_id: text("portalId"),
+      document360_api_token: secret("apiToken"),
+    },
+  }),
+  loopio: defineCredentialSpec({
+    brandName: "Loopio",
+    fields: {
+      loopio_subdomain: text("subdomain"),
+      loopio_client_id: text("clientId"),
+      loopio_client_token: secret("clientToken"),
+    },
+  }),
+  box: defineCredentialSpec({
+    brandName: "Box",
+    fields: {
+      box_client_id: text("clientId"),
+      box_client_secret: secret("clientSecret"),
+      box_enterprise_id: text("enterpriseId"),
+      box_user_email: email("userEmail", {
+        optional: true,
+        hint: { key: "boxUserEmail" },
+      }),
+    },
+  }),
+  dropbox: defineCredentialSpec({
+    brandName: "Dropbox",
+    fields: { dropbox_access_token: secret("apiKey") },
+  }),
+  salesforce: defineCredentialSpec({
+    brandName: "Salesforce",
+    fields: {
+      sf_username: text("username"),
+      sf_password: secret("password"),
+      sf_security_token: secret("securityToken"),
+      is_sandbox: toggle("isSandbox"),
+    },
+  }),
+  sharepoint: microsoftAppSpec("sp", {
+    brandName: "SharePoint",
+    fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
+    privateKeyDisplayName: "privateKey",
+    certificateLabel: "certificateAuthentication",
+    descriptions: {
+      clientSecret: "sharepointClientSecret",
+      certificate: "sharepointCertificate",
+    },
+    clientSecretDisablesPermSync: true,
+  }),
+  onedrive: microsoftAppSpec("onedrive", {
+    brandName: "OneDrive",
+    fileType: FileTypeCategory.ONEDRIVE_PFX_FILE,
+    privateKeyDisplayName: "certificate",
+    certificateLabel: "certificate",
+  }),
+  asana: defineCredentialSpec({
+    brandName: "Asana",
+    fields: { asana_api_token_secret: secret("apiToken") },
+  }),
+  // The same PFX rules apply to every Microsoft app registration.
+  teams: microsoftAppSpec("teams", {
+    brandName: "Microsoft Teams",
+    fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
+    privateKeyDisplayName: "privateKey",
+    privateKeyHint: { key: "pfxFile" },
+    certificateLabel: "certificateAuthentication",
+    descriptions: {
+      clientSecret: "teamsClientSecret",
+      certificate: "teamsCertificate",
+    },
+  }),
+  outlook: microsoftAppSpec("outlook", {
+    brandName: "Microsoft Outlook",
+    fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
+    privateKeyDisplayName: "privateKey",
+    privateKeyHint: { key: "pfxFile" },
+    certificateLabel: "certificateAuthentication",
+    descriptions: {
+      clientSecret: "outlookClientSecret",
+      certificate: "outlookCertificate",
+    },
+  }),
+  zendesk: defineCredentialSpec({
+    brandName: "Zendesk",
+    fields: {
+      zendesk_subdomain: text("subdomain"),
+      zendesk_email: email("email"),
+      zendesk_token: secret("token"),
+    },
+  }),
+  discourse: defineCredentialSpec({
+    brandName: "Discourse",
+    fields: {
+      discourse_api_key: secret("apiKey"),
+      discourse_api_username: text("apiUsername"),
+    },
+  }),
+  axero: defineCredentialSpec({
+    brandName: "Axero",
+    fields: {
+      base_url: url("baseUrl"),
+      axero_api_token: secret("apiToken"),
+    },
+  }),
+  clickup: defineCredentialSpec({
+    brandName: "ClickUp",
+    fields: {
+      clickup_api_token: secret("apiToken"),
+      clickup_team_id: text("teamId"),
+    },
+  }),
+  s3: defineCredentialSpec({
+    brandName: "AWS",
+    fields: {
+      aws_access_key_id: text("accessKeyId"),
+      aws_secret_access_key: secret("secretAccessKey"),
+      aws_role_arn: text("roleArn"),
+    },
+    methods: [
       {
         value: "access_key",
-        label: "Access Key and Secret",
-        fields: {
-          aws_access_key_id: "",
-          aws_secret_access_key: "",
-        },
-        disablePermSync: false,
+        label: "accessKeyAndSecret",
+        fields: ["aws_access_key_id", "aws_secret_access_key"],
       },
-      {
-        value: "iam_role",
-        label: "IAM Role",
-        fields: {
-          aws_role_arn: "",
-        },
-        disablePermSync: false,
-      },
+      { value: "iam_role", label: "iamRole", fields: ["aws_role_arn"] },
       {
         value: "assume_role",
-        label: "Assume Role",
-        fields: {},
-        description:
-          "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required.",
-        disablePermSync: false,
+        label: "assumeRole",
+        description: "s3AssumeRole",
+        fields: [],
       },
     ],
-  },
-  r2: {
-    account_id: "",
-    r2_access_key_id: "",
-    r2_secret_access_key: "",
-  },
-  google_cloud_storage: {
-    access_key_id: "",
-    secret_access_key: "",
-  },
-  oci_storage: {
-    namespace: "",
-    region: "",
-    access_key_id: "",
-    secret_access_key: "",
-  },
-  freshdesk: {
-    freshdesk_domain: "",
-    freshdesk_api_key: "",
-  },
-  fireflies: {
-    fireflies_api_key: "",
-  },
-  zoom: {
-    zoom_account_id: "",
-    zoom_client_id: "",
-    zoom_client_secret: "",
-  },
-  braintrust: {
-    braintrust_api_key: "",
-  },
-  canvas: {
-    canvas_access_token: "",
-  },
-  egnyte: {
-    domain: "",
-    access_token: "",
-  },
-  airtable: {
-    airtable_access_token: "",
-  },
-  drupal_wiki: {
-    drupal_wiki_api_token: "",
-  },
+  }),
+  r2: defineCredentialSpec({
+    brandName: "R2",
+    fields: {
+      account_id: text("accountId"),
+      r2_access_key_id: text("accessKeyId"),
+      r2_secret_access_key: secret("secretAccessKey"),
+    },
+  }),
+  google_cloud_storage: defineCredentialSpec({
+    brandName: "GCS",
+    fields: {
+      access_key_id: text("accessKeyId"),
+      secret_access_key: secret("secretAccessKey"),
+    },
+  }),
+  oci_storage: defineCredentialSpec({
+    brandName: "OCI",
+    fields: {
+      namespace: text("namespace"),
+      region: text("region"),
+      access_key_id: text("accessKeyId"),
+      secret_access_key: secret("secretAccessKey"),
+    },
+  }),
+  freshdesk: defineCredentialSpec({
+    brandName: "Freshdesk",
+    fields: {
+      freshdesk_domain: text("domain"),
+      freshdesk_api_key: secret("apiKey"),
+    },
+  }),
+  fireflies: defineCredentialSpec({
+    brandName: "Fireflies",
+    fields: { fireflies_api_key: secret("apiKey") },
+  }),
+  zoom: defineCredentialSpec({
+    brandName: "Zoom",
+    fields: {
+      zoom_account_id: text("accountId"),
+      zoom_client_id: text("clientId"),
+      zoom_client_secret: secret("clientSecret"),
+    },
+  }),
+  braintrust: defineCredentialSpec({
+    brandName: "Braintrust",
+    fields: { braintrust_api_key: secret("apiKey") },
+  }),
+  canvas: defineCredentialSpec({
+    brandName: "Canvas",
+    fields: { canvas_access_token: secret("accessToken") },
+  }),
+  egnyte: defineCredentialSpec({
+    brandName: "Egnyte",
+    fields: {
+      domain: text("domain"),
+      access_token: secret("accessToken"),
+    },
+  }),
+  airtable: defineCredentialSpec({
+    brandName: "Airtable",
+    fields: { airtable_access_token: secret("accessToken") },
+  }),
+  drupal_wiki: defineCredentialSpec({
+    brandName: "Drupal Wiki",
+    fields: { drupal_wiki_api_token: secret("personalAccessToken") },
+  }),
   xenforo: null,
   google_sites: null,
   file: null,
@@ -405,26 +499,54 @@ export const CREDENTIAL_TEMPLATES: Record<ValidSources, any> = {
   not_applicable: null,
   ingestion_api: null,
   federated_slack: null,
-  discord: { discord_bot_token: "" },
+  discord: defineCredentialSpec({
+    brandName: "Discord",
+    fields: { discord_bot_token: secret("botToken") },
+  }),
+  // Gmail and Google Drive set up their credentials on their own pages.
+  google_drive: defineCredentialSpec({
+    brandName: "Google",
+    fields: { google_tokens: secret("oauthTokens") },
+  }),
+  gmail: defineCredentialSpec({
+    brandName: "Google",
+    fields: { google_tokens: secret("oauthTokens") },
+  }),
+  gitbook: defineCredentialSpec({
+    brandName: "GitBook",
+    fields: { gitbook_api_key: secret("apiKey") },
+  }),
+  highspot: defineCredentialSpec({
+    brandName: "Highspot",
+    fields: {
+      highspot_url: url("url"),
+      highspot_key: text("key"),
+      highspot_secret: secret("secret"),
+    },
+  }),
+  imap: defineCredentialSpec({
+    brandName: "IMAP",
+    fields: {
+      imap_username: text("username"),
+      imap_password: secret("password"),
+    },
+  }),
+  testrail: defineCredentialSpec({
+    brandName: "TestRail",
+    fields: {
+      testrail_base_url: url("baseUrl", { hint: { key: "testrailBaseUrl" } }),
+      testrail_username: text("usernameOrEmail"),
+      testrail_api_key: secret("apiKey"),
+    },
+  }),
+} as const satisfies Record<ValidSources, CredentialSpec | null>;
 
-  // NOTE: These are Special Cases
-  google_drive: { google_tokens: "" },
-  gmail: { google_tokens: "" },
-  gitbook: {
-    gitbook_api_key: "",
-  },
-  highspot: {
-    highspot_url: "",
-    highspot_key: "",
-    highspot_secret: "",
-  },
-  imap: {
-    imap_username: "",
-    imap_password: "",
-  },
-  testrail: {
-    testrail_base_url: "",
-    testrail_username: "",
-    testrail_api_key: "",
-  },
-} satisfies CredentialTemplateMap;
+/** The `credential_json` of one source, read from its spec. */
+export type SourceCredentialJson<
+  TSource extends keyof typeof CREDENTIAL_SPECS,
+> = CredentialJsonOf<(typeof CREDENTIAL_SPECS)[TSource]>;
+
+/** A source's spec, or null when it has no credential form. */
+export function getCredentialSpec(source: ValidSources): CredentialSpec | null {
+  return CREDENTIAL_SPECS[source];
+}

@@ -7,10 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
 import { SvgEdit } from "@opal/icons";
-import type {
-  ConfluenceCredentialJson,
-  Credential,
-} from "@/lib/credentials/types";
+import type { AnyCredential, Credential } from "@/lib/credentials/types";
 import type { Connector } from "@/lib/connectors/types";
 import {
   SvgArrowExchange,
@@ -164,7 +161,7 @@ export interface ModifyCredentialProps {
     accessType: AccessType
   ) => void;
   onSwitch?: (newCredential: Credential<any>) => void;
-  onEditCredential?: (credential: Credential<ConfluenceCredentialJson>) => void;
+  onEditCredential?: (credential: AnyCredential) => void;
   onDeleteCredential: (credential: Credential<any | null>) => void;
   onCreateNew?: () => void;
 }
@@ -234,8 +231,7 @@ export default function ModifyCredential({
           }}
           onEditCredential={
             onEditCredential
-              ? (credential: Credential<ConfluenceCredentialJson>) =>
-                  onEditCredential(credential)
+              ? (credential: AnyCredential) => onEditCredential(credential)
               : undefined
           }
           currentCredentialId={

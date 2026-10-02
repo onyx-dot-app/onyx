@@ -10,9 +10,9 @@ import type { Credential } from "@/lib/credentials/types";
 import {
   createEditingValidationSchema,
   createInitialValues,
+  getCredentialFileType,
   getEditableCredentialFields,
 } from "@/lib/credentials/utils";
-import { isTypedFileField } from "@/lib/connectors/utils";
 import { SvgCheckSquare, SvgTrash } from "@opal/icons";
 import type {
   CredentialFieldValues,
@@ -38,7 +38,7 @@ export default function EditCredential({
   onUpdate,
 }: EditCredentialProps) {
   const t = useTranslations("admin");
-  const fieldCopy = useCredentialFieldCopy();
+  const fieldCopy = useCredentialFieldCopy(sourceType);
   const editableCredentialFields = getEditableCredentialFields(
     credential,
     sourceType
@@ -85,7 +85,7 @@ export default function EditCredential({
             />
 
             {Object.entries(editableCredentialFields).map(([key, value]) =>
-              isTypedFileField(key) ? (
+              getCredentialFileType(key) !== null ? (
                 <TypedFileUploadFormField
                   key={key}
                   name={key}
