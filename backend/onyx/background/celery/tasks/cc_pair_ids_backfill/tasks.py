@@ -120,7 +120,7 @@ def run_cc_pair_ids_backfill(lock: RedisLock) -> bool:
         ):
             task_logger.info("cc_pair_ids backfill: waiting for the reindex port")
             return False
-        progress = load_cc_pair_ids_backfill_progress(search_settings.index_name)
+        progress = load_cc_pair_ids_backfill_progress(search_settings)
         if progress.pending_cc_pair_ids is None:
             progress.pending_cc_pair_ids = get_non_deleting_cc_pair_ids(db_session)
             store_cc_pair_ids_backfill_progress(progress)

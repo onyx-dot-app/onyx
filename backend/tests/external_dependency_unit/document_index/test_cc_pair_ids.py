@@ -293,7 +293,7 @@ def test_backfill_fills_missing_field_resumes_and_reports_completion(
     test_snapshot = [pairs.first.id, pairs.deleting.id, missing_id, pairs.second.id]
 
     search_settings = SimpleNamespace(
-        index_name=test_index_name, port_backfill_source_id=None
+        id=1, index_name=test_index_name, port_backfill_source_id=None
     )
     lock = get_redis_client().lock(f"test_cc_pair_backfill_{uuid4().hex}", timeout=60)
     assert lock.acquire(blocking=False)
@@ -326,7 +326,7 @@ def test_backfill_fills_missing_field_resumes_and_reports_completion(
                 assert not backfill_tasks.run_cc_pair_ids_backfill(lock)
             assert (
                 cc_pair_ids_backfill.load_cc_pair_ids_backfill_progress(
-                    test_index_name
+                    search_settings  # ty: ignore[invalid-argument-type]
                 ).pending_cc_pair_ids
                 == test_snapshot
             )
@@ -344,21 +344,25 @@ def test_backfill_fills_missing_field_resumes_and_reports_completion(
             # The deleting cc-pair left the list without a write.
             assert _read_cc_pair_ids(test_index_name, deleting_only_doc) is None
 
-            # A new primary index restarts the backfill.
-            other_index = SimpleNamespace(index_name=f"{test_index_name}_other")
-            with patch.object(
-                cc_pair_ids_backfill,
-                "get_current_search_settings",
-                return_value=other_index,
+            # A new primary index restarts the backfill, also when the new
+            # generation reuses an old index name.
+            for other_generation in (
+                SimpleNamespace(id=2, index_name=f"{test_index_name}_other"),
+                SimpleNamespace(id=2, index_name=test_index_name),
             ):
-                assert not cc_pair_ids_backfill.is_cc_pair_ids_backfill_complete(
-                    db_session
-                )
+                with patch.object(
+                    cc_pair_ids_backfill,
+                    "get_current_search_settings",
+                    return_value=other_generation,
+                ):
+                    assert not cc_pair_ids_backfill.is_cc_pair_ids_backfill_complete(
+                        db_session
+                    )
 
             # Re-running from scratch is safe and gives the same result.
             cc_pair_ids_backfill.store_cc_pair_ids_backfill_progress(
                 cc_pair_ids_backfill.CCPairIdsBackfillProgress(
-                    index_name=test_index_name
+                    search_settings_id=1, index_name=test_index_name
                 )
             )
             OpenSearchIndexClient(index_name=test_index_name).refresh_index()
@@ -393,7 +397,7 @@ def test_backfill_waits_for_instant_swap_port(test_index_name: str) -> None:
         snapshot.assert_not_called()
         assert (
             cc_pair_ids_backfill.load_cc_pair_ids_backfill_progress(
-                test_index_name
+                search_settings  # ty: ignore[invalid-argument-type]
             ).pending_cc_pair_ids
             is None
         )
