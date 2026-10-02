@@ -6,6 +6,7 @@ import type {
   CardColor,
   IconFunctionComponent,
   RichStr,
+  ShadowVariants,
   StatusVariants,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
@@ -67,6 +68,13 @@ interface MessageCardBaseProps {
    * @default 0
    */
   contentPadding?: 0 | 1 | 2;
+
+  /**
+   * Drop-shadow depth of the card, passed to `Card`.
+   *
+   * @default "none"
+   */
+  shadow?: ShadowVariants;
 
   /**
    * Content rendered below a divider, under the main content area.
@@ -180,6 +188,7 @@ function MessageCard({
   outerPadding = 2,
   innerPadding = 2,
   contentPadding = 0,
+  shadow = "none",
   bottomChildren,
   rightChildren,
   onClose,
@@ -214,6 +223,7 @@ function MessageCard({
         borderColor={variant}
         rounding={4}
         padding={outerPadding}
+        shadow={shadow}
       >
         <div className="opal-message-card-layout">
           <div style={{ padding: spacingToRem(innerPadding) }}>
