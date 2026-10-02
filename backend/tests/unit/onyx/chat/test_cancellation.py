@@ -275,7 +275,7 @@ def test_late_renewal_cannot_reclaim_expired_admission() -> None:
     admission.claim(uuid4())
     with patch(
         "onyx.chat.chat_processing_checker.time.monotonic",
-        return_value=admission._last_refresh + 1800,
+        return_value=admission._last_refresh + PREPARATION_LEASE_SECONDS,
     ):
         with pytest.raises(CacheLockLostError):
             admission.refresh()

@@ -10,7 +10,7 @@ logger = setup_logger()
 
 PREFIX = "chatprocessing"
 FENCE_PREFIX = f"{PREFIX}_fence"
-PREPARATION_LEASE_SECONDS = 30 * 60
+PREPARATION_LEASE_SECONDS = 120
 ACTIVE_LEASE_SECONDS = 60
 ADMISSION_CACHE_TIMEOUT_S = 1.0
 PROCESSING_REFRESH_INTERVAL_S = 5.0
@@ -35,7 +35,7 @@ def _get_fence_key(chat_session_id: UUID) -> str:
 class ChatTurnAdmission:
     """Keep one turn admitted until its execution and storage have drained.
 
-    Preparation has no heartbeat, so its lease permits slow file loading.
+    Preparation renews between stages; a stage that exceeds its lease fails.
     Publishing starts a short lease renewed by the existing control thread.
     """
 

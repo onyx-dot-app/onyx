@@ -310,19 +310,25 @@ export default function useChatSessionController({
         const accumulated: Packet[] = [];
         let lastFlush = 0;
         let trailingFlush: ReturnType<typeof setTimeout> | null = null;
-        // updateSessionAndMessageTree re-points currentSessionId at this
-        // session; once the user navigates elsewhere, any further store write
-        // from this tail would hijack their new session's sends.
-        const stillCurrent = () =>
-          useChatSessionStore.getState().currentSessionId === sessionId;
+        // Keep replay attached across navigation without changing the selected chat.
+        const ownsStream = () => {
+          const session = useChatSessionStore
+            .getState()
+            .sessions.get(sessionId);
+          return (
+            session !== undefined &&
+            session.abortController === sessionOwner &&
+            session.chatState !== "input"
+          );
+        };
         const flush = () => {
-          if (!stillCurrent()) {
-            return;
-          }
+          if (!ownsStream()) return;
           node.packets = node.type === "error" ? [] : [...accumulated];
           // AgentMessage's memo compares packetCount, not the packets array.
           node.packetCount = node.packets.length;
-          updateSessionAndMessageTree(sessionId, new Map(messageMap));
+          useChatSessionStore
+            .getState()
+            .updateSessionMessageTree(sessionId, new Map(messageMap));
         };
         // handleSSEStream only releases the connection via this signal —
         // bailing out of the loop alone leaves the SSE response open.
@@ -333,7 +339,7 @@ export default function useChatSessionController({
             0,
             abortController.signal
           )) {
-            if (!stillCurrent()) {
+            if (!ownsStream()) {
               return;
             }
             if ("error" in rawPacket && rawPacket.error) {
@@ -358,7 +364,7 @@ export default function useChatSessionController({
               continue;
             }
             const packet = rawPacket as Packet;
-            // Heartbeats are liveness ticks for the stillCurrent check above,
+            // Heartbeats are liveness ticks for the ownership check above,
             // not run state — never render them.
             if (packet.obj.type === "chat_heartbeat") {
               continue;
@@ -386,7 +392,7 @@ export default function useChatSessionController({
             clearTimeout(trailingFlush);
           }
           resumingRuns.delete(runId);
-          if (stillCurrent()) {
+          if (ownsStream()) {
             if (
               !accumulated.some((packet) => packet.obj.type === PacketType.STOP)
             ) {
@@ -411,7 +417,11 @@ export default function useChatSessionController({
           currentStream.stream_id,
           newMessageMap
         );
-      } else if (sessionBusy) {
+      } else if (
+        sessionBusy ||
+        useChatSessionStore.getState().sessions.get(chatSession.chat_session_id)
+          ?.chatState !== "input"
+      ) {
         void settleSession(chatSession.chat_session_id);
       }
 
@@ -472,7 +482,9 @@ export default function useChatSessionController({
 
       if (
         !existingChatSession?.chatState ||
-        existingChatSession.chatState === "input"
+        existingChatSession.chatState === "input" ||
+        existingChatSession.chatState === "unconfirmed" ||
+        existingChatSession.abortController.signal.aborted
       ) {
         initialSessionFetch();
       } else {

@@ -15,7 +15,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat.history_store import ChatHistoryStore, get_chat_history_store
 from onyx.chat.response import response_snapshot
 from onyx.chat.restoration import restore_chat_agent
-from onyx.chat.run_store import ENABLE_CHAT_CHECKPOINTS, ChatRunStore
+from onyx.chat.run_store import ChatRunStore
 from onyx.db.chat_subagents import load_chat_branch
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.llm.factory import get_llm_token_counter
@@ -121,7 +121,7 @@ def create_chat_agent_coordinator(
             cache=get_cache_backend(),
             root_response=response_store,
         )
-        if persist_content and ENABLE_CHAT_CHECKPOINTS
+        if persist_content
         else None
     )
     if durable is not None and register_store is not None:

@@ -15,8 +15,8 @@ export function waitForChatSessionIdle(sessionId: string): Promise<void> {
 }
 
 async function pollSession(sessionId: string): Promise<void> {
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
+  // A successful busy response confirms live work, regardless of its duration.
+  while (true) {
     const response = await fetch(`/api/chat/chat-session/${sessionId}/status`, {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
@@ -28,7 +28,6 @@ async function pollSession(sessionId: string): Promise<void> {
     if (!status.is_processing) return;
     await new Promise<void>((resolve) => setTimeout(resolve, 1000));
   }
-  throw new Error("Session readiness check timed out");
 }
 
 export async function fetchSettledChatSession(

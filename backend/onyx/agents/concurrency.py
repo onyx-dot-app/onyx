@@ -1,6 +1,5 @@
 """Thread ownership and finite event delivery for an execution tree."""
 
-import os
 import threading
 import time
 from collections import deque
@@ -22,10 +21,8 @@ logger = setup_logger()
 OPERATION_TIMEOUT_SECONDS = 1800.0
 CLEANUP_SECONDS = 2.0
 EVENT_QUEUE_CAPACITY = 1024
+AGENT_EVENT_BUFFER_MAX_BYTES = 4 * 1024 * 1024
 EVENT_FLUSH_INTERVAL_SECONDS = 0.05
-AGENT_EVENT_BUFFER_MAX_BYTES = int(
-    os.environ.get("AGENT_EVENT_BUFFER_MAX_BYTES", 4 * 1024 * 1024)
-)
 
 
 class WorkTracker:

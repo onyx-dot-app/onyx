@@ -28,6 +28,7 @@ from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import (
+    ADMISSION_CACHE_TIMEOUT_S,
     get_processing_stream_id,
     is_chat_session_processing,
 )
@@ -429,12 +430,18 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
-    cache = get_cache_backend()
-    is_processing = is_chat_session_processing(session_id, cache)
-    stream_id = get_processing_stream_id(session_id, cache)
-    current_stream = (
-        CurrentStreamInfo(stream_id=stream_id) if stream_id is not None else None
-    )
+    current_stream: CurrentStreamInfo | None = None
+    is_processing = False
+    try:
+        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        is_processing = is_chat_session_processing(session_id, cache)
+        stream_id = get_processing_stream_id(session_id, cache)
+        if stream_id is not None:
+            current_stream = CurrentStreamInfo(stream_id=stream_id)
+    except Exception:
+        logger.exception(
+            "An error occurred while checking if the chat session is processing"
+        )
 
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.

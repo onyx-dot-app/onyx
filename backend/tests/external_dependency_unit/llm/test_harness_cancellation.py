@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from cryptography import x509
@@ -18,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.concurrency import ExecutionWork
+from onyx.agents.events import AgentEvent, MessageUpdateEvent
 from onyx.agents.runtime import Agent
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -152,7 +153,11 @@ def provider_server(
             finish = complete or (complete_after_first and state.requests > 1)
             state.path = self.path
             state.headers = dict(self.headers)
-            if finish and not request_body.get("stream"):
+            if not request_body.get("stream"):
+                if not finish:
+                    state.started.set()
+                    if not state.release.wait(15):
+                        return
                 body = json.dumps(
                     {
                         "id": "chat-test",
@@ -285,7 +290,7 @@ def provider_tls(
 )
 @pytest.mark.parametrize("send_chunk", [False, True])
 @pytest.mark.parametrize("invoke", [False, True])
-def test_cancel_stops_waiting_and_tracks_provider_cleanup(
+def test_cancel_waits_for_provider_read_then_stops_without_retry(
     provider: str, send_chunk: bool, invoke: bool, provider_tls: ssl.SSLContext | None
 ) -> None:
     with provider_server(
@@ -295,7 +300,6 @@ def test_cancel_stops_waiting_and_tracks_provider_cleanup(
     ) as (url, state):
         signal = CancellationSignal()
         stopped = threading.Event()
-        work = ExecutionWork()
         yielded = threading.Event()
         errors: list[BaseException] = []
         llm = LitellmLLM(
@@ -331,7 +335,7 @@ def test_cancel_stops_waiting_and_tracks_provider_cleanup(
 
         def execute() -> None:
             try:
-                work.blocking(generate, signal)
+                generate()
             except AgentCancelled:
                 stopped.set()
             except BaseException as error:
@@ -344,11 +348,11 @@ def test_cancel_stops_waiting_and_tracks_provider_cleanup(
             if send_chunk and not invoke:
                 assert yielded.wait(5), errors
             signal.cancel()
-            assert stopped.wait(3), errors
             if not send_chunk:
-                assert not work.tracker.wait_idle(0.05)
+                assert not stopped.wait(0.05), errors
+                assert worker.is_alive()
             state.release.set()
-            assert work.tracker.wait_idle(10), "Provider worker did not finish cleanup"
+            assert stopped.wait(10), errors
             worker.join(timeout=3)
             assert not worker.is_alive()
             assert not errors
@@ -357,7 +361,7 @@ def test_cancel_stops_waiting_and_tracks_provider_cleanup(
             signal.cancel()
             state.release.set()
             worker.join(timeout=3)
-            assert work.tracker.wait_idle(10)
+            assert not worker.is_alive()
 
 
 @pytest.mark.parametrize(
@@ -444,7 +448,7 @@ def test_azure_preserves_authentication_and_endpoint(
 @pytest.mark.parametrize(
     "provider", ["openai", "lm_studio", "vercel_ai_gateway", "together_ai"]
 )
-def test_agent_reuse_does_not_wait_for_cancelled_provider_read(
+def test_agent_reuse_waits_for_cancelled_provider_read(
     provider: str, provider_tls: ssl.SSLContext | None
 ) -> None:
     with provider_server(
@@ -467,11 +471,22 @@ def test_agent_reuse_does_not_wait_for_cancelled_provider_read(
         try:
             assert state.started.wait(10)
             old.cancel()
-            with pytest.raises(AgentCancelled):
-                old.result(timeout=3)
-            old._reusable.result(timeout=3)
-            snapshot = old.snapshot()
+            with pytest.raises(TimeoutError):
+                old.result(timeout=0.05)
             assert not old.wait_for_idle(timeout=0)
+            assert coordinator.active_run(agent.id) is old
+            with pytest.raises(RuntimeError, match="already running or draining"):
+                agent.start(
+                    messages=[UserMessage(content="Second")],
+                    max_steps=1,
+                    coordinator=coordinator,
+                )
+            assert state.requests == 1
+            state.release.set()
+            with pytest.raises(AgentCancelled):
+                old.result(timeout=5)
+            assert old.wait_for_idle(timeout=5)
+            snapshot = old.snapshot()
             new = agent.start(
                 messages=[UserMessage(content="Second")],
                 max_steps=1,
@@ -479,12 +494,53 @@ def test_agent_reuse_does_not_wait_for_cancelled_provider_read(
             )
             assert new.result(timeout=5).output.text == "hello"
             assert new.wait_for_idle(timeout=3)
-            assert not old.wait_for_idle(timeout=0)
             assert state.requests == 2
-            assert not coordinator.close(timeout=0)
         finally:
             state.release.set()
             assert old.wait_for_idle(timeout=5)
             assert coordinator.close(timeout=5)
         assert old.snapshot() == snapshot
         assert agent.state.messages[-1].text == "hello"
+
+
+@pytest.mark.parametrize("send_chunk", [False, True])
+def test_cancelled_provider_read_finishes_at_socket_timeout(send_chunk: bool) -> None:
+    with provider_server("openai", send_chunk=send_chunk) as (url, state):
+        llm = LitellmLLM(
+            api_key="local-test-key",
+            model_provider="openai",
+            model_name="harness-model",
+            max_input_tokens=4096,
+            api_base=url,
+        )
+        agent = Agent(
+            llm,
+            generation_context=GenerationContext(stall_timeout_s=1),
+        )
+        yielded = threading.Event()
+
+        def observe(event: AgentEvent) -> None:
+            if isinstance(event, MessageUpdateEvent) and isinstance(
+                event.generation_event, TextDeltaEvent
+            ):
+                yielded.set()
+
+        with patch.object(llm, "_completion", wraps=llm._completion) as complete:
+            run = agent.start(
+                messages=[UserMessage(content="Test")], max_steps=1, on_event=observe
+            )
+            try:
+                assert state.started.wait(5)
+                if send_chunk:
+                    assert yielded.wait(5)
+                run.cancel()
+                with pytest.raises(AgentCancelled):
+                    run.result(timeout=10)
+                assert run.wait_for_idle(timeout=1)
+                assert not state.release.is_set()
+                assert complete.call_count == 1
+                if send_chunk:
+                    assert state.requests == 1
+            finally:
+                state.release.set()
+                assert run.wait_for_idle(timeout=5)

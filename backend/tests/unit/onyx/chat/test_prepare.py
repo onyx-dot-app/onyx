@@ -7,6 +7,11 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.cache.interface import CacheLockLostError
+from onyx.chat.chat_processing_checker import (
+    PREPARATION_LEASE_SECONDS,
+    ChatTurnAdmission,
+)
 from onyx.chat.models import AvailableFiles, ChatHistoryMessage, PersonaPromptConfig
 from onyx.chat.prepare import (
     _ChatPreparation,
@@ -27,6 +32,7 @@ from onyx.llm.models import ReasoningEffort
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import PersonaToolConfiguration
 from onyx.utils.threadpool_concurrency import ContextThreadPoolExecutor
+from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
 # ---------------------------------------------------------------------------
@@ -243,9 +249,14 @@ class TestGetCustomAgentPrompt:
         assert result == "Custom system prompt"
 
 
+@pytest.mark.parametrize("expired_during_file_loading", [False, True])
 def test_attachment_loading_releases_preparation_session_before_reservation_failure(
     monkeypatch: pytest.MonkeyPatch,
+    expired_during_file_loading: bool,
 ) -> None:
+    cache = FakeCache()
+    admission = ChatTurnAdmission(cache)
+    monkeypatch.setattr("onyx.chat.prepare.ChatTurnAdmission", lambda _cache: admission)
     started = Event()
     release = Event()
     active_sessions = 0
@@ -322,6 +333,8 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
         del user_files, llm_max_context_window, reserved_token_count
         started.set()
         assert release.wait(5)
+        if expired_during_file_loading:
+            admission._last_refresh -= PREPARATION_LEASE_SECONDS
         return ExtractedContextFiles(
             file_texts=[],
             image_files=[],
@@ -347,9 +360,12 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
     monkeypatch.setattr(
         "onyx.chat.prepare.get_session_with_current_tenant", session_scope
     )
-    monkeypatch.setattr(
-        "onyx.chat.prepare._prepare_chat_data", lambda *_args, **_kwargs: prepared
-    )
+
+    def prepare_data(*_args: object, **_kwargs: object) -> _ChatPreparation:
+        admission.claim(session_id)
+        return prepared
+
+    monkeypatch.setattr("onyx.chat.prepare._prepare_chat_data", prepare_data)
     monkeypatch.setattr("onyx.chat.prepare.extract_context_files", load_files)
     monkeypatch.setattr("onyx.chat.prepare.reserve_chat_response_ids", fail_reservation)
     request = SendMessageRequest(message="Accepted", chat_session_id=session_id)
@@ -364,9 +380,13 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
             assert not reservation_attempted
         finally:
             release.set()
-        with pytest.raises(RuntimeError, match="Response reservation failed"):
-            pending.result(timeout=5)
-    assert reservation_attempted
+        if expired_during_file_loading:
+            with pytest.raises(CacheLockLostError, match="renewal expired"):
+                pending.result(timeout=5)
+        else:
+            with pytest.raises(RuntimeError, match="Response reservation failed"):
+                pending.result(timeout=5)
+    assert reservation_attempted is not expired_during_file_loading
     assert active_sessions == 0
 
 

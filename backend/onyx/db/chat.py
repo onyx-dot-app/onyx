@@ -1264,7 +1264,25 @@ def create_chat_session_from_request(
     user: User,
     db_session: Session,
 ) -> ChatSession:
-    """Authorize the project and persona, then create a session with its recording policy."""
+    """Create a chat session from a ChatSessionCreationRequest.
+
+    Includes project ownership and persona access validation.
+
+    Args:
+        chat_session_request: The request containing persona_id, description, and project_id
+        user: The user creating the session. Anonymous users are represented as a
+            User with is_anonymous=True (never None); the access-check helpers
+            handle that case. A real User is required so the persona access check
+            always runs — do not introduce a None-tolerant caller.
+        db_session: The database session
+
+    Returns:
+        The newly created ChatSession
+
+    Raises:
+        ValueError: If user lacks access to the specified project or persona
+        Exception: If the persona is invalid
+    """
     from onyx.db.projects import check_project_ownership
 
     project_id = chat_session_request.project_id

@@ -52,3 +52,18 @@ test("a failed status request never reports idle and can be retried", async () =
   ).resolves.toBeUndefined();
   expect(fetchSpy).toHaveBeenCalledTimes(2);
 });
+
+test("healthy long-running work stays busy beyond two minutes", async () => {
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockResolvedValue(sessionResponse(true));
+  const completed = jest.fn();
+  const check = waitForChatSessionIdle("research-session");
+  void check.then(completed);
+  await jest.advanceTimersByTimeAsync(180_000);
+  expect(completed).not.toHaveBeenCalled();
+  fetchSpy.mockResolvedValue(sessionResponse(false));
+  await jest.advanceTimersByTimeAsync(1000);
+  await check;
+  expect(completed).toHaveBeenCalledTimes(1);
+});

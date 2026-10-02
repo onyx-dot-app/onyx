@@ -202,3 +202,80 @@ test("a resumed save error survives a failed readiness check and retry", async (
     packets: [],
   });
 });
+
+test("a resumed stream keeps updating its session while another chat is selected", async () => {
+  const nextPacket = deferred<void>();
+  const finish = deferred<void>();
+  const reserved: Message = {
+    nodeId: 42,
+    messageId: 42,
+    type: "assistant",
+    message: "",
+    files: [],
+    packets: [],
+    toolCall: null,
+    parentNodeId: null,
+  };
+  jest
+    .mocked(processRawChatHistory)
+    .mockImplementation(() => new Map([[42, { ...reserved }]]));
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...backendSession(true),
+      current_stream: { stream_id: 42 },
+    }),
+  } as Response);
+  jest.mocked(resumeStream).mockImplementation(async function* () {
+    await nextPacket.promise;
+    yield {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "message_delta", content: "Research continues" },
+    };
+    await finish.promise;
+  });
+  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  const mounted = mountController();
+  await waitFor(() => expect(resumeStream).toHaveBeenCalled());
+  mounted.unmount();
+  act(() => {
+    const store = useChatSessionStore.getState();
+    store.createSession("other-session");
+    store.setCurrentSession("other-session");
+  });
+  await act(async () => nextPacket.resolve());
+  expect(useChatSessionStore.getState().currentSessionId).toBe("other-session");
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.messageTree.get(42)
+      ?.packetCount
+  ).toBe(1);
+  mountController();
+  expect(resumeStream).toHaveBeenCalledTimes(1);
+  await act(async () => finish.resolve());
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input")
+  );
+});
+
+test("returning after a disconnected Stop releases a now-idle session", async () => {
+  const store = useChatSessionStore.getState();
+  store.createSession("session");
+  store.updateChatState("session", "cancelling");
+  useChatSessionStore
+    .getState()
+    .sessions.get("session")
+    ?.abortController.abort();
+  jest.mocked(global.fetch).mockResolvedValue({
+    ok: true,
+    json: async () => backendSession(false),
+  } as Response);
+  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  mountController();
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input")
+  );
+});

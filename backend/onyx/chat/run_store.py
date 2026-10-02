@@ -1,6 +1,5 @@
 """Live response ownership and explicit, safe checkpoint transfer across API pods."""
 
-import os
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -62,9 +61,6 @@ OWNER_EXPIRY_MARGIN_SECONDS = 5.0
 OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
-ENABLE_CHAT_CHECKPOINTS = (
-    os.environ.get("ENABLE_CHAT_CHECKPOINTS", "true").lower() == "true"
-)
 
 
 class ResponseOwner(BaseModel):

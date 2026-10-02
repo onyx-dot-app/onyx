@@ -340,6 +340,7 @@ def _prepare_chat_data(
         db_session,
     )
     token_counter = get_llm_token_counter(selected_models[0][0])
+    admission.refresh()
     chat_history, accepted_text = _accept_message(
         request, chat_session, user, db_session
     )
@@ -540,6 +541,7 @@ def prepare_chat_turn(
                 litellm_additional_headers,
                 admission,
             )
+        admission.refresh()
         token_counter = get_llm_token_counter(prepared.selected_models[0][0])
         extracted_files = extract_context_files(
             user_files=prepared.context_user_files,
@@ -548,6 +550,7 @@ def prepare_chat_turn(
             ),
             reserved_token_count=prepared.reserved_token_count,
         )
+        admission.refresh()
         search_params = determine_search_params(
             prepared.persona_id, prepared.project_id, extracted_files
         )
@@ -563,6 +566,7 @@ def prepare_chat_turn(
             token_counter,
             additional_context or new_msg_req.additional_context,
         )
+        admission.refresh()
         with get_session_with_current_tenant() as session:
             response_ids = reserve_chat_response_ids(
                 db_session=session,

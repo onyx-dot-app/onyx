@@ -518,7 +518,9 @@ Transient renewal failures retry within the last confirmed lease. Owner mismatch
 Control polling cancels unconfirmed ownership when it reaches the five-second margin before the 60-second lease expires.
 Renewal timing starts before the cache request, so response latency does not extend local ownership.
 Stream-status refresh failures log and retry. Active session admission expires after 60 seconds without renewal.
-Preparation retains a 30-minute lease because its synchronous file loading has no heartbeat. A preparation crash can retain that lease until expiry.
+Preparation renews its 120-second lease between stages. If one stage exceeds the lease, preparation fails at its next ownership check.
+Ownership is checked before accepting the user message, reserving responses, and publishing the stream.
+A process crash can block a new send until the last lease expires.
 Chat releases session admission after workers, saves, and delivery finish. Save-timeout warnings do not release admission.
 Admission is claimed before loading history. Another tab or pod cannot start a turn while that claim remains active.
 The browser checks session readiness after stream errors and reloads; stream closure alone does not confirm completion.
@@ -575,7 +577,6 @@ An expired owner is reported as interrupted when its response is inspected. Unce
 Released runs have no local execution owner. Stop requests use the application’s run-ID route.
 Closing the old coordinator does not cancel execution claimed by another pod.
 Incognito runs keep local ownership and do not write checkpoints or child conversations.
-`ENABLE_CHAT_CHECKPOINTS` controls the persistent chat integration and defaults to true.
 
 Checkpoint file data uses existing file-store references. Generated files are stored under the chat session before transfer.
 Deleting the chat removes those files. Tool execution loads file contents when needed.

@@ -132,7 +132,6 @@ def _summarize_image(
     )
 
     try:
-        # Call LLM with Braintrust tracing
         response = llm.invoke(
             GenerationRequest(messages=prepare_model_messages(messages, llm.config)),
             context=GenerationContext(
@@ -141,9 +140,7 @@ def _summarize_image(
                 total_timeout_s=IMAGE_SUMMARIZATION_TIMEOUT,
             ),
         )
-        summary = response.text
-
-        return summary
+        return response.text
 
     except Exception as e:
         # Extract structured details from LiteLLM exceptions when available,

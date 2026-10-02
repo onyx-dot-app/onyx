@@ -402,7 +402,13 @@ export default function useChatController({
       return;
     }
 
-    // The stream and readiness check release the session after storage settles.
+    if (controller) {
+      await settleChatSession({
+        sessionId: currentSession,
+        controller,
+        errorMessage: tReadiness("checkFailed"),
+      });
+    }
   }, [currentSessionId, existingChatSessionId, tReadiness]);
 
   const onSubmit = useCallback(
@@ -920,10 +926,20 @@ export default function useChatController({
         return nodes;
       }
 
+      function ownsStream(): boolean {
+        const session = useChatSessionStore
+          .getState()
+          .sessions.get(frozenSessionId);
+        return (
+          session?.abortController === controller &&
+          session.chatState !== "input"
+        );
+      }
+
       /** Flush accumulated packet state into the tree as one Zustand
        *  update. No-op when nothing is pending. */
       function flushPendingUpdates() {
-        if (!pendingFlush) return;
+        if (!pendingFlush || !ownsStream()) return;
         pendingFlush = false;
 
         parentMessage =
@@ -1162,6 +1178,10 @@ export default function useChatController({
             }
           }
 
+          if (!ownsStream()) {
+            controller.abort();
+            return;
+          }
           if (!stack.isEmpty() && !controller.signal.aborted) {
             const packet = stack.nextPacket();
             if (!packet) {
@@ -1427,6 +1447,10 @@ export default function useChatController({
             pendingFlush = true;
           }
         }
+        if (!ownsStream()) {
+          controller.abort();
+          return;
+        }
         // Flush any tail state from the final packet(s) before declaring
         // the stream complete. Without this, the last ≤1 frame of packets
         // could get stranded in local state.
@@ -1439,6 +1463,10 @@ export default function useChatController({
         }
         streamSucceeded = true;
       } catch (e: any) {
+        if (!ownsStream()) {
+          controller.abort();
+          return;
+        }
         console.log("Error:", e);
         const errorMsg = e.message;
         const userErrorNode: Message = {
