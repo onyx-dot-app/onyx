@@ -70,6 +70,7 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
             <InputPasswordTypeIn
               {...formikField}
               id={fieldKey}
+              data-testid={fieldKey}
               value={formikField.value ?? ""}
               placeholder={placeholder}
               error={status === "error"}
@@ -78,6 +79,7 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
             <InputTypeIn
               {...formikField}
               id={fieldKey}
+              data-testid={fieldKey}
               value={formikField.value ?? ""}
               placeholder={placeholder}
               variant={status === "error" ? "error" : "primary"}
