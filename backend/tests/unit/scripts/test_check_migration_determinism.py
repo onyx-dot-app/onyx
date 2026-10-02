@@ -26,6 +26,7 @@ def _in_upgrade(line: str) -> str:
         "op.bulk_insert(tool_table, [{'id': str(uuid.uuid4())}])",
         "new_id = uuid4()",
         "stamp = func.now()",
+        "row.update({'created_at': sa.func.now()})",
         "op.bulk_insert(tool_table, [{'id': 1, 'created_at': sa.func.now()}])",
         "stamp = datetime.now()",
         "stamp = datetime.datetime.utcnow()",

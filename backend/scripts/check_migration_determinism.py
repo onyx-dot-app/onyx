@@ -49,7 +49,8 @@ _RUN_DEPENDENT_CALLS = {
 _CLOCKS = {"datetime", "date"}
 # Run-dependent unless it defines a column default or updates rows that exist.
 _DEFAULT_CALLS = {"now", "gen_random_uuid"}
-_NOT_ROW_CALLS = {"Column", "create_table", "add_column", "alter_column", "update"}
+_NOT_ROW_CALLS = {"Column", "create_table", "add_column", "alter_column"}
+_SQLALCHEMY_MODULES = {"sa", "sqlalchemy"}
 
 
 class _RunDependentFinder(ast.NodeVisitor):
@@ -106,7 +107,10 @@ class _RunDependentFinder(ast.NodeVisitor):
             self._flag(node)
         elif name == "get" and _terminal_name(receiver) == "environ":
             self._flag(node)
-        not_row = bool(_chain_names(node) & _NOT_ROW_CALLS)
+        not_row = any(
+            _terminal_name(call.func) in _NOT_ROW_CALLS or _is_sqlalchemy_update(call)
+            for call in _chain_calls(node)
+        )
         self._not_row_depth += not_row
         self.generic_visit(node)
         self._not_row_depth -= not_row
@@ -118,16 +122,26 @@ class _RunDependentFinder(ast.NodeVisitor):
             self._flag(node)
 
 
-def _chain_names(node: ast.expr) -> set[str]:
-    """Every name along a call chain, so `sa.update(t).values(...)` names update."""
-    names: set[str] = set()
+def _chain_calls(node: ast.expr) -> list[ast.Call]:
+    """Every call along a chain, so `sa.update(t).values(...)` yields both calls."""
+    calls: list[ast.Call] = []
     while isinstance(node, ast.Call | ast.Attribute):
-        if isinstance(node, ast.Attribute):
-            names.add(node.attr)
+        if isinstance(node, ast.Call):
+            calls.append(node)
         node = node.func if isinstance(node, ast.Call) else node.value
-    if isinstance(node, ast.Name):
-        names.add(node.id)
-    return names
+    return calls
+
+
+def _is_sqlalchemy_update(call: ast.Call) -> bool:
+    """`update(t)` or `sa.update(t)`, not `some_dict.update(...)`."""
+    func = call.func
+    if isinstance(func, ast.Name):
+        return func.id == "update"
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "update"
+        and _terminal_name(func.value) in _SQLALCHEMY_MODULES
+    )
 
 
 def _terminal_name(node: ast.expr | None) -> str | None:
