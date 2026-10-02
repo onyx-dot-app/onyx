@@ -43,13 +43,15 @@ interface CredentialFieldProps {
  * drop its focus on every toggle). The icon's class and size are not passed
  * on: the checkbox keeps its own colours and is already the icon's 1rem.
  */
-function useCheckboxIcon(name: string): IconFunctionComponent {
+function useCheckboxIcon(name: string, label: string): IconFunctionComponent {
   return useMemo(() => {
+    // The label names the visible checkbox; the wrapping <label> only names
+    // its hidden native input.
     function CheckboxIcon() {
-      return <InputCheckboxField name={name} />;
+      return <InputCheckboxField name={name} aria-label={label} />;
     }
     return CheckboxIcon;
-  }, [name]);
+  }, [name, label]);
 }
 
 /** One field of a credential spec, drawn with the Opal input for its kind. */
@@ -57,7 +59,7 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
   const t = useTranslations("admin");
   const copy = useCredentialFieldCopy(source)(fieldKey);
   const label = copy.title;
-  const checkboxIcon = useCheckboxIcon(fieldKey);
+  const checkboxIcon = useCheckboxIcon(fieldKey, label);
 
   // A file such as a .pfx key is binary; Opal's InputFile reads text, so
   // this field keeps the typed upload until Opal can hand back a File.

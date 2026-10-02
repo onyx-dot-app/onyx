@@ -32,7 +32,8 @@ A two-axis layout component for displaying icon + title + description rows. Rout
 
 > Icon container height (icon + 2 x padding) always equals the title line-height.
 
-> The icon slot can hold a small control, such as a checkbox left of the title. Pass a component
+> In the inline layouts (`body` and `section` variants), the icon slot can hold a small control, such
+> as a checkbox left of the title; `heading` puts the icon above the title instead. Pass a component
 > with a stable identity (create it once per field, e.g. with `useMemo`), or React remounts the
 > control on every render and it loses focus. The icon sits on the title's first line.
 
