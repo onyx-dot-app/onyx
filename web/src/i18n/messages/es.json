@@ -3225,7 +3225,7 @@
           "toast": "¡Nueva credencial creada!"
         },
         "name": {
-          "label": "Nombre:",
+          "label": "Correo de la cuenta de {source}",
           "placeholder": "email@company.com"
         },
         "submitError": {

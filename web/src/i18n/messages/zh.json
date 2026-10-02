@@ -3225,7 +3225,7 @@
           "toast": "已创建新凭据!"
         },
         "name": {
-          "label": "名称:",
+          "label": "{source} 账号邮箱",
           "placeholder": "email@company.com"
         },
         "submitError": {

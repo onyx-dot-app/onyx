@@ -3225,7 +3225,7 @@
           "toast": "تم إنشاء بيانات اعتماد جديدة!"
         },
         "name": {
-          "label": "الاسم:",
+          "label": "البريد الإلكتروني لحساب {source}",
           "placeholder": "email@company.com"
         },
         "submitError": {

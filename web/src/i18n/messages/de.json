@@ -3225,7 +3225,7 @@
           "toast": "Neue Anmeldedaten erstellt!"
         },
         "name": {
-          "label": "Name:",
+          "label": "E-Mail des {source}-Kontos",
           "placeholder": "email@company.com"
         },
         "submitError": {

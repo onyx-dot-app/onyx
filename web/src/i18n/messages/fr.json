@@ -3225,7 +3225,7 @@
           "toast": "Nouvel identifiant créé !"
         },
         "name": {
-          "label": "Nom :",
+          "label": "E-mail du compte {source}",
           "placeholder": "email@company.com"
         },
         "submitError": {

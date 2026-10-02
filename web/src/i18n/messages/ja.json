@@ -3225,7 +3225,7 @@
           "toast": "新しい認証情報を作成しました!"
         },
         "name": {
-          "label": "名前:",
+          "label": "{source} アカウントのメールアドレス",
           "placeholder": "email@company.com"
         },
         "submitError": {

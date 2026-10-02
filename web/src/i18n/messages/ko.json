@@ -3225,7 +3225,7 @@
           "toast": "새 자격 증명을 생성했습니다!"
         },
         "name": {
-          "label": "이름:",
+          "label": "{source} 계정 이메일",
           "placeholder": "email@company.com"
         },
         "submitError": {
