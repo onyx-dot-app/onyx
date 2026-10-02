@@ -1,6 +1,7 @@
 """Draft capability-check runs: immediate states, the run task, the result
 cache, superseding, and access."""
 
+import threading
 from collections.abc import Callable, Generator
 from typing import Any
 from unittest.mock import MagicMock
@@ -9,6 +10,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.capability_checks import (
+    tasks as capability_check_tasks,
+)
 from onyx.background.celery.tasks.capability_checks.tasks import (
     run_draft_capability_checks_task,
 )
@@ -85,6 +89,9 @@ class _Harness:
         )
         monkeypatch.setattr(capability_check_runs, "get_capability_checks", self.checks)
         monkeypatch.setattr(runner, "get_capability_checks", self.checks)
+        monkeypatch.setattr(
+            capability_check_tasks, "get_capability_checks", self.checks
+        )
 
     def checks(self, source: DocumentSource) -> list[CapabilityCheck[Any]]:
         assert source == DocumentSource.SLACK
@@ -424,3 +431,27 @@ def test_latest_run_marker_lives_as_long_as_the_run(
     harness.run_last_task()
     assert draft_runs.load_draft_run(started.run_id) is not None
     assert harness.runs == []
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_draft_check_slower_than_the_cap_is_indeterminate(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+    slack_credential: Credential,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, _ = users
+    monkeypatch.setattr(capability_check_tasks, "DRAFT_CHECK_TIMEOUT_SECONDS", 0.2)
+    release = threading.Event()
+    harness.on_token_run = lambda: release.wait(5)
+    started = _start(db_session, admin, slack_credential, {}, uuid4().hex)
+
+    try:
+        harness.run_last_task()
+    finally:
+        release.set()
+
+    done = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
+    assert done.status == DraftRunStatus.COMPLETED
+    assert _states(done)[_TOKEN] == DraftCheckStateKind.INDETERMINATE

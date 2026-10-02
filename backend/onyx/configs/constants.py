@@ -486,7 +486,9 @@ class OnyxCeleryQueues:
     # to their per-check guard, so they live with the long-running work.
     CAPABILITY_CHECKS = "capability_checks"
     # Draft runs for an unsaved connector form. The form waits on them, so they
-    # do not share a queue with the long-running perm and group syncs.
+    # do not share a queue with the long-running perm and group syncs. Draft
+    # checks are capped at DRAFT_CHECK_TIMEOUT_SECONDS so they fit the light
+    # worker.
     CAPABILITY_CHECKS_DRAFT = "capability_checks_draft"
 
     # Chat retention (TTL) hard-deletion queue, consumed by the light worker.

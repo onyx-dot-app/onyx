@@ -146,8 +146,19 @@ def _missing_instance_outcome(instantiation_error: Exception | None) -> _CheckOu
     )
 
 
+def effective_check_timeout_seconds(check: CapabilityCheck[Any]) -> float:
+    """The check's hang guard: its own timeout, else the default."""
+    return check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+
+
+def _capped(timeout_seconds: float, cap_seconds: float | None) -> float:
+    return timeout_seconds if cap_seconds is None else min(timeout_seconds, cap_seconds)
+
+
 def _execute_check(
-    check: CapabilityCheck, context: CapabilityCheckContext
+    check: CapabilityCheck,
+    context: CapabilityCheckContext,
+    timeout_cap_seconds: float | None,
 ) -> _CheckOutcome:
     """
     Executes one check under its hang guard and maps the outcome to a status.
@@ -155,7 +166,9 @@ def _execute_check(
     A timeout maps to INDETERMINATE, never FAILED; a slow source is not proof of
     a broken credential.
     """
-    timeout_seconds = check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+    timeout_seconds = _capped(
+        effective_check_timeout_seconds(check), timeout_cap_seconds
+    )
     start = time.monotonic()
 
     def elapsed_ms() -> int:
@@ -220,7 +233,7 @@ def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
     guard).
     """
     timeout_by_check_id = {
-        check.check_id: check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+        check.check_id: effective_check_timeout_seconds(check)
         for check in get_capability_checks(source)
     }
     return int(CAPABILITY_CHECK_TIMEOUT_SECONDS + sum(timeout_by_check_id.values()))
@@ -241,6 +254,7 @@ def run_capability_checks(
     checks: Sequence[CapabilityCheck],
     context: CapabilityCheckContext,
     on_result: CapabilityCheckProgressCallback | None = None,
+    timeout_cap_seconds: float | None = None,
 ) -> list[CapabilityCheckResult]:
     """Runs checks sequentially and maps their outcomes to statuses.
 
@@ -256,6 +270,8 @@ def run_capability_checks(
     ``on_result`` is called after every result row, skips included, with the
     rows recorded so far in run order. It is how a caller publishes per-check
     progress before the run completes; an exception from it propagates.
+
+    ``timeout_cap_seconds`` caps each check's hang guard.
     """
     # A check_id may repeat only as one check mirrored across capabilities;
     # anything else is a registration bug, caught before it silently collapses
@@ -291,7 +307,9 @@ def run_capability_checks(
             continue
 
         if check.check_id not in outcome_by_check_id:
-            outcome_by_check_id[check.check_id] = _execute_check(check, context)
+            outcome_by_check_id[check.check_id] = _execute_check(
+                check, context, timeout_cap_seconds
+            )
         record(check, outcome_by_check_id[check.check_id])
     return results
 
@@ -431,6 +449,7 @@ def generate_capability_report(
     access_type: AccessType | None = None,
     on_result: CapabilityCheckProgressCallback | None = None,
     check_ids: frozenset[str] | None = None,
+    timeout_cap_seconds: float | None = None,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -450,6 +469,9 @@ def generate_capability_report(
 
     ``check_ids`` limits the run to those checks. A limited run instantiates the
     connector only when a selected check needs the instance.
+
+    ``timeout_cap_seconds`` caps every hang guard of the run: each check's and
+    the connector instantiation's.
     """
     source = source or credential.source
     checks = get_capability_checks(source)
@@ -478,7 +500,7 @@ def generate_capability_report(
             # ``load_credentials`` can probe the source with no timeout of their
             # own, and the stale-run sweep trusts the ceiling.
             connector, fresh_credential_json = run_with_timeout(
-                CAPABILITY_CHECK_TIMEOUT_SECONDS,
+                _capped(CAPABILITY_CHECK_TIMEOUT_SECONDS, timeout_cap_seconds),
                 _instantiate_connector_isolated,
                 source=source,
                 input_type=input_type,
@@ -544,7 +566,9 @@ def generate_capability_report(
         instantiation_error=instantiation_error,
         source_operations=source_operations,
     )
-    results = run_capability_checks(checks, context, on_result=on_result)
+    results = run_capability_checks(
+        checks, context, on_result=on_result, timeout_cap_seconds=timeout_cap_seconds
+    )
     return CredentialCapabilityReport(
         credential_id=credential.id,
         source=source,

@@ -7,6 +7,7 @@ terminal results are cached so that a form edit re-runs only the checks the
 edit can change.
 """
 
+import math
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
@@ -34,6 +35,13 @@ from onyx.connectors.source_operations import get_source_operations_class
 from onyx.db.enums import AccessType
 
 DRAFT_RUN_TTL_SECONDS = 30 * 60
+# Caps every hang guard of a draft run. A check that times out is
+# INDETERMINATE, which does not block the form. Stored runs keep their full
+# guards.
+DRAFT_CHECK_TIMEOUT_SECONDS = 5 * 60
+# The run outlives its lease by this much, so a reader sees the lease run out
+# before the run expires.
+_DRAFT_RUN_TTL_LEASE_MARGIN_SECONDS = 60
 # A queued draft task that has not started by then is dropped; the admin is
 # waiting on the form.
 DRAFT_RUN_QUEUE_EXPIRY_SECONDS = 5 * 60
@@ -277,19 +285,28 @@ def _latest_run_key(user_id: UUID, draft_key: str) -> str:
     return f"{_DRAFT_LATEST_RUN_KEY_PREFIX}:{user_id}:{draft_key}"
 
 
+def _draft_run_ttl_seconds(run: StoredDraftRun) -> int:
+    """At least ``DRAFT_RUN_TTL_SECONDS``, and always past the lease, so a run
+    with a live task cannot expire."""
+    if run.lease_expires_at is None:
+        return DRAFT_RUN_TTL_SECONDS
+    lease_left = (run.lease_expires_at - datetime.now(timezone.utc)).total_seconds()
+    return max(
+        DRAFT_RUN_TTL_SECONDS,
+        math.ceil(lease_left) + _DRAFT_RUN_TTL_LEASE_MARGIN_SECONDS,
+    )
+
+
 def save_draft_run(run: StoredDraftRun) -> None:
     """Stores the run. While the run is the latest of its draft key, this also
     renews the latest-run marker, so the marker lives as long as the run."""
     cache = get_cache_backend()
-    cache.set(
-        _run_key(run.snapshot.run_id),
-        run.model_dump_json(),
-        ex=DRAFT_RUN_TTL_SECONDS,
-    )
+    ttl_seconds = _draft_run_ttl_seconds(run)
+    cache.set(_run_key(run.snapshot.run_id), run.model_dump_json(), ex=ttl_seconds)
     cache.renew_if_value(
         _latest_run_key(run.user_id, run.snapshot.draft_key),
         str(run.snapshot.run_id).encode(),
-        DRAFT_RUN_TTL_SECONDS,
+        ttl_seconds,
     )
 
 
@@ -307,16 +324,19 @@ def draft_run_start_lock(user_id: UUID, draft_key: str) -> CacheLock:
     )
 
 
-def set_latest_draft_run(user_id: UUID, draft_key: str, run_id: UUID) -> None:
+def set_latest_draft_run(run: StoredDraftRun) -> None:
     get_cache_backend().set(
-        _latest_run_key(user_id, draft_key), str(run_id), ex=DRAFT_RUN_TTL_SECONDS
+        _latest_run_key(run.user_id, run.snapshot.draft_key),
+        str(run.snapshot.run_id),
+        ex=_draft_run_ttl_seconds(run),
     )
 
 
 def is_superseded(run: StoredDraftRun) -> bool:
     """True when a newer run for the same user and draft key has started. A
-    missing marker counts too: the marker lives as long as the latest run, so
-    it is missing only when that run expired."""
+    missing marker counts too: while a run is the latest, each save renews the
+    marker with the run, so the marker is missing only after a newer run took
+    it and then expired."""
     latest = get_cache_backend().get(
         _latest_run_key(run.user_id, run.snapshot.draft_key)
     )

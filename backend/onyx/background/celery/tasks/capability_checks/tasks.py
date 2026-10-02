@@ -18,6 +18,7 @@ from celery import Task, shared_task
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
+    DRAFT_CHECK_TIMEOUT_SECONDS,
     DraftCheckStateKind,
     DraftRunStatus,
     apply_check_result,
@@ -34,6 +35,7 @@ from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
     CAPABILITY_CHECK_TIMEOUT_SECONDS,
     capability_check_run_stale_after,
+    effective_check_timeout_seconds,
     generate_capability_report,
 )
 from onyx.connectors.models import InputType
@@ -192,7 +194,9 @@ def run_draft_capability_checks_task(
         check for check in snapshot.checks if check.state == DraftCheckStateKind.PENDING
     ]
     timeout_by_check_id = {
-        check.check_id: check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+        check.check_id: min(
+            effective_check_timeout_seconds(check), DRAFT_CHECK_TIMEOUT_SECONDS
+        )
         for check in get_capability_checks(snapshot.source)
     }
 
@@ -206,10 +210,8 @@ def run_draft_capability_checks_task(
             # The check's hang guard, plus the guard of a connector
             # instantiation that can run before it.
             run.renew_lease(
-                timeout_by_check_id.get(
-                    next_check.check_id, CAPABILITY_CHECK_TIMEOUT_SECONDS
-                )
-                + CAPABILITY_CHECK_TIMEOUT_SECONDS
+                timeout_by_check_id[next_check.check_id]
+                + min(CAPABILITY_CHECK_TIMEOUT_SECONDS, DRAFT_CHECK_TIMEOUT_SECONDS)
             )
 
     def on_result(results: Sequence[CapabilityCheckResult]) -> None:
@@ -249,6 +251,7 @@ def run_draft_capability_checks_task(
             access_type=snapshot.access_type,
             on_result=on_result,
             check_ids=frozenset(check.check_id for check in pending),
+            timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
         )
         snapshot.status = DraftRunStatus.COMPLETED
         save_draft_run(run)

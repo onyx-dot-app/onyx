@@ -265,7 +265,7 @@ def start_draft_capability_check_run(
         )
     try:
         save_draft_run(run)
-        set_latest_draft_run(user_id, draft_key, run.snapshot.run_id)
+        set_latest_draft_run(run)
     finally:
         start_lock.release()
     if not has_pending:
