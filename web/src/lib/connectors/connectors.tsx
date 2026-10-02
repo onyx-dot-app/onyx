@@ -111,7 +111,6 @@ function buildOneDriveConfiguration(
         type: "text",
         label: text.authorityHostLabel,
         name: "authority_host",
-        credentialBound: true,
         optional: true,
         default: DEFAULT_MICROSOFT_AUTHORITY_HOST,
         description: text.authorityHostDescription,
@@ -120,7 +119,6 @@ function buildOneDriveConfiguration(
         type: "text",
         label: text.graphApiHostLabel,
         name: "graph_api_host",
-        credentialBound: true,
         optional: true,
         default: DEFAULT_MICROSOFT_GRAPH_API_HOST,
         description: text.graphApiHostDescription,
@@ -262,7 +260,6 @@ export const connectorConfigs: Record<
         type: "text",
         label: "API Base URL (cell host)",
         name: "base_url",
-        credentialBound: true,
         optional: false,
         description:
           "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com).",
@@ -271,7 +268,6 @@ export const connectorConfigs: Record<
         type: "text",
         label: "Organization ID",
         name: "organization_id",
-        credentialBound: true,
         optional: false,
         description: "Your LumApps organization id (numeric).",
       },
@@ -688,7 +684,6 @@ export const connectorConfigs: Record<
         query: "Is this a Confluence Cloud instance?",
         label: "Is Cloud",
         name: "is_cloud",
-        credentialBound: true,
         optional: false,
         default: true,
         tabLabels: {
@@ -714,7 +709,6 @@ export const connectorConfigs: Record<
         query: "Enter the wiki base URL:",
         label: "Site URL",
         name: "wiki_base",
-        credentialBound: true,
         optional: false,
         initial: (currentCredential) => {
           return currentCredential?.credential_json?.wiki_base ?? "";
@@ -733,7 +727,6 @@ export const connectorConfigs: Record<
         query: "Using scoped token?",
         label: "Using scoped token",
         name: "scoped_token",
-        credentialBound: true,
         optional: true,
         default: false,
       },
@@ -825,7 +818,6 @@ export const connectorConfigs: Record<
         query: "Enter the Jira base URL:",
         label: "Jira Base URL",
         name: "jira_base_url",
-        credentialBound: true,
         optional: false,
         description:
           "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
@@ -835,7 +827,6 @@ export const connectorConfigs: Record<
         query: "Using scoped token?",
         label: "Using scoped token",
         name: "scoped_token",
-        credentialBound: true,
         optional: true,
         default: false,
       },
@@ -1037,7 +1028,6 @@ export const connectorConfigs: Record<
         query: "Microsoft Authority Host:",
         label: "Authority Host",
         name: "authority_host",
-        credentialBound: true,
         optional: true,
         default: "https://login.microsoftonline.com",
         description:
@@ -1050,7 +1040,6 @@ export const connectorConfigs: Record<
         query: "Microsoft Graph API Host:",
         label: "Graph API Host",
         name: "graph_api_host",
-        credentialBound: true,
         optional: true,
         default: "https://graph.microsoft.com",
         description:
@@ -1063,7 +1052,6 @@ export const connectorConfigs: Record<
         query: "SharePoint Domain Suffix:",
         label: "SharePoint Domain Suffix",
         name: "sharepoint_domain_suffix",
-        credentialBound: true,
         optional: true,
         default: "sharepoint.com",
         description:
@@ -1151,7 +1139,6 @@ export const connectorConfigs: Record<
         query: "Microsoft Authority Host:",
         label: "Authority Host",
         name: "authority_host",
-        credentialBound: true,
         optional: true,
         default: "https://login.microsoftonline.com",
         description:
@@ -1164,7 +1151,6 @@ export const connectorConfigs: Record<
         query: "Microsoft Graph API Host:",
         label: "Graph API Host",
         name: "graph_api_host",
-        credentialBound: true,
         optional: true,
         default: "https://graph.microsoft.com",
         description:
@@ -1244,7 +1230,6 @@ export const connectorConfigs: Record<
         query: "Microsoft Authority Host:",
         label: "Authority Host",
         name: "authority_host",
-        credentialBound: true,
         optional: true,
         default: "https://login.microsoftonline.com",
         description:
@@ -1257,7 +1242,6 @@ export const connectorConfigs: Record<
         query: "Microsoft Graph API Host:",
         label: "Graph API Host",
         name: "graph_api_host",
-        credentialBound: true,
         optional: true,
         default: "https://graph.microsoft.com",
         description:
@@ -1275,7 +1259,6 @@ export const connectorConfigs: Record<
         query: "Enter the base URL:",
         label: "Base URL",
         name: "base_url",
-        credentialBound: true,
         optional: false,
       },
       {
@@ -1296,7 +1279,6 @@ export const connectorConfigs: Record<
         query: "Enter the base URL of the Drupal Wiki instance:",
         label: "Base URL",
         name: "base_url",
-        credentialBound: true,
         optional: false,
         description:
           "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )",
@@ -1436,7 +1418,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         query: "Enter the base URL:",
         label: "Base URL",
         name: "base_url",
-        credentialBound: true,
         optional: false,
         description: `Specify the base URL for your Slab team. This will look something like: https://onyx.slab.com/`,
       },
@@ -1500,7 +1481,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         query: "Enter the realm name",
         label: "Realm Name",
         name: "realm_name",
-        credentialBound: true,
         optional: false,
       },
       {
@@ -1508,7 +1488,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         query: "Enter the realm URL",
         label: "Realm URL",
         name: "realm_url",
-        credentialBound: true,
         optional: false,
       },
     ],
@@ -1721,7 +1700,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         query: "Enter the AWS region:",
         label: "AWS Region",
         name: "region_name",
-        credentialBound: true,
         description:
           "The AWS region of the bucket (e.g. us-east-1). Required for buckets in " +
           "non-default partitions such as GovCloud (us-gov-west-1); otherwise the " +
@@ -1732,7 +1710,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         type: "text",
         label: "Bucket Type",
         name: "bucket_type",
-        credentialBound: true,
         optional: false,
         default: "s3",
         hidden: true,
@@ -1762,7 +1739,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         type: "checkbox",
         label: "EU Data Residency",
         name: "european_residency",
-        credentialBound: true,
         description:
           "Check this box if your bucket has EU data residency enabled.",
         optional: true,
@@ -1772,7 +1748,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         type: "text",
         label: "Bucket Type",
         name: "bucket_type",
-        credentialBound: true,
         optional: false,
         default: "r2",
         hidden: true,
@@ -1803,7 +1778,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         type: "text",
         label: "Bucket Type",
         name: "bucket_type",
-        credentialBound: true,
         optional: false,
         default: "google_cloud_storage",
         hidden: true,
@@ -1833,7 +1807,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         type: "text",
         label: "Bucket Type",
         name: "bucket_type",
-        credentialBound: true,
         optional: false,
         default: "oci_storage",
         hidden: true,
@@ -2077,7 +2050,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         query: "Select the Zoom plan:",
         label: "Zoom Plan",
         name: "plan_tier",
-        credentialBound: true,
         optional: false,
         options: [
           { name: "pro", value: "pro" },
@@ -2139,7 +2111,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         query: "Enter the Canvas base URL:",
         label: "Canvas Base URL",
         name: "canvas_base_url",
-        credentialBound: true,
         optional: false,
         description: "e.g. https://school.instructure.com",
       },
@@ -2269,7 +2240,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         query: "Enter the IMAP server host:",
         label: "IMAP Server Host",
         name: "host",
-        credentialBound: true,
         optional: false,
         description:
           "The IMAP server hostname (e.g., imap.gmail.com, outlook.office365.com)",
@@ -2279,7 +2249,6 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         query: "Enter the IMAP server port:",
         label: "IMAP Server Port",
         name: "port",
-        credentialBound: true,
         optional: true,
         default: 993,
         description: "The IMAP server port (default: 993 for SSL)",

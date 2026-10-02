@@ -31,13 +31,6 @@ export interface Option {
   ) => boolean;
   wrapInCollapsible?: boolean;
   disabled?: boolean | ((currentCredential: Credential<any> | null) => boolean);
-  /**
-   * The field is part of the source's backend `CredentialBinding` model: its
-   * valid values depend on the account behind the credential. The create form
-   * shows it above the credential section. `credentialBoundFields.json` lists
-   * the bound fields of each source, and a test keeps the flags equal to it.
-   */
-  credentialBound?: boolean;
 }
 
 export interface SelectOption extends Option {

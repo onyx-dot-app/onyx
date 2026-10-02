@@ -10,6 +10,7 @@ import {
   MIN_PRUNE_FREQ_HOURS,
   MIN_REFRESH_FREQ_MINUTES,
 } from "@/lib/connectors/connectors";
+import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
   PIPELINE_ORDER,
@@ -53,14 +54,26 @@ export interface CredentialBoundFieldSplit {
 }
 
 /**
- * Takes the `credentialBound` fields out of a configuration, so the create
- * form can show them above the credential section. Only top-level fields
- * move; a flagged field inside a tab stays with its tab.
+ * Source to the names of its credential-bound fields: the fields of the
+ * backend `CredentialBinding` model, whose valid values depend on the account
+ * behind the credential. `backend/scripts/generate_credential_bound_fields.py`
+ * writes the file, and a backend test keeps it equal to the models.
+ */
+const CREDENTIAL_BOUND_FIELDS: Partial<Record<ValidSources, string[]>> =
+  credentialBoundFields;
+
+/**
+ * Takes the credential-bound fields out of a configuration, so the create form
+ * can show them above the credential section. Only top-level fields move. A
+ * bound field inside a tab is not supported: it stays with its tab, and no
+ * source has one now.
  */
 export function splitCredentialBoundFields(
+  source: ValidSources,
   configuration: ConnectionConfiguration
 ): CredentialBoundFieldSplit {
-  const isBound = (field: ConnectorField) => field.credentialBound === true;
+  const boundNames = new Set(CREDENTIAL_BOUND_FIELDS[source] ?? []);
+  const isBound = (field: ConnectorField) => boundNames.has(field.name);
   return {
     values: configuration.values.filter(isBound),
     advancedValues: configuration.advanced_values.filter(isBound),

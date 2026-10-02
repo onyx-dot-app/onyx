@@ -162,7 +162,10 @@ export default function AddConnector({
     useConnectorConfiguration(connector);
   // Fields bound to the credential sit above the credential section. The
   // submit below still reads the full configuration.
-  const credentialBoundFields = splitCredentialBoundFields(configuration);
+  const credentialBoundFields = splitCredentialBoundFields(
+    connector,
+    configuration
+  );
   const formControlFieldNames = new Set(
     [...configuration.values, ...configuration.advanced_values]
       .filter((field) => field.type === "tab")
