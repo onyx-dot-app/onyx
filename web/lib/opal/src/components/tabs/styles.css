@@ -11,7 +11,7 @@
 /* ── List ───────────────────────────────────────────────────────────────────── */
 
 .opal-tabs-list {
-  @apply w-full rounded-08;
+  @apply relative w-full rounded-08;
 }
 
 .opal-tabs-list[data-variant="contained"] {
@@ -27,12 +27,14 @@
 
 /* ── Trigger ────────────────────────────────────────────────────────────────── */
 
+/* Above the sliding surface, which paints the active state behind them. */
 .opal-tabs-trigger {
-  @apply inline-flex items-center justify-center whitespace-nowrap rounded-08 cursor-pointer transition-all duration-200 ease-out;
+  @apply relative z-1 inline-flex items-center justify-center whitespace-nowrap rounded-08 cursor-pointer transition-colors duration-200 ease-out;
 }
 
+/* 36px tall, border included. */
 .opal-tabs-trigger[data-variant="contained"] {
-  @apply p-2 gap-2;
+  @apply h-9 px-2 gap-2;
 }
 
 .opal-tabs-trigger[data-variant="pill"],
@@ -40,12 +42,9 @@
   @apply p-1 font-secondary-action;
 }
 
-/* contained · active */
+/* contained · active (the surface paints its background) */
 .opal-tabs-trigger[data-variant="contained"][data-state="active"] {
-  @apply bg-background-neutral-00 text-text-04 border border-border-01;
-  box-shadow:
-    0px 2px 12px 0px var(--shadow-02),
-    0px 0px 4px 1px var(--shadow-02);
+  @apply text-text-04 border border-transparent;
 }
 
 /* contained · inactive */
@@ -53,14 +52,14 @@
   @apply text-text-03 border border-transparent;
 }
 
-/* pill · active */
+/* pill · active (the surface paints its background) */
 .opal-tabs-trigger[data-variant="pill"][data-state="active"] {
-  @apply bg-background-tint-inverted-03 text-text-inverted-05;
+  @apply text-text-inverted-05;
 }
 
 /* pill · inactive */
 .opal-tabs-trigger[data-variant="pill"][data-state="inactive"] {
-  @apply bg-background-tint-00 text-text-03;
+  @apply text-text-03;
 }
 
 /* underline · active */
@@ -90,7 +89,46 @@
   @apply absolute bottom-0 start-0 h-px bg-border-02 pointer-events-none;
 }
 
+/* left-0, not start-0: the hook measures offsets from the list's physical
+   left edge, in either direction. */
 .opal-tabs-pill-indicator {
-  @apply absolute bottom-0 z-10 pointer-events-none bg-background-tint-inverted-03 transition-all duration-200 ease-out;
+  @apply absolute bottom-0 left-0 z-10 pointer-events-none bg-background-tint-inverted-03;
   height: 2px;
+  will-change: transform, width;
+}
+
+/* ── Active surface ─────────────────────────────────────────────────────────── */
+
+/* Sits on the active tab and slides to the next one. Contained: the raised
+   white card. Pill: the filled background. */
+/* left-0, not start-0: offsets are measured from the physical left edge. */
+.opal-tabs-surface {
+  @apply absolute top-0 left-0 z-0 pointer-events-none rounded-08;
+  will-change: transform, width, height;
+}
+
+.opal-tabs-surface[data-variant="contained"] {
+  @apply bg-background-neutral-00 border border-border-01;
+  box-shadow: var(--shadow-box-00);
+}
+
+.opal-tabs-surface[data-variant="pill"] {
+  @apply bg-background-tint-inverted-03;
+}
+
+/* Slide once placed; hold still on the first placement and while scrolling. */
+.opal-tabs-surface[data-measured]:not([data-scrolling]),
+.opal-tabs-pill-indicator[data-measured]:not([data-scrolling]) {
+  transition:
+    transform 200ms ease-out,
+    width 200ms ease-out,
+    height 200ms ease-out,
+    opacity 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-tabs-surface,
+  .opal-tabs-pill-indicator {
+    transition: none !important;
+  }
 }

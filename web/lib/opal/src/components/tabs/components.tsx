@@ -18,7 +18,7 @@ import { Tooltip, Text, Button } from "@opal/components";
 import {
   TabsContext,
   useTabsContext,
-  usePillIndicator,
+  useTabIndicator,
   useHorizontalScroll,
 } from "@opal/components/tabs/hooks";
 import { useOpalStrings } from "@opal/strings";
@@ -78,11 +78,21 @@ function TabsList({
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
 
-  const { style: indicatorStyle } = usePillIndicator(
+  const {
+    style: indicatorStyle,
+    isScrolling,
+    measured,
+  } = useTabIndicator(
     listRef,
-    isPill,
+    true,
     enableScrollArrows ? tabsContainerRef : undefined
   );
+  // The indicators slide between tabs, but not on their first placement and
+  // not while the tabs scroll under them.
+  const indicatorState = {
+    "data-measured": measured || undefined,
+    "data-scrolling": isScrolling || undefined,
+  };
   const {
     canScrollLeft,
     canScrollRight,
@@ -133,6 +143,24 @@ function TabsList({
       }
       {...props}
     >
+      {/* The active tab's surface. It slides from tab to tab behind the
+          triggers, which only change their text colour. Underline has none. */}
+      {variant !== "underline" && (
+        <div
+          className="opal-tabs-surface"
+          data-variant={variant}
+          {...indicatorState}
+          style={{
+            // A transform, not left/top: the browser composites it on the
+            // GPU and moves it by sub-pixels, so the slide does not stutter.
+            transform: `translate(${indicatorStyle.left}px, ${indicatorStyle.top}px)`,
+            width: indicatorStyle.width,
+            height: indicatorStyle.height,
+            opacity: indicatorStyle.opacity,
+          }}
+        />
+      )}
+
       {isPill ? (
         enableScrollArrows ? (
           <div
@@ -189,8 +217,9 @@ function TabsList({
           )}
           <div
             className="opal-tabs-pill-indicator"
+            {...indicatorState}
             style={{
-              left: indicatorStyle.left,
+              transform: `translateX(${indicatorStyle.left}px)`,
               width: indicatorStyle.width,
               opacity: indicatorStyle.opacity,
             }}

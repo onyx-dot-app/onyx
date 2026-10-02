@@ -19,30 +19,40 @@ export function useTabsContext(): TabsContextValue | undefined {
 }
 
 /* =============================================================================
-   usePillIndicator
+   useTabIndicator
    ============================================================================= */
 
+/** The active tab's box, relative to the list. */
 export interface IndicatorStyle {
   left: number;
+  top: number;
   width: number;
+  height: number;
   opacity: number;
 }
 
 /**
- * Tracks the position of the sliding underline indicator for pill/underline
- * variants. Uses MutationObserver to react to Radix's data-state changes and
- * ResizeObserver to react to tab width changes.
+ * Tracks the active tab's box so the list's sliding indicators (every
+ * variant's active surface, and the pill/underline bar) can move to it. Uses
+ * MutationObserver to react to Radix's data-state changes and ResizeObserver
+ * to react to tab size changes.
+ *
+ * `measured` turns true once the first position is known, so the indicators
+ * can hold their transition until then and not sweep in from the edge.
  */
-export function usePillIndicator(
+export function useTabIndicator(
   listRef: React.RefObject<HTMLElement | null>,
   enabled: boolean,
   scrollContainerRef?: React.RefObject<HTMLElement | null>
-): { style: IndicatorStyle; isScrolling: boolean } {
+): { style: IndicatorStyle; isScrolling: boolean; measured: boolean } {
   const [style, setStyle] = useState<IndicatorStyle>({
     left: 0,
+    top: 0,
     width: 0,
+    height: 0,
     opacity: 0,
   });
+  const [measured, setMeasured] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -64,9 +74,13 @@ export function usePillIndicator(
         const tabRect = activeTab.getBoundingClientRect();
         setStyle({
           left: tabRect.left - listRect.left,
+          top: tabRect.top - listRect.top,
           width: tabRect.width,
+          height: tabRect.height,
           opacity: 1,
         });
+        // A frame later, so the first position lands without a transition.
+        requestAnimationFrame(() => setMeasured(true));
       }
     };
 
@@ -114,7 +128,7 @@ export function usePillIndicator(
     };
   }, [enabled, listRef, scrollContainerRef]);
 
-  return { style, isScrolling };
+  return { style, isScrolling, measured };
 }
 
 /* =============================================================================
