@@ -15,7 +15,7 @@ import {
   type Toast,
 } from "@opal/layouts/toast/store";
 import SvgChevronRight from "@opal/icons/chevron-right";
-import { Section } from "../general/components";
+import { Section } from "@opal/layouts/general/components";
 
 // Matches opal-toast-leave in styles.css: a 200ms fade, then a 200ms collapse.
 const LEAVE_DURATION = 400;

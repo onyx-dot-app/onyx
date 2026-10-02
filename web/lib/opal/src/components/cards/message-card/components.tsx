@@ -69,7 +69,7 @@ interface MessageCardBaseProps {
    *
    * @default 0
    */
-  contentPadding?: 0 | 1 | 2;
+  contentPadding?: 0 | 0.5 | 1 | 2;
 
   /**
    * Drop-shadow depth of the card, passed to `Card`.
