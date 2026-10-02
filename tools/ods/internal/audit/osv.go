@@ -144,13 +144,19 @@ func compareVersions(a, b, ecosystem string) int {
 	return c
 }
 
-// affectedAt reports whether the entry's ranges hold version: each
-// "introduced" opens an interval that the next "fixed" closes exclusively or
-// the next "last_affected" closes inclusively, and an open interval runs on.
+// affectedAt reports whether the entry holds version: listed among its
+// versions, or inside a range, where each "introduced" opens an interval that
+// the next "fixed" closes exclusively or the next "last_affected" closes
+// inclusively, and an open interval runs on.
 func affectedAt(aff *osvschema.Affected, version, ecosystem string) bool {
 	v, err := semantic.Parse(version, ecosystem)
 	if err != nil {
 		return false
+	}
+	for _, listed := range aff.GetVersions() {
+		if c, err := v.CompareStr(listed); err == nil && c == 0 {
+			return true
+		}
 	}
 	for _, r := range aff.GetRanges() {
 		open := false

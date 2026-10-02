@@ -178,6 +178,14 @@ func TestFixedFor_skipsVersionsAnotherRecordStillLists(t *testing.T) {
 	if got := fixedFor(vulns, []string{"GHSA-1", "GHSA-2", "GHSA-3"}, models.PackageInfo{Name: "pkg", Version: "1.0.0", Ecosystem: "Nope"}); got != "" {
 		t.Fatalf("fixedFor = %q, want none for an ecosystem the comparator cannot place", got)
 	}
+	// A record that lists 4.0.0 among its affected versions rules it out too.
+	vulns = append(vulns, &osvschema.Vulnerability{Id: "GHSA-5", Affected: []*osvschema.Affected{{
+		Package:  &osvschema.Package{Name: "pkg", Ecosystem: "npm"},
+		Versions: []string{"1.0.0", "4.0.0"},
+	}}})
+	if got := fixedFor(vulns, []string{"GHSA-1", "GHSA-2", "GHSA-3", "GHSA-5"}, pkg); got != "" {
+		t.Fatalf("fixedFor = %q, want none once a record lists the only candidate as affected", got)
+	}
 	// A range still open at the candidate keeps it affected.
 	open := []*osvschema.Vulnerability{{Id: "GHSA-4", Affected: []*osvschema.Affected{{
 		Package: &osvschema.Package{Name: "pkg", Ecosystem: "npm"},
