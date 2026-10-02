@@ -14,7 +14,75 @@ branch_labels = None
 depends_on = None
 
 
+def _index_state(conn: sa.engine.Connection, qualified_name: str) -> bool | None:
+    """An interrupted concurrent build can leave an invalid index."""
+    return conn.execute(
+        sa.text(
+            "SELECT i.indisvalid FROM pg_index i "
+            "WHERE i.indexrelid = to_regclass(:qualified_name)"
+        ),
+        {"qualified_name": qualified_name},
+    ).scalar_one_or_none()
+
+
 def upgrade() -> None:
+    bind = op.get_bind()
+    schema: str = bind.execute(sa.text("SELECT current_schema()")).scalar_one()
+    # The schema phase commits together; its final table identifies a retry.
+    if not sa.inspect(bind).has_table("chat_response_checkpoint", schema=schema):
+        _add_response_storage()
+    # Release DDL locks and our snapshot before concurrent index construction.
+    # env.py owns the transaction, so Alembic's autocommit_block cannot be used.
+    bind.commit()
+    with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        quoted_schema = conn.dialect.identifier_preparer.quote_identifier(schema)
+        for name, statement in (
+            (
+                "ix_chat_session_spawned_by_message_id",
+                'CREATE INDEX CONCURRENTLY "ix_chat_session_spawned_by_message_id" '
+                f"ON {quoted_schema}.chat_session (spawned_by_message_id)",
+            ),
+            (
+                "ix_chat_message_invoking_tool_call_id",
+                'CREATE INDEX CONCURRENTLY "ix_chat_message_invoking_tool_call_id" '
+                f"ON {quoted_schema}.chat_message (invoking_tool_call_id)",
+            ),
+            (
+                "uq_chat_message_run_id",
+                'CREATE UNIQUE INDEX CONCURRENTLY "uq_chat_message_run_id" '
+                f"ON {quoted_schema}.chat_message (run_id)",
+            ),
+        ):
+            qualified_name = f'{quoted_schema}."{name}"'
+            state = _index_state(conn, qualified_name)
+            if state is True:
+                continue
+            if state is False:
+                conn.exec_driver_sql(f"DROP INDEX CONCURRENTLY {qualified_name}")
+            conn.exec_driver_sql(statement)
+
+        if not any(
+            constraint["name"] == "uq_chat_message_run_id"
+            for constraint in sa.inspect(conn).get_unique_constraints(
+                "chat_message", schema=schema
+            )
+        ):
+            conn.exec_driver_sql(
+                f"ALTER TABLE {quoted_schema}.chat_message ADD CONSTRAINT "
+                "uq_chat_message_run_id UNIQUE USING INDEX uq_chat_message_run_id"
+            )
+        # Each validation runs after the initial ALTER TABLE locks are released.
+        conn.exec_driver_sql(
+            f"ALTER TABLE {quoted_schema}.chat_session "
+            "VALIDATE CONSTRAINT fk_chat_session_spawned_by_message"
+        )
+        conn.exec_driver_sql(
+            f"ALTER TABLE {quoted_schema}.chat_message "
+            "VALIDATE CONSTRAINT fk_chat_message_invocation"
+        )
+
+
+def _add_response_storage() -> None:
     op.alter_column(
         "chat_message",
         "message_type",
@@ -42,11 +110,7 @@ def upgrade() -> None:
         ["spawned_by_message_id"],
         ["id"],
         ondelete="CASCADE",
-    )
-    op.create_index(
-        "ix_chat_session_spawned_by_message_id",
-        "chat_session",
-        ["spawned_by_message_id"],
+        postgresql_not_valid=True,
     )
     for column in (
         sa.Column("response_status", sa.String(), nullable=True),
@@ -63,22 +127,7 @@ def upgrade() -> None:
         ["invoking_tool_call_id"],
         ["id"],
         ondelete="CASCADE",
-    )
-    op.create_index(
-        "ix_chat_message_invoking_tool_call_id",
-        "chat_message",
-        ["invoking_tool_call_id"],
-    )
-    op.drop_constraint(
-        "chat_message_chat_session_id_fkey", "chat_message", type_="foreignkey"
-    )
-    op.create_foreign_key(
-        "chat_message_chat_session_id_fkey",
-        "chat_message",
-        "chat_session",
-        ["chat_session_id"],
-        ["id"],
-        ondelete="CASCADE",
+        postgresql_not_valid=True,
     )
     for column in (
         sa.Column("tool_name", sa.String(), nullable=True),
@@ -146,7 +195,6 @@ def upgrade() -> None:
     )
 
     op.add_column("chat_message", sa.Column("run_id", sa.String(), nullable=True))
-    op.create_unique_constraint("uq_chat_message_run_id", "chat_message", ["run_id"])
     op.create_table(
         "chat_response_checkpoint",
         sa.Column(
@@ -206,16 +254,6 @@ def downgrade() -> None:
         "result",
     ):
         op.drop_column("tool_call", column)
-    op.drop_constraint(
-        "chat_message_chat_session_id_fkey", "chat_message", type_="foreignkey"
-    )
-    op.create_foreign_key(
-        "chat_message_chat_session_id_fkey",
-        "chat_message",
-        "chat_session",
-        ["chat_session_id"],
-        ["id"],
-    )
     op.alter_column(
         "chat_message",
         "message_type",

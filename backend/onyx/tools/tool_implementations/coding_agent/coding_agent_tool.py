@@ -141,6 +141,8 @@ class CodingAgentTool(Tool):
                 max_steps=MAX_CODING_AGENT_CYCLES + 1,
                 messages=[UserMessage(content=arguments.query)],
             )
+            # Each invocation creates a fresh agent. Before enabling follow-up runs,
+            # tie sandbox cleanup to the agent's lifetime instead of its first run.
             invocation.agents.add_completion_cleanup(submission.run_id, cleanup)
             return ChildRunWait(run_ids=[submission.run_id])
         except BaseException:

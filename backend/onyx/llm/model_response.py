@@ -126,7 +126,8 @@ class _ProviderUsage(BaseModel):
         cached = self.cache_read_input_tokens
         if cached is None and self.prompt_tokens_details is not None:
             cached = self.prompt_tokens_details.cached_tokens
-        # Providers omit counters they do not measure, including cache usage.
+        # NOTE: sometimes the usage data dictionary has these keys and the values are None
+        # hence the "or 0" instead of just using default values
         return Usage(
             completion_tokens=self.completion_tokens or 0,
             prompt_tokens=self.prompt_tokens or 0,

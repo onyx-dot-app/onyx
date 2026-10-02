@@ -1,6 +1,7 @@
 """Stateful agents with one execution path and independent run records."""
 
 import threading
+import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack, closing
@@ -297,10 +298,10 @@ class Agent:
                         )
                     if (
                         not previous._state.status.is_terminal
-                        or not previous._idle.done()
+                        or not previous._reusable.done()
                     ):
                         raise RuntimeError("Agent is already running or draining")
-                    previous._idle.result(timeout=0)
+                    previous._reusable.result(timeout=0)
             history = self.state
             cancellation_signal = (
                 cancellation
@@ -387,6 +388,7 @@ class Run:
         self._cancellation_signal = cancellation_signal
         self._completed: Future[None] = Future()
         self._idle: Future[None] = Future()
+        self._reusable: Future[None] = Future()
         self._delivery: EventDelivery | None = EventDelivery(
             event_dispatcher, parent=event_parent
         )
@@ -426,6 +428,7 @@ class Run:
         run._execution_active = False
         run._completed.set_result(None)
         run._idle.set_result(None)
+        run._reusable.set_result(None)
         run._settled.set_result(None)
         return run
 
@@ -738,10 +741,7 @@ class Run:
         outcome = RunStatus.ERROR
         suspended = False
         try:
-            with (
-                cancellation_scope(self._cancellation_signal),
-                self._cancellation_signal.on_operation(self._work.track_operation),
-            ):
+            with cancellation_scope(self._cancellation_signal):
                 self._cancellation_signal.check()
                 if not self._state.steps:
                     self._publish_event(AgentStartEvent(**self._ancestry))
@@ -940,25 +940,31 @@ class Run:
         if delivery is not None:
             self._work.tracker.follow(delivery.tracker)
 
-        def release() -> None:
-            try:
-                if delivery is not None:
-                    self._delivery_failed = delivery.failed.is_set()
-                    self._delivery = None
-                if self._coordination is not None:
-                    self._coordination._links.close()
-                    self._coordination.coordinator.finish(self)
-            except Exception as error:
-                logger.exception("Agent ownership release failed")
-                self._idle.set_exception(error)
-            finally:
-                self._clear_execution_config()
-                self._coordination = None
-                self._execution_active = False
-                if not self._idle.done():
-                    self._idle.set_result(None)
+        # Saved terminal output permits reuse; abandoned work retains its own run.
+        try:
+            if self._coordination is not None:
+                self._coordination._links.close()
+                self._coordination.coordinator.finish(self)
+        except Exception as error:
+            logger.exception("Agent ownership release failed")
+            self._reusable.set_exception(error)
+        else:
+            self._reusable.set_result(None)
+        self._execution_active = False
 
-        self._work.tracker.on_idle(release)
+        def finish_cleanup() -> None:
+            if delivery is not None:
+                self._delivery_failed = delivery.failed.is_set()
+                self._delivery = None
+            self._clear_execution_config()
+            self._coordination = None
+            error = self._reusable.exception()
+            if error is not None:
+                self._idle.set_exception(error)
+            else:
+                self._idle.set_result(None)
+
+        self._work.tracker.on_idle(finish_cleanup)
 
     def capture(self) -> ExecutionCheckpoint:
         """Capture this run and its preceding conversation under one lock."""
@@ -1011,6 +1017,7 @@ class Run:
             delivery.close()
         if coordination is not None:
             coordination.coordinator.release_execution(self)
+        self._reusable.set_result(None)
         self._completed.set_exception(RunReleased("Local execution has been released"))
         return checkpoint
 
@@ -1162,8 +1169,26 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
         if not completed:
             raise RuntimeError("Model stream ended without completed output")
 
+    # Stop waiting promptly, but keep the provider worker tracked until cleanup ends.
+    timeout = generation_context.total_timeout_s
+    deadline = time.monotonic() + min(
+        timeout if timeout is not None else OPERATION_TIMEOUT_SECONDS,
+        OPERATION_TIMEOUT_SECONDS,
+    )
+
+    def wait_for_generation() -> None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise LLMTimeoutError("Model generation exceeded its total timeout")
+        try:
+            run._work.blocking(generate, cancellation_signal, timeout=remaining)
+        except TimeoutError as error:
+            raise LLMTimeoutError(
+                "Model generation exceeded its total timeout"
+            ) from error
+
     try:
-        generate()
+        wait_for_generation()
     except LLMContextLimitError:
         partial = recorded_step.message
         if partial.text or partial.tool_calls:
@@ -1175,7 +1200,7 @@ def _generate_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) 
             recorded_step.message = AssistantMessage(
                 id=message_id, metadata=recorded_step.message.metadata
             )
-        generate()
+        wait_for_generation()
     with run._lock:
         cancellation_signal.check()
         recorded_step.generation_status = ExecutionStatus.COMPLETE

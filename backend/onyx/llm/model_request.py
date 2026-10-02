@@ -1,4 +1,4 @@
-"""Provider request messages and serialization from application messages."""
+"""Provider request messages in the OpenAI Chat Completions shape."""
 
 from __future__ import annotations
 
@@ -17,10 +17,11 @@ from onyx.tools.tool_name import sanitize_tool_name
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLMConfig
 
-# OpenAI reasoning models need this prefix to enable Markdown formatting.
+# Specifically for OpenAI models, this prefix needs to be in place for the model to output markdown and correct styling
 CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 
+# Tool call structures
 class RequestFunctionCall(BaseModel):
     """Complete function call sent in conversation history."""
 
@@ -34,6 +35,10 @@ class ToolCall(BaseModel):
     function: RequestFunctionCall
 
 
+# Message types
+
+
+# Base class for all cacheable messages
 class CacheableMessage(BaseModel):
     # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
     cache_control: dict[str, JsonValue] | None = None
@@ -62,6 +67,7 @@ class ToolMessage(CacheableMessage):
     tool_call_id: str
 
 
+# Union type for all OpenAI Chat Completions messages
 ChatCompletionMessage = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 
 

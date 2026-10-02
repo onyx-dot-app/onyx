@@ -343,7 +343,7 @@ class AgentCoordinator:
             self._ownership.abort_start(run.id)
 
     def finish(self, run: Run) -> None:
-        """Release ownership after execution and event workers drain."""
+        """Release execution ownership after terminal output is saved."""
         try:
             if self._ownership is not None:
                 self._ownership.release(run.id)
@@ -466,18 +466,19 @@ class AgentCoordinator:
                 for run_id in released_ids:
                     binding.children.pop(run_id, None)
             binding.run.cancel()
+        with self._state.lock:
+            runs = list(self._state.runs.values())
         deadline = time.monotonic() + timeout
-        for binding in bindings:
+        for run in runs:
             try:
-                binding.run._completed.result(
-                    timeout=max(0, deadline - time.monotonic())
-                )
+                run._completed.result(timeout=max(0, deadline - time.monotonic()))
             except TimeoutError:
                 return False
-            if not binding.run.wait_for_idle(
-                timeout=max(0, deadline - time.monotonic())
-            ):
-                return False
+            try:
+                if not run.wait_for_idle(timeout=max(0, deadline - time.monotonic())):
+                    return False
+            except Exception:
+                logger.warning("Agent ownership cleanup failed", exc_info=True)
         with self._state.lock:
             completions = [
                 future
@@ -784,12 +785,14 @@ class RunCoordination:
             with self._lock:
                 if self._finished:
                     run.cancel()
-                    self.run._work.tracker.started()
-                    run.add_idle_callback(self.run._work.tracker.finished)
+                    self._track_child_cleanup(run)
                 else:
                     self._include_predecessors(run)
                     self._attach(run)
         return run
+
+    def _track_child_cleanup(self, child: Run) -> None:
+        self.run._work.track_operation(child._idle)
 
     def _include_predecessors(self, run: Run) -> None:
         """Retain completed background history consumed by this foreground child."""
@@ -880,8 +883,7 @@ class RunCoordination:
         for child in children:
             local = self.coordinator.child_run(child.run_id, self.run.agent_id)
             if local is not None:
-                self.run._work.tracker.started()
-                local.add_idle_callback(self.run._work.tracker.finished)
+                self._track_child_cleanup(local)
             for cleanup in self.coordinator._cleanup_for(child.run_id):
                 self.run._work.track_operation(cleanup)
         deadline = time.monotonic() + (
@@ -1025,12 +1027,10 @@ class _ToolControl(AgentControl):
         self._check()
         previous = coordinator.active_run(agent_id)
         if previous is not None and previous.status.is_terminal:
-            idle = self.owner.run._work.blocking(
-                lambda: previous.wait_for_idle(timeout=OPERATION_TIMEOUT_SECONDS),
+            self.owner.run._work.blocking(
+                lambda: previous._reusable.result(timeout=OPERATION_TIMEOUT_SECONDS),
                 self.owner.run._cancellation_signal,
             )
-            if not idle:
-                raise TimeoutError("Previous agent execution is still draining")
         self._check()
         return self.owner.start_child(
             agent,

@@ -17,6 +17,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
+from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.concurrency import ExecutionWork
+from onyx.agents.runtime import Agent
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import GenerationRequest, TextDeltaEvent, UserMessage
@@ -131,6 +134,7 @@ def provider_server(
     send_chunk: bool,
     complete: bool = False,
     tls: ssl.SSLContext | None = None,
+    complete_after_first: bool = False,
 ) -> Iterator[tuple[str, ProviderState]]:
     state = ProviderState()
 
@@ -141,21 +145,47 @@ def provider_server(
             pass
 
         def do_POST(self) -> None:
-            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            request_body = json.loads(
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            )
             state.requests += 1
+            finish = complete or (complete_after_first and state.requests > 1)
             state.path = self.path
             state.headers = dict(self.headers)
-            if send_chunk:
+            if finish and not request_body.get("stream"):
+                body = json.dumps(
+                    {
+                        "id": "chat-test",
+                        "object": "chat.completion",
+                        "created": 1,
+                        "model": "harness-model",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {"role": "assistant", "content": "hello"},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                    }
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+                return
+            if send_chunk or finish:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
                 self.wfile.write(_first_events(provider))
-                if complete:
+                if finish:
                     self.wfile.write(
                         b'data: {"id":"chat-test","object":"chat.completion.chunk","created":1,"model":"harness-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'
                     )
                 self.wfile.flush()
-                if complete:
+                if finish:
                     self.close_connection = True
                     return
             state.started.set()
@@ -170,6 +200,13 @@ def provider_server(
                     if disconnected:
                         state.disconnected.set()
                         return
+            if not send_chunk:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                self.wfile.write(_first_events(provider))
+                self.wfile.flush()
+            self.close_connection = True
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     if tls is not None:
@@ -222,17 +259,33 @@ def provider_tls(
         )
     )
     monkeypatch.setenv("SSL_CERT_FILE", str(cert_path))
+    # Cached clients retain the previous test's certificate trust settings.
+    from litellm.caching.in_memory_cache import InMemoryCache
+
+    from onyx.llm.litellm_singleton import litellm
+
+    monkeypatch.setattr(litellm, "in_memory_llm_clients_cache", InMemoryCache())
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert_path, key_path)
     return context
 
 
 @pytest.mark.parametrize(
-    "provider", ["openai", "anthropic", "responses", "gateway_responses", "azure"]
+    "provider",
+    [
+        "openai",
+        "anthropic",
+        "responses",
+        "gateway_responses",
+        "azure",
+        "lm_studio",
+        "vercel_ai_gateway",
+        "together_ai",
+    ],
 )
 @pytest.mark.parametrize("send_chunk", [False, True])
 @pytest.mark.parametrize("invoke", [False, True])
-def test_cancel_closes_provider_connection(
+def test_cancel_stops_waiting_and_tracks_provider_cleanup(
     provider: str, send_chunk: bool, invoke: bool, provider_tls: ssl.SSLContext | None
 ) -> None:
     with provider_server(
@@ -242,6 +295,7 @@ def test_cancel_closes_provider_connection(
     ) as (url, state):
         signal = CancellationSignal()
         stopped = threading.Event()
+        work = ExecutionWork()
         yielded = threading.Event()
         errors: list[BaseException] = []
         llm = LitellmLLM(
@@ -263,18 +317,21 @@ def test_cancel_closes_provider_connection(
             api_base=url,
         )
 
+        def generate() -> None:
+            request = GenerationRequest(messages=[UserMessage(content="test")])
+            context = GenerationContext(
+                cancellation=signal, flow=LLMFlow.MODEL_VALIDATION
+            )
+            if invoke:
+                llm.invoke(request, context)
+            else:
+                for event in llm.stream(request, context):
+                    if isinstance(event, TextDeltaEvent):
+                        yielded.set()
+
         def execute() -> None:
             try:
-                request = GenerationRequest(messages=[UserMessage(content="test")])
-                context = GenerationContext(
-                    cancellation=signal, flow=LLMFlow.MODEL_VALIDATION
-                )
-                if invoke:
-                    llm.invoke(request, context)
-                else:
-                    for event in llm.stream(request, context):
-                        if isinstance(event, TextDeltaEvent):
-                            yielded.set()
+                work.blocking(generate, signal)
             except AgentCancelled:
                 stopped.set()
             except BaseException as error:
@@ -288,7 +345,10 @@ def test_cancel_closes_provider_connection(
                 assert yielded.wait(5), errors
             signal.cancel()
             assert stopped.wait(3), errors
-            assert state.disconnected.wait(3), "Model request was left running"
+            if not send_chunk:
+                assert not work.tracker.wait_idle(0.05)
+            state.release.set()
+            assert work.tracker.wait_idle(10), "Provider worker did not finish cleanup"
             worker.join(timeout=3)
             assert not worker.is_alive()
             assert not errors
@@ -297,17 +357,35 @@ def test_cancel_closes_provider_connection(
             signal.cancel()
             state.release.set()
             worker.join(timeout=3)
+            assert work.tracker.wait_idle(10)
 
 
+@pytest.mark.parametrize(
+    "provider", ["openai", "lm_studio", "vercel_ai_gateway", "together_ai"]
+)
 @pytest.mark.parametrize("invoke", [False, True])
-def test_cancellable_model_completes_normally(invoke: bool) -> None:
-    with provider_server("openai", True, complete=True) as (url, state):
+@pytest.mark.parametrize("from_environment", [False, True])
+def test_cancellable_model_completes_normally(
+    invoke: bool, provider: str, from_environment: bool
+) -> None:
+    with (
+        provider_server("openai", True, complete=True) as (url, state),
+        pytest.MonkeyPatch.context() as env,
+    ):
+        url += "/v1"
+        if from_environment:
+            env.setenv(f"{provider.upper()}_API_BASE", url)
+            env.setenv(f"{provider.upper()}_API_KEY", "local-test-key")
         llm = LitellmLLM(
-            api_key="local-test-key",
-            model_provider="openai",
+            api_key=None if from_environment else "local-test-key",
+            model_provider=provider,
             model_name="harness-model",
             max_input_tokens=4096,
-            api_base=url,
+            api_base=None if from_environment else url,
+            # The factory sends LM Studio credentials as an explicit header.
+            extra_headers={"Authorization": "Bearer local-test-key"}
+            if provider == "lm_studio" and not from_environment
+            else None,
         )
         request = GenerationRequest(messages=[UserMessage(content="test")])
         context = GenerationContext(
@@ -323,52 +401,8 @@ def test_cancellable_model_completes_normally(invoke: bool) -> None:
             )
         assert text == "hello"
         assert state.requests == 1
-
-
-def test_cancel_does_not_interrupt_another_run() -> None:
-    with provider_server("openai", True) as (url, blocked):
-        signal = CancellationSignal()
-        stopped = threading.Event()
-        errors: list[BaseException] = []
-
-        def execute() -> None:
-            try:
-                llm = LitellmLLM(
-                    api_key="local-test-key",
-                    model_provider="openai",
-                    model_name="harness-model",
-                    max_input_tokens=4096,
-                    api_base=url,
-                )
-                list(
-                    llm.stream(
-                        GenerationRequest(messages=[UserMessage(content="test")]),
-                        GenerationContext(
-                            cancellation=signal, flow=LLMFlow.MODEL_VALIDATION
-                        ),
-                    )
-                )
-            except AgentCancelled:
-                stopped.set()
-            except BaseException as error:
-                errors.append(error)
-
-        worker = threading.Thread(target=execute, daemon=True)
-        worker.start()
-        try:
-            assert blocked.started.wait(10), errors
-            test_cancellable_model_completes_normally(False)
-            assert not stopped.is_set()
-            signal.cancel()
-            assert stopped.wait(3), errors
-            assert blocked.disconnected.wait(3)
-            # The shared event loop must remain usable after cancellation.
-            test_cancellable_model_completes_normally(True)
-            assert not errors
-        finally:
-            signal.cancel()
-            blocked.release.set()
-            worker.join(timeout=3)
+        assert state.path == "/v1/chat/completions"
+        assert state.headers["Authorization"] == "Bearer local-test-key"
 
 
 @pytest.mark.parametrize("api_version", ["2024-02-01", "v1"])
@@ -405,3 +439,52 @@ def test_azure_preserves_authentication_and_endpoint(
             assert state.headers["Authorization"] == "Bearer azure-test-token"
         else:
             assert state.headers["api-key"] == "azure-test-key"
+
+
+@pytest.mark.parametrize(
+    "provider", ["openai", "lm_studio", "vercel_ai_gateway", "together_ai"]
+)
+def test_agent_reuse_does_not_wait_for_cancelled_provider_read(
+    provider: str, provider_tls: ssl.SSLContext | None
+) -> None:
+    with provider_server(
+        "openai", False, tls=provider_tls, complete_after_first=True
+    ) as (url, state):
+        llm = LitellmLLM(
+            api_key="local-test-key",
+            model_provider=provider,
+            model_name="harness-model",
+            max_input_tokens=4096,
+            api_base=url,
+        )
+        coordinator = AgentCoordinator()
+        agent = Agent(llm)
+        old = agent.start(
+            messages=[UserMessage(content="First")],
+            max_steps=1,
+            coordinator=coordinator,
+        )
+        try:
+            assert state.started.wait(10)
+            old.cancel()
+            with pytest.raises(AgentCancelled):
+                old.result(timeout=3)
+            old._reusable.result(timeout=3)
+            snapshot = old.snapshot()
+            assert not old.wait_for_idle(timeout=0)
+            new = agent.start(
+                messages=[UserMessage(content="Second")],
+                max_steps=1,
+                coordinator=coordinator,
+            )
+            assert new.result(timeout=5).output.text == "hello"
+            assert new.wait_for_idle(timeout=3)
+            assert not old.wait_for_idle(timeout=0)
+            assert state.requests == 2
+            assert not coordinator.close(timeout=0)
+        finally:
+            state.release.set()
+            assert old.wait_for_idle(timeout=5)
+            assert coordinator.close(timeout=5)
+        assert old.snapshot() == snapshot
+        assert agent.state.messages[-1].text == "hello"

@@ -19,7 +19,7 @@ A generation tool-call event contains the generated name and arguments. Agent to
 | `multi_llm.py` | LiteLLM transport and shared generation implementation. |
 | `model_request.py` | Provider request messages and serialization from application messages. |
 | `model_response.py` | Provider responses, parsing, and streamed message accumulation. |
-| `cancellation.py` | Cancellation signals, isolated execution, and interruptible streaming. |
+| `cancellation.py` | Cooperative cancellation signals and isolated execution. |
 
 ## One generation
 
@@ -55,7 +55,8 @@ Every application operation supplies a registered tracing flow.
 `total_timeout_s` limits the complete generation, including retries.
 `invoke` uses `LLM_INVOKE_TIMEOUT_S` when no total timeout is set and ignores the streaming idle timeout.
 `stream` uses `LLM_SOCKET_READ_TIMEOUT` for idle reads and has no total timeout unless explicitly set.
-Deadline expiry interrupts owned provider I/O and raises `LLMTimeoutError`.
+Deadline checks raise `LLMTimeoutError` when provider work returns control.
+The agent runtime separately bounds its wait and retains ownership until the worker exits.
 A generation deadline does not cancel the parent agent's signal.
 
 ## Streaming and cancellation
@@ -93,8 +94,9 @@ with closing(client.stream(request, GenerationContext(flow=flow, cancellation=si
 ```
 
 The example uses an existing client, request, and registered flow.
-Call `signal.cancel()` from the request's Stop handler to interrupt generation.
-Cancellation raises `AgentCancelled`. The operation remains tracked until transport cleanup finishes.
+Call `signal.cancel()` from the request's Stop handler to stop accepting output and starting further work.
+Cancellation raises `AgentCancelled` at the next cancellation check.
+The agent runtime tracks blocked calls until their workers finish.
 Each generation owns its stream accumulator, parsing state, and deadline.
 
 ## Agents
@@ -144,15 +146,16 @@ Calls without injected settings share a read lock. Original environment values a
 When injection is disabled, the adapter drops environment-only keys and logs a warning.
 UI routing selections remain configuration metadata and do not become provider arguments.
 
-Each generation owns a synchronous HTTP client. HTTPX connection tracing captures a duplicate socket before TLS setup.
-Cancellation shuts down that socket to interrupt blocked reads. The generation thread closes the client and tracks cleanup completion.
-Controlled stalled-response tests cover OpenAI chat, OpenAI Responses, Azure chat, Anthropic, and the Responses gateway.
-They verify cancellation before response headers and between streamed chunks, plus isolation between simultaneous requests.
-Azure client construction uses LiteLLM's authentication helper and retains API-key, AD-token, and token-refresh settings.
+LiteLLM owns provider routing and normal client construction.
+Selected providers use isolated HTTP clients to avoid shared connection-pool failures.
+Cancellation is cooperative: checks surround provider requests, retries, and stream reads.
+The agent runtime stops waiting promptly and rejects late output, while the tracked worker finishes cleanup.
+Discarded model calls, tools, and callbacks do not prevent another run after terminal output is saved.
+Already-started tool side effects can complete after cancellation, as with any uninterruptible external request.
+Provider generation and token use can continue after cancellation.
 
-DNS lookup and TCP connection setup occur before socket capture. They remain subject to native connection timeouts.
-Other provider paths require their own transport verification; these tests do not establish universal provider interruption.
-Socket timeouts bound connection setup and idle reads. A generation deadline cancels that generation without cancelling its parent run.
-These limits do not cap an agent's total execution time.
+Socket timeouts limit connection setup and idle reads, not absolute cleanup time.
+Provider keepalive traffic can extend a blocked call. A generation deadline does not cancel the parent agent's signal.
+Local HTTP/HTTPS tests check prompt cancellation, retained worker ownership, and normal provider routing.
 
 Each streamed generation owns its provider diagnostics. Retry attempts update that operation's diagnostics before emitting generation events.

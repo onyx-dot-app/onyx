@@ -132,8 +132,7 @@ class ExecutionWork:
 
         def execute() -> T:
             signal.check()
-            with signal.on_operation(self.track_operation):
-                return operation()
+            return operation()
 
         future = self.start(execute)
         try:
@@ -141,15 +140,7 @@ class ExecutionWork:
         except BaseException as error:
             if future.done() and not future.cancelled() and future.exception() is error:
                 raise
-            self.tracker.started()
-
-            def report(completed: Future[T]) -> None:
-                try:
-                    _report_abandoned_worker(completed)
-                finally:
-                    self.tracker.finished()
-
-            future.add_done_callback(report)
+            future.add_done_callback(_report_abandoned_worker)
             raise
 
     def track_operation(self, future: Future[None]) -> None:

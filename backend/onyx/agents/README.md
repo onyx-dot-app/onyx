@@ -41,7 +41,9 @@ Execution functions prepare model calls, compact history, and advance steps usin
 `ToolBatch` owns parallel tool work for a step and records its results in the run.
 Execution returns when it reaches a suspension or completion boundary.
 `Agent` combines preceding history with its latest run when starting another execution.
-A new run can start only after the previous run finishes and its workers become idle.
+A new run can start after the previous run finishes and saves its output.
+Abandoned model calls, tools, and callbacks do not block reuse; their late output is rejected.
+Work already started can still produce external side effects. Cancellation does not undo that work.
 
 A **step** is one model generation together with the results of any tool calls it made. A run
 is a loop over steps: generate, execute tools, decide whether to continue.
@@ -118,7 +120,8 @@ result = run.result(timeout=60)
 `run.result(timeout=60)` returns `RunResult`,
 containing the final assistant message, step count, and stop reason.
 `agent.state` returns an isolated view of conversation history and its compaction checkpoint.
-An Agent accepts another run after its previous run finishes and becomes idle.
+An Agent accepts another run after its previous run finishes and releases execution ownership.
+Model calls, tools, and callbacks from the old run can still be draining.
 A suspended run keeps its conversation reserved, even after its workers become idle.
 
 Run lifecycle notifications have distinct meanings:
@@ -251,6 +254,8 @@ Register cleanup immediately after spawning the child. It runs after local execu
 Its returned future reports cleanup failures. Foreground parent cleanup and coordinator shutdown both retain this work.
 Application integration uses `Run.add_idle_callback` and `Run.wait_for_idle` to observe when local work has drained.
 A suspended run can be idle without being complete. Tool authors use `add_completion_cleanup` for resource cleanup.
+A terminal run can permit agent reuse before it becomes idle; idle still waits for all its workers.
+Coordinator shutdown waits for these workers too, including those from earlier runs.
 
 Subscribe to a run for progress. Foreground child events also reach its ancestors; background runs require their own subscription.
 `completion(run_id)` returns a future for terminal handling and preserves storage failures.
@@ -268,7 +273,7 @@ It cannot replace a running or suspended child with another owner.
 
 Call `Run.handoff` after suspension to release local execution. Resume the saved state with a new `Agent`.
 Resumption creates a new `Run` object with the same ID, accepted input, and remaining step budget.
-Parent dependencies use run IDs and completion records. Local resource cleanup finishes when execution is released.
+Parent dependencies use run IDs and completion records. Local resource cleanup waits for workers after execution is released.
 A coordinator rejects competing local owners. The application uses an atomic storage claim to exclude other API pods.
 A new coordinator can load terminal child states through `read_run`.
 Foreground children must finish before the parent can transfer. Rejected transfers leave the local owner intact.
@@ -407,7 +412,7 @@ The shared Onyx factory reconstructs feature configuration from these saved valu
 
 Keep callbacks, credentials, and clients out of feature payload schemas. Application code reconstructs live resources.
 Coding runs use temporary sandboxes and do not support checkpoint reconstruction.
-The live coding task owns its sandbox until completion or cancellation.
+The live coding task retains its sandbox until its workers finish after completion or cancellation.
 
 ### Chat archive
 

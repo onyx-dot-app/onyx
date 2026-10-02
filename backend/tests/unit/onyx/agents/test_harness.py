@@ -555,7 +555,7 @@ def test_current_thread_start_completes_storage_before_return() -> None:
     def generate(
         _request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
-        assert threading.current_thread() is caller
+        assert threading.current_thread() is not caller
         visited.append("model")
         return answer()
 

@@ -54,11 +54,11 @@ def test_distinct_jobs_start_independently_and_preserve_context() -> None:
     assert tenant.get() == "unset"
 
 
-def test_provider_completion_remains_tracked_after_worker_returns() -> None:
+def test_registered_completion_remains_tracked_after_cancellation() -> None:
     work = ExecutionWork()
     signal = CancellationSignal()
     provider_done: Future[None] = Future()
-    work.blocking(lambda: signal.track_operation(provider_done), signal)
+    work.track_operation(provider_done)
     signal.cancel()
     assert not work.tracker.wait_idle(0)
     provider_done.set_result(None)
@@ -67,11 +67,19 @@ def test_provider_completion_remains_tracked_after_worker_returns() -> None:
 
 @pytest.mark.parametrize("fails", [False, True])
 def test_cancelled_job_keeps_ownership_and_reports_late_failure(
-    fails: bool, caplog: pytest.LogCaptureFixture
+    fails: bool, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     work = ExecutionWork()
     signal = CancellationSignal()
     entered, release = threading.Event(), threading.Event()
+    reported = threading.Event()
+    report = concurrency._report_abandoned_worker
+
+    def report_and_notify(future: Future[None]) -> None:
+        report(future)
+        reported.set()
+
+    monkeypatch.setattr(concurrency, "_report_abandoned_worker", report_and_notify)
 
     def operation() -> None:
         entered.set()
@@ -91,6 +99,7 @@ def test_cancelled_job_keeps_ownership_and_reports_late_failure(
     finally:
         release.set()
     assert work.tracker.wait_idle(2)
+    assert reported.wait(2)
     assert sum(
         record.message == "Agent worker failed after its caller stopped waiting"
         for record in caplog.records
@@ -236,54 +245,6 @@ def test_child_thread_start_failure_rolls_back_registration(
     run.result(3)
     assert run.wait_for_idle(2)
     assert runtime.start_thread_with_context is original
-
-
-def test_preparation_preserves_outer_provider_ownership() -> None:
-    work = ExecutionWork()
-    signal = CancellationSignal()
-    completion: Future[None] = Future()
-    try:
-        with signal.on_operation(work.track_operation):
-            work.blocking(lambda: None, signal)
-            signal.track_operation(completion)
-        assert not work.tracker.wait_idle(0)
-    finally:
-        completion.set_result(None)
-    assert work.tracker.wait_idle(1)
-
-
-def test_cancelled_callback_retains_late_provider_cleanup() -> None:
-    work = ExecutionWork()
-    signal = CancellationSignal()
-    entered, release, registered = (
-        threading.Event(),
-        threading.Event(),
-        threading.Event(),
-    )
-    completion: Future[None] = Future()
-
-    def callback() -> None:
-        entered.set()
-        assert release.wait(3)
-        signal.track_operation(completion)
-        registered.set()
-
-    with signal.on_operation(work.track_operation):
-        waiting = start_thread_future(
-            lambda: work.blocking(callback, signal), name="test-preparation"
-        )
-        assert entered.wait(2)
-        signal.cancel()
-        with pytest.raises(AgentCancelled):
-            waiting.result(2)
-    try:
-        release.set()
-        assert registered.wait(2)
-        assert not work.tracker.wait_idle(0)
-    finally:
-        release.set()
-        completion.set_result(None)
-    assert work.tracker.wait_idle(2)
 
 
 def test_terminal_snapshot_rejects_late_tool_result(

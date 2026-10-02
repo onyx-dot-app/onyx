@@ -137,23 +137,22 @@ class ToolBatch:
     ) -> None:
 
         def operation() -> ToolOutcome:
-            with self.signal.on_operation(self.scope.track_operation):
-                outcome = self._execute_tool(
-                    call=call,
-                    index=index,
-                    approved=approved,
-                    children=children,
-                    grouped_calls=grouped_calls,
-                    merged_arguments=merged_arguments,
-                )
-                if grouped_calls and not isinstance(outcome, ToolResult):
-                    raise ValueError("Batched tools must return a completed result")
-                if isinstance(outcome, ToolResult):
-                    # Checkpoint capture must not split a completed batch.
-                    with self.run._lock:
-                        for member in grouped_calls or [call]:
-                            self._record_tool_result(outcome, member)
-                return outcome
+            outcome = self._execute_tool(
+                call=call,
+                index=index,
+                approved=approved,
+                children=children,
+                grouped_calls=grouped_calls,
+                merged_arguments=merged_arguments,
+            )
+            if grouped_calls and not isinstance(outcome, ToolResult):
+                raise ValueError("Batched tools must return a completed result")
+            if isinstance(outcome, ToolResult):
+                # Checkpoint capture must not split a completed batch.
+                with self.run._lock:
+                    for member in grouped_calls or [call]:
+                        self._record_tool_result(outcome, member)
+            return outcome
 
         future = self.scope.start(operation)
         for member in grouped_calls or [call]:
@@ -361,6 +360,7 @@ class ToolBatch:
             result = before_tool_call(context)
             if result is not None:
                 return result
+        cancellation_signal.check()
         active = threading.Event()
         active.set()
 

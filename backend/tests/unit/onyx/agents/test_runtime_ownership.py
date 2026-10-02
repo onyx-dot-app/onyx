@@ -1,7 +1,6 @@
 """Execution cleanup, restoration, and concurrent result acceptance remain independent."""
 
 import threading
-import time
 from threading import Event
 from unittest.mock import patch
 
@@ -11,7 +10,7 @@ from onyx.agents.agent_coordination import (
     AgentCoordinator,
 )
 from onyx.agents.events import AgentEvent
-from onyx.agents.execution_records import ExecutionStatus, RunStatus
+from onyx.agents.execution_records import ExecutionStatus, RunFailureKind, RunStatus
 from onyx.agents.models import (
     AgentInfo,
     PreparedStep,
@@ -21,8 +20,9 @@ from onyx.agents.models import (
     StepResult,
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
-from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -131,28 +131,24 @@ def test_archive_lookup_does_not_restore_an_agent(in_discovery: bool) -> None:
 
 
 @pytest.mark.parametrize("kind", ["model", "tool"])
-def test_cancelled_work_keeps_agent_and_coordinator_reserved(kind: str) -> None:
+def test_cancelled_work_remains_tracked_without_reserving_agent(kind: str) -> None:
     entered, release = Event(), Event()
+    effects: list[str] = []
 
     def generate(
-        _request: GenerationRequest, signal: CancellationSignal
+        _request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
-        def cleanup() -> None:
-            assert release.wait(5)
-
-        signal.track_operation(
-            start_thread_future(cleanup, name="test-provider-cleanup")
-        )
-        cancelled = Event()
-        with signal.on_cancel(cancelled.set):
-            entered.set()
-            assert cancelled.wait(3)
-        signal.check()
-        raise AssertionError("Cancelled provider returned")
+        if entered.is_set():
+            return AssistantMessage(content=[TextContent(text="New answer")])
+        entered.set()
+        assert release.wait(5)
+        return AssistantMessage(content=[TextContent(text="Late")])
 
     def tool(_invocation: ToolInvocation) -> ToolResult:
         entered.set()
         assert release.wait(5)
+        effects.append("Old side effect")
+        _invocation.update(ToolProgress(content="Late"))
         return ToolResult(content="Late")
 
     agent = (
@@ -161,7 +157,9 @@ def test_cancelled_work_keeps_agent_and_coordinator_reserved(kind: str) -> None:
         else Agent(
             FakeModelClient(
                 lambda *_: AssistantMessage(
-                    content=[ToolCall(id="blocked", name="blocked", arguments={})]
+                    content=[TextContent(text="New answer")]
+                    if entered.is_set()
+                    else [ToolCall(id="blocked", name="blocked", arguments={})]
                 )
             ),
             tools=[
@@ -184,16 +182,55 @@ def test_cancelled_work_keeps_agent_and_coordinator_reserved(kind: str) -> None:
             with pytest.raises(AgentCancelled):
                 run.result(timeout=3)
             assert not run.wait_for_idle(timeout=0.01)
+            run._reusable.result(timeout=2)
+            assert coordinator.active_run(agent.id) is None
+            snapshot = run.snapshot()
+            following = agent.start(max_steps=1, coordinator=coordinator)
+            assert following.result(timeout=2).output.text == "New answer"
+            assert following.wait_for_idle(timeout=2)
+            assert not run.wait_for_idle(timeout=0)
+            assert not effects
             assert not coordinator.close(timeout=0.01)
-            with pytest.raises(RuntimeError, match="draining"):
-                agent.start(max_steps=1)
         finally:
             release.set()
         assert run.wait_for_idle(timeout=3)
         assert coordinator.close(timeout=3)
-        assert "Late" not in [message.text for message in run.snapshot().messages]
+        assert run.snapshot() == snapshot
+        assert agent.state.messages[-1].text == "New answer"
+        assert effects == (["Old side effect"] if kind == "tool" else [])
 
     exercise()
+
+
+def test_generation_deadline_retains_worker_and_rejects_late_output() -> None:
+    entered, release = Event(), Event()
+
+    def generate(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        entered.set()
+        assert release.wait(5)
+        return AssistantMessage(content=[TextContent(text="Late")])
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(total_timeout_s=0.1),
+    )
+    run = agent.start(max_steps=1)
+    try:
+        assert entered.wait(2)
+        with pytest.raises(RunFailed):
+            run.result(timeout=2)
+        snapshot = run.snapshot()
+        assert snapshot.status == RunStatus.ERROR
+        assert snapshot.failure is not None
+        assert snapshot.failure.kind == RunFailureKind.LLM_TIMEOUT
+        assert not run.wait_for_idle(0)
+        run._reusable.result(timeout=2)
+    finally:
+        release.set()
+    assert run.wait_for_idle(2)
+    assert run.snapshot() == snapshot
 
 
 def test_archive_timeout_does_not_cancel_parent_or_release_its_work_early() -> None:
@@ -416,7 +453,7 @@ def test_child_cancel_does_not_need_a_free_blocking_worker() -> None:
     )
 
 
-def test_child_restart_waits_for_its_timed_out_archive_read() -> None:
+def test_child_restart_does_not_wait_for_its_timed_out_archive_read() -> None:
     entered, release = Event(), Event()
     calls = 0
 
@@ -446,11 +483,10 @@ def test_child_restart_waits_for_its_timed_out_archive_read() -> None:
                 child.id, messages=[], max_steps=2
             ),
         )
-        time.sleep(0.03)
-        assert not restarting.done()
-        release.set()
         run_id = restarting.result(2)
         assert invocation.agents.wait_run(run_id, timeout=2) is not None
+        assert not release.is_set()
+        release.set()
         return ToolResult(content="Done")
 
     try:
@@ -511,3 +547,52 @@ def test_final_validation_failure_preserves_completed_output() -> None:
     assert run.wait_for_idle(2)
     assert run.snapshot().status == RunStatus.ERROR
     assert run.snapshot().messages[-1].text == "Partial answer"
+
+
+@pytest.mark.parametrize("coordinated", [False, True])
+@pytest.mark.parametrize("timeout", [False, True])
+def test_new_run_does_not_wait_for_discarded_generation(
+    coordinated: bool, timeout: bool
+) -> None:
+    entered, release = Event(), Event()
+    calls = 0
+
+    def generate(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            entered.set()
+            assert release.wait(5)
+            return AssistantMessage(content=[TextContent(text="Discarded")])
+        return AssistantMessage(content=[TextContent(text="New answer")])
+
+    coordinator = AgentCoordinator() if coordinated else None
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(total_timeout_s=0.1 if timeout else None),
+    )
+    old = agent.start(max_steps=1, coordinator=coordinator)
+    try:
+        assert entered.wait(2)
+        if not timeout:
+            old.cancel()
+        with pytest.raises(RunFailed if timeout else AgentCancelled):
+            old.result(timeout=2)
+        old._reusable.result(timeout=2)
+        saved = old.snapshot()
+        assert not old.wait_for_idle(timeout=0)
+        new = agent.start(max_steps=1, coordinator=coordinator)
+        assert new.result(timeout=2).output.text == "New answer"
+        assert new.wait_for_idle(2)
+        assert new.previous_run_id == old.id
+        if coordinator is not None:
+            assert not coordinator.close(timeout=0)
+    finally:
+        release.set()
+    assert old.wait_for_idle(2)
+    assert old.snapshot() == saved
+    assert agent.state.messages[-1].text == "New answer"
+    if coordinator is not None:
+        assert coordinator.close(timeout=2)

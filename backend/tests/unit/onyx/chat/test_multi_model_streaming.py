@@ -2207,7 +2207,7 @@ def test_rejection_returns_while_processing_status_cleanup_is_blocked() -> None:
             assert tasks.close()
 
 
-def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
+def test_response_workers_track_generations_and_share_one_event_consumer() -> None:
     setup = _make_setup(n_models=2)
     tasks = ActiveChatTurns()
     models_entered = threading.Barrier(2)
@@ -2260,7 +2260,8 @@ def test_response_workers_execute_models_and_share_one_event_consumer() -> None:
             reader.close()
         assert save.call_count == 2
     assert launched == ["chat-control", "chat-response", "chat-response"]
-    assert model_threads == preparation_threads
+    assert model_threads.keys() == preparation_threads.keys()
+    assert set(model_threads.values()).isdisjoint(preparation_threads.values())
     assert len(set(model_threads.values())) == 2
     assert len(observer_threads) == 1
     assert observer_threads.isdisjoint(model_threads.values())

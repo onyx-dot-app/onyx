@@ -7,7 +7,6 @@ from litellm import ModelResponse
 from litellm.exceptions import BadRequestError
 from pydantic import JsonValue
 
-from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     GenerationOptions,
     GenerationRequest,
@@ -39,14 +38,7 @@ def _run(
     completion: Callable[[dict[str, JsonValue]], None] | None = None,
 ) -> GenerationRequestParams:
     class Response(Iterator[ModelResponse]):
-        def __init__(
-            self,
-            kwargs: dict[str, JsonValue],
-            signal: CancellationSignal,
-            *,
-            timeout: float,
-        ) -> None:
-            del signal, timeout
+        def __init__(self, **kwargs: JsonValue) -> None:
             if completion is not None:
                 completion(kwargs)
             self.sent = False
@@ -72,7 +64,7 @@ def _run(
         def close(self) -> None:
             pass
 
-    with patch("onyx.llm.multi_llm.CancellableStream", Response):
+    with patch("onyx.llm.litellm_singleton.litellm.completion", Response):
         events = list(
             llm.stream(
                 GenerationRequest(

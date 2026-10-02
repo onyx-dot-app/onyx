@@ -34,6 +34,7 @@ class ImageDetail(str, Enum):
     HIGH = "high"
 
 
+# Content part structures for multimodal messages
 class TextContentPart(BaseModel):
     type: Literal[ContentType.TEXT] = ContentType.TEXT
     text: str
@@ -107,6 +108,7 @@ AssistantContent = Annotated[
 class BaseMessage(BaseModel):
     # Request metadata never becomes provider content or durable transcript data.
     metadata: SerializeAsAny[BaseModel] | None = Field(default=None, exclude=True)
+    # Marks a stable prompt prefix for provider prompt caching; never sent as content.
     cacheable: bool = Field(default=False, exclude=True)
 
 
@@ -458,7 +460,8 @@ def apply_generation_event(message: AssistantMessage, event: GenerationEvent) ->
                 content.blocks = []
             for block in event.blocks:
                 previous = content.blocks[-1] if content.blocks else None
-                # Anthropic sends thinking fragments followed by a signature-only block.
+                # Providers stream one thinking block as text fragments and then
+                # its signature. Merge them so the block can be replayed.
                 if (
                     isinstance(block, ThinkingBlock)
                     and isinstance(previous, ThinkingBlock)

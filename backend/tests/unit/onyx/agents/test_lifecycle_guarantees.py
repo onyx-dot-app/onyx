@@ -51,7 +51,7 @@ def wait_entered(event: threading.Event) -> None:
 
 
 @pytest.mark.parametrize("during_completion", [False, True])
-def test_cancelled_writer_prevents_reuse_until_it_exits(
+def test_cancelled_callback_does_not_prevent_reuse(
     during_completion: bool,
 ) -> None:
     entered = threading.Event()
@@ -81,17 +81,17 @@ def test_cancelled_writer_prevents_reuse_until_it_exits(
         run.cancel()
         with pytest.raises(AgentCancelled):
             run.result(1)
-        with pytest.raises(RuntimeError, match="already running"):
-            agent.start(max_steps=1)
+        run._reusable.result(timeout=2)
         assert not run.wait_for_idle(0.02)
+        agent.prepare_step = None
+        agent.after_step = None
+        following = agent.start(max_steps=1, messages=[UserMessage(content="Continue")])
+        assert following.result(timeout=2).output.text == "answer"
+        assert following.wait_for_idle(2)
+        assert not run.wait_for_idle(0)
     finally:
         release.set()
     assert run.wait_for_idle(2)
-    agent.prepare_step = None
-    agent.after_step = None
-    following = agent.start(max_steps=1, messages=[UserMessage(content="Continue")])
-    assert (following.result()).output.text == "answer"
-    assert following.wait_for_idle(2)
     assert writes == ["finished"]
     assert [message.text for message in run.snapshot().messages] == (
         ["answer"] if during_completion else []
@@ -216,8 +216,10 @@ def test_observer_backlog_preserves_output_and_cleanup_ownership(
         frozen = run.snapshot()
         assert result.output.text == "large " * 100
         assert not run.wait_for_idle(0.05)
-        with pytest.raises(RuntimeError, match="already running"):
-            agent.start(max_steps=1)
+        run._reusable.result(timeout=2)
+        following = agent.start(max_steps=1)
+        assert following.result(timeout=2).output.text == "large " * 100
+        assert following.wait_for_idle(2)
     finally:
         release.set()
     assert run.wait_for_idle(2)
@@ -510,3 +512,48 @@ def test_provider_failure_preserves_chat_retry_policy(
     packet = chat_error(raised.value, llm)
     assert packet.error_code == code
     assert packet.is_retryable is retryable
+
+
+def test_cancelled_before_tool_callback_cannot_start_the_tool() -> None:
+    entered, release = threading.Event(), threading.Event()
+    executed: list[str] = []
+
+    def before(_context: ToolCallContext) -> None:
+        entered.set()
+        assert release.wait(3)
+
+    def execute(_invocation: ToolInvocation) -> ToolResult:
+        executed.append("write")
+        return ToolResult(content="written")
+
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[TextContent(text="New answer")]
+                if entered.is_set()
+                else [ToolCall(id="write", name="write", arguments={})]
+            )
+        ),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="write", description="", parameters={}),
+                execute=execute,
+            )
+        ],
+        before_tool_call=before,
+    )
+    old = agent.start(max_steps=1)
+    try:
+        assert entered.wait(2)
+        old.cancel()
+        with pytest.raises(AgentCancelled):
+            old.result(timeout=2)
+        old._reusable.result(timeout=2)
+        new = agent.start(max_steps=1)
+        assert new.result(timeout=2).output.text == "New answer"
+        assert new.wait_for_idle(2)
+        assert not old.wait_for_idle(0)
+    finally:
+        release.set()
+    assert old.wait_for_idle(2)
+    assert executed == []

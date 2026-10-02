@@ -467,7 +467,7 @@ def test_cancelled_parent_waits_for_child_terminal_record_before_snapshot() -> N
     exercise()
 
 
-def test_child_terminal_timeout_fails_parent_and_retains_cleanup_ownership() -> None:
+def test_child_cancellation_retains_provider_cleanup_ownership() -> None:
     def exercise() -> None:
         entered = threading.Event()
         spawned_child = threading.Event()
@@ -500,23 +500,22 @@ def test_child_terminal_timeout_fails_parent_and_retains_cleanup_ownership() -> 
                 assert entered.wait(2)
                 assert spawned_child.wait(2)
                 run.cancel()
-                with pytest.raises(RunFailed):
+                with pytest.raises(AgentCancelled):
                     run.result(timeout=2)
                 record = run.snapshot()
-                assert record.status == RunStatus.ERROR
-                assert record.child_runs[0].status == RunStatus.ERROR
-                assert record.child_runs[0].failure is not None
-                assert record.child_runs[0].failure.kind == RunFailureKind.EXECUTION
+                assert record.status == RunStatus.CANCELLED
+                assert record.child_runs[0].status == RunStatus.CANCELLED
+                assert record.child_runs[0].failure is None
                 assert not run.wait_for_idle(timeout=0.01)
-                with pytest.raises(RuntimeError, match="running or draining"):
-                    parent.start(max_steps=1, coordinator=coordinator)
+                run._reusable.result(timeout=2)
+                following = parent.start(max_steps=1, coordinator=coordinator)
+                following.result(timeout=2)
+                assert following.wait_for_idle(timeout=2)
+                assert not run.wait_for_idle(timeout=0)
             finally:
                 release_cleanup.set()
             assert run.wait_for_idle(timeout=2)
             assert run.snapshot() == record
-            following = parent.start(max_steps=1, coordinator=coordinator)
-            following.result(timeout=2)
-            assert following.wait_for_idle(timeout=2)
             assert coordinator.close(timeout=2)
 
     exercise()
@@ -565,6 +564,8 @@ def test_failed_child_settlement_retains_accepted_partial_output(
         if coordination.run.agent_id == parent.id:
             failed_coordinators.append(coordination)
             raise TimeoutError("Forced settlement timeout")
+        if coordination.run.agent_id == child.id and cancel:
+            assert release.wait(3)
         return original_finish(coordination, cancel)
 
     monkeypatch.setattr(RunCoordination, "finish", fail_parent_finish)

@@ -309,7 +309,7 @@ def _search_llm() -> LitellmLLM:
 def _completion_stream(text: str) -> MagicMock:
     stream = MagicMock(spec=litellm.CustomStreamWrapper)
     chunks = iter(_text_stream_chunks(text))
-    stream.__iter__.return_value = stream
+    stream.__iter__.side_effect = lambda: stream
     stream.__next__.side_effect = chunks.__next__
     return stream
 

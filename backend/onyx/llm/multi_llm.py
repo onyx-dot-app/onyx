@@ -2,10 +2,8 @@ import copy
 import json
 import math
 import os
-import threading
 import time
 from collections.abc import Generator, Iterable, Iterator, Mapping
-from concurrent.futures import Future
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, cast
@@ -13,9 +11,7 @@ from typing import TYPE_CHECKING, cast
 from pydantic import BaseModel, JsonValue, TypeAdapter
 from readerwriterlock import rwlock
 
-from onyx.configs.app_configs import (
-    SEND_USER_METADATA_TO_LLM_PROVIDER,
-)
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
 from onyx.configs.chat_configs import (
     LLM_FIRST_CHUNK_MAX_RETRIES,
     LLM_INVOKE_TIMEOUT_S,
@@ -33,9 +29,7 @@ from onyx.llm.api_surfaces import (
 )
 from onyx.llm.cancellation import (
     AgentCancelled,
-    CancellableStream,
     CancellationSignal,
-    cancellation_deadline,
     cancellation_scope,
     check_cancelled,
     current_cancellation,
@@ -122,6 +116,8 @@ from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.logger import setup_logger
 from onyx.utils.redaction import scrub_sensitive_values
 
+# OpenAI reasoning effort mapping
+# Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
 OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
     ReasoningEffort.AUTO: "medium",  # Default to medium when auto is requested
     ReasoningEffort.OFF: "none",
@@ -152,13 +148,9 @@ ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
 }
 
 
-class ProviderOperation(BaseModel):
-    """Diagnostics for one invocation, including its retry attempts."""
-
-    request_params: GenerationRequestParams | None = None
-
-
 logger = setup_logger()
+
+_PROVIDER_TOOL_CALLS = TypeAdapter(list[ProviderToolCall])
 
 # Write-preferring reader-writer lock guarding os.environ during litellm calls.
 # Calls that inject custom_config env vars hold the write lock; all other calls
@@ -213,7 +205,9 @@ _OPENAI_REASONING_NONE = OPENAI_REASONING_EFFORT[ReasoningEffort.OFF]
 def _merge_under(
     base: Mapping[str, JsonValue], override: JsonValue
 ) -> dict[str, JsonValue]:
-    """Preserve base fields while explicit overrides win at each nested key."""
+    """Fill *base* in beneath *override*, recursing so an override key that
+    holds a dict keeps the siblings *base* declared under it. Leaves in
+    *override* always win."""
     if not isinstance(override, dict):
         raise ValueError("Provider headers and extra_body must be JSON objects")
     merged = dict(base)
@@ -256,7 +250,8 @@ def _rejection_demands_reasoning_none(error: Exception) -> bool:
 def _retry_attempts(
     kwargs: dict[str, JsonValue], required_keys: frozenset[str]
 ) -> list[dict[str, JsonValue]]:
-    """Remove optional tuning in stages while preserving required provider fields."""
+    """The ladder: the kwargs as given, then without reasoning keys, then
+    without every best-effort key, skipping steps that drop nothing."""
     attempts = [kwargs]
     for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
         stripped = {
@@ -267,25 +262,31 @@ def _retry_attempts(
     return attempts
 
 
+class ProviderOperation(BaseModel):
+    """Diagnostics for one provider call, including its retry attempts."""
+
+    request_params: GenerationRequestParams | None = None
+
+
+def _event_with_request_params(
+    event: GenerationEvent, operation: ProviderOperation
+) -> GenerationEvent:
+    return event.model_copy(
+        update={"request_params": copy.deepcopy(operation.request_params)}
+    )
+
+
 class _GenerationSignal(CancellationSignal):
-    def __init__(self, parent: CancellationSignal) -> None:
+    def __init__(self, parent: CancellationSignal, timeout: float) -> None:
         super().__init__()
         self.parent = parent
-        self.expired = threading.Event()
+        self.deadline = time.monotonic() + timeout
 
     def check(self) -> None:
         self.parent.check()
-        if self.expired.is_set():
+        if time.monotonic() >= self.deadline:
             raise LLMTimeoutError("Model generation exceeded its total timeout")
         super().check()
-
-    def track_operation(self, completion: Future[None]) -> None:
-        self.parent.track_operation(completion)
-        super().track_operation(completion)
-
-    def expire(self) -> None:
-        self.expired.set()
-        self.cancel()
 
 
 @contextmanager
@@ -296,11 +297,10 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
             parent.check()
             yield parent
         return
-    signal = _GenerationSignal(parent)
+    signal = _GenerationSignal(parent, context.total_timeout_s)
     with (
         parent.on_cancel(signal.cancel),
         cancellation_scope(signal),
-        cancellation_deadline(context.total_timeout_s, signal.expire),
     ):
         parent.check()
         yield signal
@@ -370,11 +370,21 @@ def _consume_stream_until_deadline[T](stream: Iterable[T], deadline: float) -> l
     """
     chunks: list[T] = []
     try:
-        for chunk in stream:
+        iterator = iter(stream)
+        while True:
+            check_cancelled()
+            try:
+                chunk = next(iterator)
+            except StopIteration:
+                check_cancelled()
+                break
+            check_cancelled()
             chunks.append(chunk)
             if time.monotonic() > deadline:
                 raise LLMTimeoutError("LLM streaming call exceeded its total timeout")
     except Exception as error:
+        check_cancelled()
+        # The request itself succeeded, so _completion's mapping never saw this.
         raise _as_onyx_llm_error(error)
     return chunks
 
@@ -445,7 +455,7 @@ def _strip_tool_content_from_messages(
         if role == "assistant" and tool_calls:
             # Convert structured tool calls to text representation
             tool_call_lines = []
-            calls = TypeAdapter(list[ProviderToolCall]).validate_python(tool_calls)
+            calls = _PROVIDER_TOOL_CALLS.validate_python(tool_calls)
             for call in calls:
                 name = call.function.name
                 args = call.function.arguments
@@ -610,14 +620,6 @@ def _warn_dropped_env_only_keys(
     )
 
 
-def _event_with_request_params(
-    event: GenerationEvent, operation: ProviderOperation
-) -> GenerationEvent:
-    return event.model_copy(
-        update={"request_params": copy.deepcopy(operation.request_params)}
-    )
-
-
 class LitellmLLM(LLM):
     """Generate assistant messages and expose provider responses for gateways."""
 
@@ -641,6 +643,8 @@ class LitellmLLM(LLM):
         reasoning_effort_max: ReasoningEffort | None = None,
         supports_images: bool | None = None,
     ) -> None:
+        # No instance-level timeout: invoke() and stream() each take their own,
+        # so an instance default would be a second source of truth.
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
         self._model_provider = model_provider
@@ -807,15 +811,21 @@ class LitellmLLM(LLM):
         operation: ProviderOperation | None = None,
         env_injection_enabled: bool | None = None,
         deadline: float | None = None,
-    ) -> "LiteLLMModelResponse | CustomStreamWrapper | CancellableStream":
+    ) -> "LiteLLMModelResponse | CustomStreamWrapper":
         # Lazy loading to avoid memory bloat for non-inference flows
         from litellm.exceptions import BadRequestError
 
         from onyx.llm.litellm_singleton import litellm
 
+        # One snapshot of the setting for the whole call. A caller that made a
+        # decision on it (invoke's stream choice) passes its own value so the
+        # two cannot diverge if an admin flips the setting mid-call.
         if env_injection_enabled is None:
             env_injection_enabled = _env_injection_enabled()
 
+        #########################
+        # Flags that modify the final arguments
+        #########################
         model_identity_names = resolve_model_identity_names(
             self.config.model_name, self.config.deployment_name
         )
@@ -1245,29 +1255,16 @@ class LitellmLLM(LLM):
 
             def _call_litellm(
                 opts: dict[str, JsonValue],
-            ) -> "LiteLLMModelResponse | CustomStreamWrapper | CancellableStream":
-                # Retry attempts share one deadline. Give each attempt only the
-                # remaining budget so retries cannot multiply the total timeout.
+            ) -> "LiteLLMModelResponse | CustomStreamWrapper":
+                # The retry ladder below can make several requests. With a
+                # deadline, each one gets only the time left, so retries cannot
+                # stretch invoke() past its total timeout.
                 timeout = read_timeout_s
                 if deadline is not None:
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise LLMTimeoutError("LLM call exceeded its total timeout")
                     timeout = min(timeout, remaining)
-                kwargs = dict(
-                    model=model,
-                    base_url=self._api_base or None,
-                    api_version=api_version,
-                    custom_llm_provider=self._custom_llm_provider or None,
-                    messages=messages,
-                    # Some OpenAI-compatible servers reject an empty tools array.
-                    tools=tools or None,
-                    stream=stream,
-                    timeout=timeout,
-                    max_tokens=max_tokens,
-                    **opts,
-                    **passthrough_kwargs,
-                )
                 # Injection disabled means no env writer exists anywhere in
                 # the process, so skip the rwlock entirely. Built per attempt
                 # because the context manager is single-use.
@@ -1277,17 +1274,26 @@ class LitellmLLM(LLM):
                     else nullcontext()
                 )
                 with env_ctx:
-                    signal = current_cancellation()
-                    if stream and signal is not None:
-                        return CancellableStream(
-                            kwargs,
-                            signal,
-                            timeout=timeout,
-                        )
+                    check_cancelled()
                     # LiteLLM's overloads do not express the stream flag's return type.
                     return cast(
                         "LiteLLMModelResponse | CustomStreamWrapper",
-                        litellm.completion(**kwargs, client=client),
+                        litellm.completion(
+                            model=model,
+                            base_url=self._api_base or None,
+                            api_version=api_version,
+                            custom_llm_provider=self._custom_llm_provider or None,
+                            messages=messages,
+                            # None (omitted) rather than [] — some OpenAI-compatible
+                            # servers reject requests with an empty tools array.
+                            tools=tools or None,
+                            stream=stream,
+                            timeout=timeout,
+                            max_tokens=max_tokens,
+                            client=client,
+                            **opts,
+                            **passthrough_kwargs,
+                        ),
                     )
 
             # Provider 400s degrade to provider defaults with a warning instead
@@ -1295,7 +1301,10 @@ class LitellmLLM(LLM):
             attempts = _retry_attempts(optional_kwargs, required_kwarg_keys)
 
             for i, opts in enumerate(attempts):
-                # Diagnostics describe the final provider attempt, including stripped options.
+                check_cancelled()
+                # Last write wins: sent_kwargs holds what the returning (or
+                # final failing) attempt sent, reasoning_effort the effective
+                # intent. One dict, two sinks, so they cannot drift.
                 request_params = GenerationRequestParams(
                     model_name=self.config.model_name,
                     model_provider=self.config.model_provider,
@@ -1312,6 +1321,7 @@ class LitellmLLM(LLM):
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
+                    check_cancelled()
                     if (
                         _rejection_demands_reasoning_none(e)
                         and opts.get("reasoning_effort") != _OPENAI_REASONING_NONE
@@ -1345,6 +1355,7 @@ class LitellmLLM(LLM):
                     )
             raise RuntimeError("Provider retry attempts exhausted")
         except Exception as e:
+            check_cancelled()
             raise _as_onyx_llm_error(e)
 
     def redact_error(self, text: str) -> str:
@@ -1372,23 +1383,8 @@ class LitellmLLM(LLM):
         )
 
     def _uses_isolated_client(self) -> bool:
-        """Select providers that need a fresh per-call HTTPHandler.
-
-        Isolated clients prevent stale connections or abandoned streams from
-        affecting other threads. Shared pools have caused "Bad file descriptor"
-        errors during concurrent OpenAI streaming.
-
-        For Anthropic and Bedrock, GC can finalize an abandoned sync stream
-        while its thread holds the shared pool's non-reentrant lock. This can
-        deadlock all later calls (encode/httpcore#996; seen in production).
-        Their LiteLLM handlers use module_level_client when client is None.
-
-        The client type also matters: LiteLLM's OpenAI responses path accepts
-        HTTPHandler, but its OpenAI-compatible completion path expects an
-        OpenAI SDK client. Passing HTTPHandler there causes an AttributeError
-        for api_key. Check is_true_openai_model, not just provider == "openai":
-        GLM, DeepSeek, and local proxies can use that provider name too.
-        """
+        """Providers whose sync calls need a fresh per-call HTTPHandler instead of
+        litellm's shared module_level_client (see threading notes in invoke())."""
         return any(
             is_true_openai_model(self.config.model_provider, name)
             for name in resolve_model_identity_names(
@@ -1412,28 +1408,64 @@ class LitellmLLM(LLM):
         total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
         operation: ProviderOperation | None = None,
     ) -> ModelResponse:
-        """Return a provider response within one deadline, including retries.
+        """One complete provider response within ``total_timeout_s``.
 
-        The caller owns the generation span and cancellation scope.
+        The caller owns the generation span. Use ``invoke`` for shared messages.
 
-        Cancellation uses a request-owned streaming connection. Environment
-        injection also uses streaming to release the environment lock after
-        connection setup. Other calls send one plain request.
+        Sends one plain request, so the socket read timeout is the whole budget.
+        The only exception is env injection of custom_config (self-hosted
+        default): the process-wide env lock must cover connection setup only,
+        not a whole inference, so we stream and reassemble. The deadline then
+        applies between chunks.
         """
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
         from onyx.llm.model_response import from_litellm_model_response
 
+        # HTTPHandler Threading & Connection Pool Notes:
+        # =============================================
+        # We create an isolated HTTPHandler ONLY for true OpenAI models (not OpenAI-compatible
+        # providers like glm-4.7, DeepSeek, etc.). This distinction is critical:
+        #
+        # 1. WHY ONLY TRUE OPENAI MODELS:
+        #    - True OpenAI models use litellm's "responses API" path which expects HTTPHandler
+        #    - OpenAI-compatible providers (model_provider="openai" with non-OpenAI models)
+        #      use the standard completion path which expects OpenAI SDK client objects
+        #    - Passing HTTPHandler to OpenAI-compatible providers causes:
+        #      AttributeError: 'HTTPHandler' object has no attribute 'api_key'
+        #      (because _get_openai_client() calls openai_client.api_key on line ~929)
+        #
+        # 2. WHY ISOLATED HTTPHandler FOR OPENAI:
+        #    - Prevents "Bad file descriptor" errors when multiple threads stream concurrently
+        #    - Shared connection pools can have stale connections or abandoned streams that
+        #      corrupt the pool state for other threads
+        #    - Each request gets its own fresh httpx.Client via HTTPHandler
+        #
+        # 3. WHY ANTHROPIC AND BEDROCK ALSO GET AN ISOLATED CLIENT:
+        #    - An abandoned sync stream is finalized by GC, which can fire on a thread
+        #      already inside the shared pool's non-reentrant lock and deadlock it,
+        #      wedging all later LLM calls (encode/httpcore#996; seen in prod).
+        #    - A per-call client keeps abandoned streams off the shared pool. The
+        #      litellm anthropic and bedrock handlers both use module_level_client
+        #      only when client is None.
+        #
+        # 4. PITFALL - is_true_openai_model() CHECK:
+        #    - Must use is_true_openai_model() NOT just check model_provider == "openai"
+        #    - Many OpenAI-compatible providers set model_provider="openai" but are NOT true
+        #      OpenAI models (glm-4.7, DeepSeek, local proxies, etc.)
+        #    - is_true_openai_model() checks both provider AND model name patterns
+        #
+        # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
+        # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
+        # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
         deadline = time.monotonic() + total_timeout_s
         env_injection_enabled = _env_injection_enabled()
-        # SDK cancellation interrupts a request-owned streaming connection.
-        use_stream = env_injection_enabled or current_cancellation() is not None
+        use_stream = env_injection_enabled
         read_timeout = max(1, math.ceil(total_timeout_s))
 
-        stream_response = None
         client = None
-        if current_cancellation() is None and self._uses_isolated_client():
+        if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
 
         try:
@@ -1457,10 +1489,11 @@ class LitellmLLM(LLM):
                 from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
                 from litellm import stream_chunk_builder
 
-                stream_response = cast(
-                    "LiteLLMCustomStreamWrapper | CancellableStream", raw_response
+                chunks = _consume_stream_until_deadline(
+                    cast(LiteLLMCustomStreamWrapper, raw_response), deadline
                 )
-                chunks = _consume_stream_until_deadline(stream_response, deadline)
+                # stream_chunk_builder returns None for an empty stream. Without
+                # this the cast would hide it until an AttributeError downstream.
                 built = stream_chunk_builder(chunks)
                 if built is None:
                     raise ValueError(
@@ -1478,8 +1511,6 @@ class LitellmLLM(LLM):
 
             return model_response
         finally:
-            if isinstance(stream_response, CancellableStream):
-                stream_response.close()
             if client is not None:
                 client.close()
 
@@ -1489,13 +1520,19 @@ class LitellmLLM(LLM):
         tools: list[dict[str, JsonValue]] | None = None,
         tool_choice: ToolChoice | None = None,
         structured_response_format: dict[str, JsonValue] | None = None,
-        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
         operation: ProviderOperation | None = None,
     ) -> Iterator[ModelResponseStream]:
-        """Yield provider chunks; the caller owns tracing and cancellation scope."""
+        """Yield provider chunks as they arrive; the caller owns the generation span.
+
+        ``stall_timeout_s`` bounds the gap between deltas, not the whole run. A
+        stream takes no total timeout: its consumer sees progress and owns the
+        end-to-end deadline, and some runs (deep research reports) take many
+        minutes.
+        """
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
         from litellm.exceptions import APIConnectionError as LiteLLMAPIConnectionError
@@ -1516,18 +1553,45 @@ class LitellmLLM(LLM):
         max_attempts: int = 1 + LLM_FIRST_CHUNK_MAX_RETRIES
         yielded_any: bool = False
 
-        # Close request-owned clients when a stream completes, fails, or is abandoned.
+        # HTTPHandler Threading & Connection Pool Notes:
+        # =============================================
+        # See invoke() method for full explanation. Key points for streaming:
+        #
+        # 1. SAME RESTRICTIONS APPLY:
+        #    - HTTPHandler only for providers in _uses_isolated_client()
+        #    - OpenAI-compatible providers will fail with AttributeError on api_key
+        #
+        # 2. STREAMING-SPECIFIC CONCERNS:
+        #    - "Bad file descriptor" errors are MORE common during streaming because:
+        #      a) Streams hold connections open longer, increasing conflict window
+        #      b) Multiple concurrent streams (e.g., deep research) share the pool
+        #      c) Abandoned/interrupted streams can leave connections in bad state
+        #
+        # 3. ABANDONED STREAM PITFALL:
+        #    - If callers abandon this generator without fully consuming it (e.g.,
+        #      early return, exception, or break), the finally block won't execute
+        #      until the generator is garbage collected
+        #    - This is acceptable because:
+        #      a) CPython's refcounting typically finalizes generators promptly
+        #      b) Each HTTPHandler has its own isolated connection pool
+        #      c) httpx has built-in connection timeouts as a fallback
+        #    - If abandoned streams become problematic, consider using contextlib
+        #      or explicit stream.close() at call sites
+        #
+        # 4. WHY NOT USE SHARED HTTPHandler:
+        #    - litellm's InMemoryCache (used for client caching) is NOT thread-safe
+        #    - Shared pools can have connections corrupted by other threads
+        #    - Per-request HTTPHandler eliminates cross-thread interference
         for attempt in range(max_attempts):
             check_cancelled()
-            response = None
             client = None
-            if current_cancellation() is None and self._uses_isolated_client():
+            if self._uses_isolated_client():
                 client = HTTPHandler(timeout=stall_timeout_s)
 
             try:
                 # stream=True fixes the third-party return union to an iterator.
                 response = cast(
-                    "LiteLLMCustomStreamWrapper | CancellableStream",
+                    "LiteLLMCustomStreamWrapper",
                     self._completion(
                         prompt=prompt,
                         tools=tools,
@@ -1544,7 +1608,15 @@ class LitellmLLM(LLM):
                     ),
                 )
 
-                for chunk in response:
+                iterator = iter(response)
+                while True:
+                    check_cancelled()
+                    try:
+                        chunk = next(iterator)
+                    except StopIteration:
+                        check_cancelled()
+                        break
+                    check_cancelled()
                     model_response = from_litellm_model_response_stream(chunk)
 
                     # Track LLM cost when usage info is available (typically in the last chunk)
@@ -1555,6 +1627,7 @@ class LitellmLLM(LLM):
                     yield model_response
                 return
             except retryable_exceptions as e:
+                check_cancelled()
                 if yielded_any or attempt >= max_attempts - 1:
                     raise _as_onyx_llm_error(e)
                 logger.warning(
@@ -1565,8 +1638,6 @@ class LitellmLLM(LLM):
                     max_attempts,
                 )
             finally:
-                if isinstance(response, CancellableStream):
-                    response.close()
                 if client is not None:
                     client.close()
 
@@ -1586,25 +1657,18 @@ class LitellmLLM(LLM):
         return messages
 
     def invoke(
-        self,
-        request: GenerationRequest,
-        context: GenerationContext | None = None,
+        self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
-        """Return one completed assistant message."""
         context = context or GenerationContext()
-        if context.total_timeout_s is None:
-            context = context.model_copy(
-                update={"total_timeout_s": LLM_INVOKE_TIMEOUT_S}
-            )
         messages = self._prepare_request(request)
-        definitions = serialize_tools(request.tools) or None
+        tools = serialize_tools(request.tools) or None
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
                 self,
                 context.flow or LLMFlow.UNTAGGED_INVOKE,
                 input_messages=messages,
-                tools=definitions,
+                tools=tools,
                 content_mode=context.content_mode,
             ) as span,
         ):
@@ -1612,7 +1676,7 @@ class LitellmLLM(LLM):
             try:
                 response = self.invoke_raw(
                     messages,
-                    tools=definitions,
+                    tools=tools,
                     tool_choice=request.options.tool_choice,
                     structured_response_format=request.options.structured_response_format,
                     total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
@@ -1643,14 +1707,14 @@ class LitellmLLM(LLM):
         operation = ProviderOperation()
         accumulator = MessageAccumulator(request.tools)
         messages = self._prepare_request(request)
-        definitions = serialize_tools(request.tools) or None
+        tools = serialize_tools(request.tools) or None
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
                 self,
                 context.flow or LLMFlow.UNTAGGED_STREAM,
                 input_messages=messages,
-                tools=definitions,
+                tools=tools,
                 content_mode=context.content_mode,
             ) as span,
         ):
@@ -1659,11 +1723,11 @@ class LitellmLLM(LLM):
             request_params_sent = False
             signal.check()
             yield GenerationStartEvent()
-            stream = accumulator.consume(
+            events = accumulator.consume(
                 iter(
                     self.stream_raw(
                         messages,
-                        tools=definitions,
+                        tools=tools,
                         tool_choice=request.options.tool_choice,
                         max_tokens=request.options.max_tokens,
                         reasoning_effort=request.options.reasoning_effort,
@@ -1677,7 +1741,7 @@ class LitellmLLM(LLM):
                 request,
             )
             try:
-                for event in stream:
+                for event in events:
                     signal.check()
                     if not first_action:
                         span.span_data.time_to_first_action_seconds = (
@@ -1743,7 +1807,7 @@ class LitellmLLM(LLM):
                 # Record partial content and usage on errors and GeneratorExit,
                 # not just clean completion. GeneratorExit is a BaseException,
                 # so it does not pass through the Exception handler above.
-                stream.close()
+                events.close()
                 accumulator.finalize()
                 message = accumulator.message
                 record_llm_span_output(
