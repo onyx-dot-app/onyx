@@ -11,7 +11,6 @@ import { Permission } from "@/lib/types";
 import {
   getCredentialCreationMethods,
   shouldRedirectToOAuth,
-  titleFromCredentialKey,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
@@ -39,6 +38,7 @@ import type {
 } from "@/lib/credentials/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { toTitleCase } from "@opal/utils";
 
 /** A credential field's title, and its hint when it has one. */
 export interface CredentialFieldCopy {
@@ -62,9 +62,7 @@ function hasOwnKey<T extends object>(
 export function useCredentialFieldCopy(): (key: string) => CredentialFieldCopy {
   const fields = useMessages().admin.credentials.fields;
   return (key) =>
-    hasOwnKey(fields, key)
-      ? fields[key]
-      : { title: titleFromCredentialKey(key) };
+    hasOwnKey(fields, key) ? fields[key] : { title: toTitleCase(key) };
 }
 
 /**
