@@ -57,8 +57,8 @@ type RowContentProps = {
   description?: string | RichStr;
 
   /**
-   * Muted text beside the title, like "(Default)". Shown by the `heading`
-   * variant only.
+   * Muted text beside the title, like "(Default)". Shown only by the
+   * `heading` variant with a `main-*` size preset.
    */
   suffix?: string;
 

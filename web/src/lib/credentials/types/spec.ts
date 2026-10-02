@@ -1,6 +1,5 @@
 /** The shape of a source's credential spec. The specs live in `@/lib/credentials/constants`. */
 import type en from "@/i18n/messages/en.json";
-import type { TypedFile } from "@/lib/connectors/fileTypes";
 import type { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 
 type CredentialMessages = (typeof en)["admin"]["credentials"];
@@ -79,11 +78,11 @@ export interface DefinedCredentialSpec<
   methods: TMethods;
 }
 
+// A file field is uploaded on its own; the stored JSON holds its content as a
+// string.
 type FieldValueOf<TField> = TField extends { kind: "toggle" }
   ? boolean
-  : TField extends { kind: "file" }
-    ? TypedFile
-    : string;
+  : string;
 
 type RequiredKeys<TFields> = {
   [K in keyof TFields]: TFields[K] extends { optional: true } ? never : K;

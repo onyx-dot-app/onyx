@@ -1,7 +1,7 @@
 /**
  * The `credential_json` of the Google sources, which set up credentials on
  * their own pages. Every other source's shape comes from its spec: see
- * `SourceCredentialJson` in `@/lib/credentials/specs`.
+ * `SourceCredentialJson` in `@/lib/credentials/constants`.
  */
 
 export interface GmailCredentialJson {
