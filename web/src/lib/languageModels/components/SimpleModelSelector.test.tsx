@@ -265,6 +265,12 @@ describe("SimpleModelSelector", () => {
       await user.type(search, "claude");
       jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
       expect(modelPaging.search).toHaveBeenCalledWith("claude");
+
+      // Clearing forgets the query, so the same miss searches again.
+      await user.clear(search);
+      await user.type(search, "claude");
+      jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
+      expect(modelPaging.search).toHaveBeenCalledTimes(2);
     } finally {
       jest.useRealTimers();
     }

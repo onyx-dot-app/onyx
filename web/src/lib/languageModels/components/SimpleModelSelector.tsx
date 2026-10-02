@@ -118,8 +118,13 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   const trimmedQuery = query.trim();
   const lastServerSearchRef = useRef("");
   useEffect(() => {
-    if (!modelPaging?.hasMore || trimmedQuery === "") return;
-    if (hasLoadedMatch(options, trimmedQuery)) return;
+    if (trimmedQuery === "") {
+      // A cleared or closed search forgets its server query, so the next
+      // one runs even after a listing refresh dropped the merged matches.
+      lastServerSearchRef.current = "";
+      return;
+    }
+    if (!modelPaging?.hasMore || hasLoadedMatch(options, trimmedQuery)) return;
     if (lastServerSearchRef.current === trimmedQuery) return;
     const handle = setTimeout(() => {
       modelPaging
