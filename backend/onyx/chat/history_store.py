@@ -28,15 +28,12 @@ from onyx.db.chat_subagents import (
     load_session_agent_metadata,
     lookup_session_agent,
 )
-from onyx.llm.models import (
-    AssistantMessage,
-    Message,
-    TextContent,
-    UserMessage,
-)
+from onyx.llm.models import AssistantMessage, Message, TextContent, UserMessage
 
 
 class ChatHistoryStore(Protocol):
+    """Persist conversation content; chat owns message-tree metadata and session execution."""
+
     message_id: int
     chat_session_id: UUID
 
@@ -54,8 +51,10 @@ class ChatHistoryStore(Protocol):
         previous_run_id: str | None,
         accepted_text: str | None,
     ) -> tuple[list[Message], str | None]:
-        """Resolve history after database messages and attached files have been converted."""
+        """Resolve history without writing content; keep an accepted user message last."""
         ...
+
+    def save_user_message(self, message: UserMessage) -> None: ...
 
     def root_agent_id(self, proposed_id: str) -> str: ...
 
@@ -87,6 +86,9 @@ class PostgresChatHistoryStore(ChatHistoryStore):
     ) -> tuple[list[Message], str | None]:
         # Database history and files were loaded together during preparation.
         return messages, previous_run_id
+
+    def save_user_message(self, message: UserMessage) -> None:  # noqa: ARG002
+        """The chat message row already contains the accepted user text."""
 
     def root_agent_id(self, proposed_id: str) -> str:
         return proposed_id
@@ -145,11 +147,11 @@ class RedisChatHistoryStore(ChatHistoryStore):
             and isinstance(messages[-1], UserMessage)
         ):
             current_user = messages[-1].model_copy(update={"content": accepted_text})
-            messages = stored.messages + [current_user]
-            append_incognito_message(self.chat_session_id, current_user)
-        else:
-            messages = stored.messages
-        return messages, stored.previous_run_id
+            return stored.messages + [current_user], stored.previous_run_id
+        return stored.messages, stored.previous_run_id
+
+    def save_user_message(self, message: UserMessage) -> None:
+        append_incognito_message(self.chat_session_id, message)
 
     def root_agent_id(self, proposed_id: str) -> str:
         return get_or_create_incognito_root_id(self.chat_session_id, proposed_id)

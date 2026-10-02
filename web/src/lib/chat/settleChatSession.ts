@@ -55,6 +55,13 @@ export async function settleChatSession({
   };
   if (!ownsSettlement()) return;
   try {
+    const sendAcknowledged = useChatSessionStore
+      .getState()
+      .sessions.get(sessionId)?.sendAcknowledged;
+    if (sendAcknowledged) {
+      await sendAcknowledged;
+      if (!ownsSettlement()) return;
+    }
     await waitForChatSessionIdle(sessionId);
     if (!ownsSettlement()) return;
     if (refreshHistory) {
@@ -74,7 +81,12 @@ export async function settleChatSession({
     if (store.sessions.get(sessionId)?.uncaughtError === errorMessage) {
       store.setUncaughtError(sessionId, null);
     }
-    store.updateChatState(sessionId, "input");
+    store.updateSessionData(sessionId, {
+      chatState: "input",
+      regenerationState: null,
+      streamingStartTime: undefined,
+      sendAcknowledged: undefined,
+    });
     if (completeRendering)
       store.setLatestMessageRenderComplete(sessionId, true);
   } catch (error) {

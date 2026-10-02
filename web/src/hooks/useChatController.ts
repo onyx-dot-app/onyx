@@ -91,6 +91,7 @@ import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { getConfiguredSources } from "@/lib/sources";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
+import { stopChatSession } from "@/lib/chat/stopChatSession";
 import { useTranslations } from "next-intl";
 
 const SYSTEM_MESSAGE_ID = -3;
@@ -132,19 +133,6 @@ interface UseChatControllerProps {
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
-}
-
-async function stopChatSession(chatSessionId: string): Promise<void> {
-  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to stop chat session: ${response.statusText}`);
-  }
 }
 
 export default function useChatController({
@@ -371,43 +359,11 @@ export default function useChatController({
   };
 
   const stopGenerating = useCallback(async () => {
-    const currentSession = getCurrentSessionId();
-    const store = useChatSessionStore.getState();
-    const session = store.sessions.get(currentSession);
-    const previousState = session?.chatState;
-    const controller = session?.abortController;
-    if (
-      !previousState ||
-      previousState === "input" ||
-      previousState === "cancelling"
-    )
-      return;
-    store.updateChatState(currentSession, "cancelling");
-
-    // Call the backend stop endpoint to set the Redis fence
-    // This signals the backend to stop processing as soon as possible
-    // The backend will emit a STOP packet when it detects the fence
     try {
-      await stopChatSession(currentSession);
+      await stopChatSession(getCurrentSessionId(), tReadiness("checkFailed"));
     } catch (error) {
       console.error("Failed to stop chat session:", error);
-      const current = useChatSessionStore
-        .getState()
-        .sessions.get(currentSession);
-      if (current?.abortController !== controller) return;
-      if (current?.chatState === "cancelling") {
-        updateChatStateAction(currentSession, previousState);
-      }
       toast.error(tReadiness("stopFailed"));
-      return;
-    }
-
-    if (controller) {
-      await settleChatSession({
-        sessionId: currentSession,
-        controller,
-        errorMessage: tReadiness("checkFailed"),
-      });
     }
   }, [currentSessionId, existingChatSessionId, tReadiness]);
 
@@ -571,6 +527,8 @@ export default function useChatController({
           incognito,
           incognito ? incognitoSessionId : null
         );
+
+        if (controller.signal.aborted) return;
 
         // This send is what created the chat, so the configuration chosen for
         // it moves onto the session before the id reaches the composer.
@@ -1048,11 +1006,13 @@ export default function useChatController({
         // selections. A failed write surfaces as a chat error and the next
         // send re-persists.
         await llmManager.persistOverrides(currChatSessionId);
+        if (controller.signal.aborted || !ownsStream()) return;
 
         // The send's mainline walk must see the assumed preference. An
         // unconfirmed write can 400 with "not on the latest mainline".
         if (implicitPreference) {
           const res = await implicitPreference.persist;
+          if (controller.signal.aborted || !ownsStream()) return;
           if (!res?.ok) {
             implicitPreference.revert();
             const data = res ? await res.json().catch(() => ({})) : {};
@@ -1093,7 +1053,11 @@ export default function useChatController({
           getExtensionContext();
         const messageOrigin = isExtension ? "chrome_extension" : "webapp";
 
+        if (controller.signal.aborted || !ownsStream()) return;
         const stack = new CurrentMessageFIFO();
+        useChatSessionStore.getState().updateSessionData(frozenSessionId, {
+          sendAcknowledged: stack.acknowledged,
+        });
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
@@ -1463,10 +1427,7 @@ export default function useChatController({
         }
         streamSucceeded = true;
       } catch (e: any) {
-        if (!ownsStream()) {
-          controller.abort();
-          return;
-        }
+        if (controller.signal.aborted || !ownsStream()) return;
         console.log("Error:", e);
         const errorMsg = e.message;
         const userErrorNode: Message = {
@@ -1531,8 +1492,6 @@ export default function useChatController({
         });
       }
 
-      resetRegenerationState(frozenSessionId);
-      setStreamingStartTime(frozenSessionId, null);
       if (saveFailed || !streamSucceeded) {
         useChatSessionStore
           .getState()

@@ -12,11 +12,13 @@ from onyx.chat.history_store import (
     RedisChatHistoryStore,
     get_chat_history_store,
 )
+from onyx.chat.incognito_context import IncognitoContext
 from onyx.chat.models import ChatResponseSnapshot
 from onyx.configs.constants import MessageType
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession
+from onyx.llm.models import AssistantMessage, TextContent, UserMessage
 
 
 @pytest.mark.parametrize("persist_content", [False, True])
@@ -30,6 +32,40 @@ def test_recording_policy_selects_history_store(persist_content: bool) -> None:
         PostgresChatHistoryStore if persist_content else RedisChatHistoryStore
     )
     assert isinstance(store, expected_type)
+
+
+@pytest.mark.parametrize("accepted_text", [None, "", "Rewritten question"])
+def test_temporary_history_preparation_waits_for_explicit_user_message_save(
+    accepted_text: str | None,
+) -> None:
+    session_id = uuid4()
+    store = RedisChatHistoryStore(
+        message_id=17, chat_session_id=session_id, visible_message_ids=()
+    )
+    previous = AssistantMessage(content=[TextContent(text="Previous response")])
+    incoming = UserMessage(content="Converted request with attached context")
+    saved = IncognitoContext(
+        version=1, messages=[previous], previous_run_id="saved-run"
+    )
+    with (
+        patch("onyx.chat.history_store.load_incognito_context", return_value=saved),
+        patch("onyx.chat.history_store.append_incognito_message") as append,
+    ):
+        messages, previous_run_id = store.prepare_messages(
+            [incoming], "database-run", accepted_text
+        )
+        assert previous_run_id == "saved-run"
+        append.assert_not_called()
+        if accepted_text is None:
+            assert messages == [previous]
+        else:
+            assert messages == [previous, UserMessage(content=accepted_text)]
+            current_user = messages[-1]
+            assert isinstance(current_user, UserMessage)
+            store.save_user_message(current_user)
+            append.assert_called_once_with(session_id, current_user)
+        assert incoming.content == "Converted request with attached context"
+        assert saved.messages == [previous]
 
 
 @pytest.mark.parametrize("database_fails", [False, True])

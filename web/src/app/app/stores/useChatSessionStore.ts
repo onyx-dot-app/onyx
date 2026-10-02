@@ -26,6 +26,7 @@ interface ChatSessionData {
   chatSessionSharedStatus: ChatSessionSharedStatus;
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
+  sendAcknowledged?: Promise<number | null>;
   hasPerformedInitialScroll: boolean;
   documentSidebarVisible: boolean;
   hasSentLocalUserMessage: boolean;
@@ -583,7 +584,10 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
 
   // Abort Controller Actions
   setAbortController: (sessionId: string, controller: AbortController) => {
-    get().updateSessionData(sessionId, { abortController: controller });
+    get().updateSessionData(sessionId, {
+      abortController: controller,
+      sendAcknowledged: undefined,
+    });
   },
 
   abortSession: (sessionId: string) => {
