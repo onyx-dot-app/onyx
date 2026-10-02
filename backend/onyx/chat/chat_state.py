@@ -4,11 +4,10 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-
 from onyx.cache.interface import CacheBackend
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.models import (
+    AvailableFiles,
     ChatLoadedFile,
     ChatMessageSimple,
     ExtractedContextFiles,
@@ -181,15 +180,6 @@ class ChatStateContainer:
         """Thread-safe getter for emitted citations (returns a copy)."""
         with self._lock:
             return self._emitted_citations.copy()
-
-
-class AvailableFiles(BaseModel):
-    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
-
-    # IDs from the ``user_file`` table (project / persona-attached files).
-    user_file_ids: list[UUID] = []
-    # IDs from the ``file_record`` table (chat-attached files).
-    chat_file_ids: list[UUID] = []
 
 
 @dataclass(frozen=True)

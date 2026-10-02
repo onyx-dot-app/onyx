@@ -815,7 +815,7 @@ class TestNonVisionImageBudgeting:
         image_msg.token_count = stored_image_tokens + 5
         image_msg.image_token_count = stored_image_tokens
         monkeypatch.setattr(
-            "onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05
+            "onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05
         )
         llm = Mock()
         llm.config = LLMConfig(
@@ -837,7 +837,7 @@ class TestNonVisionImageBudgeting:
             patch("onyx.chat.llm_loop.select_reminder_text", return_value=""),
             patch("onyx.chat.llm_loop.model_supports_image_input", return_value=False),
             patch(
-                "onyx.chat.token_budget.get_model_map",
+                "onyx.llm.token_budget.get_model_map",
                 return_value={
                     "openai/text-only-model": {
                         "max_input_tokens": 24000,
