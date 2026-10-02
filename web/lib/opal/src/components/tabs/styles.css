@@ -27,60 +27,54 @@
 
 /* ── Trigger ────────────────────────────────────────────────────────────────── */
 
-/* Above the sliding surface, which paints the active state behind them. */
+/* Above the sliding surface, which paints the active state behind them. The
+   trigger is an interactive surface: each state sets the two interactive
+   foregrounds, which its label (a Content) reads, and which fade on change. */
 .opal-tabs-trigger {
-  @apply relative z-1 inline-flex items-center justify-center whitespace-nowrap rounded-08 cursor-pointer transition-colors duration-200 ease-out;
+  @apply relative z-1 inline-flex items-center justify-center whitespace-nowrap rounded-08;
 }
 
 /* 36px tall, border included. */
 .opal-tabs-trigger[data-variant="contained"] {
-  @apply h-9 px-2 gap-2;
+  @apply h-9 px-2 gap-2 border border-transparent;
 }
 
 .opal-tabs-trigger[data-variant="pill"],
 .opal-tabs-trigger[data-variant="underline"] {
-  @apply p-1 font-secondary-action;
+  @apply p-1;
 }
 
-/* contained · active (the surface paints its background) */
+/* contained (the surface paints the active background) */
 .opal-tabs-trigger[data-variant="contained"][data-state="active"] {
-  @apply text-text-04 border border-transparent;
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
 }
 
-/* contained · inactive */
 .opal-tabs-trigger[data-variant="contained"][data-state="inactive"] {
-  @apply text-text-03 border border-transparent;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
 }
 
-/* pill · active (the surface paints its background) */
+/* pill (the surface paints the filled background) */
 .opal-tabs-trigger[data-variant="pill"][data-state="active"] {
-  @apply text-text-inverted-05;
+  --interactive-foreground: var(--text-inverted-05);
+  --interactive-foreground-icon: var(--text-inverted-05);
 }
 
-/* pill · inactive */
 .opal-tabs-trigger[data-variant="pill"][data-state="inactive"] {
-  @apply text-text-03;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
 }
 
-/* underline · active */
+/* underline */
 .opal-tabs-trigger[data-variant="underline"][data-state="active"] {
-  @apply text-text-05;
+  --interactive-foreground: var(--text-05);
+  --interactive-foreground-icon: var(--text-05);
 }
 
-/* underline · inactive */
 .opal-tabs-trigger[data-variant="underline"][data-state="inactive"] {
-  @apply text-text-03;
-}
-
-/* ── Trigger icon ───────────────────────────────────────────────────────────── */
-
-.opal-tabs-trigger[data-variant="contained"] .opal-tabs-trigger-icon {
-  @apply stroke-text-03;
-}
-
-.opal-tabs-trigger[data-variant="pill"] .opal-tabs-trigger-icon,
-.opal-tabs-trigger[data-variant="underline"] .opal-tabs-trigger-icon {
-  @apply stroke-current;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
 }
 
 /* ── Pill / underline indicator ─────────────────────────────────────────────── */

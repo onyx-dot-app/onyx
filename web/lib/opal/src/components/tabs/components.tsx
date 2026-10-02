@@ -14,7 +14,8 @@ import { spacingToRem } from "@opal/shared";
 // instead of the barrel's RTL-mirrored wrappers.
 import SvgChevronLeft from "@opal/icons/chevron-left";
 import SvgChevronRight from "@opal/icons/chevron-right";
-import { Tooltip, Text, Button } from "@opal/components";
+import { Tooltip, Button } from "@opal/components";
+import { Content } from "@opal/layouts";
 import {
   TabsContext,
   useTabsContext,
@@ -261,19 +262,30 @@ function TabsTrigger({
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const strings = useOpalStrings();
 
+  // A string label renders as Content, which takes its title and icon
+  // colours from this trigger's interactive foregrounds (set per state in
+  // styles.css) and its font from the variant's size.
   const inner = (
     <>
-      {Icon && (
-        <div className="p-0.5">
-          <Icon size={14} className="opal-tabs-trigger-icon" />
-        </div>
-      )}
       {typeof children === "string" ? (
-        <div className="px-0.5">
-          <Text color="inherit">{children}</Text>
-        </div>
+        <Content
+          icon={Icon}
+          title={children}
+          color="interactive"
+          sizePreset={variant === "contained" ? "main-ui" : "secondary"}
+          variant="body"
+          // Fit, so the trigger's justify-center centres the label.
+          width="fit"
+        />
       ) : (
-        children
+        <>
+          {Icon && (
+            <div className="p-0.5">
+              <Icon size={14} className="interactive-foreground-icon" />
+            </div>
+          )}
+          {children}
+        </>
       )}
       {isLoading && (
         <span
@@ -289,7 +301,8 @@ function TabsTrigger({
       ref={ref}
       disabled={disabled}
       data-variant={variant}
-      className="opal-tabs-trigger"
+      // An interactive surface, so a Content inside follows its foregrounds.
+      className="interactive opal-tabs-trigger"
       {...props}
     >
       {tooltip && !disabled ? (
