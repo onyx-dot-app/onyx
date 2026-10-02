@@ -14,6 +14,7 @@ from ee.onyx.db.cc_pair_data_access import (
     set_cc_pair_data_access_groups__no_commit,
 )
 from ee.onyx.db.connector_manage_access import (
+    fetch_groups_with_global_permission,
     fetch_manage_roles_for_cc_pair,
     lock_cc_pairs_for_manage_access__no_commit,
 )
@@ -367,6 +368,14 @@ def set_cc_pair_manage_access(
         raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "CC Pair not found")
 
     requested = manage_access_by_group(request.manage_access)
+    # GET hides a stored row of a group that later got a global grant, so the
+    # request cannot list it. Keep that row: it applies again if the grant goes.
+    fixed_group_ids = {
+        group.id
+        for group in fetch_groups_with_global_permission(
+            db_session, Permission.MANAGE_CONNECTORS
+        )
+    }
     apply_manage_access_change__no_commit(
         db_session,
         user,
@@ -375,6 +384,7 @@ def set_cc_pair_manage_access(
             for group_id, role in fetch_manage_roles_for_cc_pair(
                 db_session, cc_pair_id
             ).items()
+            if group_id not in fixed_group_ids
         },
         requested={
             (group_id, cc_pair_id): role for group_id, role in requested.items()

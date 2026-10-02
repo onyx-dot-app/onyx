@@ -19,9 +19,10 @@ from ee.onyx.server.user_group.models import (
     GroupManagedCCPairsUpdateRequest,
     ManagedCCPairEntry,
 )
-from onyx.db.enums import AccessType, ConnectorManageRole
+from onyx.db.enums import AccessType, ConnectorManageRole, GrantSource, Permission
 from onyx.db.models import (
     ConnectorCredentialPair,
+    PermissionGrant,
     User,
     User__UserGroup,
     UserGroup,
@@ -134,6 +135,30 @@ def test_put_edits_rows_in_place_and_keeps_fixed_rows(db_session: Session) -> No
     _put(db_session, cc_pair.id, admin, {})
     rows = get_cc_pair_manage_access(cc_pair.id, admin, db_session)
     assert rows and all(row.is_fixed for row in rows)
+
+
+def test_put_keeps_the_hidden_row_of_a_group_with_a_global_grant(
+    db_session: Session,
+) -> None:
+    granted = _group(db_session)
+    admin = create_test_user(db_session, "ma-admin-grant", is_admin=True)
+    cc_pair = _pair(db_session, {granted: OPERATOR})
+    db_session.add(
+        PermissionGrant(
+            group_id=granted.id,
+            permission=Permission.MANAGE_CONNECTORS,
+            grant_source=GrantSource.USER,
+        )
+    )
+    db_session.commit()
+    assert granted.id not in _stored(db_session, cc_pair.id, admin)
+
+    _put(db_session, cc_pair.id, admin, {})
+
+    rows = db_session.query(UserGroup__ConnectorCredentialPair).filter_by(
+        cc_pair_id=cc_pair.id, user_group_id=granted.id
+    )
+    assert [row.role for row in rows] == [OPERATOR]
 
 
 def test_put_limits_a_scoped_editor_to_visible_groups(db_session: Session) -> None:
