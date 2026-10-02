@@ -95,11 +95,19 @@ class FirecrawlSearchClient(WebSearchProvider):
                 headers=headers,
                 json=body,
                 timeout=self._timeout_seconds,
+                # A redirect would skip the base_url check and resend the key.
+                allow_redirects=False,
             )
         except requests.RequestException as exc:
             raise RetryableFirecrawlSearchError(
                 f"Firecrawl search request failed: {exc}"
             ) from exc
+
+        if 300 <= response.status_code < 400:
+            raise ValueError(
+                f"Firecrawl search returned a redirect (status {response.status_code}); "
+                "set base_url to the final endpoint URL."
+            )
 
         try:
             response.raise_for_status()

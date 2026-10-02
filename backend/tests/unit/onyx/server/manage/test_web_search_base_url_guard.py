@@ -8,6 +8,7 @@ from onyx.db import web_search as web_search_db
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.web_search import api
 from onyx.server.manage.web_search.models import (
+    WebContentProviderTestRequest,
     WebContentProviderUpsertRequest,
     WebSearchProviderTestRequest,
     WebSearchProviderUpsertRequest,
@@ -131,3 +132,25 @@ def test_sibling_base_url_update_keeps_other_config() -> None:
     )
 
     assert row.config == {"base_url": _STORED_URL, "tbs": "qdr:d"}
+
+
+def test_content_test_endpoint_rejects_stored_credential_with_new_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stored = _stored_row(
+        "firecrawl",
+        WebContentProviderConfig(base_url="https://api.firecrawl.dev/v2/scrape"),
+    )
+    monkeypatch.setattr(api, "fetch_web_content_provider_by_type", lambda *_: stored)
+    build = MagicMock()
+    monkeypatch.setattr(api, "build_content_provider_from_config", build)
+
+    request = WebContentProviderTestRequest(
+        provider_type=WebContentProviderType.FIRECRAWL,
+        use_stored_key=True,
+        config=WebContentProviderConfig(base_url="https://attacker.example/v2/scrape"),
+    )
+    with pytest.raises(OnyxError):
+        api.test_content_provider(request, MagicMock(), MagicMock())
+
+    build.assert_not_called()

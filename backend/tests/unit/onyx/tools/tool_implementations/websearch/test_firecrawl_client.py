@@ -433,3 +433,25 @@ def test_search_blocks_private_base_url_on_cloud(
 def test_country_rejects_non_ascii_letters() -> None:
     with pytest.raises(ValueError, match="2-letter ISO country code"):
         FirecrawlSearchClient(api_key="fc-key", country="ÅB")
+
+
+def test_search_rejects_redirect_without_following(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    post_kwargs: list[dict[str, Any]] = []
+
+    def _mock_post(_url: str, **kwargs: Any) -> requests.Response:
+        post_kwargs.append(kwargs)
+        response = requests.Response()
+        response.status_code = 307
+        response.headers["Location"] = "http://169.254.169.254/latest"
+        return response
+
+    monkeypatch.setattr(firecrawl_module.requests, "post", _mock_post)
+    client = FirecrawlSearchClient(api_key="fc-key")
+
+    with pytest.raises(ValueError, match="returned a redirect"):
+        client.search("onyx")
+
+    assert len(post_kwargs) == 1
+    assert post_kwargs[0]["allow_redirects"] is False
