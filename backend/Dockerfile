@@ -55,28 +55,11 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
 # Python packages from the builder stage.
 ####################################################################################################
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS runtime
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS os
 
-LABEL com.danswer.maintainer="founders@onyx.app"
-LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
-
-# DO_NOT_TRACK is used to disable telemetry for Unstructured
-ENV ONYX_RUNNING_IN_DOCKER="true" \
-    DO_NOT_TRACK="true" \
-    PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
-
-# Create non-root user for security best practices
-RUN groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    mkdir -p /var/log/onyx && \
-    chmod 755 /var/log/onyx && \
-    chown onyx:onyx /var/log/onyx
-
-# Install runtime system dependencies only (no build toolchain).
+# Install runtime system dependencies only (no build toolchain). This stage is
+# everything the shipped image holds outside the lockfiles, so the audit gate
+# builds and scans it on its own before the full build.
 # zip for Vespa step further down
 # ca-certificates for HTTPS
 # libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
@@ -97,6 +80,46 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
+# Chromium's OS-level runtime libraries come from the locked playwright's own
+# list, so the stage installs that exact playwright (the builder's copy lands on
+# top of it later) and lets it pick the packages.
+#
+# perl-base is part of the base Python Debian image but not needed for Onyx functionality; it is
+# removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
+# first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
+# scripts in their dpkg configure step. The second `playwright install-deps` then restores any
+# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade. The
+# runtime image stays perl-free from here on.
+RUN --mount=type=bind,source=requirements/default.txt,target=/requirements.txt \
+    pip install --no-cache-dir --no-deps "playwright==$(sed -n 's/^playwright==\([^ \\]*\).*/\1/p' /requirements.txt)" && \
+    playwright install-deps chromium && \
+    apt-get remove -y --allow-remove-essential perl-base && \
+    apt-get autoremove -y && \
+    playwright install-deps chromium && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+FROM os AS runtime
+
+LABEL com.danswer.maintainer="founders@onyx.app"
+LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
+contains code for both the Community and Enterprise editions of Onyx. If you do not \
+have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
+Edition features outside of personal development or testing purposes. Please reach out to \
+founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+
+# DO_NOT_TRACK is used to disable telemetry for Unstructured
+ENV ONYX_RUNNING_IN_DOCKER="true" \
+    DO_NOT_TRACK="true" \
+    PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
+
+# Create non-root user for security best practices
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    mkdir -p /var/log/onyx && \
+    chmod 755 /var/log/onyx && \
+    chown onyx:onyx /var/log/onyx
+
 # Copy the compiled Python packages and only the console scripts our services launch (api server,
 # celery workers/beat, alembic migrations, supervisord, Playwright). Both stages share the same base
 # image digest, so paths and ABI match. Listing the scripts explicitly keeps the base interpreter
@@ -111,27 +134,14 @@ COPY --from=builder \
     /usr/local/bin/playwright \
     /usr/local/bin/
 
-# Install the Chromium build used by Playwright and its OS-level runtime libraries. Must run after
-# the site-packages copy above so the playwright CLI is available.
+# Install the Chromium build used by Playwright; its OS-level runtime libraries came with the os
+# stage. Must run after the site-packages copy above so the playwright CLI is available.
 #
 # `--only-shell` installs the headless shell and skips the full headed Chromium build (~364 MB). Every
 # launch site in the backend passes headless=True with no channel, so Playwright picks the shell.
 # Remove the flag if a call site ever needs a headed browser or a branded channel.
-#
-# perl-base is part of the base Python Debian image but not needed for Onyx functionality; it is
-# removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
-# first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
-# scripts in their dpkg configure step. The second `playwright install-deps` then restores any
-# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade. The
-# runtime image stays perl-free from here on.
 RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
-    playwright install --only-shell chromium && \
-    playwright install-deps chromium && \
-    apt-get remove -y --allow-remove-essential perl-base && \
-    apt-get autoremove -y && \
-    playwright install-deps chromium && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
+    playwright install --only-shell chromium
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
