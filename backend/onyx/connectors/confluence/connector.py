@@ -100,7 +100,7 @@ ATTACHMENT_EXPANSION_FIELDS = [
 # backfill on the slim path.
 # Fast path: page + ancestor restrictions inlined. Subject to
 # CONFCLOUD-77618 / 76424 on draft/trashed/outdated ancestors.
-_RESTRICTIONS_EXPANSION_FIELDS = [
+RESTRICTIONS_EXPANSION_FIELDS = [
     "space",
     "restrictions.read.restrictions.user",
     "restrictions.read.restrictions.group",
@@ -110,7 +110,7 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
 ]
 # CONFCLOUD-77618 fallback: bare ancestors only; EE resolver fetches
 # each ancestor's restrictions via `restriction/byOperation`.
-_PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
+PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
     "space",
     "restrictions.read.restrictions.user",
     "restrictions.read.restrictions.group",
@@ -669,7 +669,6 @@ class ConfluenceConnector(
 
         try:
             for attachment in self.source_operations.search_attachments(
-                variant=ConfluenceSearchVariant.CONTENT,
                 cql=attachment_query,
                 expand=",".join(ATTACHMENT_EXPANSION_FIELDS),
             ):
@@ -1028,7 +1027,7 @@ class ConfluenceConnector(
 
         expand_fields = list(_PAGE_EXPANSION_FIELDS)
         if include_permissions:
-            expand_fields.extend(_RESTRICTIONS_EXPANSION_FIELDS)
+            expand_fields.extend(RESTRICTIONS_EXPANSION_FIELDS)
 
         # TODO(nikg): chunk this into multiple CQL queries once
         # MAX_TARGETS_PER_REQUEST grows past Confluence's URL length /
@@ -1037,15 +1036,18 @@ class ConfluenceConnector(
         cql = "type=page and id IN (%s)" % quoted_ids
 
         seen_page_ids: set[str] = set()
-        for page in self.source_operations.search_pages(
-            variant=(
-                ConfluenceSearchVariant.WITH_RESTRICTIONS
-                if include_permissions
-                else ConfluenceSearchVariant.CONTENT
-            ),
-            cql=cql,
-            expand=",".join(expand_fields),
-        ):
+        pages = (
+            self.source_operations.search_pages_with_restrictions(
+                cql=cql, expand=",".join(expand_fields)
+            )
+            if include_permissions
+            else self.source_operations.search_pages(
+                variant=ConfluenceSearchVariant.CONTENT,
+                cql=cql,
+                expand=",".join(expand_fields),
+            )
+        )
+        for page in pages:
             seen_page_ids.add(_get_page_id(page, allow_missing=True))
             yield from self._yield_ancestor_hierarchy_nodes(page)
             doc_or_failure = self._convert_page_to_document(page)
@@ -1156,7 +1158,7 @@ class ConfluenceConnector(
     def _retrieve_attachments_for_slim_page(
         self,
         page_id: str,
-        variant: ConfluenceSearchVariant,
+        include_permissions: bool,
         expand: str,
         start: SecondsSinceUnixEpoch | None,
         end: SecondsSinceUnixEpoch | None,
@@ -1170,12 +1172,16 @@ class ConfluenceConnector(
         raise.
         """
         attachment_query = self._construct_attachment_query(page_id, start, end)
+        search = (
+            self.source_operations.search_attachments_with_restrictions
+            if include_permissions
+            else self.source_operations.search_attachments
+        )
         attempts = 0
         while True:
             try:
                 return list(
-                    self.source_operations.search_attachments(
-                        variant=variant,
+                    search(
                         cql=attachment_query,
                         expand=expand,
                         limit=_SLIM_DOC_BATCH_SIZE,
@@ -1210,17 +1216,12 @@ class ConfluenceConnector(
 
         # Pruning skips the restrictions expand (the CONFCLOUD-77618
         # trigger) but still needs space + ancestors for hierarchy.
-        search_variant = (
-            ConfluenceSearchVariant.WITH_RESTRICTIONS
-            if include_permissions
-            else ConfluenceSearchVariant.SLIM
-        )
         if not include_permissions:
             restrictions_expand = ",".join(PRUNING_EXPANSION_FIELDS)
         elif expand_per_page:
-            restrictions_expand = ",".join(_PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS)
+            restrictions_expand = ",".join(PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS)
         else:
-            restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
+            restrictions_expand = ",".join(RESTRICTIONS_EXPANSION_FIELDS)
 
         space_level_access_info: dict[str, ExternalAccess] = {}
         if include_permissions:
@@ -1258,13 +1259,23 @@ class ConfluenceConnector(
 
         # Query pages (with optional time filtering for indexing_start)
         page_query = self._construct_page_cql_query(start, end)
-        for page in self.source_operations.search_pages(
-            variant=search_variant,
-            cql=page_query,
-            expand=restrictions_expand,
-            limit=_SLIM_DOC_BATCH_SIZE,
-            follow_expansion_links=True,
-        ):
+        pages = (
+            self.source_operations.search_pages_with_restrictions(
+                cql=page_query,
+                expand=restrictions_expand,
+                limit=_SLIM_DOC_BATCH_SIZE,
+                follow_expansion_links=True,
+            )
+            if include_permissions
+            else self.source_operations.search_pages(
+                variant=ConfluenceSearchVariant.SLIM,
+                cql=page_query,
+                expand=restrictions_expand,
+                limit=_SLIM_DOC_BATCH_SIZE,
+                follow_expansion_links=True,
+            )
+        )
+        for page in pages:
             # Yield ancestor hierarchy nodes for this page
             doc_metadata_list.extend(self._yield_ancestor_hierarchy_nodes(page))
 
@@ -1301,7 +1312,11 @@ class ConfluenceConnector(
             attachment_results: Iterable[dict[str, Any]] = ()
             if self.include_attachments:
                 attachment_results = self._retrieve_attachments_for_slim_page(
-                    _get_page_id(page), search_variant, restrictions_expand, start, end
+                    _get_page_id(page),
+                    include_permissions,
+                    restrictions_expand,
+                    start,
+                    end,
                 )
             for attachment in attachment_results:
                 # admission must mirror the main indexing pass

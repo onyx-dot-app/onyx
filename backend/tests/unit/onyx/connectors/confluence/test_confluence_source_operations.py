@@ -345,3 +345,57 @@ def test_username_email_lookup_swallows_errors() -> None:
     )
 
     assert email is None
+
+
+def test_uncached_userkey_email_lookup_skips_the_cache() -> None:
+    """The cache keeps a None result for a userKey; a check reads past it."""
+    source_operations._USER_KEY_TO_EMAIL_CACHE.clear()
+    client = mock.Mock(spec=_OnyxConfluence)
+    client._url = _WIKI_BASE
+    client.get_user_details_by_userkey = mock.Mock(
+        side_effect=[{}, {"email": "a@x.io"}, {"email": "b@x.io"}]
+    )
+    gateway = gateway_with_client(client)
+
+    def lookup(cached: bool) -> str | None:
+        return gateway.get_user_email(
+            variant=ConfluenceUserEmailVariant.USERKEY, user="key-1", cached=cached
+        )
+
+    assert lookup(cached=True) is None
+    assert lookup(cached=True) is None
+    assert lookup(cached=False) == "a@x.io"
+    assert lookup(cached=False) == "b@x.io"
+    assert lookup(cached=True) is None
+    assert client.get_user_details_by_userkey.call_count == 3
+
+
+def test_cloud_space_permissions_translate_the_sdk_errors() -> None:
+    client = mock.Mock(spec=_OnyxConfluence)
+    client.get_space = mock.Mock(side_effect=ApiError("no such space"))
+    gateway = gateway_with_client(client, is_cloud=True)
+
+    with pytest.raises(ConfluenceSpaceNotFoundError):
+        gateway.get_space_permissions(
+            variant=ConfluenceSpacePermissionsVariant.CLOUD, space_key="X"
+        )
+    # The retry wrapper returns None after repeated 403 or 429 responses.
+    client.get_space = mock.Mock(return_value=None)
+    with pytest.raises(RuntimeError):
+        gateway.get_space_permissions(
+            variant=ConfluenceSpacePermissionsVariant.CLOUD, space_key="X"
+        )
+
+
+def test_listed_user_email_uses_the_username_lookup() -> None:
+    source_operations._USERNAME_TO_EMAIL_CACHE.clear()
+    client = mock.Mock(spec=_OnyxConfluence)
+    client._url = _WIKI_BASE
+    client.get_mobile_parameters = mock.Mock(
+        return_value={"email": "alice@example.com"}
+    )
+
+    email = gateway_with_client(client).get_listed_user_email(username="alice")
+
+    assert email == "alice@example.com"
+    client.get_mobile_parameters.assert_called_once_with("alice")
