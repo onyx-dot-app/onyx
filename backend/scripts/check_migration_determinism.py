@@ -133,14 +133,14 @@ def _chain_calls(node: ast.expr) -> list[ast.Call]:
 
 
 def _is_sqlalchemy_update(call: ast.Call) -> bool:
-    """`update(t)` or `sa.update(t)`, not `some_dict.update(...)`."""
+    """`update(t)`, `sa.update(t)` or `t.update()`. A dict's update takes a value."""
     func = call.func
     if isinstance(func, ast.Name):
         return func.id == "update"
-    return (
-        isinstance(func, ast.Attribute)
-        and func.attr == "update"
-        and _terminal_name(func.value) in _SQLALCHEMY_MODULES
+    if not isinstance(func, ast.Attribute) or func.attr != "update":
+        return False
+    return _terminal_name(func.value) in _SQLALCHEMY_MODULES or not (
+        call.args or call.keywords
     )
 
 
