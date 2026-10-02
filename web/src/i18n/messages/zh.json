@@ -3397,7 +3397,7 @@
           "title": "Gong 访问密钥"
         },
         "gong_access_key_secret": {
-          "title": "Gong 访问密钥的密文"
+          "title": "Gong 访问密钥 Secret"
         },
         "gong_base_url": {
           "description": "可选。美国以外的数据请设置你所在区域的主机，例如 https://[region].api.gong.io。",
@@ -3422,7 +3422,7 @@
           "title": "Highspot 密钥"
         },
         "highspot_secret": {
-          "title": "Highspot 密文"
+          "title": "Highspot Secret"
         },
         "highspot_url": {
           "title": "Highspot URL"
