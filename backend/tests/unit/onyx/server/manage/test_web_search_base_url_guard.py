@@ -87,7 +87,7 @@ def test_search_upsert_rejects_type_switch_on_stored_credential(
         name="Tavily",
         provider_type=WebSearchProviderType.FIRECRAWL,
         api_key_changed=False,
-        config={"base_url": _OTHER_URL},
+        config={},
     )
     with pytest.raises(OnyxError):
         api.upsert_search_provider_endpoint(request, MagicMock(), MagicMock())

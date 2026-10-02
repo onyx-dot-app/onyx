@@ -408,3 +408,28 @@ def test_test_connection_propagates_unexpected_errors(
 
     with pytest.raises(RuntimeError, match="unexpected parsing bug"):
         client.test_connection()
+
+
+def test_search_blocks_private_base_url_on_cloud(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(firecrawl_module, "MULTI_TENANT", True)
+    post_calls: list[str] = []
+    monkeypatch.setattr(
+        firecrawl_module.requests,
+        "post",
+        lambda url, **_kwargs: post_calls.append(url),
+    )
+    client = FirecrawlSearchClient(
+        api_key="fc-key", base_url="http://169.254.169.254/v2/search"
+    )
+
+    with pytest.raises(ValueError, match="base_url is not allowed"):
+        client.search("onyx")
+
+    assert post_calls == []
+
+
+def test_country_rejects_non_ascii_letters() -> None:
+    with pytest.raises(ValueError, match="2-letter ISO country code"):
+        FirecrawlSearchClient(api_key="fc-key", country="ÅB")

@@ -205,6 +205,12 @@ def upsert_search_provider_endpoint(
         for search_type, name, content_type in _SEARCH_TO_CONTENT_SYNC:
             if request.provider_type == search_type:
                 synced_config = _synced_content_config(content_type, request.config)
+                if (
+                    content_type == WebContentProviderType.FIRECRAWL
+                    and not synced_config
+                ):
+                    # No matching endpoint; keep the sibling's key and URL paired.
+                    break
                 stmt = (
                     insert(InternetContentProvider)
                     .values(
@@ -410,6 +416,9 @@ def upsert_content_provider_endpoint(
         for content_type, name, search_type in _CONTENT_TO_SEARCH_SYNC:
             if request.provider_type == content_type:
                 synced_config = _synced_search_config(search_type, request.config)
+                if search_type == WebSearchProviderType.FIRECRAWL and not synced_config:
+                    # No matching endpoint; keep the sibling's key and URL paired.
+                    break
                 stmt = (
                     insert(InternetSearchProvider)
                     .values(

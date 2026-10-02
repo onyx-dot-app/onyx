@@ -12,6 +12,8 @@ from onyx.tools.tool_implementations.web_search.models import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
+from onyx.utils.url import SSRFException, validate_outbound_http_url
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -124,6 +126,11 @@ class FirecrawlSearchClient(WebSearchProvider):
         return _parse_results(data)
 
     def search(self, query: str) -> list[WebSearchResult]:
+        if MULTI_TENANT:
+            try:
+                validate_outbound_http_url(self._base_url)
+            except SSRFException as exc:
+                raise ValueError(f"Firecrawl base_url is not allowed: {exc}") from exc
         try:
             return self._search_with_retries(query)
         except RetryableFirecrawlSearchError as exc:
@@ -281,7 +288,7 @@ def _normalize_country(country: str | None) -> str | None:
     normalized = country.strip().upper()
     if not normalized:
         return None
-    if len(normalized) != 2 or not normalized.isalpha():
+    if len(normalized) != 2 or not (normalized.isascii() and normalized.isalpha()):
         raise ValueError(
             "Firecrawl provider config 'country' must be a 2-letter ISO country code."
         )
