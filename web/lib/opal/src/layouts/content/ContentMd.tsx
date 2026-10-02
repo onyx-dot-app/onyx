@@ -262,6 +262,8 @@ function ContentMd({
             </div>
           ) : (
             <Text
+              // Lets a host (a toast) measure whether a clamped title overflows.
+              data-opal-content-title=""
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}

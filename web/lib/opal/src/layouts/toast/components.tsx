@@ -1,20 +1,23 @@
 "use client";
 
 import { useCallback, useState, useSyncExternalStore } from "react";
-import { clickOnKeyDown, cn } from "@opal/utils";
-import { MessageCard, Text } from "@opal/components";
+import { cn } from "@opal/utils";
+import { Button, MessageCard, Text } from "@opal/components";
+import { SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
+import useOverflow from "@opal/hooks/useOverflow";
 import {
   MAX_VISIBLE_TOASTS,
   toast,
   toastStore,
   type Toast,
 } from "@opal/layouts/toast/store";
+import SvgChevronRight from "@opal/icons/chevron-right";
+import { Section } from "../general/components";
 
 const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
-const MAX_TOAST_MESSAGE_LENGTH = 150;
-// How long a toast lingers after the user clicks to expand it. Long enough to
-// read a multi-line stack trace or API error without forcing a manual dismiss.
+// How long a toast lingers after the user expands it. Long enough to read a
+// multi-line stack trace or API error without forcing a manual dismiss.
 const EXPANDED_DURATION_MS = 30000;
 
 function buildDescription(
@@ -37,6 +40,94 @@ function ExpandedDetails({ message }: ExpandedDetailsProps) {
       <Text font="secondary-body" color="text-03" as="p">
         {message}
       </Text>
+    </div>
+  );
+}
+
+interface ToastCardProps {
+  toast: Toast;
+  errorAppendix?: string;
+  expanded: boolean;
+  onToggle: (t: Toast) => void;
+  onClose: (id: string) => void;
+}
+
+/**
+ * One toast. The title stays on one line; when that line cuts it off, a
+ * chevron left of the close button shows and hides the full message below.
+ */
+function ToastCard({
+  toast: t,
+  errorAppendix,
+  expanded,
+  onToggle,
+  onClose,
+}: ToastCardProps) {
+  const strings = useOpalStrings();
+  // The title lives inside MessageCard; ContentMd marks it so it can be
+  // measured from here.
+  const [title, setTitle] = useState<HTMLElement | null>(null);
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    setTitle(
+      node?.querySelector<HTMLElement>("[data-opal-content-title]") ?? null
+    );
+  }, []);
+  const truncated = useOverflow(title);
+  const close = t.dismissible ? () => onClose(t.id) : undefined;
+  const shared = {
+    innerPadding: 1,
+    variant: t.level ?? "info",
+    title: t.message,
+    titleMaxLines: 1,
+    description: buildDescription(t, errorAppendix),
+    outerPadding: 1,
+    contentPadding: 1,
+  } as const;
+
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "w-full",
+        t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
+      )}
+    >
+      {truncated ? (
+        <MessageCard
+          {...shared}
+          rightChildren={
+            <Section flexDirection="row" gap={0}>
+              <Button
+                icon={({ className, ...props }) => (
+                  <SvgChevronRight
+                    {...props}
+                    className={cn(className, expanded && "rotate-90")}
+                  />
+                )}
+                prominence="internal"
+                size="md"
+                onClick={() => onToggle(t)}
+                aria-label={strings.showFullMessage}
+                aria-expanded={expanded}
+              />
+              {close && (
+                <Button
+                  icon={SvgX}
+                  prominence="internal"
+                  size="md"
+                  onClick={close}
+                  aria-label={strings.close}
+                />
+              )}
+            </Section>
+          }
+          bottomChildren={
+            expanded ? <ExpandedDetails message={t.message} /> : undefined
+          }
+        />
+      ) : (
+        <MessageCard {...shared} onClose={close} />
+      )}
     </div>
   );
 }
@@ -68,11 +159,11 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
     }, ANIMATION_DURATION);
   }, []);
 
-  const handleExpand = useCallback((t: Toast) => {
+  const handleToggle = useCallback((t: Toast) => {
     setExpandedIds((prev) => {
-      if (prev.has(t.id)) return prev;
       const next = new Set(prev);
-      next.add(t.id);
+      if (next.has(t.id)) next.delete(t.id);
+      else next.add(t.id);
       return next;
     });
     // Restart auto-dismiss with reading time for the full message. Persistent
@@ -81,8 +172,6 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
       toast.setAutoDismiss(t.id, EXPANDED_DURATION_MS);
     }
   }, []);
-  const strings = useOpalStrings();
-
   if (visible.length === 0) return null;
 
   return (
@@ -90,64 +179,16 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
       data-testid="toast-container"
       className="fixed bottom-4 end-4 z-(--z-toast) flex w-full max-w-(--toast-width) flex-col items-end gap-2"
     >
-      {visible.map((t) => {
-        const isTruncatable = t.message.length > MAX_TOAST_MESSAGE_LENGTH;
-        const isExpanded = expandedIds.has(t.id);
-        const truncatedTitle = isTruncatable
-          ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "…"
-          : t.message;
-        const expandable = isTruncatable && !isExpanded;
-        const className = cn(
-          "w-full",
-          t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale",
-          expandable && "cursor-pointer"
-        );
-        const card = (
-          <MessageCard
-            innerPadding={1}
-            variant={t.level ?? "info"}
-            title={truncatedTitle}
-            description={buildDescription(t, errorAppendix)}
-            outerPadding={1}
-            onClose={t.dismissible ? () => handleClose(t.id) : undefined}
-            bottomChildren={
-              isExpanded ? <ExpandedDetails message={t.message} /> : undefined
-            }
-          />
-        );
-
-        if (!expandable) {
-          return (
-            <div key={t.id} className={className}>
-              {card}
-            </div>
-          );
-        }
-
-        return (
-          // The card holds its own close button, so this stays a div with
-          // button semantics rather than a <button> wrapping a <button>.
-          <div
-            key={t.id}
-            className={className}
-            role="button"
-            tabIndex={0}
-            aria-label={strings.showFullMessage}
-            onKeyDown={clickOnKeyDown(() => handleExpand(t))}
-            onClick={(e) => {
-              // Don't intercept clicks on the inner close button.
-              if (
-                (e.target as HTMLElement).closest("[data-message-card-close]")
-              ) {
-                return;
-              }
-              handleExpand(t);
-            }}
-          >
-            {card}
-          </div>
-        );
-      })}
+      {visible.map((t) => (
+        <ToastCard
+          key={t.id}
+          toast={t}
+          errorAppendix={errorAppendix}
+          expanded={expandedIds.has(t.id)}
+          onToggle={handleToggle}
+          onClose={handleClose}
+        />
+      ))}
     </div>
   );
 }
@@ -162,7 +203,8 @@ interface ToastProviderProps {
 /**
  * Renders the app's toast stack bottom-right, driven by the module-level
  * store in `toast/store` (fire toasts from anywhere via `toast(...)` or the
- * `useToast` hook). Long messages truncate and expand on click.
+ * `useToast` hook). A title that overflows its one line gets a chevron that
+ * shows and hides the full message.
  */
 function ToastProvider({ children, errorAppendix }: ToastProviderProps) {
   return (
