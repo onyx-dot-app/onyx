@@ -266,6 +266,14 @@ def test_search_provider(
                 status_code=400,
                 detail="No stored API key found for this provider type.",
             )
+        if MULTI_TENANT:
+            stored_base_url = (existing_provider.config or {}).get("base_url")
+            request_base_url = (request.config or {}).get("base_url")
+            if request_base_url != stored_base_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Base URL cannot differ from stored provider when using stored API key",
+                )
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if requires_key and not api_key:
