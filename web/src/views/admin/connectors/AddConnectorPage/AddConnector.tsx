@@ -8,7 +8,7 @@ import {
   getSourceDocLink,
   getSourceMetadata,
 } from "@/lib/sources";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "@/lib/app/components";
 import { linkCredential } from "@/lib/credentials/svc";
 import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
@@ -237,6 +237,11 @@ export default function AddConnector({
     : (linkedCredential?.id ?? null);
   const draftChecks = useDraftConnectorChecks(connector, draftCredentialId);
   const configFieldsRef = useRef<HTMLFieldSetElement>(null);
+  const boundFieldsRef = useRef<HTMLDivElement>(null);
+  const fieldContainerRefs = useMemo(
+    () => [boundFieldsRef, configFieldsRef],
+    []
+  );
   const checksCardRef = useRef<HTMLDivElement>(null);
   // Set when Create was held back by the checks; the card stays highlighted
   // until the required checks clear.
@@ -660,7 +665,7 @@ export default function AddConnector({
                   />
                   <Section gap={6} alignItems="stretch" width="full">
                     {hasVisibleBoundFields && (
-                      <>
+                      <div ref={boundFieldsRef} className="contents">
                         <CredentialBoundFields
                           fields={credentialBoundFields.values}
                           advancedFields={credentialBoundFields.advancedValues}
@@ -677,7 +682,7 @@ export default function AddConnector({
                             paddingPerpendicular={2}
                           />
                         )}
-                      </>
+                      </div>
                     )}
 
                     {!noCredentials && (
@@ -701,7 +706,7 @@ export default function AddConnector({
                           inputFor={draftInputFor}
                           configuration={configuration}
                           currentCredential={linkedCredential}
-                          configFieldsRef={configFieldsRef}
+                          fieldContainerRefs={fieldContainerRefs}
                           highlighted={
                             checksRevealed &&
                             draftChecks.requiredStatus !== "ok"

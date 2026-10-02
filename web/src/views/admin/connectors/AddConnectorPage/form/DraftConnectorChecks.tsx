@@ -23,8 +23,12 @@ export interface DraftConnectorChecksProps<FormValues> {
   inputFor: (values: FormValues) => DraftCheckRunInput;
   configuration: ConnectionConfiguration;
   currentCredential: Credential<unknown> | null;
-  /** The connector-config fields; leaving any of them starts a run. */
-  configFieldsRef: RefObject<HTMLElement | null>;
+  /**
+   * The containers of the connector-config fields (the credential-bound
+   * fields above the credential and the config below it). Leaving any field
+   * in them starts a run.
+   */
+  fieldContainerRefs: RefObject<HTMLElement | null>[];
   highlighted?: boolean;
 }
 
@@ -55,7 +59,7 @@ export function DraftConnectorChecks<FormValues>({
   inputFor,
   configuration,
   currentCredential,
-  configFieldsRef,
+  fieldContainerRefs,
   highlighted,
 }: DraftConnectorChecksProps<FormValues>) {
   const { values } = useFormikContext<FormValues>();
@@ -92,12 +96,18 @@ export function DraftConnectorChecks<FormValues>({
   }, [accessType]);
 
   useEffect(() => {
-    const fields = configFieldsRef.current;
-    if (fields === null) return;
+    const containers = fieldContainerRefs
+      .map((ref) => ref.current)
+      .filter((container): container is HTMLElement => container !== null);
     const schedule = () => scheduleRef.current();
-    fields.addEventListener("focusout", schedule);
-    return () => fields.removeEventListener("focusout", schedule);
-  }, [configFieldsRef]);
+    const listeners = new AbortController();
+    for (const container of containers) {
+      container.addEventListener("focusout", schedule, {
+        signal: listeners.signal,
+      });
+    }
+    return () => listeners.abort();
+  }, [fieldContainerRefs]);
 
   const fieldLabels = useMemo(
     () =>
