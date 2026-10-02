@@ -124,6 +124,7 @@ def _mock_convert(monkeypatch: pytest.MonkeyPatch) -> None:
         treat_sharing_link_as_public: bool = False,  # noqa: ARG001
         raw_file_callback: Any = None,  # noqa: ARG001
         permission_cache: Any = None,  # noqa: ARG001
+        list_id: str | None = None,  # noqa: ARG001
     ) -> Document:
         return _make_document(driveitem)
 

@@ -868,6 +868,7 @@ def _convert_driveitem_to_document_with_permissions(
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
     permission_cache: SharepointPermissionCache | None = None,
+    list_id: str | None = None,
 ) -> Document | ConnectorFailure | None:
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
@@ -1014,6 +1015,7 @@ def _convert_driveitem_to_document_with_permissions(
             drive_name=drive_name,
             add_prefix=True,
             treat_sharing_link_as_public=treat_sharing_link_as_public,
+            list_id=list_id,
         )
     else:
         external_access = ExternalAccess.empty()
@@ -1231,6 +1233,7 @@ def _convert_driveitem_to_slim_document(
     permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
+    list_id: str | None = None,
 ) -> SlimDocument:
     if driveitem.id is None:
         raise ValueError("DriveItem ID is required")
@@ -1243,6 +1246,7 @@ def _convert_driveitem_to_slim_document(
         drive_item=sdk_item,
         drive_name=drive_name,
         treat_sharing_link_as_public=treat_sharing_link_as_public,
+        list_id=list_id,
     )
 
     return SlimDocument(
@@ -1328,6 +1332,7 @@ class SharepointConnector(
         self._cached_rest_ctx: ClientContext | None = None
         self._cached_rest_ctx_url: str | None = None
         self._cached_rest_ctx_created_at: float = 0.0
+        self._drive_list_ids: dict[str, str | None] = {}
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self._azure_environment = resolved_env.environment
@@ -2410,6 +2415,7 @@ class SharepointConnector(
                                 drive_name,
                                 temp_checkpoint,
                                 include_permissions=include_permissions,
+                                drive_id=driveitem.drive_id,
                             )
                         )
 
@@ -2447,6 +2453,7 @@ class SharepointConnector(
                                     temp_checkpoint.permission_cache,
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
                                     treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                                    list_id=self._get_drive_list_id(driveitem.drive_id),
                                 )
                             )
                         else:
@@ -2717,6 +2724,31 @@ class SharepointConnector(
             external_access=external_access,
         )
 
+    def _get_drive_list_id(self, drive_id: str | None) -> str | None:
+        """Return the SharePoint list ID backing a drive, or None if unknown.
+
+        Callers fall back to a title lookup on None.
+        """
+        if not drive_id:
+            return None
+        if drive_id not in self._drive_list_ids:
+            list_id: str | None = None
+            try:
+                list_json = self._graph_api_get_json(
+                    f"{self.graph_api_base}/drives/{drive_id}/list",
+                    params={"$select": "id"},
+                )
+                list_id = list_json.get("id")
+            except Exception as e:
+                logger.warning(
+                    "Failed to get list ID for drive '%s', falling back to "
+                    "title lookup: %s",
+                    drive_id,
+                    e,
+                )
+            self._drive_list_ids[drive_id] = list_id
+        return self._drive_list_ids[drive_id]
+
     def _yield_drive_hierarchy_node(
         self,
         site_url: str,
@@ -2724,6 +2756,7 @@ class SharepointConnector(
         drive_name: str,
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
+        drive_id: str | None = None,
     ) -> Generator[HierarchyNode, None, None]:
         """Yield a hierarchy node for a drive if not already yielded.
 
@@ -2735,14 +2768,25 @@ class SharepointConnector(
         checkpoint.seen_hierarchy_node_raw_ids.add(drive_web_url)
         external_access = None
         if include_permissions:
-            ctx = self._create_rest_client_context(site_url)
-            external_access = get_sharepoint_hierarchy_node_external_access(
-                ctx,
-                self.graph_client,
-                checkpoint.permission_cache,
-                HierarchyNodeType.DRIVE,
-                drive_name=drive_name,
-            )
+            # Non-fatal: a None external_access leaves the node private (or
+            # keeps its stored permissions) instead of failing the whole run.
+            try:
+                ctx = self._create_rest_client_context(site_url)
+                external_access = get_sharepoint_hierarchy_node_external_access(
+                    ctx,
+                    self.graph_client,
+                    checkpoint.permission_cache,
+                    HierarchyNodeType.DRIVE,
+                    drive_name=drive_name,
+                    list_id=self._get_drive_list_id(drive_id),
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to get permissions for drive '%s' (%s): %s",
+                    drive_name,
+                    drive_web_url,
+                    e,
+                )
 
         yield HierarchyNode(
             raw_node_id=drive_web_url,
@@ -2924,8 +2968,10 @@ class SharepointConnector(
 
         try:
             ctx: ClientContext | None = None
+            list_id: str | None = None
             if include_permissions:
                 ctx = self._create_rest_client_context(site_url)
+                list_id = self._get_drive_list_id(driveitem.drive_id)
 
             access_token = self._get_graph_access_token()
             doc_or_failure = _convert_driveitem_to_document_with_permissions(
@@ -2940,6 +2986,7 @@ class SharepointConnector(
                 access_token=access_token,
                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                 raw_file_callback=self.raw_file_callback,
+                list_id=list_id,
             )
 
             if isinstance(doc_or_failure, Document):
@@ -3172,6 +3219,7 @@ class SharepointConnector(
                     display_drive_name,
                     checkpoint,
                     include_permissions=include_permissions,
+                    drive_id=drive_id,
                 )
 
             # For non-folder-scoped drives, use delta API with per-page
@@ -3550,6 +3598,7 @@ class SharepointConnector(
                 resolved.drive_name,
                 dedup,
                 include_permissions=include_permissions,
+                drive_id=resolved.driveitem.drive_id,
             )
         yield from self._process_drive_item(
             resolved.driveitem,
