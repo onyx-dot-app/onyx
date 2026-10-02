@@ -10,6 +10,7 @@ import { FormikField } from "@/refresh-components/form/FormikField";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
 import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import { getSourceDisplayName } from "@/lib/sources";
 import type {
   Credential,
   CredentialTemplateWithAuth,
@@ -231,6 +232,7 @@ export default function CreateCredential({
             <Section alignItems="stretch" gap={4}>
               <CredentialFieldsRenderer
                 credentialTemplate={credentialTemplate}
+                sourceName={getSourceDisplayName(sourceType) || sourceType}
                 authMethod={authMethod || initialAuthMethod}
                 setAuthMethod={setAuthMethod}
               />

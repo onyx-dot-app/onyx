@@ -3232,7 +3232,11 @@
         },
         "emailField": {
           "description": "Utilisez l'e-mail du compte propriétaire du jeton d'API.",
-          "placeholder": "email@company.com"
+          "placeholder": "email@company.com",
+          "title": "E-mail du compte {source}"
+        },
+        "tokenField": {
+          "title": "Jeton d'API"
         },
         "submitError": {
           "toast": "Erreur lors de l'envoi de l'identifiant"

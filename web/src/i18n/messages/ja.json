@@ -3232,7 +3232,11 @@
         },
         "emailField": {
           "description": "API トークンを所有するアカウントのメールアドレスを使用してください。",
-          "placeholder": "email@company.com"
+          "placeholder": "email@company.com",
+          "title": "{source} アカウントのメールアドレス"
+        },
+        "tokenField": {
+          "title": "API トークン"
         },
         "submitError": {
           "toast": "認証情報の送信中にエラーが発生しました"

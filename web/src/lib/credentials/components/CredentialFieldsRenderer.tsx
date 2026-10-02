@@ -20,6 +20,16 @@ import type {
   CredentialFieldValues,
 } from "@/lib/credentials/types";
 
+/** Whether a credential key is a token. */
+function isTokenKey(key: string): boolean {
+  return key.toLowerCase().includes("token");
+}
+
+/** Whether a credential key holds an email address. */
+function isEmailKey(key: string): boolean {
+  return key.toLowerCase().includes("email");
+}
+
 /** Whether a credential key holds a secret, so its input masks the value. */
 function isSecretKey(key: string): boolean {
   const lower = key.toLowerCase();
@@ -33,12 +43,30 @@ function isSecretKey(key: string): boolean {
 interface CredentialFieldProps {
   fieldKey: string;
   value: CredentialFieldValue;
+  /** Every field key shown beside this one, so titles can read the set. */
+  siblingKeys: string[];
+  /** The source's name, for titles such as "Jira Account Email". */
+  sourceName: string;
 }
 
 /** One field of a credential template, drawn with the Opal input for its type. */
-function CredentialField({ fieldKey, value }: CredentialFieldProps) {
+function CredentialField({
+  fieldKey,
+  value,
+  siblingKeys,
+  sourceName,
+}: CredentialFieldProps) {
   const t = useTranslations("admin");
-  const label = getDisplayNameForCredentialKey(fieldKey);
+  const tokenKeys = siblingKeys.filter(isTokenKey);
+  const isEmail = isEmailKey(fieldKey);
+  // A source's one token is its API token. A source with several (an id and
+  // a secret, say) keeps each token's own name.
+  const isSoleToken = isTokenKey(fieldKey) && tokenKeys.length === 1;
+  const label = isEmail
+    ? t("credentials.create.emailField.title", { source: sourceName })
+    : isSoleToken
+      ? t("credentials.create.tokenField.title")
+      : getDisplayNameForCredentialKey(fieldKey);
 
   // A file such as a .pfx key is binary; Opal's InputFile reads text, so
   // this field keeps the typed upload until Opal can hand back a File.
@@ -62,9 +90,8 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
     );
   }
 
-  // An email field shows an example address and says which account it
-  // means; any other field shows its template's placeholder, if it has one.
-  const isEmail = fieldKey.toLowerCase().includes("email");
+  // An email field shows an example address and, beside a token, says which
+  // account it means; any other field shows its template's placeholder.
   const placeholder = isEmail
     ? t("credentials.create.emailField.placeholder")
     : typeof value === "string" && value !== ""
@@ -76,7 +103,9 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
       withLabel={fieldKey}
       title={label}
       subDescription={
-        isEmail ? t("credentials.create.emailField.description") : undefined
+        isEmail && tokenKeys.length > 0
+          ? t("credentials.create.emailField.description")
+          : undefined
       }
     >
       <FormikField<string>
@@ -105,12 +134,15 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
 
 interface CredentialFieldsRendererProps {
   credentialTemplate: CredentialFieldValues;
+  /** The source's display name, for field titles. */
+  sourceName: string;
   authMethod?: string;
   setAuthMethod?: (method: string) => void;
 }
 
 export function CredentialFieldsRenderer({
   credentialTemplate,
+  sourceName,
   authMethod,
   setAuthMethod,
 }: CredentialFieldsRendererProps) {
@@ -160,6 +192,8 @@ export function CredentialFieldsRenderer({
                   key={key}
                   fieldKey={key}
                   value={value as CredentialFieldValue}
+                  siblingKeys={Object.keys(method.fields)}
+                  sourceName={sourceName}
                 />
               ))}
             </Section>
@@ -169,12 +203,21 @@ export function CredentialFieldsRenderer({
     );
   }
 
+  const fieldKeys = Object.keys(credentialTemplate).filter(
+    (key) => key !== "authentication_method" && key !== "authMethods"
+  );
   return (
     <>
       {Object.entries(credentialTemplate).map(([key, value]) =>
         // Auth-method metadata is not a field.
         key === "authentication_method" || key === "authMethods" ? null : (
-          <CredentialField key={key} fieldKey={key} value={value} />
+          <CredentialField
+            key={key}
+            fieldKey={key}
+            value={value}
+            siblingKeys={fieldKeys}
+            sourceName={sourceName}
+          />
         )
       )}
     </>

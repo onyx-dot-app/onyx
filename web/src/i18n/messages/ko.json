@@ -3232,7 +3232,11 @@
         },
         "emailField": {
           "description": "API 토큰을 소유한 계정의 이메일을 사용하세요.",
-          "placeholder": "email@company.com"
+          "placeholder": "email@company.com",
+          "title": "{source} 계정 이메일"
+        },
+        "tokenField": {
+          "title": "API 토큰"
         },
         "submitError": {
           "toast": "자격 증명 제출 중 오류가 발생했습니다"

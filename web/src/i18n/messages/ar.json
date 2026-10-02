@@ -3232,7 +3232,11 @@
         },
         "emailField": {
           "description": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API.",
-          "placeholder": "email@company.com"
+          "placeholder": "email@company.com",
+          "title": "البريد الإلكتروني لحساب {source}"
+        },
+        "tokenField": {
+          "title": "رمز API"
         },
         "submitError": {
           "toast": "حدث خطأ أثناء إرسال بيانات الاعتماد"
