@@ -26,6 +26,7 @@ from onyx.connectors.factory import identify_connector_class, validate_ccpair_fo
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     add_credential_to_connector,
     get_cc_pair_groups_for_ids,
     get_cc_pair_ids_for_connector,
@@ -33,8 +34,8 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
     remove_credential_from_connector,
     update_connector_credential_pair_from_id,
-    user_owns_groupless_cc_pair,
-    verify_user_can_edit_all_cc_pairs,
+    verify_user_can_manage_all_cc_pairs,
+    verify_user_has_access_to_cc_pair,
 )
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
@@ -108,13 +109,14 @@ def _get_readable_cc_pair(
     """Fetch a cc-pair for the detail page and its sub-resources.
 
     Neither filter contains the other, so both run: the read one drops a creator's
-    groupless private pair, the editable one drops public/sync pairs and plain group
-    membership. Editable runs second, so the common case still costs one query.
+    groupless private pair and pairs managed only through a role, the operate one
+    drops plain group membership. Operate runs second, so the common case still
+    costs one query.
     """
     return get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=False
+        cc_pair_id, db_session, user, CCPairAccessLevel.READ
     ) or get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=True
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
     )
 
 
@@ -358,21 +360,24 @@ def get_cc_pair_full_info(
     tenant_id = get_current_tenant_id()
 
     # this route needs both halves of _get_readable_cc_pair, so it fetches them directly
-    editable_cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, get_editable=True
+    operable_cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
     )
     cc_pair = (
         get_connector_credential_pair_from_id_for_user(
-            cc_pair_id, db_session, user, get_editable=False
+            cc_pair_id, db_session, user, CCPairAccessLevel.READ
         )
-        or editable_cc_pair
+        or operable_cc_pair
     )
     if not cc_pair:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             "CC Pair not found for current user permissions",
         )
-    is_editable_for_current_user = editable_cc_pair is not None
+    can_operate = operable_cc_pair is not None
+    can_edit = can_operate and verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, CCPairAccessLevel.EDIT
+    )
 
     document_count_info_list = list(
         get_document_counts_for_cc_pairs(
@@ -415,7 +420,7 @@ def get_cc_pair_full_info(
         cc_pair_model=cc_pair,
         mask_credential_prefix=get_security_settings().mask_credential_prefix,
         is_connectors_admin=has_global_permission(user, Permission.MANAGE_CONNECTORS),
-        owns_groupless=user_owns_groupless_cc_pair(cc_pair, db_session, user),
+        can_edit=can_edit,
         groups=[
             relationship.user_group_id
             for relationship in get_cc_pair_groups_for_ids(db_session, [cc_pair_id])
@@ -440,7 +445,7 @@ def get_cc_pair_full_info(
             tenant_id=tenant_id,
         ),
         num_docs_indexed=documents_indexed,
-        is_editable_for_current_user=is_editable_for_current_user,
+        is_editable_for_current_user=can_operate,
         indexing=bool(
             latest_attempt and latest_attempt.status == IndexingStatus.IN_PROGRESS
         ),
@@ -500,7 +505,7 @@ def update_cc_pair_status(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
 
     if not cc_pair:
@@ -509,8 +514,8 @@ def update_cc_pair_status(
             "Connection not found for current user's permissions",
         )
 
-    # Pause/resume only. Accepting DELETING here would let a scoped manager delete via
-    # the editable-scope gate, bypassing the admin-only /deletion-attempt route.
+    # Pause/resume only. Accepting DELETING here would let an Operator delete via the
+    # operate gate, bypassing the Editor-only /deletion-attempt route.
     if status_update_request.status not in (
         ConnectorCredentialPairStatus.ACTIVE,
         ConnectorCredentialPairStatus.PAUSED,
@@ -599,7 +604,7 @@ def update_cc_pair_name(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
     if not cc_pair:
         raise OnyxError(
@@ -633,7 +638,7 @@ def update_cc_pair_property(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
     if not cc_pair:
         raise OnyxError(
@@ -643,10 +648,11 @@ def update_cc_pair_property(
 
     # GATE 2 on every pair on this connector: refresh_freq and prune_freq live on the
     # shared Connector row. No empty guard — empty is the right side to fail on here
-    if not verify_user_can_edit_all_cc_pairs(
+    if not verify_user_can_manage_all_cc_pairs(
         get_cc_pair_ids_for_connector(db_session, cc_pair.connector_id),
         db_session,
         user,
+        CCPairAccessLevel.OPERATE,
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -703,7 +709,7 @@ def prune_cc_pair(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.OPERATE,
     )
     if not cc_pair:
         raise OnyxError(
@@ -881,8 +887,8 @@ def associate_credential_to_connector(
     # GATE 2 on the connector: it carries no creator or groups, so its pairs are what
     # says who may edit it. Empty means nobody owns it yet (create-then-associate)
     existing_cc_pair_ids = get_cc_pair_ids_for_connector(db_session, connector_id)
-    if existing_cc_pair_ids and not verify_user_can_edit_all_cc_pairs(
-        existing_cc_pair_ids, db_session, user
+    if existing_cc_pair_ids and not verify_user_can_manage_all_cc_pairs(
+        existing_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -991,7 +997,7 @@ def dissociate_credential_from_connector(
         connector_id=connector_id,
         credential_id=credential_id,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.EDIT,
     )
     cc_pair_id = cc_pair.id if cc_pair else None
 

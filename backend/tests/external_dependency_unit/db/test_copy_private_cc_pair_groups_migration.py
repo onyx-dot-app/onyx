@@ -11,7 +11,7 @@ from alembic.operations import Operations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, ConnectorManageRole
 from onyx.db.models import (
     UserGroup,
     UserGroup__CCPairDataAccess,
@@ -56,7 +56,10 @@ def test_copies_current_groups_of_private_pairs(
         ):
             db_session.add(
                 UserGroup__ConnectorCredentialPair(
-                    user_group_id=group.id, cc_pair_id=pair.id, is_current=is_current
+                    user_group_id=group.id,
+                    cc_pair_id=pair.id,
+                    is_current=is_current,
+                    role=ConnectorManageRole.EDITOR,
                 )
             )
         # An existing row is kept, not duplicated.

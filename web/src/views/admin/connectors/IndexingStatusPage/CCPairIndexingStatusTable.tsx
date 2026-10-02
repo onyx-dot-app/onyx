@@ -389,7 +389,7 @@ export function CCPairIndexingStatusTable({
                           <ConnectorRow
                             key={status.cc_pair_id}
                             ccPairsIndexingStatus={status}
-                            isEditable={can(status, "edit")}
+                            isEditable={can(status, "operate")}
                           />
                         );
                       }

@@ -8,7 +8,10 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import parse_credential_binding, validate_ccpair_for_user
-from onyx.db.connector_credential_pair import get_manageable_cc_pairs_for_credentials
+from onyx.db.connector_credential_pair import (
+    get_manageable_cc_pairs_for_credentials,
+    verify_user_can_edit_connector,
+)
 from onyx.db.credentials import (
     CREDENTIAL_PERMISSIONS_TO_IGNORE,
     alter_credential,
@@ -154,10 +157,21 @@ def delete_credential_by_id_admin(
 @router.put("/admin/credential/swap")
 def swap_credentials_for_connector(
     credential_swap_req: CredentialSwapRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     new_credential_id = credential_swap_req.new_credential_id
+
+    # GATE 2 on the connector: swapping its credential is an Editor action.
+    if not verify_user_can_edit_connector(
+        credential_swap_req.connector_id, db_session, user
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
+        )
 
     # GATE 2 on the credential: validate_ccpair_for_user builds and probes the
     # connector, so ownership has to be settled before it runs.

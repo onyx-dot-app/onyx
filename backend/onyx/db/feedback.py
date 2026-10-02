@@ -2,21 +2,23 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import Select, and_, asc, delete, desc, exists, select
+from sqlalchemy import Select, and_, asc, delete, desc, select
 from sqlalchemy.orm import Session, aliased
 
 from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import MessageType, SearchFeedbackType
 from onyx.db.chat import get_chat_message
-from onyx.db.enums import AccessType, Permission
+from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
+    select_cc_pair_ids_for_user,
+)
+from onyx.db.enums import Permission
 from onyx.db.models import (
     ChatMessageFeedback,
     ConnectorCredentialPair,
     DocumentByConnectorCredentialPair,
     DocumentRetrievalFeedback,
     User,
-    User__UserGroup,
-    UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.models import Document as DbDocument
 from onyx.utils.logger import setup_logger
@@ -36,6 +38,9 @@ def _fetch_db_doc_by_id(doc_id: str, db_session: Session) -> DbDocument:
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
+    """Boost and hide are Operator actions. A document is readable when a pair the
+    user may operate serves it, and editable when every pair serving it is one the
+    user may operate, so an edit cannot reach documents other managers serve."""
     # MANAGE_CONNECTORS is org-wide over connectors, so boost/hide sees every
     # document the same way an admin does; without this the routes would admit
     # the holder and then silently return only their own groups' documents.
@@ -44,53 +49,30 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     ) or has_global_permission(user, Permission.MANAGE_CONNECTORS):
         return stmt
 
-    stmt = stmt.distinct()
-    DocByCC = aliased(DocumentByConnectorCredentialPair)
-    CCPair = aliased(ConnectorCredentialPair)
-    UG__CCpair = aliased(UserGroup__ConnectorCredentialPair)
-    User__UG = aliased(User__UserGroup)
-
-    """
-    Here we select documents by relation:
-    User -> User__UserGroup -> UserGroup__ConnectorCredentialPair ->
-    ConnectorCredentialPair -> DocumentByConnectorCredentialPair -> Document
-    """
-    stmt = (
-        stmt.outerjoin(DocByCC, DocByCC.id == DbDocument.id)
-        .outerjoin(
-            CCPair,
+    DocCCPair = aliased(ConnectorCredentialPair)
+    document_cc_pair_ids = (
+        select(DocCCPair.id)
+        .join(
+            DocumentByConnectorCredentialPair,
             and_(
-                CCPair.connector_id == DocByCC.connector_id,
-                CCPair.credential_id == DocByCC.credential_id,
+                DocumentByConnectorCredentialPair.connector_id
+                == DocCCPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == DocCCPair.credential_id,
             ),
         )
-        .outerjoin(UG__CCpair, UG__CCpair.cc_pair_id == CCPair.id)
-        .outerjoin(User__UG, User__UG.user_group_id == UG__CCpair.user_group_id)
+        .where(DocumentByConnectorCredentialPair.id == DbDocument.id)
     )
+    operable_cc_pair_ids = select_cc_pair_ids_for_user(user, CCPairAccessLevel.OPERATE)
 
-    """
-    Filter Documents by group membership:
-    - if get_editable, the document's CCPair must be owned exclusively by
-      groups the user belongs to (prevents mutating docs that are also
-      visible to groups outside the user's reach)
-    - otherwise, show docs in any group the user belongs to plus public docs
-    """
-
-    # Anonymous users only see public documents
-    if user.is_anonymous:
-        where_clause = CCPair.access_type == AccessType.PUBLIC
-        return stmt.where(where_clause)
-
-    where_clause = User__UG.user_id == user.id
-    if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        where_clause &= ~exists().where(UG__CCpair.cc_pair_id == CCPair.id).where(
-            ~UG__CCpair.user_group_id.in_(user_groups)
-        ).correlate(CCPair)
-    else:
-        where_clause |= CCPair.access_type == AccessType.PUBLIC
-
-    return stmt.where(where_clause)
+    stmt = stmt.where(
+        document_cc_pair_ids.where(DocCCPair.id.in_(operable_cc_pair_ids)).exists()
+    )
+    if not get_editable:
+        return stmt
+    return stmt.where(
+        ~document_cc_pair_ids.where(DocCCPair.id.not_in(operable_cc_pair_ids)).exists()
+    )
 
 
 def fetch_docs_ranked_by_boost_for_user(

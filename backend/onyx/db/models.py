@@ -76,6 +76,7 @@ from onyx.db.enums import (
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     DefaultAppMode,
     EndpointPolicy,
     ExternalAppType,
@@ -5001,6 +5002,9 @@ class UserGroup__ConnectorCredentialPair(Base):
         Boolean,
         default=True,
         primary_key=True,
+    )
+    role: Mapped[ConnectorManageRole] = mapped_column(
+        Enum(ConnectorManageRole, native_enum=False), nullable=False
     )
 
     cc_pair: Mapped[ConnectorCredentialPair] = relationship(

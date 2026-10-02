@@ -286,6 +286,14 @@ class ConnectorCredentialPairStatus(str, PyEnum):
         return self in self.active_statuses()
 
 
+class ConnectorManageRole(str, PyEnum):
+    """A group's role on a cc-pair it manages. Editors change and delete the
+    configuration; Operators schedule and monitor indexing."""
+
+    EDITOR = "editor"
+    OPERATOR = "operator"
+
+
 class AccessType(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"

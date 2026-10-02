@@ -29,16 +29,18 @@ from onyx.auth.permissions import (
 from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_cc_pair_groups_for_ids,
     get_connector_credential_pair_from_id,
-    get_editable_cc_pair_ids,
-    verify_user_can_edit_all_cc_pairs,
+    get_managed_cc_pair_ids,
+    verify_user_can_manage_all_cc_pairs,
 )
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
     AccountType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     GrantSource,
     Permission,
     PermissionAuthority,
@@ -540,14 +542,18 @@ def _add_user__user_group_relationships__no_commit(
 
 
 def _add_user_group__cc_pair_relationships__no_commit(
-    db_session: Session, user_group_id: int, cc_pair_ids: list[int]
+    db_session: Session,
+    user_group_id: int,
+    manage_roles: dict[int, ConnectorManageRole],
 ) -> list[UserGroup__ConnectorCredentialPair]:
-    """NOTE: does not commit the transaction."""
+    """``manage_roles`` maps each cc_pair id to the group's role on it.
+
+    NOTE: does not commit the transaction."""
     relationships = [
         UserGroup__ConnectorCredentialPair(
-            user_group_id=user_group_id, cc_pair_id=cc_pair_id
+            user_group_id=user_group_id, cc_pair_id=cc_pair_id, role=role
         )
-        for cc_pair_id in cc_pair_ids
+        for cc_pair_id, role in manage_roles.items()
     ]
     db_session.add_all(relationships)
     return relationships
@@ -592,7 +598,7 @@ def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserG
     _add_user_group__cc_pair_relationships__no_commit(
         db_session=db_session,
         user_group_id=db_user_group.id,
-        cc_pair_ids=user_group.cc_pair_ids,
+        manage_roles=dict.fromkeys(user_group.cc_pair_ids, ConnectorManageRole.EDITOR),
     )
     apply_group_cc_pair_change_to_data_access__no_commit(
         db_session,
@@ -765,8 +771,9 @@ def _assert_group_update_within_scope(
     """GATE 2 for a scoped manager editing a group: the group must be one they
     manage, and every newly-attached cc_pair must be a private one within their
     managed scope — otherwise the junction rewrite could attach a public or
-    out-of-scope connector to the group, granting its members access. Admins /
-    global holders bypass both checks."""
+    out-of-scope connector to the group, granting its members access. The
+    manager must also be an Editor of each attached pair. Admins / global
+    holders bypass these checks."""
     assert_manages_group(user, db_session, group_id=user_group_id)
 
     # The cc_pair re-attach vector only applies to scoped managers; a global
@@ -814,6 +821,16 @@ def _assert_group_update_within_scope(
             current_group_ids=current_groups_by_cc_pair[cc_pair_id],
             requested_group_ids=[user_group_id],
             is_non_public=cc_pair.access_type != AccessType.PUBLIC,
+        )
+
+    # An attached pair gets EDITOR, so an Operator can't use this to make
+    # themselves an Editor through another group they manage.
+    if added_cc_pair_ids and not verify_user_can_manage_all_cc_pairs(
+        added_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers can only attach connectors where they are an Editor.",
         )
 
 
@@ -940,13 +957,23 @@ def update_user_group(
 
     cc_pairs_updated = current_cc_pair_ids != requested_cc_pair_ids
     if cc_pairs_updated:
+        # Read before the rows are marked outdated. Kept pairs keep their role;
+        # newly attached pairs get EDITOR, today's full scoped-manager power.
+        current_roles = {
+            relationship.cc_pair_id: relationship.role
+            for relationship in db_user_group.cc_pair_relationships
+            if relationship.is_current
+        }
         _mark_user_group__cc_pair_relationships_outdated__no_commit(
             db_session=db_session, user_group_id=user_group_id
         )
         _add_user_group__cc_pair_relationships__no_commit(
             db_session=db_session,
             user_group_id=db_user_group.id,
-            cc_pair_ids=list(requested_cc_pair_ids),
+            manage_roles={
+                cc_pair_id: current_roles.get(cc_pair_id, ConnectorManageRole.EDITOR)
+                for cc_pair_id in requested_cc_pair_ids
+            },
         )
         apply_group_cc_pair_change_to_data_access__no_commit(
             db_session,
@@ -1013,8 +1040,8 @@ def set_user_group_data_access_cc_pairs(
     )
     added_cc_pair_ids = cc_pair_ids - current_cc_pair_ids
     # Like the pair-side setter, the caller changes only what they can manage.
-    removed_cc_pair_ids = get_editable_cc_pair_ids(
-        current_cc_pair_ids - cc_pair_ids, db_session, user
+    removed_cc_pair_ids = get_managed_cc_pair_ids(
+        current_cc_pair_ids - cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
     )
     final_cc_pair_ids = (current_cc_pair_ids - removed_cc_pair_ids) | added_cc_pair_ids
     _assert_default_group_update_allowed(
@@ -1027,7 +1054,9 @@ def set_user_group_data_access_cc_pairs(
     _assert_group_update_within_scope(
         db_session, user, user_group_id, added_cc_pair_ids=added_cc_pair_ids
     )
-    if not verify_user_can_edit_all_cc_pairs(changed_cc_pair_ids, db_session, user):
+    if not verify_user_can_manage_all_cc_pairs(
+        changed_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
+    ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can only change data access of connectors you can edit.",

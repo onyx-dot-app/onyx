@@ -36,7 +36,11 @@ from onyx.db.document import (
     get_cc_pair_ids_for_documents,
     upsert_document_by_connector_credential_pair,
 )
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    ConnectorManageRole,
+)
 from onyx.db.models import (
     ConnectorCredentialPair,
     User,
@@ -153,7 +157,10 @@ def world(
     # Manage rows grant no data access.
     db_session.add(
         UserGroup__ConnectorCredentialPair(
-            user_group_id=manage_group.id, cc_pair_id=private_pair.id, is_current=True
+            user_group_id=manage_group.id,
+            cc_pair_id=private_pair.id,
+            is_current=True,
+            role=ConnectorManageRole.EDITOR,
         )
     )
     db_session.commit()

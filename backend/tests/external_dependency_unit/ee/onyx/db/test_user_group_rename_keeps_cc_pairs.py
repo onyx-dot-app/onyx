@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.user_group import mark_user_group_as_synced, rename_user_group
+from onyx.db.enums import ConnectorManageRole
 from onyx.db.models import (
     ConnectorCredentialPair,
     UserGroup,
@@ -29,7 +30,10 @@ def group_with_cc_pair(
     db_session.flush()
     db_session.add(
         UserGroup__ConnectorCredentialPair(
-            user_group_id=group.id, cc_pair_id=cc_pair.id, is_current=True
+            user_group_id=group.id,
+            cc_pair_id=cc_pair.id,
+            is_current=True,
+            role=ConnectorManageRole.EDITOR,
         )
     )
     db_session.commit()

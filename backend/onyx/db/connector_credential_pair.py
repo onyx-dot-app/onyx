@@ -9,7 +9,7 @@ from sqlalchemy import Select, and_, delete, desc, false, func, or_, select, upd
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import get_effective_permissions, has_permission
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource, NotificationType
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
@@ -18,8 +18,10 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     IndexingMode,
     Permission,
+    PermissionAuthority,
     ProcessingMode,
     SwitchoverType,
 )
@@ -37,10 +39,7 @@ from onyx.db.models import (
     UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
 )
-from onyx.db.scoped_permissions import (
-    scoped_group_ids_subquery,
-    within_managed_scope_clause,
-)
+from onyx.db.scoped_permissions import scoped_group_ids_subquery
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -222,17 +221,82 @@ def get_connector_state_snapshots(
     ]
 
 
+class CCPairAccessLevel(str, Enum):
+    """What the caller needs to do with a pair. READ is visibility; OPERATE and
+    EDIT are management, granted by a manage role (see ConnectorManageRole)."""
+
+    READ = "read"
+    OPERATE = "operate"
+    EDIT = "edit"
+
+
+_ROLES_FOR_ACCESS_LEVEL: dict[CCPairAccessLevel, tuple[ConnectorManageRole, ...]] = {
+    CCPairAccessLevel.OPERATE: (
+        ConnectorManageRole.OPERATOR,
+        ConnectorManageRole.EDITOR,
+    ),
+    CCPairAccessLevel.EDIT: (ConnectorManageRole.EDITOR,),
+}
+
+
+def _manage_access_clause(
+    user: User, roles: tuple[ConnectorManageRole, ...]
+) -> ColumnElement[bool]:
+    """Scoped management of a pair, for a caller without global MANAGE_CONNECTORS.
+
+    A scoped manager passes when a group they manage holds one of ``roles`` on the
+    pair, for any access type. The creator of a pair with no manage group is its
+    Editor, so a groupless permission-synced pair does not lock out its creator;
+    that fallback stops once the pair is published or given a manage group."""
+    live_manage_row = and_(
+        UserGroup__ConnectorCredentialPair.cc_pair_id == ConnectorCredentialPair.id,
+        UserGroup__ConnectorCredentialPair.is_current.is_(True),
+    )
+    has_manage_group = (
+        select(UserGroup__ConnectorCredentialPair.cc_pair_id)
+        .where(live_manage_row)
+        .exists()
+    )
+    is_groupless_creator = and_(
+        ConnectorCredentialPair.creator_id == user.id,
+        ConnectorCredentialPair.access_type != AccessType.PUBLIC,
+        ~has_manage_group,
+    )
+    if has_permission(user, Permission.MANAGE_CONNECTORS) is not (
+        PermissionAuthority.SCOPED
+    ):
+        return is_groupless_creator
+
+    has_role_in_managed_group = (
+        select(UserGroup__ConnectorCredentialPair.cc_pair_id)
+        .where(
+            live_manage_row,
+            UserGroup__ConnectorCredentialPair.role.in_(roles),
+            UserGroup__ConnectorCredentialPair.user_group_id.in_(
+                scoped_group_ids_subquery(user)
+            ),
+        )
+        .exists()
+    )
+    return or_(has_role_in_managed_group, is_groupless_creator)
+
+
 def _add_user_filters(
-    stmt: Select[tuple[*R]], user: User, get_editable: bool = True
+    stmt: Select[tuple[*R]], user: User, access_level: CCPairAccessLevel
 ) -> Select[tuple[*R]]:
     user_permissions = get_effective_permissions(user)
 
     if Permission.MANAGE_CONNECTORS in user_permissions:
         return stmt
 
+    if access_level is not CCPairAccessLevel.READ:
+        return stmt.where(
+            _manage_access_clause(user, _ROLES_FOR_ACCESS_LEVEL[access_level])
+        )
+
     # Reads: MANAGE_USER_GROUPS / MANAGE_DOCUMENT_SETS imply only READ_CONNECTORS, so
     # without this the attach pickers hide private pairs they aren't a member of.
-    if not get_editable and Permission.READ_CONNECTORS in user_permissions:
+    if Permission.READ_CONNECTORS in user_permissions:
         return stmt
 
     if user.is_anonymous:
@@ -248,40 +312,8 @@ def _add_user_filters(
     )
 
     where_clause = User__UG.user_id == user.id
-
-    if get_editable:
-        where_clause = within_managed_scope_clause(
-            resource_id_col=ConnectorCredentialPair.id,
-            junction_resource_col=UserGroup__ConnectorCredentialPair.cc_pair_id,
-            junction_group_col=UserGroup__ConnectorCredentialPair.user_group_id,
-            non_public_clause=ConnectorCredentialPair.access_type != AccessType.PUBLIC,
-            managed_subq=scoped_group_ids_subquery(user),
-            junction_live_clause=UserGroup__ConnectorCredentialPair.is_current.is_(
-                True
-            ),
-        )
-        # The scope clause needs >=1 managed group, so it can never match a groupless
-        # pair — a permission-synced one has no group to sit in, which would lock its
-        # creator out of what they just made. All three conditions are load-bearing:
-        # creator alone would keep them editing it after it is published or moved into
-        # groups they don't manage.
-        has_live_group = (
-            select(UserGroup__ConnectorCredentialPair.cc_pair_id)
-            .where(
-                UserGroup__ConnectorCredentialPair.cc_pair_id
-                == ConnectorCredentialPair.id,
-                UserGroup__ConnectorCredentialPair.is_current.is_(True),
-            )
-            .exists()
-        )
-        where_clause |= and_(
-            ConnectorCredentialPair.creator_id == user.id,
-            ConnectorCredentialPair.access_type != AccessType.PUBLIC,
-            ~has_live_group,
-        )
-    else:
-        where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
-        where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
+    where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
+    where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC
 
     return stmt.where(where_clause)
 
@@ -291,7 +323,7 @@ def get_manageable_cc_pairs_for_credentials(
     user: User,
     credential_ids: list[int],
 ) -> list[ConnectorCredentialPair]:
-    """The pairs using any of these credentials that the user can manage, with
+    """The pairs using any of these credentials that the user can operate, with
     their connectors loaded. The single place that decides which connectors the
     credential usage hints may show."""
     stmt = (
@@ -300,14 +332,14 @@ def get_manageable_cc_pairs_for_credentials(
         .options(selectinload(ConnectorCredentialPair.connector))
         .where(ConnectorCredentialPair.credential_id.in_(credential_ids))
     )
-    stmt = _add_user_filters(stmt, user, get_editable=True)
+    stmt = _add_user_filters(stmt, user, CCPairAccessLevel.OPERATE)
     return list(db_session.scalars(stmt).unique().all())
 
 
 def get_connector_credential_pairs_for_user(
     db_session: Session,
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
     eager_load_credential: bool = False,
@@ -343,7 +375,7 @@ def get_connector_credential_pairs_for_user(
             load_opts = load_opts.joinedload(Credential.user)
         stmt = stmt.options(load_opts)
 
-    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _add_user_filters(stmt, user, access_level)
 
     if source:
         stmt = stmt.join(ConnectorCredentialPair.connector).where(
@@ -367,7 +399,7 @@ def get_connector_credential_pairs_for_user(
 # after this function to allow lazy loading.
 def get_connector_credential_pairs_for_user_parallel(
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
     eager_load_credential: bool = False,
@@ -381,7 +413,7 @@ def get_connector_credential_pairs_for_user_parallel(
         return get_connector_credential_pairs_for_user(
             db_session=db_session,
             user=user,
-            get_editable=get_editable,
+            access_level=access_level,
             ids=ids,
             eager_load_connector=eager_load_connector,
             eager_load_credential=eager_load_credential,
@@ -432,24 +464,6 @@ def get_cc_pair_groups_for_ids(
     return list(db_session.scalars(stmt).all())
 
 
-def user_owns_groupless_cc_pair(
-    cc_pair: ConnectorCredentialPair, db_session: Session, user: User
-) -> bool:
-    """Whether a pair is shared with nobody but its creator.
-
-    Matches the creator fallback in _add_user_filters. The delete gate and the delete
-    affordance both read this, so keep it the only definition — they must not drift.
-    """
-    if cc_pair.creator_id != user.id or cc_pair.access_type == AccessType.PUBLIC:
-        return False
-    return not any(
-        relationship.is_current
-        for relationship in get_cc_pair_groups_for_ids(
-            db_session=db_session, cc_pair_ids=[cc_pair.id]
-        )
-    )
-
-
 # For use with our thread-level parallelism utils. Note that any relationships
 # you wish to use MUST be eagerly loaded, as the session will not be available
 # after this function to allow lazy loading.
@@ -465,10 +479,10 @@ def get_connector_credential_pair_for_user(
     connector_id: int,
     credential_id: int,
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
-    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _add_user_filters(stmt, user, access_level)
     stmt = stmt.where(ConnectorCredentialPair.connector_id == connector_id)
     stmt = stmt.where(ConnectorCredentialPair.credential_id == credential_id)
     result = db_session.execute(stmt)
@@ -491,10 +505,10 @@ def get_connector_credential_pair_from_id_for_user(
     cc_pair_id: int,
     db_session: Session,
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()
-    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _add_user_filters(stmt, user, access_level)
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
@@ -504,10 +518,10 @@ def verify_user_has_access_to_cc_pair(
     cc_pair_id: int,
     db_session: Session,
     user: User,
-    get_editable: bool = True,
+    access_level: CCPairAccessLevel,
 ) -> bool:
     stmt = select(ConnectorCredentialPair.id)
-    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _add_user_filters(stmt, user, access_level)
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
     result = db_session.execute(stmt)
     return result.scalars().first() is not None
@@ -553,27 +567,55 @@ def get_non_deleting_cc_pair_ids(db_session: Session) -> list[int]:
     )
 
 
-def verify_user_can_edit_all_cc_pairs(
+def select_cc_pair_ids_for_user(
+    user: User, access_level: CCPairAccessLevel
+) -> Select[tuple[int]]:
+    """The ids of the pairs the user holds ``access_level`` on, as a statement to
+    run or to use as a subquery."""
+    return _add_user_filters(select(ConnectorCredentialPair.id), user, access_level)
+
+
+def get_managed_cc_pair_ids(
     cc_pair_ids: set[int],
     db_session: Session,
     user: User,
+    access_level: CCPairAccessLevel,
+) -> set[int]:
+    """The subset of ``cc_pair_ids`` the user holds ``access_level`` on."""
+    stmt = select_cc_pair_ids_for_user(user, access_level).where(
+        ConnectorCredentialPair.id.in_(cc_pair_ids)
+    )
+    return set(db_session.scalars(stmt))
+
+
+def verify_user_can_manage_all_cc_pairs(
+    cc_pair_ids: set[int],
+    db_session: Session,
+    user: User,
+    access_level: CCPairAccessLevel,
 ) -> bool:
     # guard: issubset is vacuously true for an empty set, which would authorize anything
     if not cc_pair_ids:
         return False
-    return cc_pair_ids.issubset(get_editable_cc_pair_ids(cc_pair_ids, db_session, user))
+    return cc_pair_ids.issubset(
+        get_managed_cc_pair_ids(cc_pair_ids, db_session, user, access_level)
+    )
 
 
-def get_editable_cc_pair_ids(
-    cc_pair_ids: set[int],
-    db_session: Session,
-    user: User,
-) -> set[int]:
-    """The subset of ``cc_pair_ids`` the user may edit."""
-    stmt = select(ConnectorCredentialPair.id)
-    stmt = _add_user_filters(stmt, user, get_editable=True)
-    stmt = stmt.where(ConnectorCredentialPair.id.in_(cc_pair_ids))
-    return set(db_session.scalars(stmt))
+def verify_user_can_edit_connector(
+    connector_id: int, db_session: Session, user: User
+) -> bool:
+    """A connector carries no groups, so its pairs decide: the user must be an Editor
+    of every pair on it. A connector with no pairs has no Editor, so only global
+    MANAGE_CONNECTORS passes."""
+    if Permission.MANAGE_CONNECTORS in get_effective_permissions(user):
+        return True
+    return verify_user_can_manage_all_cc_pairs(
+        get_cc_pair_ids_for_connector(db_session, connector_id),
+        db_session,
+        user,
+        CCPairAccessLevel.EDIT,
+    )
 
 
 def get_connector_credential_pair_from_id(
@@ -808,7 +850,9 @@ def _relate_groups_to_cc_pair__no_commit(
     for group_id in user_group_ids:
         db_session.add(
             UserGroup__ConnectorCredentialPair(
-                user_group_id=group_id, cc_pair_id=cc_pair_id
+                user_group_id=group_id,
+                cc_pair_id=cc_pair_id,
+                role=ConnectorManageRole.EDITOR,
             )
         )
 
@@ -985,7 +1029,7 @@ def remove_credential_from_connector(
         connector_id=connector_id,
         credential_id=credential_id,
         user=user,
-        get_editable=True,
+        access_level=CCPairAccessLevel.EDIT,
     )
 
     if association is not None:
