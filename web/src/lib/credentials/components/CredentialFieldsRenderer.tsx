@@ -62,16 +62,23 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
     );
   }
 
-  // An email field shows an example address; any other field shows its
-  // template's placeholder, if it has one.
-  const placeholder = fieldKey.toLowerCase().includes("email")
+  // An email field shows an example address and says which account it
+  // means; any other field shows its template's placeholder, if it has one.
+  const isEmail = fieldKey.toLowerCase().includes("email");
+  const placeholder = isEmail
     ? t("credentials.create.emailField.placeholder")
     : typeof value === "string" && value !== ""
       ? value
       : undefined;
 
   return (
-    <InputVertical withLabel={fieldKey} title={label}>
+    <InputVertical
+      withLabel={fieldKey}
+      title={label}
+      subDescription={
+        isEmail ? t("credentials.create.emailField.description") : undefined
+      }
+    >
       <FormikField<string>
         name={fieldKey}
         render={(field, _helper, _meta, status) =>

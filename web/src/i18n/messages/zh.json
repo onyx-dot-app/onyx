@@ -3231,6 +3231,7 @@
           "title": "显示名称"
         },
         "emailField": {
+          "description": "请使用拥有该 API 令牌的账号邮箱。",
           "placeholder": "email@company.com"
         },
         "submitError": {

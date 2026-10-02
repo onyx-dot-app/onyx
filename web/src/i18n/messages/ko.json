@@ -3231,6 +3231,7 @@
           "title": "표시 이름"
         },
         "emailField": {
+          "description": "API 토큰을 소유한 계정의 이메일을 사용하세요.",
           "placeholder": "email@company.com"
         },
         "submitError": {

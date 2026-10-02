@@ -3231,6 +3231,7 @@
           "title": "表示名"
         },
         "emailField": {
+          "description": "API トークンを所有するアカウントのメールアドレスを使用してください。",
           "placeholder": "email@company.com"
         },
         "submitError": {
