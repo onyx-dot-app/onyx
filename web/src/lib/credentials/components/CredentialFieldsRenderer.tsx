@@ -1,14 +1,22 @@
 "use client";
 
+import { useMemo } from "react";
 import {
-  InputCheckbox,
   InputPasswordTypeIn,
   InputSwitch,
   InputTypeIn,
   MessageCard,
   Tabs,
 } from "@opal/components";
-import { InputHorizontal, InputVertical, Section } from "@opal/layouts";
+import {
+  Content,
+  InputHorizontal,
+  InputVertical,
+  Label,
+  Section,
+} from "@opal/layouts";
+import { InputCheckboxField } from "@opal/form";
+import type { IconFunctionComponent } from "@opal/types";
 import { useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import { TypedFileUploadFormField } from "@/components/Field";
@@ -28,11 +36,28 @@ interface CredentialFieldProps {
   field: CredentialSpecField;
 }
 
+/**
+ * A checkbox bound to one Formik field, shaped as a `Content` icon so it sits
+ * where an icon would. It depends only on the field name, so it keeps its
+ * identity across renders and React never remounts the checkbox (which would
+ * drop its focus on every toggle). The icon's class and size are not passed
+ * on: the checkbox keeps its own colours and is already the icon's 1rem.
+ */
+function useCheckboxIcon(name: string): IconFunctionComponent {
+  return useMemo(() => {
+    function CheckboxIcon() {
+      return <InputCheckboxField name={name} />;
+    }
+    return CheckboxIcon;
+  }, [name]);
+}
+
 /** One field of a credential spec, drawn with the Opal input for its kind. */
 function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
   const t = useTranslations("admin");
   const copy = useCredentialFieldCopy(source)(fieldKey);
   const label = copy.title;
+  const checkboxIcon = useCheckboxIcon(fieldKey);
 
   // A file such as a .pfx key is binary; Opal's InputFile reads text, so
   // this field keeps the typed upload until Opal can hand back a File.
@@ -40,19 +65,19 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
     return <TypedFileUploadFormField name={fieldKey} label={label} />;
   }
 
+  // The checkbox stands in for the icon, left of the title. The label around
+  // it hands a click on the title or description to the checkbox.
   if (field.kind === "checkbox") {
     return (
-      <InputHorizontal withLabel title={label} description={copy.description}>
-        <FormikField<boolean>
-          name={fieldKey}
-          render={(formikField, helper) => (
-            <InputCheckbox
-              checked={!!formikField.value}
-              onCheckedChange={(checked) => helper.setValue(checked)}
-            />
-          )}
+      <Label>
+        <Content
+          icon={checkboxIcon}
+          title={label}
+          description={copy.description}
+          sizePreset="main-ui"
+          variant="section"
         />
-      </InputHorizontal>
+      </Label>
     );
   }
 
