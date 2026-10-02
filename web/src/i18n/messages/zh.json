@@ -2939,6 +2939,10 @@
           "label": "没有可显示的标签页。"
         }
       },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
       "scheduled": {
         "description": "指定连接器如何执行索引。操作员可以编辑此部分。",
         "indexingStart": {

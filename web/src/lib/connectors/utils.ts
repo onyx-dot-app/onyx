@@ -42,6 +42,38 @@ export function isLoadState(connector_name: string): boolean {
 
 type ConnectorField = ConnectionConfiguration["values"][number];
 
+/** A connector form's fields, split by whether they are bound to the credential. */
+export interface CredentialBoundFieldSplit {
+  /** The bound fields of `values`, in their order. */
+  values: ConnectorField[];
+  /** The bound fields of `advanced_values`, in their order. */
+  advancedValues: ConnectorField[];
+  /** The configuration without the bound fields. */
+  rest: ConnectionConfiguration;
+}
+
+/**
+ * Takes the `credentialBound` fields out of a configuration, so the create
+ * form can show them above the credential section. Only top-level fields
+ * move; a flagged field inside a tab stays with its tab.
+ */
+export function splitCredentialBoundFields(
+  configuration: ConnectionConfiguration
+): CredentialBoundFieldSplit {
+  const isBound = (field: ConnectorField) => field.credentialBound === true;
+  return {
+    values: configuration.values.filter(isBound),
+    advancedValues: configuration.advanced_values.filter(isBound),
+    rest: {
+      ...configuration,
+      values: configuration.values.filter((field) => !isBound(field)),
+      advanced_values: configuration.advanced_values.filter(
+        (field) => !isBound(field)
+      ),
+    },
+  };
+}
+
 interface ConnectorValidationMessages {
   oneDriveUsersRequired?: string;
 }

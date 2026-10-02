@@ -2939,6 +2939,10 @@
           "label": "표시할 탭이 없습니다."
         }
       },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
       "scheduled": {
         "description": "커넥터가 인덱싱을 수행하는 방식을 지정합니다. 운영자가 이 섹션을 편집할 수 있습니다.",
         "indexingStart": {

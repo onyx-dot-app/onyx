@@ -2939,6 +2939,10 @@
           "label": "Keine Tabs zum Anzeigen."
         }
       },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
       "scheduled": {
         "description": "Legen Sie fest, wie der Connector die Indexierung durchführt. Der Betreiber kann diesen Abschnitt bearbeiten.",
         "indexingStart": {

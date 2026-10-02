@@ -31,6 +31,13 @@ export interface Option {
   ) => boolean;
   wrapInCollapsible?: boolean;
   disabled?: boolean | ((currentCredential: Credential<any> | null) => boolean);
+  /**
+   * The field is part of the source's backend `CredentialBinding` model: its
+   * valid values depend on the account behind the credential. The create form
+   * shows it above the credential section. `credentialBoundFields.json` lists
+   * the bound fields of each source, and a test keeps the flags equal to it.
+   */
+  credentialBound?: boolean;
 }
 
 export interface SelectOption extends Option {
@@ -75,9 +82,16 @@ export interface NumberOption extends Option {
   default?: number;
 }
 
+/** A key under `admin.connectorsList.checkboxTabs` in the message catalog. */
+export type CheckboxTabLabelKey = "confluenceCloud" | "confluenceDataCenter";
+
 export interface BooleanOption extends Option {
   type: "checkbox";
   default?: boolean;
+  /** The value the credential sets; the form uses it while the field is disabled. */
+  initial?: (currentCredential: Credential<any> | null) => boolean | undefined;
+  /** Shows the value as two tabs with these labels instead of a checkbox. */
+  tabLabels?: { true: CheckboxTabLabelKey; false: CheckboxTabLabelKey };
 }
 
 export interface FileOption extends Option {

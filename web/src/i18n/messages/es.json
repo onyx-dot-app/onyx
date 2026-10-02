@@ -2939,6 +2939,10 @@
           "label": "No hay pestañas que mostrar."
         }
       },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
       "scheduled": {
         "description": "Especifica cómo realizará el conector la indexación. El operador podrá editar esta sección.",
         "indexingStart": {

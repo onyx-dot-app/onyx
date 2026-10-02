@@ -2939,6 +2939,10 @@
           "label": "لا توجد تبويبات لعرضها."
         }
       },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
       "scheduled": {
         "description": "حدّد كيف سيُجري الموصل الفهرسة. سيتمكن المشغّل من تعديل هذا القسم.",
         "indexingStart": {

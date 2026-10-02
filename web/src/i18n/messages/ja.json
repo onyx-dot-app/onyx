@@ -2939,6 +2939,10 @@
           "label": "表示するタブはありません。"
         }
       },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
       "scheduled": {
         "description": "コネクタがインデックス作成をどのように実行するかを指定します。オペレーターはこのセクションを編集できます。",
         "indexingStart": {

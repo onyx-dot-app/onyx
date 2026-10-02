@@ -16,6 +16,7 @@ import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
 import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
+import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import {
   ConfigurableSources,
   ValidSources,
@@ -30,6 +31,7 @@ import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
   isLoadState,
+  splitCredentialBoundFields,
 } from "@/lib/connectors/utils";
 import type {
   ConnectionConfiguration,
@@ -158,6 +160,9 @@ export default function AddConnector({
   const credentialSpec = getCredentialSpec(connector);
   const configuration: ConnectionConfiguration =
     useConnectorConfiguration(connector);
+  // Fields bound to the credential sit above the credential section. The
+  // submit below still reads the full configuration.
+  const credentialBoundFields = splitCredentialBoundFields(configuration);
   const formControlFieldNames = new Set(
     [...configuration.values, ...configuration.advanced_values]
       .filter((field) => field.type === "tab")
@@ -457,6 +462,23 @@ export default function AddConnector({
     >
       {(formikProps) => {
         const busy = uploading || creatingConnector;
+        const formCredential =
+          currentCredential ||
+          liveGDriveCredential ||
+          liveGmailCredential ||
+          null;
+        const showAdvancedBoundFields =
+          !configuration.advancedValuesVisibleCondition ||
+          configuration.advancedValuesVisibleCondition(
+            formikProps.values,
+            formCredential
+          );
+        const hasVisibleBoundFields =
+          credentialBoundFields.values.some((field) => !field.hidden) ||
+          (showAdvancedBoundFields &&
+            credentialBoundFields.advancedValues.some(
+              (field) => !field.hidden
+            ));
         return (
           <SettingsLayouts.Root width="sm">
             <SettingsLayouts.Header
@@ -540,6 +562,22 @@ export default function AddConnector({
                 </PageCenter>
               ) : (
                 <Section gap={6} alignItems="stretch" width="full">
+                  {hasVisibleBoundFields && (
+                    <>
+                      <CredentialBoundFields
+                        fields={credentialBoundFields.values}
+                        advancedFields={credentialBoundFields.advancedValues}
+                        showAdvancedFields={showAdvancedBoundFields}
+                        values={formikProps.values}
+                        connector={connector}
+                        currentCredential={formCredential}
+                      />
+                      {!noCredentials && (
+                        <Divider paddingParallel={0} paddingPerpendicular={2} />
+                      )}
+                    </>
+                  )}
+
                   {!noCredentials && (
                     <CredentialsConfigurer
                       connector={connector}
@@ -577,14 +615,9 @@ export default function AddConnector({
                           />
                           <DynamicConnectionForm
                             values={formikProps.values}
-                            config={configuration}
+                            config={credentialBoundFields.rest}
                             connector={connector}
-                            currentCredential={
-                              currentCredential ||
-                              liveGDriveCredential ||
-                              liveGmailCredential ||
-                              null
-                            }
+                            currentCredential={formCredential}
                           />
                         </Section>
                       </fieldset>

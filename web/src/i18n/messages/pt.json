@@ -2939,6 +2939,10 @@
           "label": "Nenhuma aba para mostrar."
         }
       },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
       "scheduled": {
         "description": "Especifique como o conector fará a indexação. O operador poderá editar esta seção.",
         "indexingStart": {
