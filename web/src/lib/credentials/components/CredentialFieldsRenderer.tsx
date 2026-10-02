@@ -22,7 +22,7 @@ import { useTranslations } from "next-intl";
 import { TypedFileUploadFormField } from "@/components/Field";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
-import { methodFields } from "@/lib/credentials/utils";
+import { getCredentialSpec, methodFields } from "@/lib/credentials/utils";
 import type {
   CredentialFieldValues,
   CredentialSpec,
@@ -106,7 +106,11 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
   const subDescription =
     field.displayName === "accountEmail"
       ? t("credentials.create.accountEmailField.subDescription")
-      : undefined;
+      : field.displayName === "apiToken"
+        ? t("credentials.create.apiTokenField.subDescription", {
+            source: getCredentialSpec(source)?.brandName ?? source,
+          })
+        : undefined;
 
   return (
     // The field name ties the label to the input's id and shows the field's

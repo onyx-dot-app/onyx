@@ -3221,6 +3221,9 @@
         "accountEmailField": {
           "subDescription": "API トークンを所有するアカウントのメールアドレスを使用してください。"
         },
+        "apiTokenField": {
+          "subDescription": "{source} にアクセスするための API トークンを貼り付けてください。"
+        },
         "createButton": {
           "label": "作成"
         },

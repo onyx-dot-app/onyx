@@ -3221,6 +3221,9 @@
         "accountEmailField": {
           "subDescription": "Utilisez l'adresse e-mail du compte propriétaire du jeton d'API."
         },
+        "apiTokenField": {
+          "subDescription": "Collez votre jeton d'API pour accéder à {source}."
+        },
         "createButton": {
           "label": "Créer"
         },

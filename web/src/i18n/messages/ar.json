@@ -3221,6 +3221,9 @@
         "accountEmailField": {
           "subDescription": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API."
         },
+        "apiTokenField": {
+          "subDescription": "الصق رمز API للوصول إلى {source}."
+        },
         "createButton": {
           "label": "إنشاء"
         },

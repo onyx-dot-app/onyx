@@ -3221,6 +3221,9 @@
         "accountEmailField": {
           "subDescription": "Verwenden Sie die E-Mail-Adresse des Kontos, dem das API-Token gehört."
         },
+        "apiTokenField": {
+          "subDescription": "Fügen Sie Ihr API-Token ein, um auf {source} zuzugreifen."
+        },
         "createButton": {
           "label": "Erstellen"
         },

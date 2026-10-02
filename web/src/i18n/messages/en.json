@@ -3221,6 +3221,9 @@
         "accountEmailField": {
           "subDescription": "Use the account email that owns the API token."
         },
+        "apiTokenField": {
+          "subDescription": "Paste your API token to access {source}."
+        },
         "createButton": {
           "label": "Create"
         },

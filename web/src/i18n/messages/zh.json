@@ -3221,6 +3221,9 @@
         "accountEmailField": {
           "subDescription": "请使用拥有该 API 令牌的账户邮箱。"
         },
+        "apiTokenField": {
+          "subDescription": "粘贴你的 API 令牌以访问 {source}。"
+        },
         "createButton": {
           "label": "创建"
         },
