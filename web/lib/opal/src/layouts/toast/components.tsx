@@ -1,9 +1,11 @@
 "use client";
 
+import "@opal/layouts/toast/styles.css";
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { cn } from "@opal/utils";
 import { Button, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
+import type { IconProps } from "@opal/types";
 import { useOpalStrings } from "@opal/strings";
 import useOverflow from "@opal/hooks/useOverflow";
 import {
@@ -41,6 +43,19 @@ function ExpandedDetails({ message }: ExpandedDetailsProps) {
         {message}
       </Text>
     </div>
+  );
+}
+
+/**
+ * The expand toggle's chevron. A stable component, so the SVG persists and
+ * its rotation can transition; it turns with the button's `aria-expanded`.
+ */
+function ToastChevronIcon({ className, ...props }: IconProps) {
+  return (
+    <SvgChevronRight
+      {...props}
+      className={cn(className, "opal-toast-chevron")}
+    />
   );
 }
 
@@ -85,51 +100,40 @@ function ToastCard({
   } as const;
 
   return (
-    <div
-      ref={ref}
-      className={cn(
-        // The same lift as a pinned StickyBox: a drop-shadow follows the
-        // card's rounded shape, where a box-shadow would square it off.
-        "w-full drop-shadow-[0px_2px_12px_var(--shadow-02)]",
-        t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale"
-      )}
-    >
-      {truncated ? (
-        <MessageCard
-          {...shared}
-          rightChildren={
-            <Section flexDirection="row" gap={0}>
-              <Button
-                icon={({ className, ...props }) => (
-                  <SvgChevronRight
-                    {...props}
-                    className={cn(className, expanded && "rotate-90")}
-                  />
-                )}
-                prominence="internal"
-                size="md"
-                onClick={() => onToggle(t)}
-                aria-label={strings.showFullMessage}
-                aria-expanded={expanded}
-              />
-              {close && (
+    <div ref={ref} className="opal-toast" data-leaving={t.leaving || undefined}>
+      <div className="opal-toast-body">
+        {truncated ? (
+          <MessageCard
+            {...shared}
+            rightChildren={
+              <Section flexDirection="row" gap={0}>
                 <Button
-                  icon={SvgX}
+                  icon={ToastChevronIcon}
                   prominence="internal"
                   size="md"
-                  onClick={close}
-                  aria-label={strings.close}
+                  onClick={() => onToggle(t)}
+                  aria-label={strings.showFullMessage}
+                  aria-expanded={expanded}
                 />
-              )}
-            </Section>
-          }
-          bottomChildren={
-            expanded ? <ExpandedDetails message={t.message} /> : undefined
-          }
-        />
-      ) : (
-        <MessageCard {...shared} onClose={close} />
-      )}
+                {close && (
+                  <Button
+                    icon={SvgX}
+                    prominence="internal"
+                    size="md"
+                    onClick={close}
+                    aria-label={strings.close}
+                  />
+                )}
+              </Section>
+            }
+            bottomChildren={
+              expanded ? <ExpandedDetails message={t.message} /> : undefined
+            }
+          />
+        ) : (
+          <MessageCard {...shared} onClose={close} />
+        )}
+      </div>
     </div>
   );
 }
@@ -146,7 +150,16 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   );
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const visible = allToasts.slice(-MAX_VISIBLE_TOASTS);
+  // The newest toasts that are not leaving, plus any still leaving in place.
+  // A closed toast stops counting as it starts to leave, so the next hidden
+  // one slides in while it slides out.
+  const shownIds = new Set(
+    allToasts
+      .filter((t) => !t.leaving)
+      .slice(-MAX_VISIBLE_TOASTS)
+      .map((t) => t.id)
+  );
+  const visible = allToasts.filter((t) => t.leaving || shownIds.has(t.id));
 
   const handleClose = useCallback((id: string) => {
     toast._markLeaving(id);
@@ -179,7 +192,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   return (
     <div
       data-testid="toast-container"
-      className="fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center gap-2"
+      className="fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
     >
       {visible.map((t) => (
         <ToastCard

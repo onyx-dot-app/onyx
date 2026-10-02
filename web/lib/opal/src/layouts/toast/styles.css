@@ -1,0 +1,72 @@
+/* ============================================================================
+   Toast — each toast animates its own height as it enters and leaves, so the
+   toasts around it slide into place instead of jumping.
+   ============================================================================ */
+
+/* The lift matches a pinned StickyBox. On the outer box, the drop-shadow
+   follows the card as the inner box clips it. */
+.opal-toast {
+  display: grid;
+  grid-template-rows: 1fr;
+  width: 100%;
+  filter: drop-shadow(0px 2px 12px var(--shadow-02));
+  animation: opal-toast-enter 200ms ease-out;
+}
+
+.opal-toast[data-leaving] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  animation: opal-toast-leave 200ms ease-in;
+}
+
+/* The space between toasts lives here, not in a container gap, so it
+   collapses with the toast that leaves. */
+.opal-toast-body {
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0.5rem;
+}
+
+@keyframes opal-toast-enter {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    translate: 0 -0.5rem;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes opal-toast-leave {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
+/* The expand toggle's chevron points right, and turns down while open. */
+.opal-toast-chevron {
+  transition: rotate 200ms ease;
+}
+
+[aria-expanded="true"] .opal-toast-chevron {
+  rotate: 90deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-toast,
+  .opal-toast[data-leaving] {
+    animation: none;
+  }
+
+  .opal-toast-chevron {
+    transition: none;
+  }
+}
