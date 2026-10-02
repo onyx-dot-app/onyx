@@ -71,7 +71,7 @@ export function CreateStdOAuthCredential({
             {additionalFields.map((field) => (
               <InputVertical
                 key={field.name}
-                withLabel
+                withLabel={field.name}
                 title={field.display_name}
                 description={field.description}
               >
@@ -80,6 +80,7 @@ export function CreateStdOAuthCredential({
                   render={(formikField, _helper, _meta, status) => (
                     <InputTypeIn
                       {...formikField}
+                      id={field.name}
                       variant={status === "error" ? "error" : "primary"}
                     />
                   )}

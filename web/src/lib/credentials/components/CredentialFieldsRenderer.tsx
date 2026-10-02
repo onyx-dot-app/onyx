@@ -78,13 +78,16 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
       : undefined;
 
   return (
-    <InputVertical withLabel title={label}>
+    // The field name ties the label to the input's id and shows the field's
+    // Formik error under it.
+    <InputVertical withLabel={fieldKey} title={label}>
       <FormikField<string>
         name={fieldKey}
         render={(field, _helper, _meta, status) =>
           isSecretKey(fieldKey) ? (
             <InputPasswordTypeIn
               {...field}
+              id={fieldKey}
               value={field.value ?? ""}
               placeholder={placeholder}
               error={status === "error"}
@@ -92,6 +95,7 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
           ) : (
             <InputTypeIn
               {...field}
+              id={fieldKey}
               value={field.value ?? ""}
               placeholder={placeholder}
               variant={status === "error" ? "error" : "primary"}
