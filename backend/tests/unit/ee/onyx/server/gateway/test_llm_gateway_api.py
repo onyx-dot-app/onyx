@@ -21,6 +21,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import (
     AssistantMessage,
@@ -51,7 +52,7 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     Usage,
 )
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow

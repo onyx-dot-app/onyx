@@ -41,6 +41,7 @@ from onyx.db.llm import (
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_request import (
@@ -60,7 +61,7 @@ from onyx.llm.models import (
     ToolChoice,
     ToolChoiceOptions,
 )
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import (
