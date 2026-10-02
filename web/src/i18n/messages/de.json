@@ -3229,12 +3229,18 @@
         },
         "share": {
           "admins": {
-            "label": "Admins"
+            "label": "Admins",
+            "description": "Alle Admins können dieses Konto wiederverwenden, um Connectoren zu erstellen.",
+            "suffix": "(Standard)"
+          },
+          "adminsAndGroups": {
+            "description": "Admins und von Ihnen benannte Gruppen können dieses Konto wiederverwenden.",
+            "label": "Admins & Gruppen"
+          },
+          "onlyMe": {
+            "label": "Nur ich"
           },
           "description": "Erlaube Gruppen, dieses Konto zum Erstellen von Konnektoren wiederzuverwenden.",
-          "everyone": {
-            "label": "Alle"
-          },
           "title": "Dieses Konto teilen"
         },
         "submitError": {

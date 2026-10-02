@@ -3229,12 +3229,18 @@
         },
         "share": {
           "admins": {
-            "label": "Administradores"
+            "label": "Administradores",
+            "description": "Todos os administradores podem reutilizar esta conta para criar conectores.",
+            "suffix": "(Padrão)"
+          },
+          "adminsAndGroups": {
+            "description": "Administradores e os grupos que você indicar podem reutilizar esta conta.",
+            "label": "Administradores e grupos"
+          },
+          "onlyMe": {
+            "label": "Somente eu"
           },
           "description": "Permita que grupos reutilizem esta conta para criar conectores.",
-          "everyone": {
-            "label": "Todos"
-          },
           "title": "Compartilhar esta conta"
         },
         "submitError": {

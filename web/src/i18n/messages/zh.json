@@ -3229,12 +3229,18 @@
         },
         "share": {
           "admins": {
-            "label": "管理员"
+            "label": "管理员",
+            "description": "所有管理员都可以重复使用此账户来创建连接器。",
+            "suffix": "（默认）"
+          },
+          "adminsAndGroups": {
+            "description": "管理员和你指定的群组可以重复使用此账户。",
+            "label": "管理员和群组"
+          },
+          "onlyMe": {
+            "label": "仅限我"
           },
           "description": "允许群组复用此账号来创建连接器。",
-          "everyone": {
-            "label": "所有人"
-          },
           "title": "共享此账号"
         },
         "submitError": {

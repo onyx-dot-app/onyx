@@ -3229,12 +3229,18 @@
         },
         "share": {
           "admins": {
-            "label": "管理者"
+            "label": "管理者",
+            "description": "すべての管理者がこのアカウントを再利用してコネクタを作成できます。",
+            "suffix": "（デフォルト）"
+          },
+          "adminsAndGroups": {
+            "description": "管理者と、あなたが指定したグループがこのアカウントを再利用できます。",
+            "label": "管理者とグループ"
+          },
+          "onlyMe": {
+            "label": "自分のみ"
           },
           "description": "グループがこのアカウントを再利用してコネクターを作成できるようにします。",
-          "everyone": {
-            "label": "全員"
-          },
           "title": "このアカウントを共有"
         },
         "submitError": {

@@ -3229,12 +3229,18 @@
         },
         "share": {
           "admins": {
-            "label": "Admins"
+            "label": "Admins",
+            "description": "All admins can reuse this account to create connectors.",
+            "suffix": "(Default)"
+          },
+          "adminsAndGroups": {
+            "description": "Admins and groups named by you can reuse this account.",
+            "label": "Admins & Groups"
+          },
+          "onlyMe": {
+            "label": "Only Me"
           },
           "description": "Allow groups to reuse this account to create connectors.",
-          "everyone": {
-            "label": "Everyone"
-          },
           "title": "Share This Account"
         },
         "submitError": {
