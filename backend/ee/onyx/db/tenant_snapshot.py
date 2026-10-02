@@ -122,7 +122,24 @@ _pg_class = table(
     column("relname"),
     column("relnamespace"),
     column("relkind"),
+    column("relpersistence"),
+    column("relreplident"),
     column("relrowsecurity"),
+    column("relforcerowsecurity"),
+    column("reloptions"),
+    column("relpartbound"),
+    schema=_PG_CATALOG,
+)
+_pg_policies = table(
+    "pg_policies",
+    column("schemaname"),
+    column("tablename"),
+    column("policyname"),
+    column("permissive"),
+    column("roles"),
+    column("cmd"),
+    column("qual"),
+    column("with_check"),
     schema=_PG_CATALOG,
 )
 _pg_attribute = table(
@@ -238,7 +255,14 @@ _STRUCTURE_QUERIES = (
         literal("relation"),
         _relkind,
         _pg_class.c.relname,
+        cast(_pg_class.c.relpersistence, Text),
+        cast(_pg_class.c.relreplident, Text),
         _pg_class.c.relrowsecurity,
+        _pg_class.c.relforcerowsecurity,
+        # Storage options, and a view's security_invoker and barrier settings.
+        _pg_class.c.reloptions,
+        func.pg_get_partkeydef(_pg_class.c.oid),
+        func.pg_get_expr(_pg_class.c.relpartbound, _pg_class.c.oid),
         case(
             (_relkind.in_(["v", "m"]), func.pg_get_viewdef(_pg_class.c.oid)),
             else_=literal(""),
@@ -246,6 +270,18 @@ _STRUCTURE_QUERIES = (
     )
     .where(_in_schema, _relkind != "i")
     .order_by(_relkind, _pg_class.c.relname),
+    select(
+        literal("policy"),
+        _pg_policies.c.tablename,
+        _pg_policies.c.policyname,
+        _pg_policies.c.permissive,
+        _pg_policies.c.roles,
+        _pg_policies.c.cmd,
+        _pg_policies.c.qual,
+        _pg_policies.c.with_check,
+    )
+    .where(_pg_policies.c.schemaname == bindparam("schema"))
+    .order_by(_pg_policies.c.tablename, _pg_policies.c.policyname),
     select(
         literal("column"),
         _pg_class.c.relname,
@@ -335,14 +371,21 @@ _STRUCTURE_QUERIES = (
     .order_by(_owned_sequence.c.relname),
     select(
         literal("function"),
+        cast(_pg_proc.c.prokind, Text),
         _pg_proc.c.proname,
         func.pg_get_function_identity_arguments(_pg_proc.c.oid),
-        func.pg_get_functiondef(_pg_proc.c.oid),
+        func.pg_get_function_result(_pg_proc.c.oid),
+        # pg_get_functiondef cannot render an aggregate, so one is compared by
+        # its signature alone.
+        case(
+            (
+                cast(_pg_proc.c.prokind, Text) != "a",
+                func.pg_get_functiondef(_pg_proc.c.oid),
+            ),
+            else_=literal(""),
+        ),
     )
-    # pg_get_functiondef cannot render an aggregate.
-    .where(
-        _pg_proc.c.pronamespace == _schema_oid, cast(_pg_proc.c.prokind, Text) != "a"
-    )
+    .where(_pg_proc.c.pronamespace == _schema_oid)
     .order_by(
         _pg_proc.c.proname, func.pg_get_function_identity_arguments(_pg_proc.c.oid)
     ),
