@@ -11,6 +11,7 @@ import {
   createEditingValidationSchema,
   createInitialValues,
   getCredentialFileType,
+  getCredentialSpec,
   getEditableCredentialFields,
 } from "@/lib/credentials/utils";
 import { SvgCheckSquare, SvgTrash } from "@opal/icons";
@@ -39,6 +40,20 @@ export default function EditCredential({
 }: EditCredentialProps) {
   const t = useTranslations("admin");
   const fieldCopy = useCredentialFieldCopy(sourceType);
+  const spec = getCredentialSpec(sourceType);
+
+  // The spec says which fields are secret. A stored key it does not list
+  // keeps the old guess from its name.
+  function isSecretField(key: string): boolean {
+    const field = spec?.fields[key];
+    if (field) return field.kind === "secret";
+    const lower = key.toLowerCase();
+    return (
+      lower.includes("token") ||
+      lower.includes("password") ||
+      lower.includes("secret")
+    );
+  }
   const editableCredentialFields = getEditableCredentialFields(
     credential,
     sourceType
@@ -98,13 +113,7 @@ export default function EditCredential({
                   name={key}
                   placeholder={value == null ? undefined : String(value)}
                   label={fieldCopy(key).title}
-                  type={
-                    key.toLowerCase().includes("token") ||
-                    key.toLowerCase().includes("password") ||
-                    key.toLowerCase().includes("secret")
-                      ? "password"
-                      : "text"
-                  }
+                  type={isSecretField(key) ? "password" : "text"}
                   disabled={key === "authentication_method"}
                 />
               )

@@ -545,8 +545,3 @@ export const CREDENTIAL_SPECS = {
 export type SourceCredentialJson<
   TSource extends keyof typeof CREDENTIAL_SPECS,
 > = CredentialJsonOf<(typeof CREDENTIAL_SPECS)[TSource]>;
-
-/** A source's spec, or null when it has no credential form. */
-export function getCredentialSpec(source: ValidSources): CredentialSpec | null {
-  return CREDENTIAL_SPECS[source];
-}
