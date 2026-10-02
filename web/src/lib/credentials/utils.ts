@@ -262,6 +262,13 @@ export function getEditableCredentialFields(
           initialFieldValue(field),
         ])
       );
+  // The edit form types every field as text, so it leaves out checkboxes and
+  // switches; their stored values stay as they are.
+  for (const [key, field] of Object.entries(spec.fields)) {
+    if (field.kind === "checkbox" || field.kind === "toggle") {
+      delete templateFields[key];
+    }
+  }
 
   return Object.fromEntries(
     Object.entries(templateFields).map(([key, templateValue]) => [
