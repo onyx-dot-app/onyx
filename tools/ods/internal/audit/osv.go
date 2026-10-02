@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -84,11 +85,11 @@ func findingFromGroup(group models.GroupInfo, pkg models.PackageVulns) Finding {
 	return f
 }
 
-// fixedFor returns the version a bump must reach to end the finding: for each
-// record in the group the lowest fixed version above the installed one, for
-// the package in its own ecosystem, and across records the highest of those,
-// since every record needs its own fix. Empty when no record names one the
-// comparator can place.
+// fixedFor returns the lowest version above the installed one that no record
+// in the group still lists as affected, so a bump to it ends every advisory
+// of the finding. Candidates are the records' fixed versions for the package
+// in its own ecosystem. Empty when no record names one the comparator can
+// place.
 func fixedFor(vulns []*osvschema.Vulnerability, ids []string, pkg models.PackageInfo) string {
 	installed, err := semantic.Parse(pkg.Version, pkg.Ecosystem)
 	if err != nil {
@@ -98,40 +99,83 @@ func fixedFor(vulns []*osvschema.Vulnerability, ids []string, pkg models.Package
 	for _, id := range ids {
 		idset[id] = true
 	}
-	best := ""
+	var affected []*osvschema.Affected
+	var candidates []string
 	for _, v := range vulns {
 		if !idset[v.GetId()] {
 			continue
 		}
-		fixed := ""
 		for _, aff := range v.GetAffected() {
 			if !strings.EqualFold(aff.GetPackage().GetName(), pkg.Name) || !sameEcosystem(aff.GetPackage().GetEcosystem(), pkg.Ecosystem) {
 				continue
 			}
-			fixed = lowestFixedAbove(installed, aff, fixed, pkg.Ecosystem)
+			affected = append(affected, aff)
+			for _, r := range aff.GetRanges() {
+				for _, e := range r.GetEvents() {
+					if fixed := e.GetFixed(); fixed != "" {
+						if c, err := installed.CompareStr(fixed); err == nil && c < 0 {
+							candidates = append(candidates, fixed)
+						}
+					}
+				}
+			}
 		}
-		best = higherVersion(best, fixed, pkg.Ecosystem)
 	}
-	return best
+	slices.SortFunc(candidates, func(a, b string) int { return compareVersions(a, b, pkg.Ecosystem) })
+	for _, candidate := range candidates {
+		if !slices.ContainsFunc(affected, func(aff *osvschema.Affected) bool { return affectedAt(aff, candidate, pkg.Ecosystem) }) {
+			return candidate
+		}
+	}
+	return ""
 }
 
-// higherVersion returns the higher of two versions in the ecosystem's order,
-// treating an empty or unparsable one as the lower.
-func higherVersion(a, b, ecosystem string) string {
-	if a == "" {
-		return b
-	}
-	if b == "" {
-		return a
-	}
+// compareVersions orders two versions in the ecosystem's order, with an
+// unparsable one first.
+func compareVersions(a, b, ecosystem string) int {
 	av, err := semantic.Parse(a, ecosystem)
 	if err != nil {
-		return b
+		return -1
 	}
-	if c, err := av.CompareStr(b); err == nil && c < 0 {
-		return b
+	c, err := av.CompareStr(b)
+	if err != nil {
+		return 1
 	}
-	return a
+	return c
+}
+
+// affectedAt reports whether the entry's ranges hold version: each
+// "introduced" opens an interval that the next "fixed" closes exclusively or
+// the next "last_affected" closes inclusively, and an open interval runs on.
+func affectedAt(aff *osvschema.Affected, version, ecosystem string) bool {
+	v, err := semantic.Parse(version, ecosystem)
+	if err != nil {
+		return false
+	}
+	for _, r := range aff.GetRanges() {
+		open := false
+		for _, e := range r.GetEvents() {
+			switch {
+			case e.GetIntroduced() != "":
+				c, err := v.CompareStr(e.GetIntroduced())
+				open = err == nil && c >= 0
+			case e.GetFixed() != "":
+				if c, err := v.CompareStr(e.GetFixed()); open && err == nil && c < 0 {
+					return true
+				}
+				open = false
+			case e.GetLastAffected() != "":
+				if c, err := v.CompareStr(e.GetLastAffected()); open && err == nil && c <= 0 {
+					return true
+				}
+				open = false
+			}
+		}
+		if open {
+			return true
+		}
+	}
+	return false
 }
 
 // sameEcosystem compares OSV ecosystem names without their release suffix,
@@ -139,33 +183,6 @@ func higherVersion(a, b, ecosystem string) string {
 func sameEcosystem(a, b string) bool {
 	base := func(s string) string { return strings.ToLower(strings.SplitN(s, ":", 2)[0]) }
 	return base(a) == base(b)
-}
-
-// lowestFixedAbove folds the affected entry's fixed versions into best,
-// keeping the lowest one above installed.
-func lowestFixedAbove(installed semantic.Version, aff *osvschema.Affected, best, ecosystem string) string {
-	{
-		for _, r := range aff.GetRanges() {
-			for _, e := range r.GetEvents() {
-				fixed := e.GetFixed()
-				if fixed == "" {
-					continue
-				}
-				if c, err := installed.CompareStr(fixed); err != nil || c >= 0 {
-					continue
-				}
-				if best == "" {
-					best = fixed
-					continue
-				}
-				bestV, err := semantic.Parse(best, ecosystem)
-				if c, cerr := bestV.CompareStr(fixed); err == nil && cerr == nil && c > 0 {
-					best = fixed
-				}
-			}
-		}
-	}
-	return best
 }
 
 // vulnTitle returns a one-line title for an advisory, preferring the summary

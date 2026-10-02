@@ -151,6 +151,46 @@ func TestFindingsFromResults(t *testing.T) {
 	}
 }
 
+func TestFixedFor_skipsVersionsAnotherRecordStillLists(t *testing.T) {
+	// The first advisory came back in 3.0 and was fixed again in 4.0, so the
+	// second advisory's 3.5 is no fix for the group.
+	vulns := []*osvschema.Vulnerability{
+		{Id: "GHSA-1", Affected: []*osvschema.Affected{{
+			Package: &osvschema.Package{Name: "pkg", Ecosystem: "npm"},
+			Ranges: []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{
+				{Introduced: "0"}, {Fixed: "2.0.0"}, {Introduced: "3.0.0"}, {Fixed: "4.0.0"},
+			}}},
+		}}},
+		{Id: "GHSA-2", Affected: []*osvschema.Affected{{
+			Package: &osvschema.Package{Name: "pkg", Ecosystem: "npm"},
+			Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "3.5.0"}}}},
+		}}},
+		// An interval closed by last_affected below the install.
+		{Id: "GHSA-3", Affected: []*osvschema.Affected{{
+			Package: &osvschema.Package{Name: "pkg", Ecosystem: "npm"},
+			Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0.5.0"}, {LastAffected: "0.9.0"}}}},
+		}}},
+	}
+	pkg := models.PackageInfo{Name: "pkg", Version: "1.0.0", Ecosystem: "npm"}
+	if got := fixedFor(vulns, []string{"GHSA-1", "GHSA-2", "GHSA-3"}, pkg); got != "4.0.0" {
+		t.Fatalf("fixedFor = %q, want 4.0.0, the lowest fix no record still lists as affected", got)
+	}
+	if got := fixedFor(vulns, []string{"GHSA-1", "GHSA-2", "GHSA-3"}, models.PackageInfo{Name: "pkg", Version: "1.0.0", Ecosystem: "Nope"}); got != "" {
+		t.Fatalf("fixedFor = %q, want none for an ecosystem the comparator cannot place", got)
+	}
+	// A range still open at the candidate keeps it affected.
+	open := []*osvschema.Vulnerability{{Id: "GHSA-4", Affected: []*osvschema.Affected{{
+		Package: &osvschema.Package{Name: "pkg", Ecosystem: "npm"},
+		Ranges: []*osvschema.Range{
+			{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "2.0.0"}}},
+			{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "1.5.0"}}},
+		},
+	}}}}
+	if got := fixedFor(open, []string{"GHSA-4"}, pkg); got != "" {
+		t.Fatalf("fixedFor = %q, want none while a range stays open past every fix", got)
+	}
+}
+
 func TestSeverityForGroupPrefersCVSS(t *testing.T) {
 	// CVSS present -> used even when database_specific differs.
 	pkg := models.PackageVulns{
