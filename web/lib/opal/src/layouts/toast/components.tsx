@@ -17,7 +17,8 @@ import {
 import SvgChevronRight from "@opal/icons/chevron-right";
 import { Section } from "../general/components";
 
-const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
+// Matches opal-toast-leave in styles.css: a 200ms fade, then a 200ms collapse.
+const LEAVE_DURATION = 400;
 // How long a toast lingers after the user expands it. Long enough to read a
 // multi-line stack trace or API error without forcing a manual dismiss.
 const EXPANDED_DURATION_MS = 30000;
@@ -102,37 +103,39 @@ function ToastCard({
   return (
     <div ref={ref} className="opal-toast" data-leaving={t.leaving || undefined}>
       <div className="opal-toast-body">
-        {truncated ? (
-          <MessageCard
-            {...shared}
-            rightChildren={
-              <Section flexDirection="row" gap={0}>
-                <Button
-                  icon={ToastChevronIcon}
-                  prominence="internal"
-                  size="md"
-                  onClick={() => onToggle(t)}
-                  aria-label={strings.showFullMessage}
-                  aria-expanded={expanded}
-                />
-                {close && (
+        <div className="opal-toast-spacer">
+          {truncated ? (
+            <MessageCard
+              {...shared}
+              rightChildren={
+                <Section flexDirection="row" gap={0}>
                   <Button
-                    icon={SvgX}
+                    icon={ToastChevronIcon}
                     prominence="internal"
                     size="md"
-                    onClick={close}
-                    aria-label={strings.close}
+                    onClick={() => onToggle(t)}
+                    aria-label={strings.showFullMessage}
+                    aria-expanded={expanded}
                   />
-                )}
-              </Section>
-            }
-            bottomChildren={
-              expanded ? <ExpandedDetails message={t.message} /> : undefined
-            }
-          />
-        ) : (
-          <MessageCard {...shared} onClose={close} />
-        )}
+                  {close && (
+                    <Button
+                      icon={SvgX}
+                      prominence="internal"
+                      size="md"
+                      onClick={close}
+                      aria-label={strings.close}
+                    />
+                  )}
+                </Section>
+              }
+              bottomChildren={
+                expanded ? <ExpandedDetails message={t.message} /> : undefined
+              }
+            />
+          ) : (
+            <MessageCard {...shared} onClose={close} />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -171,7 +174,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
         next.delete(id);
         return next;
       });
-    }, ANIMATION_DURATION);
+    }, LEAVE_DURATION);
   }, []);
 
   const handleToggle = useCallback((t: Toast) => {
