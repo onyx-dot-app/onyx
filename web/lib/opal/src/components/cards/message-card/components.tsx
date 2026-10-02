@@ -201,7 +201,8 @@ function MessageCard({
   const { icon: DefaultIcon, iconClass, color } = VARIANT_CONFIG[variant];
   const Icon = iconOverride ?? DefaultIcon;
   const strings = useOpalStrings();
-  const expanded = bottomChildren != null;
+  // Falsey content (`condition && <X />`) counts as absent, as it always has.
+  const expanded = Boolean(bottomChildren);
   const presence = usePresence(expanded, 200);
   // Animate only once the section has come or gone, so a card that mounts
   // with it does not play the opening on page load.
@@ -214,7 +215,7 @@ function MessageCard({
   // The last section shown, kept so it can animate out after the caller
   // drops it.
   const [shownBottom, setShownBottom] = useState(bottomChildren);
-  if (bottomChildren != null && bottomChildren !== shownBottom) {
+  if (expanded && bottomChildren !== shownBottom) {
     setShownBottom(bottomChildren);
   }
 
@@ -271,7 +272,7 @@ function MessageCard({
               <div className="opal-message-card-bottom-inner">
                 <div className="opal-message-card-bottom-content">
                   <Divider paddingParallel={3} paddingPerpendicular={0} />
-                  {bottomChildren ?? shownBottom}
+                  {expanded ? bottomChildren : shownBottom}
                 </div>
               </div>
             </div>
