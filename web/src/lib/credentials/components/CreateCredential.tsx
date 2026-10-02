@@ -228,7 +228,7 @@ export default function CreateCredential({
           // No card of its own: the form sits directly in its host (the
           // credential step's create card, or a modal).
           <Form className="w-full">
-            <Section alignItems="stretch" gap={6}>
+            <Section alignItems="stretch" gap={4}>
               <CredentialFieldsRenderer
                 credentialTemplate={credentialTemplate}
                 authMethod={authMethod || initialAuthMethod}
