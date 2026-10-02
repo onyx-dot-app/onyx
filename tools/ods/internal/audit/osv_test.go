@@ -218,6 +218,35 @@ func TestFixedFor_skipsVersionsAnotherRecordStillLists(t *testing.T) {
 	}
 }
 
+func TestFixedFor_keepsDistributionReleasesApart(t *testing.T) {
+	// Debian:12 fixed the package in 1.5; Debian:13 has only an open range,
+	// so the Debian:13 install has no fix, and a bare "Debian" entry counts
+	// for either release.
+	vulns := []*osvschema.Vulnerability{{Id: "DEBIAN-CVE-1", Affected: []*osvschema.Affected{
+		{
+			Package: &osvschema.Package{Name: "pkg", Ecosystem: "Debian:12"},
+			Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "1.5"}}}},
+		},
+		{
+			Package: &osvschema.Package{Name: "pkg", Ecosystem: "Debian:13"},
+			Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}}}},
+		},
+	}}}
+	if got := fixedFor(vulns, []string{"DEBIAN-CVE-1"}, models.PackageInfo{Name: "pkg", Version: "1.0", Ecosystem: "Debian:13"}); got != "" {
+		t.Fatalf("fixedFor = %q, want none for Debian:13 from a Debian:12 fix", got)
+	}
+	if got := fixedFor(vulns, []string{"DEBIAN-CVE-1"}, models.PackageInfo{Name: "pkg", Version: "1.0", Ecosystem: "Debian:12"}); got != "1.5" {
+		t.Fatalf("fixedFor = %q, want 1.5 for Debian:12", got)
+	}
+	bare := []*osvschema.Vulnerability{{Id: "DEBIAN-CVE-2", Affected: []*osvschema.Affected{{
+		Package: &osvschema.Package{Name: "pkg", Ecosystem: "Debian"},
+		Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "2.0"}}}},
+	}}}}
+	if got := fixedFor(bare, []string{"DEBIAN-CVE-2"}, models.PackageInfo{Name: "pkg", Version: "1.0", Ecosystem: "Debian:13"}); got != "2.0" {
+		t.Fatalf("fixedFor = %q, want 2.0 from a release-less entry", got)
+	}
+}
+
 func TestSeverityForGroupPrefersCVSS(t *testing.T) {
 	// CVSS present -> used even when database_specific differs.
 	pkg := models.PackageVulns{
