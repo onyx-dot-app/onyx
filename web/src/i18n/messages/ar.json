@@ -3388,6 +3388,7 @@
           "label": "إعادة المحاولة"
         },
         "signIn": {
+          "description": "يتطلب {appName} نطاقات للقراءة فقط.",
           "title": "تسجيل الدخول باستخدام {source}"
         },
         "startError": {

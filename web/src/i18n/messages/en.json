@@ -3388,6 +3388,7 @@
           "label": "Retry"
         },
         "signIn": {
+          "description": "{appName} requires read-only scopes.",
           "title": "Sign in with {source}"
         },
         "startError": {

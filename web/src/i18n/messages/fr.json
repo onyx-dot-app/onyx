@@ -3388,6 +3388,7 @@
           "label": "Réessayer"
         },
         "signIn": {
+          "description": "{appName} nécessite des autorisations en lecture seule.",
           "title": "Se connecter avec {source}"
         },
         "startError": {

@@ -3388,6 +3388,7 @@
           "label": "Erneut versuchen"
         },
         "signIn": {
+          "description": "{appName} benötigt Lesezugriff.",
           "title": "Mit {source} anmelden"
         },
         "startError": {

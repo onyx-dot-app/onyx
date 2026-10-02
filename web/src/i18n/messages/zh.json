@@ -3388,6 +3388,7 @@
           "label": "重试"
         },
         "signIn": {
+          "description": "{appName} 需要只读权限范围。",
           "title": "使用 {source} 登录"
         },
         "startError": {

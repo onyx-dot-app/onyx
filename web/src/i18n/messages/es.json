@@ -3388,6 +3388,7 @@
           "label": "Reintentar"
         },
         "signIn": {
+          "description": "{appName} requiere permisos de solo lectura.",
           "title": "Iniciar sesión con {source}"
         },
         "startError": {

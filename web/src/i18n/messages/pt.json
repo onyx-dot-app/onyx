@@ -3388,6 +3388,7 @@
           "label": "Tentar novamente"
         },
         "signIn": {
+          "description": "{appName} requer escopos somente leitura.",
           "title": "Entrar com {source}"
         },
         "startError": {
