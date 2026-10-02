@@ -6,6 +6,10 @@ export {
 } from "@opal/form/FieldContext";
 export { FieldMessage } from "@opal/form/FieldMessage";
 export {
+  InputCheckboxField,
+  type InputCheckboxFieldProps,
+} from "@opal/form/InputCheckboxField";
+export {
   InputSingleSelectField,
   type InputSingleSelectFieldProps,
 } from "@opal/form/InputSingleSelectField";
