@@ -25,6 +25,8 @@ from sqlalchemy import (
     LargeBinary,
     Text,
     Uuid,
+    and_,
+    bindparam,
     case,
     cast,
     column,
@@ -109,6 +111,266 @@ _QUOTED_LITERAL = re.compile(r"'[^']*'")
 # Where alembic.ini lives: the alembic subprocess and the head lookup run from here.
 _BACKEND_DIR = Path(__file__).resolve().parents[3]
 
+# The catalog tables the structure comparison reads.
+_PG_CATALOG = "pg_catalog"
+_pg_namespace = table(
+    "pg_namespace", column("oid"), column("nspname"), schema=_PG_CATALOG
+)
+_pg_class = table(
+    "pg_class",
+    column("oid"),
+    column("relname"),
+    column("relnamespace"),
+    column("relkind"),
+    column("relrowsecurity"),
+    schema=_PG_CATALOG,
+)
+_pg_attribute = table(
+    "pg_attribute",
+    column("attrelid"),
+    column("attnum"),
+    column("attname"),
+    column("atttypid"),
+    column("atttypmod"),
+    column("attnotnull"),
+    column("attidentity"),
+    column("attgenerated"),
+    column("attisdropped"),
+    schema=_PG_CATALOG,
+)
+_pg_attrdef = table(
+    "pg_attrdef",
+    column("adrelid"),
+    column("adnum"),
+    column("adbin"),
+    schema=_PG_CATALOG,
+)
+_pg_constraint = table(
+    "pg_constraint",
+    column("oid"),
+    column("conname"),
+    column("connamespace"),
+    column("conrelid"),
+    schema=_PG_CATALOG,
+)
+_pg_index = table(
+    "pg_index",
+    column("indexrelid"),
+    column("indrelid"),
+    column("indisvalid"),
+    schema=_PG_CATALOG,
+)
+_pg_proc = table(
+    "pg_proc",
+    column("oid"),
+    column("proname"),
+    column("pronamespace"),
+    column("prokind"),
+    schema=_PG_CATALOG,
+)
+_pg_trigger = table(
+    "pg_trigger",
+    column("oid"),
+    column("tgname"),
+    column("tgrelid"),
+    column("tgisinternal"),
+    schema=_PG_CATALOG,
+)
+_pg_type = table(
+    "pg_type",
+    column("oid"),
+    column("typname"),
+    column("typnamespace"),
+    column("typtype"),
+    column("typbasetype"),
+    column("typtypmod"),
+    schema=_PG_CATALOG,
+)
+_pg_enum = table(
+    "pg_enum",
+    column("enumtypid"),
+    column("enumlabel"),
+    column("enumsortorder"),
+    schema=_PG_CATALOG,
+)
+_pg_sequences = table(
+    "pg_sequences",
+    column("schemaname"),
+    column("sequencename"),
+    column("data_type"),
+    column("start_value"),
+    column("min_value"),
+    column("max_value"),
+    column("increment_by"),
+    column("cycle"),
+    column("cache_size"),
+    schema=_PG_CATALOG,
+)
+_pg_depend = table(
+    "pg_depend",
+    column("objid"),
+    column("refobjid"),
+    column("refobjsubid"),
+    column("deptype"),
+    schema=_PG_CATALOG,
+)
+_schema_oid = (
+    select(_pg_namespace.c.oid)
+    .where(_pg_namespace.c.nspname == bindparam("schema"))
+    .scalar_subquery()
+)
+_in_schema = _pg_class.c.relnamespace == _schema_oid
+# relkind is a "char". The text form compares and sorts like any string.
+_relkind = cast(_pg_class.c.relkind, Text)
+_sequence_owner = _pg_class.alias("sequence_owner")
+_owned_sequence = _pg_class.alias("owned_sequence")
+# What Onyx schemas hold, each as one line of text. Any relation the other
+# queries do not break down still shows up here by kind and name.
+# Rows are ordered by name within each kind. Columns keep their table order.
+_STRUCTURE_QUERIES = (
+    select(
+        literal("relation"),
+        _relkind,
+        _pg_class.c.relname,
+        _pg_class.c.relrowsecurity,
+        case(
+            (_relkind.in_(["v", "m"]), func.pg_get_viewdef(_pg_class.c.oid)),
+            else_=literal(""),
+        ),
+    )
+    .where(_in_schema, _relkind != "i")
+    .order_by(_relkind, _pg_class.c.relname),
+    select(
+        literal("column"),
+        _pg_class.c.relname,
+        _pg_attribute.c.attname,
+        func.format_type(_pg_attribute.c.atttypid, _pg_attribute.c.atttypmod),
+        _pg_attribute.c.attnotnull,
+        cast(_pg_attribute.c.attidentity, Text),
+        cast(_pg_attribute.c.attgenerated, Text),
+        func.pg_get_expr(_pg_attrdef.c.adbin, _pg_attrdef.c.adrelid),
+    )
+    .select_from(
+        _pg_attribute.join(
+            _pg_class, _pg_class.c.oid == _pg_attribute.c.attrelid
+        ).outerjoin(
+            _pg_attrdef,
+            and_(
+                _pg_attrdef.c.adrelid == _pg_attribute.c.attrelid,
+                _pg_attrdef.c.adnum == _pg_attribute.c.attnum,
+            ),
+        )
+    )
+    .where(
+        _in_schema,
+        _relkind != "i",
+        _pg_attribute.c.attnum > 0,
+        _pg_attribute.c.attisdropped.is_(False),
+    )
+    .order_by(_pg_class.c.relname, _pg_attribute.c.attnum),
+    select(
+        literal("constraint"),
+        _pg_class.c.relname,
+        _pg_constraint.c.conname,
+        func.pg_get_constraintdef(_pg_constraint.c.oid),
+    )
+    # Outer join: a domain's constraint has no table.
+    .select_from(
+        _pg_constraint.outerjoin(
+            _pg_class, _pg_class.c.oid == _pg_constraint.c.conrelid
+        )
+    )
+    .where(_pg_constraint.c.connamespace == _schema_oid)
+    .order_by(_pg_class.c.relname, _pg_constraint.c.conname),
+    select(
+        literal("index"),
+        _pg_class.c.relname,
+        _pg_index.c.indisvalid,
+        func.pg_get_indexdef(_pg_index.c.indexrelid),
+    )
+    .select_from(_pg_index.join(_pg_class, _pg_class.c.oid == _pg_index.c.indexrelid))
+    .where(_in_schema)
+    .order_by(_pg_class.c.relname),
+    select(
+        literal("sequence"),
+        _pg_sequences.c.sequencename,
+        _pg_sequences.c.data_type,
+        _pg_sequences.c.start_value,
+        _pg_sequences.c.min_value,
+        _pg_sequences.c.max_value,
+        _pg_sequences.c.increment_by,
+        _pg_sequences.c.cycle,
+        _pg_sequences.c.cache_size,
+    )
+    .where(_pg_sequences.c.schemaname == bindparam("schema"))
+    .order_by(_pg_sequences.c.sequencename),
+    select(
+        literal("sequence owner"),
+        _owned_sequence.c.relname,
+        _sequence_owner.c.relname,
+        _pg_attribute.c.attname,
+    )
+    .select_from(
+        _pg_depend.join(_owned_sequence, _owned_sequence.c.oid == _pg_depend.c.objid)
+        .join(_sequence_owner, _sequence_owner.c.oid == _pg_depend.c.refobjid)
+        .join(
+            _pg_attribute,
+            and_(
+                _pg_attribute.c.attrelid == _pg_depend.c.refobjid,
+                _pg_attribute.c.attnum == _pg_depend.c.refobjsubid,
+            ),
+        )
+    )
+    .where(
+        _owned_sequence.c.relnamespace == _schema_oid,
+        cast(_owned_sequence.c.relkind, Text) == "S",
+        cast(_pg_depend.c.deptype, Text) == "a",
+    )
+    .order_by(_owned_sequence.c.relname),
+    select(
+        literal("function"),
+        _pg_proc.c.proname,
+        func.pg_get_function_identity_arguments(_pg_proc.c.oid),
+        func.pg_get_functiondef(_pg_proc.c.oid),
+    )
+    # pg_get_functiondef cannot render an aggregate.
+    .where(
+        _pg_proc.c.pronamespace == _schema_oid, cast(_pg_proc.c.prokind, Text) != "a"
+    )
+    .order_by(
+        _pg_proc.c.proname, func.pg_get_function_identity_arguments(_pg_proc.c.oid)
+    ),
+    select(
+        literal("trigger"),
+        _pg_class.c.relname,
+        _pg_trigger.c.tgname,
+        func.pg_get_triggerdef(_pg_trigger.c.oid),
+    )
+    .select_from(_pg_trigger.join(_pg_class, _pg_class.c.oid == _pg_trigger.c.tgrelid))
+    .where(_in_schema, _pg_trigger.c.tgisinternal.is_(False))
+    .order_by(_pg_class.c.relname, _pg_trigger.c.tgname),
+    select(
+        literal("type"),
+        cast(_pg_type.c.typtype, Text),
+        _pg_type.c.typname,
+        func.format_type(_pg_type.c.typbasetype, _pg_type.c.typtypmod),
+        select(
+            func.string_agg(
+                _pg_enum.c.enumlabel,
+                aggregate_order_by(literal(","), _pg_enum.c.enumsortorder),
+            )
+        )
+        .where(_pg_enum.c.enumtypid == _pg_type.c.oid)
+        .scalar_subquery(),
+    )
+    .where(
+        _pg_type.c.typnamespace == _schema_oid,
+        # Enums, domains and ranges. A composite type is a relation, listed above.
+        cast(_pg_type.c.typtype, Text).in_(["e", "d", "r"]),
+    )
+    .order_by(_pg_type.c.typname),
+)
+
 
 @functools.cache
 def get_head_revision() -> str | None:
@@ -153,10 +415,12 @@ def ensure_template_schema(shard_name: str) -> None:
         connection.execute(CreateSchema(TENANT_TEMPLATE_SCHEMA, if_not_exists=True))
 
 
-def dump_schema(shard_name: str, schema: str, schema_only: bool = False) -> str:
+def dump_schema(shard_name: str, schema: str) -> str:
     """pg_dump of one schema as plain SQL a driver can execute in one go.
 
-    Rows come out as INSERTs rather than COPY blocks for that reason."""
+    Rows come out as INSERTs rather than COPY blocks for that reason. pg_dump reads
+    the whole catalog before it filters to the schema, so this is a per-rollout
+    cost, never a per-tenant one."""
     if not validate_tenant_id(schema):
         raise ValueError(f"Refusing to dump schema {schema!r}")
     if shutil.which("pg_dump") is None:
@@ -172,8 +436,6 @@ def dump_schema(shard_name: str, schema: str, schema_only: bool = False) -> str:
         "--no-security-labels",
         "--inserts",
     ]
-    if schema_only:
-        command.append("--schema-only")
     result = subprocess.run(
         command,
         env={**os.environ, **_libpq_env(shard_name)},
@@ -355,9 +617,9 @@ def check_snapshot_parity(shard_name: str, dump: str) -> list[str]:
 
 
 def compare_schemas(shard_name: str, left: str, right: str) -> list[str]:
-    """Structure must match line for line after name, comment and array-cast
-    normalisation. Rows must match in count and, outside the uncompared column
-    types, in content."""
+    """Structure must match catalog line for line after name and array-cast
+    normalisation. Rows must match in count and, outside the excluded columns
+    and the dated seed field, in content."""
     differences = _structure_differences(shard_name, left, right)
     with get_engine_for_shard(shard_name).connect() as connection:
         differences.extend(_row_differences(connection, left, right))
@@ -365,8 +627,9 @@ def compare_schemas(shard_name: str, left: str, right: str) -> list[str]:
 
 
 def _structure_differences(shard_name: str, left: str, right: str) -> list[str]:
-    left_lines = _normalised_structure(dump_schema(shard_name, left, True), left)
-    right_lines = _normalised_structure(dump_schema(shard_name, right, True), right)
+    with get_engine_for_shard(shard_name).connect() as connection:
+        left_lines = _structure_lines(connection, left)
+        right_lines = _structure_lines(connection, right)
     diff = list(
         unified_diff(left_lines, right_lines, fromfile=left, tofile=right, lineterm="")
     )
@@ -375,13 +638,20 @@ def _structure_differences(shard_name: str, left: str, right: str) -> list[str]:
     return ["structure differs:"] + diff[:_DIFF_LINES_REPORTED]
 
 
-def _normalised_structure(dump: str, schema: str) -> list[str]:
-    body = _schema_name_pattern(schema).sub("SCHEMA", dump)
-    return [
-        _canonical_text_arrays(line)
-        for line in body.splitlines()
-        if line.strip() and not line.startswith("--")
-    ]
+def _structure_lines(connection: Connection, schema: str) -> list[str]:
+    """One line per catalog fact about the schema, read straight from pg_catalog.
+
+    These queries return only the schema's own rows. pg_dump loads the whole
+    catalog before it filters to one schema, so its memory and time scale with
+    every tenant in the database."""
+    schema_name = _schema_name_pattern(schema)
+    lines: list[str] = []
+    for statement in _STRUCTURE_QUERIES:
+        for row in connection.execute(statement, {"schema": schema}):
+            line = " ".join("" if value is None else str(value) for value in row)
+            line = schema_name.sub("SCHEMA", line.replace("\n", " "))
+            lines.append(_canonical_text_arrays(line))
+    return lines
 
 
 def _canonical_text_arrays(line: str) -> str:
