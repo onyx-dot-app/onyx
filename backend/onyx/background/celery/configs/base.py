@@ -21,9 +21,11 @@ from onyx.configs.app_configs import (
     REDIS_SSL_KEYFILE,
     USE_REDIS_IAM_AUTH,
 )
-from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS, OnyxCeleryPriority
-
-CELERY_SEPARATOR = ":"
+from onyx.configs.constants import (
+    CELERY_SEPARATOR,
+    REDIS_SOCKET_KEEPALIVE_OPTIONS,
+    OnyxCeleryPriority,
+)
 
 CELERY_PASSWORD_PART = ""
 if REDIS_PASSWORD:

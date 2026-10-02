@@ -88,6 +88,9 @@ def _initializer(
     )
 
     # Proceed with executing the target function
+    from onyx.utils.fleet_telemetry import start_telemetry, stop_telemetry
+
+    start_telemetry("indexing")
     try:
         return func(*args, **kwargs)
     except SimpleJobException as e:
@@ -103,6 +106,7 @@ def _initializer(
 
         sys.exit(255)  # use 255 to indicate a generic exception
     finally:
+        stop_telemetry()
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
         # os._exit entrypoints skip this finally and drain themselves

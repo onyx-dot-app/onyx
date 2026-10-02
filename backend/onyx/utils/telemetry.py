@@ -1,12 +1,8 @@
-import contextvars
-import threading
 import uuid
 from enum import Enum
 from typing import Any
 
-import requests
-
-from onyx.configs.app_configs import DISABLE_TELEMETRY, ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.constants import (
     KV_CUSTOMER_UUID_KEY,
     KV_INSTANCE_DOMAIN_KEY,
@@ -16,13 +12,13 @@ from onyx.db.encrypted_kv_store import load_encrypted_kv, upsert_encrypted_kv
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.key_value_store.interface import KvKeyNotFoundError, unwrap_str
+from onyx.utils.fleet_telemetry import emit_telemetry
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
     noop_fallback,
 )
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -97,64 +93,33 @@ def _get_or_generate_instance_domain() -> str | None:  #
 def optional_telemetry(
     record_type: RecordType,
     data: dict,
-    user_id: str | None = None,
+    user_id: str | None = None,  # noqa: ARG001 - Keep the legacy call signature.
     tenant_id: str | None = None,  # Allows for override of tenant_id
     blocking: bool = False,
 ) -> bool | None:
-    """Fire-and-forget by default. With blocking=True, sends in the current
-    thread and returns whether the POST succeeded."""
+    """Compatibility adapter. ``blocking`` means queue acceptance, never network I/O.
+
+    The legacy open-ended metric and text payloads are deliberately not forwarded.
+    Fleet collection reconstructs connector/job state in an isolated process.
+    """
     if DISABLE_TELEMETRY:
         return False if blocking else None
-
-    tenant_id = tenant_id or get_current_tenant_id()
-
+    accepted = False
     try:
-
-        def telemetry_logic() -> bool:
-            try:
-                customer_uuid = (
-                    _get_or_generate_customer_id_mt(tenant_id)
-                    if MULTI_TENANT
-                    else get_or_generate_uuid()
-                )
-                payload = {
-                    "data": data,
-                    "record": record_type,
-                    # If None then it's a flow that doesn't include a user
-                    # For cases where the User itself is None, a string is provided instead
-                    "user_id": user_id,
-                    "customer_uuid": customer_uuid,
-                    "is_cloud": MULTI_TENANT,
-                }
-                if ENTERPRISE_EDITION_ENABLED:
-                    payload["instance_domain"] = _get_or_generate_instance_domain()
-                response = requests.post(
-                    _DANSWER_TELEMETRY_ENDPOINT,
-                    headers={"Content-Type": "application/json"},
-                    json=payload,
-                    timeout=_TELEMETRY_POST_TIMEOUT_SECONDS,
-                )
-                return response.ok
-
-            except Exception:
-                # This way it silences all thread level logging as well
-                return False
-
-        if blocking:
-            return telemetry_logic()
-
-        # Run in separate thread with the same context as the current thread
-        # This is to ensure that the thread gets the current tenant ID
-        current_context = contextvars.copy_context()
-        thread = threading.Thread(
-            target=lambda: current_context.run(telemetry_logic), daemon=True
-        )
-        thread.start()
+        if record_type == RecordType.VERSION and isinstance(data.get("version"), str):
+            accepted = emit_telemetry(
+                "version", {"version": data["version"]}, tenant_id=tenant_id
+            )
+        elif record_type == RecordType.INDEX_ATTEMPT_STATUS:
+            safe = {
+                "attempt_id": data.get("index_attempt_id"),
+                "cc_pair_id": data.get("cc_pair_id"),
+                "state": str(data.get("status", "unknown")).lower(),
+            }
+            accepted = emit_telemetry("attempt", safe, tenant_id=tenant_id)
     except Exception:
-        # Should never interfere with normal functions of Onyx
         pass
-
-    return None
+    return accepted if blocking else None
 
 
 def mt_cloud_telemetry(

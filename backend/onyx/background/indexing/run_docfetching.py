@@ -234,6 +234,42 @@ _TimedYield = TypeVar("_TimedYield")
 _CONNECTOR_FETCH_FLUSH_EVERY = 8
 
 
+def _emit_fetch_telemetry(
+    index_attempt_id: int,
+    item: object,
+    fetch_start: float,
+    *,
+    failed: bool = False,
+) -> None:
+    """Inspect only the fixed ConnectorRunner tuple; generic yields pass untouched."""
+    try:
+        from onyx.utils.fleet_telemetry import emit_stage_counter
+
+        if failed:
+            counters = {"fetch_errors": 1}
+        elif type(item) is tuple and len(item) == 4:
+            docs, _hierarchy, failure, _checkpoint = item
+            if docs is not None and type(docs) is not list:
+                return
+            if failure is not None and not isinstance(failure, ConnectorFailure):
+                return
+            counters = {
+                "fetch_docs": len(docs) if type(docs) is list else 0,
+                "fetch_errors": int(failure is not None),
+            }
+        else:
+            return
+        emit_stage_counter(
+            index_attempt_id,
+            "fetch",
+            counters,
+            duration_ms=max(0, int((time.monotonic() - fetch_start) * 1000)),
+        )
+    except Exception:
+        # Unexpected metadata or telemetry failures cannot replace connector output.
+        pass
+
+
 def _timed_connector_runs(
     runner_iterable: Iterable[_TimedYield],
     index_attempt_id: int,
@@ -259,11 +295,13 @@ def _timed_connector_runs(
             except StopIteration:
                 return
             except Exception:
+                _emit_fetch_telemetry(index_attempt_id, None, fetch_start, failed=True)
                 # Record the partial duration of the failing fetch so the
                 # terminal error iteration isn't lost from the metric.
                 buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
                 raise
             buffer.record(max(0, int((time.monotonic() - fetch_start) * 1000)))
+            _emit_fetch_telemetry(index_attempt_id, item, fetch_start)
             if buffer.count >= _CONNECTOR_FETCH_FLUSH_EVERY:
                 buffer.flush()
             yield item

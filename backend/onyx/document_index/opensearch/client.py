@@ -55,8 +55,10 @@ from onyx.server.metrics.opensearch_search import (
     record_opensearch_search_error,
     track_opensearch_search,
 )
+from onyx.utils.fleet_telemetry import emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS = 2000
 DEFAULT_INDEX_SETTINGS_TIMEOUT_S = 15
@@ -81,6 +83,43 @@ opensearch_logger.setLevel(logging.WARNING)
 
 
 SchemaDocumentModel = TypeVar("SchemaDocumentModel")
+
+
+class _MeasuredBulkClient:
+    """Observe actual item acknowledgments without changing bulk helper behavior."""
+
+    def __init__(self, client: OpenSearch) -> None:
+        self.client = client
+        self.transport = client.transport
+
+    def bulk(self, *args: Any, **kwargs: Any) -> Any:
+        started = time.monotonic()
+        response = self.client.bulk(*args, **kwargs)
+        try:
+            context = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
+            if context is not None:
+                accepted = rejected = errors = 0
+                for operation in response.get("items", []):
+                    for result in operation.values():
+                        status = result.get("status", 500)
+                        if 200 <= status < 300:
+                            accepted += 1
+                        else:
+                            errors += 1
+                            rejected += int(status == 429)
+                emit_stage_counter(
+                    context[1],
+                    "write",
+                    {
+                        "write_chunks": accepted,
+                        "write_errors": errors,
+                        "write_rejected": rejected,
+                    },
+                    duration_ms=max(0, int((time.monotonic() - started) * 1000)),
+                )
+        except Exception:
+            pass
+        return response
 
 
 class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
@@ -1078,7 +1117,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             # a chunk that already exists is owned by a live/forward writer, so
             # the port yields with a benign 409 instead of failing the batch
             successes, errors = bulk(
-                self._client,
+                _MeasuredBulkClient(self._client),
                 data,
                 max_retries=3,
                 raise_on_error=False,
@@ -1089,7 +1128,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             # any error fails the batch (the caller may refresh-retry
             # on the BulkIndexError that bulk raises)
             successes, _ = bulk(
-                self._client,
+                _MeasuredBulkClient(self._client),
                 data,
                 max_retries=3,
                 raise_on_error=True,

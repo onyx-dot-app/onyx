@@ -432,6 +432,9 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:  # noqa: ARG00
 
 
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+    from onyx.utils.fleet_telemetry import start_telemetry
+
+    start_telemetry("worker")
     task_logger.info("worker_ready signal received.")
 
     # file based way to do readiness/liveness probes
@@ -445,6 +448,10 @@ def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
 
 
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
+    from onyx.utils.fleet_telemetry import stop_telemetry
+
+    stop_telemetry()
+
     hostname: str = cast(str, sender.hostname)
     path = make_probe_path("readiness", hostname)
     path.unlink(missing_ok=True)

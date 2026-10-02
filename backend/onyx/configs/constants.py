@@ -23,6 +23,7 @@ SOURCE_TYPE = "source_type"
 IGNORE_FOR_QA = "ignore_for_qa"
 PUBLIC_DOC_PAT = "PUBLIC"
 ID_SEPARATOR = ":;:"
+CELERY_SEPARATOR = ":"
 DEFAULT_BOOST = 0
 
 # Tag for endpoints that should be included in the public API documentation
