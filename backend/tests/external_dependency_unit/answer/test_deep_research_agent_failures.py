@@ -13,12 +13,12 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.tools import get_tool_by_name
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TASK_KEY,
     RESEARCH_AGENT_TOOL_NAME,
 )
-from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
 from onyx.llm.model_request import ChatCompletionMessage, ToolMessage
 from onyx.llm.model_response import (

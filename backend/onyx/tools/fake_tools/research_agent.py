@@ -26,22 +26,23 @@ from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.dr_mock_tools import (
-    RESEARCH_AGENT_TASK_KEY,
-    THINK_TOOL_RESPONSE_MESSAGE,
-    THINK_TOOL_RESPONSE_TOKEN_COUNT,
-    get_research_agent_additional_tool_definitions,
-)
 from onyx.deep_research.models import (
     CombinedResearchAgentCallResult,
     ResearchAgentCallFailure,
     ResearchAgentCallResult,
+)
+from onyx.deep_research.tool_definitions import (
+    RESEARCH_AGENT_TASK_KEY,
+    THINK_TOOL_RESPONSE_MESSAGE,
+    THINK_TOOL_RESPONSE_TOKEN_COUNT,
+    get_research_agent_additional_tool_definitions,
 )
 from onyx.deep_research.utils import (
     check_special_tool_calls,
     create_think_tool_token_processor,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_request import serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION,
@@ -382,8 +383,10 @@ def run_research_agent_call(
                 llm_step_result, has_reasoned = run_llm_step(
                     emitter=emitter,
                     history=constructed_history,
-                    tool_definitions=[tool.tool_definition() for tool in current_tools]
-                    + research_agent_tools,
+                    tool_definitions=serialize_tools(
+                        [tool.tool_definition() for tool in current_tools]
+                        + research_agent_tools
+                    ),
                     tool_choice=ToolChoiceOptions.REQUIRED,
                     llm=llm,
                     placement=Placement(
