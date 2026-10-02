@@ -5886,6 +5886,9 @@
           "optionalSuffix": {
             "label": "任意"
           },
+          "slowSave": {
+            "text": "通常より時間がかかっています。モデル一覧が大きい場合は1分ほどかかることがあります。"
+          },
           "submitButton": {
             "invalidTooltip": "必須項目をすべて入力してください。",
             "pristineTooltip": "保存する変更はありません。"

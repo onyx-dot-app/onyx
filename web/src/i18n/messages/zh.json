@@ -5886,6 +5886,9 @@
           "optionalSuffix": {
             "label": "可选"
           },
+          "slowSave": {
+            "text": "耗时比平时更长。模型列表较大时可能需要一分钟。"
+          },
           "submitButton": {
             "invalidTooltip": "请填写所有必填字段。",
             "pristineTooltip": "没有需要保存的更改。"

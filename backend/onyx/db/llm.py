@@ -528,6 +528,7 @@ def upsert_llm_provider(
         ).delete(synchronize_session="fetch")
         db_session.flush()
 
+    new_models: list[NewModelConfiguration] = []
     for model_config in llm_provider_upsert_request.model_configurations:
         supported_flows = [LLMModelFlowType.CHAT]
         supported_flows.extend(merged_capabilities.get(model_config.name, set()))
@@ -570,25 +571,28 @@ def upsert_llm_provider(
                 temperature_default=merged_temperature,
             )
         else:
-            insert_new_model_configuration__no_commit(
-                db_session=db_session,
-                llm_provider_id=existing_llm_provider.id,
-                model_name=model_config.name,
-                supported_flows=supported_flows,
-                is_visible=model_config.is_visible,
-                max_input_tokens=_stored_max_input_tokens(
-                    provider=llm_provider_upsert_request.provider,
-                    model_name=model_config.name,
-                    max_input_tokens=model_config.max_input_tokens,
-                    # New row, so there is no stored override to preserve.
-                    existing_max_input_tokens=None,
-                ),
-                display_name=model_config.display_name,
-                custom_display_name=model_config.custom_display_name,
-                reasoning_effort_max=model_config.reasoning_effort_max,
-                reasoning_effort_default=model_config.reasoning_effort_default,
-                temperature_default=model_config.temperature_default,
+            new_models.append(
+                NewModelConfiguration(
+                    name=model_config.name,
+                    supported_flows=supported_flows,
+                    is_visible=model_config.is_visible,
+                    max_input_tokens=_stored_max_input_tokens(
+                        provider=llm_provider_upsert_request.provider,
+                        model_name=model_config.name,
+                        max_input_tokens=model_config.max_input_tokens,
+                        # New row, so there is no stored override to preserve.
+                        existing_max_input_tokens=None,
+                    ),
+                    display_name=model_config.display_name,
+                    custom_display_name=model_config.custom_display_name,
+                    reasoning_effort_max=model_config.reasoning_effort_max,
+                    reasoning_effort_default=model_config.reasoning_effort_default,
+                    temperature_default=model_config.temperature_default,
+                )
             )
+    insert_new_model_configurations__no_commit(
+        db_session, existing_llm_provider.id, new_models
+    )
 
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
@@ -602,17 +606,21 @@ def upsert_llm_provider(
         persona_ids=llm_provider_upsert_request.personas,
     )
 
-    db_session.flush()
-    db_session.refresh(existing_llm_provider)
-
     try:
         db_session.commit()
     except Exception as e:
         db_session.rollback()
         raise ValueError(f"Failed to save LLM provider: {str(e)}") from e
 
-    full_llm_provider = LLMProviderView.from_model(existing_llm_provider)
-    return full_llm_provider
+    # Expire everything so the re-read refreshes the model collection and the
+    # flows the Core statements changed behind the ORM, then load models and
+    # flows eagerly: the view would otherwise lazy-load flows per model.
+    provider_id = existing_llm_provider.id
+    db_session.expire_all()
+    saved_llm_provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    if saved_llm_provider is None:
+        raise ValueError(f"LLM provider {provider_id} vanished after commit")
+    return LLMProviderView.from_model(saved_llm_provider)
 
 
 def sync_model_configurations(
@@ -641,7 +649,7 @@ def sync_model_configurations(
 
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
-    new_count = 0
+    new_models: list[NewModelConfiguration] = []
     upgraded_flow_count = 0
     for model in models:
         existing = existing_by_name.get(model.name)
@@ -653,20 +661,19 @@ def sync_model_configurations(
             if model.supports_reasoning:
                 supported_flows.append(LLMModelFlowType.REASONING)
 
-            insert_new_model_configuration__no_commit(
-                db_session=db_session,
-                llm_provider_id=provider.id,
-                model_name=model.name,
-                supported_flows=supported_flows,
-                is_visible=False,
-                max_input_tokens=model.max_input_tokens,
-                display_name=model.display_name,
+            new_models.append(
+                NewModelConfiguration(
+                    name=model.name,
+                    supported_flows=supported_flows,
+                    is_visible=False,
+                    max_input_tokens=model.max_input_tokens,
+                    display_name=model.display_name,
+                )
             )
-            new_count += 1
             continue
 
         # Existing model: add newly-reported capability flags (additive only).
-        # TODO(ENG-4233): durable admin flow removals; avoid per-model lazy-load.
+        # TODO(ENG-4233): durable admin flow removals.
         existing_flows = set(existing.llm_model_flow_types)
         missing_flows: list[LLMModelFlowType] = []
         if model.supports_image_input and LLMModelFlowType.VISION not in existing_flows:
@@ -684,6 +691,9 @@ def sync_model_configurations(
                 flow_type=flow_type,
             )
             upgraded_flow_count += 1
+
+    insert_new_model_configurations__no_commit(db_session, provider.id, new_models)
+    new_count = len(new_models)
 
     if new_count > 0 or upgraded_flow_count > 0:
         db_session.commit()
@@ -993,7 +1003,13 @@ def fetch_existing_llm_provider_by_id(
         )
     )
     if include_model_configurations:
-        stmt = stmt.options(selectinload(LLMProviderModel.model_configurations))
+        # Flows ride along: consumers read llm_model_flow_types per model,
+        # which otherwise costs one query per model.
+        stmt = stmt.options(
+            selectinload(LLMProviderModel.model_configurations).selectinload(
+                ModelConfiguration.llm_model_flows
+            )
+        )
 
     return db_session.scalar(stmt)
 
@@ -1605,6 +1621,81 @@ def create_new_flow_mapping__no_commit(
     return flow
 
 
+class NewModelConfiguration(BaseModel):
+    """One model row to insert, with the flows it supports."""
+
+    name: str
+    supported_flows: list[LLMModelFlowType]
+    is_visible: bool
+    max_input_tokens: int | None
+    display_name: str | None
+    custom_display_name: str | None = None
+    reasoning_effort_max: ReasoningEffort | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
+    temperature_default: float | None = None
+
+
+# Rows per INSERT. Keeps bind-parameter counts modest while tens of
+# thousands of models still take tens of statements, not thousands.
+_MODEL_INSERT_CHUNK = 1000
+
+
+def insert_new_model_configurations__no_commit(
+    db_session: Session,
+    llm_provider_id: int,
+    models: list[NewModelConfiguration],
+) -> dict[str, int]:
+    """Bulk-insert model rows and their flow rows, a few statements per
+    thousand models instead of several per model. Returns name -> id for the
+    rows actually inserted. Names this provider already stores are skipped
+    and get no flow rows."""
+    inserted: dict[str, int] = {}
+    for start in range(0, len(models), _MODEL_INSERT_CHUNK):
+        chunk = models[start : start + _MODEL_INSERT_CHUNK]
+        rows = db_session.execute(
+            insert(ModelConfiguration)
+            .values(
+                [
+                    {
+                        "llm_provider_id": llm_provider_id,
+                        "name": model.name,
+                        "is_visible": model.is_visible,
+                        "max_input_tokens": model.max_input_tokens,
+                        "display_name": model.display_name,
+                        "custom_display_name": model.custom_display_name,
+                        "supports_image_input": LLMModelFlowType.VISION
+                        in model.supported_flows,
+                        "reasoning_effort_max": model.reasoning_effort_max,
+                        "reasoning_effort_default": model.reasoning_effort_default,
+                        "temperature_default": model.temperature_default,
+                    }
+                    for model in chunk
+                ]
+            )
+            .on_conflict_do_nothing()
+            .returning(ModelConfiguration.id, ModelConfiguration.name)
+        ).all()
+        inserted.update({name: model_id for model_id, name in rows})
+
+    flow_rows = [
+        {
+            "model_configuration_id": inserted[model.name],
+            "llm_model_flow_type": flow_type,
+            "is_default": False,
+        }
+        for model in models
+        if model.name in inserted
+        for flow_type in model.supported_flows
+    ]
+    for start in range(0, len(flow_rows), _MODEL_INSERT_CHUNK):
+        db_session.execute(
+            insert(LLMModelFlow)
+            .values(flow_rows[start : start + _MODEL_INSERT_CHUNK])
+            .on_conflict_do_nothing()
+        )
+    return inserted
+
+
 def insert_new_model_configuration__no_commit(
     db_session: Session,
     llm_provider_id: int,
@@ -1618,37 +1709,24 @@ def insert_new_model_configuration__no_commit(
     reasoning_effort_default: ReasoningEffort | None = None,
     temperature_default: float | None = None,
 ) -> int | None:
-    result = db_session.execute(
-        insert(ModelConfiguration)
-        .values(
-            llm_provider_id=llm_provider_id,
-            name=model_name,
-            is_visible=is_visible,
-            max_input_tokens=max_input_tokens,
-            display_name=display_name,
-            custom_display_name=custom_display_name,
-            supports_image_input=LLMModelFlowType.VISION in supported_flows,
-            reasoning_effort_max=reasoning_effort_max,
-            reasoning_effort_default=reasoning_effort_default,
-            temperature_default=temperature_default,
-        )
-        .on_conflict_do_nothing()
-        .returning(ModelConfiguration.id)
+    inserted = insert_new_model_configurations__no_commit(
+        db_session,
+        llm_provider_id,
+        [
+            NewModelConfiguration(
+                name=model_name,
+                supported_flows=supported_flows,
+                is_visible=is_visible,
+                max_input_tokens=max_input_tokens,
+                display_name=display_name,
+                custom_display_name=custom_display_name,
+                reasoning_effort_max=reasoning_effort_max,
+                reasoning_effort_default=reasoning_effort_default,
+                temperature_default=temperature_default,
+            )
+        ],
     )
-
-    model_config_id = result.scalar()
-
-    if not model_config_id:
-        return None
-
-    for flow_type in supported_flows:
-        create_new_flow_mapping__no_commit(
-            db_session=db_session,
-            model_configuration_id=model_config_id,
-            flow_type=flow_type,
-        )
-
-    return model_config_id
+    return inserted.get(model_name)
 
 
 def update_model_configuration__no_commit(
