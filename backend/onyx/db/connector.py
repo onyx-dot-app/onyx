@@ -1,6 +1,8 @@
+import hashlib
+import struct
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, exists, func, select
+from sqlalchemy import and_, exists, func, select, text
 from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
@@ -16,8 +18,13 @@ from onyx.db.models import (
 from onyx.server.documents.models import ConnectorBase, ObjectCreationIdResponse
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# tenant-hashed so tenants don't block each other and the id can't collide with
+# the other advisory locks in the codebase
+_CONNECTOR_NAME_LOCK_NAMESPACE = "onyx_connector_name_lock"
 
 
 def check_federated_connectors_exist(db_session: Session) -> bool:
@@ -91,7 +98,7 @@ def delete_connector_if_unpaired(db_session: Session, connector_id: int) -> bool
     ).scalar_one_or_none()
     if connector is None:
         return True
-    paired = db_session.scalar(
+    paired: bool | None = db_session.scalar(
         select(exists().where(ConnectorCredentialPair.connector_id == connector_id))
     )
     if paired:
@@ -128,16 +135,51 @@ def fetch_ingestion_connector_by_name(
     return connector
 
 
+def _connector_name_lock_id(name: str, source: DocumentSource) -> int:
+    digest = hashlib.sha256(
+        f"{_CONNECTOR_NAME_LOCK_NAMESPACE}:{get_current_tenant_id()}:{source.value}:{name}".encode()
+    ).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
+
+
+def _lock_connector_name(
+    db_session: Session, name: str, source: DocumentSource
+) -> None:
+    """Serialize creates of one name and source until the caller's commit. No
+    constraint enforces the name, so two concurrent creates would otherwise both
+    pass the check, or both replace the same orphan."""
+    # Bounded wait: a wedged holder should fail fast, not hang the request.
+    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": _connector_name_lock_id(name, source)},
+    )
+    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
+
+
 def create_connector(
     db_session: Session,
     connector_data: ConnectorBase,
 ) -> ObjectCreationIdResponse:
-    if connector_by_name_source_exists(
-        connector_data.name, connector_data.source, db_session
-    ):
-        raise ValueError(
-            "Connector by this name already exists, duplicate naming not allowed."
+    _lock_connector_name(db_session, connector_data.name, connector_data.source)
+    same_name_ids: list[int] = list(
+        db_session.scalars(
+            select(Connector.id).where(
+                Connector.name == connector_data.name,
+                Connector.source == connector_data.source,
+            )
         )
+    )
+    for existing_id in same_name_ids:
+        # A connector nobody paired is what a create whose credential link failed
+        # leaves behind. It holds no documents or access, so the retry takes the
+        # name instead of being refused.
+        if not delete_connector_if_unpaired(db_session, existing_id):
+            db_session.rollback()
+            raise ValueError(
+                "Connector by this name already exists, duplicate naming not allowed."
+            )
 
     connector = Connector(
         name=connector_data.name,
