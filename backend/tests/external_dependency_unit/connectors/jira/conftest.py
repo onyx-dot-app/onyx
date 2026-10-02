@@ -22,7 +22,6 @@ def jira_connector_config() -> dict[str, Any]:
     return {
         "jira_base_url": "https://danswerai.atlassian.net",
         "project_key": "",  # Empty to sync all projects
-        "scoped_token": False,
     }
 
 

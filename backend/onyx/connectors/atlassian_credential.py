@@ -9,12 +9,18 @@ from onyx.connectors.credential_family_base import (
     FamilyCredential,
     FamilyCredentialCodec,
 )
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    credential_uses_scoped_token,
+)
 
 _CONFLUENCE_USERNAME_KEY = "confluence_username"
 _CONFLUENCE_ACCESS_TOKEN_KEY = "confluence_access_token"
 _CONFLUENCE_REFRESH_TOKEN_KEY = "confluence_refresh_token"
 _JIRA_USER_EMAIL_KEY = "jira_user_email"
 _JIRA_API_TOKEN_KEY = "jira_api_token"
+# Shared by both sources: whether the API token has scopes, which routes it
+# through Atlassian's API gateway.
+SCOPED_TOKEN_KEY = "scoped_token"
 
 
 class AtlassianOAuth(BaseModel):
@@ -41,6 +47,8 @@ class AtlassianCredential(FamilyCredential):
     email: str | None = None
     # An API token, a personal access token, or the OAuth access token.
     token: str
+    # The API token has scopes, so calls go through Atlassian's API gateway.
+    scoped_token: bool = False
     oauth: AtlassianOAuth | None = None
 
 
@@ -53,6 +61,7 @@ class ConfluenceCredentialCodec(FamilyCredentialCodec[AtlassianCredential]):
         return AtlassianCredential(
             email=source_json.get(_CONFLUENCE_USERNAME_KEY) or None,
             token=source_json[_CONFLUENCE_ACCESS_TOKEN_KEY],
+            scoped_token=credential_uses_scoped_token(source_json),
             oauth=(
                 AtlassianOAuth.model_validate(
                     {**source_json, "refresh_token": refresh_token}
@@ -68,6 +77,9 @@ class ConfluenceCredentialCodec(FamilyCredentialCodec[AtlassianCredential]):
             _CONFLUENCE_USERNAME_KEY: family_credential.email,
             _CONFLUENCE_ACCESS_TOKEN_KEY: family_credential.token,
         }
+        # Only a scoped token carries the key; absent reads as unscoped.
+        if family_credential.scoped_token:
+            source_json[SCOPED_TOKEN_KEY] = True
         if family_credential.oauth is None:
             return source_json
         oauth = family_credential.oauth.model_dump(exclude_none=True)
@@ -83,12 +95,16 @@ class JiraCredentialCodec(FamilyCredentialCodec[AtlassianCredential]):
         return AtlassianCredential(
             email=source_json.get(_JIRA_USER_EMAIL_KEY) or None,
             token=source_json[_JIRA_API_TOKEN_KEY],
+            scoped_token=credential_uses_scoped_token(source_json),
         )
 
     def from_family(self, family_credential: AtlassianCredential) -> dict[str, Any]:
         # The Jira client picks Cloud vs. Data Center by whether the email key
         # is present, so leave it out when there is no email.
         source_json: dict[str, Any] = {_JIRA_API_TOKEN_KEY: family_credential.token}
+        # Only a scoped token carries the key; absent reads as unscoped.
+        if family_credential.scoped_token:
+            source_json[SCOPED_TOKEN_KEY] = True
         if family_credential.email:
             source_json[_JIRA_USER_EMAIL_KEY] = family_credential.email
         return source_json

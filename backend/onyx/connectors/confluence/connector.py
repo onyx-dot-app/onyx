@@ -184,7 +184,6 @@ class ConfluenceConnector(
         # pages.
         labels_to_skip: list[str] = CONFLUENCE_CONNECTOR_LABELS_TO_SKIP,
         timezone_offset: float = CONFLUENCE_TIMEZONE_OFFSET,
-        scoped_token: bool = False,
         # default True: configs stored before this option existed must keep
         # indexing attachments
         include_attachments: bool = True,
@@ -198,7 +197,8 @@ class ConfluenceConnector(
         self.batch_size = batch_size
         self.labels_to_skip = labels_to_skip
         self.timezone_offset = timezone_offset
-        self.scoped_token = scoped_token
+        # Read from the credential in set_credentials_provider.
+        self.scoped_token = False
         self.include_attachments = include_attachments
         self._confluence_client: OnyxConfluence | None = None
         self._low_timeout_confluence_client: OnyxConfluence | None = None
@@ -431,9 +431,8 @@ class ConfluenceConnector(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
         self.credentials_provider = credentials_provider
-        # The credential now carries the flag; older connectors set it in
-        # their own config.
-        self.scoped_token = self.scoped_token or credential_uses_scoped_token(
+        # Whether the API token has scopes is a property of the credential.
+        self.scoped_token = credential_uses_scoped_token(
             credentials_provider.get_credentials()
         )
 

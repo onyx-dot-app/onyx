@@ -159,10 +159,7 @@ def jira_group_sync(
     """
     jira_base_url = cc_pair.connector.connector_specific_config.get("jira_base_url", "")
     credentials = credential_json(cc_pair)
-    # The credential carries the flag; older connectors set it in their config.
-    scoped_token = cc_pair.connector.connector_specific_config.get(
-        "scoped_token", False
-    ) or credential_uses_scoped_token(credentials)
+    scoped_token = credential_uses_scoped_token(credentials)
 
     if not jira_base_url:
         raise ValueError("No jira_base_url found in connector config")
