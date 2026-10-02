@@ -2,6 +2,7 @@ import copy
 import re
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Any
 from urllib.parse import quote
 
@@ -79,7 +80,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 # Potential Improvements
 # 1. Segment into Sections for more accurate linking, can split by headers but make sure no text/ordering is lost
-_COMMENT_EXPANSION_FIELDS = ["body.storage.value"]
+COMMENT_EXPANSION_FIELDS = ["body.storage.value"]
 _PAGE_EXPANSION_FIELDS = [
     "body.storage.value",
     "version",
@@ -88,7 +89,7 @@ _PAGE_EXPANSION_FIELDS = [
     "history.lastUpdated",
     "ancestors",  # For hierarchy node tracking
 ]
-_ATTACHMENT_EXPANSION_FIELDS = [
+ATTACHMENT_EXPANSION_FIELDS = [
     "version",
     "space",
     "metadata.labels",
@@ -119,7 +120,7 @@ _PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
 # Pruning needs `space` + `ancestors` to populate hierarchy nodes and
 # parent ids; skipping them would flatten the graph. No restrictions
 # expand here, so CONFCLOUD-77618 can't fire.
-_PRUNING_EXPANSION_FIELDS = [
+PRUNING_EXPANSION_FIELDS = [
     "space",
     "ancestors",
     "history",  # for history.createdDate (doc_created_at backfill)
@@ -152,6 +153,97 @@ def _get_page_id(page: dict[str, Any], allow_missing: bool = False) -> str:
 def _http_status(e: HTTPError) -> int | None:
     # NOTE: requests.Response is falsy for error statuses, so compare to None.
     return e.response.status_code if e.response is not None else None
+
+
+class ConfluenceIndexingMode(str, Enum):
+    CQL = "cql"
+    PAGE = "page"
+    SPACE = "space"
+    EVERYTHING = "everything"
+
+
+def get_indexing_mode(
+    *, space: str, page_id: str, cql_query: str | None
+) -> ConfluenceIndexingMode:
+    """The scope the connector indexes. The config can hold values for several
+    modes (the form sends every tab's fields); the first set one wins, in this
+    order: CQL query, page id, space, everything. Blank values are not set."""
+    if cql_query and cql_query.strip():
+        return ConfluenceIndexingMode.CQL
+    if page_id.strip():
+        return ConfluenceIndexingMode.PAGE
+    if space.strip():
+        return ConfluenceIndexingMode.SPACE
+    return ConfluenceIndexingMode.EVERYTHING
+
+
+def build_base_page_cql(
+    *, space: str, page_id: str, index_recursively: bool, cql_query: str | None
+) -> str:
+    """The page CQL of the indexing scope, without label or time filters."""
+    match get_indexing_mode(space=space, page_id=page_id, cql_query=cql_query):
+        case ConfluenceIndexingMode.CQL:
+            return (cql_query or "").strip()
+        case ConfluenceIndexingMode.PAGE:
+            page_id = page_id.strip()
+            if index_recursively:
+                return f"type=page and (ancestor='{page_id}' or id='{page_id}')"
+            return f"type=page and id='{page_id}'"
+        case ConfluenceIndexingMode.SPACE:
+            return f"type=page and space='{quote(space.strip())}'"
+        case ConfluenceIndexingMode.EVERYTHING:
+            return "type=page"
+
+
+def build_label_filter(labels_to_skip: list[str]) -> str:
+    """The CQL clause that skips pages with one of these labels, or ""."""
+    if not labels_to_skip:
+        return ""
+    comma_separated_labels = ",".join(
+        f"'{quote(label)}'" for label in set(labels_to_skip)
+    )
+    return f" and label not in ({comma_separated_labels})"
+
+
+def _time_filter(
+    start: SecondsSinceUnixEpoch | None,
+    end: SecondsSinceUnixEpoch | None,
+    tz: timezone,
+) -> str:
+    time_filter = ""
+    if start:
+        formatted_start_time = datetime.fromtimestamp(start, tz=tz).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        time_filter += f" and lastmodified >= '{formatted_start_time}'"
+    if end:
+        formatted_end_time = datetime.fromtimestamp(end, tz=tz).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        time_filter += f" and lastmodified <= '{formatted_end_time}'"
+    return time_filter
+
+
+def build_page_cql(base_cql: str, label_filter: str, time_filter: str = "") -> str:
+    """The page query of an indexing run: the scope, label and time filters."""
+    return f"{base_cql}{label_filter}{time_filter} order by lastmodified asc"
+
+
+def build_attachment_cql(page_id: str, label_filter: str, time_filter: str = "") -> str:
+    return (
+        f"type=attachment and container='{page_id}'{label_filter}{time_filter}"
+        " order by lastmodified asc"
+    )
+
+
+def build_comment_cql(page_id: str, label_filter: str) -> str:
+    return f"type=comment and container='{page_id}'{label_filter}"
+
+
+def build_page_retrieval_url(page_query: str, limit: int) -> str:
+    """The content-search URL the indexing run reads pages from."""
+    cql_url = build_cql_url(page_query, expand=",".join(_PAGE_EXPANSION_FIELDS))
+    return update_param_in_path(cql_url, "limit", str(limit))
 
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
@@ -213,33 +305,13 @@ class ConfluenceConnector(
 
         # Remove trailing slash from wiki_base if present
         self.wiki_base = wiki_base.rstrip("/")
-        """
-        If nothing is provided, we default to fetching all pages
-        Only one or none of the following options should be specified so
-            the order shouldn't matter
-        However, we use elif to ensure that only of the following is enforced
-        """
-        base_cql_page_query = "type=page"
-        if cql_query:
-            base_cql_page_query = cql_query
-        elif page_id:
-            if index_recursively:
-                base_cql_page_query += f" and (ancestor='{page_id}' or id='{page_id}')"
-            else:
-                base_cql_page_query += f" and id='{page_id}'"
-        elif space:
-            uri_safe_space = quote(space)
-            base_cql_page_query += f" and space='{uri_safe_space}'"
-
-        self.base_cql_page_query = base_cql_page_query
-
-        self.cql_label_filter = ""
-        if labels_to_skip:
-            labels_to_skip = list(set(labels_to_skip))
-            comma_separated_labels = ",".join(
-                f"'{quote(label)}'" for label in labels_to_skip
-            )
-            self.cql_label_filter = f" and label not in ({comma_separated_labels})"
+        self.base_cql_page_query = build_base_page_cql(
+            space=space,
+            page_id=page_id,
+            index_recursively=index_recursively,
+            cql_query=cql_query,
+        )
+        self.cql_label_filter = build_label_filter(labels_to_skip)
 
         self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
         self.credentials_provider: CredentialsProviderInterface | None = None
@@ -441,21 +513,11 @@ class ConfluenceConnector(
         for more information. This is JUST the CQL, not the full URL used to hit the API.
         Use _build_page_retrieval_url to get the full URL.
         """
-        page_query = self.base_cql_page_query + self.cql_label_filter
-        # Add time filters
-        if start:
-            formatted_start_time = datetime.fromtimestamp(
-                start, tz=self.timezone
-            ).strftime("%Y-%m-%d %H:%M")
-            page_query += f" and lastmodified >= '{formatted_start_time}'"
-        if end:
-            formatted_end_time = datetime.fromtimestamp(end, tz=self.timezone).strftime(
-                "%Y-%m-%d %H:%M"
-            )
-            page_query += f" and lastmodified <= '{formatted_end_time}'"
-
-        page_query += " order by lastmodified asc"
-        return page_query
+        return build_page_cql(
+            self.base_cql_page_query,
+            self.cql_label_filter,
+            _time_filter(start, end, self.timezone),
+        )
 
     def _construct_attachment_query(
         self,
@@ -463,27 +525,17 @@ class ConfluenceConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> str:
-        attachment_query = f"type=attachment and container='{confluence_page_id}'"
-        attachment_query += self.cql_label_filter
-        # Add time filters to avoid reprocessing unchanged attachments during refresh
-        if start:
-            formatted_start_time = datetime.fromtimestamp(
-                start, tz=self.timezone
-            ).strftime("%Y-%m-%d %H:%M")
-            attachment_query += f" and lastmodified >= '{formatted_start_time}'"
-        if end:
-            formatted_end_time = datetime.fromtimestamp(end, tz=self.timezone).strftime(
-                "%Y-%m-%d %H:%M"
-            )
-            attachment_query += f" and lastmodified <= '{formatted_end_time}'"
-        attachment_query += " order by lastmodified asc"
-        return attachment_query
+        # Time filters avoid reprocessing unchanged attachments during refresh.
+        return build_attachment_cql(
+            confluence_page_id,
+            self.cql_label_filter,
+            _time_filter(start, end, self.timezone),
+        )
 
     def _get_comment_string_for_page_id(self, page_id: str) -> str:
         comment_string = ""
-        comment_cql = f"type=comment and container='{page_id}'"
-        comment_cql += self.cql_label_filter
-        expand = ",".join(_COMMENT_EXPANSION_FIELDS)
+        comment_cql = build_comment_cql(page_id, self.cql_label_filter)
+        expand = ",".join(COMMENT_EXPANSION_FIELDS)
 
         for comment in self.source_operations.search_comments(
             cql=comment_cql,
@@ -619,7 +671,7 @@ class ConfluenceConnector(
             for attachment in self.source_operations.search_attachments(
                 variant=ConfluenceSearchVariant.CONTENT,
                 cql=attachment_query,
-                expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
+                expand=",".join(ATTACHMENT_EXPANSION_FIELDS),
             ):
                 media_type: str = attachment.get("metadata", {}).get("mediaType", "")
 
@@ -904,9 +956,9 @@ class ConfluenceConnector(
         This can be used as input to the confluence client's _paginate_url
         or paginated_page_retrieval methods.
         """
-        page_query = self._construct_page_cql_query(start, end)
-        cql_url = build_cql_url(page_query, expand=",".join(_PAGE_EXPANSION_FIELDS))
-        return update_param_in_path(cql_url, "limit", str(limit))
+        return build_page_retrieval_url(
+            self._construct_page_cql_query(start, end), limit
+        )
 
     @override
     def load_from_checkpoint(
@@ -1164,7 +1216,7 @@ class ConfluenceConnector(
             else ConfluenceSearchVariant.SLIM
         )
         if not include_permissions:
-            restrictions_expand = ",".join(_PRUNING_EXPANSION_FIELDS)
+            restrictions_expand = ",".join(PRUNING_EXPANSION_FIELDS)
         elif expand_per_page:
             restrictions_expand = ",".join(_PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS)
         else:

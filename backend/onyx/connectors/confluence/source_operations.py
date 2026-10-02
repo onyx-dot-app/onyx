@@ -68,7 +68,16 @@ logger = setup_logger()
 
 _T = TypeVar("_T")
 
-_UNTESTED = "Capability checks land in #15455."
+# Present in the credential of a Confluence Cloud OAuth connection.
+OAUTH_REFRESH_TOKEN_KEY = "confluence_refresh_token"
+
+_EE_UNTESTED = "The EE permission-sync and group-sync checks land in #15456."
+# untested exempts every unit of an operation. These operations also serve
+# DOC_PERMISSION_SYNC, which has no named checks until #15456. Their
+# INDEXING units are asserted by test_confluence_capability_checks.py.
+_SHARED_UNTESTED = (
+    "Serves DOC_PERMISSION_SYNC too, whose EE checks land in #15456. {indexing}"
+)
 
 # Client settings for the connection probe and for all later calls.
 _PROBE_KWARGS: dict[str, Any] = {"max_backoff_retries": 6, "max_backoff_seconds": 10}
@@ -94,7 +103,7 @@ _CONFCLOUD_77618_404_BODY_SIGNATURES = (
     "Cannot find content. Outdated version/old_draft/trashed",
 )
 
-_USER_NOT_FOUND = "Unknown Confluence User"
+UNKNOWN_USER_DISPLAY_NAME = "Unknown Confluence User"
 # Keyed by (instance base url, user id): one worker process can serve several
 # Confluence instances, and DC userkeys are unique only per instance.
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[tuple[str, str], str | None] = {}
@@ -107,6 +116,7 @@ _MINIMUM_PAGINATION_LIMIT = 5
 
 _SERVER_ERROR_CODES = {500, 502, 503, 504}
 _FORBIDDEN_STATUS = 403
+_RATE_LIMITED_STATUS = 429
 
 _CONFLUENCE_SPACES_API_V1 = "rest/api/space"
 _CONFLUENCE_SPACES_API_V2 = "wiki/api/v2/spaces"
@@ -169,6 +179,10 @@ class ConfluenceRestSpacePermissionsNotAvailableError(Exception):
     """
 
 
+class ConfluenceNoVisibleSpacesError(RuntimeError):
+    """The connection probe signed in but found no visible space."""
+
+
 def _is_confcloud_77618_response(response: requests.Response) -> bool:
     """Body-signature match for the CONFCLOUD-77618 / CONFCLOUD-76424 404
     so unrelated 404s still propagate."""
@@ -206,7 +220,6 @@ class _OnyxConfluence:
         # one tenant_info lookup.
         scoped_api_url: str | None = None,
     ) -> None:
-        self.base_url = url
         if scoped_token:
             url = scoped_api_url or scoped_url(url, "confluence")
 
@@ -277,7 +290,7 @@ class _OnyxConfluence:
         else:
             credential_json = self._credentials_provider.get_credentials()
 
-        if "confluence_refresh_token" not in credential_json:
+        if OAUTH_REFRESH_TOKEN_KEY not in credential_json:
             # static credentials ... cache them permanently and return
             self.static_credentials = credential_json
             return credential_json, False
@@ -312,7 +325,7 @@ class _OnyxConfluence:
                 OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
                 OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
                 credential_json["cloud_id"],
-                credential_json["confluence_refresh_token"],
+                credential_json[OAUTH_REFRESH_TOKEN_KEY],
             ),
         }
 
@@ -332,7 +345,7 @@ class _OnyxConfluence:
     @staticmethod
     def _make_oauth2_dict(credentials: dict[str, Any]) -> dict[str, Any]:
         oauth2_dict: dict[str, Any] = {}
-        if "confluence_refresh_token" in credentials:
+        if OAUTH_REFRESH_TOKEN_KEY in credentials:
             oauth2_dict["client_id"] = OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
             oauth2_dict["token"] = {}
             oauth2_dict["token"]["access_token"] = credentials[
@@ -497,7 +510,7 @@ class _OnyxConfluence:
         first_space = next(spaces_iter, None)
 
         if not first_space:
-            raise RuntimeError(
+            raise ConfluenceNoVisibleSpacesError(
                 f"No spaces found at {self._url}! Check your credentials and wiki_base and make sure is_cloud is set correctly."
             )
 
@@ -528,7 +541,7 @@ class _OnyxConfluence:
         confluence = None
 
         # probe connection with direct client, no retries
-        if "confluence_refresh_token" in credentials:
+        if OAUTH_REFRESH_TOKEN_KEY in credentials:
             logger.info("Connecting to Confluence Cloud with OAuth Access Token.")
 
             oauth2_dict: dict[str, Any] = _OnyxConfluence._make_oauth2_dict(credentials)
@@ -1321,7 +1334,7 @@ def _parse_dc_version(version_str: str) -> tuple[int, int] | None:
 def _get_user(confluence_client: _OnyxConfluence, user_id: str) -> str:
     """Returns the display name for an account id (Cloud) or userkey (DC).
 
-    Returns ``_USER_NOT_FOUND`` if the user is deactivated or not found.
+    Returns ``UNKNOWN_USER_DISPLAY_NAME`` if the user is deactivated or not found.
     """
     cache_key = (confluence_client._url, user_id)
     if _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) is None:
@@ -1340,7 +1353,38 @@ def _get_user(confluence_client: _OnyxConfluence, user_id: str) -> str:
 
         _USER_ID_TO_DISPLAY_NAME_CACHE[cache_key] = found_display_name
 
-    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) or _USER_NOT_FOUND
+    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) or UNKNOWN_USER_DISPLAY_NAME
+
+
+def _lookup_user_display_name(
+    confluence_client: _OnyxConfluence, user_id: str
+) -> str | None:
+    """Uncached: tries the userkey (DC) and then the account-id (Cloud)
+    endpoint. Returns None when neither has a readable user with this id.
+    Raises on rate limits, server errors and connection errors."""
+    for lookup in (
+        confluence_client.get_user_details_by_userkey,
+        confluence_client.get_user_details_by_accountid,
+    ):
+        try:
+            details = lookup(user_id)
+        except ApiError:
+            # The SDK raises these for 403 and 404.
+            continue
+        except HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            if status is None or not _is_rejected_lookup_status(status):
+                raise
+            continue
+        if name := details.get("displayName"):
+            return name
+    return None
+
+
+def _is_rejected_lookup_status(status: int) -> bool:
+    """A 4xx other than 429: the endpoint rejects this id, so retrying cannot
+    help."""
+    return 400 <= status < 500 and status != _RATE_LIMITED_STATUS
 
 
 def _http_status(e: HTTPError) -> int | str:
@@ -1530,7 +1574,6 @@ class ConfluenceSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         variants=tuple(ConfluenceProbeVariant),
-        untested=_UNTESTED,
     )
     def probe_site(self, *, variant: ConfluenceProbeVariant) -> None:
         """Proves the credential works for the site. Scoped tokens resolve the
@@ -1554,7 +1597,9 @@ class ConfluenceSourceOperations(SourceOperations):
             CredentialCapability.DOC_PERMISSION_SYNC,
         },
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=_SHARED_UNTESTED.format(
+            indexing="confluence_spaces_visible exercises the INDEXING unit."
+        ),
     )
     def list_spaces(
         self,
@@ -1572,7 +1617,6 @@ class ConfluenceSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_UNTESTED,
     )
     def get_space(self, *, space_key: str, fast: bool = False) -> dict[str, Any]:
         """Raises ``ConfluenceSpaceNotFoundError`` if the space does not exist
@@ -1596,7 +1640,12 @@ class ConfluenceSourceOperations(SourceOperations):
         },
         consumes=OperationConsumes.BOTH,
         variants=_SEARCH_VARIANTS,
-        untested=_UNTESTED,
+        untested=_SHARED_UNTESTED.format(
+            indexing=(
+                "The indexing checks exercise content and slim. with_restrictions "
+                "serves permission sync (and reindex with permissions)."
+            )
+        ),
     )
     def search_pages(
         self,
@@ -1620,17 +1669,17 @@ class ConfluenceSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_UNTESTED,
     )
     def search_pages_from_url(
         self,
         *,
         url: str,
         limit: int,
-        next_page_callback: Callable[[str], None],
+        next_page_callback: Callable[[str], None] | None = None,
     ) -> Iterator[dict[str, Any]]:
         """Yields pages from a content-search URL (a start URL or a checkpoint's
-        ``_links.next``). Calls ``next_page_callback`` with each next URL."""
+        ``_links.next``). Calls ``next_page_callback``, if given, with each next
+        URL."""
         return self._client().paginated_page_retrieval(
             cql_url=url, limit=limit, next_page_callback=next_page_callback
         )
@@ -1642,7 +1691,13 @@ class ConfluenceSourceOperations(SourceOperations):
         },
         consumes=OperationConsumes.BOTH,
         variants=_SEARCH_VARIANTS,
-        untested=_UNTESTED,
+        untested=_SHARED_UNTESTED.format(
+            indexing=(
+                "confluence_attachments_read exercises content. slim (pruning) "
+                "reads the same listing with less expanded; with_restrictions "
+                "serves permission sync."
+            )
+        ),
     )
     def search_attachments(
         self,
@@ -1665,16 +1720,23 @@ class ConfluenceSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_UNTESTED,
     )
-    def search_comments(self, *, cql: str, expand: str) -> Iterator[dict[str, Any]]:
+    def search_comments(
+        self, *, cql: str, expand: str, limit: int | None = None
+    ) -> Iterator[dict[str, Any]]:
         """Yields the comments a CQL query matches."""
-        return self._client().paginated_cql_retrieval(cql=cql, expand=expand)
+        return self._client().paginated_cql_retrieval(
+            cql=cql, expand=expand, limit=limit
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=(
+            "Runs only for pages with an include macro, so a check has no title "
+            "to look up. It is the content search that confluence_content_read "
+            "proves."
+        ),
     )
     def find_page_by_title(self, *, title: str) -> dict[str, Any] | None:
         """Returns the page with this title and its storage body, if any.
@@ -1691,7 +1753,12 @@ class ConfluenceSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        # The coverage spy returns attachments with no size, and the check
+        # downloads only an attachment of a known size.
+        untested=(
+            "confluence_attachments_read downloads only an attachment of a "
+            "known size; test_confluence_capability_checks.py asserts the call."
+        ),
     )
     def download_attachment(
         self, *, attachment: dict[str, Any], parent_content_id: str | None
@@ -1721,18 +1788,33 @@ class ConfluenceSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=(
+            "The cached form of lookup_user_display_name, which "
+            "confluence_user_names probes on the same endpoints."
+        ),
     )
     def get_user_display_name(self, *, user_id: str) -> str:
         """Returns the display name of a userkey (DC) or account id (Cloud), or
         "Unknown Confluence User". No variants: the lookup tries the userkey
-        endpoint and then the account-id endpoint for every id."""
+        endpoint and then the account-id endpoint for every id. Cached per
+        Confluence site; swallows lookup errors."""
         return _get_user(self._client(), user_id)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def lookup_user_display_name(self, *, user_id: str) -> str | None:
+        """Uncached form of ``get_user_display_name`` for checks. Returns None
+        when Confluence has no readable user with this id. Raises on rate
+        limits, server errors and connection errors, so a check can tell them
+        from a missing user."""
+        return _lookup_user_display_name(self._client(), user_id)
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=_EE_UNTESTED,
     )
     def get_content_read_restrictions(
         self, *, content_id: str
@@ -1746,7 +1828,7 @@ class ConfluenceSourceOperations(SourceOperations):
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
         variants=tuple(ConfluenceSpacePermissionsVariant),
-        untested=_UNTESTED,
+        untested=_EE_UNTESTED,
     )
     def get_space_permissions(
         self,
@@ -1788,7 +1870,7 @@ class ConfluenceSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=_EE_UNTESTED,
     )
     def get_anonymous_space_permissions(
         self, *, space_key: str
@@ -1802,7 +1884,7 @@ class ConfluenceSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=_EE_UNTESTED,
     )
     def get_server_version(self, *, fast: bool = False) -> tuple[int, int] | None:
         """Returns the DC (major, minor) version. Returns None for Cloud or when
@@ -1816,7 +1898,7 @@ class ConfluenceSourceOperations(SourceOperations):
         },
         consumes=OperationConsumes.CREDENTIAL,
         variants=tuple(ConfluenceUserEmailVariant),
-        untested=_UNTESTED,
+        untested=_EE_UNTESTED,
     )
     def get_user_email(
         self, *, variant: ConfluenceUserEmailVariant, user: str
@@ -1834,7 +1916,7 @@ class ConfluenceSourceOperations(SourceOperations):
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
         variants=tuple(ConfluenceUserListVariant),
-        untested=_UNTESTED,
+        untested=_EE_UNTESTED,
     )
     def list_users(
         self, *, variant: ConfluenceUserListVariant
@@ -1853,7 +1935,7 @@ class ConfluenceSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=_EE_UNTESTED,
     )
     def list_user_groups(self, *, user_id: str) -> Iterator[dict[str, Any]]:
         """Yields the groups of a user (``rest/api/user/memberof``). ``user_id``
