@@ -11,6 +11,7 @@ from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
+    MCPServerConnection,
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.oauth import (
@@ -73,7 +74,7 @@ class MCPTool(Tool[None]):
         self,
         tool_id: int,
         emitter: Emitter,
-        mcp_server: MCPServer,  # TODO: these should be basemodels instead of db objects
+        mcp_server: MCPServer,
         tool_name: str,
         tool_description: str,
         tool_definition: dict[str, Any],
@@ -87,13 +88,15 @@ class MCPTool(Tool[None]):
         super().__init__(emitter=emitter)
 
         self._id = tool_id
-        self.mcp_server = mcp_server
-        self.connection_config = connection_config
-        self.user_email = user_email
+        self.mcp_server = MCPServerConnection.model_validate(mcp_server)
         self._user_id = user_id
-        self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
-        self._resolved_credentials = resolved_credentials
+        self._resolved_credentials = resolved_credentials or ResolvedMCPCredentials(
+            connection_config=connection_config,
+            user_oauth_token=user_oauth_token,
+            auth_type=self.mcp_server.auth_type,
+            user_email=user_email,
+        )
 
         self._mcp_tool_name = tool_name
         self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
@@ -165,12 +168,7 @@ class MCPTool(Tool[None]):
                     self._name,
                     denylisted,
                 )
-            credentials = self._resolved_credentials or ResolvedMCPCredentials(
-                connection_config=self.connection_config,
-                user_oauth_token=self._user_oauth_token,
-                auth_type=self.mcp_server.auth_type,
-                user_email=self.user_email,
-            )
+            credentials = self._resolved_credentials
             headers = merge_mcp_headers(
                 request_headers,
                 credentials.build_headers(),
@@ -222,7 +220,7 @@ class MCPTool(Tool[None]):
             auth: OAuthClientProvider | None = None
             if (
                 self.mcp_server.auth_type == MCPAuthenticationType.OAUTH
-                and self.connection_config is not None
+                and credentials.connection_config_id is not None
                 and self._user_id
             ):
                 if self.mcp_server.transport == MCPTransport.SSE:
@@ -231,7 +229,7 @@ class MCPTool(Tool[None]):
                     try:
                         refreshed_header = refresh_mcp_oauth_token_if_expired(
                             self.mcp_server,
-                            self.connection_config.id,
+                            credentials.connection_config_id,
                         )
                         if refreshed_header:
                             headers["Authorization"] = refreshed_header
@@ -243,7 +241,7 @@ class MCPTool(Tool[None]):
                 else:
                     auth = make_oauth_provider(
                         self.mcp_server,
-                        self.connection_config.id,
+                        credentials.connection_config_id,
                         None,
                     )
 
