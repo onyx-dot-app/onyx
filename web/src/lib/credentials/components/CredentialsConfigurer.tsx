@@ -5,7 +5,6 @@ import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 // SvgExpand, SvgFold and SvgListTree return with the header buttons below.
 import { SvgPlusCircle } from "@opal/icons";
-import { CardLoader } from "@opal/loaders";
 import type { Credential } from "@/lib/credentials/types";
 import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -44,7 +43,6 @@ export function CredentialsConfigurer({
     displayName,
     credentials,
     oauthDetails,
-    isLoading,
     methods,
     canAuthorize,
     openMethod,
@@ -179,13 +177,10 @@ export function CredentialsConfigurer({
         // }
       />
 
-      {/* The header always shows. Below it: a card loader in the shape of
-      the accounts card while the step loads, then the accounts and create
-      card. A failed load never reaches here: the page shows the error in
-      place of the whole form. */}
-      {isLoading || !credentials ? (
-        <CardLoader color="transparent" />
-      ) : (
+      {/* The page mounts this step only once the credentials have loaded,
+      and shows its own loader and error until then; the guard only keeps
+      the types honest. */}
+      {!credentials ? null : (
         <Section gap={4} alignItems="stretch" width="full">
           <Card border="solid" rounding={4} padding={6}>
             <Section gap={4} alignItems="start" width="full">
