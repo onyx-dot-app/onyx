@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Callable, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, JsonValue, model_validator
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
@@ -61,7 +61,7 @@ class CustomToolUserFileSnapshot(BaseModel):
 class CustomToolCallSummary(BaseModel):
     tool_name: str
     response_type: str  # e.g., 'json', 'image', 'csv', 'graph'
-    tool_result: Any  # The response data
+    tool_result: CustomToolUserFileSnapshot | JsonValue
     error: CustomToolErrorInfo | None = None
 
 

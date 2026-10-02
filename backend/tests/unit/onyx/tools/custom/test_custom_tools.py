@@ -488,5 +488,51 @@ class TestSanitizeToolName(unittest.TestCase):
             openapi_to_method_specs(schema)
 
 
+@pytest.mark.parametrize(
+    ("content_type", "response_type"),
+    [("text/csv", "csv"), ("image/png", "image")],
+)
+def test_custom_tool_file_response_is_serialized_for_llm(
+    content_type: str, response_type: str
+) -> None:
+    tools = build_custom_tools_from_openapi_schema_and_headers(
+        tool_id=1,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Files", "version": "1.0.0"},
+            "servers": [{"url": "https://example.com"}],
+            "paths": {
+                "/file": {
+                    "get": {
+                        "operationId": "getFile",
+                        "summary": "Get a file",
+                        "responses": {},
+                    }
+                }
+            },
+        },
+    )
+    mock_response = unittest.mock.MagicMock()
+    mock_response.status_code = 200
+    mock_response.headers = {"Content-Type": content_type}
+    mock_response.content = b"file-bytes"
+    with (
+        patch(
+            "onyx.tools.tool_implementations.custom.custom_tool.requests.request",
+            return_value=mock_response,
+        ),
+        patch.object(
+            type(tools[0]),
+            "_save_and_get_file_references",
+            return_value=["file-1"],
+        ),
+    ):
+        result = tools[0].run(placement=Placement(turn_index=0, tab_index=0))
+
+    assert isinstance(result.rich_response, CustomToolCallSummary)
+    assert result.rich_response.response_type == response_type
+    assert result.llm_facing_response == '{"file_ids":["file-1"]}'
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
