@@ -168,10 +168,7 @@ def confluence_group_sync(
         tenant_id, cc_pair.connector.source, cc_pair.credential_id
     )
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
-    # The credential carries the flag; older connectors set it in their config.
-    scoped_token = cc_pair.connector.connector_specific_config.get(
-        "scoped_token", False
-    ) or credential_uses_scoped_token(provider.get_credentials())
+    scoped_token = credential_uses_scoped_token(provider.get_credentials())
     wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
     url = wiki_base.rstrip("/")
 

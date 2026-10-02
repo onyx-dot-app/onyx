@@ -24,7 +24,6 @@ def _make_connector(
         jira_base_url="https://danswerai.atlassian.net",
         project_key="AS",
         comment_email_blacklist=[],
-        scoped_token=scoped_token,
     )
     connector.load_credentials(
         {
@@ -34,6 +33,8 @@ def _make_connector(
                 if scoped_token
                 else test_secrets[TestSecret.JIRA_API_TOKEN]
             ),
+            # Whether the token has scopes lives on the credential.
+            "scoped_token": scoped_token,
         }
     )
     return connector

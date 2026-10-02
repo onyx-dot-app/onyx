@@ -24,6 +24,7 @@ def test_new_family_credential_is_stored_in_the_family_shape() -> None:
     assert stored == {
         "email": "user@example.com",
         "token": "token",
+        "scoped_token": False,
         "oauth": None,
         CREDENTIAL_FAMILY_KEY: "atlassian",
     }
@@ -162,6 +163,41 @@ def test_jira_refuses_a_confluence_oauth_credential() -> None:
         to_stored_credential_json(
             DocumentSource.JIRA, {"jira_api_token": "new"}, stored
         )
+
+
+def test_scoped_token_survives_the_family_shape() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.CONFLUENCE, {**_CONFLUENCE_JSON, "scoped_token": True}, None
+    )
+
+    assert stored["scoped_token"] is True
+    assert to_source_credential_json(DocumentSource.CONFLUENCE, stored) == {
+        **_CONFLUENCE_JSON,
+        "scoped_token": True,
+    }
+    assert to_source_credential_json(DocumentSource.JIRA, stored) == {
+        "jira_user_email": "user@example.com",
+        "jira_api_token": "token",
+        "scoped_token": True,
+    }
+
+
+def test_unscoped_flag_is_accepted_and_left_out_of_the_source_shape() -> None:
+    stored = to_stored_credential_json(
+        DocumentSource.JIRA,
+        {
+            "jira_user_email": "user@example.com",
+            "jira_api_token": "token",
+            "scoped_token": False,
+        },
+        None,
+    )
+
+    assert stored["scoped_token"] is False
+    assert to_source_credential_json(DocumentSource.JIRA, stored) == {
+        "jira_user_email": "user@example.com",
+        "jira_api_token": "token",
+    }
 
 
 def test_malformed_family_credential_is_not_usable_by_other_sources() -> None:

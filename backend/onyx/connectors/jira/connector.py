@@ -529,7 +529,6 @@ class JiraConnector(
         labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
-        scoped_token: bool = False,
     ) -> None:
         self.batch_size = batch_size
 
@@ -542,7 +541,8 @@ class JiraConnector(
         self._comment_email_blacklist = comment_email_blacklist or []
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
-        self.scoped_token = scoped_token
+        # Read from the credential in load_credentials.
+        self.scoped_token = False
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
@@ -705,11 +705,8 @@ class JiraConnector(
         return project_key
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        # The credential now carries the flag; older connectors set it in
-        # their own config.
-        self.scoped_token = self.scoped_token or credential_uses_scoped_token(
-            credentials
-        )
+        # Whether the API token has scopes is a property of the credential.
+        self.scoped_token = credential_uses_scoped_token(credentials)
         self._jira_client = build_jira_client(
             credentials=credentials,
             jira_base=self.jira_base,

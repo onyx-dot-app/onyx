@@ -4,7 +4,6 @@ from onyx.connectors.connector_config import ConnectorConfig, CredentialBinding
 
 class JiraCredentialBinding(CredentialBinding):
     jira_base_url: str
-    scoped_token: bool = False
 
 
 class JiraConnectorConfig(JiraCredentialBinding, ConnectorConfig):

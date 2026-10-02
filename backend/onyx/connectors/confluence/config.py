@@ -24,7 +24,6 @@ def _site(url: str) -> tuple[str, str]:
 class ConfluenceCredentialBinding(CredentialBinding):
     wiki_base: str
     is_cloud: bool
-    scoped_token: bool = False
 
     def validate_credential(self, credential_json: dict[str, Any]) -> None:
         authorized_wiki_base = credential_json.get(_OAUTH_WIKI_BASE_KEY)

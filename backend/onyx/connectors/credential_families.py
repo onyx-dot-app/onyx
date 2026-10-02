@@ -161,10 +161,15 @@ def _reject_dropped_keys(
     trip through the family shape, e.g. another source's keys sent to this
     source. Storing it would silently drop the value. Names keys only, never
     values."""
+    # An unset flag (False) carries no value either: the family shape stores
+    # it as its default, and the source shape leaves it out.
     dropped = sorted(
         key
         for key, value in source_json.items()
-        if value not in (None, "") and key not in round_tripped_json
+        if value is not None
+        and value != ""
+        and value is not False
+        and key not in round_tripped_json
     )
     if dropped:
         raise ValueError(f"Not {source.value} credential keys: {', '.join(dropped)}.")

@@ -27,7 +27,6 @@ def _make_connector(
         space=space,
         is_cloud=os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true",
         page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
-        scoped_token=scoped_token,
     )
 
     credentials_provider = OnyxStaticCredentialsProvider(
@@ -36,6 +35,8 @@ def _make_connector(
         {
             "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
             "confluence_access_token": access_token,
+            # Whether the token has scopes lives on the credential.
+            "scoped_token": scoped_token,
         },
     )
     connector.set_credentials_provider(credentials_provider)
