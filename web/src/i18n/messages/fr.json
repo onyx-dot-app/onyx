@@ -2650,7 +2650,8 @@
         "awaitingCheck": "Quittez le champ pour le vérifier avec les identifiants.",
         "checking": "Vérification des identifiants…",
         "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
-        "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"
+        "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}",
+        "checksFailed": "Une vérification obligatoire a échoué. La carte des vérifications ci-dessus en indique la raison."
       },
       "credentialsLoadError": {
         "title": "Échec du chargement des identifiants."

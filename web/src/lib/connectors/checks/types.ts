@@ -125,6 +125,8 @@ export interface DraftCheck {
   docs_link: string | null;
   duration_ms: number | null;
   from_cache: boolean;
+  /** The check proves the credential works with the credential-bound fields. */
+  validates_binding: boolean;
 }
 
 export interface DraftCheckRunSnapshot {

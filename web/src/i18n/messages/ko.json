@@ -2650,7 +2650,8 @@
         "awaitingCheck": "필드를 벗어나면 자격 증명으로 확인합니다.",
         "checking": "자격 증명을 확인하는 중…",
         "fieldInvalid": "‘{field}’을(를) 확인하세요: {detail}",
-        "rejected": "이 자격 증명은 이 설정으로 사용할 수 없습니다. {detail}"
+        "rejected": "이 자격 증명은 이 설정으로 사용할 수 없습니다. {detail}",
+        "checksFailed": "필수 검사가 실패했습니다. 위의 검사 카드에서 이유를 확인하세요."
       },
       "credentialsLoadError": {
         "title": "자격 증명을 불러오지 못했습니다."

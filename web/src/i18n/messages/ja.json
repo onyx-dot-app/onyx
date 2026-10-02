@@ -2650,7 +2650,8 @@
         "awaitingCheck": "フィールドから移動すると、認証情報で確認します。",
         "checking": "認証情報を確認しています…",
         "fieldInvalid": "「{field}」を確認してください: {detail}",
-        "rejected": "この認証情報はこの設定では使用できません。{detail}"
+        "rejected": "この認証情報はこの設定では使用できません。{detail}",
+        "checksFailed": "必須のチェックが失敗しました。理由は上のチェックカードに表示されています。"
       },
       "credentialsLoadError": {
         "title": "認証情報の読み込みに失敗しました。"

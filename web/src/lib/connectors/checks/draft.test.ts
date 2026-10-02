@@ -1,4 +1,8 @@
-import { requiredChecksStatus } from "@/lib/connectors/checks/draft";
+import {
+  bindingChecksGate,
+  bindingChecksVerdict,
+  requiredChecksStatus,
+} from "@/lib/connectors/checks/draft";
 import { ValidSources } from "@/lib/connectors/types/source";
 import type {
   DraftCheck,
@@ -20,6 +24,7 @@ function check(overrides: Partial<DraftCheck>): DraftCheck {
     docs_link: null,
     duration_ms: null,
     from_cache: false,
+    validates_binding: false,
     ...overrides,
   };
 }
@@ -107,5 +112,122 @@ describe("requiredChecksStatus", () => {
     expect(
       requiredChecksStatus(snapshot([check({ state: "passed" })], "superseded"))
     ).toBe("pending");
+  });
+});
+
+function binding(overrides: Partial<DraftCheck>): DraftCheck {
+  return check({ validates_binding: true, ...overrides });
+}
+
+describe("bindingChecksVerdict", () => {
+  it("counts only required binding checks that apply", () => {
+    expect(
+      bindingChecksVerdict(
+        snapshot([
+          check({ state: "failed" }),
+          binding({ required: false, state: "failed" }),
+          binding({ state: "not_applicable" }),
+        ])
+      )
+    ).toBe("none");
+  });
+
+  it("passes on passed and indeterminate binding checks", () => {
+    expect(
+      bindingChecksVerdict(
+        snapshot([
+          binding({ state: "passed" }),
+          binding({ state: "indeterminate" }),
+          check({ state: "pending" }),
+        ])
+      )
+    ).toBe("passed");
+  });
+
+  it("is checking while a binding check is unfinished", () => {
+    expect(
+      bindingChecksVerdict(
+        snapshot(
+          [binding({ state: "passed" }), binding({ state: "running" })],
+          "running"
+        )
+      )
+    ).toBe("checking");
+  });
+
+  it("fails as soon as a binding check fails", () => {
+    expect(
+      bindingChecksVerdict(
+        snapshot(
+          [binding({ state: "failed" }), binding({ state: "pending" })],
+          "running"
+        )
+      )
+    ).toBe("failed");
+  });
+
+  it("is unavailable when the run could not start", () => {
+    expect(
+      bindingChecksVerdict(
+        snapshot([binding({ state: "pending" })], "failed_to_run")
+      )
+    ).toBe("unavailable");
+  });
+});
+
+describe("bindingChecksGate", () => {
+  const base = {
+    current: true,
+    passedBefore: false,
+    requestFailed: false,
+    failedMessage: "Failed.",
+  };
+
+  it("unlocks when the current run's binding checks pass", () => {
+    expect(
+      bindingChecksGate({
+        ...base,
+        snapshot: snapshot([binding({ state: "passed" })]),
+      }).status
+    ).toBe("unlocked");
+  });
+
+  it("is checking for a run of other bound values", () => {
+    expect(
+      bindingChecksGate({
+        ...base,
+        current: false,
+        snapshot: snapshot([binding({ state: "passed" })]),
+      }).status
+    ).toBe("checking");
+  });
+
+  it("keeps an earlier pass while a later run is unfinished", () => {
+    expect(
+      bindingChecksGate({
+        ...base,
+        passedBefore: true,
+        snapshot: snapshot([binding({ state: "running" })], "running"),
+      }).status
+    ).toBe("unlocked");
+  });
+
+  it("locks with the message when a binding check fails", () => {
+    expect(
+      bindingChecksGate({
+        ...base,
+        passedBefore: true,
+        snapshot: snapshot([binding({ state: "failed" })]),
+      })
+    ).toEqual({
+      status: "locked",
+      reason: { kind: "custom", message: "Failed." },
+    });
+  });
+
+  it("unlocks when the draft-run request failed", () => {
+    expect(
+      bindingChecksGate({ ...base, snapshot: null, requestFailed: true }).status
+    ).toBe("unlocked");
   });
 });

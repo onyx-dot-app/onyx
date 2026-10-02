@@ -106,6 +106,8 @@ export type DraftCheckRunOutcome =
 export interface UseDraftConnectorChecksResult {
   /** The latest snapshot of the latest run; `null` before the first run. */
   snapshot: DraftCheckRunSnapshot | null;
+  /** The input of the run `snapshot` belongs to. */
+  snapshotInput: DraftCheckRunInput | null;
   /** True from a `run` call until its run settles. */
   running: boolean;
   error: unknown;
@@ -138,7 +140,10 @@ export function useDraftConnectorChecks(
   credentialId: number | null
 ): UseDraftConnectorChecksResult {
   const [draftKey] = useState(() => crypto.randomUUID());
-  const [snapshot, setSnapshot] = useState<DraftCheckRunSnapshot | null>(null);
+  const [shown, setShown] = useState<{
+    snapshot: DraftCheckRunSnapshot;
+    input: DraftCheckRunInput;
+  } | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -154,7 +159,7 @@ export function useDraftConnectorChecks(
   useEffect(() => {
     generationRef.current += 1;
     lastRunRef.current = null;
-    setSnapshot(null);
+    setShown(null);
     setRunning(false);
     setError(null);
   }, [credentialId]);
@@ -210,7 +215,7 @@ export function useDraftConnectorChecks(
           let latest = await startDraftCheckRun(request);
           while (true) {
             if (!isCurrent()) return { kind: "stale" };
-            setSnapshot(latest);
+            setShown({ snapshot: latest, input });
             if (isDraftRunSettled(latest)) break;
             await sleep(DRAFT_POLL_INTERVAL_MS);
             if (!isCurrent()) return { kind: "stale" };
@@ -245,8 +250,10 @@ export function useDraftConnectorChecks(
     [buildRequest]
   );
 
+  const snapshot = shown?.snapshot ?? null;
   return {
     snapshot,
+    snapshotInput: shown?.input ?? null,
     running,
     error,
     requiredStatus: requiredChecksStatus(snapshot),

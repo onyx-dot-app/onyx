@@ -49,7 +49,14 @@ import {
   useDraftConnectorChecks,
   type DraftCheckRunInput,
 } from "@/lib/connectors/checks/hooks";
-import { requiredChecksStatus } from "@/lib/connectors/checks/draft";
+import {
+  bindingChecksGate,
+  requiredChecksStatus,
+} from "@/lib/connectors/checks/draft";
+import {
+  bindingCheckInput,
+  type BindingGate,
+} from "@/lib/connectors/bindingGate";
 import { DraftConnectorChecks } from "@/views/admin/connectors/AddConnectorPage/form/DraftConnectorChecks";
 import { useSettings } from "@/lib/settings/hooks";
 import { Card, Divider, MessageCard } from "@opal/components";
@@ -293,6 +300,51 @@ export default function AddConnector({
     } finally {
       setCheckingBeforeCreate(false);
     }
+  };
+
+  // The binding checks of the draft run must also pass (or be
+  // indeterminate) for the current credential and bound values.
+  const boundFieldNames = [
+    ...credentialBoundFields.values,
+    ...credentialBoundFields.advancedValues,
+  ].map((field) => field.name);
+  const boundKeyOf = (
+    credentialId: number | null,
+    formState: Record<string, unknown>
+  ) => bindingCheckInput(credentialId, boundFieldNames, formState).key;
+  // Keys of credential and bound values whose binding checks passed. A later
+  // run for other config values then does not lock the form again.
+  const bindingPassedKeysRef = useRef(new Set<string>());
+  const snapshotBoundKey =
+    draftChecks.snapshot !== null && draftChecks.snapshotInput !== null
+      ? boundKeyOf(
+          draftChecks.snapshot.credential_id,
+          draftChecks.snapshotInput.formState
+        )
+      : null;
+  const bindingChecksFor = (values: ConnectorFormValues): BindingGate => {
+    const currentKey = boundKeyOf(
+      draftCredentialId,
+      draftInputFor(values).formState
+    );
+    const extra = bindingChecksGate({
+      snapshot: draftChecks.snapshot,
+      current: snapshotBoundKey === currentKey,
+      passedBefore: bindingPassedKeysRef.current.has(currentKey),
+      requestFailed: Boolean(draftChecks.error),
+      failedMessage: t("bindingGate.checksFailed"),
+    });
+    if (
+      extra.status === "unlocked" &&
+      snapshotBoundKey === currentKey &&
+      draftChecks.snapshot !== null &&
+      !draftChecks.error
+    ) {
+      bindingPassedKeysRef.current.add(currentKey);
+    } else if (extra.status === "locked") {
+      bindingPassedKeysRef.current.delete(currentKey);
+    }
+    return extra;
   };
 
   const convertStringToDateTime = (indexingStart: string | null) => {
@@ -661,6 +713,9 @@ export default function AddConnector({
                       ...credentialBoundFields.advancedValues,
                     ]}
                     visibleBoundFields={visibleBoundFields}
+                    extraFor={
+                      draftCredentialId !== null ? bindingChecksFor : undefined
+                    }
                     onChange={onGateChange}
                   />
                   <Section gap={6} alignItems="stretch" width="full">
@@ -707,6 +762,10 @@ export default function AddConnector({
                           configuration={configuration}
                           currentCredential={linkedCredential}
                           fieldContainerRefs={fieldContainerRefs}
+                          runOnChangeKey={boundKeyOf(
+                            draftCredentialId,
+                            draftInputFor(formikProps.values).formState
+                          )}
                           highlighted={
                             checksRevealed &&
                             draftChecks.requiredStatus !== "ok"

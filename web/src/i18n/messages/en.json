@@ -2650,7 +2650,8 @@
         "awaitingCheck": "Leave the field to check it with the credential.",
         "checking": "Checking the credential…",
         "fieldInvalid": "Check the {field}: {detail}",
-        "rejected": "This credential cannot be used with these settings. {detail}"
+        "rejected": "This credential cannot be used with these settings. {detail}",
+        "checksFailed": "A required check failed. The checks card above shows why."
       },
       "credentialsLoadError": {
         "title": "Failed to load credentials."

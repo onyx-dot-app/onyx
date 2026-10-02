@@ -2650,7 +2650,8 @@
         "awaitingCheck": "Sal del campo para comprobarlo con la credencial.",
         "checking": "Comprobando la credencial…",
         "fieldInvalid": "Revisa el campo «{field}»: {detail}",
-        "rejected": "Esta credencial no se puede usar con esta configuración. {detail}"
+        "rejected": "Esta credencial no se puede usar con esta configuración. {detail}",
+        "checksFailed": "Ha fallado una comprobación obligatoria. La tarjeta de comprobaciones de arriba muestra el motivo."
       },
       "credentialsLoadError": {
         "title": "No se pudieron cargar las credenciales."

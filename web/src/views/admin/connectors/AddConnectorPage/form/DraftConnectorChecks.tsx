@@ -29,6 +29,8 @@ export interface DraftConnectorChecksProps<FormValues> {
    * in them starts a run.
    */
   fieldContainerRefs: RefObject<HTMLElement | null>[];
+  /** A change of this key starts a run, e.g. the credential-bound values. */
+  runOnChangeKey?: string;
   highlighted?: boolean;
 }
 
@@ -60,6 +62,7 @@ export function DraftConnectorChecks<FormValues>({
   configuration,
   currentCredential,
   fieldContainerRefs,
+  runOnChangeKey,
   highlighted,
 }: DraftConnectorChecksProps<FormValues>) {
   const { values } = useFormikContext<FormValues>();
@@ -94,6 +97,17 @@ export function DraftConnectorChecks<FormValues>({
   useEffect(() => {
     scheduleRef.current();
   }, [accessType]);
+
+  // A text field runs the checks when the admin leaves it, so a partial
+  // value is not checked while they type. Tabs and checkboxes run at once.
+  useEffect(() => {
+    if (runOnChangeKey === undefined) return;
+    const active = document.activeElement;
+    const typing =
+      active instanceof HTMLTextAreaElement ||
+      (active instanceof HTMLInputElement && active.type !== "checkbox");
+    if (!typing) scheduleRef.current();
+  }, [runOnChangeKey]);
 
   useEffect(() => {
     const containers = fieldContainerRefs
