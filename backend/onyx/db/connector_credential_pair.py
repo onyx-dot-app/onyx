@@ -33,6 +33,8 @@ from onyx.db.models import (
     SearchSettings,
     User,
     User__UserGroup,
+    UserGroup,
+    UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.scoped_permissions import (
@@ -40,6 +42,8 @@ from onyx.db.scoped_permissions import (
     within_managed_scope_clause,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
@@ -56,7 +60,8 @@ _CONNECTOR_STATE_QUERY_TIMEOUT = "7s"
 def _build_user_group_cc_pair_access_clause(
     user_id: UUID,  # noqa: ARG001
 ) -> ColumnElement[bool]:
-    """CE has no user groups. The EE version grants pairs of the user's groups.
+    """CE has no user groups. The EE version grants pairs where the user is in
+    a data-access group.
 
     NOTE: EE version in ee.onyx.db.connector_credential_pair."""
     return false()
@@ -65,7 +70,7 @@ def _build_user_group_cc_pair_access_clause(
 def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
     """Pairs whose documents the user may see with no document ACL match
     ("open" pairs): PUBLIC pairs, and non-perm-synced pairs where the user owns
-    the credential or is in a current group of the pair. Perm-synced pairs are
+    the credential or is in a data-access group of the pair. Perm-synced pairs are
     never open; their documents need an ACL match. Does not exclude DELETING
     pairs."""
     credential_owner = (
@@ -556,11 +561,19 @@ def verify_user_can_edit_all_cc_pairs(
     # guard: issubset is vacuously true for an empty set, which would authorize anything
     if not cc_pair_ids:
         return False
+    return cc_pair_ids.issubset(get_editable_cc_pair_ids(cc_pair_ids, db_session, user))
+
+
+def get_editable_cc_pair_ids(
+    cc_pair_ids: set[int],
+    db_session: Session,
+    user: User,
+) -> set[int]:
+    """The subset of ``cc_pair_ids`` the user may edit."""
     stmt = select(ConnectorCredentialPair.id)
     stmt = _add_user_filters(stmt, user, get_editable=True)
     stmt = stmt.where(ConnectorCredentialPair.id.in_(cc_pair_ids))
-    editable = set(db_session.scalars(stmt))
-    return cc_pair_ids.issubset(editable)
+    return set(db_session.scalars(stmt))
 
 
 def get_connector_credential_pair_from_id(
@@ -800,6 +813,35 @@ def _relate_groups_to_cc_pair__no_commit(
         )
 
 
+def _relate_data_access_groups_to_cc_pair__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+    user_group_ids: list[int],
+) -> None:
+    if not user_group_ids:
+        return
+
+    assert_not_shared_with_default_group(db_session, user_group_ids)
+    found_group_ids = set(
+        db_session.scalars(
+            select(UserGroup.id).where(
+                UserGroup.id.in_(user_group_ids),
+                UserGroup.is_up_for_deletion.is_(False),
+            )
+        )
+    )
+    if missing_group_ids := set(user_group_ids) - found_group_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"User group(s) not found: {sorted(missing_group_ids)}",
+        )
+
+    for group_id in set(user_group_ids):
+        db_session.add(
+            UserGroup__CCPairDataAccess(user_group_id=group_id, cc_pair_id=cc_pair_id)
+        )
+
+
 def add_credential_to_connector(
     db_session: Session,
     user: User,
@@ -808,6 +850,7 @@ def add_credential_to_connector(
     cc_pair_name: str,
     access_type: AccessType,
     groups: list[int] | None,
+    data_access_group_ids: list[int] | None = None,
     auto_sync_options: dict | None = None,
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.SCHEDULED,
     last_successful_index_time: datetime | None = None,
@@ -893,6 +936,18 @@ def add_credential_to_connector(
         cc_pair_id=association.id,
         user_group_ids=groups,
     )
+    if access_type == AccessType.PRIVATE:
+        # Callers that set only manage groups keep today's meaning: the
+        # manage groups also get data access.
+        _relate_data_access_groups_to_cc_pair__no_commit(
+            db_session=db_session,
+            cc_pair_id=association.id,
+            user_group_ids=(
+                data_access_group_ids
+                if data_access_group_ids is not None
+                else groups or []
+            ),
+        )
 
     db_session.commit()
 

@@ -21,6 +21,7 @@ from onyx.db.models import (
     HierarchyNodeByConnectorCredentialPair,
     User__UserGroup,
     UserGroup,
+    UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.kg.models import KGStage
@@ -192,6 +193,10 @@ def connector_access_seed(
                 user_group_id=group.id,
                 cc_pair_id=cc_pair.id,
                 is_current=True,
+            ),
+            UserGroup__CCPairDataAccess(
+                user_group_id=group.id,
+                cc_pair_id=cc_pair.id,
             ),
         ]
     )

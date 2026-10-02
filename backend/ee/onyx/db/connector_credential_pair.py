@@ -11,6 +11,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     User__UserGroup,
+    UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.utils.logger import setup_logger
@@ -19,8 +20,8 @@ logger = setup_logger()
 
 
 def _build_user_group_cc_pair_access_clause(user_id: UUID) -> ColumnElement[bool]:
-    """True for pairs attached to a group the user is in. Uses the current
-    manage-table rows, the same rows the group: ACL entries come from
+    """True for pairs where the user is in a data-access group. The same rows
+    give the group: ACL entries of PRIVATE pairs
     (fetch_user_groups_for_documents).
 
     NOTE: is imported in onyx.db.connector_credential_pair by
@@ -29,13 +30,11 @@ def _build_user_group_cc_pair_access_clause(user_id: UUID) -> ColumnElement[bool
         select(1)
         .select_from(User__UserGroup)
         .join(
-            UserGroup__ConnectorCredentialPair,
+            UserGroup__CCPairDataAccess,
             and_(
-                UserGroup__ConnectorCredentialPair.user_group_id
+                UserGroup__CCPairDataAccess.user_group_id
                 == User__UserGroup.user_group_id,
-                UserGroup__ConnectorCredentialPair.cc_pair_id
-                == ConnectorCredentialPair.id,
-                UserGroup__ConnectorCredentialPair.is_current.is_(True),
+                UserGroup__CCPairDataAccess.cc_pair_id == ConnectorCredentialPair.id,
             ),
         )
         .where(User__UserGroup.user_id == user_id)

@@ -151,6 +151,18 @@ class UserGroupManager:
         )
 
     @staticmethod
+    def set_data_access_cc_pairs(
+        user_group: DATestUserGroup,
+        cc_pair_ids: list[int],
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        return client.put(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/data-access-cc-pairs",
+            json={"cc_pair_ids": cc_pair_ids},
+            headers=user_performing_action.headers,
+        )
+
+    @staticmethod
     def get_manager_ids(
         user_group_id: int | str, user_performing_action: DATestUser
     ) -> set[str]:
