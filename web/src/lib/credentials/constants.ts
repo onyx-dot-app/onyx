@@ -227,7 +227,7 @@ export const CREDENTIAL_SPECS = {
   confluence: defineCredentialSpec({
     brandName: "Confluence",
     fields: {
-      confluence_username: text("accountEmail"),
+      confluence_username: email("accountEmail"),
       confluence_access_token: secret("apiToken"),
     },
   }),
@@ -260,7 +260,7 @@ export const CREDENTIAL_SPECS = {
   guru: defineCredentialSpec({
     brandName: "Guru",
     fields: {
-      guru_user: text("accountEmail"),
+      guru_user: email("accountEmail"),
       guru_user_token: secret("apiToken"),
     },
   }),
@@ -535,7 +535,7 @@ export const CREDENTIAL_SPECS = {
     brandName: "TestRail",
     fields: {
       testrail_base_url: url("baseUrl", { hint: { key: "testrailBaseUrl" } }),
-      testrail_username: text("accountEmail"),
+      testrail_username: email("accountEmail"),
       testrail_api_key: secret("apiToken"),
     },
   }),
