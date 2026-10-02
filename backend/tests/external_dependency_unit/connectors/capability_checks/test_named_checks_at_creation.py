@@ -1,6 +1,8 @@
 """Pairing validation for a source with named checks: what runs, what blocks,
-what is stored, and reuse of fresh draft-run results."""
+what is stored, the blocking budget, and reuse of fresh draft-run results."""
 
+import threading
+import time
 from collections.abc import Generator
 from datetime import timedelta
 from typing import Any
@@ -14,6 +16,7 @@ from onyx.background.celery.tasks.capability_checks import (
     tasks as capability_check_tasks,
 )
 from onyx.background.celery.tasks.capability_checks.tasks import (
+    run_capability_checks_task,
     run_draft_capability_checks_task,
 )
 from onyx.configs.constants import DocumentSource
@@ -71,6 +74,8 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
 
     def run(self, context: CapabilityCheckContext) -> None:  # noqa: ARG002
         self._harness.runs.append(self.check_id)
+        if (release := self._harness.slow.get(self.check_id)) is not None:
+            release.wait(timeout=30)
         if (error := self._harness.errors.get(self.check_id)) is not None:
             raise error
 
@@ -83,6 +88,8 @@ class _Harness:
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.runs: list[str] = []
         self.errors: dict[str, Exception] = {}
+        # A check in here waits until its event is set.
+        self.slow: dict[str, threading.Event] = {}
         self.send_task = MagicMock()
         monkeypatch.setattr(
             capability_check_runs.client_app, "send_task", self.send_task
@@ -91,6 +98,16 @@ class _Harness:
             monkeypatch.setattr(module, "get_capability_checks", self.checks)
         # The early return would skip validation entirely.
         monkeypatch.setattr(factory, "INTEGRATION_TESTS_MODE", False)
+        monkeypatch.setattr(creation, "CREATION_BLOCKING_BUDGET_SECONDS", 1.0)
+
+    def make_slow(self, check_id: str) -> threading.Event:
+        release = threading.Event()
+        self.slow[check_id] = release
+        return release
+
+    def release_all(self) -> None:
+        for release in self.slow.values():
+            release.set()
 
     def checks(self, source: DocumentSource) -> list[CapabilityCheck[Any]]:
         assert source == DocumentSource.SLACK
@@ -104,8 +121,11 @@ class _Harness:
 
 
 @pytest.fixture
-def harness(monkeypatch: pytest.MonkeyPatch) -> _Harness:
-    return _Harness(monkeypatch)
+def harness(monkeypatch: pytest.MonkeyPatch) -> Generator[_Harness, None, None]:
+    harness = _Harness(monkeypatch)
+    yield harness
+    # Ends the abandoned probe threads.
+    harness.release_all()
 
 
 @pytest.fixture
@@ -135,6 +155,17 @@ def _validate(
     )
 
 
+def _run_status(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> CapabilityReportRunStatus:
+    db_session.expire_all()
+    row = get_capability_report_row(
+        db_session, cc_pair.credential_id, cc_pair.connector_id
+    )
+    assert row is not None
+    return row.run_status
+
+
 def _stored_statuses(
     db_session: Session, cc_pair: ConnectorCredentialPair
 ) -> dict[str, str]:
@@ -157,7 +188,7 @@ def test_passing_checks_store_the_full_named_report(
 ) -> None:
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
 
-    assert harness.runs == [_TOKEN, _CHANNELS]
+    assert sorted(harness.runs) == sorted([_TOKEN, _CHANNELS])
     assert _stored_statuses(db_session, slack_pair) == {
         _TOKEN: "passed",
         _CHANNELS: "passed",
@@ -227,10 +258,18 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
     )
     run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
     assert harness.runs == [_TOKEN, _CHANNELS]
+    # A reused result counts as finished at once, also for a check that would
+    # now be slow.
+    harness.make_slow(_CHANNELS)
+    harness.send_task.reset_mock()
 
+    started = time.monotonic()
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+    assert time.monotonic() - started < creation.CREATION_BLOCKING_BUDGET_SECONDS
     # Nothing ran again, and the reused results are stored.
     assert harness.runs == [_TOKEN, _CHANNELS]
+    harness.send_task.assert_not_called()
+    harness.release_all()
     assert _stored_statuses(db_session, slack_pair) == {
         _TOKEN: "passed",
         _CHANNELS: "passed",
@@ -311,3 +350,67 @@ def test_failed_report_write_retires_the_running_mark(
     )
     assert row is not None
     assert row.run_status == CapabilityReportRunStatus.FAILED_TO_RUN
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_fast_required_failure_blocks_while_another_check_is_slow(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.make_slow(_TOKEN)
+    harness.errors[_CHANNELS] = ConnectorValidationError("bot not in channel a")
+
+    with pytest.raises(ConnectorValidationError, match="bot not in channel a"):
+        _validate(db_session, slack_pair, {"channels": ["a"]})
+
+    # The rejection stores the report; no background run starts.
+    statuses = _stored_statuses(db_session, slack_pair)
+    assert statuses[_CHANNELS] == "failed"
+    assert statuses[_TOKEN] == "indeterminate"
+    harness.send_task.assert_not_called()
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_slow_required_check_does_not_block_and_its_result_lands_later(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    release = harness.make_slow(_TOKEN)
+    harness.errors[_TOKEN] = ConnectorValidationError("token revoked")
+
+    started = time.monotonic()
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+    assert time.monotonic() - started < creation.CREATION_BLOCKING_BUDGET_SECONDS + 1
+
+    # The row stays RUNNING until the background run stores the full report.
+    assert _run_status(db_session, slack_pair) == CapabilityReportRunStatus.RUNNING
+    harness.send_task.assert_called_once()
+    send_kwargs = harness.send_task.call_args.kwargs
+    assert send_kwargs["expires"] > 0
+    task_kwargs = send_kwargs["kwargs"]
+    assert task_kwargs["check_ids"] == [_TOKEN]
+    assert task_kwargs["access_type"] == AccessType.PUBLIC.value
+
+    release.set()
+    run_capability_checks_task(**task_kwargs)
+
+    assert _stored_statuses(db_session, slack_pair) == {
+        _TOKEN: "failed",
+        _CHANNELS: "passed",
+        _PERM_SYNC: "skipped",
+    }
+    # The background run ran only the unfinished check.
+    assert sorted(harness.runs) == sorted([_TOKEN, _TOKEN, _CHANNELS])
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_failed_enqueue_marks_the_run_failed_to_run(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.make_slow(_TOKEN)
+    harness.send_task.side_effect = RuntimeError("broker down")
+
+    # Creation still succeeds; the dead run is for the admin to re-run.
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+
+    assert (
+        _run_status(db_session, slack_pair) == CapabilityReportRunStatus.FAILED_TO_RUN
+    )

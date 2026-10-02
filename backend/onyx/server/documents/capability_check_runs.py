@@ -6,6 +6,9 @@ from uuid import UUID, uuid4
 from pydantic_core import to_jsonable_python
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.capability_checks.enqueue import (
+    send_capability_check_run_task,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import (
     DocumentSource,
@@ -30,13 +33,14 @@ from onyx.connectors.capability_checks.draft_runs import (
     set_latest_draft_run,
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
-from onyx.connectors.capability_checks.models import CapabilityCheckContext
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckContext,
+)
 from onyx.connectors.capability_checks.registry import (
     get_capability_checks,
     has_named_capability_checks,
 )
 from onyx.connectors.capability_checks.runner import (
-    capability_check_run_ceiling_seconds,
     capability_check_run_stale_after,
 )
 from onyx.connectors.connector_config import ConnectorConfig
@@ -95,24 +99,13 @@ def start_capability_check_run(
     assert run_id is not None, "The RUNNING mark always stamps a run_id."
     db_session.commit()
     try:
-        client_app.send_task(
-            OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
-            kwargs={
-                "credential_id": credential_id,
-                "connector_id": connector_id,
-                "connector_specific_config": connector_specific_config,
-                "tenant_id": get_current_tenant_id(),
-                # The attempt's fence: the task's terminal writes land only
-                # while this id still owns the row.
-                "run_id": str(run_id),
-                "trigger": trigger.value,
-            },
-            queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
-            priority=OnyxCeleryPriority.HIGH,
-            # Queue wait is bounded by one execution ceiling; the staleness
-            # cutoff allows for both, so an expired task never strands the
-            # scope.
-            expires=capability_check_run_ceiling_seconds(source),
+        send_capability_check_run_task(
+            credential_id=credential_id,
+            connector_id=connector_id,
+            source=source,
+            trigger=trigger,
+            run_id=run_id,
+            connector_specific_config=connector_specific_config,
         )
     except Exception as e:
         # Broker down and a bad task payload must stay distinguishable in the
