@@ -47,9 +47,9 @@ _RUN_DEPENDENT_CALLS = {
     "token_urlsafe",
 }
 _CLOCKS = {"datetime", "date"}
-# Run-dependent only when it feeds a row: `func.now()` is also a column default.
-_ROW_ONLY_CALLS = {"now", "gen_random_uuid"}
-_INSERT_ATTRS = {"insert", "bulk_insert", "values"}
+# Run-dependent unless it defines a column default, where it is schema, not a row.
+_DEFAULT_CALLS = {"now", "gen_random_uuid"}
+_SCHEMA_CALLS = {"Column", "create_table", "add_column", "alter_column"}
 
 
 class _RunDependentFinder(ast.NodeVisitor):
@@ -58,9 +58,8 @@ class _RunDependentFinder(ast.NodeVisitor):
 
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
-        self._inserts: set[str] = {"insert"}
         self._statement: ast.stmt | None = None
-        self._insert_depth = 0
+        self._schema_depth = 0
         self.found: set[int] = set()
 
     def visit(self, node: ast.AST) -> None:
@@ -80,23 +79,10 @@ class _RunDependentFinder(ast.NodeVisitor):
         if not any(ALLOW_MARKER in line for line in marked):
             self.found.add(node.lineno)
 
-    def _is_insert(self, node: ast.expr) -> bool:
-        func = node.func if isinstance(node, ast.Call) else node
-        if isinstance(func, ast.Name):
-            return func.id in self._inserts
-        return isinstance(func, ast.Attribute) and func.attr in _INSERT_ATTRS
-
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         # downgrade may restore what it removed, with whatever values it had.
         if node.name != "downgrade":
             self.generic_visit(node)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        self._inserts.update(
-            alias.asname
-            for alias in node.names
-            if alias.name == "insert" and alias.asname
-        )
 
     def visit_Expr(self, node: ast.Expr) -> None:
         # A docstring may describe values without producing one.
@@ -116,14 +102,14 @@ class _RunDependentFinder(ast.NodeVisitor):
             name == "now" and _terminal_name(receiver) in _CLOCKS
         ):
             self._flag(node)
-        elif name in _ROW_ONLY_CALLS and self._insert_depth:
+        elif name in _DEFAULT_CALLS and not self._schema_depth:
             self._flag(node)
         elif name == "get" and _terminal_name(receiver) == "environ":
             self._flag(node)
-        inside = self._is_insert(node)
-        self._insert_depth += inside
+        schema = name in _SCHEMA_CALLS
+        self._schema_depth += schema
         self.generic_visit(node)
-        self._insert_depth -= inside
+        self._schema_depth -= schema
 
     def visit_Constant(self, node: ast.Constant) -> None:
         if not isinstance(node.value, str) or not _INSERT_SQL.search(node.value):

@@ -25,6 +25,8 @@ def _in_upgrade(line: str) -> str:
         "op.execute(tool_table.insert().values(id=1, created_at=sa.func.now()))",
         "op.bulk_insert(tool_table, [{'id': str(uuid.uuid4())}])",
         "new_id = uuid4()",
+        "stamp = func.now()",
+        "op.bulk_insert(tool_table, [{'id': 1, 'created_at': sa.func.now()}])",
         "stamp = datetime.now()",
         "stamp = datetime.datetime.utcnow()",
         "seed = random.randint(1, 10)",
@@ -44,6 +46,8 @@ def test_run_dependent_values_are_flagged(line: str) -> None:
     [
         'op.add_column("tool", sa.Column("c", sa.DateTime(), server_default=sa.text("now()")))',
         'op.add_column("tool", sa.Column("c", sa.DateTime(), server_default=func.now()))',
+        'op.create_table("t", sa.Column("c", sa.DateTime(), server_default=sa.func.now()))',
+        'op.alter_column("tool", "c", server_default=func.now())',
         "op.execute(\"UPDATE tool SET updated_at = now() WHERE name = 'x'\")",
         "op.execute(\"INSERT INTO tool (id, name) VALUES (1, 'x')\")",
         "op.execute(insert(tool_table).values(id=1, name='x'))",
@@ -82,14 +86,6 @@ def test_module_level_helper_is_flagged() -> None:
         "def upgrade() -> None:\n    _seed()\n"
     )
     assert check_migration_determinism.find_run_dependent_values(source) == [2]
-
-
-def test_aliased_insert_counts_as_a_row() -> None:
-    source = (
-        "from sqlalchemy.dialects.postgresql import insert as pg_insert\n\n\n"
-        "def upgrade() -> None:\n    op.execute(pg_insert(t).values(created_at=func.now()))\n"
-    )
-    assert check_migration_determinism.find_run_dependent_values(source) == [5]
 
 
 def _write_revision(
