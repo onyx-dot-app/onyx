@@ -43,6 +43,7 @@ def get_sharepoint_external_access(
     site_page: dict[str, Any] | None = None,
     add_prefix: bool = False,
     treat_sharing_link_as_public: bool = False,
+    list_id: str | None = None,
 ) -> ExternalAccess:
     if drive_item and drive_item.id is None:
         raise ValueError("DriveItem ID is required")
@@ -69,6 +70,7 @@ def get_sharepoint_external_access(
         add_prefix,
         treat_sharing_link_as_public,
         permission_cache,
+        list_id=list_id,
     )
 
     return external_access
@@ -81,6 +83,7 @@ def get_sharepoint_hierarchy_node_external_access(
     node_type: HierarchyNodeType,
     drive_name: str | None = None,
     folder_server_relative_path: str | None = None,
+    list_id: str | None = None,
 ) -> ExternalAccess:
     def noop_fallback(
         *args: Any,  # noqa: ARG001
@@ -100,4 +103,5 @@ def get_sharepoint_hierarchy_node_external_access(
         drive_name,
         folder_server_relative_path,
         permission_cache,
+        list_id=list_id,
     )

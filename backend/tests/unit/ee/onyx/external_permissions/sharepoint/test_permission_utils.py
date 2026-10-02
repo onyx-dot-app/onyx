@@ -839,3 +839,69 @@ def test_drive_item_falls_through_when_sharing_link_disabled(
 
     assert result.is_public is False
     assert len(result.external_user_group_ids) > 0
+
+
+# ---------------------------------------------------------------------------
+# Library lookup by list ID vs. title
+# ---------------------------------------------------------------------------
+
+
+@patch(f"{MODULE}._get_external_access_from_securable_object")
+def test_drive_node_access_uses_list_id_when_available(
+    mock_get_access: MagicMock,
+) -> None:
+    ctx = MagicMock()
+
+    get_hierarchy_node_external_access_from_sharepoint(
+        ctx,
+        MagicMock(),
+        HierarchyNodeType.DRIVE,
+        "Documents",
+        None,
+        list_id="list-guid",
+    )
+
+    ctx.web.lists.get_by_id.assert_called_once_with("list-guid")
+    ctx.web.lists.get_by_title.assert_not_called()
+    assert mock_get_access.call_args.args[2] is ctx.web.lists.get_by_id.return_value
+
+
+@pytest.mark.parametrize(
+    ("list_id", "expected_by_id", "expected_by_title"),
+    [
+        ("list-guid", "list-guid", None),
+        (None, None, "Documents"),
+    ],
+)
+@patch(f"{MODULE}._get_external_access_from_securable_object")
+@patch(f"{MODULE}._get_sharepoint_list_item_id", return_value="7")
+@patch(f"{MODULE}._is_public_item", return_value=False)
+def test_drive_item_access_list_lookup(
+    _mock_is_public: MagicMock,
+    _mock_item_id: MagicMock,
+    mock_get_access: MagicMock,
+    list_id: str | None,
+    expected_by_id: str | None,
+    expected_by_title: str | None,
+) -> None:
+    ctx = MagicMock()
+
+    get_external_access_from_sharepoint(
+        client_context=ctx,
+        graph_client=MagicMock(),
+        drive_name="Shared Documents",
+        drive_item=MagicMock(),
+        site_page=None,
+        list_id=list_id,
+    )
+
+    if expected_by_id:
+        ctx.web.lists.get_by_id.assert_called_once_with(expected_by_id)
+        ctx.web.lists.get_by_title.assert_not_called()
+        sp_list = ctx.web.lists.get_by_id.return_value
+    else:
+        ctx.web.lists.get_by_title.assert_called_once_with(expected_by_title)
+        ctx.web.lists.get_by_id.assert_not_called()
+        sp_list = ctx.web.lists.get_by_title.return_value
+    sp_list.items.get_by_id.assert_called_once_with("7")
+    assert mock_get_access.call_args.args[2] is sp_list.items.get_by_id.return_value
