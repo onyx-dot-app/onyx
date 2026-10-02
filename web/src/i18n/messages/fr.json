@@ -3224,8 +3224,13 @@
         "created": {
           "toast": "Nouvel identifiant créé !"
         },
-        "name": {
-          "label": "E-mail du compte {source}",
+        "displayName": {
+          "description": "Sert à identifier ce fournisseur dans l'application.",
+          "optionalSuffix": "facultatif",
+          "placeholder": "Nom d'affichage",
+          "title": "Nom d'affichage"
+        },
+        "emailField": {
           "placeholder": "email@company.com"
         },
         "submitError": {

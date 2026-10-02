@@ -3224,8 +3224,13 @@
         "created": {
           "toast": "新しい認証情報を作成しました!"
         },
-        "name": {
-          "label": "{source} アカウントのメールアドレス",
+        "displayName": {
+          "description": "アプリ内でこのプロバイダーを識別するために使用します。",
+          "optionalSuffix": "任意",
+          "placeholder": "表示名",
+          "title": "表示名"
+        },
+        "emailField": {
           "placeholder": "email@company.com"
         },
         "submitError": {

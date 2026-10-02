@@ -3224,8 +3224,13 @@
         "created": {
           "toast": "تم إنشاء بيانات اعتماد جديدة!"
         },
-        "name": {
-          "label": "البريد الإلكتروني لحساب {source}",
+        "displayName": {
+          "description": "يُستخدم لتمييز هذا الموفر في التطبيق.",
+          "optionalSuffix": "اختياري",
+          "placeholder": "اسم العرض",
+          "title": "اسم العرض"
+        },
+        "emailField": {
           "placeholder": "email@company.com"
         },
         "submitError": {

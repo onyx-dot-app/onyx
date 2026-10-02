@@ -3224,8 +3224,13 @@
         "created": {
           "toast": "¡Nueva credencial creada!"
         },
-        "name": {
-          "label": "Correo de la cuenta de {source}",
+        "displayName": {
+          "description": "Se usa para identificar este proveedor en la app.",
+          "optionalSuffix": "opcional",
+          "placeholder": "Nombre visible",
+          "title": "Nombre visible"
+        },
+        "emailField": {
           "placeholder": "email@company.com"
         },
         "submitError": {

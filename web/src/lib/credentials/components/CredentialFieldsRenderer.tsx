@@ -2,6 +2,7 @@
 
 import { Tabs } from "@opal/components";
 import { useFormikContext } from "formik";
+import { useTranslations } from "next-intl";
 import {
   BooleanFormField,
   TextFormField,
@@ -10,7 +11,10 @@ import {
 import { getDisplayNameForCredentialKey } from "@/lib/credentials/utils";
 import type { CredentialTemplateWithAuth } from "@/lib/credentials/types";
 import { isTypedFileField } from "@/lib/connectors/utils";
-import type { CredentialFieldValues } from "@/lib/credentials/types";
+import type {
+  CredentialFieldValue,
+  CredentialFieldValues,
+} from "@/lib/credentials/types";
 
 interface CredentialFieldsRendererProps {
   credentialTemplate: CredentialFieldValues;
@@ -23,8 +27,21 @@ export function CredentialFieldsRenderer({
   authMethod,
   setAuthMethod,
 }: CredentialFieldsRendererProps) {
+  const t = useTranslations("admin");
   const templateWithAuth =
     credentialTemplate as CredentialTemplateWithAuth<any>;
+
+  // An email field shows an example address; any other field shows its
+  // template's placeholder, if it has one.
+  function fieldPlaceholder(
+    key: string,
+    val: CredentialFieldValue
+  ): string | undefined {
+    if (key.toLowerCase().includes("email")) {
+      return t("credentials.create.emailField.placeholder");
+    }
+    return typeof val === "string" && val !== "" ? val : undefined;
+  }
   const { values, setValues } = useFormikContext<any>();
 
   // remove other auth‐method fields when switching
@@ -105,7 +122,7 @@ export function CredentialFieldsRenderer({
                   <TextFormField
                     key={key}
                     name={key}
-                    placeholder={typeof val === "string" ? val : undefined}
+                    placeholder={fieldPlaceholder(key, val)}
                     label={getDisplayNameForCredentialKey(key)}
                     type={
                       key.toLowerCase().includes("token") ||
@@ -155,7 +172,7 @@ export function CredentialFieldsRenderer({
           <TextFormField
             key={key}
             name={key}
-            placeholder={typeof val === "string" ? val : undefined}
+            placeholder={fieldPlaceholder(key, val)}
             label={getDisplayNameForCredentialKey(key)}
             type={
               key.toLowerCase().includes("token") ||

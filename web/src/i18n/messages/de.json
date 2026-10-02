@@ -3224,8 +3224,13 @@
         "created": {
           "toast": "Neue Anmeldedaten erstellt!"
         },
-        "name": {
-          "label": "E-Mail des {source}-Kontos",
+        "displayName": {
+          "description": "Dient zur Identifizierung dieses Anbieters in der App.",
+          "optionalSuffix": "optional",
+          "placeholder": "Anzeigename",
+          "title": "Anzeigename"
+        },
+        "emailField": {
           "placeholder": "email@company.com"
         },
         "submitError": {

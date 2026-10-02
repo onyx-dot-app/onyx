@@ -3224,8 +3224,13 @@
         "created": {
           "toast": "Created new credential!"
         },
-        "name": {
-          "label": "{source} Account Email",
+        "displayName": {
+          "description": "Used to identify this provider in the app.",
+          "optionalSuffix": "optional",
+          "placeholder": "Display Name",
+          "title": "Display Name"
+        },
+        "emailField": {
           "placeholder": "email@company.com"
         },
         "submitError": {

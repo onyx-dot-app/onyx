@@ -3224,8 +3224,13 @@
         "created": {
           "toast": "새 자격 증명을 생성했습니다!"
         },
-        "name": {
-          "label": "{source} 계정 이메일",
+        "displayName": {
+          "description": "앱에서 이 제공자를 식별하는 데 사용됩니다.",
+          "optionalSuffix": "선택 사항",
+          "placeholder": "표시 이름",
+          "title": "표시 이름"
+        },
+        "emailField": {
           "placeholder": "email@company.com"
         },
         "submitError": {

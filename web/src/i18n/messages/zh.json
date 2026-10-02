@@ -3224,8 +3224,13 @@
         "created": {
           "toast": "已创建新凭据!"
         },
-        "name": {
-          "label": "{source} 账号邮箱",
+        "displayName": {
+          "description": "用于在应用中标识此提供商。",
+          "optionalSuffix": "可选",
+          "placeholder": "显示名称",
+          "title": "显示名称"
+        },
+        "emailField": {
           "placeholder": "email@company.com"
         },
         "submitError": {

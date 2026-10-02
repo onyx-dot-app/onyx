@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputTypeIn } from "@opal/components";
+import { Button, Divider, InputTypeIn } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/lib/credentials/svc";
@@ -10,7 +10,6 @@ import { FormikField } from "@/refresh-components/form/FormikField";
 import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
 import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
-import { getSourceDisplayName } from "@/lib/sources";
 import type {
   Credential,
   CredentialTemplateWithAuth,
@@ -230,29 +229,34 @@ export default function CreateCredential({
           // credential step's create card, or a modal).
           <Form className="w-full">
             <Section alignItems="stretch" gap={6}>
+              <CredentialFieldsRenderer
+                credentialTemplate={credentialTemplate}
+                authMethod={authMethod || initialAuthMethod}
+                setAuthMethod={setAuthMethod}
+              />
+
+              {/* Above: the fields the source needs. Below: niceties. */}
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+
               <InputVertical
                 withLabel="name"
-                title={t("credentials.create.name.label", {
-                  source: getSourceDisplayName(sourceType) || sourceType,
-                })}
+                title={t("credentials.create.displayName.title")}
+                suffix={t("credentials.create.displayName.optionalSuffix")}
+                subDescription={t("credentials.create.displayName.description")}
               >
                 <FormikField<string>
                   name="name"
                   render={(field, _helper, _meta, status) => (
                     <InputTypeIn
                       {...field}
-                      placeholder={t("credentials.create.name.placeholder")}
+                      placeholder={t(
+                        "credentials.create.displayName.placeholder"
+                      )}
                       variant={status === "error" ? "error" : "primary"}
                     />
                   )}
                 />
               </InputVertical>
-
-              <CredentialFieldsRenderer
-                credentialTemplate={credentialTemplate}
-                authMethod={authMethod || initialAuthMethod}
-                setAuthMethod={setAuthMethod}
-              />
 
               <Section
                 flexDirection="row"
