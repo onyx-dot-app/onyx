@@ -5886,6 +5886,9 @@
           "optionalSuffix": {
             "label": "optional"
           },
+          "slowSave": {
+            "text": "Das dauert länger als üblich. Große Modelllisten können eine Minute dauern."
+          },
           "submitButton": {
             "invalidTooltip": "Bitte füllen Sie alle Pflichtfelder aus.",
             "pristineTooltip": "Keine Änderungen zum Speichern."
