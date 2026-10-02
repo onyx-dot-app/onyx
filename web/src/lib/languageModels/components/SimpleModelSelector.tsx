@@ -116,8 +116,10 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   // so a merged page, which changes `modelPaging`, does not re-run it.
   const [query, setQuery] = useState("");
   const trimmedQuery = query.trim();
+  const currentQueryRef = useRef("");
   const lastServerSearchRef = useRef("");
   useEffect(() => {
+    currentQueryRef.current = trimmedQuery;
     if (trimmedQuery === "") {
       // A cleared or closed search forgets its server query, so the next
       // one runs even after a listing refresh dropped the merged matches.
@@ -130,7 +132,10 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       modelPaging
         .search(trimmedQuery)
         .then((searched) => {
-          if (searched) lastServerSearchRef.current = trimmedQuery;
+          // A search that lands after its query was cleared is not remembered.
+          if (searched && currentQueryRef.current === trimmedQuery) {
+            lastServerSearchRef.current = trimmedQuery;
+          }
         })
         .catch(console.error);
     }, SERVER_SEARCH_DEBOUNCE_MS);
