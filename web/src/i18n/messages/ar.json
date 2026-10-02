@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "اختر بيانات اعتماد أولاً."
       },
+      "bindingGate": {
+        "enterField": "أدخل «{field}».",
+        "fixField": "تحقق من «{field}».",
+        "awaitingCheck": "غادر الحقل للتحقق منه باستخدام بيانات الاعتماد.",
+        "checking": "جارٍ التحقق من بيانات الاعتماد…",
+        "fieldInvalid": "تحقق من «{field}»: {detail}",
+        "rejected": "لا يمكن استخدام بيانات الاعتماد هذه مع هذه الإعدادات. {detail}"
+      },
       "credentialsLoadError": {
         "title": "فشل تحميل بيانات الاعتماد."
       },
@@ -2942,6 +2950,13 @@
       "checkboxTabs": {
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "خيارات متقدمة",
+        "errors": {
+          "missing": "أدخل قيمة.",
+          "invalid": "هذه القيمة غير صالحة: {detail}"
+        }
       },
       "scheduled": {
         "description": "حدّد كيف سيُجري الموصل الفهرسة. سيتمكن المشغّل من تعديل هذا القسم.",

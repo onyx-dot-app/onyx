@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "Selecciona primero una credencial."
       },
+      "bindingGate": {
+        "enterField": "Introduce el campo «{field}».",
+        "fixField": "Revisa el campo «{field}».",
+        "awaitingCheck": "Sal del campo para comprobarlo con la credencial.",
+        "checking": "Comprobando la credencial…",
+        "fieldInvalid": "Revisa el campo «{field}»: {detail}",
+        "rejected": "Esta credencial no se puede usar con esta configuración. {detail}"
+      },
       "credentialsLoadError": {
         "title": "No se pudieron cargar las credenciales."
       },
@@ -2942,6 +2950,13 @@
       "checkboxTabs": {
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Opciones avanzadas",
+        "errors": {
+          "missing": "Introduce un valor.",
+          "invalid": "Este valor no es válido: {detail}"
+        }
       },
       "scheduled": {
         "description": "Especifica cómo realizará el conector la indexación. El operador podrá editar esta sección.",

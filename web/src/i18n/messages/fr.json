@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "Sélectionnez d'abord un identifiant."
       },
+      "bindingGate": {
+        "enterField": "Saisissez le champ « {field} ».",
+        "fixField": "Vérifiez le champ « {field} ».",
+        "awaitingCheck": "Quittez le champ pour le vérifier avec les identifiants.",
+        "checking": "Vérification des identifiants…",
+        "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
+        "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"
+      },
       "credentialsLoadError": {
         "title": "Échec du chargement des identifiants."
       },
@@ -2942,6 +2950,13 @@
       "checkboxTabs": {
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Options avancées",
+        "errors": {
+          "missing": "Saisissez une valeur.",
+          "invalid": "Cette valeur n’est pas valide : {detail}"
+        }
       },
       "scheduled": {
         "description": "Indiquez comment le connecteur effectuera l'indexation. L'opérateur pourra modifier cette section.",

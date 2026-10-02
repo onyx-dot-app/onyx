@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
+import { Text } from "@opal/components";
+import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import type { CredentialBindingFieldError } from "@/lib/connectors/bindingGate";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { Credential } from "@/lib/credentials/types";
@@ -18,6 +20,10 @@ export interface CredentialBoundFieldsProps {
   values: Record<string, unknown>;
   connector: ConfigurableSources;
   currentCredential: Credential<unknown> | null;
+  /** Field name to the error the backend gave for the field and credential. */
+  fieldErrors?: Record<string, CredentialBindingFieldError>;
+  /** Called when focus leaves a bound field. */
+  onFieldBlur?: () => void;
 }
 
 /**
@@ -32,22 +38,37 @@ export default function CredentialBoundFields({
   values,
   connector,
   currentCredential,
+  fieldErrors = {},
+  onFieldBlur,
 }: CredentialBoundFieldsProps) {
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const t = useTranslations("admin.connectorsList.boundFields");
   const visibleFields = fields.filter((field) => !field.hidden);
   const visibleAdvancedFields = showAdvancedFields
     ? advancedFields.filter((field) => !field.hidden)
     : [];
 
+  function errorText(error: CredentialBindingFieldError): string {
+    return error.kind === "missing"
+      ? t("errors.missing")
+      : t("errors.invalid", { detail: error.detail });
+  }
+
   function renderField(field: ConnectorField) {
+    const error = fieldErrors[field.name];
     return (
-      <RenderField
-        key={field.name}
-        field={field}
-        values={values}
-        connector={connector}
-        currentCredential={currentCredential}
-      />
+      <Section key={field.name} gap={0.5} alignItems="start" width="full">
+        <RenderField
+          field={field}
+          values={values}
+          connector={connector}
+          currentCredential={currentCredential}
+        />
+        {error && (
+          <Text font="secondary-body" color="status-error-05" role="alert">
+            {errorText(error)}
+          </Text>
+        )}
+      </Section>
     );
   }
 
@@ -57,16 +78,21 @@ export default function CredentialBoundFields({
       alignItems="start"
       width="full"
       data-testid="credential-bound-fields"
+      onBlur={onFieldBlur}
     >
       {visibleFields.map(renderField)}
       {visibleAdvancedFields.length > 0 && (
-        <>
-          <AdvancedOptionsToggle
-            showAdvancedOptions={showAdvancedOptions}
-            setShowAdvancedOptions={setShowAdvancedOptions}
+        <SimpleCollapsible defaultOpen={false}>
+          <SimpleCollapsible.Header
+            title={t("advancedOptions")}
+            sizePreset="main-ui"
           />
-          {showAdvancedOptions && visibleAdvancedFields.map(renderField)}
-        </>
+          <SimpleCollapsible.Content>
+            <Section gap={4} alignItems="start" width="full">
+              {visibleAdvancedFields.map(renderField)}
+            </Section>
+          </SimpleCollapsible.Content>
+        </SimpleCollapsible>
       )}
     </Section>
   );

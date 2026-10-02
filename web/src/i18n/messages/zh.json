@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "请先选择一个凭据。"
       },
+      "bindingGate": {
+        "enterField": "请输入“{field}”。",
+        "fixField": "请检查“{field}”。",
+        "awaitingCheck": "离开该字段后将使用凭据进行检查。",
+        "checking": "正在检查凭据…",
+        "fieldInvalid": "请检查“{field}”：{detail}",
+        "rejected": "此凭据无法与这些设置一起使用。{detail}"
+      },
       "credentialsLoadError": {
         "title": "加载凭据失败。"
       },
@@ -2942,6 +2950,13 @@
       "checkboxTabs": {
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "高级选项",
+        "errors": {
+          "missing": "请输入一个值。",
+          "invalid": "此值无效：{detail}"
+        }
       },
       "scheduled": {
         "description": "指定连接器如何执行索引。操作员可以编辑此部分。",

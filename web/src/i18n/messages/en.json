@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "Select a credential first."
       },
+      "bindingGate": {
+        "enterField": "Enter the {field}.",
+        "fixField": "Check the {field}.",
+        "awaitingCheck": "Leave the field to check it with the credential.",
+        "checking": "Checking the credential…",
+        "fieldInvalid": "Check the {field}: {detail}",
+        "rejected": "This credential cannot be used with these settings. {detail}"
+      },
       "credentialsLoadError": {
         "title": "Failed to load credentials."
       },
@@ -2942,6 +2950,13 @@
       "checkboxTabs": {
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Advanced Options",
+        "errors": {
+          "missing": "Enter a value.",
+          "invalid": "This value is not valid: {detail}"
+        }
       },
       "scheduled": {
         "description": "Specify how the connector will operate indexing. Operator will be able to edit this section.",

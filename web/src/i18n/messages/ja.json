@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "最初に認証情報を選択してください。"
       },
+      "bindingGate": {
+        "enterField": "「{field}」を入力してください。",
+        "fixField": "「{field}」を確認してください。",
+        "awaitingCheck": "フィールドから移動すると、認証情報で確認します。",
+        "checking": "認証情報を確認しています…",
+        "fieldInvalid": "「{field}」を確認してください: {detail}",
+        "rejected": "この認証情報はこの設定では使用できません。{detail}"
+      },
       "credentialsLoadError": {
         "title": "認証情報の読み込みに失敗しました。"
       },
@@ -2942,6 +2950,13 @@
       "checkboxTabs": {
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "詳細オプション",
+        "errors": {
+          "missing": "値を入力してください。",
+          "invalid": "この値は無効です: {detail}"
+        }
       },
       "scheduled": {
         "description": "コネクタがインデックス作成をどのように実行するかを指定します。オペレーターはこのセクションを編集できます。",
