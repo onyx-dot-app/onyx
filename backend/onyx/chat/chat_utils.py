@@ -1,18 +1,11 @@
 import json
-import re
 from collections.abc import Callable
 from typing import cast
 from uuid import UUID
 
-from fastapi.datastructures import Headers
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.chat.incognito import (
-    incognito_allowed_for_user,
-    resolve_incognito_record_mode,
-)
-from onyx.chat.incognito_context import incognito_context_available
 from onyx.chat.models import (
     ChatHistoryResult,
     ChatLoadedFile,
@@ -28,24 +21,12 @@ from onyx.configs.constants import (
 )
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document
-from onyx.db.chat import (
-    create_chat_session,
-    get_chat_messages_by_session,
-    get_or_create_root_message,
-)
 from onyx.db.enums import (
-    IncognitoRecordMode,
     UserFileStatus,
-    record_mode_persists_content,
 )
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
-from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.persona import user_can_access_persona
-from onyx.db.projects import check_project_ownership
+from onyx.db.models import ChatMessage, ChatSession, Persona, UserFile
 from onyx.db.user_file import get_user_file_by_id
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
@@ -55,8 +36,6 @@ from onyx.prompts.chat_prompts import (
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.models import ChatFile, ToolCallKickoff
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -156,274 +135,6 @@ def build_file_context(
     )
 
     return FileContextResult(message=message, tool_metadata=metadata)
-
-
-def create_chat_session_from_request(
-    chat_session_request: ChatSessionCreationRequest,
-    user: User,
-    db_session: Session,
-) -> ChatSession:
-    """Create a chat session from a ChatSessionCreationRequest.
-
-    Includes project ownership and persona access validation.
-
-    Args:
-        chat_session_request: The request containing persona_id, description, and project_id
-        user: The user creating the session. Anonymous users are represented as a
-            User with is_anonymous=True (never None); the access-check helpers
-            handle that case. A real User is required so the persona access check
-            always runs — do not introduce a None-tolerant caller.
-        db_session: The database session
-
-    Returns:
-        The newly created ChatSession
-
-    Raises:
-        ValueError: If user lacks access to the specified project or persona
-        Exception: If the persona is invalid
-    """
-    project_id = chat_session_request.project_id
-    if project_id:
-        if not check_project_ownership(project_id, user.id, db_session):
-            raise ValueError("User does not have access to project")
-
-    persona_id = chat_session_request.persona_id
-    if persona_id != DEFAULT_PERSONA_ID:
-        if not user_can_access_persona(
-            db_session=db_session,
-            persona_id=persona_id,
-            user=user,
-            get_editable=False,
-        ):
-            raise ValueError("User does not have access to persona")
-
-    # Pinned at creation so a later setting change cannot alter a live session.
-    # Availability decides server-side, never the client flag. A refusal
-    # errors: degrading would silently persist a believed-incognito chat.
-    # The capability is checked first so a deployment that cannot hold the
-    # context says so, rather than reporting it as a permission the admin
-    # could grant.
-    incognito_mode: IncognitoRecordMode | None = None
-    if chat_session_request.incognito:
-        if not incognito_context_available():
-            raise OnyxError(
-                OnyxErrorCode.DEPLOYMENT_UNSUPPORTED,
-                "Incognito chat is not supported on this deployment.",
-            )
-        if not incognito_allowed_for_user(user, db_session, cached=False):
-            raise OnyxError(
-                OnyxErrorCode.UNAUTHORIZED,
-                "Incognito chat is not enabled for this user.",
-            )
-        incognito_mode = resolve_incognito_record_mode()
-
-    # A caller-supplied title is conversation-derived, so a content-free
-    # session stores none of it.
-    description = (
-        chat_session_request.description or ""
-        if record_mode_persists_content(incognito_mode)
-        else ""
-    )
-
-    chat_session = create_chat_session(
-        db_session=db_session,
-        description=description,
-        user_id=user.id,
-        persona_id=chat_session_request.persona_id,
-        project_id=chat_session_request.project_id,
-        incognito_record_mode=incognito_mode,
-        session_id=(
-            chat_session_request.incognito_session_id if incognito_mode else None
-        ),
-    )
-    return chat_session
-
-
-def create_chat_history_chain(
-    chat_session_id: UUID,
-    db_session: Session,
-    prefetch_top_two_level_tool_calls: bool = True,
-    prefetch_message_details: bool = False,
-    # Optional id at which we finish processing
-    stop_at_message_id: int | None = None,
-) -> list[ChatMessage]:
-    """Build the linear chain of messages without including the root message"""
-    mainline_messages: list[ChatMessage] = []
-
-    all_chat_messages = get_chat_messages_by_session(
-        chat_session_id=chat_session_id,
-        user_id=None,
-        db_session=db_session,
-        skip_permission_check=True,
-        prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
-        prefetch_message_details=prefetch_message_details,
-    )
-
-    if not all_chat_messages:
-        root_message = get_or_create_root_message(
-            chat_session_id=chat_session_id, db_session=db_session
-        )
-    else:
-        root_message = all_chat_messages[0]
-        if root_message.parent_message is not None:
-            raise RuntimeError(
-                "Invalid root message, unable to fetch valid chat message sequence"
-            )
-
-    current_message: ChatMessage | None = root_message
-    previous_message: ChatMessage | None = None
-    while current_message is not None:
-        child_msg = current_message.latest_child_message
-
-        # Break if at the end of the chain
-        # or have reached the `final_id` of the submitted message
-        if not child_msg or (
-            stop_at_message_id and current_message.id == stop_at_message_id
-        ):
-            break
-        current_message = child_msg
-
-        if (
-            current_message.message_type == MessageType.ASSISTANT
-            and previous_message is not None
-            and previous_message.message_type == MessageType.ASSISTANT
-            and mainline_messages
-        ):
-            # Note that 2 user messages in a row is fine since this is often used for
-            # adding custom prompts and reminders
-            raise RuntimeError(
-                "Invalid message chain, cannot have two assistant messages in a row"
-            )
-        else:
-            mainline_messages.append(current_message)
-
-        previous_message = current_message
-
-    return mainline_messages
-
-
-def reorganize_citations(
-    answer: str, citations: list[CitationInfo]
-) -> tuple[str, list[CitationInfo]]:
-    """For a complete, citation-aware response, we want to reorganize the citations so that
-    they are in the order of the documents that were used in the response. This just looks nicer / avoids
-    confusion ("Why is there [7] when only 2 documents are cited?")."""
-
-    # Regular expression to find all instances of [[x]](LINK)
-    pattern = r"\[\[(.*?)\]\]\((.*?)\)"
-
-    all_citation_matches = re.findall(pattern, answer)
-
-    new_citation_info: dict[int, CitationInfo] = {}
-    for citation_match in all_citation_matches:
-        try:
-            citation_num = int(citation_match[0])
-            if citation_num in new_citation_info:
-                continue
-
-            matching_citation = next(
-                iter([c for c in citations if c.citation_number == int(citation_num)]),
-                None,
-            )
-            if matching_citation is None:
-                continue
-
-            new_citation_info[citation_num] = CitationInfo(
-                citation_number=len(new_citation_info) + 1,
-                document_id=matching_citation.document_id,
-            )
-        except Exception:
-            pass
-
-    # Function to replace citations with their new number
-    def slack_link_format(match: re.Match) -> str:
-        link_text = match.group(1)
-        try:
-            citation_num = int(link_text)
-            if citation_num in new_citation_info:
-                link_text = new_citation_info[citation_num].citation_number
-        except Exception:
-            pass
-
-        link_url = match.group(2)
-        return f"[[{link_text}]]({link_url})"
-
-    # Substitute all matches in the input text
-    new_answer = re.sub(pattern, slack_link_format, answer)
-
-    # if any citations weren't parsable, just add them back to be safe
-    for citation in citations:
-        if citation.citation_number not in new_citation_info:
-            new_citation_info[citation.citation_number] = citation
-
-    return new_answer, list(new_citation_info.values())
-
-
-def build_citation_map_from_infos(
-    citations_list: list[CitationInfo], db_docs: list[DbSearchDoc]
-) -> dict[int, int]:
-    """Translate a list of streaming CitationInfo objects into a mapping of
-    citation number -> saved search doc DB id.
-
-    Always cites the first instance of a document_id and assumes db_docs are
-    ordered as shown to the user (display order).
-    """
-    doc_id_to_saved_doc_id_map: dict[str, int] = {}
-    for db_doc in db_docs:
-        if db_doc.document_id not in doc_id_to_saved_doc_id_map:
-            doc_id_to_saved_doc_id_map[db_doc.document_id] = db_doc.id
-
-    citation_to_saved_doc_id_map: dict[int, int] = {}
-    for citation in citations_list:
-        if citation.citation_number not in citation_to_saved_doc_id_map:
-            saved_id = doc_id_to_saved_doc_id_map.get(citation.document_id)
-            if saved_id is not None:
-                citation_to_saved_doc_id_map[citation.citation_number] = saved_id
-
-    return citation_to_saved_doc_id_map
-
-
-def build_citation_map_from_numbers(
-    cited_numbers: list[int] | set[int], db_docs: list[DbSearchDoc]
-) -> dict[int, int]:
-    """Translate parsed citation numbers (e.g., from [[n]]) into a mapping of
-    citation number -> saved search doc DB id by positional index.
-    """
-    citation_to_saved_doc_id_map: dict[int, int] = {}
-    for num in sorted(set(cited_numbers)):
-        idx = num - 1
-        if 0 <= idx < len(db_docs):
-            citation_to_saved_doc_id_map[num] = db_docs[idx].id
-
-    return citation_to_saved_doc_id_map
-
-
-def extract_headers(
-    headers: dict[str, str] | Headers, pass_through_headers: list[str] | None
-) -> dict[str, str]:
-    """
-    Extract headers specified in pass_through_headers from input headers.
-    Handles both dict and FastAPI Headers objects, accounting for lowercase keys.
-
-    Args:
-        headers: Input headers as dict or Headers object.
-
-    Returns:
-        dict: Filtered headers based on pass_through_headers.
-    """
-    if not pass_through_headers:
-        return {}
-
-    extracted_headers: dict[str, str] = {}
-    for key in pass_through_headers:
-        if key in headers:
-            extracted_headers[key] = headers[key]
-        else:
-            # fastapi makes all header keys lowercase, handling that here
-            lowercase_key = key.lower()
-            if lowercase_key in headers:
-                extracted_headers[lowercase_key] = headers[lowercase_key]
-    return extracted_headers
 
 
 def _get_or_extract_plaintext(
@@ -924,24 +635,6 @@ def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str 
         return chat_session.project.instructions
 
     return None
-
-
-def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:
-    """Check if the last assistant message in chat history was a clarification question.
-
-    This is used in the deep research flow to determine whether to skip the
-    clarification step when the user has already responded to a clarification.
-
-    Args:
-        chat_history: List of ChatMessage objects in chronological order
-
-    Returns:
-        True if the last assistant message has is_clarification=True, False otherwise
-    """
-    for message in reversed(chat_history):
-        if message.message_type == MessageType.ASSISTANT:
-            return message.is_clarification
-    return False
 
 
 def create_tool_call_failure_messages(
