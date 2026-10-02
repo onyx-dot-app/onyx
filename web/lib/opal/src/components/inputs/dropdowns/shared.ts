@@ -87,11 +87,26 @@ export function buildNavItems(
   return items;
 }
 
+/** Whether the search term matches a row's title, value or keywords. */
+export function optionMatchesSearch(
+  option: SelectOption,
+  searchTerm: string
+): boolean {
+  return (
+    option.title.toLowerCase().includes(searchTerm) ||
+    option.value.toLowerCase().includes(searchTerm) ||
+    (option.keywords?.some((keyword) =>
+      keyword.toLowerCase().includes(searchTerm)
+    ) ??
+      false)
+  );
+}
+
 /**
  * Filters each group's options by the search term, matched against a
- * row's title or value. A term that matches a divider's title keeps the
- * whole section. Groups left empty disappear, so the dropdown's dividers
- * never dangle.
+ * row's title, value or keywords. A term that matches a divider's title
+ * keeps the whole section. Groups left empty disappear, so the dropdown's
+ * dividers never dangle.
  */
 export function filterSections(
   groups: OptionGroup[],
@@ -105,10 +120,8 @@ export function filterSections(
         ? group
         : {
             ...group,
-            options: group.options.filter(
-              (option) =>
-                option.title.toLowerCase().includes(searchTerm) ||
-                option.value.toLowerCase().includes(searchTerm)
+            options: group.options.filter((option) =>
+              optionMatchesSearch(option, searchTerm)
             ),
           }
     )

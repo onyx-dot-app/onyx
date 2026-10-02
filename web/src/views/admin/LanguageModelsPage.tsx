@@ -109,7 +109,12 @@ function ExistingProviderCard({
       })
     );
     setIsOpen(false);
-  }, [fullProviderError, t]);
+    // Drop the cached failure so the next open fetches again instead of
+    // replaying it.
+    void mutate(SWR_KEYS.adminLlmProvider(provider.id), undefined, {
+      revalidate: false,
+    });
+  }, [fullProviderError, provider.id, mutate, t]);
 
   const handleDelete = async () => {
     try {
@@ -361,8 +366,11 @@ export default function LanguageModelsPage() {
   const [pendingHideGrouping, setPendingHideGrouping] = useState<
     boolean | null
   >(null);
-  const { llmProviders: existingLlmProviders, defaultText } =
-    useAdminLanguageModels();
+  const {
+    llmProviders: existingLlmProviders,
+    defaultText,
+    modelPaging,
+  } = useAdminLanguageModels();
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
@@ -511,6 +519,7 @@ export default function LanguageModelsPage() {
                   grouped={
                     !(pendingHideGrouping ?? settings.hide_provider_grouping)
                   }
+                  modelPaging={modelPaging}
                   onChange={(modelConfigurationId) => {
                     const opt = findLlmOptionById(
                       existingLlmProviders,

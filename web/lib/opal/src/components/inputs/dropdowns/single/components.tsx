@@ -84,6 +84,8 @@ function SingleDropdown({
   showOtherOptions = false,
   dropdownMaxHeight,
   search = false,
+  onSearchChange,
+  onScrollEnd,
   ...rest
 }: WithoutStyles<SingleDropdownProps>) {
   const typeIn = trigger === "type-in";
@@ -166,8 +168,10 @@ function SingleDropdown({
   // with the list.
   const [searchText, setSearchText] = useState("");
   useEffect(() => {
-    if (!isOpen) setSearchText("");
-  }, [isOpen]);
+    if (isOpen) return;
+    setSearchText("");
+    onSearchChange?.("");
+  }, [isOpen, onSearchChange]);
   const filterText = typeIn ? inputValue : search ? searchText : "";
 
   // Filtering: each section filters independently; empty ones disappear.
@@ -579,12 +583,14 @@ function SingleDropdown({
           dropdownMaxHeight={dropdownMaxHeight}
           keyboardNav={isKeyboardNav}
           onToggleGroup={toggleGroup}
+          onScrollEnd={onScrollEnd}
           searchField={
             search
               ? {
                   value: searchText,
                   onChange: (next) => {
                     setSearchText(next);
+                    onSearchChange?.(next);
                     // Typing never highlights; only walking the list does.
                     setHighlightedIndex(-1);
                     setIsKeyboardNav(false);

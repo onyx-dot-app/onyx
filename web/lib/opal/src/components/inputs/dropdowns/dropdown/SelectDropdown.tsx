@@ -59,7 +59,11 @@ interface SelectDropdownProps {
   };
   /** A click on a foldable group's title. */
   onToggleGroup?: (group: OptionGroup) => void;
+  /** The rows scrolled to within SCROLL_END_THRESHOLD_PX of their end. */
+  onScrollEnd?: () => void;
 }
+
+const SCROLL_END_THRESHOLD_PX = 48;
 
 /**
  * Renders the dropdown menu in a portal
@@ -91,6 +95,7 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
       keyboardNav,
       searchField,
       onToggleGroup,
+      onScrollEnd,
     },
     ref
   ) => {
@@ -244,6 +249,11 @@ export const SelectDropdown = forwardRef<HTMLDivElement, SelectDropdownProps>(
             // Scroll independently of whatever sits behind the portal.
             overscrollBehavior: "contain",
             maxHeight: dropdownMaxHeight || undefined,
+          }}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+            if (remaining <= SCROLL_END_THRESHOLD_PX) onScrollEnd?.();
           }}
         >
           <OptionsList

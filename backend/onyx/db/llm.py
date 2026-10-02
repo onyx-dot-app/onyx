@@ -753,6 +753,7 @@ def fetch_existing_llm_providers(
     only_public: bool = False,
     exclude_image_generation_providers: bool = True,
     include_model_configurations: bool = True,
+    include_model_flows: bool = False,
 ) -> list[LLMProviderModel]:
     """Fetch all LLM providers with optional filtering.
 
@@ -765,6 +766,8 @@ def fetch_existing_llm_providers(
         include_model_configurations: If False, leave model_configurations
             unloaded. A provider can hold tens of thousands of rows, so callers
             that only need a page use fetch_model_configurations_page instead.
+        include_model_flows: Load each model's flows with it, for callers that
+            build LLMProviderView per model. Needs include_model_configurations.
     """
     stmt = select(LLMProviderModel)
 
@@ -788,7 +791,11 @@ def fetch_existing_llm_providers(
         selectinload(LLMProviderModel.personas),
     )
     if include_model_configurations:
-        stmt = stmt.options(_load_model_configurations_with_flows())
+        stmt = stmt.options(
+            _load_model_configurations_with_flows()
+            if include_model_flows
+            else selectinload(LLMProviderModel.model_configurations)
+        )
 
     providers = list(db_session.scalars(stmt).all())
     if only_public:
@@ -958,7 +965,9 @@ def fetch_all_llm_providers_accessible_in_any_context(
             include_slack_bot_personas=True,
         )
     }
-    provider_models = fetch_existing_llm_providers(db_session, [])
+    provider_models = fetch_existing_llm_providers(
+        db_session, [], include_model_flows=True
+    )
     user_group_ids = fetch_user_group_ids(db_session, user)
     can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
 
