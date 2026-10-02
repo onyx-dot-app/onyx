@@ -49,6 +49,19 @@ export interface GoogleDriveConfig {
   shared_folder_urls?: string;
 }
 
+export enum OneDriveScope {
+  General = "general",
+  Specific = "specific",
+}
+
+export interface OneDriveConfig {
+  users: string[];
+  excluded_paths: string[];
+  treat_organization_link_as_public: boolean;
+  authority_host: string;
+  graph_api_host: string;
+}
+
 export interface GmailConfig {}
 
 export interface BookstackConfig {}

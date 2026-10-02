@@ -12,7 +12,7 @@ import {
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
-import { getProvider } from "@/lib/languageModels";
+import { getProvider } from "@/lib/languageModels/utils";
 import ProviderSetupModal from "@/sections/modals/languageModels/ProviderSetupModal";
 import { Disabled } from "@opal/core";
 import { ModelIcon } from "@/lib/languageModels/components";

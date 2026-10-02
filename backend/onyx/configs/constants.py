@@ -119,6 +119,7 @@ KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
+KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY = "opensearch_cc_pair_ids_backfill_progress"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -126,9 +127,42 @@ KV_KG_CONFIG_KEY = "kg_config"
 # rather than holding the beat lock past its timeout.
 INCOGNITO_FILE_CLEANUP_BATCH = 200
 
+
+def lock_timeout_from_env(name: str, default: int, minimum: int = 1) -> int:
+    """A Redis lock TTL in seconds that an operator may set through the env.
+
+    Values under ``minimum`` would break the guard (0 is a lock with no TTL that
+    a crashed worker leaves stuck forever, negatives fail acquisition, and a
+    lock refreshed on a fixed cadence must outlive that cadence), so a bad
+    override falls back to the default loudly: an operator who set a TTL needs
+    to know it is not in effect."""
+    raw: str | None = os.environ.get(name)
+    value: int
+    try:
+        value = int(raw) if raw else default
+    except ValueError:
+        value = minimum - 1
+    if value >= minimum:
+        return value
+    logging.getLogger(__name__).warning(
+        "Ignoring invalid %s=%r (must be an integer of at least %d seconds); "
+        "using the %ds default.",
+        name,
+        raw,
+        minimum,
+        default,
+    )
+    return default
+
+
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
-CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
+# Beat lock for one document-index sync pass, reacquired every quarter of its
+# TTL. A step that outruns it loses the lock and aborts the pass, so large
+# tenants raise it.
+CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT: int = lock_timeout_from_env(
+    "CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT", 120
+)
 
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
@@ -160,39 +194,23 @@ CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
-CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
+# Held for one connector's whole document permission sync and refreshed every
+# quarter of the generic beat TTL, so it must not be set below that TTL. A
+# connector silent longer than this loses it, so large tenants raise it.
+CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
+    "CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT",
+    3600,
+    minimum=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+)
 
 # While this lock is held, duplicate dispatches for the same cc_pair exit
 # immediately. Deployments whose group syncs legitimately run for hours should
 # raise this toward the JOB_TIMEOUT crawl deadline (6h) so re-dispatches can't
 # stack concurrent crawls on one heavy worker; a worker that dies mid-sync
 # leaves the lock stuck for at most this TTL.
-# Non-positive values would break the guard (0 = a lock with no TTL that a
-# crashed worker leaves stuck forever; negatives fail acquisition), so clamp
-# bad overrides back to the default — loudly, since an operator who set a
-# long TTL needs to know their duplicate-crawl protection is NOT in effect.
-_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT = 300
-_external_group_sync_lock_timeout_raw = os.environ.get(
-    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT"
+CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = lock_timeout_from_env(
+    "CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT", 300
 )
-try:
-    _external_group_sync_lock_timeout = (
-        int(_external_group_sync_lock_timeout_raw)
-        if _external_group_sync_lock_timeout_raw
-        else _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
-    )
-except ValueError:
-    _external_group_sync_lock_timeout = -1
-if _external_group_sync_lock_timeout > 0:
-    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: int = _external_group_sync_lock_timeout
-else:
-    logging.getLogger(__name__).warning(
-        "Ignoring invalid CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT=%r "
-        "(must be a positive integer of seconds); using the %ds default.",
-        _external_group_sync_lock_timeout_raw,
-        _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT,
-    )
-    CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = _EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT_DEFAULT
 
 CELERY_USER_FILE_PROCESSING_LOCK_TIMEOUT = 30 * 60  # 30 minutes (in seconds)
 
@@ -224,7 +242,7 @@ CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
 
 # Per-doc metadata-sync task expiry: bounds queue growth if consumers stall. An
 # expired task's doc stays needs_sync / secondary_only_sync_pending and is
-# re-enqueued on the next vespa-sync beat pass, so dropping it is safe.
+# re-enqueued on the next document index sync beat pass, so dropping it is safe.
 CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
@@ -276,6 +294,7 @@ class DocumentSource(str, Enum):
     BOX = "box"
     DROPBOX = "dropbox"
     SHAREPOINT = "sharepoint"
+    ONEDRIVE = "onedrive"
     TEAMS = "teams"
     OUTLOOK = "outlook"
     SALESFORCE = "salesforce"
@@ -348,11 +367,6 @@ class BlobType(str, Enum):
     OCI_STORAGE = "oci_storage"
 
 
-class DocumentIndexType(str, Enum):
-    COMBINED = "combined"  # Vespa
-    SPLIT = "split"  # Typesense + Qdrant
-
-
 class QueryHistoryType(str, Enum):
     DISABLED = "disabled"
     ANONYMIZED = "anonymized"
@@ -390,13 +404,6 @@ class MessageType(str, Enum):
     ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
     TOOL_CALL_RESPONSE = "tool_call_response"
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
-
-
-class ChatMessageSimpleType(str, Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL_CALL = "tool_call"
-    FILE_TEXT = "file_text"
 
 
 class TokenRateLimitScope(str, Enum):
@@ -507,8 +514,6 @@ class OnyxCeleryQueues:
     # Scheduled tasks queue (Craft scheduled-task executor)
     SCHEDULED_TASKS = "scheduled_tasks"
 
-    OPENSEARCH_MIGRATION = "opensearch_migration"
-
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -528,7 +533,7 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
-    OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
+    CC_PAIR_IDS_BACKFILL_LOCK = "da_lock:cc_pair_ids_backfill"
     OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
     SECURITY_SETTINGS = "da_lock:security_settings"
@@ -733,15 +738,7 @@ class OnyxCeleryTask:
     SCHEDULED_TASKS_RUN = "scheduled_tasks_run"
     SCHEDULED_TASKS_CLEANUP_STUCK = "scheduled_tasks_cleanup_stuck"
 
-    CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
-        "check_for_documents_for_opensearch_migration_task"
-    )
-    MIGRATE_DOCUMENTS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_documents_from_vespa_to_opensearch_task"
-    )
-    MIGRATE_CHUNKS_FROM_VESPA_TO_OPENSEARCH_TASK = (
-        "migrate_chunks_from_vespa_to_opensearch_task"
-    )
+    BACKFILL_CC_PAIR_IDS_TASK = "backfill_cc_pair_ids_task"
 
 
 # this needs to correspond to the matching entry in supervisord
@@ -760,11 +757,6 @@ if platform.system() == "Darwin":
     REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60  # noqa: B009  # ods: ignore[getattr]
 else:
     REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009  # ods: ignore[getattr]
-
-
-class OnyxCallTypes(str, Enum):
-    FIREFLIES = "FIREFLIES"
-    GONG = "GONG"
 
 
 NUM_DAYS_TO_KEEP_CHECKPOINTS = 7
@@ -804,6 +796,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.BOX: "Cloud-stored files and folders",
     DocumentSource.DROPBOX: "Cloud-stored files and folders",
     DocumentSource.SHAREPOINT: "Documents and team sites",
+    DocumentSource.ONEDRIVE: "Files and folders from Microsoft 365 OneDrive",
     DocumentSource.TEAMS: "Chat messages and channels",
     DocumentSource.OUTLOOK: "Email conversations and calendar events from Microsoft 365 mailboxes",
     DocumentSource.SALESFORCE: "Sales data, accounts, and opportunities",

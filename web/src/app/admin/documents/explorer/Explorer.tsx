@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { adminSearch } from "@/lib/searchFilters/svc";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
@@ -19,7 +20,6 @@ import { SourceIcon } from "@/components/SourceIcon";
 import type { Connector } from "@/lib/connectors/types";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { clickOnKeyDown } from "@opal/utils";
 
 const DocumentDisplay = ({
@@ -227,7 +227,7 @@ export function Explorer({
       )}
       {isLoading && (
         <div className="flex justify-center py-12">
-          <SvgSimpleLoader className="h-6 w-6" />
+          <IconLoader className="h-6 w-6" />
         </div>
       )}
     </div>

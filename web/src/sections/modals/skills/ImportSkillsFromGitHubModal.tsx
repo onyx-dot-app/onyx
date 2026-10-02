@@ -236,6 +236,8 @@ export function ImportSkillsFromGitHubModalView({
           {result ? (
             <div className="flex w-full flex-col gap-3">
               <MessageCard
+                outerPadding={1}
+                innerPadding={1}
                 variant={
                   result.imported.length === 0
                     ? "error"
@@ -374,6 +376,8 @@ export function ImportSkillsFromGitHubModalView({
 
               {error && (
                 <MessageCard
+                  outerPadding={1}
+                  innerPadding={1}
                   variant="error"
                   title={
                     preview

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import CardSection from "@/components/admin/CardSection";
 import { handleOAuthAuthorizationResponse } from "@/lib/oauth_utils";
 import { SvgKey } from "@opal/icons";

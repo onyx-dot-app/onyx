@@ -120,7 +120,7 @@ per cluster. New clusters use the `kindest/node:v1.33.1` node image so Craft's
 native init sidecar pod shape is supported. Existing clusters are not recreated;
 set `KIND_NODE_IMAGE` to override the default for a newly created cluster.
 
-Watch pods (vespa and CNPG-postgres take a minute or two on first boot):
+Watch pods (opensearch and CNPG-postgres take a minute or two on first boot):
 
 ```bash
 kubectl -n onyx get pods -w
@@ -332,7 +332,7 @@ external-dependency-unit tests against a temp dir. See
 
 Run **`k8s: pause cluster`** (or `docker stop onyx-dev-control-plane`) to stop
 the kind node container. PVC data lives inside that container, so postgres,
-redis, opensearch, vespa, and minio state all survive. Resume with
+redis, opensearch, and minio state all survive. Resume with
 **`k8s: resume cluster`** — the kubelet reconciles pods automatically.
 
 Reach for **`k8s: cluster down (full teardown)`** only when you want a clean

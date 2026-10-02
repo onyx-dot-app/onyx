@@ -578,7 +578,7 @@ def count_consecutive_failed_port_attempts_no_progress(
 
 def any_future_port_in_progress(db_session: Session) -> bool:
     """True if any PortAttempt against a FUTURE SearchSettings is active
-    (NOT_STARTED / IN_PROGRESS). The vespa sync producer drops deferred-doc syncs
+    (NOT_STARTED / IN_PROGRESS). The document index sync producer drops deferred-doc syncs
     to LOW priority while a port runs so they don't starve normal needs_sync work."""
     stmt = select(
         exists()

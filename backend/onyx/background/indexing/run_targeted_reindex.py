@@ -40,12 +40,11 @@ from onyx.db.models import (
     TargetedReindexJobTarget,
 )
 from onyx.db.targeted_reindex import targets_to_connector_failures
-from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.staging import (
     build_tracking_raw_file_callback,
     delete_files_best_effort,
 )
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
@@ -131,11 +130,7 @@ def _flush_batch(
         search_settings=search_settings,
         callback=None,
     )
-    document_indices = get_all_document_indices(
-        search_settings,
-        None,
-        httpx_client=HttpxPool.get("vespa"),
-    )
+    document_index = get_default_document_index(search_settings, None)
     metadata = IndexAttemptMetadata(
         attempt_id=attempt.id,
         connector_id=attempt.connector_credential_pair.connector.id,
@@ -154,7 +149,7 @@ def _flush_batch(
 
     result = run_indexing_pipeline(
         embedder=embedder,
-        document_indices=document_indices,
+        document_index=document_index,
         ignore_time_skip=True,
         # FUTURE/secondary build: skip the PRESENT-only content_hash dedup.
         index_to_secondary=search_settings.status.is_future(),
@@ -311,7 +306,7 @@ def process_targets_for_cc_pair(
             )
 
         # Per-attempt pipeline run. Each attempt commits to its own
-        # search_settings's document_indices.
+        # search_settings.s document index.
         for attempt in cc_pair_attempts:
             for batch_num, batch in enumerate(chunked(docs, INDEX_BATCH_SIZE)):
                 landed, failed = _flush_batch(

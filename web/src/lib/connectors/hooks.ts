@@ -1,37 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
-import { useFederatedConnectors, usePublicCredentials } from "@/lib/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import type {
-  Credential,
-  GmailCredentialJson,
-  GmailServiceAccountCredentialJson,
-  GoogleDriveCredentialJson,
-  GoogleDriveServiceAccountCredentialJson,
-  OAuthDetails,
-} from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { FederatedConnectorDetail } from "@/lib/types";
+import type { CredentialSchemaResponse } from "@/lib/credentials/types";
 import type {
   ConfigurableSources,
-  CredentialSchemaResponse,
-  FederatedConnectorDetail,
   ValidSources,
-} from "@/lib/types";
+} from "@/lib/connectors/types/source";
 
-/** The OAuth capabilities of a source: whether it supports OAuth, manual credentials, and any extra fields. */
-export function useOAuthDetails(sourceType: ValidSources) {
-  return useSWR<OAuthDetails>(
-    SWR_KEYS.connectorOAuthDetails(sourceType),
-    errorHandlingFetcher,
-    {
-      shouldRetryOnError: false,
-    }
+/** The workspace's federated connectors. */
+export function useFederatedConnectors() {
+  const { mutate } = useSWRConfig();
+  const url = SWR_KEYS.federatedConnectors;
+  const swrResponse = useSWR<FederatedConnectorDetail[]>(
+    url,
+    errorHandlingFetcher
   );
+
+  return {
+    ...swrResponse,
+    refreshFederatedConnectors: () => mutate(url),
+  };
 }
 
 /**
@@ -94,68 +89,6 @@ export function useAvailableSources(): {
     error: ccPairsError ?? federatedError,
   };
 }
-
-export const useGmailCredentials = (connector: string) => {
-  const {
-    data: credentialsData,
-    isLoading: isCredentialsLoading,
-    error: credentialsError,
-    refreshCredentials,
-  } = usePublicCredentials();
-
-  const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
-    credentialsData?.find(
-      (credential) =>
-        credential.credential_json?.google_tokens &&
-        credential.admin_public &&
-        credential.source === connector
-    );
-
-  const gmailServiceAccountCredential:
-    | Credential<GmailServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGmailCredential =
-    gmailPublicCredential || gmailServiceAccountCredential;
-
-  return {
-    liveGmailCredential: liveGmailCredential,
-  };
-};
-
-export const useGoogleDriveCredentials = (connector: string) => {
-  const { data: credentialsData } = usePublicCredentials();
-
-  const googleDrivePublicCredential:
-    | Credential<GoogleDriveCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_tokens &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const googleDriveServiceAccountCredential:
-    | Credential<GoogleDriveServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGDriveCredential =
-    googleDrivePublicCredential || googleDriveServiceAccountCredential;
-
-  return {
-    liveGDriveCredential: liveGDriveCredential,
-  };
-};
 
 interface UseFederatedConnectorResult {
   sourceType: ConfigurableSources | null;

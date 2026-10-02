@@ -36,7 +36,7 @@ import {
   SvgFilter,
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import {
   HierarchyNodeSummary,
   DocumentSummary,
@@ -46,7 +46,7 @@ import {
   DocumentSortField,
   DocumentSortDirection,
   FolderPosition,
-} from "@/lib/hierarchy/interfaces";
+} from "@/lib/hierarchy/types";
 import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,

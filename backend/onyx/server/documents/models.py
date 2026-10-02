@@ -1,17 +1,27 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timezone
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, Self, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializeAsAny,
+    model_validator,
+)
 
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.connector_config import CredentialBinding
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     PermissionSyncStatus,
     ProcessingMode,
 )
@@ -33,6 +43,7 @@ from onyx.db.models import (
 )
 from onyx.db.models import Document as DbDocument
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -156,16 +167,34 @@ class CredentialSnapshot(CredentialBase):
         credential: Credential,
         *,
         mask_credential_prefix: bool,
-    ) -> "CredentialSnapshot":
-        # Get the credential_json value with appropriate masking
-        if credential.credential_json is None:
-            credential_json_value: dict[str, Any] = {}
-        else:
-            credential_json_value = credential.credential_json.get_value(
-                apply_mask=mask_credential_prefix
+        view_source: DocumentSource | None = None,
+    ) -> Self:
+        """``view_source`` picks the keys ``credential_json`` is shown in: a
+        family credential listed for another source of its family is shown in
+        that source's keys. Defaults to the credential's own source."""
+        source = credential.source or DocumentSource.NOT_APPLICABLE
+        stored_json = (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        )
+        try:
+            credential_json_value = to_source_credential_json(
+                view_source or source, stored_json
             )
+        except ValueError:
+            # One unreadable row (e.g. its source left the family registry) must
+            # not fail a whole credential listing.
+            logger.warning(
+                "Showing credential %s in its stored shape: it cannot be read as %s.",
+                credential.id,
+                (view_source or source).value,
+            )
+            credential_json_value = stored_json
+        if mask_credential_prefix:
+            credential_json_value = mask_credential_dict(credential_json_value)
 
-        return CredentialSnapshot(
+        return cls(
             id=credential.id,
             credential_json=credential_json_value,
             user_id=credential.user_id,
@@ -173,10 +202,27 @@ class CredentialSnapshot(CredentialBase):
             admin_public=credential.admin_public,
             time_created=credential.time_created,
             time_updated=credential.time_updated,
-            source=credential.source or DocumentSource.NOT_APPLICABLE,
+            source=source,
             name=credential.name,
             curator_public=credential.curator_public,
         )
+
+
+class CredentialUsage(BaseModel):
+    """A connector that uses a credential, as a hint for picking a credential."""
+
+    cc_pair_id: int
+    cc_pair_name: str | None
+    connector_id: int
+    source: DocumentSource
+    # None when the source has no binding model or the stored config does not
+    # match it.
+    credential_binding: SerializeAsAny[CredentialBinding] | None
+
+
+class SimilarCredentialSnapshot(CredentialSnapshot):
+    # Only connectors the requesting user can manage.
+    usages: list[CredentialUsage] = Field(default_factory=list)
 
 
 class IndexAttemptSnapshot(BaseModel):
@@ -449,9 +495,10 @@ class CCPairFullInfo(BaseModel):
     last_index_attempt_status: IndexingStatus | None
     latest_deletion_attempt: DeletionAttemptSnapshot | None
     access_type: AccessType
+    # True when the caller may operate the pair (the OPERATE access level)
     is_editable_for_current_user: bool
-    # per-action affordance map for the requesting user, from the same editable-scope
-    # decision the write guard enforces
+    # per-action affordance map for the requesting user, from the same access
+    # decisions the write guards enforce
     permissions: dict[str, bool]
     deletion_failure_message: str | None
     indexing: bool
@@ -532,8 +579,8 @@ class CCPairFullInfo(BaseModel):
         indexing: bool,
         *,
         mask_credential_prefix: bool,
+        can_edit: bool,
         is_connectors_admin: bool = False,
-        owns_groupless: bool = False,
         groups: list[int] | None = None,
         last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
@@ -585,9 +632,9 @@ class CCPairFullInfo(BaseModel):
             access_type=cc_pair_model.access_type,
             is_editable_for_current_user=is_editable_for_current_user,
             permissions=cc_pair_permissions(
-                is_editable=is_editable_for_current_user,
+                can_operate=is_editable_for_current_user,
+                can_edit=can_edit,
                 is_connectors_admin=is_connectors_admin,
-                owns_groupless=owns_groupless,
             ),
             deletion_failure_message=cc_pair_model.deletion_failure_message,
             indexing=indexing,
@@ -677,9 +724,10 @@ class ConnectorIndexingStatusLite(BaseModel):
     last_finished_status: IndexingStatus | None
     last_status: IndexingStatus | None
     last_success: datetime | None
+    # True when the caller may operate the pair (the OPERATE access level)
     is_editable: bool
-    # per-action affordance map for the requesting user, from the same editable-scope
-    # decision the write guard enforces
+    # per-action affordance map for the requesting user, from the same access
+    # decisions the write guards enforce
     permissions: dict[str, bool]
     docs_indexed: int
     latest_index_attempt_docs_indexed: int | None
@@ -705,12 +753,55 @@ class ConnectorCredentialPairIdentifier(BaseModel):
     credential_id: int
 
 
+class CCPairManageAccessEntry(BaseModel):
+    group_id: int
+    role: ConnectorManageRole
+
+
+def _require_unique_groups(
+    entries: list[CCPairManageAccessEntry],
+) -> list[CCPairManageAccessEntry]:
+    if len({entry.group_id for entry in entries}) != len(entries):
+        raise ValueError("Each group may appear only once in manage_access")
+    return entries
+
+
+# A group listed twice is rejected rather than resolved to one of its roles.
+ManageAccessList = Annotated[
+    list[CCPairManageAccessEntry], AfterValidator(_require_unique_groups)
+]
+
+
+def manage_access_by_group(
+    entries: ManageAccessList,
+) -> dict[int, ConnectorManageRole]:
+    return {entry.group_id: entry.role for entry in entries}
+
+
 class ConnectorCredentialPairMetadata(BaseModel):
     name: str
     access_type: AccessType
     auto_sync_options: dict[str, Any] | None = None
+    # Groups that manage the pair as Editors, for clients that predate
+    # manage_access. At most one of groups and manage_access may be set.
     groups: list[int] = Field(default_factory=list)
+    # Groups that manage the pair, with their roles.
+    manage_access: ManageAccessList = Field(default_factory=list)
+    # Groups whose members may read a PRIVATE pair's documents. None means
+    # the manage groups.
+    data_access: list[int] | None = None
     processing_mode: ProcessingMode = ProcessingMode.REGULAR
+
+    @model_validator(mode="after")
+    def _one_manage_field(self) -> Self:
+        if self.groups and self.manage_access:
+            raise ValueError("Set groups or manage_access, not both")
+        return self
+
+    def manage_roles_by_group(self) -> dict[int, ConnectorManageRole]:
+        if self.manage_access:
+            return manage_access_by_group(self.manage_access)
+        return dict.fromkeys(self.groups, ConnectorManageRole.EDITOR)
 
 
 class CCStatusUpdateRequest(BaseModel):

@@ -808,13 +808,7 @@
         "description": "Connectez {appName} à vos sources de données."
       },
       "search": {
-        "placeholder": "Rechercher des connecteurs..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Connecteur fédéré déjà configuré.</strong> Cliquez pour modifier le connecteur existant.",
-          "slackCredentialsFound": "<strong>Identifiants Slack existants trouvés.</strong> Cliquez pour gérer votre connecteur Slack."
-        }
+        "placeholder": "Rechercher des connecteurs ou appuyer sur \"/\" pour accéder à la recherche..."
       },
       "sourceCard": {
         "connectButton": {
@@ -908,6 +902,12 @@
         },
         "sharepoint": {
           "description": "Intranet Microsoft"
+        },
+        "onedrive": {
+          "description": "Stockage cloud Microsoft"
+        },
+        "zoom": {
+          "description": "Enregistrements de réunions et de webinaires"
         },
         "teams": {
           "description": "Discussions d'équipe Microsoft"
@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "ID du document",
+          "documentId": "ID de l’échec",
           "errorMessage": "Message d'erreur",
           "status": "Statut",
           "time": "Heure"
@@ -2559,10 +2559,50 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "Configurer le connecteur OneDrive",
+        "indexingScope": {
+          "label": "Quels fichiers OneDrive Onyx doit-il indexer ?",
+          "general": {
+            "label": "Général",
+            "description": "Indexer tous les utilisateurs admissibles auxquels l’application Microsoft peut accéder."
+          },
+          "specific": {
+            "label": "Spécifique",
+            "users": {
+              "label": "Utilisateurs",
+              "description": "Ajoutez le nom d’utilisateur principal ou l’adresse e-mail principale de chaque utilisateur à indexer.",
+              "required": "Ajoutez au moins un utilisateur pour la portée spécifique"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "Chemins exclus",
+          "description": "Motifs glob appliqués à chaque chemin et nom de fichier, tels que '*.tmp' ou 'Archive/*'."
+        },
+        "organizationLinks": {
+          "label": "Traiter les liens de l’organisation comme publics",
+          "description": "Rendre les fichiers partagés par un lien à l’échelle de l’organisation visibles par tous les utilisateurs Onyx."
+        },
+        "authorityHost": {
+          "label": "Hôte d’autorité",
+          "description": "Hôte d’autorité d’identité Microsoft. Utilisez https://login.microsoftonline.us pour GCC High ou DoD."
+        },
+        "graphApiHost": {
+          "label": "Hôte de l’API Graph",
+          "description": "Hôte Microsoft Graph. Utilisez https://graph.microsoft.us pour GCC High ou DoD."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "Autoriser avec {source}",
           "pendingLabel": "Autorisation en cours..."
+        },
+        "collapseButton": {
+          "ariaLabel": "Replier"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Créer"
@@ -2573,8 +2613,13 @@
         "credentialModal": {
           "title": "Créer un identifiant pour {source}"
         },
+        "credentialsLoadFailed": {
+          "description": "Les identifiants ne peuvent pas être configurés pour le moment. Rechargez la page ou réessayez plus tard.",
+          "title": "Impossible de charger vos identifiants"
+        },
         "credentialStep": {
-          "title": "Sélectionnez un identifiant"
+          "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",
+          "title": "Compte d'authentification"
         },
         "credentialSwapped": {
           "toast": "Identifiant remplacé avec succès !"
@@ -2582,16 +2627,26 @@
         "error": {
           "toast": "Erreur : {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Déplier"
+        },
         "federated": {
           "tooltip": {
-            "description": "Une option de recherche fédérée est disponible pour ce connecteur. Elle entraîne une latence plus élevée et une qualité de recherche réduite.",
+            "description": "Elle entraîne une latence plus élevée et une qualité de recherche réduite.",
             "link": {
               "label": "Utiliser la version fédérée à la place →"
-            }
+            },
+            "title": "Une option de recherche fédérée est disponible pour ce connecteur."
           }
         },
         "fileUploadFailed": {
           "toast": "Erreur lors du téléversement des fichiers"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "Nouveau compte {source}"
         },
         "oauthRedirectFailed": {
           "message": "Nous n'avons pas pu vous rediriger pour vous connecter avec {source}. Veuillez réessayer."
@@ -2604,6 +2659,9 @@
         },
         "retryButton": {
           "label": "Réessayer"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}"
         },
         "timeout": {
           "toast": "L'opération a expiré après {seconds} secondes. Vérifiez si votre configuration contient des erreurs ?"
@@ -2678,7 +2736,8 @@
         },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer le Drive.",
-          "title": "Option 1 : application OAuth"
+          "title": "Option 1 : application OAuth",
+          "sharedScopesNote": "Google demande l'accès à Google Drive et à Gmail en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Google Drive, décochez les autorisations Gmail sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
@@ -2736,7 +2795,8 @@
         },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer la messagerie Gmail.",
-          "title": "Option 1 : application OAuth"
+          "title": "Option 1 : application OAuth",
+          "sharedScopesNote": "Google demande l'accès à Gmail et à Google Drive en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Gmail, décochez les autorisations Google Drive sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
@@ -2771,7 +2831,7 @@
         "connectButton": {
           "label": "Connecter"
         },
-        "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}."
+        "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}.{hasDocs, select, true { Voir la [documentation]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4779,6 +4839,12 @@
         "azureGptImage2": {
           "description": "Modèle de génération d'images GPT Image 2 hébergé sur Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "Modèle de génération d'images GPT Image 2.5 Flare hébergé sur Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Modèle de génération d'images GPT Image 2.5 Sunburst hébergé sur Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Le modèle Gemini 2.5 Flash Image (Nano Banana) est conçu pour la rapidité et l'efficacité."
         },
@@ -4795,7 +4861,13 @@
           "description": "Ancien modèle phare de génération d'images d'OpenAI."
         },
         "openaiGptImage2": {
-          "description": "Dernier modèle de génération d'images d'OpenAI, avec la meilleure fidélité aux prompts."
+          "description": "Modèle de génération d'images de génération précédente d'OpenAI, avec une haute fidélité aux prompts."
+        },
+        "openaiGptImage25Flare": {
+          "description": "Dernier modèle de génération d'images d'OpenAI, alliant haute qualité et génération rapide."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "Modèle premium de génération d'images d'OpenAI, pour les retouches les plus précises."
         }
       },
       "setDefaultError": {
@@ -4814,6 +4886,9 @@
           "label": "Appliquer et réindexer",
           "statusesLoading": "Chargement de l'état des connecteurs…",
           "statusesFailed": "Impossible de charger l'état des connecteurs — réessayez avant de réindexer."
+        },
+        "applyWithoutReindex": {
+          "label": "Appliquer sans réindexer"
         },
         "rebuildAll": {
           "label": "Reconstruire tous les documents existants"
@@ -4848,7 +4923,7 @@
         "title": "Annuler la réindexation"
       },
       "captioningModel": {
-        "description": "Ce modèle servira à analyser les images pendant l'indexation. Seuls les modèles capables de traiter les images peuvent être sélectionnés. Les mises à jour s'appliquent aux documents indexés à partir de maintenant : les légendes existantes sont figées dans les embeddings précédents.",
+        "description": "Ce modèle sera utilisé pour analyser les images lors de l’indexation.",
         "title": "LLM de légendage"
       },
       "changesBanner": {
@@ -4864,8 +4939,16 @@
           "description": "La modification des paramètres d'embedding ou de récupération exige une réindexation complète de tous les documents pour prendre effet. Cela peut prendre **des heures ou des jours** selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Les modifications exigent une réindexation complète."
         },
+        "doNotReindex": {
+          "description": "Les paramètres de traitement d’images ne prendront effet que pour les documents indexés à partir de maintenant. Les documents existants ne seront pas mis à jour sauf si vous lancez une réindexation complète.\n\nLa réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows).",
+          "title": "Les modifications s’appliquent uniquement au contenu nouvellement indexé."
+        },
         "orSeparator": {
           "label": "ou"
+        },
+        "reindex": {
+          "description": "La réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "Une réindexation complète va s’exécuter."
         }
       },
       "cloudDisabled": {
@@ -4952,6 +5035,9 @@
           "description": "Ce texte est ajouté devant les requêtes de recherche avant leur envoi au modèle, si votre modèle d'embedding l'exige. Un préfixe incorrect ou manquant dégrade la qualité des embeddings.",
           "placeholder": "ex. : 'query: '",
           "title": "Préfixe de requête"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Utilisez les identifiants GKE du serveur API et des workers d’embedding. Aucune clé JSON requise."
         }
       },
       "forwardOnlyModal": {
@@ -4962,12 +5048,13 @@
         "description": "Configurez la façon dont les documents sont indexés, encodés et préparés pour la recherche et la récupération."
       },
       "imageExtraction": {
-        "description": "Extrayez les images intégrées aux fichiers téléversés (PDF, DOCX, etc.) et résumez-les avec un LLM capable de traiter les images, afin que les documents composés uniquement d'images deviennent consultables. Nécessite un LLM par défaut capable de traiter les images.",
+        "description": "Extrait les images lors de l’indexation des documents et génère des descriptions consultables.",
         "title": "Extraire et légender les images"
       },
       "imageProcessing": {
         "description": "Utilisez un LLM pour analyser les images et leur ajouter des descriptions pendant l'indexation.",
         "enableFirstTooltip": "Activez Extraire et légender les images pour configurer cette option.",
+        "noModelSelected": "Aucun modèle sélectionné",
         "noVisionModelsTooltip": "Le traitement des images est désactivé car aucun modèle capable de traiter les images n'est configuré. Configurez d'abord un [modèle de langage]({link}) capable de traiter les images.",
         "title": "Traitement des images"
       },
@@ -4981,7 +5068,7 @@
         }
       },
       "maxImageSize": {
-        "description": "Les images qui dépassent cette taille seront ignorées afin de limiter l'utilisation des ressources.",
+        "description": "Les images dépassant cette taille seront ignorées pour limiter l’utilisation des ressources.",
         "suffix": "(Mo)",
         "title": "Taille maximale des images à analyser"
       },
@@ -5148,24 +5235,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Continuez d'utiliser l'index de documents actuel avec les paramètres existants jusqu'à ce que tous les connecteurs actifs (ni en pause ni en cours de suppression) aient terminé une indexation réussie.",
+          "description": "Continue d’utiliser l’index de documents actuel avec les paramètres existants jusqu’à ce que tous les connecteurs **actifs** (non suspendus/en suppression) aient terminé une indexation réussie.",
           "label": "Réindexer les connecteurs actifs puis basculer"
         },
+        "doNotReindex": {
+          "description": "**Option la plus sûre.** Applique les modifications uniquement au contenu nouvellement indexé.",
+          "label": "Ne pas réindexer"
+        },
         "instant": {
-          "description": "Videz immédiatement l'index de documents actuel et passez aux nouveaux paramètres. Nécessite de réindexer tous les connecteurs avant que l'index soit de nouveau disponible pour la recherche.",
+          "description": "**Vide immédiatement l’index de documents actuel** et bascule vers les nouveaux paramètres. Nécessite de réindexer tous les connecteurs avant que l’index soit de nouveau disponible pour la recherche.",
           "label": "Basculer avant la réindexation"
         },
         "placeholder": "Sélectionnez une stratégie de bascule",
         "reindexAll": {
-          "description": "Option la plus sûre. Continuez d'utiliser l'index de documents actuel avec les paramètres existants jusqu'à ce que tous les connecteurs aient terminé une indexation réussie.",
+          "description": "Continue d’utiliser l’index de documents actuel avec les paramètres existants jusqu’à ce que tous les connecteurs aient terminé une indexation réussie.",
           "label": "Réindexer tous les connecteurs puis basculer"
+        },
+        "reindexOptions": {
+          "label": "Options de réindexation"
         }
       },
       "toasts": {
         "applyFailed": "Échec de l'application des paramètres",
         "cancelReindexFailed": "Échec de l'annulation de la réindexation",
-        "captioningUpdateFailed": "Échec de la mise à jour du LLM de légendage",
-        "captioningUpdated": "LLM de légendage mis à jour",
+        "captioningModelRequired": "Sélectionnez un LLM de légendage avant d’appliquer.",
         "contextualModelRequired": "Sélectionnez un LLM de récupération contextuelle avant de réindexer.",
         "contextualModelUpdateFailed": "Échec de la mise à jour du LLM de récupération contextuelle",
         "contextualModelUpdated": "LLM de récupération contextuelle mis à jour",
@@ -5188,7 +5281,24 @@
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",
-        "urlInvalid": "Doit être une URL valide"
+        "urlInvalid": "Doit être une URL valide",
+        "googleProjectRequired": "L’ID du projet GCP est requis"
+      },
+      "vectorQuantization": {
+        "description": "Stockez les vecteurs des documents avec moins de bits pour utiliser moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche.",
+        "none": {
+          "description": "Précision complète sur 32 bits.",
+          "label": "Aucune"
+        },
+        "scalar1Bit": {
+          "description": "32 fois moins de mémoire. Nécessite OpenSearch 3.6 ou une version ultérieure.",
+          "label": "1 bit"
+        },
+        "scalar7Bit": {
+          "description": "4 fois moins de mémoire. Presque aucune perte de qualité de recherche.",
+          "label": "7 bits"
+        },
+        "title": "Quantification des vecteurs"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Ce connecteur sera supprimé} other {Ces # connecteurs seront supprimés}}",
@@ -5776,6 +5886,9 @@
           "optionalSuffix": {
             "label": "facultatif"
           },
+          "slowSave": {
+            "text": "Cela prend plus de temps que d'habitude. Les grandes listes de modèles peuvent prendre une minute."
+          },
           "submitButton": {
             "invalidTooltip": "Veuillez remplir tous les champs obligatoires.",
             "pristineTooltip": "Aucune modification à enregistrer."
@@ -5822,10 +5935,12 @@
             "title": "Clé d'API"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Région où vos modèles Google Vertex AI sont hébergés. Consultez la liste complète des régions prises en charge sur Google Cloud.",
             "title": "Nom de la région Google Cloud"
           },
           "projectField": {
+            "placeholder": "mon-projet-vertex",
             "description": "Le projet GCP où Vertex AI est activé. Obligatoire, car ADC ne peut pas déduire de façon fiable le projet cible en cas d'usurpation d'identité de compte de service.",
             "title": "ID de projet GCP"
           },
@@ -6024,12 +6139,6 @@
         "imageSummarization": {
           "label": "Résumé des images"
         },
-        "kgDeepExtraction": {
-          "label": "Extraction du graphe de connaissances"
-        },
-        "kgDocumentClassification": {
-          "label": "Classification du graphe de connaissances"
-        },
         "other": {
           "label": "Autres"
         },
@@ -6046,8 +6155,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
-        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images et le traitement RAG contextuel.",
+        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images et le traitement RAG contextuel.",
         "error": {
           "title": "Échec du chargement de l'utilisation système pour cette période."
         },
@@ -9116,6 +9225,7 @@
         "loginRequired": "Vous devez d'abord vous connecter avec votre fournisseur d'identité.",
         "oauthUserAlreadyExists": "Un compte avec cette adresse e-mail existe déjà avec une autre méthode de connexion. Connectez-vous comme la première fois, ou demandez à votre administrateur d'associer ce fournisseur.",
         "serverError": "Votre fournisseur d'identité a rencontré une erreur. Veuillez réessayer.",
+        "staleSignIn": "Ce lien de connexion a expiré ou n'est plus valide. Veuillez vous reconnecter.",
         "temporarilyUnavailable": "Votre fournisseur d'identité est temporairement indisponible. Veuillez réessayer plus tard."
       },
       "credentialsIssue": {
@@ -10746,6 +10856,9 @@
         },
         "loading": {
           "text": "Chargement des modèles..."
+        },
+        "loadingMore": {
+          "text": "Chargement d'autres modèles..."
         }
       },
       "modelSettingsButton": {
@@ -11492,6 +11605,12 @@
       },
       "poweredBy": {
         "label": "Propulsé par Onyx"
+      }
+    },
+    "modelSelectors": {
+      "placeholder": "Sélectionner un modèle",
+      "globalDefault": {
+        "label": "Valeur par défaut globale"
       }
     },
     "nonSelectableConnectors": {

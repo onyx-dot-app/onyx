@@ -13,6 +13,7 @@ from onyx.background.celery.tasks.port.tasks import (
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import (
     DISABLE_INDEX_UPDATE_ON_SWAP,
+    DISABLE_VECTOR_DB,
     OLD_INDEX_RECLAIM_ENABLED,
 )
 from onyx.context.search.models import (
@@ -28,7 +29,12 @@ from onyx.db.connector_credential_pair import (
     resync_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import IndexReclaimStatus, Permission, SwitchoverType
+from onyx.db.enums import (
+    IndexReclaimStatus,
+    Permission,
+    SwitchoverType,
+    VectorQuantization,
+)
 from onyx.db.index_attempt import create_synthetic_seed_attempt, expire_index_attempts
 from onyx.db.llm import (
     fetch_default_contextual_rag_model,
@@ -58,11 +64,10 @@ from onyx.db.search_settings import (
     update_current_search_settings,
     update_search_settings_status,
 )
-from onyx.document_index.factory import (
-    get_all_document_indices,
-    get_default_document_index,
-)
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import TenantState
+from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.constants import LUCENE_SCALAR_QUANTIZATION
 from onyx.document_index.opensearch.index_reclaim import (
     ReclaimOutcome,
     reclaim_index_data,
@@ -135,6 +140,7 @@ def set_new_search_settings(
         db_session=db_session,
         enable_contextual_rag=search_settings_new.enable_contextual_rag,
     )
+    _validate_vector_quantization_supported(search_settings_new.vector_quantization)
 
     # Lock PRESENT so concurrent reindex submissions serialize: without it two racers both
     # pass the no-FUTURE guard below and the loser trips the FUTURE unique index (raw 500).
@@ -212,15 +218,13 @@ def set_new_search_settings(
         commit=False,
     )
 
-    # Ensure the document indices have the new index immediately.
-    document_indices = get_all_document_indices(search_settings, new_search_settings)
-    for document_index in document_indices:
-        # Pair instances already know about their secondary search settings via
-        # the factory; only the primary embedding info needs to be passed in.
-        document_index.verify_and_create_index_if_necessary(
-            embedding_dim=search_settings.final_embedding_dim,
-            embedding_precision=search_settings.embedding_precision,
-        )
+    # Ensure the document index has the new index immediately. The pair already
+    # knows about its secondary search settings via the factory; only the primary
+    # embedding info needs to be passed in.
+    document_index = get_default_document_index(search_settings, new_search_settings)
+    document_index.verify_and_create_index_if_necessary(
+        embedding_dim=search_settings.final_embedding_dim,
+    )
 
     # Pause index attempts for the currently in-use index to preserve resources.
     if DISABLE_INDEX_UPDATE_ON_SWAP:
@@ -269,6 +273,30 @@ def set_new_search_settings(
     # Atomic: FUTURE row, its seeds, and the reclaim intent become visible together.
     db_session.commit()
     return IdReturn(id=new_search_settings.id)
+
+
+def _validate_vector_quantization_supported(
+    vector_quantization: VectorQuantization,
+) -> None:
+    """Rejects a quantization level that the OpenSearch cluster cannot index.
+
+    Runs before anything is written, so an older external cluster gets a clear
+    error instead of a failed index creation. A cluster that does not report
+    its OpenSearch version is not checked.
+    """
+    lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
+    if lucene_scalar_quantization is None or DISABLE_VECTOR_DB:
+        return
+    with OpenSearchClient() as opensearch_client:
+        cluster_version = opensearch_client.get_opensearch_version()
+    min_version = lucene_scalar_quantization.min_opensearch_version
+    if cluster_version is not None and cluster_version < min_version:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"The {vector_quantization.value} vector quantization needs OpenSearch "
+            f"{min_version[0]}.{min_version[1]} or later. This cluster runs "
+            f"OpenSearch {cluster_version[0]}.{cluster_version[1]}.",
+        )
 
 
 def _compute_index_name(
@@ -462,12 +490,9 @@ def cancel_new_embedding(
         clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
     db_session.commit()
 
-    document_index = get_default_document_index(
-        primary_search_settings, None, db_session
-    )
+    document_index = get_default_document_index(primary_search_settings, None)
     document_index.verify_and_create_index_if_necessary(
         embedding_dim=primary_search_settings.final_embedding_dim,
-        embedding_precision=primary_search_settings.embedding_precision,
     )
 
     # Kick off reclamation now instead of waiting for the reclaim beat. Safe no-op if the

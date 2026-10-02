@@ -1,6 +1,159 @@
-import { ConfigurableSources } from "../types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
-import type { BooleanOption, ConnectionConfiguration } from "./types";
+import { useTranslations } from "next-intl";
+import type {
+  BooleanOption,
+  ConnectionConfiguration,
+  ListOption,
+} from "@/lib/connectors/types";
+import { OneDriveScope } from "@/lib/connectors/types";
+
+const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
+const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
+
+interface OneDriveConfigurationText {
+  description: string;
+  indexingScopeLabel: string;
+  generalLabel: string;
+  generalDescription: string;
+  specificLabel: string;
+  usersLabel: string;
+  usersDescription: string;
+  excludedPathsLabel: string;
+  excludedPathsDescription: string;
+  organizationLinksLabel: string;
+  organizationLinksDescription: string;
+  authorityHostLabel: string;
+  authorityHostDescription: string;
+  graphApiHostLabel: string;
+  graphApiHostDescription: string;
+}
+
+const ONE_DRIVE_TRANSLATION_KEYS: OneDriveConfigurationText = {
+  description: "description",
+  indexingScopeLabel: "indexingScope.label",
+  generalLabel: "indexingScope.general.label",
+  generalDescription: "indexingScope.general.description",
+  specificLabel: "indexingScope.specific.label",
+  usersLabel: "indexingScope.specific.users.label",
+  usersDescription: "indexingScope.specific.users.description",
+  excludedPathsLabel: "excludedPaths.label",
+  excludedPathsDescription: "excludedPaths.description",
+  organizationLinksLabel: "organizationLinks.label",
+  organizationLinksDescription: "organizationLinks.description",
+  authorityHostLabel: "authorityHost.label",
+  authorityHostDescription: "authorityHost.description",
+  graphApiHostLabel: "graphApiHost.label",
+  graphApiHostDescription: "graphApiHost.description",
+};
+
+function buildOneDriveConfiguration(
+  text: OneDriveConfigurationText
+): ConnectionConfiguration {
+  return {
+    description: text.description,
+    values: [
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: text.indexingScopeLabel,
+        optional: true,
+        tabs: [
+          {
+            value: OneDriveScope.General,
+            label: text.generalLabel,
+            fields: [
+              {
+                type: "string_tab",
+                label: text.generalLabel,
+                name: "all_users_description",
+                optional: true,
+                description: text.generalDescription,
+              },
+            ],
+          },
+          {
+            value: OneDriveScope.Specific,
+            label: text.specificLabel,
+            fields: [
+              {
+                type: "list",
+                label: text.usersLabel,
+                name: "users",
+                optional: true,
+                default: [],
+                description: text.usersDescription,
+              },
+            ],
+          },
+        ],
+        defaultTab: OneDriveScope.General,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: text.excludedPathsLabel,
+        name: "excluded_paths",
+        optional: true,
+        default: [],
+        description: text.excludedPathsDescription,
+      },
+      {
+        type: "checkbox",
+        label: text.organizationLinksLabel,
+        name: "treat_organization_link_as_public",
+        optional: true,
+        default: false,
+        description: text.organizationLinksDescription,
+      },
+      {
+        type: "text",
+        label: text.authorityHostLabel,
+        name: "authority_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_AUTHORITY_HOST,
+        description: text.authorityHostDescription,
+      },
+      {
+        type: "text",
+        label: text.graphApiHostLabel,
+        name: "graph_api_host",
+        optional: true,
+        default: DEFAULT_MICROSOFT_GRAPH_API_HOST,
+        description: text.graphApiHostDescription,
+      },
+    ],
+  };
+}
+
+export function useConnectorConfiguration(
+  connector: ConfigurableSources
+): ConnectionConfiguration {
+  const t = useTranslations("admin.connectorsList.oneDrive");
+
+  if (connector !== "onedrive") {
+    return connectorConfigs[connector];
+  }
+
+  return buildOneDriveConfiguration({
+    description: t("description"),
+    indexingScopeLabel: t("indexingScope.label"),
+    generalLabel: t("indexingScope.general.label"),
+    generalDescription: t("indexingScope.general.description"),
+    specificLabel: t("indexingScope.specific.label"),
+    usersLabel: t("indexingScope.specific.users.label"),
+    usersDescription: t("indexingScope.specific.users.description"),
+    excludedPathsLabel: t("excludedPaths.label"),
+    excludedPathsDescription: t("excludedPaths.description"),
+    organizationLinksLabel: t("organizationLinks.label"),
+    organizationLinksDescription: t("organizationLinks.description"),
+    authorityHostLabel: t("authorityHost.label"),
+    authorityHostDescription: t("authorityHost.description"),
+    graphApiHostLabel: t("graphApiHost.label"),
+    graphApiHostDescription: t("graphApiHost.description"),
+  });
+}
 
 // Shared "Include Attachments" checkbox. Pair with an `include_attachments`
 // kwarg on the backend connector; see backend/onyx/connectors/README.md for
@@ -18,6 +171,30 @@ export function buildIncludeAttachmentsOption(
     default: defaultValue,
   };
 }
+
+const zoomMeetingIdsOption: ListOption = {
+  type: "list",
+  query: "Enter the Zoom meeting IDs to index:",
+  label: "Meeting IDs",
+  name: "meeting_ids",
+  optional: true,
+  description:
+    "Each recurring meeting is indexed occurrence by occurrence. Zoom returns " +
+    "occurrences from the last 15 months only, so older ones are out of reach " +
+    "of a meeting ID. To index history further back, scope by host email or by " +
+    "Zoom Group instead — neither has that limit.",
+};
+
+const zoomWebinarIdsOption: ListOption = {
+  type: "list",
+  query: "Enter the Zoom webinar IDs to index:",
+  label: "Webinar IDs",
+  name: "webinar_ids",
+  optional: true,
+  description:
+    "Webinars also need the Webinar add-on, enabled for the host. Unlike " +
+    "meeting IDs, webinar history has no 15-month limit.",
+};
 
 export const connectorConfigs: Record<
   ConfigurableSources,
@@ -375,7 +552,7 @@ export const connectorConfigs: Record<
         optional: true,
         tabs: [
           {
-            value: "general",
+            value: OneDriveScope.General,
             label: "General",
             fields: [
               {
@@ -417,7 +594,7 @@ export const connectorConfigs: Record<
             ],
           },
           {
-            value: "specific",
+            value: OneDriveScope.Specific,
             label: "Specific",
             fields: [
               {
@@ -455,7 +632,7 @@ export const connectorConfigs: Record<
             ],
           },
         ],
-        defaultTab: "general",
+        defaultTab: OneDriveScope.General,
       },
     ],
     advanced_values: [
@@ -482,6 +659,7 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  onedrive: buildOneDriveConfiguration(ONE_DRIVE_TRANSLATION_KEYS),
   gmail: {
     description: "Configure Gmail connector",
     values: [],
@@ -776,6 +954,7 @@ export const connectorConfigs: Record<
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
 • Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
 • Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
+• To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).
 • Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.
 `,
       },
@@ -1757,7 +1936,7 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         name: "recurse_depth",
         description:
           "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen.",
-        optional: true,
+        optional: false,
       },
     ],
     advanced_values: [],
@@ -1801,6 +1980,93 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Fireflies connector",
     values: [],
     advanced_values: [],
+  },
+  zoom: {
+    description: "Configure Zoom connector",
+    subtext:
+      "Indexes the Cloud Recording transcript of each Zoom session, on a Zoom " +
+      "Pro plan or higher. A session that was never cloud-recorded is skipped. " +
+      "Set an Indexing Start date under Advanced. Zoom lists recordings a month " +
+      "per request, so without one the first crawl asks for every month back to " +
+      "2013 and spends your account's API allowance on years that hold nothing.",
+    values: [
+      // Two lists rather than one: the same number can be a legal meeting id
+      // and a legal webinar id, so the list it is typed into says which.
+      zoomMeetingIdsOption,
+      zoomWebinarIdsOption,
+      {
+        type: "list",
+        query: "Enter the Zoom host emails to index:",
+        label: "Host Emails",
+        name: "host_emails",
+        optional: true,
+        description:
+          "Index every session these people host, of the types ticked " +
+          "below. An email that matches no Zoom user is reported as an " +
+          "indexing error rather than silently ignored.",
+      },
+      {
+        type: "text",
+        query: "Enter the Zoom Group ID to index:",
+        label: "Zoom Group ID",
+        name: "group_id",
+        optional: true,
+        description:
+          "Index every session the members of one Zoom Group host, of the " +
+          "types ticked below. Zoom re-reads the member list on every run, " +
+          "so a joiner or leaver is picked up without editing this connector.",
+      },
+      {
+        type: "checkbox",
+        query: "Include meetings?",
+        label: "Include meetings",
+        name: "include_meetings",
+        description:
+          "Applies to Host Emails and Zoom Group. The ID lists above already " +
+          "say which type each ID is.",
+        default: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include webinars?",
+        label: "Include webinars",
+        name: "include_webinars",
+        description:
+          "Applies to Host Emails and Zoom Group. Webinars also need the " +
+          "Webinar add-on, enabled for the host.",
+        default: true,
+      },
+      {
+        type: "select",
+        query: "Select the Zoom plan:",
+        label: "Zoom Plan",
+        name: "plan_tier",
+        optional: false,
+        options: [
+          { name: "pro", value: "pro" },
+          { name: "business_plus", value: "business_plus" },
+        ],
+        description:
+          "Sets how fast this connector is allowed to call Zoom. Pick pro on " +
+          "a Pro account, and business_plus on Business, Education, " +
+          "Enterprise or Partner.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Enter the share of Zoom's rate limit to use:",
+        label: "Zoom API Rate Limit",
+        name: "rate_limit_percent",
+        optional: true,
+        description:
+          "Whole percent, 1 to 100, of the account's Zoom rate limit this " +
+          "connector may spend. Blank means 50, which leaves room for the " +
+          "customer's other Zoom integrations. Each Zoom connector paces " +
+          "itself and cannot see the others, so two connectors on one Zoom " +
+          "account spend this percent each — divide it if you run several.",
+      },
+    ],
   },
   braintrust: {
     description: "Configure Braintrust connector",

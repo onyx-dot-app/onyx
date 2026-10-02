@@ -808,13 +808,7 @@
         "description": "Connect {appName} to your data sources."
       },
       "search": {
-        "placeholder": "Search connectors..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Federated connector already configured.</strong> Click to edit the existing connector.",
-          "slackCredentialsFound": "<strong>Existing Slack credentials found.</strong> Click to manage your Slack connector."
-        }
+        "placeholder": "Search connectors or press \"/\" to focus..."
       },
       "sourceCard": {
         "connectButton": {
@@ -908,6 +902,12 @@
         },
         "sharepoint": {
           "description": "Microsoft intranet"
+        },
+        "onedrive": {
+          "description": "Microsoft cloud storage"
+        },
+        "zoom": {
+          "description": "Meeting and webinar recordings"
         },
         "teams": {
           "description": "Microsoft team chats"
@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "Document ID",
+          "documentId": "Failure ID",
           "errorMessage": "Error Message",
           "status": "Status",
           "time": "Time"
@@ -2559,10 +2559,50 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "Configure OneDrive connector",
+        "indexingScope": {
+          "label": "Whose OneDrive files should Onyx index?",
+          "general": {
+            "label": "General",
+            "description": "Index all eligible users that the Microsoft application can access."
+          },
+          "specific": {
+            "label": "Specific",
+            "users": {
+              "label": "Users",
+              "description": "Add each user principal name or primary email address to index.",
+              "required": "Add at least one user for Specific scope"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "Excluded Paths",
+          "description": "Glob patterns matched against each file path and filename, such as '*.tmp' or 'Archive/*'."
+        },
+        "organizationLinks": {
+          "label": "Treat organization links as public",
+          "description": "Treat files shared through an organization-wide link as visible to all Onyx users."
+        },
+        "authorityHost": {
+          "label": "Authority Host",
+          "description": "Microsoft identity authority host. Use https://login.microsoftonline.us for GCC High or DoD."
+        },
+        "graphApiHost": {
+          "label": "Graph API Host",
+          "description": "Microsoft Graph host. Use https://graph.microsoft.us for GCC High or DoD."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "Authorize with {source}",
           "pendingLabel": "Authorizing..."
+        },
+        "collapseButton": {
+          "ariaLabel": "Collapse"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Create New"
@@ -2573,8 +2613,13 @@
         "credentialModal": {
           "title": "Create a {source} credential"
         },
+        "credentialsLoadFailed": {
+          "description": "Credentials can't be set up right now. Reload the page or try again later.",
+          "title": "Couldn't load your credentials"
+        },
         "credentialStep": {
-          "title": "Select a credential"
+          "description": "Use a shared service account. {appName} indexes content as this account.",
+          "title": "Authentication Account"
         },
         "credentialSwapped": {
           "toast": "Swapped credential successfully!"
@@ -2582,16 +2627,26 @@
         "error": {
           "toast": "Error: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Expand"
+        },
         "federated": {
           "tooltip": {
-            "description": "A federated search option is available for this connector. It will result in greater latency and reduced search quality.",
+            "description": "It will result in greater latency and reduced search quality.",
             "link": {
               "label": "Use federated version instead →"
-            }
+            },
+            "title": "A federated search option is available for this connector."
           }
         },
         "fileUploadFailed": {
           "toast": "Error uploading files"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "New {source} Account"
         },
         "oauthRedirectFailed": {
           "message": "We couldn't redirect you to sign in with {source}. Please try again."
@@ -2604,6 +2659,9 @@
         },
         "retryButton": {
           "label": "Retry"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
         },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
@@ -2678,7 +2736,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Google Drive and Gmail access together, so one account can back both connectors. To use this account for Google Drive only, untick the Gmail scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2736,7 +2795,8 @@
         },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Gmail you want to index.",
-          "title": "Option 1: OAuth app"
+          "title": "Option 1: OAuth app",
+          "sharedScopesNote": "Google asks for Gmail and Google Drive access together, so one account can back both connectors. To use this account for Gmail only, untick the Google Drive scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
@@ -2771,7 +2831,7 @@
         "connectButton": {
           "label": "Connect"
         },
-        "description": "Connect to {source} and set up the connector for {appName}."
+        "description": "Connect to {source} and set up the connector for {appName}.{hasDocs, select, true { View [docs]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4779,6 +4839,12 @@
         "azureGptImage2": {
           "description": "GPT Image 2 image generation model hosted on Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "GPT Image 2.5 Flare image generation model hosted on Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "GPT Image 2.5 Sunburst image generation model hosted on Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) model is designed for speed and efficiency."
         },
@@ -4795,7 +4861,13 @@
           "description": "OpenAI's previous flagship Image Generation model."
         },
         "openaiGptImage2": {
-          "description": "OpenAI's latest Image Generation model with the highest prompt fidelity."
+          "description": "OpenAI's previous-generation Image Generation model with high prompt fidelity."
+        },
+        "openaiGptImage25Flare": {
+          "description": "OpenAI's latest Image Generation model with high quality and fast generation."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "OpenAI's premium Image Generation model for the most precise edits."
         }
       },
       "setDefaultError": {
@@ -4814,6 +4886,9 @@
           "label": "Apply & Re-index",
           "statusesLoading": "Loading connector statuses…",
           "statusesFailed": "Couldn't load connector statuses — retry before re-indexing."
+        },
+        "applyWithoutReindex": {
+          "label": "Apply without Re-index"
         },
         "rebuildAll": {
           "label": "Rebuild all existing documents"
@@ -4848,7 +4923,7 @@
         "title": "Cancel Re-index"
       },
       "captioningModel": {
-        "description": "This model will be used to analyze images during indexing. Only vision-capable models can be selected. Updates apply to documents indexed going forward — existing captions are baked into prior embeddings.",
+        "description": "This model will be used to analyze images during indexing.",
         "title": "Captioning LLM"
       },
       "changesBanner": {
@@ -4864,8 +4939,16 @@
           "description": "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Changes require a full re-index."
         },
+        "doNotReindex": {
+          "description": "Image processing settings will take effect only for documents indexed going forward. Existing documents will not be updated unless you run a full re-index.\n\nRe-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows).",
+          "title": "Changes apply to newly indexed content only."
+        },
         "orSeparator": {
           "label": "or"
+        },
+        "reindex": {
+          "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "A full re-index will run."
         }
       },
       "cloudDisabled": {
@@ -4952,6 +5035,9 @@
           "description": "This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality.",
           "placeholder": "e.g., 'query: '",
           "title": "Query Prefix"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Use the GKE credentials of the API server and embedding workers. No JSON key is required."
         }
       },
       "forwardOnlyModal": {
@@ -4962,12 +5048,13 @@
         "description": "Configure how documents are indexed, embedded, and prepared for search and retrieval."
       },
       "imageExtraction": {
-        "description": "Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM.",
+        "description": "Extract images during document indexing and generate searchable descriptions.",
         "title": "Extract & Caption Images"
       },
       "imageProcessing": {
         "description": "Use LLM model to analyze and add descriptions to images during indexing.",
         "enableFirstTooltip": "Enable Extract & Caption Images to configure this.",
+        "noModelSelected": "No model selected",
         "noVisionModelsTooltip": "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model]({link}) first.",
         "title": "Image Processing"
       },
@@ -5148,24 +5235,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt.",
+          "description": "Continue using the current document index with existing settings until all **active** (not paused/deleting) connectors have completed a successful index attempt.",
           "label": "Re-index Active Connectors Then Switch"
         },
+        "doNotReindex": {
+          "description": "**Safest option.** Only apply changes to newly indexed content.",
+          "label": "Do Not Re-index"
+        },
         "instant": {
-          "description": "Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search.",
+          "description": "Immediately **clear the current document index** and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search.",
           "label": "Switch Before Re-index"
         },
         "placeholder": "Select a switchover strategy",
         "reindexAll": {
-          "description": "Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt.",
+          "description": "Continue using the current document index with existing settings until all connectors have completed a successful index attempt.",
           "label": "Re-index All Connectors Then Switch"
+        },
+        "reindexOptions": {
+          "label": "Re-index Options"
         }
       },
       "toasts": {
         "applyFailed": "Failed to apply settings",
         "cancelReindexFailed": "Failed to cancel re-indexing",
-        "captioningUpdateFailed": "Failed to update captioning LLM",
-        "captioningUpdated": "Captioning LLM updated",
+        "captioningModelRequired": "Select a Captioning LLM before applying.",
         "contextualModelRequired": "Select a Contextual Retrieval LLM before re-indexing.",
         "contextualModelUpdateFailed": "Failed to update Contextual Retrieval LLM",
         "contextualModelUpdated": "Contextual Retrieval LLM updated",
@@ -5188,7 +5281,24 @@
         "serviceAccountJsonInvalid": "Must be a valid Google service account JSON file",
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",
-        "urlInvalid": "Must be a valid URL"
+        "urlInvalid": "Must be a valid URL",
+        "googleProjectRequired": "GCP Project ID is required"
+      },
+      "vectorQuantization": {
+        "description": "Store document vectors with fewer bits to use less memory. Fewer bits can lower search quality.",
+        "none": {
+          "description": "Full 32-bit precision.",
+          "label": "None"
+        },
+        "scalar1Bit": {
+          "description": "32x less memory. Needs OpenSearch 3.6 or later.",
+          "label": "1-bit"
+        },
+        "scalar7Bit": {
+          "description": "4x less memory. Almost no loss in search quality.",
+          "label": "7-bit"
+        },
+        "title": "Vector Quantization"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {This connector will be deleted} other {These # connectors will be deleted}}",
@@ -5776,6 +5886,9 @@
           "optionalSuffix": {
             "label": "optional"
           },
+          "slowSave": {
+            "text": "This is taking longer than usual. Large model lists can take a minute."
+          },
           "submitButton": {
             "invalidTooltip": "Please fill in all required fields.",
             "pristineTooltip": "No changes to save."
@@ -5822,10 +5935,12 @@
             "title": "API Key"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud.",
             "title": "Google Cloud Region Name"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "The GCP project where Vertex AI is enabled. Required because ADC cannot reliably infer the target project under service-account impersonation.",
             "title": "GCP Project ID"
           },
@@ -6024,12 +6139,6 @@
         "imageSummarization": {
           "label": "Image summarization"
         },
-        "kgDeepExtraction": {
-          "label": "Knowledge graph extraction"
-        },
-        "kgDocumentClassification": {
-          "label": "Knowledge graph classification"
-        },
         "other": {
           "label": "Other"
         },
@@ -6046,8 +6155,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
-        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries, contextual RAG processing, and knowledge graph extraction.",
+        "description": "{start} – {end} · System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
+        "emptyDescription": "System usage is LLM activity that {appName} runs in the background rather than for a specific user. Examples include image summaries and contextual RAG processing.",
         "error": {
           "title": "Failed to load system usage for this period."
         },
@@ -9116,6 +9225,7 @@
         "loginRequired": "You need to log in with your identity provider first.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
         "serverError": "Your identity provider encountered an error. Please try again.",
+        "staleSignIn": "This sign-in link has expired or is no longer valid. Please sign in again.",
         "temporarilyUnavailable": "Your identity provider is temporarily unavailable. Please try again later."
       },
       "credentialsIssue": {
@@ -10746,6 +10856,9 @@
         },
         "loading": {
           "text": "Loading models..."
+        },
+        "loadingMore": {
+          "text": "Loading more models..."
         }
       },
       "modelSettingsButton": {
@@ -11492,6 +11605,12 @@
       },
       "poweredBy": {
         "label": "Powered by Onyx"
+      }
+    },
+    "modelSelectors": {
+      "placeholder": "Select model",
+      "globalDefault": {
+        "label": "Global Default"
       }
     },
     "nonSelectableConnectors": {

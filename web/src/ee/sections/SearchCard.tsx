@@ -6,7 +6,7 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import Text from "@/refresh-components/texts/Text";
 import Chip from "@/refresh-components/Chip";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Section } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";

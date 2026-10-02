@@ -808,13 +808,7 @@
         "description": "{appName} をデータソースに接続します。"
       },
       "search": {
-        "placeholder": "コネクターを検索..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>フェデレーテッドコネクターは設定済みです。</strong> クリックすると、既存のコネクターを編集できます。",
-          "slackCredentialsFound": "<strong>既存の Slack 資格情報が見つかりました。</strong> クリックすると、Slack コネクターを管理できます。"
-        }
+        "placeholder": "コネクターを検索、または \"/\" を押してフォーカス..."
       },
       "sourceCard": {
         "connectButton": {
@@ -908,6 +902,12 @@
         },
         "sharepoint": {
           "description": "Microsoft のイントラネット"
+        },
+        "onedrive": {
+          "description": "Microsoft クラウド ストレージ"
+        },
+        "zoom": {
+          "description": "会議とウェビナーの録画"
         },
         "teams": {
           "description": "Microsoft のチームチャット"
@@ -2050,7 +2050,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "ドキュメント ID",
+          "documentId": "失敗 ID",
           "errorMessage": "エラーメッセージ",
           "status": "ステータス",
           "time": "時刻"
@@ -2559,10 +2559,50 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "OneDrive コネクタを設定",
+        "indexingScope": {
+          "label": "Onyx でインデックスを作成する OneDrive ファイルの所有者",
+          "general": {
+            "label": "一般",
+            "description": "Microsoft アプリケーションがアクセスできるすべての対象ユーザーをインデックス化します。"
+          },
+          "specific": {
+            "label": "指定",
+            "users": {
+              "label": "ユーザー",
+              "description": "インデックスを作成する各ユーザーのユーザープリンシパル名またはプライマリメールアドレスを追加します。",
+              "required": "指定範囲には少なくとも 1 人のユーザーを追加してください"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "除外するパス",
+          "description": "各ファイルパスとファイル名に照合する glob パターン（例: '*.tmp'、'Archive/*'）。"
+        },
+        "organizationLinks": {
+          "label": "組織リンクを公開として扱う",
+          "description": "組織全体のリンクで共有されたファイルをすべての Onyx ユーザーに表示します。"
+        },
+        "authorityHost": {
+          "label": "機関ホスト",
+          "description": "Microsoft ID 機関ホスト。GCC High または DoD では https://login.microsoftonline.us を使用してください。"
+        },
+        "graphApiHost": {
+          "label": "Graph API ホスト",
+          "description": "Microsoft Graph ホスト。GCC High または DoD では https://graph.microsoft.us を使用してください。"
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "{source} で認可",
           "pendingLabel": "認可しています..."
+        },
+        "collapseButton": {
+          "ariaLabel": "折りたたむ"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "新規作成"
@@ -2573,8 +2613,13 @@
         "credentialModal": {
           "title": "{source} の認証情報を作成"
         },
+        "credentialsLoadFailed": {
+          "description": "現在、認証情報を設定できません。ページを再読み込みするか、後でもう一度お試しください。",
+          "title": "認証情報を読み込めませんでした"
+        },
         "credentialStep": {
-          "title": "認証情報を選択"
+          "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
+          "title": "認証アカウント"
         },
         "credentialSwapped": {
           "toast": "認証情報を切り替えました！"
@@ -2582,16 +2627,26 @@
         "error": {
           "toast": "エラー: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "展開"
+        },
         "federated": {
           "tooltip": {
-            "description": "このコネクターではフェデレーテッド検索を利用できます。ただし、レイテンシーが大きくなり、検索品質は下がります。",
+            "description": "ただし、レイテンシーが大きくなり、検索品質は下がります。",
             "link": {
               "label": "代わりにフェデレーテッド版を使用 →"
-            }
+            },
+            "title": "このコネクターではフェデレーテッド検索を利用できます。"
           }
         },
         "fileUploadFailed": {
           "toast": "ファイルのアップロード中にエラーが発生しました"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "新しい {source} アカウント"
         },
         "oauthRedirectFailed": {
           "message": "{source} でのサインイン画面にリダイレクトできませんでした。もう一度お試しください。"
@@ -2604,6 +2659,9 @@
         },
         "retryButton": {
           "label": "再試行"
+        },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
         },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
@@ -2678,7 +2736,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Drive を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ"
+          "title": "オプション 1: OAuth アプリ",
+          "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Google Drive と Gmail へのアクセスをまとめて求めます。このアカウントを Google Drive だけに使う場合は、同意画面で Gmail のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
@@ -2736,7 +2795,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Gmail を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ"
+          "title": "オプション 1: OAuth アプリ",
+          "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Gmail と Google Drive へのアクセスをまとめて求めます。このアカウントを Gmail だけに使う場合は、同意画面で Google Drive のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
@@ -2771,7 +2831,7 @@
         "connectButton": {
           "label": "接続"
         },
-        "description": "{source} に接続し、{appName} 用のコネクタを設定します。"
+        "description": "{source} に接続し、{appName} 用のコネクタを設定します。{hasDocs, select, true {[ドキュメント]({url})を見る} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -4779,6 +4839,12 @@
         "azureGptImage2": {
           "description": "Microsoft Azure でホストされる GPT Image 2 画像生成モデルです。"
         },
+        "azureGptImage25Flare": {
+          "description": "Microsoft Azure でホストされる GPT Image 2.5 Flare 画像生成モデルです。"
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Microsoft Azure でホストされる GPT Image 2.5 Sunburst 画像生成モデルです。"
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) は速度と効率を重視して設計されたモデルです。"
         },
@@ -4795,7 +4861,13 @@
           "description": "OpenAI の従来のフラッグシップ画像生成モデルです。"
         },
         "openaiGptImage2": {
-          "description": "プロンプト忠実度が最も高い、OpenAI の最新の画像生成モデルです。"
+          "description": "プロンプト忠実度が高い、OpenAI の前世代の画像生成モデルです。"
+        },
+        "openaiGptImage25Flare": {
+          "description": "高品質かつ高速な、OpenAI の最新の画像生成モデルです。"
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
       },
       "setDefaultError": {
@@ -4814,6 +4886,9 @@
           "label": "適用して再インデックス",
           "statusesLoading": "コネクタの状態を読み込んでいます…",
           "statusesFailed": "コネクタの状態を読み込めませんでした。再インデックスの前にもう一度お試しください。"
+        },
+        "applyWithoutReindex": {
+          "label": "再インデックスせずに適用"
         },
         "rebuildAll": {
           "label": "既存のすべてのドキュメントを再構築"
@@ -4848,7 +4923,7 @@
         "title": "再インデックスをキャンセル"
       },
       "captioningModel": {
-        "description": "このモデルはインデックス作成時に画像を解析するために使用します。選択できるのは画像認識に対応したモデルのみです。変更は以降にインデックスされるドキュメントに適用されます。既存のキャプションは以前の embedding に埋め込まれたままです。",
+        "description": "このモデルはインデックス作成時に画像を分析するために使用されます。",
         "title": "キャプション生成 LLM"
       },
       "changesBanner": {
@@ -4864,8 +4939,16 @@
           "description": "embedding または検索の設定を変更すると、反映するためにすべてのドキュメントの完全な再インデックスが必要です。コーパスの規模によっては **数時間から数日** かかることがあります。[詳細を見る](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "変更には完全な再インデックスが必要です。"
         },
+        "doNotReindex": {
+          "description": "画像処理設定は、今後インデックスされるドキュメントにのみ適用されます。既存のドキュメントは、完全な再インデックスを実行しない限り更新されません。\n\n再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)。",
+          "title": "変更は新しくインデックスされたコンテンツにのみ適用されます。"
+        },
         "orSeparator": {
           "label": "または"
+        },
+        "reindex": {
+          "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "完全な再インデックスが実行されます。"
         }
       },
       "cloudDisabled": {
@@ -4952,6 +5035,9 @@
           "description": "embedding モデルが必要とする場合、検索クエリをモデルに渡す前に、この文字列を先頭に追加します。プレフィックスが正しくない、または不足していると embedding の品質が低下します。",
           "placeholder": "例: 'query: '",
           "title": "クエリプレフィックス"
+        },
+        "googleWorkloadIdentity": {
+          "description": "API サーバーと埋め込みワーカーの GKE 認証情報を使用します。JSON キーは不要です。"
         }
       },
       "forwardOnlyModal": {
@@ -4962,12 +5048,13 @@
         "description": "ドキュメントのインデックス作成、embedding の生成、検索と取得に向けた準備の方法を設定します。"
       },
       "imageExtraction": {
-        "description": "アップロードされたファイル (PDF、DOCX など) に含まれる画像を抽出し、画像認識に対応した LLM で要約します。これにより、画像だけのドキュメントも検索や回答に使用できます。画像認識に対応したデフォルト LLM が必要です。",
+        "description": "ドキュメントのインデックス作成時に画像を抽出し、検索可能な説明を生成します。",
         "title": "画像の抽出とキャプション生成"
       },
       "imageProcessing": {
         "description": "インデックス作成時に LLM を使用して画像を解析し、説明を追加します。",
         "enableFirstTooltip": "設定するには「画像の抽出とキャプション生成」を有効にしてください。",
+        "noModelSelected": "モデルが選択されていません",
         "noVisionModelsTooltip": "画像認識に対応したモデルが設定されていないため、画像処理は無効です。先に画像認識に対応した [言語モデル]({link}) を設定してください。",
         "title": "画像処理"
       },
@@ -4981,7 +5068,7 @@
         }
       },
       "maxImageSize": {
-        "description": "リソース使用量を抑えるため、このサイズを超える画像はスキップされます。",
+        "description": "このサイズを超える画像はリソース使用を抑えるためスキップされます。",
         "suffix": "(MB)",
         "title": "解析する画像の最大サイズ"
       },
@@ -5148,24 +5235,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "アクティブな (一時停止中でも削除中でもない) すべてのコネクターがインデックス作成に成功するまで、既存の設定の現在のドキュメントインデックスを使い続けます。",
+          "description": "すべての**アクティブな**（一時停止中/削除中でない）コネクタがインデックス作成を正常に完了するまで、既存の設定で現在のドキュメントインデックスを使い続けます。",
           "label": "アクティブなコネクターを再インデックスしてから切り替え"
         },
+        "doNotReindex": {
+          "description": "**最も安全なオプション。** 新しくインデックスされたコンテンツにのみ変更を適用します。",
+          "label": "再インデックスしない"
+        },
         "instant": {
-          "description": "現在のドキュメントインデックスをすぐに消去し、新しい設定に切り替えます。検索用のインデックスが再び揃うまで、すべてのコネクターの再インデックスが必要です。",
+          "description": "直ちに**現在のドキュメントインデックスを消去**して新しい設定に切り替えます。検索用にインデックスが再構築されるまで、すべてのコネクタの再インデックスが必要です。",
           "label": "再インデックスの前に切り替え"
         },
         "placeholder": "切り替え方法を選択",
         "reindexAll": {
-          "description": "最も安全な方法です。すべてのコネクターがインデックス作成に成功するまで、既存の設定の現在のドキュメントインデックスを使い続けます。",
+          "description": "すべてのコネクタがインデックス作成を正常に完了するまで、既存の設定で現在のドキュメントインデックスを使い続けます。",
           "label": "すべてのコネクターを再インデックスしてから切り替え"
+        },
+        "reindexOptions": {
+          "label": "再インデックスのオプション"
         }
       },
       "toasts": {
         "applyFailed": "設定を適用できませんでした",
         "cancelReindexFailed": "再インデックスをキャンセルできませんでした",
-        "captioningUpdateFailed": "キャプション生成 LLM を更新できませんでした",
-        "captioningUpdated": "キャプション生成 LLM を更新しました",
+        "captioningModelRequired": "適用する前にキャプション用LLMを選択してください。",
         "contextualModelRequired": "再インデックスの前にコンテキスト検索 LLM を選択してください。",
         "contextualModelUpdateFailed": "コンテキスト検索 LLM を更新できませんでした",
         "contextualModelUpdated": "コンテキスト検索 LLM を更新しました",
@@ -5188,7 +5281,24 @@
         "serviceAccountJsonInvalid": "有効な Google サービスアカウントの JSON ファイルを指定してください",
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",
-        "urlInvalid": "有効な URL を入力してください"
+        "urlInvalid": "有効な URL を入力してください",
+        "googleProjectRequired": "GCP プロジェクト ID が必要です"
+      },
+      "vectorQuantization": {
+        "description": "ドキュメントのベクトルを少ないビット数で保存し、メモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。",
+        "none": {
+          "description": "32 ビットの完全な精度。",
+          "label": "なし"
+        },
+        "scalar1Bit": {
+          "description": "メモリ使用量が 32 分の 1。OpenSearch 3.6 以降が必要です。",
+          "label": "1 ビット"
+        },
+        "scalar7Bit": {
+          "description": "メモリ使用量が 4 分の 1。検索品質はほぼ低下しません。",
+          "label": "7 ビット"
+        },
+        "title": "ベクトル量子化"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {このコネクタは削除されます} other {これら # 個のコネクタは削除されます}}",
@@ -5776,6 +5886,9 @@
           "optionalSuffix": {
             "label": "任意"
           },
+          "slowSave": {
+            "text": "通常より時間がかかっています。モデル一覧が大きい場合は1分ほどかかることがあります。"
+          },
           "submitButton": {
             "invalidTooltip": "必須項目をすべて入力してください。",
             "pristineTooltip": "保存する変更はありません。"
@@ -5822,10 +5935,12 @@
             "title": "API キー"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Google Vertex AI のモデルがホストされているリージョンです。対応リージョンの全一覧は Google Cloud で確認できます。",
             "title": "Google Cloud リージョン名"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "Vertex AI が有効になっている GCP プロジェクトです。サービスアカウントの権限借用では ADC が対象プロジェクトを確実に推定できないため、指定が必要です。",
             "title": "GCP プロジェクト ID"
           },
@@ -6024,12 +6139,6 @@
         "imageSummarization": {
           "label": "画像要約"
         },
-        "kgDeepExtraction": {
-          "label": "ナレッジグラフ抽出"
-        },
-        "kgDocumentClassification": {
-          "label": "ナレッジグラフ分類"
-        },
         "other": {
           "label": "その他"
         },
@@ -6046,8 +6155,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
-        "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
+        "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約やコンテキスト RAG 処理があります。",
+        "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約やコンテキスト RAG 処理があります。",
         "error": {
           "title": "この期間のシステム使用状況を読み込めませんでした。"
         },
@@ -9116,6 +9225,7 @@
         "loginRequired": "先に ID プロバイダーでログインする必要があります。",
         "oauthUserAlreadyExists": "このメールアドレスのアカウントは、別のサインイン方法で既に存在します。最初に使用した方法でサインインするか、管理者にこのプロバイダーの連携を依頼してください。",
         "serverError": "ID プロバイダーでエラーが発生しました。もう一度お試しください。",
+        "staleSignIn": "このログインリンクは期限切れか、無効になっています。もう一度ログインしてください。",
         "temporarilyUnavailable": "ID プロバイダーは一時的に利用できません。しばらくしてからもう一度お試しください。"
       },
       "credentialsIssue": {
@@ -10746,6 +10856,9 @@
         },
         "loading": {
           "text": "モデルを読み込み中..."
+        },
+        "loadingMore": {
+          "text": "さらにモデルを読み込み中..."
         }
       },
       "modelSettingsButton": {
@@ -11492,6 +11605,12 @@
       },
       "poweredBy": {
         "label": "Powered by Onyx"
+      }
+    },
+    "modelSelectors": {
+      "placeholder": "モデルを選択",
+      "globalDefault": {
+        "label": "グローバルデフォルト"
       }
     },
     "nonSelectableConnectors": {

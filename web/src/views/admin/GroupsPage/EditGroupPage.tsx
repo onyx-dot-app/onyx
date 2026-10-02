@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -20,7 +21,6 @@ import {
   SvgTrash,
   SvgMinusCircle,
   SvgPlusCircle,
-  SvgSimpleLoader,
   SvgUserShield,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
@@ -340,7 +340,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             <div className="flex items-center gap-1">
               {canManage && (
                 <Button
-                  icon={isPending ? SvgSimpleLoader : SvgUserShield}
+                  icon={isPending ? IconLoader : SvgUserShield}
                   prominence="tertiary"
                   interaction={isManager ? "hover" : "rest"}
                   disabled={!isPersisted || isPending || isOwnManager}
@@ -614,7 +614,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         />
 
         <SettingsLayouts.Body>
-          {isLoading && <SvgSimpleLoader />}
+          {isLoading && <IconLoader />}
 
           {error && (
             <Text as="p" secondaryBody text03>

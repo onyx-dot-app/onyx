@@ -3,30 +3,28 @@
 import { ChangeEvent, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { ContentAction, PageLoader, toast } from "@opal/layouts";
-import {
-  Button,
-  Card,
-  InputTypeIn,
-  MessageCard,
-  OpenButton,
-  Text,
-} from "@opal/components";
+import { ContentAction, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
+import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
-import { getProvider } from "@/lib/languageModels";
-import { LLMOption } from "@/lib/languageModels/options";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
+import { getProvider } from "@/lib/languageModels/utils";
+import {
+  filterModelConfigurations,
+  findLlmOptionById,
+} from "@/lib/languageModels/options";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
-  CostOverride,
   deleteCostOverride,
   refreshCostOverrides,
   upsertCostOverride,
   useCostOverrides,
 } from "@/lib/languageModels/costOverrides";
+import type { CostOverride } from "@/lib/languageModels/types";
 
 /** `allProvidersLabel` is passed in: this module cannot call translation hooks. */
 function getProviderDisplayName(
@@ -62,7 +60,8 @@ interface OverrideFormProps {
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const t = useTranslations("admin.costOverrides");
   const { mutate } = useSWRConfig();
-  const { llmProviders } = useAdminLLMProviders();
+  const { llmProviders } = useAdminLanguageModels();
+  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
   const [inputRate, setInputRate] = useState(
@@ -137,21 +136,22 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
           {isEdit ? (
             <InputTypeIn value={modelLabel} variant="readOnly" />
           ) : (
-            <ModelSelector
+            <SimpleModelSelector
+              nullable
+              providers={filterModelConfigurations(llmProviders ?? [], {
+                visibleOnly: false,
+              })}
               value={modelConfigId}
-              providerOptions={llmProviders ?? []}
-              includeHiddenModels
-              onChange={(opt: LLMOption) => {
-                setModel(opt.modelName);
-                setProvider(opt.provider);
-                setModelConfigId(opt.modelConfigurationId ?? null);
+              grouped={!hideProviderGrouping}
+              onChange={(modelConfigurationId) => {
+                const opt = findLlmOptionById(
+                  llmProviders,
+                  modelConfigurationId
+                );
+                setModel(opt?.modelName ?? "");
+                setProvider(opt?.provider ?? "");
+                setModelConfigId(modelConfigurationId);
               }}
-              renderTrigger={() => (
-                <OpenButton>
-                  {modelLabel || t("form.model.placeholder")}
-                </OpenButton>
-              )}
-              side="bottom"
             />
           )}
         </div>

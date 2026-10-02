@@ -257,7 +257,8 @@ class UserFileIndexingAdapter:
         db_session: Session,
         index_to_secondary: bool,
     ) -> None:
-        assert isinstance(enrichment, UserFileChunkEnricher)
+        if not isinstance(enrichment, UserFileChunkEnricher):
+            raise TypeError("User file indexing requires a UserFileChunkEnricher")
         if index_to_secondary:
             # Secondary (reindex-port) write: chunks are written; the PRESENT pass owns the
             # terminal side-effects (status/chunk_count/plaintext/notifications) — leave them.

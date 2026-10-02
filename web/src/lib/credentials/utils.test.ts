@@ -1,17 +1,24 @@
-import { credentialTemplates } from "@/lib/connectors/credentials";
-import type { Credential } from "@/lib/connectors/types";
-import { ValidSources } from "@/lib/types";
+import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import type { Credential } from "@/lib/credentials/types";
+import type { CredentialFieldValues } from "@/lib/credentials/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 import {
   canEditCredentialWithForm,
   createInitialValues,
   createValidationSchema,
+  getCredentialCreationMethods,
   getEditableCredentialFields,
+  shouldRedirectToOAuth,
 } from "@/lib/credentials/utils";
+import {
+  CredentialCreationMethod,
+  type OAuthDetails,
+} from "@/lib/credentials/types";
 
 function buildCredential(
-  credential: Partial<Credential<Record<string, unknown>>>
-): Credential<Record<string, unknown>> {
+  credential: Partial<Credential<CredentialFieldValues>>
+): Credential<CredentialFieldValues> {
   return {
     id: 1,
     credential_json: {},
@@ -70,6 +77,28 @@ describe("credential edit helpers", () => {
     });
   });
 
+  it("restores the legacy OneDrive certificate auth method", () => {
+    const credential = buildCredential({
+      credential_json: {
+        onedrive_authentication_method: "certificate",
+        onedrive_client_id: "client-id",
+        onedrive_directory_id: "directory-id",
+        onedrive_private_key: "masked-certificate",
+      },
+      source: ValidSources.OneDrive,
+    });
+
+    expect(
+      getEditableCredentialFields(credential, ValidSources.OneDrive)
+    ).toEqual({
+      authentication_method: "certificate",
+      onedrive_client_id: "client-id",
+      onedrive_directory_id: "directory-id",
+      onedrive_certificate_password: "",
+      onedrive_private_key: "masked-certificate",
+    });
+  });
+
   it("does not expose OAuth-managed credential internals in the edit form", () => {
     const credential = buildCredential({
       credential_json: {
@@ -91,7 +120,7 @@ describe("credential edit helpers", () => {
 
 describe("createValidationSchema", () => {
   const schema = createValidationSchema(
-    credentialTemplates[ValidSources.Outlook]
+    CREDENTIAL_TEMPLATES[ValidSources.Outlook]
   );
   const ids = {
     outlook_client_id: "client-id",
@@ -134,7 +163,7 @@ describe("createValidationSchema", () => {
 
   it("requires the SharePoint app ids under both of its methods", () => {
     const sharepointSchema = createValidationSchema(
-      credentialTemplates[ValidSources.Sharepoint]
+      CREDENTIAL_TEMPLATES[ValidSources.Sharepoint]
     );
     const sharepointIds = {
       sp_client_id: "client-id",
@@ -170,4 +199,52 @@ describe("createValidationSchema", () => {
       })
     ).toBe(true);
   });
+});
+
+function oauthDetails(
+  oauthEnabled: boolean,
+  supportsManualCredentials: boolean,
+  hasAdditionalFields = false
+): OAuthDetails {
+  return {
+    oauth_enabled: oauthEnabled,
+    supports_manual_credentials: supportsManualCredentials,
+    additional_kwargs: hasAdditionalFields
+      ? [
+          {
+            name: "domain",
+            display_name: "Domain",
+            description: "Provider domain",
+          },
+        ]
+      : [],
+  };
+}
+
+test.each([
+  [
+    true,
+    true,
+    [CredentialCreationMethod.OAuth, CredentialCreationMethod.Manual],
+  ],
+  [true, false, [CredentialCreationMethod.OAuth]],
+  [false, true, [CredentialCreationMethod.Manual]],
+])(
+  "selects credential methods for OAuth=%s and manual=%s",
+  (oauthEnabled, supportsManual, expected) => {
+    expect(
+      getCredentialCreationMethods(oauthDetails(oauthEnabled, supportsManual))
+    ).toEqual(expected);
+  }
+);
+
+test("falls back to manual credentials without OAuth details", () => {
+  expect(getCredentialCreationMethods()).toEqual([
+    CredentialCreationMethod.Manual,
+  ]);
+});
+
+test("redirects OAuth providers without additional fields", () => {
+  expect(shouldRedirectToOAuth(oauthDetails(true, false))).toBe(true);
+  expect(shouldRedirectToOAuth(oauthDetails(true, false, true))).toBe(false);
 });

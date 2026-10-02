@@ -5,8 +5,7 @@
    -------------------------------------------------------------------------- */
 
 .opal-input-field {
-  @apply w-full h-6 bg-transparent p-0.5 focus:outline-hidden;
-  font: inherit;
+  @apply w-full h-6 bg-transparent p-0.5 font-main-ui-body focus:outline-hidden;
 }
 
 /* A chosen option's icon, sized like the search icon. */

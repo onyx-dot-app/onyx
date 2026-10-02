@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { format, startOfDay, subDays } from "date-fns";
@@ -13,12 +14,12 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
+import { ContentAction, Section, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import {
   SvgCalendar,
   SvgDownload,
   SvgDownloadCloud,
-  SvgSimpleLoader,
   SvgSpreadsheetFile,
   SvgX,
 } from "@opal/icons";
@@ -84,7 +85,7 @@ function PendingReportRow({ rangeLabel, slow }: PendingReportRowProps) {
         padding={1}
         center
         rightChildren={
-          <SvgSimpleLoader
+          <IconLoader
             size={16}
             className="shrink-0 animate-spin stroke-text-03 motion-reduce:animate-none"
           />

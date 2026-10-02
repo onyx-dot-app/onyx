@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.auth.users import current_chat_accessible_user
+from onyx.auth.users import current_chat_accessible_user, scope_exempt
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
@@ -26,6 +26,7 @@ from onyx.db.llm import (
     fetch_existing_llm_providers,
     fetch_existing_models,
     fetch_model_configuration_by_id,
+    fetch_model_configurations_page,
     fetch_persona_with_groups,
     fetch_user_group_ids,
     remove_llm_provider,
@@ -39,7 +40,8 @@ from onyx.db.llm import (
     upsert_llm_provider,
     validate_persona_ids_exist,
 )
-from onyx.db.models import Persona, User
+from onyx.db.models import LLMProvider as LLMProviderModel
+from onyx.db.models import ModelConfiguration, Persona, User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -97,6 +99,7 @@ from onyx.server.manage.llm.models import (
     LLMProviderView,
     LMStudioFinalModelResponse,
     LMStudioModelsRequest,
+    ModelConfigurationPage,
     ModelConfigurationUpsertRequest,
     NebiusTokenfactoryFinalModelResponse,
     NebiusTokenfactoryModelsRequest,
@@ -909,6 +912,97 @@ def get_vision_capable_providers(
 """Endpoints for all"""
 
 
+def _fetch_persona_for_listing(
+    persona_id: int, user: User, db_session: Session
+) -> Persona:
+    persona = fetch_persona_with_groups(db_session, persona_id)
+    if not persona:
+        raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND, "Persona not found")
+
+    if not user_can_access_persona(db_session, persona_id, user, get_editable=False):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You don't have access to this assistant",
+        )
+    return persona
+
+
+def _build_provider_descriptors(
+    db_session: Session,
+    providers: list[LLMProviderModel],
+    pinned_models: list[ModelConfiguration],
+) -> list[LLMProviderDescriptor]:
+    """Descriptors carrying each provider's first page of models. The listing
+    never loads a provider's full model list. The picker pages the rest in.
+    `pinned_models` (the defaults) ride along even when they sort past the
+    page, so clients can resolve them without paging."""
+    windows = fetch_model_configurations_page(
+        db_session, [provider.id for provider in providers]
+    )
+    for model in pinned_models:
+        window = windows.get(model.llm_provider_id)
+        if window is None or any(
+            mc.id == model.id for mc in window.model_configurations
+        ):
+            continue
+        window.model_configurations.append(model)
+    return [
+        LLMProviderDescriptor.from_model(
+            provider,
+            windows[provider.id].model_configurations,
+            windows[provider.id].next_offset,
+        )
+        for provider in providers
+    ]
+
+
+@basic_router.get(
+    "/provider/{provider_id}/models", dependencies=[Depends(scope_exempt)]
+)
+def list_llm_provider_models(
+    provider_id: int,
+    offset: int = Query(0, ge=0),
+    query: str | None = Query(None, max_length=200),
+    persona_id: int | None = Query(None),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> ModelConfigurationPage:
+    """The next page of a provider's models after the listing's first page, or
+    with `query` one page of the models whose names contain it. `persona_id`
+    applies that persona's restrictions as the persona listing does."""
+    provider = fetch_existing_llm_provider_by_id(
+        provider_id, db_session, include_model_configurations=False
+    )
+    if provider is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"LLM provider {provider_id} does not exist"
+        )
+
+    persona = (
+        _fetch_persona_for_listing(persona_id, user, db_session)
+        if persona_id is not None
+        else None
+    )
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
+    user_group_ids = (
+        set() if can_manage_llms else fetch_user_group_ids(db_session, user)
+    )
+    if not can_user_access_llm_provider(
+        provider, user_group_ids, persona, can_manage_llms=can_manage_llms
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You don't have access to this LLM provider",
+        )
+
+    window = fetch_model_configurations_page(
+        db_session, [provider_id], offset=offset, name_query=query
+    )[provider_id]
+    return ModelConfigurationPage.from_model(
+        provider, window.model_configurations, window.next_offset
+    )
+
+
 @basic_router.get("/provider")
 def list_llm_provider_basics(
     user: User = Depends(current_chat_accessible_user),
@@ -937,7 +1031,13 @@ def list_llm_provider_basics(
     if cache_lookup.response is not None:
         return cache_lookup.response
 
-    all_providers = fetch_existing_llm_providers(db_session, [])
+    all_providers = fetch_existing_llm_providers(
+        db_session, [], include_model_configurations=False
+    )
+    default_text_model = fetch_default_llm_model(db_session)
+    default_vision_model = fetch_default_vision_model(db_session)
+    default_chat_naming_model = fetch_default_chat_naming_model(db_session)
+    default_craft_model = fetch_default_craft_model(db_session)
 
     # Use centralized access control logic with persona=None since we're
     # listing providers without a specific persona context. This correctly:
@@ -945,13 +1045,26 @@ def list_llm_provider_basics(
     # - Includes providers user can access via group membership
     # - Excludes providers with persona restrictions (requires specific persona)
     # - Excludes non-public providers with no restrictions (admin-only)
-    accessible_providers = [
-        LLMProviderDescriptor.from_model(provider)
-        for provider in all_providers
-        if can_user_access_llm_provider(
-            provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
-        )
-    ]
+    accessible_providers = _build_provider_descriptors(
+        db_session,
+        [
+            provider
+            for provider in all_providers
+            if can_user_access_llm_provider(
+                provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
+            )
+        ],
+        [
+            model
+            for model in (
+                default_text_model,
+                default_vision_model,
+                default_chat_naming_model,
+                default_craft_model,
+            )
+            if model is not None
+        ],
+    )
 
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
@@ -963,18 +1076,10 @@ def list_llm_provider_basics(
 
     response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=accessible_providers,
-        default_text=DefaultModel.from_model_config(
-            fetch_default_llm_model(db_session)
-        ),
-        default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
-        ),
-        default_chat_naming=DefaultModel.from_model_config(
-            fetch_default_chat_naming_model(db_session)
-        ),
-        default_craft=DefaultModel.from_model_config(
-            fetch_default_craft_model(db_session)
-        ),
+        default_text=DefaultModel.from_model_config(default_text_model),
+        default_vision=DefaultModel.from_model_config(default_vision_model),
+        default_chat_naming=DefaultModel.from_model_config(default_chat_naming_model),
+        default_craft=DefaultModel.from_model_config(default_craft_model),
     )
     cache_provider_listing(
         persona_id=None,
@@ -1072,16 +1177,7 @@ def list_llm_providers_for_persona(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers for persona %s", persona_id)
 
-    persona = fetch_persona_with_groups(db_session, persona_id)
-    if not persona:
-        raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND, "Persona not found")
-
-    # Verify user has access to this persona
-    if not user_can_access_persona(db_session, persona_id, user, get_editable=False):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You don't have access to this assistant",
-        )
+    persona = _fetch_persona_for_listing(persona_id, user, db_session)
 
     can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     user_group_ids = (
@@ -1095,25 +1191,9 @@ def list_llm_providers_for_persona(
         return cache_lookup.response
 
     all_providers = fetch_existing_llm_providers(
-        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
-    )
-
-    # Check access with persona context — respects persona restrictions
-    llm_provider_list: list[LLMProviderDescriptor] = [
-        LLMProviderDescriptor.from_model(llm_provider_model)
-        for llm_provider_model in all_providers
-        if can_user_access_llm_provider(
-            llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
-        )
-    ]
-
-    end_time = datetime.now(timezone.utc)
-    duration = (end_time - start_time).total_seconds()
-    logger.debug(
-        "Completed fetching %s LLM providers for persona %s in %s seconds",
-        len(llm_provider_list),
-        persona_id,
-        format(duration, ".2f"),
+        db_session,
+        [LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+        include_model_configurations=False,
     )
 
     default_text_model = fetch_default_llm_model(db_session)
@@ -1124,6 +1204,7 @@ def list_llm_providers_for_persona(
     default_text = DefaultModel.from_model_config(default_text_model)
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
+    persona_default_model: ModelConfiguration | None = None
     if persona.default_model_configuration_id:
         model_config = fetch_model_configuration_by_id(
             db_session, persona.default_model_configuration_id
@@ -1134,10 +1215,44 @@ def list_llm_providers_for_persona(
             persona,
             can_manage_llms=can_manage_llms,
         ):
+            persona_default_model = model_config
             default_text = DefaultModel(
                 provider_id=model_config.llm_provider_id,
                 model_name=model_config.name,
             )
+
+    # Check access with persona context — respects persona restrictions
+    llm_provider_list = _build_provider_descriptors(
+        db_session,
+        [
+            llm_provider_model
+            for llm_provider_model in all_providers
+            if can_user_access_llm_provider(
+                llm_provider_model,
+                user_group_ids,
+                persona,
+                can_manage_llms=can_manage_llms,
+            )
+        ],
+        [
+            model
+            for model in (
+                default_text_model,
+                default_vision_model,
+                persona_default_model,
+            )
+            if model is not None
+        ],
+    )
+
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+    logger.debug(
+        "Completed fetching %s LLM providers for persona %s in %s seconds",
+        len(llm_provider_list),
+        persona_id,
+        format(duration, ".2f"),
+    )
 
     response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,

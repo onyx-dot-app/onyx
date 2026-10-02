@@ -106,7 +106,6 @@ class ReindexPortManager:
             "provider_type": current.get("provider_type"),
             "index_name": None,
             "multipass_indexing": current.get("multipass_indexing", False),
-            "embedding_precision": current["embedding_precision"],
             "reduced_dimension": current.get("reduced_dimension"),
             "switchover_type": switchover_type,
             "enable_contextual_rag": enable_contextual_rag,

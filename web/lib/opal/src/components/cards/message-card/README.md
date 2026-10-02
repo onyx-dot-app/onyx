@@ -6,6 +6,10 @@ A styled card for displaying messages, alerts, or status notifications. Uses `Co
 for consistent title/description/icon layout. Built on `Card`, which owns the surface — each variant maps to a `CardColor`, a border color, and an icon. Supports 6 variants — `default`, `info`, `success`, `warning`, `pending`, `error` — with corresponding background
 and border colors.
 
+## Padding
+
+Both paddings move together. A card inside a modal, popover or toast uses `outerPadding={1}` and `innerPadding={1}`. A card directly on a page uses the defaults, 2 and 2.
+
 ## Props
 
 | Prop             | Type                                                                    | Default     | Description                                                                                |
@@ -14,8 +18,8 @@ and border colors.
 | `icon`           | `IconFunctionComponent`                                                 | per variant | Override the default variant icon                                                          |
 | `title`          | `string \| RichStr`                                                     | —           | Main title text                                                                            |
 | `description`    | `string \| RichStr`                                                     | —           | Description below the title                                                                |
-| `padding`        | `1 \| 2`                                                                | `2`         | Padding around the outer card, as a spacing step (`N / 4` rem). Narrowed to two densities. |
-| `headerPadding`  | `Spacing`                                                               | `0`         | Padding around the header Content area, as a spacing step (`N / 4` rem)                    |
+| `outerPadding`   | `1 \| 2`                                                                | `2`         | Padding around the outer card, as a spacing step (`N / 4` rem). Narrowed to two densities. |
+| `innerPadding`   | `1 \| 2`                                                                | `2`         | Padding around the header Content area, as a spacing step (`N / 4` rem). Narrowed to two densities. |
 | `bottomChildren` | `ReactNode`                                                             | —           | Content below a divider, under the main content                                            |
 | `rightChildren`  | `ReactNode`                                                             | —           | Content on the right side. Mutually exclusive with `onClose`.                              |
 | `onClose`        | `() => void`                                                            | —           | Close button callback. When omitted, no close button is rendered.                          |
