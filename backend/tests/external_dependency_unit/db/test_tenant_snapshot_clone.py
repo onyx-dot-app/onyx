@@ -87,6 +87,74 @@ def test_parity_catches_a_missing_column(shard: str, clone: str) -> None:
     assert differences and differences[0] == "structure differs:"
 
 
+def test_parity_catches_an_extra_index(shard: str, clone: str) -> None:
+    with get_engine_for_shard(shard).begin() as connection:
+        connection.execute(
+            text(f'CREATE INDEX parity_extra ON "{clone}".persona (name)')
+        )
+
+    differences = tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA)
+    assert differences and differences[0] == "structure differs:"
+    assert any("parity_extra" in difference for difference in differences)
+
+
+def test_parity_catches_a_dropped_constraint(shard: str, clone: str) -> None:
+    with get_engine_for_shard(shard).begin() as connection:
+        constraint = connection.execute(
+            text(
+                "SELECT con.conname, c.relname FROM pg_constraint con "
+                "JOIN pg_class c ON c.oid = con.conrelid "
+                "WHERE con.connamespace = CAST(:schema AS regnamespace) "
+                "AND con.contype = 'f' "
+                "ORDER BY con.conname LIMIT 1"
+            ),
+            {"schema": f'"{clone}"'},
+        ).one()
+        connection.execute(
+            text(
+                f'ALTER TABLE "{clone}"."{constraint.relname}" '
+                f'DROP CONSTRAINT "{constraint.conname}"'
+            )
+        )
+
+    differences = tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA)
+    assert differences and differences[0] == "structure differs:"
+    assert any(constraint.conname in difference for difference in differences)
+
+
+def test_parity_catches_a_dropped_trigger(shard: str, clone: str) -> None:
+    with get_engine_for_shard(shard).begin() as connection:
+        trigger = connection.execute(
+            text(
+                "SELECT t.tgname, c.relname FROM pg_trigger t "
+                "JOIN pg_class c ON c.oid = t.tgrelid "
+                "WHERE c.relnamespace = CAST(:schema AS regnamespace) "
+                "AND NOT t.tgisinternal "
+                "ORDER BY t.tgname LIMIT 1"
+            ),
+            {"schema": f'"{clone}"'},
+        ).one()
+        connection.execute(
+            text(
+                f'ALTER TABLE "{clone}"."{trigger.relname}" '
+                f'DISABLE TRIGGER "{trigger.tgname}"'
+            )
+        )
+
+    differences = tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA)
+    assert differences and differences[0] == "structure differs:"
+    assert any(trigger.tgname in difference for difference in differences)
+
+    with get_engine_for_shard(shard).begin() as connection:
+        connection.execute(
+            text(f'DROP TRIGGER "{trigger.tgname}" ON "{clone}"."{trigger.relname}"')
+        )
+
+    differences = tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA)
+    assert differences and differences[0] == "structure differs:"
+    assert any(trigger.tgname in difference for difference in differences)
+
+
 def test_parity_ignores_the_migration_date_seed(shard: str, clone: str) -> None:
     # The knowledge graph config is seeded with the migration's run date.
     with get_engine_for_shard(shard).begin() as connection:
