@@ -21,7 +21,7 @@ import { Tabs } from "@opal/components";
 
 ### Contained (default)
 
-Equal-width tabs laid out in a grid on a tinted background. Active tab gets a white card with a subtle shadow. Best for primary page-level navigation.
+Equal-width tabs, 36px tall, laid out in a grid on a tinted background. The active tab sits on a white card with a subtle shadow, which slides to the next tab when the selection changes. Best for primary page-level navigation.
 
 ```tsx
 <Tabs variant="contained">
@@ -34,7 +34,7 @@ Equal-width tabs laid out in a grid on a tinted background. Active tab gets a wh
 
 ### Pill
 
-Content-width tabs with a sliding underline indicator that animates between active tabs. Good for secondary navigation or filter-style tabs.
+Content-width tabs. The active tab's filled background and the underline indicator both slide between tabs. Good for secondary navigation or filter-style tabs.
 
 ```tsx
 <Tabs variant="pill">
@@ -47,7 +47,7 @@ Content-width tabs with a sliding underline indicator that animates between acti
 
 ### Underline
 
-Like pill but without the filled active background on the trigger — only the underline indicator is shown.
+Like pill but without the filled active background — only the underline indicator is shown, and it slides between tabs.
 
 ```tsx
 <Tabs variant="underline">
@@ -57,6 +57,12 @@ Like pill but without the filled active background on the trigger — only the u
   </Tabs.List>
 </Tabs>
 ```
+
+### Animation
+
+The active state slides from the old tab to the new one: in `contained` the white card, in `pill` both the filled background and the underline bar, in `underline` the bar. It moves with a `transform`, holds still on its first placement and while the tabs scroll, and turns off for reduced motion. Panels (`Tabs.Content`) swap without animation.
+
+A string label renders as an Opal `Content` with `color="interactive"`: each tab is an interactive surface whose state sets `--interactive-foreground` and `--interactive-foreground-icon`, so title and icon colours fade with the slide. Contained labels use the `main-ui` size (16px icon); pill and underline use `secondary` (12px icon).
 
 ## Features
 
