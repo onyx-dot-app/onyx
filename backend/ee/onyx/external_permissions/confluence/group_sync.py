@@ -9,6 +9,9 @@ from onyx.connectors.confluence.onyx_confluence import (
     get_user_email_from_username__server,
 )
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    credential_uses_scoped_token,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.users import get_all_users
@@ -165,9 +168,10 @@ def confluence_group_sync(
         tenant_id, cc_pair.connector.source, cc_pair.credential_id
     )
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
+    # The credential carries the flag; older connectors set it in their config.
     scoped_token = cc_pair.connector.connector_specific_config.get(
         "scoped_token", False
-    )
+    ) or credential_uses_scoped_token(provider.get_credentials())
     wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
     url = wiki_base.rstrip("/")
 
