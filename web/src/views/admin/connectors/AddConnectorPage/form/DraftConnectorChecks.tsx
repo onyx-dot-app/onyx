@@ -54,7 +54,8 @@ function fieldLabelsOf(
 /**
  * The checks card of the create form. It runs the capability checks when a
  * credential is selected, when the access type changes, and when the admin
- * leaves a connector-config field.
+ * leaves a connector-config field. Its re-run button runs them again for the
+ * current input.
  */
 export function DraftConnectorChecks<FormValues>({
   checks,
@@ -132,6 +133,15 @@ export function DraftConnectorChecks<FormValues>({
     [configuration, currentCredential]
   );
 
+  // Runs the checks for the current input again. Failed results run again
+  // and passed ones come from the cache; indeterminate ones are never cached.
+  const rerun = () => {
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    const latest = latestRef.current;
+    void latest.run(latest.input, { force: true, rerunFailed: true });
+  };
+
   // A failed request hides the card; creation then runs the checks itself.
   if (checks.error) return null;
 
@@ -139,6 +149,7 @@ export function DraftConnectorChecks<FormValues>({
     <ConnectorsCheckCard
       draft={checks.snapshot}
       running={checks.running}
+      onRerun={rerun}
       highlighted={highlighted}
       fieldLabels={fieldLabels}
     />
