@@ -38,7 +38,9 @@ Scans what deployment.yml's audit-gate scans: the lockfiles, the open Dependabot
 alerts, the pinned Actions, and the OS layer each shipped image carries (the
 pinned runtime base for web and model-server, the backend apt stage built from
 backend/Dockerfile). Run it from the repository root on the commit you are
-about to tag; a critical here is the one that would fail the tag build.
+about to tag; a critical here is the one that would fail the tag build. Every
+scan is strict, so a source that cannot be read (gh not signed in, no
+docker login dhi.io) fails the gate instead of passing silently.
 
 Example usage:
 
@@ -59,6 +61,7 @@ func runAuditGate(opts *AuditGateOptions, stdout, stderr io.Writer) error {
 		Format:    "text",
 		FailOn:    audit.SeverityCritical,
 		IgnoreURL: opts.IgnoreURL,
+		Strict:    true,
 		Stdout:    stdout,
 		Stderr:    stderr,
 	})
@@ -80,6 +83,7 @@ func runAuditGate(opts *AuditGateOptions, stdout, stderr io.Writer) error {
 			Format:    "text",
 			FailOn:    audit.SeverityCritical,
 			IgnoreURL: opts.IgnoreURL,
+			Strict:    true,
 			Stdout:    stdout,
 			Stderr:    stderr,
 		})

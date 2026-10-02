@@ -18,8 +18,16 @@ func fakeGateScans(t *testing.T, deps *audit.Result, depsErr error, images map[s
 	origDeps, origImage := runDeps, runImage
 	t.Cleanup(func() { runDeps, runImage = origDeps, origImage })
 	var scanned []string
-	runDeps = func(audit.Options) (*audit.Result, error) { return deps, depsErr }
+	runDeps = func(opts audit.Options) (*audit.Result, error) {
+		if !opts.Strict {
+			t.Fatal("the gate must run the dependency audit strictly")
+		}
+		return deps, depsErr
+	}
 	runImage = func(opts audit.ImageOptions) (*audit.Result, error) {
+		if !opts.Strict {
+			t.Fatalf("the gate must scan %s strictly", opts.Image)
+		}
 		scanned = append(scanned, opts.Image)
 		if imageErr != nil {
 			return nil, imageErr

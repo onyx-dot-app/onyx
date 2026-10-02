@@ -746,7 +746,9 @@ Dependabot alerts, pinned Actions, and the OS layer each shipped image carries
 (the pinned runtime base for web and model-server, the backend apt stage built
 from `backend/Dockerfile`). A critical here is the one that would fail the tag
 build, so run it on the release branch at the commit you are about to tag. It
-needs Docker, and `docker login dhi.io` to scan the hardened bases CI ships.
+scans the same hardened bases CI ships, so it needs Docker, `docker login
+dhi.io`, and a signed-in `gh` for the Dependabot alerts; every scan is strict,
+so a source it cannot read fails the gate.
 
 ```shell
 git switch release/v4.7
