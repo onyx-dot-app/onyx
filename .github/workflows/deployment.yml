@@ -133,13 +133,13 @@ jobs:
           docker-token: ${{ env.DOCKER_TOKEN }}
 
       # Everything a shipped image holds outside its lockfiles: the pinned
-      # runtime base for web and model-server, the backend's os stage built
-      # here. All three are scanned before the step fails, so one run shows
+      # runtime base for web and model-server, the backend's and the sandbox's
+      # os stage built here. All three are scanned before the step fails, so one run shows
       # every blocker, and --strict keeps an empty scan from passing.
       - name: Run base image audit
         run: |
           status=0
-          for component in web model-server backend; do
+          for component in web model-server backend sandbox; do
             image="$(.github/scripts/base-image-ref.sh "${component}")"
             uv run --no-sync ods audit image "${image}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || status=1
             if [ ! -s "image-audit-${component}.sarif" ]; then
@@ -186,6 +186,18 @@ jobs:
         with:
           sarif_file: image-audit-backend.sarif
           category: image-audit-backend
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
+
+      - name: Upload the sandbox image audit to the GitHub Security tab
+        if: >-
+          always() &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: image-audit-sandbox.sarif
+          category: image-audit-sandbox
           ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
           sha: ${{ github.sha }}
 
