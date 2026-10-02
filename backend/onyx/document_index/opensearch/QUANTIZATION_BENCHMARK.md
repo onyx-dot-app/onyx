@@ -10,15 +10,21 @@ Quantization substantially shrank the **vector search files**, but produced mode
 
 ## Accuracy and speed
 
-| Quantization | Hybrid recall@50 | Semantic recall@50 | Hybrid median | Hybrid p95 | Hybrid queries/sec¹ |
-|---|---:|---:|---:|---:|---:|
-| None (float32) | **79.28%** | **60.65%** | **170 ms** | **269 ms** | **21.40** |
-| 7-bit | 78.29% | 59.24% | 178 ms | 279 ms | 20.71 |
-| 1-bit | 78.23% | 58.50% | 178 ms | 290 ms | 20.75 |
+| Quantization | Hybrid recall@10 | Hybrid recall@50 | Semantic recall@10 | Semantic recall@50 |
+|---|---:|---:|---:|---:|
+| None (float32) | **68.45%** | **79.28%** | **50.29%** | **60.65%** |
+| 7-bit | 66.90% | 78.29% | 48.80% | 59.24% |
+| 1-bit | 67.40% | 78.23% | 48.80% | 58.50% |
+
+| Quantization | Hybrid median | Hybrid p95 | Hybrid queries/sec¹ |
+|---|---:|---:|---:|
+| None (float32) | **170 ms** | **269 ms** | **21.40** |
+| 7-bit | 178 ms | 279 ms | 20.71 |
+| 1-bit | 178 ms | 290 ms | 20.75 |
 
 ¹ Throughput uses four concurrent requests. Median and p95 use serial native retrieval timings. Query embedding network time is excluded.
 
-Hybrid recall fell **0.99 points at 7-bit** and **1.05 points at 1-bit**. Both paired 95% confidence intervals include zero; a clear hybrid accuracy difference is not established.
+Hybrid recall@50 fell **0.99 points at 7-bit** and **1.05 points at 1-bit**. Both paired 95% confidence intervals include zero; a clear hybrid accuracy difference is not established.
 
 ## Resources and savings
 
@@ -47,7 +53,7 @@ For a defensible RAM requirement, measure resident pages by file type after warm
 ## Test conditions and retained data
 
 - **Corpus:** 511,958 unique documents; 1,572,105 chunks. All 722 gold documents were present in every index.
-- **Evaluation:** all 500 questions, semantic and hybrid search. Recall averages use the 470 questions with gold document IDs. Recall@50 scores gold-document coverage in the first 50 retrieved chunks.
+- **Evaluation:** all 500 questions, semantic and hybrid search. Recall averages use the 470 questions with gold document IDs. Recall@10 and recall@50 score gold-document coverage in the first 10 and 50 retrieved chunks. Recall@10 reuses the saved top-50 rankings; no searches were rerun.
 - **Repetitions:** three timing passes; first-pass accuracy. Official recall scoring agreed. No reranking, answer generation, or LLM judging.
 - **Isolation:** one deployment at a time; six CPUs, 12-GiB memory limit, fixed 2-GiB JVM heap, 10 segments per index.
 - **Embeddings:** Cohere `embed-english-light-v3.0`, 384 dimensions. Identical saved records and query vectors were reused across all levels.
