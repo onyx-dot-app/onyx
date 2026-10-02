@@ -107,15 +107,11 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
 )
+from onyx.llm.exceptions import LLMErrorInfo, litellm_exception_to_safe_error
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import LLMErrorInfo, ReasoningEffort
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.utils import (
-    collect_credential_values,
-    litellm_exception_to_safe_error,
-    scrub_sensitive_values,
-)
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
@@ -1557,11 +1553,8 @@ def _run_models(
                     stack_trace = "".join(
                         traceback.format_exception(type(item), item, item.__traceback__)
                     )
-                    secrets = collect_credential_values(
-                        model_llm.config.api_key, model_llm.config.custom_config
-                    )
-                    error_msg = scrub_sensitive_values(info.message, secrets)
-                    stack_trace = scrub_sensitive_values(stack_trace, secrets)
+                    error_msg = model_llm.redact_error(info.message)
+                    stack_trace = model_llm.redact_error(stack_trace)
                     _publish(
                         StreamingError(
                             error=error_msg,
@@ -1838,10 +1831,7 @@ def _stream_chat_turn(
         llm = setup.llms[0] if setup else None
         if llm:
             error_info = litellm_exception_to_safe_error(e, llm)
-            stack_trace = scrub_sensitive_values(
-                stack_trace,
-                collect_credential_values(llm.config.api_key, llm.config.custom_config),
-            )
+            stack_trace = llm.redact_error(stack_trace)
             yield StreamingError(
                 error=error_info.message,
                 stack_trace=stack_trace if DEV_MODE else None,

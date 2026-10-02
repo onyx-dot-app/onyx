@@ -34,6 +34,7 @@ from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
@@ -82,7 +83,7 @@ from onyx.llm.models import (
     resolve_reasoning_effort,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
-from onyx.llm.utils import build_litellm_passthrough_kwargs
+from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
@@ -91,8 +92,9 @@ from onyx.tracing.llm_utils import (
     record_llm_response,
     record_llm_span_output,
 )
-from onyx.utils.encryption import mask_env_value_for_logging, mask_string
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.logger import setup_logger
+from onyx.utils.redaction import scrub_sensitive_values
 
 # OpenAI reasoning effort mapping
 # Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
@@ -232,18 +234,6 @@ def _retry_attempts(
         if len(stripped) < len(attempts[-1]):
             attempts.append(stripped)
     return attempts
-
-
-class LLMTimeoutError(Exception):
-    """
-    Exception raised when an LLM call times out.
-    """
-
-
-class LLMRateLimitError(Exception):
-    """
-    Exception raised when an LLM call is rate limited.
-    """
 
 
 class ProviderOperation(BaseModel):
@@ -668,18 +658,6 @@ class LitellmLLM(LLM):
             )
 
         self._model_kwargs = model_kwargs
-
-    def _safe_model_config(self) -> dict:
-        dump = self.config.model_dump()
-        dump["api_key"] = mask_string(dump.get("api_key") or "")
-        custom_config = dump.get("custom_config")
-        if isinstance(custom_config, dict):
-            # Mask sensitive values in custom_config
-            masked_config = {}
-            for k, v in custom_config.items():
-                masked_config[k] = mask_string(v) if v else v
-            dump["custom_config"] = masked_config
-        return dump
 
     def _track_llm_cost(self, usage: Usage) -> None:
         """
@@ -1291,6 +1269,12 @@ class LitellmLLM(LLM):
         except Exception as e:
             raise _as_onyx_llm_error(e)
 
+    def redact_error(self, text: str) -> str:
+        config = self.config
+        return scrub_sensitive_values(
+            text, collect_credential_values(config.api_key, config.custom_config)
+        )
+
     @property
     def config(self) -> LLMConfig:
         return LLMConfig(
@@ -1599,7 +1583,10 @@ class LitellmLLM(LLM):
                 )
             except Exception as exc:
                 span.set_error(
-                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                    {
+                        "message": self.redact_error(f"{type(exc).__name__}: {exc}"),
+                        "data": None,
+                    }
                 )
                 raise
             record_llm_response(span, response)
@@ -1674,7 +1661,10 @@ class LitellmLLM(LLM):
                     )
             except Exception as exc:
                 span.set_error(
-                    {"message": f"{type(exc).__name__}: {exc}", "data": None}
+                    {
+                        "message": self.redact_error(f"{type(exc).__name__}: {exc}"),
+                        "data": None,
+                    }
                 )
                 accumulator.message.stop_reason = "error"
                 accumulator.message.error_message = "Generation failed"

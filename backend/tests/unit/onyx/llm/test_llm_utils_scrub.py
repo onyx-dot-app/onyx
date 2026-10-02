@@ -6,13 +6,11 @@ from echoing API keys back through error messages.
 from collections.abc import Iterable
 from typing import Any
 
-from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.interfaces import LLM, LLMConfig
-from onyx.llm.utils import (
-    collect_credential_values,
-    is_sensitive_custom_config_key,
-    litellm_exception_to_safe_error,
-)
+from onyx.llm.exceptions import ClassifiedLLMError, litellm_exception_to_safe_error
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_response import Choice, Message, ModelResponse
+from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.utils import collect_credential_values, is_sensitive_custom_config_key
 from onyx.llm.utils import (
     test_llm as run_test_llm,
 )  # aliased to avoid pytest collection
@@ -25,8 +23,8 @@ _SECRET_VERTEX_BLOB = (
 _CLASSIFIED_ERROR_CODE = "MODEL_REFUSAL"
 
 
-class _StubLLM(LLM):
-    """Minimal LLM that lets us drive `test_llm` through both success and
+class _StubLLM(LitellmLLM):
+    """Provider fixture that lets us drive `test_llm` through both success and
     failure paths without going anywhere near LiteLLM."""
 
     def __init__(
@@ -36,6 +34,8 @@ class _StubLLM(LLM):
         raise_on_invoke: Exception | None = None,
     ) -> None:
         self._config = config
+        self._api_key = config.api_key
+        self._custom_config = config.custom_config
         self._raise_on_invoke = raise_on_invoke
         self.invoke_calls = 0
 
@@ -43,14 +43,13 @@ class _StubLLM(LLM):
     def config(self) -> LLMConfig:
         return self._config
 
-    def invoke(self, *_: Any, **__: Any) -> Any:  # noqa: D401, ANN401
+    def invoke_raw(self, *_: Any, **__: Any) -> ModelResponse:
         self.invoke_calls += 1
         if self._raise_on_invoke is not None:
             raise self._raise_on_invoke
-        return None
-
-    def stream(self, *_: Any, **__: Any) -> Any:  # noqa: ANN401
-        raise NotImplementedError
+        return ModelResponse(
+            id="test", created="0", choice=Choice(message=Message(content="ok"))
+        )
 
 
 def _make_config(

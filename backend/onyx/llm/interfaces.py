@@ -68,6 +68,9 @@ class LLM(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def redact_error(self, text: str) -> str: ...
+
+    @abc.abstractmethod
     def invoke(
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
