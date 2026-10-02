@@ -52,17 +52,18 @@ func TestRunAuditGate_sumsBlockingAcrossScans(t *testing.T) {
 		"dhi.io/node:24@sha256:a":     {},
 		"dhi.io/python:3.13@sha256:b": {Blocking: []audit.Finding{critical, critical}},
 		"onyx-backend-os:audit":       {},
+		"onyx-sandbox-os:audit":       {Blocking: []audit.Finding{critical}},
 	}, nil)
-	script := writeGateScript(t, `case "$1" in web) echo "dhi.io/node:24@sha256:a ";; model-server) echo dhi.io/python:3.13@sha256:b;; backend) echo onyx-backend-os:audit;; esac`)
+	script := writeGateScript(t, `case "$1" in web) echo "dhi.io/node:24@sha256:a ";; model-server) echo dhi.io/python:3.13@sha256:b;; backend) echo onyx-backend-os:audit;; sandbox) echo onyx-sandbox-os:audit;; esac`)
 
 	var stdout, stderr bytes.Buffer
 	err := runAuditGate(&AuditGateOptions{Script: script}, &stdout, &stderr)
 
 	var blocking *blockingError
-	if !errors.As(err, &blocking) || blocking.count != 3 {
-		t.Fatalf("expected three blocking findings across the scans, got %v", err)
+	if !errors.As(err, &blocking) || blocking.count != 4 {
+		t.Fatalf("expected four blocking findings across the scans, got %v", err)
 	}
-	want := []string{"dhi.io/node:24@sha256:a", "dhi.io/python:3.13@sha256:b", "onyx-backend-os:audit"}
+	want := []string{"dhi.io/node:24@sha256:a", "dhi.io/python:3.13@sha256:b", "onyx-backend-os:audit", "onyx-sandbox-os:audit"}
 	if strings.Join(*scanned, ",") != strings.Join(want, ",") {
 		t.Fatalf("scanned %v, want %v in order", *scanned, want)
 	}
@@ -72,8 +73,8 @@ func TestRunAuditGate_sumsBlockingAcrossScans(t *testing.T) {
 }
 
 func TestRunAuditGate_cleanPasses(t *testing.T) {
-	fakeGateScans(t, &audit.Result{}, nil, map[string]*audit.Result{"a": {}, "b": {}, "c": {}}, nil)
-	script := writeGateScript(t, `case "$1" in web) echo a;; model-server) echo b;; backend) echo c;; esac`)
+	fakeGateScans(t, &audit.Result{}, nil, map[string]*audit.Result{"a": {}, "b": {}, "c": {}, "d": {}}, nil)
+	script := writeGateScript(t, `case "$1" in web) echo a;; model-server) echo b;; backend) echo c;; sandbox) echo d;; esac`)
 	if err := runAuditGate(&AuditGateOptions{Script: script}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("expected a clean gate to pass, got %v", err)
 	}
