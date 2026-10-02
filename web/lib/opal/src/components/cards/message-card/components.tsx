@@ -6,6 +6,7 @@ import type {
   CardColor,
   IconFunctionComponent,
   RichStr,
+  ShadowVariants,
   StatusVariants,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
@@ -20,7 +21,9 @@ import {
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
+import { useState } from "react";
 import { useOpalStrings } from "@opal/strings";
+import usePresence from "@opal/hooks/usePresence";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,8 +64,25 @@ interface MessageCardBaseProps {
   innerPadding?: 1 | 2;
 
   /**
+   * Padding of the `ContentAction` itself, inside `innerPadding`, as a
+   * spacing step.
+   *
+   * @default 0
+   */
+  contentPadding?: 0 | 0.5 | 1 | 2;
+
+  /**
+   * Drop-shadow depth of the card, passed to `Card`.
+   *
+   * @default "none"
+   */
+  shadow?: ShadowVariants;
+
+  /**
    * Content rendered below a divider, under the main content area.
    * When provided, a `Divider` is inserted between the `ContentAction` and this node.
+   * Adding or removing it animates the section open or closed; a card that
+   * mounts with it does not animate.
    */
   bottomChildren?: React.ReactNode;
 
@@ -171,6 +191,8 @@ function MessageCard({
   titleMaxLines,
   outerPadding = 2,
   innerPadding = 2,
+  contentPadding = 0,
+  shadow = "none",
   bottomChildren,
   rightChildren,
   onClose,
@@ -179,6 +201,23 @@ function MessageCard({
   const { icon: DefaultIcon, iconClass, color } = VARIANT_CONFIG[variant];
   const Icon = iconOverride ?? DefaultIcon;
   const strings = useOpalStrings();
+  // Falsey content (`condition && <X />`) counts as absent, as it always has.
+  const expanded = Boolean(bottomChildren);
+  const presence = usePresence(expanded, 200);
+  // Animate only once the section has come or gone, so a card that mounts
+  // with it does not play the opening on page load.
+  const [toggled, setToggled] = useState(false);
+  const [prevExpanded, setPrevExpanded] = useState(expanded);
+  if (expanded !== prevExpanded) {
+    setPrevExpanded(expanded);
+    setToggled(true);
+  }
+  // The last section shown, kept so it can animate out after the caller
+  // drops it.
+  const [shownBottom, setShownBottom] = useState(bottomChildren);
+  if (expanded && bottomChildren !== shownBottom) {
+    setShownBottom(bottomChildren);
+  }
 
   const right = onClose ? (
     <Button
@@ -205,6 +244,7 @@ function MessageCard({
         borderColor={variant}
         rounding={4}
         padding={outerPadding}
+        shadow={shadow}
       >
         <div className="opal-message-card-layout">
           <div style={{ padding: spacingToRem(innerPadding) }}>
@@ -218,15 +258,24 @@ function MessageCard({
               sizePreset="main-ui"
               variant="section"
               rightChildren={right}
-              padding={0}
+              padding={contentPadding}
             />
           </div>
 
-          {bottomChildren && (
-            <>
-              <Divider paddingParallel={2} paddingPerpendicular={1} />
-              {bottomChildren}
-            </>
+          {presence.mounted && (
+            <div
+              className="opal-message-card-bottom"
+              data-state={presence.state}
+              data-animate={toggled || undefined}
+              onAnimationEnd={presence.onAnimationEnd}
+            >
+              <div className="opal-message-card-bottom-inner">
+                <div className="opal-message-card-bottom-content">
+                  <Divider paddingParallel={3} paddingPerpendicular={0} />
+                  {expanded ? bottomChildren : shownBottom}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </Card>

@@ -35,7 +35,7 @@ interface DividerSharedProps {
  * across the surfaces it separates, so an arbitrary step would only ever put one
  * divider out of step with the rest.
  */
-type DividerSpacing = 0 | 0.5 | 1 | 2 | 4 | 6;
+type DividerSpacing = 0 | 0.5 | 1 | 2 | 3 | 4 | 6;
 
 /** Plain line — no title, no description. */
 type DividerBareProps = Omit<
