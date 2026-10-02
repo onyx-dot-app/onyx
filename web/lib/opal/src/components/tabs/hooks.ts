@@ -61,11 +61,21 @@ export function useTabIndicator(
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
+    let lastActiveTab: HTMLElement | null = null;
 
     const updateIndicator = () => {
       const activeTab = list.querySelector<HTMLElement>(
         '[data-state="active"]'
       );
+      // A new active tab is a selection, not a scroll: end any scroll hold
+      // now, so a tab clicked just after scrolling still slides.
+      if (activeTab !== lastActiveTab) {
+        if (lastActiveTab !== null) {
+          if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+          setIsScrolling(false);
+        }
+        lastActiveTab = activeTab;
+      }
       if (activeTab) {
         const listRect = list.getBoundingClientRect();
         const tabRect = activeTab.getBoundingClientRect();
