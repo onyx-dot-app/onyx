@@ -5776,8 +5776,13 @@
               "title": "Vision"
             }
           },
+          "search": {
+            "noMatch": "Keine Modelle gefunden.",
+            "placeholder": "Modelle suchen..."
+          },
           "selectAllButton": {
-            "label": "Alle auswählen"
+            "label": "Alle auswählen",
+            "unloadedTooltip": "Scrollen Sie zuerst bis zum Ende der Liste. Nur geladene Modelle lassen sich gemeinsam umschalten."
           }
         },
         "nebius": {

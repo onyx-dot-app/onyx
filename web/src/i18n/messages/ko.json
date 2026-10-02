@@ -5776,8 +5776,13 @@
               "title": "비전"
             }
           },
+          "search": {
+            "noMatch": "일치하는 모델이 없습니다.",
+            "placeholder": "모델 검색..."
+          },
           "selectAllButton": {
-            "label": "전체 선택"
+            "label": "전체 선택",
+            "unloadedTooltip": "먼저 목록 끝까지 스크롤하세요. 불러온 모델만 함께 전환할 수 있습니다."
           }
         },
         "nebius": {

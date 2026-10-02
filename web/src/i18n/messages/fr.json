@@ -5776,8 +5776,13 @@
               "title": "Vision"
             }
           },
+          "search": {
+            "noMatch": "Aucun modèle ne correspond.",
+            "placeholder": "Rechercher des modèles..."
+          },
           "selectAllButton": {
-            "label": "Tout sélectionner"
+            "label": "Tout sélectionner",
+            "unloadedTooltip": "Faites d'abord défiler la liste jusqu'à la fin. Seuls les modèles chargés peuvent être basculés ensemble."
           }
         },
         "nebius": {

@@ -146,9 +146,9 @@ export interface ModelPaging {
    *  unloaded models, in the order given (any provider when omitted). */
   loadMore: (providerIds?: number[]) => Promise<void>;
   /** Fetches the first window of server matches for every provider with
-   *  unloaded models. Resolves false when a page load was in flight and the
-   *  search was skipped, so the caller can retry once that load settles. */
-  search: (query: string) => Promise<boolean>;
+   *  unloaded models, or just the given ones among them. Resolves false when
+   *  a page load was in flight and the search was skipped, for a later retry. */
+  search: (query: string, providerIds?: number[]) => Promise<boolean>;
   /** The last search left matches on the server. */
   searchHasMore: boolean;
   /** Fetches the next window of the last search's matches. */

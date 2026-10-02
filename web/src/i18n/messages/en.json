@@ -5776,8 +5776,13 @@
               "title": "Vision"
             }
           },
+          "search": {
+            "noMatch": "No models match.",
+            "placeholder": "Search models..."
+          },
           "selectAllButton": {
-            "label": "Select All"
+            "label": "Select All",
+            "unloadedTooltip": "Scroll to the end of the list first. Only loaded models can be toggled together."
           }
         },
         "nebius": {

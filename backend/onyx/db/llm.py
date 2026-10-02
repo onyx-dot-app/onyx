@@ -380,6 +380,19 @@ def _stored_max_input_tokens(
     return max_input_tokens
 
 
+def _removed_model_names(
+    llm_provider_upsert_request: LLMProviderUpsertRequest,
+    existing_names: set[str],
+) -> set[str]:
+    """The models named for removal, plus every stored model the request left
+    out unless the caller asked to keep those."""
+    removed = set(llm_provider_upsert_request.removed_model_names)
+    if not llm_provider_upsert_request.keep_existing_models:
+        sent = {mc.name for mc in llm_provider_upsert_request.model_configurations}
+        removed.update(existing_names - sent)
+    return removed
+
+
 def upsert_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
@@ -438,10 +451,6 @@ def upsert_llm_provider(
         mc.name: mc for mc in existing_llm_provider.model_configurations
     }
 
-    models_to_exist = {
-        mc.name for mc in llm_provider_upsert_request.model_configurations
-    }
-
     # Build a lookup of requested visibility by model name
     requested_visibility = {
         mc.name: mc.is_visible
@@ -466,16 +475,12 @@ def upsert_llm_provider(
                 merged.add(capability_flow)
         merged_capabilities[mc_request.name] = merged
 
-    # Delete removed models, unless the caller asked to keep what it did not send
-    removed_ids = (
-        []
-        if llm_provider_upsert_request.keep_existing_models
-        else [
-            mc.id
-            for name, mc in existing_by_name.items()
-            if name not in models_to_exist
-        ]
+    removed_names = _removed_model_names(
+        llm_provider_upsert_request, set(existing_by_name)
     )
+    removed_ids = [
+        mc.id for name, mc in existing_by_name.items() if name in removed_names
+    ]
 
     # Every deployment default lives on a flow row pointing at a model, and
     # _update_default_model__no_commit makes that model visible, so a model

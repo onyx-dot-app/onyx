@@ -5776,8 +5776,13 @@
               "title": "画像対応"
             }
           },
+          "search": {
+            "noMatch": "一致するモデルはありません。",
+            "placeholder": "モデルを検索..."
+          },
           "selectAllButton": {
-            "label": "すべて選択"
+            "label": "すべて選択",
+            "unloadedTooltip": "まずリストの最後までスクロールしてください。読み込まれたモデルのみをまとめて切り替えられます。"
           }
         },
         "nebius": {

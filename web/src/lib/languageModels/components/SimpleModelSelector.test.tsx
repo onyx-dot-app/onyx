@@ -1,8 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, setupUser } from "@tests/setup/test-utils";
-import SimpleModelSelector, {
-  SERVER_SEARCH_DEBOUNCE_MS,
-} from "@/lib/languageModels/components/SimpleModelSelector";
+import SimpleModelSelector from "@/lib/languageModels/components/SimpleModelSelector";
+import { SERVER_SEARCH_DEBOUNCE_MS } from "@/lib/languageModels/hooks";
 import type {
   ModelOptionProvider,
   ModelPaging,
@@ -266,7 +265,8 @@ describe("SimpleModelSelector", () => {
       await user.clear(search);
       await user.type(search, "claude");
       jest.advanceTimersByTime(SERVER_SEARCH_DEBOUNCE_MS);
-      expect(modelPaging.search).toHaveBeenCalledWith("claude");
+      // Every provider with unloaded models, so no provider ids.
+      expect(modelPaging.search).toHaveBeenCalledWith("claude", undefined);
 
       // Clearing forgets the query, so the same miss searches again.
       await user.clear(search);

@@ -5776,8 +5776,13 @@
               "title": "视觉"
             }
           },
+          "search": {
+            "noMatch": "没有匹配的模型。",
+            "placeholder": "搜索模型..."
+          },
           "selectAllButton": {
-            "label": "全选"
+            "label": "全选",
+            "unloadedTooltip": "请先滚动到列表末尾。只有已加载的模型才能一起切换。"
           }
         },
         "nebius": {

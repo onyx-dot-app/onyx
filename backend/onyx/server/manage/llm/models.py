@@ -173,16 +173,30 @@ class LLMProviderUpsertRequest(LLMProvider):
     custom_config_changed: bool = False
     # The write replaces model_configurations, and the read hides obsolete and
     # dated-duplicate models, so a read-modify-write drops the hidden rows. With
-    # this set, models absent from the request are left alone and the request
-    # only adds or updates.
+    # this set, models absent from the request are left alone unless named in
+    # removed_model_names.
     keep_existing_models: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
+    # Stored models to delete by name, so a client that holds only a page of
+    # the models can still drop the ones it saw removed.
+    removed_model_names: list[str] = []
 
     @field_validator("provider", mode="before")
     @classmethod
     def normalize_provider(cls, value: str) -> str:
         """Normalize provider name by stripping whitespace and lowercasing."""
         return value.strip().lower()
+
+    @model_validator(mode="after")
+    def _reject_models_both_sent_and_removed(self) -> "LLMProviderUpsertRequest":
+        sent_names = {mc.name for mc in self.model_configurations}
+        conflicting = sorted(sent_names.intersection(self.removed_model_names))
+        if conflicting:
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"Models both sent and removed: {', '.join(conflicting)}",
+            )
+        return self
 
 
 class LLMProviderView(LLMProvider):

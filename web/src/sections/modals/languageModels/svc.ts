@@ -1,4 +1,8 @@
-import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
+import {
+  LLMProviderName,
+  LLMProviderView,
+  ModelConfiguration,
+} from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
 import isEqual from "lodash/isEqual";
@@ -10,6 +14,7 @@ import {
 } from "@/lib/analytics/utils";
 import {
   BaseLLMFormValues,
+  diffModelConfigurations,
   LlmModalsTranslator,
   TestApiKeyResult,
 } from "@/sections/modals/languageModels/utils";
@@ -97,6 +102,28 @@ export const testCustomProvider = async (
 
 // ─── Submit provider ──────────────────────────────────────────────────────
 
+/** An update sends only the models the admin changed and the stored models
+ *  the form dropped. The server keeps the rest, which the form may never
+ *  have loaded. A create, or the custom editor's own full table, replaces. */
+function buildModelFields(
+  models: ModelConfiguration[],
+  existingLlmProvider: LLMProviderView | undefined,
+  isCustomProvider: boolean
+) {
+  if (!existingLlmProvider || isCustomProvider) {
+    return { model_configurations: models };
+  }
+  const { changed, removedNames } = diffModelConfigurations(
+    models,
+    existingLlmProvider.model_configurations
+  );
+  return {
+    model_configurations: changed,
+    removed_model_names: removedNames,
+    keep_existing_models: true,
+  };
+}
+
 export interface SubmitProviderParams<
   T extends BaseLLMFormValues = BaseLLMFormValues,
 > {
@@ -133,11 +160,23 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 }: SubmitProviderParams<T>): Promise<void> {
   setSubmitting(true);
 
-  const { test_model_name, api_key, name: rawName, ...rest } = values;
+  const {
+    test_model_name,
+    api_key,
+    name: rawName,
+    model_configurations,
+    ...rest
+  } = values;
   const testModelName =
     test_model_name ||
-    values.model_configurations.find((m) => m.is_visible)?.name ||
+    model_configurations.find((m) => m.is_visible)?.name ||
     "";
+
+  const modelFields = buildModelFields(
+    model_configurations,
+    existingLlmProvider,
+    isCustomProvider ?? false
+  );
 
   // ── Test credentials ────────────────────────────────────────────────
   const customConfigChanged = !isEqual(
@@ -169,6 +208,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 
   const finalValues = {
     ...rest,
+    ...modelFields,
     name: nameForRequest,
     api_base: normalizedApiBase,
     api_key: apiKeyForRequest,

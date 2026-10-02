@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect } from "@opal/components";
 import type {
@@ -14,6 +14,7 @@ import {
   toSelectValue,
 } from "@/lib/languageModels/options";
 import { getModelIcon } from "@/lib/languageModels/utils";
+import { useServerModelSearch } from "@/lib/languageModels/hooks";
 import type {
   ModelOptionProvider,
   ModelPaging,
@@ -21,9 +22,6 @@ import type {
 
 /** The select value of the Global Default row; `fromSelectValue` reads it as null. */
 const GLOBAL_DEFAULT_SELECT_VALUE = "global-default";
-
-/** A keystroke storm settles before a search leaves for the server. */
-export const SERVER_SEARCH_DEBOUNCE_MS = 300;
 
 /** True when the list's own filter would show at least one loaded row. */
 function hasLoadedMatch(options: SelectOptions, query: string): boolean {
@@ -115,35 +113,14 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     ];
   }, [providers, grouped, globalDefault, t]);
 
-  // Server search only when nothing loaded matches. The query is remembered
-  // so a merged page, which changes `modelPaging`, does not re-run it.
+  // Server search only when nothing loaded matches.
   const [query, setQuery] = useState("");
   const trimmedQuery = query.trim();
-  const currentQueryRef = useRef("");
-  const lastServerSearchRef = useRef("");
-  useEffect(() => {
-    currentQueryRef.current = trimmedQuery;
-    if (trimmedQuery === "") {
-      // A cleared or closed search forgets its server query, so the next
-      // one runs even after a listing refresh dropped the merged matches.
-      lastServerSearchRef.current = "";
-      return;
-    }
-    if (!modelPaging?.hasMore || hasLoadedMatch(options, trimmedQuery)) return;
-    if (lastServerSearchRef.current === trimmedQuery) return;
-    const handle = setTimeout(() => {
-      modelPaging
-        .search(trimmedQuery)
-        .then((searched) => {
-          // A search that lands after its query was cleared is not remembered.
-          if (searched && currentQueryRef.current === trimmedQuery) {
-            lastServerSearchRef.current = trimmedQuery;
-          }
-        })
-        .catch(console.error);
-    }, SERVER_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-  }, [modelPaging, trimmedQuery, options]);
+  const serverSearched = useServerModelSearch(
+    modelPaging,
+    trimmedQuery,
+    (modelPaging?.hasMore ?? false) && !hasLoadedMatch(options, trimmedQuery)
+  );
 
   // Which provider each row belongs to, so scrolling pages the providers
   // whose rows are on show rather than one hidden behind a folded group.
@@ -163,10 +140,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     (shown: SelectOption[]) => {
       if (!modelPaging || modelPaging.isLoading) return;
       if (trimmedQuery !== "") {
-        if (
-          lastServerSearchRef.current === trimmedQuery &&
-          modelPaging.searchHasMore
-        ) {
+        if (serverSearched && modelPaging.searchHasMore) {
           modelPaging.loadMoreSearch().catch(console.error);
         }
         return;
@@ -179,7 +153,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       ];
       modelPaging.loadMore(shownProviderIds).catch(console.error);
     },
-    [modelPaging, trimmedQuery, providerIdByValue]
+    [modelPaging, trimmedQuery, serverSearched, providerIdByValue]
   );
 
   // The Global Default row is what null shows as; otherwise a non-nullable

@@ -42,7 +42,10 @@ import {
   minReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
+import {
+  SERVER_SEARCH_DEBOUNCE_MS,
+  useLanguageModelsForCurrentAgent,
+} from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -58,8 +61,6 @@ import type {
 
 /** Scroll distance from the list bottom that pulls in the next model page. */
 const LOAD_MORE_THRESHOLD_PX = 48;
-/** Pause after the last keystroke before the unloaded models are searched. */
-const SERVER_SEARCH_DEBOUNCE_MS = 300;
 /** Windows loaded without a scroll event before the list is left short. */
 const AUTOFILL_CAP = 3;
 

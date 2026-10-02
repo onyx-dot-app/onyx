@@ -8,6 +8,7 @@ import {
   useAdminLanguageModel,
   useAdminLanguageModels,
 } from "@/lib/languageModels/hooks";
+import CustomModal from "@/sections/modals/languageModels/CustomModal";
 import { PageLoader } from "@opal/loaders";
 import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
@@ -42,7 +43,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
-import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
+import {
+  LLMProviderName,
+  LLMProviderView,
+  ModelConfiguration,
+} from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
@@ -92,12 +97,13 @@ function ExistingProviderCard({
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
-  // The listing holds one page of models and the edit modal needs them all,
-  // so a provider with more is loaded whole before the modal opens.
-  const isPaged = provider.next_model_configuration_offset != null;
+  const { icon, companyName, Modal } = getProvider(provider.provider, provider);
+  // The custom editor lists models in its own table with no paging, so it
+  // still gets the provider whole before it opens.
+  const needsEveryModel =
+    Modal === CustomModal && provider.next_model_configuration_offset != null;
   const { llmProvider: fetchedProvider, error: fullProviderError } =
-    useAdminLanguageModel(isOpen && isPaged ? provider.id : null);
-  const fullProvider = isPaged ? fetchedProvider : provider;
+    useAdminLanguageModel(isOpen && needsEveryModel ? provider.id : null);
   useEffect(() => {
     if (!fullProviderError) return;
     toast.error(
@@ -115,6 +121,31 @@ function ExistingProviderCard({
       revalidate: false,
     });
   }, [fullProviderError, provider.id, mutate, t]);
+  // The listing pages models in while the modal is open, and a revalidation
+  // drops back to the first page. The modal keeps every model shown since it
+  // opened: the server copy its save diffs against.
+  const [seenModels, setSeenModels] = useState<ModelConfiguration[] | null>(
+    null
+  );
+  useEffect(() => {
+    if (!isOpen) {
+      setSeenModels(null);
+      return;
+    }
+    setSeenModels((previous) => {
+      const byName = new Map((previous ?? []).map((m) => [m.name, m]));
+      for (const model of provider.model_configurations) {
+        byName.set(model.name, model);
+      }
+      return [...byName.values()];
+    });
+  }, [isOpen, provider.model_configurations]);
+  const modalProvider = useMemo(() => {
+    if (needsEveryModel) return fetchedProvider;
+    return seenModels === null
+      ? provider
+      : { ...provider, model_configurations: seenModels };
+  }, [needsEveryModel, fetchedProvider, provider, seenModels]);
 
   const handleDelete = async () => {
     try {
@@ -128,12 +159,10 @@ function ExistingProviderCard({
     }
   };
 
-  const { icon, companyName, Modal } = getProvider(provider.provider, provider);
-
   return (
     <>
-      {isOpen && fullProvider && (
-        <Modal existingLlmProvider={fullProvider} onOpenChange={setIsOpen} />
+      {isOpen && modalProvider && (
+        <Modal existingLlmProvider={modalProvider} onOpenChange={setIsOpen} />
       )}
 
       {deleteModal.isOpen && (

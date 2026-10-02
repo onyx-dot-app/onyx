@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -188,9 +188,13 @@ function useModelPaging<P extends PageableProvider>(
           offset: provider.next_model_configuration_offset,
         });
       },
-      search: async (query: string) => {
+      search: async (query: string, providerIds?: number[]) => {
+        const searched =
+          providerIds === undefined
+            ? truncatedProviders
+            : truncatedProviders.filter((p) => providerIds.includes(p.id));
         const nextOffsets: Record<number, number | null> = {};
-        for (const provider of truncatedProviders) {
+        for (const provider of searched) {
           const page = await applyModelPage(provider.id, { offset: 0, query });
           if (page === null) return false;
           nextOffsets[provider.id] = page.next_offset;
@@ -224,6 +228,45 @@ function useModelPaging<P extends PageableProvider>(
     }),
     [truncatedProviders, isLoadingPage, applyModelPage, searchWindows]
   );
+}
+
+/** A keystroke storm settles before a search leaves for the server. */
+export const SERVER_SEARCH_DEBOUNCE_MS = 300;
+
+/** Asks the server for `query` once it settles, while `enabled`, and says
+ *  whether the current query is answered, which gates paging its matches. A
+ *  merged page re-runs nothing, and a skipped search retries once it can. */
+export function useServerModelSearch(
+  modelPaging: ModelPaging | undefined,
+  query: string,
+  enabled: boolean,
+  providerIds?: number[]
+): boolean {
+  const [answeredQuery, setAnsweredQuery] = useState("");
+  const currentQueryRef = useRef("");
+  useEffect(() => {
+    currentQueryRef.current = query;
+    if (query === "") {
+      // A cleared search forgets its answer, so the next one runs even after
+      // a listing refresh dropped the merged matches.
+      setAnsweredQuery("");
+      return;
+    }
+    if (!modelPaging || !enabled || answeredQuery === query) return;
+    const handle = setTimeout(() => {
+      modelPaging
+        .search(query, providerIds)
+        .then((searched) => {
+          // A search that lands after its query changed is not remembered.
+          if (searched && currentQueryRef.current === query) {
+            setAnsweredQuery(query);
+          }
+        })
+        .catch(console.error);
+    }, SERVER_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [modelPaging, query, enabled, answeredQuery, providerIds]);
+  return query !== "" && answeredQuery === query;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,11 +426,11 @@ export function useLanguageModelsForCurrentAgent() {
  * — use `useLanguageModels` instead.
  *
  * @returns
- * - `llmProviders`: Provider views carrying only each provider's first page
- *    of models (see `next_model_configuration_offset`), or `undefined` while
- *    loading. Edit flows load the whole provider through `useAdminLanguageModel`.
+ * - `llmProviders`: Provider views carrying each provider's first page of
+ *    models (see `next_model_configuration_offset`) until `modelPaging` loads
+ *    more, or `undefined` while loading.
  * - `modelPaging`: pages and searches the rest into `llmProviders`, for the
- *    admin model pickers.
+ *    admin model pickers and the provider edit modal.
  * - `defaultText` — The global default text model.
  * - `defaultVision` — The global default vision model.
  * - `defaultCraft`: the admin-configured default Craft model, or `null` if
@@ -430,8 +473,8 @@ export function useAdminLanguageModels() {
   };
 }
 
-/** One provider with every model, for the edit modals whose PUT replaces
- *  the model list. */
+/** One provider with every model, for the custom editor whose own model
+ *  table has no paging and whose PUT replaces the list. */
 export function useAdminLanguageModel(providerId: number | null) {
   const {
     data: raw,

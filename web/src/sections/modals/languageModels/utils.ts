@@ -11,6 +11,7 @@ import {
   minReasoningStop,
 } from "@/sections/model-selector/setting-controls";
 import * as Yup from "yup";
+import isEqual from "lodash/isEqual";
 import type { useTranslations } from "next-intl";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
 
@@ -214,6 +215,36 @@ export function withFetchedModels<
       prev.model_configurations
     ),
   });
+}
+
+// ─── diffModelConfigurations ──────────────────────────────────────────────
+
+export interface ModelConfigurationDiff {
+  /** Form models that differ from the server's copy, or have none. */
+  changed: ModelConfiguration[];
+  /** Server models the form no longer holds. */
+  removedNames: string[];
+}
+
+/** What a save sends for a form that holds only part of a provider's models:
+ *  the server keeps every model the form does not mention. Both copies are
+ *  clamped first, so a value the form only clamped is not an edit. */
+export function diffModelConfigurations(
+  form: ModelConfiguration[],
+  server: ModelConfiguration[]
+): ModelConfigurationDiff {
+  const serverByName = new Map(
+    server.map((m) => [m.name, clampModelSettings(m)])
+  );
+  const formNames = new Set(form.map((m) => m.name));
+  return {
+    changed: form.filter(
+      (m) => !isEqual(clampModelSettings(m), serverByName.get(m.name))
+    ),
+    removedNames: server
+      .filter((m) => !formNames.has(m.name))
+      .map((m) => m.name),
+  };
 }
 
 // ─── Misc ─────────────────────────────────────────────────────────────────

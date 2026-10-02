@@ -1,10 +1,17 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
+import isEqual from "lodash/isEqual";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
@@ -28,7 +35,11 @@ import { Button } from "@opal/components";
 // The file's unqualified `Text` is the legacy component, kept for its
 // existing call sites.
 import { Text as OpalText } from "@opal/components";
-import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
+import {
+  BaseLLMFormValues,
+  clampModelSettings,
+  diffModelConfigurations,
+} from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
 import {
@@ -46,7 +57,10 @@ import {
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
 import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import {
+  useAdminLanguageModels,
+  useServerModelSearch,
+} from "@/lib/languageModels/hooks";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
@@ -541,6 +555,13 @@ function buildModelDescription(model: ModelConfiguration): string | undefined {
   return parts.length > 0 ? parts.join("  ·  ") : undefined;
 }
 
+/** The same match the server's model search makes. */
+function modelMatchesQuery(model: ModelConfiguration, term: string): boolean {
+  return [model.name, model.display_name, model.custom_display_name].some(
+    (text) => text?.toLowerCase().includes(term) ?? false
+  );
+}
+
 /** Eye marker for vision models, shown on the right of the picker row. */
 function modelRightChildren(
   model: ModelConfiguration,
@@ -744,7 +765,7 @@ export function ModelSelectionField({
   const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
-  const { defaultText } = useAdminLanguageModels();
+  const { defaultText, llmProviders, modelPaging } = useAdminLanguageModels();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -753,6 +774,61 @@ export function ModelSelectionField({
   const isAutoMode =
     shouldShowAutoUpdateToggle && formikProps.values.is_auto_mode;
   const models = formikProps.values.model_configurations;
+
+  // The admin listing holds this provider's loaded models and grows as pages
+  // and server searches merge in. The form follows it.
+  const listedProvider = useMemo(
+    () => llmProviders?.find((p) => p.id === providerId),
+    [llmProviders, providerId]
+  );
+  const listedModels = listedProvider?.model_configurations;
+  const hasUnloadedModels =
+    listedProvider?.next_model_configuration_offset != null;
+
+  // A listed model joins the form once, so a model the provider refetch
+  // dropped is not re-added while the listing still shows it.
+  const knownNamesRef = useRef(new Set<string>());
+  useEffect(() => {
+    const known = knownNamesRef.current;
+    for (const model of models) known.add(model.name);
+    const added = (listedModels ?? []).filter((m) => !known.has(m.name));
+    if (added.length === 0) return;
+    for (const model of added) known.add(model.name);
+    formikProps.setFieldValue("model_configurations", [
+      ...models,
+      ...added.map(clampModelSettings),
+    ]);
+  }, [listedModels, models]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A search also asks the server while models are unloaded: the admin needs
+  // every match to toggle, where a picker needs one to choose.
+  const [query, setQuery] = useState("");
+  const trimmedQuery = query.trim();
+  const isSearching = trimmedQuery !== "";
+  const providerIds = useMemo(
+    () => (providerId == null ? [] : [providerId]),
+    [providerId]
+  );
+  const serverSearched = useServerModelSearch(
+    modelPaging,
+    trimmedQuery,
+    providerId != null && hasUnloadedModels,
+    providerIds
+  );
+
+  // The end of the list pages the next window: of the current server
+  // search's matches while searching, of the provider's models otherwise.
+  const canLoadMore = isSearching
+    ? serverSearched && modelPaging.searchHasMore
+    : hasUnloadedModels;
+  const loadNextWindow = useCallback(() => {
+    if (providerId == null || modelPaging.isLoading || !canLoadMore) return;
+    if (isSearching) {
+      modelPaging.loadMoreSearch().catch(console.error);
+      return;
+    }
+    modelPaging.loadMore([providerId]).catch(console.error);
+  }, [modelPaging, providerId, canLoadMore, isSearching]);
 
   // Snapshot the original model visibility so we can restore it when
   // toggling auto mode back on.
@@ -832,6 +908,46 @@ export function ModelSelectionField({
   }
 
   const visibleModels = models.filter((m) => m.is_visible);
+  const baseModels = isAutoMode ? visibleModels : models;
+  const lowerQuery = trimmedQuery.toLowerCase();
+  const matchingModels = isSearching
+    ? baseModels.filter((m) => modelMatchesQuery(m, lowerQuery))
+    : baseModels;
+  // Sort by name for providers that ship rich model metadata (Nebius
+  // TokenFactory) so the order is stable across refetches. Otherwise keep
+  // the given order.
+  const displayModels = matchingModels.some((m) => hasModelMetadata(m))
+    ? [...matchingModels].sort((a, b) => a.name.localeCompare(b.name))
+    : matchingModels;
+  // A search shows every match: the fold would hide the ones scrolled for.
+  const isFoldable = !isSearching && displayModels.length > FOLD_THRESHOLD;
+  const shownModels =
+    isFoldable && !isExpanded
+      ? displayModels.slice(0, FOLD_THRESHOLD)
+      : displayModels;
+  const showSearch = models.length > FOLD_THRESHOLD || hasUnloadedModels;
+  const showSentinel = canLoadMore && (!isFoldable || isExpanded);
+  const defaultModelName =
+    providerId != null && defaultText?.provider_id === providerId
+      ? defaultText.model_name
+      : undefined;
+
+  // Scrolling the sentinel into view loads the next window. The observer is
+  // rebuilt when a load settles, so a sentinel still in view after a short
+  // page fires again until the list outgrows the box.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadNextWindow();
+      },
+      { rootMargin: "100px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadNextWindow, showSentinel]);
 
   return (
     <Card color="background-tint-00" border="none" padding={2}>
@@ -843,10 +959,15 @@ export function ModelSelectionField({
         >
           <Section flexDirection="row" gap={0}>
             <Button
-              disabled={isAutoMode || models.length === 0}
+              disabled={isAutoMode || models.length === 0 || hasUnloadedModels}
               prominence="tertiary"
               size="md"
               onClick={handleToggleSelectAll}
+              tooltip={
+                hasUnloadedModels
+                  ? t("models.selectAllButton.unloadedTooltip")
+                  : undefined
+              }
             >
               {allSelected
                 ? t("models.deselectAllButton.label")
@@ -856,85 +977,84 @@ export function ModelSelectionField({
           </Section>
         </InputHorizontal>
 
+        {showSearch && (
+          <InputTypeIn
+            searchIcon
+            clearButton
+            placeholder={t("models.search.placeholder")}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        )}
+
         {models.length === 0 ? (
           <EmptyMessageCard
             title={emptyMessage ?? t("models.empty.title")}
             padding={2}
           />
+        ) : displayModels.length === 0 && !modelPaging.isLoading ? (
+          <EmptyMessageCard title={t("models.search.noMatch")} padding={2} />
         ) : (
           <Section gap={1} alignItems="stretch">
-            {(() => {
-              const baseModels = isAutoMode ? visibleModels : models;
-              // Sort alphabetically by id for providers that ship rich model
-              // metadata (Nebius TokenFactory) so the order is stable across
-              // refetches; otherwise keep the given order.
-              const displayModels = baseModels.some((m) => hasModelMetadata(m))
-                ? [...baseModels].sort((a, b) => a.name.localeCompare(b.name))
-                : baseModels;
-              const isFoldable = displayModels.length > FOLD_THRESHOLD;
-              const shownModels =
-                isFoldable && !isExpanded
-                  ? displayModels.slice(0, FOLD_THRESHOLD)
-                  : displayModels;
-              const defaultModelName =
-                providerId != null && defaultText?.provider_id === providerId
-                  ? defaultText.model_name
-                  : undefined;
-
-              return (
-                <>
-                  {shownModels.map((model) => (
-                    <ModelRow
-                      key={model.name}
-                      model={model}
-                      isAutoMode={isAutoMode}
-                      onToggleVisibility={(visible) =>
-                        setVisibility(model.name, visible)
-                      }
-                      onRename={(value) =>
-                        setCustomDisplayName(model.name, value)
-                      }
-                      onSettingsChange={(patch) =>
-                        setModelSettings(model.name, patch)
-                      }
-                      isDefaultModel={model.name === defaultModelName}
-                      onSetDefaultModel={
-                        providerId != null && model.is_visible
-                          ? () => void setDefaultModel(model.name)
-                          : undefined
-                      }
-                    />
-                  ))}
-                  {isFoldable && (
-                    <Interactive.Stateless
-                      prominence="tertiary"
-                      onClick={() => setIsExpanded(!isExpanded)}
-                    >
-                      <Interactive.Container type="button" width="full">
-                        <Content
-                          sizePreset="secondary"
-                          variant="body"
-                          title={
-                            isExpanded
-                              ? t("models.foldButton.label")
-                              : t("models.moreButton.label")
-                          }
-                          icon={() => (
-                            <SvgChevronDown
-                              className={cn(
-                                "transition-transform",
-                                isExpanded && "-rotate-180"
-                              )}
-                              size={14}
-                            />
-                          )}
-                        />
-                      </Interactive.Container>
-                    </Interactive.Stateless>
-                  )}
-                </>
-              );
-            })()}
+            {shownModels.map((model) => (
+              <ModelRow
+                key={model.name}
+                model={model}
+                isAutoMode={isAutoMode}
+                onToggleVisibility={(visible) =>
+                  setVisibility(model.name, visible)
+                }
+                onRename={(value) => setCustomDisplayName(model.name, value)}
+                onSettingsChange={(patch) =>
+                  setModelSettings(model.name, patch)
+                }
+                isDefaultModel={model.name === defaultModelName}
+                onSetDefaultModel={
+                  providerId != null && model.is_visible
+                    ? () => void setDefaultModel(model.name)
+                    : undefined
+                }
+              />
+            ))}
+            {isFoldable && (
+              <Interactive.Stateless
+                prominence="tertiary"
+                onClick={() => setIsExpanded(!isExpanded)}
+              >
+                <Interactive.Container type="button" width="full">
+                  <Content
+                    sizePreset="secondary"
+                    variant="body"
+                    title={
+                      isExpanded
+                        ? t("models.foldButton.label")
+                        : t("models.moreButton.label")
+                    }
+                    icon={() => (
+                      <SvgChevronDown
+                        className={cn(
+                          "transition-transform",
+                          isExpanded && "-rotate-180"
+                        )}
+                        size={14}
+                      />
+                    )}
+                  />
+                </Interactive.Container>
+              </Interactive.Stateless>
+            )}
+            {showSentinel && (
+              <OpalSection
+                ref={sentinelRef}
+                data-testid="model-list-sentinel"
+                flexDirection="row"
+                width="full"
+                height="auto"
+                padding={0.25}
+              >
+                {modelPaging.isLoading && <IconLoader size={14} />}
+              </OpalSection>
+            )}
           </Section>
         )}
 
@@ -1058,8 +1178,33 @@ function ModalWrapperInner({
   description: descriptionOverride,
 }: ModalWrapperInnerProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
-    useFormikContext<BaseLLMFormValues>();
+  const {
+    isValid,
+    isSubmitting,
+    status,
+    setFieldValue,
+    values,
+    initialValues,
+  } = useFormikContext<BaseLLMFormValues>();
+
+  // Paged-in models join the form as the server holds them, which Formik's
+  // own dirty flag would count as an edit. Models are judged against the
+  // server's copy instead, and the other fields keep Formik's comparison.
+  const dirty = useMemo(() => {
+    const { model_configurations: formModels, ...formRest } = values;
+    const { model_configurations: initialModels, ...initialRest } =
+      initialValues;
+    if (!isEqual(formRest, initialRest)) return true;
+    const { changed } = diffModelConfigurations(formModels, [
+      ...initialModels,
+      ...(llmProvider?.model_configurations ?? []),
+    ]);
+    if (changed.length > 0) return true;
+    // A server model the form has not taken in yet is no removal, so only
+    // the initial models count as dropped.
+    const formNames = new Set(formModels.map((m) => m.name));
+    return initialModels.some((m) => !formNames.has(m.name));
+  }, [values, initialValues, llmProvider]);
 
   // When SWR resolves after mount, populate model_configurations if still
   // empty. test_model_name is then derived automatically by
