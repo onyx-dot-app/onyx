@@ -49,14 +49,17 @@ func TestFindingsFromResults(t *testing.T) {
 					{
 						Package: models.PackageInfo{Name: "lodash", Version: "4.17.0", Ecosystem: "npm"},
 						Groups: []models.GroupInfo{
-							{IDs: []string{"GHSA-aaaa"}, Aliases: []string{"GHSA-aaaa", "CVE-2020-1"}, MaxSeverity: "9.8"},
+							{IDs: []string{"GHSA-aaaa", "GHSA-bbbb"}, Aliases: []string{"GHSA-aaaa", "CVE-2020-1"}, MaxSeverity: "9.8"},
 						},
 						Vulnerabilities: []*osvschema.Vulnerability{
+							// The first record of the group names no range; the fix
+							// comes from the second.
+							{Id: "GHSA-aaaa", Summary: "Prototype pollution"},
 							{
-								Id:      "GHSA-aaaa",
-								Summary: "Prototype pollution",
-								// Two lines fixed, one below the install; the lowest
-								// above it is the pin.
+								Id: "GHSA-bbbb",
+								// Two lines fixed, one below the install, one for another
+								// package and one for another ecosystem; the lowest above
+								// the install for this package is the pin.
 								Affected: []*osvschema.Affected{
 									{
 										Package: &osvschema.Package{Name: "lodash", Ecosystem: "npm"},
@@ -69,6 +72,10 @@ func TestFindingsFromResults(t *testing.T) {
 									{
 										Package: &osvschema.Package{Name: "lodash-es", Ecosystem: "npm"},
 										Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "4.17.1"}}}},
+									},
+									{
+										Package: &osvschema.Package{Name: "lodash", Ecosystem: "PyPI"},
+										Ranges:  []*osvschema.Range{{Type: osvschema.Range_ECOSYSTEM, Events: []*osvschema.Event{{Introduced: "0"}, {Fixed: "4.17.5"}}}},
 									},
 								},
 							},

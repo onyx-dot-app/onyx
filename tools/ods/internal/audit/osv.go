@@ -79,24 +79,49 @@ func findingFromGroup(group models.GroupInfo, pkg models.PackageVulns) Finding {
 	}
 	if vuln := findVuln(pkg.Vulnerabilities, group.IDs); vuln != nil {
 		f.Title = vulnTitle(vuln)
-		f.FixedIn = fixedFor(vuln, pkg.Package)
 	}
+	f.FixedIn = fixedFor(pkg.Vulnerabilities, group.IDs, pkg.Package)
 	return f
 }
 
 // fixedFor returns the lowest fixed version above the installed one across
-// the record's ranges for the package, so a bump to it ends the finding.
-// Empty when the record names none the ecosystem's comparator can place.
-func fixedFor(v *osvschema.Vulnerability, pkg models.PackageInfo) string {
+// the group's records, for the package in its own ecosystem, so a bump to it
+// ends the finding. Empty when no record names one the comparator can place.
+func fixedFor(vulns []*osvschema.Vulnerability, ids []string, pkg models.PackageInfo) string {
 	installed, err := semantic.Parse(pkg.Version, pkg.Ecosystem)
 	if err != nil {
 		return ""
 	}
+	idset := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		idset[id] = true
+	}
 	best := ""
-	for _, aff := range v.GetAffected() {
-		if !strings.EqualFold(aff.GetPackage().GetName(), pkg.Name) {
+	for _, v := range vulns {
+		if !idset[v.GetId()] {
 			continue
 		}
+		for _, aff := range v.GetAffected() {
+			if !strings.EqualFold(aff.GetPackage().GetName(), pkg.Name) || !sameEcosystem(aff.GetPackage().GetEcosystem(), pkg.Ecosystem) {
+				continue
+			}
+			best = lowestFixedAbove(installed, aff, best, pkg.Ecosystem)
+		}
+	}
+	return best
+}
+
+// sameEcosystem compares OSV ecosystem names without their release suffix,
+// so "Debian:13" and "Debian" match.
+func sameEcosystem(a, b string) bool {
+	base := func(s string) string { return strings.ToLower(strings.SplitN(s, ":", 2)[0]) }
+	return base(a) == base(b)
+}
+
+// lowestFixedAbove folds the affected entry's fixed versions into best,
+// keeping the lowest one above installed.
+func lowestFixedAbove(installed semantic.Version, aff *osvschema.Affected, best, ecosystem string) string {
+	{
 		for _, r := range aff.GetRanges() {
 			for _, e := range r.GetEvents() {
 				fixed := e.GetFixed()
@@ -110,7 +135,7 @@ func fixedFor(v *osvschema.Vulnerability, pkg models.PackageInfo) string {
 					best = fixed
 					continue
 				}
-				bestV, err := semantic.Parse(best, pkg.Ecosystem)
+				bestV, err := semantic.Parse(best, ecosystem)
 				if c, cerr := bestV.CompareStr(fixed); err == nil && cerr == nil && c > 0 {
 					best = fixed
 				}
