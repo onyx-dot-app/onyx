@@ -254,7 +254,8 @@ describe("SimpleModelSelector", () => {
           .getByRole("listbox")
           .querySelector(".opal-select-dropdown-scroll")!
       );
-      // Pages the providers whose rows are on show.
+      // One page request per scroll, for the providers whose rows are on show.
+      expect(modelPaging.loadMore).toHaveBeenCalledTimes(1);
       expect(modelPaging.loadMore).toHaveBeenCalledWith([1]);
 
       const search = screen.getByRole("textbox", { name: "Search" });
