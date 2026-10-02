@@ -24,6 +24,10 @@ from onyx.db.models import (
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.kg.models import KGStage
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+)
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
 
@@ -67,6 +71,15 @@ def _make_node(
         external_user_emails=external_user_emails,
         external_user_group_ids=external_user_group_ids,
     )
+
+
+@pytest.fixture
+def ee(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    """User-group rows grant connector access only in EE."""
+    fetch_versioned_implementation.cache_clear()
+    monkeypatch.setattr(global_version, "is_ee_version", lambda: True)
+    yield
+    fetch_versioned_implementation.cache_clear()
 
 
 @pytest.fixture()
@@ -240,6 +253,7 @@ def test_connector_credential_owner_can_access_node(
     assert seed.node.id not in {node.id for node in outsider_results}
 
 
+@pytest.mark.usefixtures("ee")
 def test_connector_user_group_member_can_access_node(
     db_session: Session,
     connector_access_seed: ConnectorAccessSeed,
@@ -290,6 +304,7 @@ def test_connector_credential_owner_can_access_hierarchy_document(
     assert seed.document_id not in {document.id for document in outsider_results}
 
 
+@pytest.mark.usefixtures("ee")
 def test_connector_user_group_member_can_access_hierarchy_document(
     db_session: Session,
     connector_access_seed: ConnectorAccessSeed,

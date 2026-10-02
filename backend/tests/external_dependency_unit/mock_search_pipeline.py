@@ -12,6 +12,7 @@ from onyx.context.search.models import (
     InferenceChunk,
     PersonaSearchInfo,
     SearchDoc,
+    UserAccessFilters,
 )
 from onyx.db.models import SearchSettings, User
 from onyx.document_index.interfaces import DocumentIndex
@@ -207,7 +208,7 @@ def use_mock_search_pipeline(
         ),
         patch(
             "onyx.tools.tool_implementations.search.search_tool.build_access_filters_for_user",
-            return_value=[],
+            return_value=UserAccessFilters(access_control_list=[], cc_pair_access=None),
         ),
         patch(
             "onyx.tools.tool_implementations.search.search_tool.get_current_search_settings",

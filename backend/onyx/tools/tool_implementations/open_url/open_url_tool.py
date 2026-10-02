@@ -863,12 +863,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         return IndexedRetrievalResult(sections=sections, missing_document_ids=missing)
 
     def _build_index_filters(self, db_session: Session) -> IndexFilters:
-        access_control_list = build_access_filters_for_user(self._user, db_session)
+        user_access_filters = build_access_filters_for_user(self._user, db_session)
         return IndexFilters(
             source_type=None,
             document_set=None,
             tags=None,
-            access_control_list=access_control_list,
+            access_control_list=user_access_filters.access_control_list,
+            cc_pair_access=user_access_filters.cc_pair_access,
             tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
             project_id_filter=None,
         )

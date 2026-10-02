@@ -45,6 +45,7 @@ def _get_search_filters(
         tenant_state=TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False),
         include_hidden=False,
         access_control_list=["user_email:test@example.com"],
+        cc_pair_access=None,
         source_types=source_types,
         tags=[],
         document_sets=document_sets or [],

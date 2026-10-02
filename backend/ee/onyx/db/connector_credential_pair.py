@@ -1,5 +1,8 @@
-from sqlalchemy import delete
+from uuid import UUID
+
+from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -7,11 +10,38 @@ from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
+    User__UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _build_user_group_cc_pair_access_clause(user_id: UUID) -> ColumnElement[bool]:
+    """True for pairs attached to a group the user is in. Uses the current
+    manage-table rows, the same rows the group: ACL entries come from
+    (fetch_user_groups_for_documents).
+
+    NOTE: is imported in onyx.db.connector_credential_pair by
+    `fetch_versioned_implementation`. DO NOT REMOVE."""
+    return (
+        select(1)
+        .select_from(User__UserGroup)
+        .join(
+            UserGroup__ConnectorCredentialPair,
+            and_(
+                UserGroup__ConnectorCredentialPair.user_group_id
+                == User__UserGroup.user_group_id,
+                UserGroup__ConnectorCredentialPair.cc_pair_id
+                == ConnectorCredentialPair.id,
+                UserGroup__ConnectorCredentialPair.is_current.is_(True),
+            ),
+        )
+        .where(User__UserGroup.user_id == user_id)
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
 
 
 def _delete_connector_credential_pair_user_groups_relationship__no_commit(

@@ -150,10 +150,40 @@ class AssistantKnowledgeFilters(BaseModel):
     hierarchy_node_ids: list[int] | None = None
 
 
+class CCPairAccessMode(str, Enum):
+    # Results use the old ACL filter; the cc-pair filter is only compared.
+    SHADOW = "shadow"
+    # Results use the cc-pair filter.
+    ENFORCE = "enforce"
+
+
+class CCPairAccessFilter(BaseModel):
+    """Query-time access by cc-pair. A chunk is visible if it is in an open
+    pair, or in an ACL pair and public or matching user_acl. Chunks with no
+    cc-pair (user files) fall back to the old ACL filter."""
+
+    mode: CCPairAccessMode
+    open_cc_pair_ids: list[int]
+    acl_cc_pair_ids: list[int]
+    # The user's user_email: and external_group: entries. No group: entries,
+    # since group access comes from open_cc_pair_ids.
+    user_acl: list[str]
+
+
+class UserAccessFilters(BaseModel):
+    # NOTE: These strings must be formatted in the same way as the output of
+    # DocumentAccess::to_acl.
+    access_control_list: list[str]
+    # None when query-time cc-pair access is off.
+    cc_pair_access: CCPairAccessFilter | None
+
+
 class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # NOTE: These strings must be formatted in the same way as the output of
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
+    # Only read when access_control_list is not None.
+    cc_pair_access: CCPairAccessFilter | None = None
     tenant_id: str | None = None
     # Operator-forced document-set scope (NAMES, not IDs). When set, retrieval is
     # restricted to these sets via a standalone AND clause — distinct from

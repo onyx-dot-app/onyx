@@ -9,7 +9,13 @@ from onyx.configs.app_configs import (
     OPENSEARCH_PROFILING_DISABLED,
 )
 from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
-from onyx.context.search.models import IndexFilters, Tag, TimeRange
+from onyx.context.search.models import (
+    CCPairAccessFilter,
+    CCPairAccessMode,
+    IndexFilters,
+    Tag,
+    TimeRange,
+)
 from onyx.db.enums import VectorQuantization
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
@@ -57,6 +63,15 @@ TermQuery: TypeAlias = dict[str, dict[str, dict[str, _T]]]
 
 
 # TODO(andrei): Turn all magic dictionaries to pydantic models.
+
+
+def _get_enforced_cc_pair_access(
+    index_filters: IndexFilters,
+) -> CCPairAccessFilter | None:
+    cc_pair_access = index_filters.cc_pair_access
+    if cc_pair_access is None or cc_pair_access.mode != CCPairAccessMode.ENFORCE:
+        return None
+    return cc_pair_access
 
 
 # Normalization pipelines combine document scores from multiple query clauses.
@@ -222,6 +237,7 @@ class DocumentQuery:
             tenant_state=tenant_state,
             include_hidden=include_hidden,
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -289,6 +305,7 @@ class DocumentQuery:
             # Delete hidden docs too.
             include_hidden=True,
             access_control_list=None,
+            cc_pair_access=None,
             source_types=[],
             tags=[],
             document_sets=[],
@@ -366,6 +383,74 @@ class DocumentQuery:
         }
 
     @staticmethod
+    def get_cc_pair_access_shadow_query(
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        cc_pair_access: CCPairAccessFilter,
+        visible_to_old_filter_only: bool,
+        num_hits: int,
+        timeout_s: int,
+        document_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Returns a chunk ID query for chunks where the old ACL filter and the
+        cc-pair access filter disagree, within the scope of the other filters.
+
+        Args:
+            visible_to_old_filter_only: If True, finds chunks the old filter
+                shows and the cc-pair filter hides. If False, the reverse.
+            num_hits: The maximum number of chunk IDs to return.
+            timeout_s: The OpenSearch query timeout.
+            document_ids: If given, limits the comparison to these documents.
+        """
+
+        def _filters(
+            filter_cc_pair_access: CCPairAccessFilter | None,
+        ) -> list[dict[str, Any]]:
+            return DocumentQuery._get_search_filters(
+                tenant_state=tenant_state,
+                include_hidden=False,
+                access_control_list=index_filters.access_control_list,
+                cc_pair_access=filter_cc_pair_access,
+                source_types=index_filters.source_type or [],
+                tags=index_filters.tags or [],
+                document_sets=index_filters.document_set or [],
+                project_id_filter=index_filters.project_id_filter,
+                persona_id_filter=index_filters.persona_id_filter,
+                created_at_range=index_filters.created_at_range,
+                updated_at_range=index_filters.updated_at_range,
+                min_chunk_index=None,
+                max_chunk_index=None,
+                attached_document_ids=index_filters.attached_document_ids,
+                hierarchy_node_ids=index_filters.hierarchy_node_ids,
+                forced_document_sets=index_filters.forced_document_set,
+            )
+
+        # The two filter lists differ only in the access clause.
+        old_filters = _filters(None)
+        new_filters = _filters(cc_pair_access)
+        included, excluded = (
+            (old_filters, new_filters)
+            if visible_to_old_filter_only
+            else (new_filters, old_filters)
+        )
+        if document_ids is not None:
+            included = [
+                *included,
+                {"terms": {DOCUMENT_ID_FIELD_NAME: document_ids}},
+            ]
+        return {
+            "query": {
+                "bool": {
+                    "filter": included,
+                    "must_not": [{"bool": {"filter": excluded}}],
+                }
+            },
+            "size": num_hits,
+            "_source": False,
+            "timeout": f"{timeout_s}s",
+        }
+
+    @staticmethod
     def get_hybrid_search_query(
         query_text: str,
         query_vector: list[float],
@@ -423,6 +508,7 @@ class DocumentQuery:
             # now. This should not cause any issues but it can introduce
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -520,6 +606,7 @@ class DocumentQuery:
             # now. This should not cause any issues but it can introduce
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -607,6 +694,7 @@ class DocumentQuery:
             # now. This should not cause any issues but it can introduce
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -671,6 +759,7 @@ class DocumentQuery:
             tenant_state=tenant_state,
             include_hidden=False,
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -928,6 +1017,7 @@ class DocumentQuery:
         tenant_state: TenantState,
         include_hidden: bool,
         access_control_list: list[str] | None,
+        cc_pair_access: CCPairAccessFilter | None,
         source_types: list[DocumentSource],
         tags: list[Tag],
         document_sets: list[str],
@@ -967,6 +1057,9 @@ class DocumentQuery:
                 can be retrieved. If not None, only public documents can be
                 retrieved, or non-public documents where at least one acl
                 provided here is present in the document's acl list.
+            cc_pair_access: If not None (and access_control_list is not None),
+                replaces the access control list filter above with the
+                cc-pair access filter.
             source_types: If supplied, only documents of one of these source
                 types will be retrieved.
             tags: If supplied, only documents with an entry in their metadata
@@ -1054,6 +1147,77 @@ class DocumentQuery:
                     acl_subclause  # ty: ignore[invalid-argument-type]
                 )
             return acl_visibility_filter
+
+        def _get_cc_pair_access_visibility_filter(
+            cc_pair_access: CCPairAccessFilter,
+            access_control_list: list[str],
+        ) -> dict[str, Any]:
+            """Returns the cc-pair access filter, a logical OR of:
+            - the chunk is in an open cc-pair;
+            - the chunk is in an ACL cc-pair, and is public or matches the
+              user's ACL;
+            - the chunk has no cc-pair (user files), and matches the access
+              control list filter.
+
+            Raises:
+                ValueError: A term list is longer than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+            """
+            for name, terms in (
+                ("open cc-pair ids", cc_pair_access.open_cc_pair_ids),
+                ("ACL cc-pair ids", cc_pair_access.acl_cc_pair_ids),
+                ("user ACL entries", cc_pair_access.user_acl),
+            ):
+                if len(terms) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                    raise ValueError(
+                        f"Too many {name}: {len(terms)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                    )
+
+            # An empty terms list matches nothing, but leave empty clauses out.
+            visibility_clauses: list[dict[str, Any]] = [
+                {
+                    "bool": {
+                        "must_not": [{"exists": {"field": CC_PAIR_IDS_FIELD_NAME}}],
+                        "filter": [_get_acl_visibility_filter(access_control_list)],
+                    }
+                }
+            ]
+            if cc_pair_access.open_cc_pair_ids:
+                visibility_clauses.append(
+                    {"terms": {CC_PAIR_IDS_FIELD_NAME: cc_pair_access.open_cc_pair_ids}}
+                )
+            if cc_pair_access.acl_cc_pair_ids:
+                acl_match_clauses: list[dict[str, Any]] = [
+                    {"term": {PUBLIC_FIELD_NAME: {"value": True}}}
+                ]
+                if cc_pair_access.user_acl:
+                    acl_match_clauses.append(
+                        {
+                            "terms": {
+                                ACCESS_CONTROL_LIST_FIELD_NAME: cc_pair_access.user_acl
+                            }
+                        }
+                    )
+                visibility_clauses.append(
+                    {
+                        "bool": {
+                            "filter": [
+                                {
+                                    "terms": {
+                                        CC_PAIR_IDS_FIELD_NAME: cc_pair_access.acl_cc_pair_ids
+                                    }
+                                },
+                                {
+                                    "bool": {
+                                        "should": acl_match_clauses,
+                                        "minimum_should_match": 1,
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                )
+            return {"bool": {"should": visibility_clauses, "minimum_should_match": 1}}
 
         def _get_source_type_filter(
             source_types: list[DocumentSource],
@@ -1329,7 +1493,13 @@ class DocumentQuery:
             # one acl provided here is present in the document's acl list. If
             # there is explicitly no list provided, we make no restrictions on
             # the documents that can be retrieved.
-            filter_clauses.append(_get_acl_visibility_filter(access_control_list))
+            filter_clauses.append(
+                _get_acl_visibility_filter(access_control_list)
+                if cc_pair_access is None
+                else _get_cc_pair_access_visibility_filter(
+                    cc_pair_access, access_control_list
+                )
+            )
 
         if forced_document_sets:
             # Its own top-level AND clause (not merged into the OR-based

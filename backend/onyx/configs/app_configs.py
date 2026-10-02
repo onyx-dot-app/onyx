@@ -1977,6 +1977,14 @@ ENABLE_TENANT_WORK_GATING = (
     os.environ.get("ENABLE_TENANT_WORK_GATING", "").lower() == "true"
 )
 
+# Master switch for query-time cc-pair access filtering. Controls the `enabled`
+# axis only: True puts the filter in shadow mode (search keeps the old ACL
+# filter and logs where the cc-pair filter disagrees). The `enforce` axis is
+# cache-only (Redis, or the Postgres cache) with a hard-coded default of False.
+ENABLE_CC_PAIR_ACCESS_FILTER = (
+    os.environ.get("ENABLE_CC_PAIR_ACCESS_FILTER", "").lower() == "true"
+)
+
 # Membership TTL for the `active_tenants` sorted set. Members older than this
 # are treated as inactive by the gate read path. Must be > the full-fanout
 # interval so self-healing re-adds a genuinely-working tenant before their
