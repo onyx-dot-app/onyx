@@ -243,7 +243,7 @@ function MessageCard({
 
           {bottomChildren && (
             <>
-              <Divider paddingParallel={2} paddingPerpendicular={1} />
+              <Divider paddingParallel={3} paddingPerpendicular={0} />
               {bottomChildren}
             </>
           )}
