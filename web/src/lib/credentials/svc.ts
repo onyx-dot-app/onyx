@@ -39,7 +39,9 @@ export async function createCredentialWithPrivateKey(
       formData.append("groups", String(group));
     });
   }
-  formData.append(CREDENTIAL_NAME, credential.name || "");
+  if (credential.name) {
+    formData.append(CREDENTIAL_NAME, credential.name);
+  }
   formData.append(CREDENTIAL_SOURCE, credential.source);
   if (credential.private_key) {
     formData.append(CREDENTIAL_UPLOADED_FILE, credential.private_key.file);

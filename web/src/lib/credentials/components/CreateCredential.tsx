@@ -151,7 +151,6 @@ function CreateButton({
 }
 
 type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
-  name: string;
   [key: string]: unknown;
 };
 
@@ -213,7 +212,7 @@ export default function CreateCredential({
     setSubmitting(true);
     formikHelpers.setSubmitting(true);
 
-    const { name, is_public, groups, ...credentialValues } = values;
+    const { is_public, groups, ...credentialValues } = values;
 
     let privateKey: TypedFile | null = null;
     const filteredCredentialValues = Object.fromEntries(
@@ -232,7 +231,7 @@ export default function CreateCredential({
         admin_public: true,
         curator_public: is_public,
         groups: groups,
-        name: name,
+        // No name: the credential list shows its "Untitled" fallback.
         source: sourceType,
         private_key: privateKey || undefined,
       });
@@ -295,7 +294,6 @@ export default function CreateCredential({
   return (
     <Formik<CreateCredentialFormValues>
       initialValues={{
-        name: "",
         is_public: isGlobalHolder || !businessTier,
         groups: [],
         ...(initialAuthMethod && {
