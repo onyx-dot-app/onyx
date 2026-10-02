@@ -54,7 +54,30 @@ RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
 # Python packages from the builder stage.
 ####################################################################################################
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS runtime
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b AS os
+
+# Install runtime system dependencies only (no build toolchain). This stage is
+# everything the shipped image holds outside the lockfiles, so the audit gate
+# builds and scans it on its own before the full build.
+# ca-certificates for HTTPS
+# libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
+# Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
+# shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
+RUN apt-get update && \
+    apt-get install -y \
+        ca-certificates \
+        libgnutls30 \
+        libblkid1 \
+        libmount1 \
+        libsmartcols1 \
+        libuuid1 \
+        libjemalloc2 \
+        libxmlsec1-openssl \
+        && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+FROM os AS runtime
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -74,25 +97,6 @@ RUN groupadd -g 1001 onyx && \
     mkdir -p /var/log/onyx && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
-
-# Install runtime system dependencies only (no build toolchain).
-# ca-certificates for HTTPS
-# libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
-# Interactive debugging tools (curl, vim, nano, psql, ps) are deliberately absent to keep the
-# shipped image minimal; they live in the dev stage below, published with a -dev tag suffix.
-RUN apt-get update && \
-    apt-get install -y \
-        ca-certificates \
-        libgnutls30 \
-        libblkid1 \
-        libmount1 \
-        libsmartcols1 \
-        libuuid1 \
-        libjemalloc2 \
-        libxmlsec1-openssl \
-        && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
 
 # Copy the compiled Python packages and only the console scripts our services launch (api server,
 # celery workers/beat, alembic migrations, supervisord, Playwright). Both stages share the same base
