@@ -104,6 +104,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     IndexingMode,
     Permission,
     ProcessingMode,
@@ -1634,7 +1635,10 @@ def create_connector_with_mock_credential(
             credential_id=credential_id,
             access_type=connector_data.access_type,
             cc_pair_name=connector_data.name,
-            groups=connector_data.groups,
+            # this legacy create path has no roles, so its groups manage as Editors
+            manage_access=dict.fromkeys(
+                connector_data.groups, ConnectorManageRole.EDITOR
+            ),
         )
 
         # Tenant-work-gating lifecycle hook: keep new-tenant latency to

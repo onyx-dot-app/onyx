@@ -24,7 +24,7 @@ from sqlalchemy import select, update
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, ConnectorManageRole
 from onyx.db.models import (
     ConnectorCredentialPair,
     Document,
@@ -138,7 +138,10 @@ def _associate_body(access_type: AccessType, groups: list[int]) -> dict[str, Any
     return {
         "name": f"cc-{uuid4()}",
         "access_type": access_type.value,
-        "groups": groups,
+        "manage_access": [
+            {"group_id": group_id, "role": ConnectorManageRole.EDITOR.value}
+            for group_id in groups
+        ],
     }
 
 
@@ -164,21 +167,12 @@ def _doc_set_body(
 
 
 def _detach_cc_pair_from_group(group: DATestUserGroup, admin: DATestUser) -> None:
-    """Drop every cc_pair off a group and wait out the sync.
+    """Drop every cc_pair off a group.
 
     The only route to a manager-owned groupless connector: creating one directly is
     refused (no managed scope in zero groups), so it has to start in a group and lose
-    it. Attaching the connector already left the group syncing, and an edit is refused
-    (404) while is_up_to_date is False — so both waits are load-bearing.
-    """
-    UserGroupManager.wait_for_sync(
-        user_performing_action=admin, user_groups_to_check=[group]
-    )
-    group.cc_pair_ids = []
-    UserGroupManager.edit(group, user_performing_action=admin)
-    UserGroupManager.wait_for_sync(
-        user_performing_action=admin, user_groups_to_check=[group]
-    )
+    it."""
+    UserGroupManager.set_managed_cc_pairs(group, {}, user_performing_action=admin)
 
 
 def _create_synced_doc_set(

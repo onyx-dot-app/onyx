@@ -147,8 +147,26 @@ def _me_permissions(user: DATestUser) -> dict[str, Any]:
     return resp.json()
 
 
-def _patch_group_body(user_ids: list[str], cc_pair_ids: list[int]) -> dict[str, Any]:
-    return {"user_ids": user_ids, "cc_pair_ids": cc_pair_ids}
+def _patch_group_body(
+    user_ids: list[str], cc_pair_ids: list[int] | None = None
+) -> dict[str, Any]:
+    body: dict[str, Any] = {"user_ids": user_ids}
+    if cc_pair_ids is not None:
+        body["cc_pair_ids"] = cc_pair_ids
+    return body
+
+
+def _managed_cc_pairs_path(group_id: int) -> str:
+    return f"/manage/admin/user-group/{group_id}/managed-cc-pairs"
+
+
+def _managed_cc_pairs_body(cc_pair_ids: list[int]) -> dict[str, Any]:
+    return {
+        "cc_pairs": [
+            {"cc_pair_id": cc_pair_id, "role": ConnectorManageRole.EDITOR.value}
+            for cc_pair_id in cc_pair_ids
+        ]
+    }
 
 
 def _group_member_ids(group_id: int) -> set[str]:
@@ -331,7 +349,7 @@ def test_manager_cannot_remove_self_from_managed_group(env: _ScopedEnv) -> None:
     resp = call_endpoint(
         "PATCH",
         path,
-        _patch_group_body([env.member.id], []),
+        _patch_group_body([env.member.id]),
         env.manager.headers,
         env.manager.cookies,
     )
@@ -362,7 +380,7 @@ def test_global_holder_cannot_remove_self_from_their_granting_group(
     resp = call_endpoint(
         "PATCH",
         f"/manage/admin/user-group/{group.id}",
-        _patch_group_body([], []),
+        _patch_group_body([]),
         holder.headers,
         holder.cookies,
     )
@@ -385,7 +403,7 @@ def test_admin_may_remove_self_from_group(isolated_env: _ScopedEnv) -> None:
     resp = call_endpoint(
         "PATCH",
         f"/manage/admin/user-group/{isolated_env.managed_group.id}",
-        _patch_group_body([isolated_env.manager.id, isolated_env.member.id], []),
+        _patch_group_body([isolated_env.manager.id, isolated_env.member.id]),
         isolated_env.admin.headers,
         isolated_env.admin.cookies,
     )
@@ -420,28 +438,39 @@ def test_manager_cannot_patch_unmanaged_group(env: _ScopedEnv) -> None:
     resp = call_endpoint(
         "PATCH",
         path,
-        _patch_group_body([env.outsider.id], []),
+        _patch_group_body([env.outsider.id]),
         env.manager.headers,
         env.manager.cookies,
     )
     assert_response(resp, "PATCH", path, "manager", "denied")
 
 
-# cc_pair re-attach gate — the junction-rewrite escalation vector.
+# Group-side connector attach — the junction-rewrite escalation vector.
 def test_manager_cannot_attach_public_cc_pair(env: _ScopedEnv) -> None:
     public_cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
     )
     before = _settled_cc_pair_ids(env)
-    path = f"/manage/admin/user-group/{env.managed_group.id}"
+    path = _managed_cc_pairs_path(env.managed_group.id)
+    resp = call_endpoint(
+        "PUT",
+        path,
+        _managed_cc_pairs_body([public_cc_pair.id]),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert_response(resp, "PUT", path, "manager", "denied_gate2")
+
+    # The legacy PATCH cc_pair_ids field runs the same attach gate.
+    patch_path = f"/manage/admin/user-group/{env.managed_group.id}"
     resp = call_endpoint(
         "PATCH",
-        path,
+        patch_path,
         _patch_group_body([env.manager.id, env.member.id], [public_cc_pair.id]),
         env.manager.headers,
         env.manager.cookies,
     )
-    assert_response(resp, "PATCH", path, "manager", "denied")
+    assert_response(resp, "PATCH", patch_path, "manager", "denied")
     assert _current_cc_pair_ids(env.managed_group.id) == before
     assert public_cc_pair.id not in before
 
@@ -454,17 +483,15 @@ def test_manager_cannot_attach_unmanaged_cc_pair(isolated_env: _ScopedEnv) -> No
         groups=[isolated_env.other_group.id],
     )
     before = _settled_cc_pair_ids(isolated_env)
-    path = f"/manage/admin/user-group/{isolated_env.managed_group.id}"
+    path = _managed_cc_pairs_path(isolated_env.managed_group.id)
     resp = call_endpoint(
-        "PATCH",
+        "PUT",
         path,
-        _patch_group_body(
-            [isolated_env.manager.id, isolated_env.member.id], [unmanaged_cc_pair.id]
-        ),
+        _managed_cc_pairs_body([unmanaged_cc_pair.id]),
         isolated_env.manager.headers,
         isolated_env.manager.cookies,
     )
-    assert_response(resp, "PATCH", path, "manager", "denied")
+    assert_response(resp, "PUT", path, "manager", "denied_gate2")
     assert _current_cc_pair_ids(isolated_env.managed_group.id) == before
     assert unmanaged_cc_pair.id not in before
 
@@ -482,26 +509,23 @@ def test_manager_cannot_reattach_removed_public_cc_pair(
     )
     before = _settled_cc_pair_ids(isolated_env)
     _insert_stale_cc_pair_junction(isolated_env.managed_group.id, public_cc_pair.id)
-    path = f"/manage/admin/user-group/{isolated_env.managed_group.id}"
+    path = _managed_cc_pairs_path(isolated_env.managed_group.id)
     resp = call_endpoint(
-        "PATCH",
+        "PUT",
         path,
-        _patch_group_body(
-            [isolated_env.manager.id, isolated_env.member.id], [public_cc_pair.id]
-        ),
+        _managed_cc_pairs_body([public_cc_pair.id]),
         isolated_env.manager.headers,
         isolated_env.manager.cookies,
     )
-    assert_response(resp, "PATCH", path, "manager", "denied")
+    assert_response(resp, "PUT", path, "manager", "denied_gate2")
     # The stale row must stay stale — revival is the escalation this test guards.
     assert _current_cc_pair_ids(isolated_env.managed_group.id) == before
     assert public_cc_pair.id not in before
 
 
 def test_manager_attaches_groupless_private_cc_pair(isolated_env: _ScopedEnv) -> None:
-    # A groupless private cc_pair has no current group for the scope check to judge,
-    # so only its creator may pull it into a group. Another creator's pair is not
-    # the manager's to reach.
+    # The creator of a groupless private cc_pair is its Editor, so only they may pull
+    # it into a group. Another creator's pair is not the manager's to reach.
     others_cc_pair = CCPairManager.create_from_scratch(
         user_performing_action=isolated_env.admin,
         access_type=AccessType.PRIVATE,
@@ -514,25 +538,21 @@ def test_manager_attaches_groupless_private_cc_pair(isolated_env: _ScopedEnv) ->
     )
     _set_cc_pair_creator(own_cc_pair.id, isolated_env.manager.id)
     before = _settled_cc_pair_ids(isolated_env)
-    path = f"/manage/admin/user-group/{isolated_env.managed_group.id}"
+    path = _managed_cc_pairs_path(isolated_env.managed_group.id)
     resp = call_endpoint(
-        "PATCH",
+        "PUT",
         path,
-        _patch_group_body(
-            [isolated_env.manager.id, isolated_env.member.id], [others_cc_pair.id]
-        ),
+        _managed_cc_pairs_body([others_cc_pair.id]),
         isolated_env.manager.headers,
         isolated_env.manager.cookies,
     )
-    assert_response(resp, "PATCH", path, "manager", "denied")
+    assert_response(resp, "PUT", path, "manager", "denied_gate2")
     assert _current_cc_pair_ids(isolated_env.managed_group.id) == before
 
     resp = call_endpoint(
-        "PATCH",
+        "PUT",
         path,
-        _patch_group_body(
-            [isolated_env.manager.id, isolated_env.member.id], [own_cc_pair.id]
-        ),
+        _managed_cc_pairs_body([own_cc_pair.id]),
         isolated_env.manager.headers,
         isolated_env.manager.cookies,
     )

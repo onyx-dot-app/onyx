@@ -2,10 +2,17 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.connector_manage_access import (
+    assert_groups_have_no_global_manage_grant,
+    fetch_managed_cc_pair_roles_for_group,
+    lock_cc_pairs_for_manage_access__no_commit,
+    write_manage_rows__no_commit,
+)
 from ee.onyx.db.document_set import set_document_set_group_membership__no_commit
 from ee.onyx.db.persona import update_persona_access
 from ee.onyx.db.user_group import (
     add_users_to_user_group,
+    assert_cc_pairs_attachable_to_group,
     assert_group_membership_survives_deletion,
     fetch_user_group,
     fetch_user_group_for_snapshot,
@@ -25,6 +32,8 @@ from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
 from ee.onyx.server.user_group.models import (
     AddUsersToUserGroupRequest,
     BulkSetPermissionsRequest,
+    GroupManagedCCPairsUpdateRequest,
+    ManagedCCPairEntry,
     MinimalUserGroupSnapshot,
     SetGroupManagerRequest,
     UpdateGroupAgentsRequest,
@@ -57,12 +66,13 @@ from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS, OnyxCeleryPriority, OnyxCeleryTask
+from onyx.db.connector_credential_pair import CCPairAccessLevel
 from onyx.db.document_set import (
     get_document_sets_by_ids,
     get_group_ids_for_document_sets,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission, PermissionAuthority
+from onyx.db.enums import ConnectorManageRole, Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
 from onyx.db.user_group import assert_group_config_is_editable
@@ -81,6 +91,12 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
+
+# A group manager can give a group only a role they hold on the pair themselves.
+_ACCESS_LEVEL_TO_GIVE_ROLE: dict[ConnectorManageRole, CCPairAccessLevel] = {
+    ConnectorManageRole.EDITOR: CCPairAccessLevel.EDIT,
+    ConnectorManageRole.OPERATOR: CCPairAccessLevel.OPERATE,
+}
 
 
 @router.get("/admin/user-group")
@@ -410,6 +426,87 @@ def set_user_group_data_access_cc_pairs_endpoint(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
     return UserGroupDataAccessCCPairs(cc_pair_ids=sorted(cc_pair_ids))
+
+
+@router.put("/admin/user-group/{user_group_id}/managed-cc-pairs")
+def set_group_managed_cc_pairs(
+    user_group_id: int,
+    request: GroupManagedCCPairsUpdateRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> list[ManagedCCPairEntry]:
+    """Replace the connectors this group manages, and its role on each. Authorized
+    as a group edit: the caller manages the group, and a scoped manager may only
+    attach (or re-role) pairs within their managed scope."""
+    # GATE 2: before any read, so a non-manager can't confirm the group exists.
+    assert_manages_group(user, db_session, group_id=user_group_id)
+    if fetch_user_group(db_session, user_group_id) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    assert_group_config_is_editable(db_session, user_group_id, "give connectors to")
+
+    requested = {entry.cc_pair_id: entry.role for entry in request.cc_pairs}
+    current = fetch_managed_cc_pair_roles_for_group(db_session, user_group_id)
+    found_cc_pair_ids = lock_cc_pairs_for_manage_access__no_commit(
+        db_session, current.keys() | requested.keys()
+    )
+    if missing := sorted(requested.keys() - found_cc_pair_ids):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"Connector(s) {missing} not found"
+        )
+    # Re-read under the lock, so a concurrent write is diffed rather than overwritten.
+    current = fetch_managed_cc_pair_roles_for_group(db_session, user_group_id)
+
+    upserts = {
+        cc_pair_id: role
+        for cc_pair_id, role in requested.items()
+        if current.get(cc_pair_id) is not role
+    }
+    if upserts:
+        assert_groups_have_no_global_manage_grant(db_session, [user_group_id])
+    for role, access_level in _ACCESS_LEVEL_TO_GIVE_ROLE.items():
+        assert_cc_pairs_attachable_to_group(
+            db_session,
+            user,
+            user_group_id,
+            cc_pair_ids={
+                cc_pair_id
+                for cc_pair_id, upsert_role in upserts.items()
+                if upsert_role is role
+            },
+            access_level=access_level,
+        )
+    write_manage_rows__no_commit(
+        db_session,
+        upserts={
+            (user_group_id, cc_pair_id): role for cc_pair_id, role in upserts.items()
+        },
+        deletes=[
+            (user_group_id, cc_pair_id)
+            for cc_pair_id in current.keys() - requested.keys()
+        ],
+    )
+    db_session.commit()
+
+    emit_audit_event(
+        AuditAction.USER_GROUP_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="user_group",
+        resource_id=user_group_id,
+        extra={
+            "managed_cc_pairs": {
+                str(cc_pair_id): role.value for cc_pair_id, role in requested.items()
+            }
+        },
+    )
+    return [
+        ManagedCCPairEntry(cc_pair_id=cc_pair_id, role=role)
+        for cc_pair_id, role in sorted(
+            fetch_managed_cc_pair_roles_for_group(db_session, user_group_id).items()
+        )
+    ]
 
 
 @router.post("/admin/user-group/{user_group_id}/add-users")

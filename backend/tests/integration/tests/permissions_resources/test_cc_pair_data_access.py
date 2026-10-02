@@ -11,7 +11,7 @@ import os
 import httpx
 import pytest
 
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, ConnectorManageRole
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import (
@@ -111,7 +111,7 @@ def test_scoped_manager_changes_only_groups_they_can_see(
     }
 
 
-def test_data_access_needs_the_editable_check(
+def test_data_access_needs_editor(
     permission_admin_user: DATestUser,
     permission_basic_user: DATestUser,
     scoped_manager_user: DATestUser,
@@ -126,6 +126,29 @@ def test_data_access_needs_the_editable_check(
             unmanaged_pair.id, [scoped_managed_group.id], user
         )
         assert response.status_code == _FORBIDDEN, user.email
+
+    # An Operator of the pair may not change its data access; an Editor may.
+    pair = _private_pair(admin, groups=[], data_access=[])
+    CCPairManager.set_manage_access(
+        pair.id,
+        {scoped_managed_group.id: ConnectorManageRole.OPERATOR},
+        user_performing_action=admin,
+    )
+    response = CCPairManager.set_data_access(
+        pair.id, [scoped_managed_group.id], scoped_manager_user
+    )
+    assert response.status_code == _FORBIDDEN
+    CCPairManager.set_manage_access(
+        pair.id,
+        {scoped_managed_group.id: ConnectorManageRole.EDITOR},
+        user_performing_action=admin,
+    )
+    CCPairManager.set_data_access(
+        pair.id, [scoped_managed_group.id], scoped_manager_user
+    ).raise_for_status()
+    assert CCPairManager.get_data_access_group_ids(pair.id, admin) == {
+        scoped_managed_group.id
+    }
 
     public_pair = CCPairManager.create_from_scratch(user_performing_action=admin)
     response = CCPairManager.set_data_access(

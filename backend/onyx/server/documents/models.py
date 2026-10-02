@@ -1,10 +1,17 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timezone
 from enum import Enum
-from typing import Any, Generic, Self, TypeVar
+from typing import Annotated, Any, Generic, Self, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializeAsAny,
+    model_validator,
+)
 
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
@@ -14,6 +21,7 @@ from onyx.connectors.models import InputType
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     PermissionSyncStatus,
     ProcessingMode,
 )
@@ -745,16 +753,55 @@ class ConnectorCredentialPairIdentifier(BaseModel):
     credential_id: int
 
 
+class CCPairManageAccessEntry(BaseModel):
+    group_id: int
+    role: ConnectorManageRole
+
+
+def _require_unique_groups(
+    entries: list[CCPairManageAccessEntry],
+) -> list[CCPairManageAccessEntry]:
+    if len({entry.group_id for entry in entries}) != len(entries):
+        raise ValueError("Each group may appear only once in manage_access")
+    return entries
+
+
+# A group listed twice is rejected rather than resolved to one of its roles.
+ManageAccessList = Annotated[
+    list[CCPairManageAccessEntry], AfterValidator(_require_unique_groups)
+]
+
+
+def manage_access_by_group(
+    entries: ManageAccessList,
+) -> dict[int, ConnectorManageRole]:
+    return {entry.group_id: entry.role for entry in entries}
+
+
 class ConnectorCredentialPairMetadata(BaseModel):
     name: str
     access_type: AccessType
     auto_sync_options: dict[str, Any] | None = None
-    # Groups that manage the pair.
+    # Groups that manage the pair as Editors, for clients that predate
+    # manage_access. At most one of groups and manage_access may be set.
     groups: list[int] = Field(default_factory=list)
+    # Groups that manage the pair, with their roles.
+    manage_access: ManageAccessList = Field(default_factory=list)
     # Groups whose members may read a PRIVATE pair's documents. None means
-    # the same groups as `groups`.
+    # the manage groups.
     data_access: list[int] | None = None
     processing_mode: ProcessingMode = ProcessingMode.REGULAR
+
+    @model_validator(mode="after")
+    def _one_manage_field(self) -> Self:
+        if self.groups and self.manage_access:
+            raise ValueError("Set groups or manage_access, not both")
+        return self
+
+    def manage_roles_by_group(self) -> dict[int, ConnectorManageRole]:
+        if self.manage_access:
+            return manage_access_by_group(self.manage_access)
+        return dict.fromkeys(self.groups, ConnectorManageRole.EDITOR)
 
 
 class CCStatusUpdateRequest(BaseModel):
