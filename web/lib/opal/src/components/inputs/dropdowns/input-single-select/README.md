@@ -21,7 +21,7 @@ default keeps the trigger filled.
 
 `options` is a list of loose options and dividers in any order, like
 `<option>`s beside `<optgroup>`s: a divider is `{ title?, options }` and renders
-a separator line above its rows, carrying `title` when there is one. The trigger shows the chosen option's `icon`, when it has one. A value
+a separator line above its rows, carrying `title` when there is one. An option's `suffix` shows muted beside its title in the list, like "(Default)". The trigger shows the chosen option's `icon`, when it has one. A value
 outside the set shows the placeholder with the validation error.
 
 ```tsx

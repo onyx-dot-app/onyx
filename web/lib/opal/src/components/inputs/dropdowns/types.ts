@@ -2,13 +2,18 @@ import type { RichStr } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
 import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-type-in-tag/components";
 
-/** A clickable row. `title`, `description` and `icon` match `Content`'s props. */
+/**
+ * A clickable row. `title`, `description`, `suffix` and `icon` match
+ * `Content`'s props.
+ */
 export type SelectOption = {
   value: string;
   title: string;
   /** Further text a search matches, such as an identifier the title prettifies. */
   keywords?: string[];
   description?: string | RichStr;
+  /** Muted text beside the title in the list, like "(Default)". */
+  suffix?: string;
   icon?: IconFunctionComponent;
   disabled?: boolean;
 };

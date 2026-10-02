@@ -26,7 +26,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * The `ContentAction` props a row actually uses — eleven of the twenty-two it
+ * The `ContentAction` props a row actually uses — twelve of the twenty-two it
  * offers. Listed rather than spread, so that everything a caller passes which
  * is *not* here is DOM, and reaches the row element.
  *
@@ -55,6 +55,12 @@ type RowContentProps = {
 
   /** Secondary line under the title. */
   description?: string | RichStr;
+
+  /**
+   * Muted text beside the title, like "(Default)". Shown by the `heading`
+   * variant only.
+   */
+  suffix?: string;
 
   /**
    * Cap the description at N lines and truncate the rest. Unset wraps without
@@ -177,6 +183,7 @@ function LineItemButton({
   icon,
   description,
   descriptionMaxLines,
+  suffix,
   rightChildren,
   sizePreset,
   variant,
@@ -261,6 +268,7 @@ function LineItemButton({
               icon,
               description,
               descriptionMaxLines,
+              suffix,
               rightChildren,
               sizePreset,
               variant,
