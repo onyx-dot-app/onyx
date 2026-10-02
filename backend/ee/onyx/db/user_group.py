@@ -14,6 +14,7 @@ from ee.onyx.db.cc_pair_data_access import (
     assert_restricted_cc_pairs_keep_a_group,
     fetch_cc_pair_ids_with_data_access,
     fetch_data_access_cc_pair_ids_for_user_group,
+    lock_cc_pairs_for_data_access__no_commit,
     remove_cc_pair_data_access__no_commit,
 )
 from ee.onyx.server.user_group.models import (
@@ -1074,6 +1075,7 @@ def set_user_group_data_access_cc_pairs(
             f"{sorted(invalid_ids)}",
         )
 
+    lock_cc_pairs_for_data_access__no_commit(db_session, removed_cc_pair_ids)
     add_cc_pair_data_access__no_commit(
         db_session, cc_pair_ids=added_cc_pair_ids, user_group_ids=[user_group_id]
     )

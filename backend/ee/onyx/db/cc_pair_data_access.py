@@ -85,11 +85,29 @@ def fetch_cc_pair_ids_with_data_access(
     )
 
 
+def lock_cc_pairs_for_data_access__no_commit(
+    db_session: Session, cc_pair_ids: Collection[int]
+) -> None:
+    """Row-locks the pairs in id order. A writer that can remove a data-access
+    group takes this lock before it writes, so that
+    assert_restricted_cc_pairs_keep_a_group sees the removals of concurrent
+    writers. NO KEY UPDATE does not block inserts that reference the pairs."""
+    if not cc_pair_ids:
+        return
+    db_session.execute(
+        select(ConnectorCredentialPair.id)
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+        .order_by(ConnectorCredentialPair.id)
+        .with_for_update(key_share=True)
+    )
+
+
 def assert_restricted_cc_pairs_keep_a_group(
     db_session: Session, cc_pair_ids: Collection[int]
 ) -> None:
     """A SYNC_RESTRICTED pair with no data-access group is visible to nobody,
-    so a write must not remove its last group."""
+    so a write must not remove its last group. The caller locks the pairs with
+    lock_cc_pairs_for_data_access__no_commit before it removes groups."""
     if not cc_pair_ids:
         return
     has_group = (

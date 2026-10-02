@@ -12,6 +12,7 @@ from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
 from ee.onyx.db.cc_pair_data_access import (
     assert_restricted_cc_pairs_keep_a_group,
     fetch_data_access_groups_for_cc_pair,
+    lock_cc_pairs_for_data_access__no_commit,
     set_cc_pair_data_access_groups__no_commit,
 )
 from ee.onyx.db.connector_manage_access import (
@@ -285,6 +286,7 @@ def set_cc_pair_data_access(
             "Data-access groups can only be set on private or restricted connectors.",
         )
 
+    lock_cc_pairs_for_data_access__no_commit(db_session, [cc_pair_id])
     visible_group_ids = get_visible_user_group_ids(user, db_session)
     set_cc_pair_data_access_groups__no_commit(
         db_session,
