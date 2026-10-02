@@ -24,11 +24,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import NamedTuple
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
 
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.tenant_utils import get_schemas_needing_migration
+from ee.onyx.db.tenant_snapshot import ensure_template_schema
+from ee.onyx.db.tenant_snapshot import get_head_revision
+from ee.onyx.db.tenant_snapshot import store_template_snapshots
+from onyx.db.engine.shard_registry import get_shard_specs
 from onyx.db.engine.tenant_utils import get_tenant_ids_by_shard
 from shared_configs.configs import TENANT_ID_PREFIX
 
@@ -40,6 +42,7 @@ from shared_configs.configs import TENANT_ID_PREFIX
 class Args(NamedTuple):
     jobs: int
     batch_size: int
+    snapshot_template: bool
 
 
 class Batch(NamedTuple):
@@ -102,13 +105,6 @@ def run_alembic_for_batch(batch: Batch) -> BatchResult:
     )
     elapsed = time.monotonic() - start
     return BatchResult(schemas, False, retry.stdout or "", elapsed)
-
-
-def get_head_revision() -> str | None:
-    """Get the head revision from the alembic script directory."""
-    alembic_cfg = Config("alembic.ini")
-    script = ScriptDirectory.from_config(alembic_cfg)
-    return script.get_current_head()
 
 
 def run_migrations_parallel(
@@ -252,12 +248,24 @@ def parse_args() -> Args:
         metavar="N",
         help="Schemas per alembic process (default: 50)",
     )
+    parser.add_argument(
+        "--snapshot-template",
+        action="store_true",
+        help=(
+            "Migrate the template schema on every shard with the tenants and "
+            "store its dump afterwards (cloud provisioning clones it)"
+        ),
+    )
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be >= 1")
     if args.batch_size < 1:
         parser.error("--batch-size must be >= 1")
-    return Args(jobs=args.jobs, batch_size=args.batch_size)
+    return Args(
+        jobs=args.jobs,
+        batch_size=args.batch_size,
+        snapshot_template=args.snapshot_template,
+    )
 
 
 def main() -> int:
@@ -270,6 +278,10 @@ def main() -> int:
 
     schemas_by_shard: dict[str, list[str]] = {}
     with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
+        if args.snapshot_template:
+            for shard_name in sorted(get_shard_specs()):
+                ensure_template_schema(shard_name)
+
         # The prefix filter drops `public`, which enumeration reports as the sole
         # "tenant" outside multi-tenant mode. That is what makes the hint below fire.
         tenants_by_shard = {
@@ -295,22 +307,27 @@ def main() -> int:
                 schemas_by_shard[shard_name] = needing
 
     total_to_migrate = sum(len(s) for s in schemas_by_shard.values())
-    if not total_to_migrate:
+    if total_to_migrate:
+        print(
+            f"{total_to_migrate}/{total_tenants} tenants need migration (head: {head_rev})."
+        )
+        success = run_migrations_parallel(
+            schemas_by_shard,
+            max_workers=args.jobs,
+            batch_size=args.batch_size,
+        )
+        print(
+            f"\n{'All migrations successful' if success else 'Some migrations failed'}"
+        )
+        if not success:
+            return 1
+    else:
         print(f"All {total_tenants} tenants are already at head revision ({head_rev}).")
-        return 0
 
-    print(
-        f"{total_to_migrate}/{total_tenants} tenants need migration (head: {head_rev})."
-    )
-
-    success = run_migrations_parallel(
-        schemas_by_shard,
-        max_workers=args.jobs,
-        batch_size=args.batch_size,
-    )
-
-    print(f"\n{'All migrations successful' if success else 'Some migrations failed'}")
-    return 0 if success else 1
+    if args.snapshot_template:
+        with SqlEngine.scoped_engine(pool_size=5, max_overflow=2):
+            store_template_snapshots(head_rev)
+    return 0
 
 
 if __name__ == "__main__":

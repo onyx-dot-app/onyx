@@ -5669,6 +5669,27 @@ class AvailableTenant(PublicBase):
     shard_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class TenantSchemaSnapshot(PublicBase):
+    """SQL dump of a shard's template schema at one head revision, written by the
+    rollout job. apply_snapshot builds a tenant schema from it instead of replaying
+    the migration chain. The newest two per shard are kept so the image being
+    replaced keeps its own snapshot until the rollout completes."""
+
+    __tablename__ = "tenant_schema_snapshot"
+    __table_args__ = (
+        UniqueConstraint("shard_name", "alembic_revision"),
+        {"schema": "public"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shard_name: Mapped[str] = mapped_column(String, nullable=False)
+    alembic_revision: Mapped[str] = mapped_column(String, nullable=False)
+    dump: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 # This is a mapping from tenant IDs to anonymous user paths
 class TenantAnonymousUserPath(PublicBase):
     __tablename__ = "tenant_anonymous_user_path"
