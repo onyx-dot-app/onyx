@@ -58,11 +58,21 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
     field.kind === "email"
       ? t("credentials.create.emailField.placeholder")
       : undefined;
+  // The account email pairs with an API token, so it says which account,
+  // under the input.
+  const subDescription =
+    field.displayName === "accountEmail"
+      ? t("credentials.create.accountEmailField.subDescription")
+      : undefined;
 
   return (
     // The field name ties the label to the input's id and shows the field's
     // Formik error under it.
-    <InputVertical withLabel={fieldKey} title={label}>
+    <InputVertical
+      withLabel={fieldKey}
+      title={label}
+      subDescription={subDescription}
+    >
       <FormikField<string>
         name={fieldKey}
         render={(formikField, _helper, _meta, status) =>

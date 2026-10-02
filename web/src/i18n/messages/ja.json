@@ -3218,6 +3218,9 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "API トークンを所有するアカウントのメールアドレスを使用してください。"
+        },
         "createButton": {
           "label": "作成"
         },

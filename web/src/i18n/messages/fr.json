@@ -3218,6 +3218,9 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Utilisez l'adresse e-mail du compte propriétaire du jeton d'API."
+        },
         "createButton": {
           "label": "Créer"
         },

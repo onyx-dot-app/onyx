@@ -3218,6 +3218,9 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API."
+        },
         "createButton": {
           "label": "إنشاء"
         },

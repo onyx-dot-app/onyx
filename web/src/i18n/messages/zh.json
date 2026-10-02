@@ -3218,6 +3218,9 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "请使用拥有该 API 令牌的账户邮箱。"
+        },
         "createButton": {
           "label": "创建"
         },

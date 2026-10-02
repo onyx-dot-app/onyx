@@ -3218,6 +3218,9 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "API 토큰을 소유한 계정의 이메일을 사용하세요."
+        },
         "createButton": {
           "label": "생성"
         },

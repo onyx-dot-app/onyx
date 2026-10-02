@@ -3218,6 +3218,9 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Verwenden Sie die E-Mail-Adresse des Kontos, dem das API-Token gehört."
+        },
         "createButton": {
           "label": "Erstellen"
         },
