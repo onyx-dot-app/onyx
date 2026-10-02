@@ -21,7 +21,9 @@ import {
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
+import { useState } from "react";
 import { useOpalStrings } from "@opal/strings";
+import usePresence from "@opal/hooks/usePresence";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,6 +81,8 @@ interface MessageCardBaseProps {
   /**
    * Content rendered below a divider, under the main content area.
    * When provided, a `Divider` is inserted between the `ContentAction` and this node.
+   * Adding or removing it animates the section open or closed; a card that
+   * mounts with it does not animate.
    */
   bottomChildren?: React.ReactNode;
 
@@ -197,6 +201,22 @@ function MessageCard({
   const { icon: DefaultIcon, iconClass, color } = VARIANT_CONFIG[variant];
   const Icon = iconOverride ?? DefaultIcon;
   const strings = useOpalStrings();
+  const expanded = bottomChildren != null;
+  const presence = usePresence(expanded, 200);
+  // Animate only once the section has come or gone, so a card that mounts
+  // with it does not play the opening on page load.
+  const [toggled, setToggled] = useState(false);
+  const [prevExpanded, setPrevExpanded] = useState(expanded);
+  if (expanded !== prevExpanded) {
+    setPrevExpanded(expanded);
+    setToggled(true);
+  }
+  // The last section shown, kept so it can animate out after the caller
+  // drops it.
+  const [shownBottom, setShownBottom] = useState(bottomChildren);
+  if (bottomChildren != null && bottomChildren !== shownBottom) {
+    setShownBottom(bottomChildren);
+  }
 
   const right = onClose ? (
     <Button
@@ -241,11 +261,18 @@ function MessageCard({
             />
           </div>
 
-          {bottomChildren && (
-            <>
-              <Divider paddingParallel={3} paddingPerpendicular={0} />
-              {bottomChildren}
-            </>
+          {presence.mounted && (
+            <div
+              className="opal-message-card-bottom"
+              data-state={presence.state}
+              data-animate={toggled || undefined}
+              onAnimationEnd={presence.onAnimationEnd}
+            >
+              <div className="opal-message-card-bottom-inner">
+                <Divider paddingParallel={3} paddingPerpendicular={0} />
+                {bottomChildren ?? shownBottom}
+              </div>
+            </div>
           )}
         </div>
       </Card>
