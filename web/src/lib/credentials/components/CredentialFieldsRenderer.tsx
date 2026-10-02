@@ -55,7 +55,7 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
 
   if (typeof value === "boolean") {
     return (
-      <InputHorizontal withLabel={fieldKey} title={label}>
+      <InputHorizontal withLabel title={label}>
         <FormikField<boolean>
           name={fieldKey}
           render={(field, helper) => (
@@ -78,7 +78,7 @@ function CredentialField({ fieldKey, value }: CredentialFieldProps) {
       : undefined;
 
   return (
-    <InputVertical withLabel={fieldKey} title={label}>
+    <InputVertical withLabel title={label}>
       <FormikField<string>
         name={fieldKey}
         render={(field, _helper, _meta, status) =>
