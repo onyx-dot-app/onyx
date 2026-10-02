@@ -221,8 +221,8 @@ class ChatTurnSetup:
     simple_chat_history: list[ChatMessageSimple]
     extracted_context_files: ExtractedContextFiles
     reserved_messages: list[ChatMessage]  # length 1 for single, N for multi
-    # Processing-fence value and stream-buffer key — single source for the run id
-    processing_run_id: int
+    # Processing-fence value, stream-buffer key, and Stop-request key
+    processing_stream_id: int
     reserved_token_count: int
     reasoning_effort: ReasoningEffort
     search_params: SearchParams
