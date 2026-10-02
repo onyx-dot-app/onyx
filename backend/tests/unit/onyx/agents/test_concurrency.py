@@ -10,6 +10,7 @@ from onyx.agents import concurrency, runtime
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.concurrency import ExecutionWork
 from onyx.agents.events import AgentEvent, AgentStartEvent, ToolUpdateEvent
+from onyx.agents.models import ToolCallContext
 from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tool_execution import ToolBatch
 from onyx.agents.tools import AgentTool, ToolInvocation, ToolProgress
@@ -261,9 +262,10 @@ def test_terminal_snapshot_rejects_late_tool_result(
         assert release_tool.wait(5)
         return ToolResult(content="late result")
 
-    def fail(_invocation: ToolInvocation) -> ToolResult:
-        assert tool_entered.wait(5)
-        raise ValueError("sibling failed")
+    def before_call(context: ToolCallContext) -> None:
+        if context.call.name == "fail":
+            assert tool_entered.wait(5)
+            raise ValueError("Tool hook failed")
 
     agent = Agent(
         FakeModelClient(
@@ -281,10 +283,11 @@ def test_terminal_snapshot_rejects_late_tool_result(
             ),
             AgentTool(
                 definition=ToolDefinition(name="fail", description="", parameters={}),
-                execute=fail,
+                execute=lambda _: ToolResult(content="unused"),
             ),
         ],
     )
+    agent.before_tool_call = before_call
     original_record = ToolBatch._record_tool_result
 
     def record_result(

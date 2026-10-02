@@ -386,6 +386,17 @@ def test_factory_carries_configured_vision_support_to_client() -> None:
     assert create_client.call_args.kwargs["supports_images"] is True
 
 
+def test_factory_falls_back_to_catalog_without_configured_vision() -> None:
+    provider = _build_provider_view("openai", 4096)
+    provider.model_configurations[0].supports_image_input = False
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"test-model": {"supports_vision": True}},
+    ):
+        client = llm_from_provider("test-model", provider)
+    assert client.config.supports_images is True
+
+
 def test_client_config_is_a_defensive_snapshot() -> None:
     from onyx.llm.multi_llm import LitellmLLM
 

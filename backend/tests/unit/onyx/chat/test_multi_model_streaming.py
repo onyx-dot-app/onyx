@@ -2618,3 +2618,63 @@ def test_failed_ownership_poll_does_not_starve_other_stores() -> None:
     turn._poll_control()
     assert failed.poll_control.call_count == 2
     assert healthy.poll_control.call_count == 2
+
+
+def test_worker_without_outcome_finishes_turn_with_error() -> None:
+    outcome = Future[ChatResponseOutcome]()
+    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    tasks = ActiveChatTurns()
+    with (
+        patch.object(turn, "_run_response", return_value=None),
+        patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
+    ):
+        turn.begin()
+        tasks.start(turn)
+        try:
+            with pytest.raises(RuntimeError, match="finished without an outcome"):
+                outcome.result(timeout=5)
+            turn.finished.result(timeout=5)
+            assert turn.cancellation.cancelled
+            assert turn.delivery.is_closing
+        finally:
+            turn.delivery.reader.close()
+            assert tasks.close()
+
+
+def test_failed_completion_lookup_cancels_run_and_drains_other_responses() -> None:
+    turn = ChatTurnExecution(_make_setup(), MagicMock())
+    run = MagicMock(spec=Run)
+    run.id = str(uuid4())
+    run.status = RunStatus.COMPLETE
+    run.wait_for_idle.return_value = True
+    run.delivery_failed = False
+    persistence = ChatResponsePersistence(
+        history_store=MagicMock(),
+        model_index=0,
+        llm=turn.setup.responses[0].llm,
+        delivery=turn.delivery,
+        outcome=Future[ChatResponseOutcome](),
+    )
+    persistence.coordinator = MagicMock(spec=AgentCoordinator)
+    persistence.coordinator.completion.side_effect = RuntimeError("Missing completion")
+    worker = Future[Run | None]()
+    worker.set_result(run)
+    other_worker = Future[Run | None]()
+    other_worker.set_result(None)
+    other_persistence = ChatResponsePersistence(
+        history_store=MagicMock(),
+        model_index=1,
+        llm=turn.setup.responses[0].llm,
+        delivery=turn.delivery,
+        outcome=Future[ChatResponseOutcome](),
+    )
+    turn._response_workers[worker] = persistence
+    turn._response_workers[other_worker] = other_persistence
+    turn._poll_responses()
+    assert isinstance(persistence.outcome.exception(), RuntimeError)
+    assert isinstance(other_persistence.outcome.exception(), RuntimeError)
+    run.cancel.assert_called_once()
+    assert other_worker not in turn._response_workers
+    turn._poll_responses()
+    assert not turn._response_workers
+    persistence.coordinator.completion.assert_called_once()

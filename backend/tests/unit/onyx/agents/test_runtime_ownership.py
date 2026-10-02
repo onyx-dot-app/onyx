@@ -287,9 +287,15 @@ def test_loaded_agent_bound_is_shared_across_parent_runs() -> None:
         first.result()
         assert first.wait_for_idle(timeout=3)
         second = parent.start(max_steps=2, coordinator=coordinator)
-        with pytest.raises(RunFailed):
-            second.result()
+        second.result()
         assert second.wait_for_idle(timeout=3)
+        errors = [
+            message
+            for message in second.snapshot().messages
+            if isinstance(message, ToolResultMessage) and message.is_error
+        ]
+        assert len(errors) == 1
+        assert "loaded agent limit exceeded" in errors[0].content
         assert len(coordinator.discovery(parent.id)) == 1
         assert coordinator.close(timeout=3)
 
@@ -332,7 +338,10 @@ def test_parallel_result_survives_another_tool_failure(cancelled: bool) -> None:
         ],
     )
     handles: list[Run] = []
-    with pytest.raises(AgentCancelled if cancelled else RunFailed):
+    if cancelled:
+        with pytest.raises(AgentCancelled):
+            run_agent(agent, max_steps=1, runs=handles, listener=observe)
+    else:
         run_agent(agent, max_steps=1, runs=handles, listener=observe)
     snapshot = handles[0].snapshot()
     results = [
@@ -340,9 +349,14 @@ def test_parallel_result_survives_another_tool_failure(cancelled: bool) -> None:
         for message in snapshot.messages
         if isinstance(message, ToolResultMessage)
     ]
-    assert [(result.tool_call_id, result.text) for result in results] == [
-        ("second", "Completed side effect")
-    ]
+    assert [
+        (result.tool_call_id, result.text) for result in results if not result.is_error
+    ] == [("second", "Completed side effect")]
+    if not cancelled:
+        assert snapshot.steps[0].tools["first"].status == "error"
+        assert any(
+            result.is_error and "First tool failed" in result.text for result in results
+        )
     assert snapshot.steps[0].tools["second"].status == RunStatus.COMPLETE
 
 

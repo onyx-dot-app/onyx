@@ -31,6 +31,7 @@ from onyx.tools.models import (
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
+    ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 
@@ -64,6 +65,7 @@ def _checkpoint_model_types() -> dict[str, type[BaseModel]]:
         "tool.bash.v1": LlmBashExecutionResult,
         "tool.python.v1": LlmPythonExecutionResult,
         "tool.memory.v1": MemoryUpdated,
+        "tool.error.v1": ToolExecutionError,
         "tool.image.v1": FinalImageGenerationResponse,
     }
 

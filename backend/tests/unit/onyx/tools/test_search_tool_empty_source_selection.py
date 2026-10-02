@@ -53,9 +53,14 @@ def test_absent_source_filter_still_searches(filters: BaseFilters | None) -> Non
         "onyx.tools.tool_implementations.search.search_tool."
         "get_session_with_current_tenant",
         side_effect=sentinel,
-    ):
-        with pytest.raises(RuntimeError, match="reached the search body"):
-            tool.run(invocation=_invocation({"queries": ["q"]}), context=ToolContext())
+    ) as get_session:
+        result = tool.run(
+            invocation=_invocation({"queries": ["q"]}), context=ToolContext()
+        )
+    get_session.assert_called_once()
+    assert isinstance(result, ToolResult)
+    assert result.is_error
+    assert "reached the search body" in result.content
 
 
 def test_project_mode_ignores_empty_source_selection() -> None:
@@ -67,9 +72,14 @@ def test_project_mode_ignores_empty_source_selection() -> None:
         "onyx.tools.tool_implementations.search.search_tool."
         "get_session_with_current_tenant",
         side_effect=sentinel,
-    ):
-        with pytest.raises(RuntimeError, match="reached the search body"):
-            tool.run(invocation=_invocation({"queries": ["q"]}), context=ToolContext())
+    ) as get_session:
+        result = tool.run(
+            invocation=_invocation({"queries": ["q"]}), context=ToolContext()
+        )
+    get_session.assert_called_once()
+    assert isinstance(result, ToolResult)
+    assert result.is_error
+    assert "reached the search body" in result.content
 
 
 def test_malformed_call_raises_despite_empty_selection() -> None:

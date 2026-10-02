@@ -11,7 +11,13 @@ from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.db.memory import UserMemoryContext
 from onyx.llm.models import Message, ToolDefinition, ToolResult
-from onyx.tools.models import ChatFile, ChatMinimalTextMessage, ToolCallException
+from onyx.tools.models import (
+    ChatFile,
+    ChatMinimalTextMessage,
+    ToolCallException,
+    ToolExecutionError,
+    ToolExecutionException,
+)
 from onyx.tracing.framework.create import function_span
 from onyx.utils.logger import setup_logger
 
@@ -168,7 +174,12 @@ class Tool(abc.ABC):
                     {"message": str(error), "data": {"tool_name": self.name}}
                 )
                 result = ToolResult(
-                    content=f"Tool failed with error: {error}", is_error=True
+                    content=f"Tool failed with error: {error}",
+                    is_error=True,
+                    details=ToolExecutionError(message=str(error))
+                    if isinstance(error, ToolExecutionException)
+                    and error.emit_error_packet
+                    else None,
                 )
             span.span_data.output = (
                 result.text
@@ -204,7 +215,12 @@ class Tool(abc.ABC):
                             {"message": str(error), "data": {"tool_name": self.name}}
                         )
                         result = ToolResult(
-                            content=f"Tool failed with error: {error}", is_error=True
+                            content=f"Tool failed with error: {error}",
+                            is_error=True,
+                            details=ToolExecutionError(message=str(error))
+                            if isinstance(error, ToolExecutionException)
+                            and error.emit_error_packet
+                            else None,
                         )
                     span.span_data.output = result.text
                 invocation.cancellation.check()

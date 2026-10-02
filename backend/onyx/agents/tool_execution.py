@@ -406,13 +406,25 @@ class ToolBatch:
                     raise ValueError(
                         "Tool does not support completing child dependencies"
                     )
-                result = tool.result_from_children(invocation, children)
+                try:
+                    result = tool.result_from_children(invocation, children)
+                except Exception as error:
+                    logger.exception("Tool completion failed for %s", call.name)
+                    result = ToolResult(
+                        content=f"Tool failed with error: {error}", is_error=True
+                    )
                 if self.run._coordination is not None:
                     self.run._coordination.observe_children(
                         [child.run_id for child in children]
                     )
                 return result
-            outcome = tool.execute(invocation)
+            try:
+                outcome = tool.execute(invocation)
+            except Exception as error:
+                logger.exception("Tool execution failed for %s", call.name)
+                return ToolResult(
+                    content=f"Tool failed with error: {error}", is_error=True
+                )
             if (
                 isinstance(outcome, PendingToolInput)
                 and outcome.mode == InputMode.EXECUTE

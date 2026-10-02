@@ -1694,7 +1694,9 @@ class LitellmLLM(LLM):
                     }
                 )
                 raise
-            signal.check()
+            # A completed response survives its deadline, but explicit Stop wins.
+            if signal.cancelled:
+                raise AgentCancelled()
             message = to_assistant_message(response, request)
             record_llm_response(span, response)
             return message

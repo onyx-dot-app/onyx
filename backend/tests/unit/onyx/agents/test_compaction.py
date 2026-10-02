@@ -34,7 +34,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.llm.token_budget import TokenBudget
+from onyx.llm.token_budget import TokenBudget, resolve_token_budget
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
 from tests.unit.onyx.agents.fakes import message_events
@@ -101,6 +101,21 @@ class ContextModel(LLM):
             yield GenerationErrorEvent(error_message="Too much context")
             raise
         yield from message_events(message)
+
+
+def test_compaction_uses_configured_input_safety_margin() -> None:
+    model = ContextModel()
+    with (
+        patch("onyx.agents.compaction.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.25),
+        patch("onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.25),
+    ):
+        budget = context_budget(model)
+        output_budget = resolve_token_budget(model)
+    assert budget.input_limit == 900
+    assert (
+        model.config.max_input_tokens - budget.input_limit
+        == output_budget.safety_tokens
+    )
 
 
 def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> None:

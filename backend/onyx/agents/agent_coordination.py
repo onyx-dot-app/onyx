@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Protocol, overload
 from uuid import UUID, uuid4
 
@@ -768,10 +769,12 @@ class RunCoordination:
         call_id: str,
         message_id: str,
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
+        deadline_at: datetime | None = None,
     ) -> Run:
         run = agent.start(
             messages=messages,
             max_steps=max_steps,
+            _deadline_at=deadline_at,
             coordinator=self.coordinator,
             cancellation=CancellationSignal(),
             parent_run_id=self.run.id,
@@ -995,17 +998,14 @@ class _ToolControl(AgentControl):
                 call_id=self.call_id,
                 message_id=self.message_id,
                 lifetime=lifetime,
+                deadline_at=datetime.now(timezone.utc)
+                + timedelta(seconds=total_timeout_s)
+                if total_timeout_s is not None
+                else None,
             )
         except BaseException:
             coordinator.unregister_child(agent.id)
             raise
-        if total_timeout_s is not None:
-            timer = threading.Timer(total_timeout_s, run.cancel)
-            timer.daemon = True
-            coordinator.completion(run.id).add_done_callback(
-                lambda _future: timer.cancel()
-            )
-            timer.start()
         return SpawnResult(agent_id=agent.id, agent_path=info.path, run_id=run.id)
 
     def start_run(

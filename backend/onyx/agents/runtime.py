@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
 
@@ -285,6 +286,7 @@ class Agent:
         on_event: Callable[[AgentEvent], None] | None = None,
         event_dispatcher: EventDispatcher | None = None,
         _snapshot: RunState | None = None,
+        _deadline_at: datetime | None = None,
     ) -> "Run":
         """Start a worker, or execute here until suspension or completion with background=False."""
         AgentStep(index=0, limit=max_steps)
@@ -313,7 +315,9 @@ class Agent:
                 _snapshot.model_copy(deep=True)
                 if _snapshot is not None
                 else RunState(
-                    progress=RunProgress(step_limit=max_steps),
+                    progress=RunProgress(
+                        step_limit=max_steps, deadline_at=_deadline_at
+                    ),
                     run_id=str(uuid4()),
                     agent_id=self.id,
                     previous_run_id=previous.id if previous else self._previous_run_id,
@@ -653,6 +657,16 @@ class Run:
             self._cancellation_link.enter_context(
                 self._cancellation_signal.on_cancel(self._wake_execution)
             )
+            deadline_at = self._progress.deadline_at
+            if deadline_at is not None:
+                remaining = (deadline_at - datetime.now(timezone.utc)).total_seconds()
+                if remaining <= 0:
+                    self.cancel()
+                else:
+                    timer = threading.Timer(remaining, self.cancel)
+                    timer.daemon = True
+                    self._cancellation_link.callback(timer.cancel)
+                    timer.start()
             self._start_execution(background=background)
         except BaseException:
             self._cancellation_link.close()

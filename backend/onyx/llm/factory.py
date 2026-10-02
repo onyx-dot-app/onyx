@@ -339,7 +339,9 @@ def llm_from_provider(
         policy_headers=policy.headers if policy else None,
         policy_model_kwargs=policy.model_kwargs if policy else None,
         supports_images=(
-            model_configuration.supports_image_input if model_configuration else None
+            True
+            if model_configuration and model_configuration.supports_image_input
+            else None
         ),
         reasoning_effort_default=(
             model_configuration.reasoning_effort_default

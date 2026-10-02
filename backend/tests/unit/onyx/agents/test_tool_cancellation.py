@@ -231,10 +231,11 @@ def test_stop_cancels_a_cooperative_tool_wait() -> None:
     assert exited.is_set()
 
 
-def test_parallel_failure_cancels_a_blocked_earlier_call() -> None:
+def test_parallel_tool_failure_preserves_other_calls() -> None:
     entered = threading.Event()
     release = threading.Event()
     failed = ValueError("Tool implementation defect")
+    failure_raised = threading.Event()
 
     def execute(invocation: ToolInvocation) -> ToolResult:
         if invocation.call_id == "blocked":
@@ -247,6 +248,7 @@ def test_parallel_failure_cancels_a_blocked_earlier_call() -> None:
             return block()
         while not entered.is_set():
             time.sleep(0)
+        failure_raised.set()
         raise failed
 
     root = Agent(
@@ -270,14 +272,20 @@ def test_parallel_failure_cancels_a_blocked_earlier_call() -> None:
         run = root.start(max_steps=1)
         try:
             assert entered.wait(2)
-            with pytest.raises(RunFailed):
-                run.result(timeout=2)
+            assert failure_raised.wait(2)
             assert not run.wait_for_idle(timeout=0)
         finally:
             release.set()
             assert run.wait_for_idle(timeout=2)
+        run.result(timeout=2)
         snapshot = run.snapshot()
-        assert snapshot.status == "error"
+        assert snapshot.status == "limit"
+        results = snapshot.steps[0].tools
+        assert results["blocked"].result is not None
+        assert results["blocked"].result.content == "late"
+        assert results["fails"].result is not None
+        assert results["fails"].result.is_error
+        assert "Tool implementation defect" in results["fails"].result.content
         assert all(
             step.generation_status != "running"
             and all(tool.status != "running" for tool in step.tools.values())

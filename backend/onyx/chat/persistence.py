@@ -66,6 +66,14 @@ class ChatResponsePersistence(RunStore):
     def save_failure(self, error: BaseException) -> None:
         self._save(None, error)
 
+    def report_worker_failure(self, error: Exception) -> None:
+        """Resolve a failed response without racing a concurrent save."""
+        with self._lock:
+            if self.outcome.done():
+                return
+            self.outcome.set_exception(error)
+            self.delivery.publish(chat_error(error, self.llm, self.model_index))
+
     def report_save_failure(self, run: Run) -> None:
         """Report a rejected save without attempting another database write."""
         if self.outcome.done():

@@ -297,49 +297,62 @@ class ChatTurnExecution:
 
     def _poll_responses(self) -> None:
         for worker, persistence in tuple(self._response_workers.items()):
-            persistence.expire_save()
-            if not worker.done():
-                continue
-            failure = worker.exception()
-            if failure is not None:
-                logger.error("Chat response worker failed", exc_info=failure)
+            run: Run | None = None
+            worker_done = worker.done()
+            try:
+                if worker_done:
+                    failure = worker.exception()
+                    if failure is not None:
+                        if isinstance(failure, Exception):
+                            raise failure
+                        raise RuntimeError("Chat response worker failed") from failure
+                    run = worker.result()
                 if not persistence.outcome.done():
-                    persistence.outcome.set_exception(failure)
-                    self.delivery.publish(
-                        chat_error(
-                            failure
-                            if isinstance(failure, Exception)
-                            else RuntimeError("Chat response worker failed"),
-                            persistence.llm,
-                            persistence.model_index,
-                        )
-                    )
-                del self._response_workers[worker]
-                continue
-            run = worker.result()
-            if run is not None:
-                coordinator = persistence.coordinator
-                if coordinator is None:
-                    raise RuntimeError("Chat response run has no coordinator")
-                completion = coordinator.completion(run.id)
-                if not completion.done():
+                    persistence.expire_save()
+                if not worker_done:
                     continue
-                if (
-                    completion.exception() is not None
-                    and not persistence.outcome.done()
-                ):
-                    persistence.report_save_failure(run)
-                try:
-                    if not run.wait_for_idle(timeout=0):
+                failed = (
+                    persistence.outcome.done()
+                    and persistence.outcome.exception() is not None
+                )
+                if run is not None:
+                    if not failed:
+                        coordinator = persistence.coordinator
+                        if coordinator is None:
+                            raise RuntimeError("Chat response run has no coordinator")
+                        completion = coordinator.completion(run.id)
+                        if not completion.done():
+                            continue
+                        if (
+                            completion.exception() is not None
+                            and not persistence.outcome.done()
+                        ):
+                            persistence.report_save_failure(run)
+                    if not run.status.is_terminal:
                         continue
-                except Exception:
-                    # An exceptional idle future reports failed cleanup after workers drain.
-                    logger.exception("Chat response cleanup failed")
-                    self.delivery.report_gap()
-                if run.delivery_failed:
-                    self.delivery.report_gap()
-            if persistence.outcome.done():
-                del self._response_workers[worker]
+                    try:
+                        if not run.wait_for_idle(timeout=0):
+                            continue
+                    except Exception:
+                        # An exceptional idle future reports failed cleanup after workers drain.
+                        logger.exception("Chat response cleanup failed")
+                        self.delivery.report_gap()
+                    if run.delivery_failed:
+                        self.delivery.report_gap()
+                if not persistence.outcome.done():
+                    raise RuntimeError(
+                        "Chat response worker finished without an outcome"
+                    )
+            except Exception as failure:
+                logger.exception("Chat response completion failed")
+                self.cancellation.cancel()
+                persistence.report_worker_failure(failure)
+                if run is not None:
+                    run.cancel()
+                    continue
+                if not worker_done:
+                    continue
+            del self._response_workers[worker]
 
     def _clear_processing_status(self) -> None:
         try:

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 from pydantic import BaseModel, Field
 
 from onyx.agents.execution_records import CompactionCheckpoint, completed_tool_call_ids
+from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
@@ -27,7 +28,6 @@ from onyx.llm.models import (
 from onyx.prompts.compression_prompts import AGENT_COMPACTION_PROMPT
 from onyx.tracing.flows import LLMFlow
 
-INPUT_SAFETY_RATIO = 0.9
 COMPACTION_TRIGGER_RATIO = 0.85
 RECENT_CONTEXT_RATIO = 0.2
 SUMMARY_OUTPUT_LIMIT = 2048
@@ -91,7 +91,9 @@ def request_tokens(request: GenerationRequest) -> int:
 
 def context_budget(model: LLM) -> ContextBudget:
     # max_input_tokens is already an input ceiling, not the total context window.
-    limit = max(1, int(model.config.max_input_tokens * INPUT_SAFETY_RATIO))
+    limit = max(
+        1, int(model.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN))
+    )
     return ContextBudget(
         input_limit=limit,
         trigger=max(1, int(limit * COMPACTION_TRIGGER_RATIO)),

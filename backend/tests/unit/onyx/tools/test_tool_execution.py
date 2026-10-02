@@ -23,6 +23,7 @@ from onyx.tools.models import (
     MemoryOperation,
     MemoryUpdated,
     ToolCallException,
+    ToolExecutionError,
     ToolExecutionException,
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
@@ -200,3 +201,36 @@ def test_binding_resolves_context_when_execution_and_completion_start(
     assert bound.result_from_children(invocation, []) is output
     assert observed_contexts == [context]
     assert context_reads == 2
+
+
+@pytest.mark.parametrize("display_error", [False, True])
+@pytest.mark.parametrize("complete_children", [False, True])
+def test_tool_execution_error_keeps_explicit_display_choice(
+    display_error: bool, complete_children: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool = MemoryTool(tool_id=1, llm=MagicMock(spec=LLM))
+    error = ToolExecutionException(
+        "Provider rejected request", emit_error_packet=display_error
+    )
+    monkeypatch.setattr(tool, "_run", MagicMock(side_effect=error))
+    tool.result_from_children = MagicMock(side_effect=error)
+    bound = tool.bind(lambda: ToolContext())
+    invocation = ToolInvocation(
+        call_id="failure",
+        arguments={},
+        cancellation=CancellationSignal(),
+        update=lambda _: None,
+    )
+    if complete_children:
+        assert bound.result_from_children is not None
+        result = bound.result_from_children(invocation, [])
+    else:
+        result = bound.execute(invocation)
+    assert isinstance(result, ToolResult)
+    assert result.is_error
+    assert result.content == "Tool failed with error: Provider rejected request"
+    if display_error:
+        assert isinstance(result.details, ToolExecutionError)
+        assert result.details.message == "Provider rejected request"
+    else:
+        assert result.details is None

@@ -42,6 +42,7 @@ from onyx.tools.models import (
     LlmPythonExecutionResult,
     MemoryUpdated,
     PythonExecutionDelta,
+    ToolExecutionError,
     ToolExecutionException,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
@@ -598,23 +599,13 @@ class ToolRenderer:
             output = (
                 self.update(result.details, result.text) if result is not None else []
             )
-        if (
-            self.call.name == ImageGenerationTool.NAME
-            and result is not None
-            and result.is_error
-        ):
+        if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
                 packets.Packet(
                     placement=self.placement,
                     obj=packets.PacketException(
-                        exception=ToolExecutionException(result.text)
+                        exception=ToolExecutionException(result.details.message)
                     ),
-                )
-            )
-        if self.call.name == MemoryTool.NAME and result is not None and result.is_error:
-            output.append(
-                packets.Packet(
-                    placement=self.placement, obj=packets.MemoryToolNoAccess()
                 )
             )
         output.append(

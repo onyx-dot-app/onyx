@@ -7,6 +7,7 @@ import weakref
 from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from contextvars import ContextVar
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -17,10 +18,11 @@ from onyx.agents.agent_coordination import (
 )
 from onyx.agents.events import AgentEvent, MessageEndEvent
 from onyx.agents.execution_records import RunFailureKind, RunStatus
-from onyx.agents.models import AgentInfo, PreparedStep, RunState, StepInput
+from onyx.agents.models import AgentInfo, PreparedStep, RunState, StepInput, StepResult
 from onyx.agents.runtime import Agent, Run, RunFailed, RunNotTransferable, RunReleased
 from onyx.agents.tools import (
     AgentControl,
+    AgentLifetime,
     AgentTool,
     ChildRunWait,
     HumanToolAnswer,
@@ -930,10 +932,15 @@ def test_coordinator_shutdown_cancels_background_child_after_parent_failure() ->
             )
         )
         assert entered.wait(2)
+        return ToolResult(content="Background child started")
+
+    def fail_parent(_result: StepResult) -> bool:
         raise ValueError("parent failed")
 
     coordinator = AgentCoordinator()
-    run = parent_agent(delegate).start(max_steps=2, coordinator=coordinator)
+    parent = parent_agent(delegate)
+    parent.after_step = fail_parent
+    run = parent.start(max_steps=2, coordinator=coordinator)
     with pytest.raises(RunFailed):
         run.result(3)
     assert run.wait_for_idle(3)
@@ -2048,3 +2055,78 @@ def test_same_scope_view_observes_completion_of_a_running_child() -> None:
     finally:
         finish.set()
         assert owner.close(3)
+
+
+@pytest.mark.parametrize("expired", [False, True])
+def test_child_deadline_survives_checkpoint_and_ownership_transfer(
+    expired: bool,
+) -> None:
+    coordinator = AgentCoordinator()
+    child = suspended_agent()
+    child_runs: list[Run] = []
+
+    def spawn(invocation: ToolInvocation) -> ToolResult:
+        submitted = invocation.agents.spawn_agent(
+            child,
+            name="question",
+            description="Wait for a response",
+            messages=[UserMessage(content="Ask a question")],
+            max_steps=2,
+            total_timeout_s=60,
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        run = coordinator.child_run(submitted.run_id, parent.id)
+        assert run is not None
+        child_runs.append(run)
+        return ToolResult(content="started")
+
+    parent = parent_agent(spawn)
+    run_agent(parent, max_steps=2, coordinator=coordinator)
+    run = child_runs[0]
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    assert run.wait_for_idle(3)
+    captured = run.handoff()
+    storage = CheckpointStorage({})
+    restored = storage.load(
+        storage.save(
+            captured.run_state,
+            captured.agent_state,
+            CheckpointBinding(
+                tenant_id="tenant", branch_id="branch", context_version="v1"
+            ),
+        )
+    )
+    assert restored.run_state.progress is not None
+    deadline = restored.run_state.progress.deadline_at
+    assert deadline is not None
+    assert captured.run_state.progress is not None
+    assert deadline == captured.run_state.progress.deadline_at
+    calls: list[str] = []
+
+    def generate(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        calls.append("model")
+        return AssistantMessage(content=[TextContent(text="unexpected")])
+
+    replacement = Agent(
+        FakeModelClient(generate),
+        tools=child.tools,
+        agent_id=child.id,
+        state=restored.agent_state,
+    )
+    with patch("onyx.agents.runtime.datetime") as clock:
+        clock.now.return_value = (
+            deadline + timedelta(seconds=1)
+            if expired
+            else deadline - timedelta(seconds=0.05)
+        )
+        resumed = replacement.resume(restored.run_state)
+        with pytest.raises(AgentCancelled):
+            resumed.result(timeout=3)
+    assert resumed.wait_for_idle(3)
+    assert resumed.snapshot().status == RunStatus.CANCELLED
+    assert not calls
+    with pytest.raises(RunReleased):
+        run.result(timeout=0)
+    assert coordinator.close(timeout=3)

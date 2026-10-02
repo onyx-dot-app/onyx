@@ -29,6 +29,7 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolDelta,
+    MemoryToolNoAccess,
     OverallStop,
     PacketException,
     SearchToolDocumentsDelta,
@@ -38,6 +39,7 @@ from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     LlmPythonExecutionResult,
+    ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -331,20 +333,46 @@ def test_empty_search_selection_survives_projection_and_reload(
         )
 
 
-@pytest.mark.parametrize("is_error", [False, True])
-def test_image_failure_renders_error_at_tool_placement(is_error: bool) -> None:
+@pytest.mark.parametrize("display_error", [False, True])
+def test_image_failure_renders_error_at_tool_placement(display_error: bool) -> None:
     placement = Placement(turn_index=2, tab_index=1, model_index=1)
     call = ModelToolCall(id="image", name=ImageGenerationTool.NAME, arguments={})
     result = ToolResultMessage(
         tool_call_id=call.id,
         tool_name=call.name,
-        content="The image request was rejected by the content policy.",
-        is_error=is_error,
+        content="Tool failed with error: The image request was rejected by the content policy.",
+        is_error=True,
+        details=ToolExecutionError(
+            message="The image request was rejected by the content policy."
+        )
+        if display_error
+        else None,
     )
     packets = ToolRenderer(call, placement).complete(result)
     errors = [packet for packet in packets if isinstance(packet.obj, PacketException)]
-    assert len(errors) == int(is_error)
+    assert len(errors) == int(display_error)
     assert all(packet.placement == placement for packet in packets)
     assert packets[-1].obj.type == "section_end"
     if errors:
+        assert isinstance(errors[0].obj, PacketException)
         assert errors[0].model_dump()["obj"] == {"type": "error"}
+        assert (
+            str(errors[0].obj.exception)
+            == "The image request was rejected by the content policy."
+        )
+
+
+def test_memory_failure_does_not_claim_access_was_denied() -> None:
+    call = ModelToolCall(id="memory", name="add_memory", arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="Tool failed with error: memory provider unavailable",
+        is_error=True,
+    )
+    packets = ToolRenderer(call, Placement(turn_index=0)).complete(result)
+    assert not any(
+        isinstance(packet.obj, (MemoryToolNoAccess, PacketException))
+        for packet in packets
+    )
+    assert packets[-1].obj.type == "section_end"

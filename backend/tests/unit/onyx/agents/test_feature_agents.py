@@ -928,8 +928,10 @@ def test_empty_final_response_fails_at_step_limit(feature_name: str) -> None:
     assert runs[-1].snapshot().status == "error"
 
 
-def test_citation_conversion_failure_preserves_child_without_parent_result(
+@pytest.mark.parametrize("missing_metadata", [False, True])
+def test_research_result_failure_returns_tool_error_and_preserves_child(
     monkeypatch: pytest.MonkeyPatch,
+    missing_metadata: bool,
 ) -> None:
     def fail_conversion(
         answer_text: str,
@@ -939,7 +941,20 @@ def test_citation_conversion_failure_preserves_child_without_parent_result(
         del answer_text, existing_citation_mapping, new_citation_mapping
         raise ValueError("Invalid citation mapping")
 
-    monkeypatch.setattr("onyx.deep_research.agent.collapse_citations", fail_conversion)
+    if missing_metadata:
+        original_prepare = ResearchAgent._prepare_step
+
+        def prepare_without_metadata(
+            agent: ResearchAgent, state: StepInput
+        ) -> PreparedStep:
+            prepared = original_prepare(agent, state)
+            return prepared.model_copy(update={"output_metadata": None})
+
+        monkeypatch.setattr(ResearchAgent, "_prepare_step", prepare_without_metadata)
+    else:
+        monkeypatch.setattr(
+            "onyx.deep_research.agent.collapse_citations", fail_conversion
+        )
 
     def reply(
         request: GenerationRequest, _signal: CancellationSignal
@@ -968,22 +983,32 @@ def test_citation_conversion_failure_preserves_child_without_parent_result(
         skip_clarification=True,
     )
     runs: list[Run] = []
-    with pytest.raises(RunFailed):
-        run_agent(
-            feature,
-            messages=[UserMessage(content="Parent task")],
-            max_steps=3,
-            runs=runs,
-            coordinator=AgentCoordinator(),
-        )
+    result = run_agent(
+        feature,
+        messages=[UserMessage(content="Parent task")],
+        max_steps=3,
+        runs=runs,
+        coordinator=AgentCoordinator(),
+    )
+    assert result.output.text == "Completed report"
     snapshot = runs[-1].snapshot()
-    assert snapshot.status == "error"
+    assert snapshot.status == "complete"
     assert len(snapshot.child_runs) == 1
     assert snapshot.child_runs[0].status == "complete"
     assert snapshot.child_runs[0].messages[-1].text == "Completed report"
-    assert not any(
-        isinstance(message, ToolResultMessage) for message in snapshot.messages
+    errors = [
+        message
+        for message in snapshot.messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert len(errors) == 1
+    assert errors[0].is_error
+    expected_error = (
+        "Research child requires a report with source metadata"
+        if missing_metadata
+        else "Invalid citation mapping"
     )
+    assert expected_error in errors[0].content
 
 
 def test_coding_cancellation_keeps_sandbox_until_child_work_finishes(

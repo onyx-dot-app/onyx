@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import datetime
 from enum import Enum
 from typing import Literal
 
@@ -166,6 +167,8 @@ class RunProgress(BaseModel):
 
     step_index: int = 0
     step_limit: int = Field(gt=0)
+    # Absolute UTC deadline includes time spent suspended or between execution owners.
+    deadline_at: datetime | None = None
     action: RunAction = RunAction.PREPARE
     options: GenerationOptions | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)

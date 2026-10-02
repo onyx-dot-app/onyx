@@ -89,8 +89,18 @@ class ToolCallException(Exception):
         self.llm_facing_message = llm_facing_message
 
 
+class ToolExecutionError(BaseModel):
+    """A tool failure that must also be shown to the user."""
+
+    message: str
+
+
 class ToolExecutionException(Exception):
     """Tool execution failed."""
+
+    def __init__(self, message: str, emit_error_packet: bool = False) -> None:
+        super().__init__(message)
+        self.emit_error_packet = emit_error_packet
 
 
 class SearchToolUsage(str, Enum):

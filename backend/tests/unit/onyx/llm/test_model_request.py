@@ -175,6 +175,32 @@ def test_invoke_deadline_is_independent_of_stream_idle_timeout(
     assert context.total_timeout_s == total_timeout_s
 
 
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_completed_invoke_keeps_response_after_deadline_unless_cancelled(
+    cancelled: bool,
+) -> None:
+    provider = RecordingProvider()
+    signal = CancellationSignal()
+    invoke_raw = provider.invoke_raw
+    with patch("onyx.llm.multi_llm.time.monotonic", return_value=0) as clock:
+
+        def complete_response(*args: Any, **kwargs: Any) -> ModelResponse:
+            response = invoke_raw(*args, **kwargs)
+            clock.return_value = 2
+            if cancelled:
+                signal.cancel()
+            return response
+
+        with patch.object(provider, "invoke_raw", side_effect=complete_response):
+            request = GenerationRequest()
+            context = GenerationContext(cancellation=signal, total_timeout_s=1)
+            if cancelled:
+                with pytest.raises(AgentCancelled):
+                    provider.invoke(request, context)
+            else:
+                assert provider.invoke(request, context).text == "answer"
+
+
 @pytest.mark.parametrize("stall_timeout_s", [None, 7])
 @pytest.mark.parametrize("total_timeout_s", [None, 18.5])
 def test_stream_idle_timeout_does_not_create_a_total_deadline(
