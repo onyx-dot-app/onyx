@@ -288,11 +288,11 @@ repos:
             (cli|tools/ods|tools/ods-audit)/pyproject\.toml
             |tools/requirements/build-constraints\.in
           )$
-      - id: migration-inserts
-        name: migrations do not insert rows
-        description: "Fail a new tenant-chain revision that seeds rows"
+      - id: migration-determinism
+        name: migration rows are deterministic
+        description: "Fail a new tenant-chain revision that seeds rows with run-dependent values"
         language: system
-        entry: python3 backend/scripts/check_migration_inserts.py
+        entry: python3 backend/scripts/check_migration_determinism.py
         pass_filenames: true
         stages: [pre-commit]
         files: ^backend/alembic/versions/.*\.py$

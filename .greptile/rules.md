@@ -24,9 +24,9 @@ When hardcoding a boolean variable to a constant value, remove the variable enti
 
 Code changes must consider both multi-tenant and single-tenant deployments. In multi-tenant mode, preserve tenant isolation, ensure tenant context is propagated correctly, and avoid assumptions that only hold for a single shared schema or globally shared state. In single-tenant mode, avoid introducing unnecessary tenant-specific requirements or cloud-only control-plane dependencies.
 
-## Migrations Do Not Insert Rows
+## Migration Rows Are Deterministic
 
-A new revision under `backend/alembic/versions` must not insert rows anywhere but its `downgrade`: no `INSERT INTO`, `op.bulk_insert`, `insert(...)` in any form, or `session.add`. A seed row written by a revision reaches new tenants through the template snapshot but never reaches existing tenants or the single-tenant setup path. Migrations change schema and fix rows that already exist. New seed rows belong in application setup code such as `setup_onyx`. The only exception is a backfill that moves rows which already exist, marked on its line with `# migration-inserts: allow`. Flag any other new insert and ask for it to move to application code.
+A new revision under `backend/alembic/versions` may insert rows, and those rows must be identical on every schema: fixed ids and literal values, no `uuid4()`, `now()`, `gen_random_uuid()`, randomness or env reads, in Python or in the SQL text, anywhere but `downgrade`. The template schema is migrated once, snapshotted and cloned into every new tenant, and the deploy gate compares it with a fresh build of the chain, so a run-dependent value makes template and tenants diverge. Schema defaults such as `server_default=now()` and updates to existing rows are fine. A deliberate exception carries `# migration-determinism: allow` on its statement. Flag any run-dependent value in an insert and ask for a fixed one.
 
 ## Routing for New Non-/api Backend Routes
 

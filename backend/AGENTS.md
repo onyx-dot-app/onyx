@@ -94,11 +94,12 @@ uv run alembic -n schema_private revision -m "description"
 
 Write the migration manually and place it in the file that alembic creates when running the above command.
 
-Revisions in `alembic/versions` never insert rows outside `downgrade`. A seed row written there reaches
-new tenants through the template snapshot but never existing tenants, so new seed rows go in
-application setup code such as `setup_onyx`. A backfill of rows that already exist carries
-`# migration-inserts: allow` on its line. `scripts/check_migration_inserts.py` enforces this on
-commit for revisions newer than the rule.
+Rows a revision in `alembic/versions` inserts must be identical on every schema: fixed ids and
+literal values, no `uuid4()`, `now()`, randomness or env reads. The template snapshot is cloned
+into new tenants and compared with a fresh build on deploy, so a run-dependent value breaks the
+comparison. Schema defaults and updates to existing rows are fine.
+`scripts/check_migration_determinism.py` enforces this on commit for revisions newer than the
+rule, and `# migration-determinism: allow` marks a deliberate exception.
 
 ## Testing Strategy
 
