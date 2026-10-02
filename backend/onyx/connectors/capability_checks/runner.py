@@ -114,6 +114,7 @@ def _build_result(
         docs_link=check.docs_link,
         duration_ms=outcome.duration_ms,
         applicable=outcome.applicable,
+        validates_binding=check.validates_binding,
     )
 
 

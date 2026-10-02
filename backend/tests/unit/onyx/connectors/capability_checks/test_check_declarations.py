@@ -197,3 +197,27 @@ def test_checks_declare_fields_of_their_source_config(source: DocumentSource) ->
             assert check.requires_fields <= set(source_config_class.model_fields), (
                 check.check_id
             )
+
+
+@pytest.mark.parametrize("source", sorted(CONNECTOR_CLASS_MAP, key=str))
+def test_binding_checks_require_only_bound_fields(source: DocumentSource) -> None:
+    # The create form runs these checks before the rest of the config is
+    # filled, so they can wait only for the credential-bound fields.
+    binding_class = CONNECTOR_CLASS_MAP[source].config_class.credential_binding_class()
+    for check in _registered_checks(source):
+        if not check.validates_binding:
+            continue
+        assert binding_class is not None, check.check_id
+        assert check.requires_fields <= set(binding_class.model_fields), check.check_id
+
+
+def test_confluence_declares_its_binding_checks() -> None:
+    assert {
+        check.check_id
+        for check in _registered_checks(DocumentSource.CONFLUENCE)
+        if check.validates_binding
+    } == {
+        "confluence_auth",
+        "confluence_scoped_token_auth",
+        "confluence_spaces_visible",
+    }

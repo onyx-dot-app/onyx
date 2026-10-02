@@ -250,6 +250,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
         remediation: str,
         required: bool = True,
         capability: CredentialCapability = CredentialCapability.INDEXING,
+        validates_binding: bool = False,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -260,6 +261,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
             requires_fields=_SITE_FIELDS,
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            validates_binding=validates_binding,
         )
 
 
@@ -276,6 +278,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
         if scoped:
             super().__init__(
                 check_id="confluence_scoped_token_auth",
+                validates_binding=True,
                 display_name="Scoped API token signs in to the site",
                 remediation=(
                     "Scoped API tokens work only with Confluence Cloud. Check the "
@@ -285,6 +288,7 @@ class _SiteAuthCheck(_ConfluenceCheck):
         else:
             super().__init__(
                 check_id="confluence_auth",
+                validates_binding=True,
                 display_name="Credential signs in to the site",
                 remediation=(
                     "Check the site URL and the Cloud setting. For an API token, "
@@ -348,6 +352,7 @@ class _SpacesVisibleCheck(_ConfluenceCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="confluence_spaces_visible",
+            validates_binding=True,
             display_name="Spaces are visible",
             remediation=(
                 "Give the token's user view permission on the spaces to index. "

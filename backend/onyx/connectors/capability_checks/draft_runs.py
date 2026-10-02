@@ -119,6 +119,8 @@ class DraftCheckState(BaseModel):
     docs_link: str | None = None
     duration_ms: int | None = None
     from_cache: bool = False
+    # The check proves the credential works with the credential-bound fields.
+    validates_binding: bool = False
 
 
 class DraftCheckRunSnapshot(BaseModel):
@@ -170,6 +172,7 @@ def decide_draft_check_state(
         state=DraftCheckStateKind.PENDING,
         remediation=check.remediation,
         docs_link=check.docs_link,
+        validates_binding=check.validates_binding,
     )
     match readiness.kind:
         case CheckReadinessKind.RUNNABLE:
@@ -281,6 +284,7 @@ def cached_check_result(
         remediation=check.remediation,
         docs_link=check.docs_link,
         duration_ms=cached.duration_ms,
+        validates_binding=check.validates_binding,
     )
 
 

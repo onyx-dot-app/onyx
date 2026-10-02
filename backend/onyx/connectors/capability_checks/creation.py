@@ -213,6 +213,7 @@ def _unfinished_results(
             is_fallback=check.is_fallback,
             remediation=check.remediation,
             docs_link=check.docs_link,
+            validates_binding=check.validates_binding,
         )
         for check in checks
         if check.check_id in unfinished
