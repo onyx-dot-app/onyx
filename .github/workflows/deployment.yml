@@ -1781,13 +1781,15 @@ jobs:
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
+  # The sandbox builds do not wait on the audit gate, so its public tag does.
   merge-sandbox:
     needs:
       - determine-builds
+      - audit-gate
       - prepare-sandbox
       - build-sandbox-amd64
       - build-sandbox-arm64
-    if: always() && needs.prepare-sandbox.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
+    if: always() && needs.audit-gate.result == 'success' && needs.prepare-sandbox.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
