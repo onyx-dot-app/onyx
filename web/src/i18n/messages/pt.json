@@ -3218,15 +3218,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Use o e-mail da conta dona do token de API."
+        },
+        "apiTokenField": {
+          "subDescription": "Cole seu token de API para acessar {source}."
+        },
         "createButton": {
           "label": "Criar"
         },
         "created": {
           "toast": "Nova credencial criada!"
         },
-        "name": {
-          "label": "Nome:",
-          "placeholder": "(Opcional) nome da credencial..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Administradores",
+            "description": "Todos os administradores podem reutilizar esta conta para criar conectores.",
+            "suffix": "(Padrão)"
+          },
+          "adminsAndGroups": {
+            "description": "Administradores e os grupos que você indicar podem reutilizar esta conta.",
+            "label": "Administradores e grupos"
+          },
+          "onlyMe": {
+            "label": "Somente eu"
+          },
+          "description": "Permita que grupos reutilizem esta conta para criar conectores.",
+          "title": "Compartilhar esta conta"
         },
         "submitError": {
           "toast": "Erro ao enviar a credencial"
@@ -3261,6 +3282,82 @@
           "toast": "Erro ao atualizar a credencial"
         }
       },
+      "displayNames": {
+        "accessKeyId": "ID da chave de acesso de {source}",
+        "secretAccessKey": "Chave de acesso secreta de {source}",
+        "accountId": "ID da conta do {source}",
+        "apiToken": "Token de API",
+        "clientId": "ID do cliente do {source}",
+        "clientSecret": "Segredo do cliente do {source}",
+        "clientToken": "Token do cliente do {source}",
+        "directoryId": "ID do diretório do {source}",
+        "certificatePassword": "Senha do certificado do {source}",
+        "privateKey": "Chave privada do {source}",
+        "certificate": "Certificado do {source}",
+        "baseUrl": "URL base do {source}",
+        "apiBaseUrl": "URL base da API do {source}",
+        "url": "URL do {source}",
+        "enterpriseServerUrl": "URL do {source} Enterprise Server",
+        "botToken": "Token do bot do {source}",
+        "username": "Nome de usuário do {source}",
+        "apiUsername": "Nome de usuário da API do {source}",
+        "userEmail": "E-mail do usuário do {source}",
+        "accountEmail": "E-mail da conta do {source}",
+        "password": "Senha do {source}",
+        "subdomain": "Subdomínio do {source}",
+        "domain": "Domínio do {source}",
+        "enterpriseId": "ID da empresa do {source}",
+        "teamId": "ID da equipe do {source}",
+        "applicationId": "ID do aplicativo do {source}",
+        "apiTokenId": "ID do token de API do {source}",
+        "apiTokenSecret": "Segredo do token de API do {source}",
+        "securityToken": "Token de segurança do {source}",
+        "integrationToken": "Token de integração do {source}",
+        "accessKey": "Chave de acesso do {source}",
+        "accessKeySecret": "Segredo da chave de acesso do {source}",
+        "key": "Chave do {source}",
+        "secret": "Segredo do {source}",
+        "roleArn": "ARN da função da {source}",
+        "namespace": "Namespace do {source}",
+        "region": "Região do {source}",
+        "portalId": "ID do portal do {source}",
+        "oauthTokens": "Tokens OAuth do {source}",
+        "isSandbox": "Ambiente de sandbox",
+        "serviceUserEmail": "E-mail do usuário de serviço",
+        "zuliprcContent": "Conteúdo do Zuliprc",
+        "authenticationMethod": "Método de autenticação",
+        "scopedToken": "Este é um token de API com escopos"
+      },
+      "hints": {
+        "boxUserEmail": "Opcional. O usuário do Box a ser representado.",
+        "githubBaseUrl": "Opcional. Defina o host do seu servidor, como https://github.example.com. Deixe em branco para github.com.",
+        "gongBaseUrl": "Opcional. Para dados fora dos EUA, defina o host da sua região, como https://[region].api.gong.io.",
+        "jiraUserEmail": "Obrigatório para o Jira Cloud.",
+        "lumappsServiceUser": "O usuário em nome do qual indexar.",
+        "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
+        "pfxFile": "Um arquivo PFX.",
+        "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
+        "scopedToken": "Tokens com escopos precisam passar pelo gateway de API da Atlassian. Deixe desativado para tokens clássicos."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Segredo do cliente",
+          "certificateAuthentication": "Autenticação por certificado",
+          "certificate": "Certificado",
+          "accessKeyAndSecret": "Chave de acesso e segredo",
+          "iamRole": "Função do IAM",
+          "assumeRole": "Assumir função"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "Neste modo, o conector do SharePoint usa um segredo do cliente para se autenticar. Você precisa informar o ID do cliente e o segredo do cliente.",
+          "sharepointCertificate": "Neste modo, o conector do SharePoint usa um certificado para se autenticar. Você precisa informar o ID do cliente, o ID do diretório, a senha do certificado e os dados PFX.",
+          "teamsClientSecret": "O conector entra com um segredo do cliente do registro do aplicativo. Informe o ID do cliente, o ID do diretório e o segredo. Somente mensagens e membros de canais: o SharePoint recusa um segredo, então Incluir anexos precisa da opção de certificado.",
+          "teamsCertificate": "O conector entra com um certificado enviado ao registro do aplicativo. Informe o ID do cliente, o ID do diretório, o pacote PFX e a senha dele. Obrigatório para Incluir anexos, que lê os arquivos dos canais e seus leitores no SharePoint.",
+          "outlookClientSecret": "O conector entra com um segredo do cliente do registro do aplicativo. Informe o ID do cliente, o ID do diretório e o segredo.",
+          "outlookCertificate": "O conector entra com um certificado enviado ao registro do aplicativo. Informe o ID do cliente, o ID do diretório, o pacote PFX e a senha dele.",
+          "s3AssumeRole": "Neste modo, a instância do Amazon EC2 assume a função que já tem para acessar o S3. Nenhuma outra credencial é necessária."
+        }
+      },
       "modal": {
         "createTitle": "Criar credencial de {source}",
         "editTitle": "Editar credencial",
@@ -3289,6 +3386,10 @@
         },
         "retryButton": {
           "label": "Tentar novamente"
+        },
+        "signIn": {
+          "description": "{appName} requer escopos somente leitura.",
+          "title": "Entrar com {source}"
         },
         "startError": {
           "message": "Não foi possível iniciar o OAuth"
@@ -3341,6 +3442,13 @@
         "success": {
           "toast": "Credencial atualizada"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Selecione um método de autenticação",
+        "empty": "O campo {field} não pode ficar vazio",
+        "fileRequired": "Selecione um arquivo para {field}",
+        "invalidEmail": "Informe um e-mail válido em {field}",
+        "required": "Preencha o campo {field}"
       }
     },
     "customAnalytics": {

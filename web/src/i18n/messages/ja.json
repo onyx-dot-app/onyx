@@ -3218,15 +3218,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "API トークンを所有するアカウントのメールアドレスを使用してください。"
+        },
+        "apiTokenField": {
+          "subDescription": "{source} にアクセスするための API トークンを貼り付けてください。"
+        },
         "createButton": {
           "label": "作成"
         },
         "created": {
           "toast": "新しい認証情報を作成しました!"
         },
-        "name": {
-          "label": "名前:",
-          "placeholder": "(任意) 認証情報の名前..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "管理者",
+            "description": "すべての管理者がこのアカウントを再利用してコネクタを作成できます。",
+            "suffix": "（デフォルト）"
+          },
+          "adminsAndGroups": {
+            "description": "管理者と、あなたが指定したグループがこのアカウントを再利用できます。",
+            "label": "管理者とグループ"
+          },
+          "onlyMe": {
+            "label": "自分のみ"
+          },
+          "description": "グループがこのアカウントを再利用してコネクターを作成できるようにします。",
+          "title": "このアカウントを共有"
         },
         "submitError": {
           "toast": "認証情報の送信中にエラーが発生しました"
@@ -3261,6 +3282,82 @@
           "toast": "認証情報の更新中にエラーが発生しました"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} アクセスキー ID",
+        "secretAccessKey": "{source} シークレットアクセスキー",
+        "accountId": "{source} アカウント ID",
+        "apiToken": "API トークン",
+        "clientId": "{source} クライアント ID",
+        "clientSecret": "{source} クライアントシークレット",
+        "clientToken": "{source} クライアントトークン",
+        "directoryId": "{source} ディレクトリ ID",
+        "certificatePassword": "{source} 証明書のパスワード",
+        "privateKey": "{source} 秘密鍵",
+        "certificate": "{source} 証明書",
+        "baseUrl": "{source} ベース URL",
+        "apiBaseUrl": "{source} API ベース URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} ボットトークン",
+        "username": "{source} ユーザー名",
+        "apiUsername": "{source} API ユーザー名",
+        "userEmail": "{source} ユーザーのメールアドレス",
+        "accountEmail": "{source} アカウントのメールアドレス",
+        "password": "{source} パスワード",
+        "subdomain": "{source} サブドメイン",
+        "domain": "{source} ドメイン",
+        "enterpriseId": "{source} エンタープライズ ID",
+        "teamId": "{source} チーム ID",
+        "applicationId": "{source} アプリケーション ID",
+        "apiTokenId": "{source} API トークン ID",
+        "apiTokenSecret": "{source} API トークンシークレット",
+        "securityToken": "{source} セキュリティトークン",
+        "integrationToken": "{source} インテグレーショントークン",
+        "accessKey": "{source} アクセスキー",
+        "accessKeySecret": "{source} アクセスキーシークレット",
+        "key": "{source} キー",
+        "secret": "{source} シークレット",
+        "roleArn": "{source} ロール ARN",
+        "namespace": "{source} ネームスペース",
+        "region": "{source} リージョン",
+        "portalId": "{source} ポータル ID",
+        "oauthTokens": "{source} OAuth トークン",
+        "isSandbox": "サンドボックス環境かどうか",
+        "serviceUserEmail": "サービスユーザーのメールアドレス",
+        "zuliprcContent": "Zuliprc の内容",
+        "authenticationMethod": "認証方法",
+        "scopedToken": "スコープ付きの API トークンです"
+      },
+      "hints": {
+        "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
+        "githubBaseUrl": "任意。https://github.example.com のようにサーバーのホストを指定します。github.com を使う場合は空欄のままにします。",
+        "gongBaseUrl": "任意。米国外のデータを使う場合は、https://[region].api.gong.io のようにリージョンのホストを指定します。",
+        "jiraUserEmail": "Jira Cloud では必須です。",
+        "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
+        "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
+        "pfxFile": "PFX ファイルです。",
+        "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
+        "scopedToken": "スコープ付きトークンは Atlassian の API ゲートウェイを経由する必要があります。クラシックトークンの場合はオフのままにしてください。"
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "クライアントシークレット",
+          "certificateAuthentication": "証明書認証",
+          "certificate": "証明書",
+          "accessKeyAndSecret": "アクセスキーとシークレット",
+          "iamRole": "IAM ロール",
+          "assumeRole": "ロールの引き受け"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "このモードでは、SharePoint コネクタはクライアントシークレットで認証します。クライアント ID とクライアントシークレットを入力してください。",
+          "sharepointCertificate": "このモードでは、SharePoint コネクタは証明書で認証します。クライアント ID、ディレクトリ ID、証明書のパスワード、PFX データを入力してください。",
+          "teamsClientSecret": "コネクタはアプリ登録のクライアントシークレットでサインインします。クライアント ID、ディレクトリ ID、シークレットを入力してください。チャネルのメッセージとメンバーのみ対象です。SharePoint はシークレットを受け付けないため、「添付ファイルを含める」には証明書オプションが必要です。",
+          "teamsCertificate": "コネクタはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。「添付ファイルを含める」に必要です。この機能は SharePoint からチャネルのファイルとその閲覧者を読み取ります。",
+          "outlookClientSecret": "コネクタはアプリ登録のクライアントシークレットでサインインします。クライアント ID、ディレクトリ ID、シークレットを入力してください。",
+          "outlookCertificate": "コネクタはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。",
+          "s3AssumeRole": "このモードでは、Amazon EC2 インスタンスが既存のロールを引き受けて S3 にアクセスします。追加の認証情報は不要です。"
+        }
+      },
       "modal": {
         "createTitle": "{source} の認証情報を作成",
         "editTitle": "認証情報を編集",
@@ -3289,6 +3386,10 @@
         },
         "retryButton": {
           "label": "再試行"
+        },
+        "signIn": {
+          "description": "{appName} には読み取り専用のスコープが必要です。",
+          "title": "{source} でサインイン"
         },
         "startError": {
           "message": "OAuth を開始できません"
@@ -3341,6 +3442,13 @@
         "success": {
           "toast": "認証情報を更新しました"
         }
+      },
+      "validation": {
+        "authMethodRequired": "認証方式を選択してください",
+        "empty": "{field}は空にできません",
+        "fileRequired": "{field}のファイルを選択してください",
+        "invalidEmail": "{field}に有効なメールアドレスを入力してください",
+        "required": "{field}を入力してください"
       }
     },
     "customAnalytics": {

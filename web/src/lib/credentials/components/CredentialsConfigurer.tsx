@@ -9,6 +9,7 @@ import type { Credential } from "@/lib/credentials/types";
 import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
+import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 import { shouldRedirectToOAuth } from "@/lib/credentials/utils";
@@ -84,11 +85,7 @@ export function CredentialsConfigurer({
   function renderCredentialForm(method: CredentialCreationMethod) {
     if (method === CredentialCreationMethod.OAuth && oauthDetails) {
       return shouldRedirectToOAuth(oauthDetails) ? (
-        <Section alignItems="start">
-          <Button onClick={attemptOauthRedirect}>
-            {t("add.authorizeButton.label", { source: displayName })}
-          </Button>
-        </Section>
+        <OAuthSignInRow source={displayName} onConnect={attemptOauthRedirect} />
       ) : (
         <CreateStdOAuthCredential
           sourceType={connector}
@@ -237,6 +234,7 @@ export function CredentialsConfigurer({
               <div className="p-4" data-testid="credential-form">
                 {namesMethods ? (
                   <Tabs
+                    gap={4}
                     value={openMethod ?? defaultMethod}
                     onValueChange={(value) => {
                       // Matched against the real methods rather than cast:

@@ -1,4 +1,4 @@
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 import type { Credential } from "@/lib/credentials/types";
 import type { CredentialFieldValues } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/credentials/utils";
 import {
   CredentialCreationMethod,
+  type CredentialValidationMessages,
   type OAuthDetails,
 } from "@/lib/credentials/types";
 
@@ -118,9 +119,19 @@ describe("credential edit helpers", () => {
   });
 });
 
+const MESSAGES: CredentialValidationMessages = {
+  fieldTitle: (key) => key,
+  required: (field) => `required: ${field}`,
+  empty: (field) => `empty: ${field}`,
+  invalidEmail: (field) => `invalid email: ${field}`,
+  fileRequired: (field) => `file required: ${field}`,
+  authMethodRequired: "auth method required",
+};
+
 describe("createValidationSchema", () => {
   const schema = createValidationSchema(
-    CREDENTIAL_TEMPLATES[ValidSources.Outlook]
+    CREDENTIAL_SPECS[ValidSources.Outlook],
+    MESSAGES
   );
   const ids = {
     outlook_client_id: "client-id",
@@ -163,7 +174,8 @@ describe("createValidationSchema", () => {
 
   it("requires the SharePoint app ids under both of its methods", () => {
     const sharepointSchema = createValidationSchema(
-      CREDENTIAL_TEMPLATES[ValidSources.Sharepoint]
+      CREDENTIAL_SPECS[ValidSources.Sharepoint],
+      MESSAGES
     );
     const sharepointIds = {
       sp_client_id: "client-id",

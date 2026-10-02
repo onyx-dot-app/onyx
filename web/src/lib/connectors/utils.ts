@@ -171,32 +171,6 @@ export function createTypedFile(
   return new TypedFile(file, typeDefinition, fieldKey);
 }
 
-export function isTypedFileField(fieldKey: string): boolean {
-  // Define which fields should be typed files
-  const typedFileFields = new Set([
-    "sp_private_key",
-    "onedrive_private_key",
-    "outlook_private_key",
-    "teams_private_key",
-  ]);
-  return typedFileFields.has(fieldKey);
-}
-
-// Get the appropriate file type definition for a field
-export function getFileTypeDefinitionForField(
-  fieldKey: string
-): FileTypeCategory | null {
-  const fieldToTypeMap: Record<string, FileTypeCategory> = {
-    sp_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-    onedrive_private_key: FileTypeCategory.ONEDRIVE_PFX_FILE,
-    // The same PFX bundle rules apply to every Microsoft app registration.
-    outlook_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-    teams_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-  };
-
-  return fieldToTypeMap[fieldKey] || null;
-}
-
 // ---------------------------------------------------------------------------
 // Connector-credential pairs
 // ---------------------------------------------------------------------------

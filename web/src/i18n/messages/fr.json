@@ -3218,15 +3218,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Utilisez l'adresse e-mail du compte propriétaire du jeton d'API."
+        },
+        "apiTokenField": {
+          "subDescription": "Collez votre jeton d'API pour accéder à {source}."
+        },
         "createButton": {
           "label": "Créer"
         },
         "created": {
           "toast": "Nouvel identifiant créé !"
         },
-        "name": {
-          "label": "Nom :",
-          "placeholder": "(Facultatif) nom de l'identifiant..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Administrateurs",
+            "description": "Tous les administrateurs peuvent réutiliser ce compte pour créer des connecteurs.",
+            "suffix": "(Par défaut)"
+          },
+          "adminsAndGroups": {
+            "description": "Les administrateurs et les groupes que vous désignez peuvent réutiliser ce compte.",
+            "label": "Administrateurs et groupes"
+          },
+          "onlyMe": {
+            "label": "Moi uniquement"
+          },
+          "description": "Autorisez les groupes à réutiliser ce compte pour créer des connecteurs.",
+          "title": "Partager ce compte"
         },
         "submitError": {
           "toast": "Erreur lors de l'envoi de l'identifiant"
@@ -3261,6 +3282,82 @@
           "toast": "Erreur lors de la mise à jour de l'identifiant"
         }
       },
+      "displayNames": {
+        "accessKeyId": "ID de clé d'accès {source}",
+        "secretAccessKey": "Clé d'accès secrète {source}",
+        "accountId": "ID de compte {source}",
+        "apiToken": "Jeton d'API",
+        "clientId": "ID client {source}",
+        "clientSecret": "Secret client {source}",
+        "clientToken": "Jeton client {source}",
+        "directoryId": "ID de répertoire {source}",
+        "certificatePassword": "Mot de passe du certificat {source}",
+        "privateKey": "Clé privée {source}",
+        "certificate": "Certificat {source}",
+        "baseUrl": "URL de base {source}",
+        "apiBaseUrl": "URL de base de l'API {source}",
+        "url": "URL {source}",
+        "enterpriseServerUrl": "URL du serveur {source} Enterprise",
+        "botToken": "Jeton du bot {source}",
+        "username": "Nom d'utilisateur {source}",
+        "apiUsername": "Nom d'utilisateur de l'API {source}",
+        "userEmail": "E-mail de l'utilisateur {source}",
+        "accountEmail": "E-mail du compte {source}",
+        "password": "Mot de passe {source}",
+        "subdomain": "Sous-domaine {source}",
+        "domain": "Domaine {source}",
+        "enterpriseId": "ID d'entreprise {source}",
+        "teamId": "ID d'équipe {source}",
+        "applicationId": "ID d'application {source}",
+        "apiTokenId": "ID du jeton d'API {source}",
+        "apiTokenSecret": "Secret du jeton d'API {source}",
+        "securityToken": "Jeton de sécurité {source}",
+        "integrationToken": "Jeton d'intégration {source}",
+        "accessKey": "Clé d'accès {source}",
+        "accessKeySecret": "Secret de la clé d'accès {source}",
+        "key": "Clé {source}",
+        "secret": "Secret {source}",
+        "roleArn": "ARN du rôle {source}",
+        "namespace": "Espace de noms {source}",
+        "region": "Région {source}",
+        "portalId": "ID de portail {source}",
+        "oauthTokens": "Jetons OAuth {source}",
+        "isSandbox": "Environnement sandbox",
+        "serviceUserEmail": "E-mail de l'utilisateur de service",
+        "zuliprcContent": "Contenu de zuliprc",
+        "authenticationMethod": "Méthode d'authentification",
+        "scopedToken": "Ceci est un jeton d'API avec des portées"
+      },
+      "hints": {
+        "boxUserEmail": "Facultatif. L'utilisateur Box à usurper.",
+        "githubBaseUrl": "Facultatif. Indiquez l'hôte de votre serveur, par exemple https://github.example.com. Laissez vide pour github.com.",
+        "gongBaseUrl": "Facultatif. Pour les données hors des États-Unis, indiquez l'hôte de votre région, par exemple https://[region].api.gong.io.",
+        "jiraUserEmail": "Obligatoire pour Jira Cloud.",
+        "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
+        "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
+        "pfxFile": "Un fichier PFX.",
+        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
+        "scopedToken": "Les jetons avec portées doivent passer par la passerelle d'API d'Atlassian. Laissez cette option désactivée pour les jetons classiques."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Secret client",
+          "certificateAuthentication": "Authentification par certificat",
+          "certificate": "Certificat",
+          "accessKeyAndSecret": "Clé d'accès et secret",
+          "iamRole": "Rôle IAM",
+          "assumeRole": "Endosser un rôle"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "Dans ce mode, le connecteur SharePoint s'authentifie avec un secret client. Vous devez fournir l'ID client et le secret client.",
+          "sharepointCertificate": "Dans ce mode, le connecteur SharePoint s'authentifie avec un certificat. Vous devez fournir l'ID client, l'ID d'annuaire, le mot de passe du certificat et les données PFX.",
+          "teamsClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret. Messages et membres des canaux uniquement : SharePoint refuse un secret, l'option Inclure les pièces jointes nécessite donc le certificat.",
+          "teamsCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe. Obligatoire pour Inclure les pièces jointes, qui lit les fichiers des canaux et leurs lecteurs depuis SharePoint.",
+          "outlookClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret.",
+          "outlookCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe.",
+          "s3AssumeRole": "Dans ce mode, l'instance Amazon EC2 endosse son rôle existant pour accéder à S3. Aucun autre identifiant n'est nécessaire."
+        }
+      },
       "modal": {
         "createTitle": "Créer un identifiant {source}",
         "editTitle": "Modifier l'identifiant",
@@ -3289,6 +3386,10 @@
         },
         "retryButton": {
           "label": "Réessayer"
+        },
+        "signIn": {
+          "description": "{appName} nécessite des autorisations en lecture seule.",
+          "title": "Se connecter avec {source}"
         },
         "startError": {
           "message": "Impossible de démarrer OAuth"
@@ -3341,6 +3442,13 @@
         "success": {
           "toast": "Identifiant mis à jour"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Veuillez sélectionner une méthode d'authentification",
+        "empty": "Le champ {field} ne peut pas être vide",
+        "fileRequired": "Veuillez sélectionner un fichier pour {field}",
+        "invalidEmail": "Veuillez saisir une adresse e-mail valide dans {field}",
+        "required": "Veuillez renseigner le champ {field}"
       }
     },
     "customAnalytics": {

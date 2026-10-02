@@ -47,7 +47,7 @@ export async function triggerIndexing(
 export const submitFiles = async (
   selectedFiles: File[],
   name: string,
-  access_type: string,
+  access_type: AccessType,
   groups?: number[]
 ) => {
   const formData = new FormData();
@@ -114,7 +114,7 @@ export const submitFiles = async (
     connector.id,
     credentialId,
     name,
-    access_type as AccessType,
+    access_type,
     groups
   );
   if (!credentialResponse.ok) {

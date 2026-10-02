@@ -3218,15 +3218,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Verwenden Sie die E-Mail-Adresse des Kontos, dem das API-Token gehört."
+        },
+        "apiTokenField": {
+          "subDescription": "Fügen Sie Ihr API-Token ein, um auf {source} zuzugreifen."
+        },
         "createButton": {
           "label": "Erstellen"
         },
         "created": {
           "toast": "Neue Anmeldedaten erstellt!"
         },
-        "name": {
-          "label": "Name:",
-          "placeholder": "(Optional) Name der Anmeldedaten..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Admins",
+            "description": "Alle Admins können dieses Konto wiederverwenden, um Connectoren zu erstellen.",
+            "suffix": "(Standard)"
+          },
+          "adminsAndGroups": {
+            "description": "Admins und von Ihnen benannte Gruppen können dieses Konto wiederverwenden.",
+            "label": "Admins & Gruppen"
+          },
+          "onlyMe": {
+            "label": "Nur ich"
+          },
+          "description": "Erlaube Gruppen, dieses Konto zum Erstellen von Konnektoren wiederzuverwenden.",
+          "title": "Dieses Konto teilen"
         },
         "submitError": {
           "toast": "Fehler beim Übermitteln der Anmeldedaten"
@@ -3261,6 +3282,82 @@
           "toast": "Fehler beim Aktualisieren der Anmeldedaten"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source}-Zugriffsschlüssel-ID",
+        "secretAccessKey": "Geheimer {source}-Zugriffsschlüssel",
+        "accountId": "{source}-Konto-ID",
+        "apiToken": "API-Token",
+        "clientId": "{source}-Client-ID",
+        "clientSecret": "{source}-Client-Secret",
+        "clientToken": "{source}-Client-Token",
+        "directoryId": "{source}-Verzeichnis-ID",
+        "certificatePassword": "{source}-Zertifikatspasswort",
+        "privateKey": "Privater Schlüssel für {source}",
+        "certificate": "{source}-Zertifikat",
+        "baseUrl": "{source}-Basis-URL",
+        "apiBaseUrl": "{source}-API-Basis-URL",
+        "url": "{source}-URL",
+        "enterpriseServerUrl": "{source}-Enterprise-Server-URL",
+        "botToken": "{source}-Bot-Token",
+        "username": "{source}-Benutzername",
+        "apiUsername": "{source}-API-Benutzername",
+        "userEmail": "{source}-Benutzer-E-Mail",
+        "accountEmail": "E-Mail-Adresse des {source}-Kontos",
+        "password": "{source}-Passwort",
+        "subdomain": "{source}-Subdomain",
+        "domain": "{source}-Domain",
+        "enterpriseId": "{source}-Enterprise-ID",
+        "teamId": "{source}-Team-ID",
+        "applicationId": "{source}-Anwendungs-ID",
+        "apiTokenId": "{source}-API-Token-ID",
+        "apiTokenSecret": "{source}-API-Token-Geheimnis",
+        "securityToken": "{source}-Sicherheitstoken",
+        "integrationToken": "{source}-Integrationstoken",
+        "accessKey": "{source}-Zugriffsschlüssel",
+        "accessKeySecret": "{source}-Zugriffsschlüssel-Geheimnis",
+        "key": "{source}-Schlüssel",
+        "secret": "{source}-Geheimnis",
+        "roleArn": "{source}-Rollen-ARN",
+        "namespace": "{source}-Namespace",
+        "region": "{source}-Region",
+        "portalId": "{source}-Portal-ID",
+        "oauthTokens": "{source}-OAuth-Tokens",
+        "isSandbox": "Sandbox-Umgebung",
+        "serviceUserEmail": "E-Mail-Adresse des Dienstbenutzers",
+        "zuliprcContent": "Zuliprc-Inhalt",
+        "authenticationMethod": "Authentifizierungsmethode",
+        "scopedToken": "Dies ist ein API-Token mit Bereichen"
+      },
+      "hints": {
+        "boxUserEmail": "Optional. Der Box-Benutzer, dessen Identität übernommen wird.",
+        "githubBaseUrl": "Optional. Gib den Host deines Servers an, z. B. https://github.example.com. Für github.com leer lassen.",
+        "gongBaseUrl": "Optional. Für Daten außerhalb der USA gib den Host deiner Region an, z. B. https://[region].api.gong.io.",
+        "jiraUserEmail": "Erforderlich für Jira Cloud.",
+        "lumappsServiceUser": "Der Benutzer, in dessen Namen indiziert wird.",
+        "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
+        "pfxFile": "Eine PFX-Datei.",
+        "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
+        "scopedToken": "Tokens mit Bereichen müssen über das API-Gateway von Atlassian geleitet werden. Lassen Sie diese Option für klassische Tokens deaktiviert."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Client-Secret",
+          "certificateAuthentication": "Zertifikatsauthentifizierung",
+          "certificate": "Zertifikat",
+          "accessKeyAndSecret": "Zugriffsschlüssel und Secret",
+          "iamRole": "IAM-Rolle",
+          "assumeRole": "Rolle übernehmen"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "In diesem Modus authentifiziert sich der SharePoint-Connector mit einem Client-Secret. Geben Sie die Client-ID und das Client-Secret an.",
+          "sharepointCertificate": "In diesem Modus authentifiziert sich der SharePoint-Connector mit einem Zertifikat. Geben Sie die Client-ID, die Verzeichnis-ID, das Zertifikatspasswort und die PFX-Daten an.",
+          "teamsClientSecret": "Der Connector meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an. Nur Kanalnachrichten und Mitglieder: SharePoint lehnt ein Secret ab, daher benötigt „Anhänge einbeziehen“ die Zertifikatsoption.",
+          "teamsCertificate": "Der Connector meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an. Erforderlich für „Anhänge einbeziehen“, das Kanaldateien und ihre Leser aus SharePoint liest.",
+          "outlookClientSecret": "Der Connector meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an.",
+          "outlookCertificate": "Der Connector meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an.",
+          "s3AssumeRole": "In diesem Modus übernimmt die Amazon-EC2-Instanz ihre vorhandene Rolle, um auf S3 zuzugreifen. Es sind keine weiteren Anmeldedaten erforderlich."
+        }
+      },
       "modal": {
         "createTitle": "{source}-Anmeldedaten erstellen",
         "editTitle": "Anmeldedaten bearbeiten",
@@ -3289,6 +3386,10 @@
         },
         "retryButton": {
           "label": "Erneut versuchen"
+        },
+        "signIn": {
+          "description": "{appName} benötigt Lesezugriff.",
+          "title": "Mit {source} anmelden"
         },
         "startError": {
           "message": "OAuth konnte nicht gestartet werden"
@@ -3341,6 +3442,13 @@
         "success": {
           "toast": "Anmeldedaten aktualisiert"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Bitte wählen Sie eine Authentifizierungsmethode aus",
+        "empty": "{field} darf nicht leer sein",
+        "fileRequired": "Bitte wählen Sie eine Datei für {field} aus",
+        "invalidEmail": "Bitte geben Sie für {field} eine gültige E-Mail-Adresse ein",
+        "required": "Bitte geben Sie {field} ein"
       }
     },
     "customAnalytics": {

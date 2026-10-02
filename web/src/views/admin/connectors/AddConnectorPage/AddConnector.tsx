@@ -20,7 +20,7 @@ import {
   ConfigurableSources,
   ValidSources,
 } from "@/lib/connectors/types/source";
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import type { Credential } from "@/lib/credentials/types";
 import {
   defaultRefreshFreqMinutes,
@@ -154,8 +154,8 @@ export default function AddConnector({
     Permission.MANAGE_CONNECTORS
   );
 
-  // Get credential template and configuration
-  const credentialTemplate = CREDENTIAL_TEMPLATES[connector];
+  // Get credential spec and configuration
+  const credentialSpec = getCredentialSpec(connector);
   const configuration: ConnectionConfiguration =
     useConnectorConfiguration(connector);
   const formControlFieldNames = new Set(
@@ -189,8 +189,8 @@ export default function AddConnector({
     (connector === "gmail" && liveGmailCredential) ||
     currentCredential;
 
-  // Sources without a credential template skip the credential section.
-  const noCredentials = credentialTemplate == null;
+  // Sources without a credential spec skip the credential section.
+  const noCredentials = credentialSpec == null;
   const canCreate = noCredentials || credentialActivated != null;
 
   // The page body waits for the source's saved credentials: no connector

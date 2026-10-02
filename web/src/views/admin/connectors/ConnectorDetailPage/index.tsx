@@ -12,7 +12,7 @@ import {
   updateConnectorCredentialPairName,
   updateConnectorCredentialPairProperty,
 } from "@/lib/connector";
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Title from "@/components/ui/title";
 import { useRouter } from "next/navigation";
@@ -705,7 +705,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
       </Card>
 
-      {CREDENTIAL_TEMPLATES[ccPair.connector.source] && can(ccPair, "edit") && (
+      {getCredentialSpec(ccPair.connector.source) && can(ccPair, "edit") && (
         <>
           <Title size="md" className="mt-10 mb-2">
             {t("sections.credential.title")}

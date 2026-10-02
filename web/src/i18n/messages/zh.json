@@ -3218,15 +3218,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "请使用拥有该 API 令牌的账户邮箱。"
+        },
+        "apiTokenField": {
+          "subDescription": "粘贴你的 API 令牌以访问 {source}。"
+        },
         "createButton": {
           "label": "创建"
         },
         "created": {
           "toast": "已创建新凭据!"
         },
-        "name": {
-          "label": "名称:",
-          "placeholder": "(可选) 凭据名称..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "管理员",
+            "description": "所有管理员都可以重复使用此账户来创建连接器。",
+            "suffix": "（默认）"
+          },
+          "adminsAndGroups": {
+            "description": "管理员和你指定的群组可以重复使用此账户。",
+            "label": "管理员和群组"
+          },
+          "onlyMe": {
+            "label": "仅限我"
+          },
+          "description": "允许群组复用此账号来创建连接器。",
+          "title": "共享此账号"
         },
         "submitError": {
           "toast": "提交凭据时出错"
@@ -3261,6 +3282,82 @@
           "toast": "更新凭据时出错"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} 访问密钥 ID",
+        "secretAccessKey": "{source} 秘密访问密钥",
+        "accountId": "{source} 账户 ID",
+        "apiToken": "API 令牌",
+        "clientId": "{source} 客户端 ID",
+        "clientSecret": "{source} 客户端密钥",
+        "clientToken": "{source} 客户端令牌",
+        "directoryId": "{source} 目录 ID",
+        "certificatePassword": "{source} 证书密码",
+        "privateKey": "{source} 私钥",
+        "certificate": "{source} 证书",
+        "baseUrl": "{source} 基础 URL",
+        "apiBaseUrl": "{source} API 基础 URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} 机器人令牌",
+        "username": "{source} 用户名",
+        "apiUsername": "{source} API 用户名",
+        "userEmail": "{source} 用户邮箱",
+        "accountEmail": "{source} 账号邮箱",
+        "password": "{source} 密码",
+        "subdomain": "{source} 子域名",
+        "domain": "{source} 域名",
+        "enterpriseId": "{source} 企业 ID",
+        "teamId": "{source} 团队 ID",
+        "applicationId": "{source} 应用 ID",
+        "apiTokenId": "{source} API 令牌 ID",
+        "apiTokenSecret": "{source} API 令牌密钥",
+        "securityToken": "{source} 安全令牌",
+        "integrationToken": "{source} 集成令牌",
+        "accessKey": "{source} 访问密钥",
+        "accessKeySecret": "{source} 访问密钥 Secret",
+        "key": "{source} 密钥",
+        "secret": "{source} Secret",
+        "roleArn": "{source} 角色 ARN",
+        "namespace": "{source} 命名空间",
+        "region": "{source} 区域",
+        "portalId": "{source} 门户 ID",
+        "oauthTokens": "{source} OAuth 令牌",
+        "isSandbox": "是否为沙盒环境",
+        "serviceUserEmail": "服务用户邮箱",
+        "zuliprcContent": "Zuliprc 内容",
+        "authenticationMethod": "身份验证方式",
+        "scopedToken": "这是带作用域的 API 令牌"
+      },
+      "hints": {
+        "boxUserEmail": "可选。要模拟的 Box 用户。",
+        "githubBaseUrl": "可选。设置你的服务器主机，例如 https://github.example.com。使用 github.com 时请留空。",
+        "gongBaseUrl": "可选。美国以外的数据请设置你所在区域的主机，例如 https://[region].api.gong.io。",
+        "jiraUserEmail": "Jira Cloud 必填。",
+        "lumappsServiceUser": "要代表其建立索引的用户。",
+        "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
+        "pfxFile": "PFX 文件。",
+        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
+        "scopedToken": "带作用域的令牌需要通过 Atlassian 的 API 网关进行路由。经典令牌请保持关闭。"
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "客户端密钥",
+          "certificateAuthentication": "证书身份验证",
+          "certificate": "证书",
+          "accessKeyAndSecret": "访问密钥和 Secret",
+          "iamRole": "IAM 角色",
+          "assumeRole": "代入角色"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "选择此模式后，SharePoint 连接器将使用客户端密钥进行身份验证。你需要提供客户端 ID 和客户端密钥。",
+          "sharepointCertificate": "选择此模式后，SharePoint 连接器将使用证书进行身份验证。你需要提供客户端 ID、目录 ID、证书密码和 PFX 数据。",
+          "teamsClientSecret": "连接器使用应用注册的客户端密钥登录。请提供客户端 ID、目录 ID 和密钥。仅限频道消息和成员：SharePoint 不接受密钥，因此“包含附件”需要使用证书选项。",
+          "teamsCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件包及其密码。“包含附件”需要此选项，该功能会从 SharePoint 读取频道文件及其读者。",
+          "outlookClientSecret": "连接器使用应用注册的客户端密钥登录。请提供客户端 ID、目录 ID 和密钥。",
+          "outlookCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件包及其密码。",
+          "s3AssumeRole": "选择此模式后，Amazon EC2 实例将代入其现有角色来访问 S3。无需其他凭据。"
+        }
+      },
       "modal": {
         "createTitle": "创建 {source} 凭据",
         "editTitle": "编辑凭据",
@@ -3289,6 +3386,10 @@
         },
         "retryButton": {
           "label": "重试"
+        },
+        "signIn": {
+          "description": "{appName} 需要只读权限范围。",
+          "title": "使用 {source} 登录"
         },
         "startError": {
           "message": "无法启动 OAuth"
@@ -3341,6 +3442,13 @@
         "success": {
           "toast": "已更新凭据"
         }
+      },
+      "validation": {
+        "authMethodRequired": "请选择身份验证方式",
+        "empty": "{field}不能为空",
+        "fileRequired": "请选择{field}文件",
+        "invalidEmail": "请在{field}中输入有效的邮箱地址",
+        "required": "请输入{field}"
       }
     },
     "customAnalytics": {

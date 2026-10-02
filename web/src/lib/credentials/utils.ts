@@ -1,119 +1,160 @@
 import * as Yup from "yup";
 
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
-import type {
-  Credential,
-  CredentialTemplateWithAuth,
-} from "@/lib/credentials/types";
-import { isTypedFileField } from "@/lib/connectors/utils";
+import type { Credential } from "@/lib/credentials/types";
 import type {
   CredentialFieldValues,
   CredentialFormValues,
 } from "@/lib/credentials/types";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { CREDENTIAL_DISPLAY_NAMES } from "@/lib/credentials/constants";
 import { toast } from "@opal/layouts";
 import {
   CredentialCreationMethod,
   type OAuthDetails,
 } from "@/lib/credentials/types";
+import type {
+  CredentialSpec,
+  CredentialSpecField,
+  CredentialSpecMethod,
+  CredentialValidationMessages,
+} from "@/lib/credentials/types";
+import type { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
+import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 
-// What a credential template seeds a field with: "" for a required text
-// field, null for an optional one or a file, a boolean for a checkbox.
-type CredentialFieldSeed = string | boolean | null;
+// ---------------------------------------------------------------------------
+// Credential specs
+// ---------------------------------------------------------------------------
+
+/** A source's spec, or null when it has no credential form. */
+export function getCredentialSpec(source: ValidSources): CredentialSpec | null {
+  return CREDENTIAL_SPECS[source];
+}
+
+const FILE_FIELD_TYPES: ReadonlyMap<string, FileTypeCategory> = new Map(
+  Object.values<CredentialSpec | null>(CREDENTIAL_SPECS).flatMap((spec) =>
+    Object.entries(spec?.fields ?? {}).flatMap(([key, field]) => {
+      if (field.kind !== "file") return [];
+      const entry: [string, FileTypeCategory] = [key, field.fileType];
+      return [entry];
+    })
+  )
+);
+
+/** The file type a credential field takes, or null when it takes text. */
+export function getCredentialFileType(key: string): FileTypeCategory | null {
+  return FILE_FIELD_TYPES.get(key) ?? null;
+}
+
+/** The value a form starts a field at. */
+export function initialFieldValue(
+  field: CredentialSpecField
+): string | boolean | null {
+  if (field.kind === "toggle" || field.kind === "checkbox") return false;
+  if (field.kind === "file" || field.optional) return null;
+  return "";
+}
+
+/** A method's fields, in the order the method lists them. */
+export function methodFields(
+  spec: CredentialSpec,
+  method: CredentialSpecMethod
+): [string, CredentialSpecField][] {
+  return method.fields.flatMap((key) => {
+    const field = spec.fields[key];
+    if (!field) return [];
+    const entry: [string, CredentialSpecField] = [key, field];
+    return [entry];
+  });
+}
+
+/** The value of each field a form starts with. */
+export function initialCredentialValues(
+  spec: CredentialSpec
+): CredentialFieldValues {
+  return Object.fromEntries(
+    Object.entries(spec.fields).map(([key, field]) => [
+      key,
+      initialFieldValue(field),
+    ])
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Validation and edit forms
+// ---------------------------------------------------------------------------
 
 const AUTHENTICATION_METHOD_KEY = "authentication_method";
 const ONEDRIVE_LEGACY_AUTHENTICATION_METHOD_KEY =
   "onedrive_authentication_method";
 
-interface FieldMethods {
-  def: CredentialFieldSeed;
-  methods: string[];
-}
-
 // The rules for one credential field. With `selected` the required rules
 // apply only while one of the field's auth methods is chosen.
 function fieldSchema(
   key: string,
-  def: CredentialFieldSeed,
+  field: CredentialSpecField,
+  messages: CredentialValidationMessages,
   selected?: (method: string) => boolean
 ): Yup.AnySchema {
-  const displayName = getDisplayNameForCredentialKey(key);
-  if (typeof def === "boolean") {
+  const title = messages.fieldTitle(key);
+  if (field.kind === "toggle" || field.kind === "checkbox") {
     return Yup.boolean()
       .nullable()
       .default(false)
       .transform((v, o) => (o === undefined ? false : v));
   }
-  if (isTypedFileField(key)) {
+  if (field.kind === "file") {
     // TypedFile fields use mixed schema instead of string.
-    const required = Yup.mixed().required(
-      `Please select a ${displayName} file`
-    );
+    const required = Yup.mixed().required(messages.fileRequired(title));
     if (!selected) return required;
-    return Yup.mixed().when("authentication_method", {
+    return Yup.mixed().when(AUTHENTICATION_METHOD_KEY, {
       is: selected,
       then: () => required,
       otherwise: () => Yup.mixed().notRequired(),
     });
   }
-  if (def === null) {
-    return Yup.string()
-      .trim()
+  const base =
+    field.kind === "email"
+      ? Yup.string().trim().email(messages.invalidEmail(title))
+      : Yup.string().trim();
+  if (field.optional) {
+    return base
       .transform((v) => (v === "" ? null : v))
       .nullable()
       .notRequired();
   }
   const required = (s: Yup.StringSchema) =>
-    s
-      .min(1, `${displayName} cannot be empty`)
-      .required(`Please enter your ${displayName}`);
-  if (!selected) return required(Yup.string().trim());
-  return Yup.string()
-    .trim()
-    .when("authentication_method", {
-      is: selected,
-      then: required,
-      otherwise: (s) => s.notRequired(),
-    });
+    s.min(1, messages.empty(title)).required(messages.required(title));
+  if (!selected) return required(base);
+  return base.when(AUTHENTICATION_METHOD_KEY, {
+    is: selected,
+    then: required,
+    otherwise: (s) => s.notRequired(),
+  });
 }
 
-export function createValidationSchema(jsonValues: Record<string, any>) {
+export function createValidationSchema(
+  spec: CredentialSpec,
+  messages: CredentialValidationMessages
+) {
   const schemaFields: Record<string, Yup.AnySchema> = {};
-  const template = jsonValues as CredentialTemplateWithAuth<any>;
-  // multi-auth templates
-  if (template.authMethods && template.authMethods.length > 1) {
-    // auth method selector
-    schemaFields["authentication_method"] = Yup.string().required(
-      "Please select an authentication method"
+  const methods = spec.methods;
+  if (methods) {
+    schemaFields[AUTHENTICATION_METHOD_KEY] = Yup.string().required(
+      messages.authMethodRequired
     );
-    // A field several methods share (the app ids of SharePoint and Outlook)
-    // is required under every method that lists it, so collect them first.
-    const methodsByField = new Map<string, FieldMethods>();
-    template.authMethods.forEach((method) => {
-      Object.entries(method.fields).forEach(([key, def]) => {
-        const entry: FieldMethods = methodsByField.get(key) ?? {
-          def,
-          methods: [],
-        };
-        entry.methods.push(method.value);
-        methodsByField.set(key, entry);
-      });
-    });
-    methodsByField.forEach(({ def, methods }, key) => {
-      schemaFields[key] = fieldSchema(key, def, (method) =>
-        methods.includes(method)
-      );
-    });
   }
-  // single-auth templates and other fields
-  for (const key in jsonValues) {
-    if (!Object.prototype.hasOwnProperty.call(jsonValues, key)) continue;
-    if (key === "authentication_method" || key === "authMethods") continue;
-    schemaFields[key] = fieldSchema(key, jsonValues[key]);
+  for (const [key, field] of Object.entries(spec.fields)) {
+    // A field several methods share (the Microsoft app ids) is required
+    // under every method that lists it.
+    const fieldMethods = methods
+      ?.filter((method) => method.fields.includes(key))
+      .map((method) => method.value);
+    schemaFields[key] = fieldSchema(
+      key,
+      field,
+      messages,
+      fieldMethods && ((method) => fieldMethods.includes(method))
+    );
   }
-
-  schemaFields["name"] = Yup.string().optional();
   return Yup.object().shape(schemaFields);
 }
 
@@ -124,7 +165,7 @@ export function createEditingValidationSchema(
 
   for (const key in jsonValues) {
     if (Object.prototype.hasOwnProperty.call(jsonValues, key)) {
-      if (isTypedFileField(key)) {
+      if (getCredentialFileType(key) !== null) {
         // TypedFile fields use mixed schema for optional file uploads during editing.
         schemaFields[key] = Yup.mixed().optional();
       } else {
@@ -139,24 +180,24 @@ export function createEditingValidationSchema(
 
 function getAuthMethodFieldsForCredential(
   credentialJson: CredentialFieldValues,
-  credentialTemplate: CredentialTemplateWithAuth<CredentialFieldValues>,
+  spec: CredentialSpec,
+  methods: readonly CredentialSpecMethod[],
   storedAuthMethod: string | undefined
 ): CredentialFieldValues {
-  const authMethods = credentialTemplate.authMethods ?? [];
   const selectedAuthMethod =
-    authMethods.find((method) => method.value === storedAuthMethod) ??
-    authMethods.find((method) =>
-      Object.keys(method.fields).some((fieldKey) => fieldKey in credentialJson)
+    methods.find((method) => method.value === storedAuthMethod) ??
+    methods.find((method) =>
+      method.fields.some((fieldKey) => fieldKey in credentialJson)
     ) ??
-    authMethods[0];
+    methods[0];
 
   return {
-    authentication_method:
-      storedAuthMethod ??
-      selectedAuthMethod?.value ??
-      credentialTemplate.authentication_method ??
-      "",
-    ...selectedAuthMethod?.fields,
+    authentication_method: storedAuthMethod ?? selectedAuthMethod?.value ?? "",
+    ...Object.fromEntries(
+      (selectedAuthMethod ? methodFields(spec, selectedAuthMethod) : []).map(
+        ([key, field]) => [key, initialFieldValue(field)]
+      )
+    ),
   };
 }
 
@@ -203,29 +244,24 @@ export function getEditableCredentialFields(
     return {};
   }
 
-  const credentialTemplate = CREDENTIAL_TEMPLATES[sourceType] as
-    | CredentialFieldValues
-    | null
-    | undefined;
-
-  if (!credentialTemplate) {
+  const spec = getCredentialSpec(sourceType);
+  if (!spec) {
     return credentialJson;
   }
 
-  const templateWithAuth =
-    credentialTemplate as CredentialTemplateWithAuth<CredentialFieldValues>;
-  const templateFields =
-    templateWithAuth.authMethods && templateWithAuth.authMethods.length > 1
-      ? getAuthMethodFieldsForCredential(
-          credentialJson,
-          templateWithAuth,
-          getStoredAuthMethod(credentialJson, sourceType)
-        )
-      : Object.fromEntries(
-          Object.entries(credentialTemplate).filter(
-            ([key]) => key !== "authMethods"
-          )
-        );
+  const templateFields: CredentialFieldValues = spec.methods
+    ? getAuthMethodFieldsForCredential(
+        credentialJson,
+        spec,
+        spec.methods,
+        getStoredAuthMethod(credentialJson, sourceType)
+      )
+    : Object.fromEntries(
+        Object.entries(spec.fields).map(([key, field]) => [
+          key,
+          initialFieldValue(field),
+        ])
+      );
 
   return Object.fromEntries(
     Object.entries(templateFields).map(([key, templateValue]) => [
@@ -254,7 +290,7 @@ export function createInitialValues(
 
   for (const key in credentialFields) {
     // Initialize TypedFile fields as null, other fields as empty strings
-    if (isTypedFileField(key)) {
+    if (getCredentialFileType(key) !== null) {
       initialValues[key] = null;
     } else {
       initialValues[key] = "";
@@ -262,11 +298,6 @@ export function createInitialValues(
   }
 
   return initialValues;
-}
-
-/** The label for a credential field key, falling back to the key itself. */
-export function getDisplayNameForCredentialKey(key: string): string {
-  return CREDENTIAL_DISPLAY_NAMES[key] || key;
 }
 
 // Parse an uploaded OAuth app JSON; toasts and returns null when invalid.

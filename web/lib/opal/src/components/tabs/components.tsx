@@ -39,13 +39,23 @@ interface TabsRootProps extends WithoutStyles<
    * - `underline`: like pill but without the filled active state.
    */
   variant?: "contained" | "pill" | "underline";
+
+  /**
+   * Space between the tab list and the panel below it, as a {@link Spacing}
+   * step (`N / 4` rem). Unset, the panel sits flush against the list.
+   */
+  gap?: Spacing;
 }
 
-function TabsRoot({ variant = "contained", ...props }: TabsRootProps) {
+function TabsRoot({ variant = "contained", gap, ...props }: TabsRootProps) {
   const contextValue = useMemo(() => ({ variant }), [variant]);
   return (
     <TabsContext.Provider value={contextValue}>
-      <TabsPrimitive.Root className="w-full" {...props} />
+      <TabsPrimitive.Root
+        {...props}
+        className={cn("w-full", gap !== undefined && "flex flex-col")}
+        style={gap !== undefined ? { gap: spacingToRem(gap) } : undefined}
+      />
     </TabsContext.Provider>
   );
 }

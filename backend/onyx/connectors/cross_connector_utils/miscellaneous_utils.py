@@ -206,6 +206,18 @@ def get_cloudId(base_url: str) -> str:
     return response.json()["cloudId"]
 
 
+def credential_uses_scoped_token(credentials: dict[str, Any]) -> bool:
+    """Whether an Atlassian credential says its API token has scopes.
+
+    The credential form stores a boolean; the edit form can store text, so
+    "true" counts and "false" does not.
+    """
+    value = credentials.get("scoped_token")
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return value is True
+
+
 def scoped_url(url: str, product: str) -> str:
     parsed = urlparse(url)
     base_url = parsed.scheme + "://" + parsed.netloc

@@ -14,7 +14,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
 import type { Credential } from "@/lib/credentials/types";
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -52,10 +52,7 @@ export function AccessTypeForm({
 
   // If the selected auth method is one that disables sync, return true
   const isSyncDisabledByAuth = useMemo(() => {
-    const template = (CREDENTIAL_TEMPLATES as any)[connector];
-    const authMethods = template?.authMethods as
-      | { value: string; disablePermSync?: boolean }[]
-      | undefined; // auth methods are returned as an array of objects with a value and disablePermSync property
+    const authMethods = getCredentialSpec(connector)?.methods;
     if (!authMethods || !selectedAuthMethod) return false;
     const method = authMethods.find((m) => m.value === selectedAuthMethod);
     return method?.disablePermSync === true;

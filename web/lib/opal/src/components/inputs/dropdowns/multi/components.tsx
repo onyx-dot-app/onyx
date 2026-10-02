@@ -121,11 +121,12 @@ function MultiDropdown(props: MultiDropdownProps) {
 
   // Closed-set doctrine, committed values only: a tag outside the supplied
   // set (stale seed, options shrank) flags the input chrome's error variant.
-  // Open mode legitimately holds free-form tags, and typing never flags.
+  // Open mode legitimately holds free-form tags, and typing never flags. A
+  // locked tag is fixed by the caller, not picked, so it never flags.
   const hasInvalidTag = useMemo(() => {
     if (freeEntry) return false;
     const optionValues = new Set(flatOptions.map((option) => option.value));
-    return tags.some((tag) => !optionValues.has(tag.id));
+    return tags.some((tag) => !tag.locked && !optionValues.has(tag.id));
   }, [freeEntry, flatOptions, tags]);
 
   // The filter is transient UI state, like the single's: closing the

@@ -7,6 +7,9 @@ from jira.exceptions import JIRAError
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.utils import credential_json
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    credential_uses_scoped_token,
+)
 from onyx.connectors.jira.utils import build_jira_client
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -155,15 +158,17 @@ def jira_group_sync(
     Streams group-by-group rather than accumulating all groups in memory.
     """
     jira_base_url = cc_pair.connector.connector_specific_config.get("jira_base_url", "")
+    credentials = credential_json(cc_pair)
+    # The credential carries the flag; older connectors set it in their config.
     scoped_token = cc_pair.connector.connector_specific_config.get(
         "scoped_token", False
-    )
+    ) or credential_uses_scoped_token(credentials)
 
     if not jira_base_url:
         raise ValueError("No jira_base_url found in connector config")
 
     jira_client = build_jira_client(
-        credentials=credential_json(cc_pair),
+        credentials=credentials,
         jira_base=jira_base_url,
         scoped_token=scoped_token,
     )

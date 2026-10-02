@@ -3218,15 +3218,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API."
+        },
+        "apiTokenField": {
+          "subDescription": "الصق رمز API للوصول إلى {source}."
+        },
         "createButton": {
           "label": "إنشاء"
         },
         "created": {
           "toast": "تم إنشاء بيانات اعتماد جديدة!"
         },
-        "name": {
-          "label": "الاسم:",
-          "placeholder": "(اختياري) اسم بيانات الاعتماد..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "المسؤولون",
+            "description": "يمكن لجميع المسؤولين إعادة استخدام هذا الحساب لإنشاء الموصلات.",
+            "suffix": "(افتراضي)"
+          },
+          "adminsAndGroups": {
+            "description": "يمكن للمسؤولين والمجموعات التي تحددها إعادة استخدام هذا الحساب.",
+            "label": "المسؤولون والمجموعات"
+          },
+          "onlyMe": {
+            "label": "أنا فقط"
+          },
+          "description": "اسمح للمجموعات بإعادة استخدام هذا الحساب لإنشاء الموصلات.",
+          "title": "مشاركة هذا الحساب"
         },
         "submitError": {
           "toast": "حدث خطأ أثناء إرسال بيانات الاعتماد"
@@ -3261,6 +3282,82 @@
           "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
         }
       },
+      "displayNames": {
+        "accessKeyId": "معرّف مفتاح الوصول إلى {source}",
+        "secretAccessKey": "مفتاح الوصول السري إلى {source}",
+        "accountId": "معرّف حساب {source}",
+        "apiToken": "رمز API",
+        "clientId": "معرّف عميل {source}",
+        "clientSecret": "سر عميل {source}",
+        "clientToken": "رمز عميل {source}",
+        "directoryId": "معرّف الدليل في {source}",
+        "certificatePassword": "كلمة مرور شهادة {source}",
+        "privateKey": "المفتاح الخاص لـ {source}",
+        "certificate": "شهادة {source}",
+        "baseUrl": "عنوان URL الأساسي لـ {source}",
+        "apiBaseUrl": "عنوان URL الأساسي لـ {source} API",
+        "url": "عنوان URL لـ {source}",
+        "enterpriseServerUrl": "عنوان URL لخادم {source} Enterprise",
+        "botToken": "رمز بوت {source}",
+        "username": "اسم مستخدم {source}",
+        "apiUsername": "اسم مستخدم API لـ {source}",
+        "userEmail": "بريد مستخدم {source} الإلكتروني",
+        "accountEmail": "بريد حساب {source} الإلكتروني",
+        "password": "كلمة مرور {source}",
+        "subdomain": "النطاق الفرعي لـ {source}",
+        "domain": "نطاق {source}",
+        "enterpriseId": "معرّف مؤسسة {source}",
+        "teamId": "معرّف فريق {source}",
+        "applicationId": "معرّف تطبيق {source}",
+        "apiTokenId": "معرّف رمز API لـ {source}",
+        "apiTokenSecret": "السر الخاص برمز API لـ {source}",
+        "securityToken": "رمز الأمان لـ {source}",
+        "integrationToken": "رمز تكامل {source}",
+        "accessKey": "مفتاح الوصول إلى {source}",
+        "accessKeySecret": "سر مفتاح الوصول إلى {source}",
+        "key": "مفتاح {source}",
+        "secret": "سر {source}",
+        "roleArn": "ARN لدور {source}",
+        "namespace": "مساحة أسماء {source}",
+        "region": "منطقة {source}",
+        "portalId": "معرّف بوابة {source}",
+        "oauthTokens": "رموز {source} OAuth",
+        "isSandbox": "بيئة تجريبية (Sandbox)",
+        "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
+        "zuliprcContent": "محتوى Zuliprc",
+        "authenticationMethod": "طريقة المصادقة",
+        "scopedToken": "هذا رمز API ذو نطاقات"
+      },
+      "hints": {
+        "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
+        "githubBaseUrl": "اختياري. حدد مضيف الخادم لديك، مثل https://github.example.com. اتركه فارغًا لاستخدام github.com.",
+        "gongBaseUrl": "اختياري. للبيانات خارج الولايات المتحدة، حدد مضيف منطقتك، مثل https://[region].api.gong.io.",
+        "jiraUserEmail": "مطلوب لـ Jira Cloud.",
+        "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
+        "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
+        "pfxFile": "ملف PFX.",
+        "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
+        "scopedToken": "يجب توجيه الرموز ذات النطاقات عبر بوابة API الخاصة بـ Atlassian. اتركه معطّلًا للرموز الكلاسيكية."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "سر العميل",
+          "certificateAuthentication": "المصادقة بالشهادة",
+          "certificate": "الشهادة",
+          "accessKeyAndSecret": "مفتاح الوصول والسر",
+          "iamRole": "دور IAM",
+          "assumeRole": "تولّي الدور"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint سر العميل للمصادقة. ستحتاج إلى تقديم معرّف العميل وسر العميل.",
+          "sharepointCertificate": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint شهادة للمصادقة. ستحتاج إلى تقديم معرّف العميل ومعرّف الدليل وكلمة مرور الشهادة وبيانات PFX.",
+          "teamsClientSecret": "يسجّل الموصل الدخول باستخدام سر العميل الخاص بتسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل والسر. رسائل القنوات وأعضاؤها فقط: يرفض SharePoint السر، لذا يتطلب خيار تضمين المرفقات استخدام الشهادة.",
+          "teamsCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها. مطلوب لخيار تضمين المرفقات، الذي يقرأ ملفات القنوات وقرّاءها من SharePoint.",
+          "outlookClientSecret": "يسجّل الموصل الدخول باستخدام سر العميل الخاص بتسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل والسر.",
+          "outlookCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها.",
+          "s3AssumeRole": "إذا اخترت هذا الوضع، فسيتولّى مثيل Amazon EC2 دوره الحالي للوصول إلى S3. لا حاجة إلى بيانات اعتماد إضافية."
+        }
+      },
       "modal": {
         "createTitle": "إنشاء بيانات اعتماد {source}",
         "editTitle": "تعديل بيانات الاعتماد",
@@ -3289,6 +3386,10 @@
         },
         "retryButton": {
           "label": "إعادة المحاولة"
+        },
+        "signIn": {
+          "description": "يتطلب {appName} نطاقات للقراءة فقط.",
+          "title": "تسجيل الدخول باستخدام {source}"
         },
         "startError": {
           "message": "تعذر بدء OAuth"
@@ -3341,6 +3442,13 @@
         "success": {
           "toast": "تم تحديث بيانات الاعتماد"
         }
+      },
+      "validation": {
+        "authMethodRequired": "يُرجى اختيار طريقة المصادقة",
+        "empty": "لا يمكن ترك {field} فارغًا",
+        "fileRequired": "يُرجى اختيار ملف {field}",
+        "invalidEmail": "يُرجى إدخال بريد إلكتروني صالح في {field}",
+        "required": "يُرجى إدخال {field}"
       }
     },
     "customAnalytics": {

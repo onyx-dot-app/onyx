@@ -276,11 +276,11 @@ function ContentMd({
           )}
 
           {suffix && (
-            <span className="opal-content-md-suffix">
-              <Text font={config.optionalFont} color="inherit">
+            <div className="opal-content-md-suffix">
+              <Text as="p" font={config.optionalFont} color="inherit">
                 {suffix === "optional" ? "(Optional)" : suffix}
               </Text>
-            </span>
+            </div>
           )}
 
           {auxIcon &&

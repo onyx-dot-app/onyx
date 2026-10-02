@@ -3218,15 +3218,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Use the account email that owns the API token."
+        },
+        "apiTokenField": {
+          "subDescription": "Paste your API token to access {source}."
+        },
         "createButton": {
           "label": "Create"
         },
         "created": {
           "toast": "Created new credential!"
         },
-        "name": {
-          "label": "Name:",
-          "placeholder": "(Optional) credential name.."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Admins",
+            "description": "All admins can reuse this account to create connectors.",
+            "suffix": "(Default)"
+          },
+          "adminsAndGroups": {
+            "description": "Admins and groups named by you can reuse this account.",
+            "label": "Admins & Groups"
+          },
+          "onlyMe": {
+            "label": "Only Me"
+          },
+          "description": "Allow groups to reuse this account to create connectors.",
+          "title": "Share This Account"
         },
         "submitError": {
           "toast": "Error submitting credential"
@@ -3261,6 +3282,82 @@
           "toast": "Error updating credential"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} Access Key ID",
+        "secretAccessKey": "{source} Secret Access Key",
+        "accountId": "{source} Account ID",
+        "apiToken": "API Token",
+        "clientId": "{source} Client ID",
+        "clientSecret": "{source} Client Secret",
+        "clientToken": "{source} Client Token",
+        "directoryId": "{source} Directory ID",
+        "certificatePassword": "{source} Certificate Password",
+        "privateKey": "{source} Private Key",
+        "certificate": "{source} Certificate",
+        "baseUrl": "{source} Base URL",
+        "apiBaseUrl": "{source} API Base URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} Bot Token",
+        "username": "{source} Username",
+        "apiUsername": "{source} API Username",
+        "userEmail": "{source} User Email",
+        "accountEmail": "{source} Account Email",
+        "password": "{source} Password",
+        "subdomain": "{source} Subdomain",
+        "domain": "{source} Domain",
+        "enterpriseId": "{source} Enterprise ID",
+        "teamId": "{source} Team ID",
+        "applicationId": "{source} Application ID",
+        "apiTokenId": "{source} API Token ID",
+        "apiTokenSecret": "{source} API Token Secret",
+        "securityToken": "{source} Security Token",
+        "integrationToken": "{source} Integration Token",
+        "accessKey": "{source} Access Key",
+        "accessKeySecret": "{source} Access Key Secret",
+        "key": "{source} Key",
+        "secret": "{source} Secret",
+        "roleArn": "{source} Role ARN",
+        "namespace": "{source} Namespace",
+        "region": "{source} Region",
+        "portalId": "{source} Portal ID",
+        "oauthTokens": "{source} Oauth Tokens",
+        "isSandbox": "Is Sandbox Environment",
+        "serviceUserEmail": "Service User Email",
+        "zuliprcContent": "Zuliprc Content",
+        "authenticationMethod": "Authentication Method",
+        "scopedToken": "This is an API token with scopes"
+      },
+      "hints": {
+        "boxUserEmail": "Optional. The Box user to impersonate.",
+        "githubBaseUrl": "Optional. Set your server host, like https://github.example.com. Leave blank for github.com.",
+        "gongBaseUrl": "Optional. For data outside the US, set your region's host, like https://[region].api.gong.io.",
+        "jiraUserEmail": "Required for Jira Cloud.",
+        "lumappsServiceUser": "The user to index on behalf of.",
+        "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
+        "pfxFile": "A PFX file.",
+        "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
+        "scopedToken": "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Client Secret",
+          "certificateAuthentication": "Certificate Authentication",
+          "certificate": "Certificate",
+          "accessKeyAndSecret": "Access Key and Secret",
+          "iamRole": "IAM Role",
+          "assumeRole": "Assume Role"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
+          "sharepointCertificate": "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
+          "teamsClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Channel messages and members only: SharePoint refuses a secret, so Include Attachments needs the certificate option.",
+          "teamsCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
+          "outlookClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
+          "outlookCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+          "s3AssumeRole": "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required."
+        }
+      },
       "modal": {
         "createTitle": "Create {source} Credential",
         "editTitle": "Edit Credential",
@@ -3289,6 +3386,10 @@
         },
         "retryButton": {
           "label": "Retry"
+        },
+        "signIn": {
+          "description": "{appName} requires read-only scopes.",
+          "title": "Sign in with {source}"
         },
         "startError": {
           "message": "Unable to start OAuth"
@@ -3341,6 +3442,13 @@
         "success": {
           "toast": "Updated credential"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Please select an authentication method",
+        "empty": "{field} cannot be empty",
+        "fileRequired": "Please select a {field} file",
+        "invalidEmail": "Please enter a valid {field}",
+        "required": "Please enter your {field}"
       }
     },
     "customAnalytics": {
