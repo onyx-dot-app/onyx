@@ -135,6 +135,18 @@ def test_parity_catches_a_dropped_trigger(shard: str, clone: str) -> None:
             {"schema": f'"{clone}"'},
         ).one()
         connection.execute(
+            text(
+                f'ALTER TABLE "{clone}"."{trigger.relname}" '
+                f'DISABLE TRIGGER "{trigger.tgname}"'
+            )
+        )
+
+    differences = tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA)
+    assert differences and differences[0] == "structure differs:"
+    assert any(trigger.tgname in difference for difference in differences)
+
+    with get_engine_for_shard(shard).begin() as connection:
+        connection.execute(
             text(f'DROP TRIGGER "{trigger.tgname}" ON "{clone}"."{trigger.relname}"')
         )
 

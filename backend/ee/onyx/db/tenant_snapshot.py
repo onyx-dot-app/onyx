@@ -174,6 +174,7 @@ _pg_trigger = table(
     column("tgname"),
     column("tgrelid"),
     column("tgisinternal"),
+    column("tgenabled"),
     schema=_PG_CATALOG,
 )
 _pg_type = table(
@@ -184,7 +185,12 @@ _pg_type = table(
     column("typtype"),
     column("typbasetype"),
     column("typtypmod"),
+    column("typnotnull"),
+    column("typdefault"),
     schema=_PG_CATALOG,
+)
+_pg_range = table(
+    "pg_range", column("rngtypid"), column("rngsubtype"), schema=_PG_CATALOG
 )
 _pg_enum = table(
     "pg_enum",
@@ -344,6 +350,7 @@ _STRUCTURE_QUERIES = (
         literal("trigger"),
         _pg_class.c.relname,
         _pg_trigger.c.tgname,
+        cast(_pg_trigger.c.tgenabled, Text),
         func.pg_get_triggerdef(_pg_trigger.c.oid),
     )
     .select_from(_pg_trigger.join(_pg_class, _pg_class.c.oid == _pg_trigger.c.tgrelid))
@@ -353,7 +360,13 @@ _STRUCTURE_QUERIES = (
         literal("type"),
         cast(_pg_type.c.typtype, Text),
         _pg_type.c.typname,
+        # Domain: base type, nullability, default. Range: subtype. Enum: labels.
         func.format_type(_pg_type.c.typbasetype, _pg_type.c.typtypmod),
+        _pg_type.c.typnotnull,
+        _pg_type.c.typdefault,
+        select(func.format_type(_pg_range.c.rngsubtype, None))
+        .where(_pg_range.c.rngtypid == _pg_type.c.oid)
+        .scalar_subquery(),
         select(
             func.string_agg(
                 _pg_enum.c.enumlabel,
