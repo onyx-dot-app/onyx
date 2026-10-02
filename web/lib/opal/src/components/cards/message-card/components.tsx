@@ -269,8 +269,10 @@ function MessageCard({
               onAnimationEnd={presence.onAnimationEnd}
             >
               <div className="opal-message-card-bottom-inner">
-                <Divider paddingParallel={3} paddingPerpendicular={0} />
-                {bottomChildren ?? shownBottom}
+                <div className="opal-message-card-bottom-content">
+                  <Divider paddingParallel={3} paddingPerpendicular={0} />
+                  {bottomChildren ?? shownBottom}
+                </div>
               </div>
             </div>
           )}

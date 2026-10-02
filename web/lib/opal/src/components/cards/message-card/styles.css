@@ -23,10 +23,15 @@
   grid-template-rows: 0fr;
 }
 
+/* No padding on the clipped box: a grid row at 0fr shrinks an item only down
+   to its padding, so the space sits one level in. */
 .opal-message-card-bottom-inner {
-  @apply pt-1;
   min-height: 0;
   overflow: hidden;
+}
+
+.opal-message-card-bottom-content {
+  @apply pt-1;
 }
 
 .opal-message-card-bottom[data-animate][data-state="open"] {
