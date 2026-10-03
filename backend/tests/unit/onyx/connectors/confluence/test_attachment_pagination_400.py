@@ -21,7 +21,6 @@ from onyx.connectors.confluence.connector import (
     _extract_page_id_from_url,
 )
 from onyx.connectors.confluence.source_operations import (
-    ConfluenceSearchVariant,
     _OnyxConfluence,
 )
 from onyx.connectors.models import ConnectorFailure, Document, DocumentFailure
@@ -220,7 +219,7 @@ def _slim_attachments_with(side_effects: list[Any]) -> tuple[list[Any], mock.Moc
         return_value=gateway_with_client(fake_client),
     ):
         results = connector._retrieve_attachments_for_slim_page(
-            "111", ConfluenceSearchVariant.SLIM, "space", None, None
+            "111", False, "space", None, None
         )
     return results, fake_client
 

@@ -34,7 +34,6 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceNoVisibleSpacesError,
     ConfluenceProbeVariant,
     ConfluenceRetriesExhaustedError,
-    ConfluenceSearchVariant,
     ConfluenceSourceOperations,
     ConfluenceSpaceNotFoundError,
 )
@@ -210,38 +209,6 @@ def test_full_run_in_space_mode_passes_the_indexing_verdict() -> None:
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
     assert verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.PASSED
     gateway.probe_site.assert_called_once_with(variant=ConfluenceProbeVariant.UNSCOPED)
-
-
-def test_indexing_checks_exercise_the_indexing_units_of_shared_operations() -> None:
-    """``list_spaces``, ``search_pages`` and ``search_attachments`` are exempt
-    from the coverage harness because they also serve permission sync, and
-    ``download_attachment`` because the harness spy gives no attachment size.
-    Their INDEXING units must still be exercised."""
-    spy = _gateway()
-    spy.search_attachments.side_effect = lambda **_: _attachments(10)
-
-    results = run_capability_checks(
-        build_confluence_indexing_checks(), _context(spy, _form(space="KB"))
-    )
-
-    assert all(result.error_type is None for result in results), results
-    exercised: set[tuple[str, str | None]] = set()
-    for name, _args, kwargs in spy.mock_calls:
-        variant = kwargs.get("variant")
-        exercised.add((name.split(".")[0], variant.value if variant else None))
-
-    assert {
-        ("list_spaces", None),
-        ("search_pages", ConfluenceSearchVariant.CONTENT.value),
-        ("search_attachments", ConfluenceSearchVariant.CONTENT.value),
-        ("download_attachment", None),
-    } <= exercised
-    # The slim unit needs a page id or a CQL query in the config.
-    gateway = _gateway()
-    _run("confluence_configured_page", _context(gateway, _form(page_id="42")))
-    assert (
-        gateway.search_pages.call_args.kwargs["variant"] == ConfluenceSearchVariant.SLIM
-    )
 
 
 # confluence_auth / confluence_scoped_token_auth

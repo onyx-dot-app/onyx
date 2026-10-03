@@ -6,7 +6,6 @@ from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC
 from onyx.connectors.confluence.source_operations import (
     ConfluenceSourceOperations,
-    ConfluenceUserEmailVariant,
     build_probed_confluence_gateway,
     user_list_variant,
 )
@@ -34,9 +33,7 @@ def _build_group_member_email_map(
             user_name = user.username
             # If it is present, try to get the email using a Server-specific method
             if user_name:
-                email = source_operations.get_user_email(
-                    variant=ConfluenceUserEmailVariant.USERNAME, user=user_name
-                )
+                email = source_operations.get_listed_user_email(username=user_name)
             else:
                 logger.error("user result missing username field: %s", user)
 

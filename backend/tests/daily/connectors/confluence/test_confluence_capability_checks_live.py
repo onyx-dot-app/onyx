@@ -1,5 +1,5 @@
-"""Runs the Confluence indexing checks against the live Cloud test site, with the
-classic and the scoped API token. Read only."""
+"""Runs the Confluence indexing, permission-sync and group-sync checks against
+the live Cloud test site, with the classic and the scoped API token. Read only."""
 
 import os
 from typing import Any
@@ -16,10 +16,13 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.confluence.capability_checks import (
+    build_confluence_doc_permission_sync_checks,
+    build_confluence_group_sync_checks,
     build_confluence_indexing_checks,
 )
 from onyx.connectors.confluence.source_operations import ConfluenceSourceOperations
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.db.enums import AccessType
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(
@@ -45,6 +48,35 @@ def _form(scoped_token: bool, **scope: Any) -> dict[str, Any]:
     }
 
 
+def _context(
+    test_secrets: dict[TestSecret, str],
+    scoped_token: bool,
+    config: dict[str, Any],
+    access_type: AccessType | None = None,
+) -> CapabilityCheckContext:
+    secret = (
+        TestSecret.CONFLUENCE_ACCESS_TOKEN_SCOPED
+        if scoped_token
+        else TestSecret.CONFLUENCE_ACCESS_TOKEN
+    )
+    credential_json = {
+        "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
+        "confluence_access_token": test_secrets[secret].strip(),
+    }
+    return CapabilityCheckContext(
+        source=DocumentSource.CONFLUENCE,
+        credential_json=credential_json,
+        connector_specific_config=config,
+        access_type=access_type,
+        source_operations=ConfluenceSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.CONFLUENCE, credential_json
+            ),
+            connector_specific_config=config,
+        ),
+    )
+
+
 @pytest.mark.parametrize("scoped_token", [False, True], ids=["classic", "scoped"])
 @pytest.mark.parametrize(
     "scope,mode_check_id",
@@ -63,27 +95,7 @@ def test_indexing_checks_pass_on_the_test_space(
     scope: dict[str, Any],
     mode_check_id: str,
 ) -> None:
-    secret = (
-        TestSecret.CONFLUENCE_ACCESS_TOKEN_SCOPED
-        if scoped_token
-        else TestSecret.CONFLUENCE_ACCESS_TOKEN
-    )
-    credential_json = {
-        "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
-        "confluence_access_token": test_secrets[secret].strip(),
-    }
-    config = _form(scoped_token, **scope)
-    context = CapabilityCheckContext(
-        source=DocumentSource.CONFLUENCE,
-        credential_json=credential_json,
-        connector_specific_config=config,
-        source_operations=ConfluenceSourceOperations(
-            credentials_provider=OnyxStaticCredentialsProvider(
-                None, DocumentSource.CONFLUENCE, credential_json
-            ),
-            connector_specific_config=config,
-        ),
-    )
+    context = _context(test_secrets, scoped_token, _form(scoped_token, **scope))
 
     results = run_capability_checks(build_confluence_indexing_checks(), context)
 
@@ -142,3 +154,61 @@ def test_scoped_mode_accepts_a_classic_token(
     # The gateway accepts classic API tokens too, so this setup works.
     token = test_secrets[TestSecret.CONFLUENCE_ACCESS_TOKEN].strip()
     assert _scoped_auth_result(token) == CapabilityCheckStatus.PASSED
+
+
+@pytest.mark.parametrize("scoped_token", [False, True], ids=["classic", "scoped"])
+def test_perm_sync_checks_pass_on_the_test_space(
+    test_secrets: dict[TestSecret, str], scoped_token: bool
+) -> None:
+    """The test account is a space admin of the test space, so the Cloud
+    permission-sync and group-sync checks all pass."""
+    context = _context(
+        test_secrets,
+        scoped_token,
+        _form(scoped_token, space=_SPACE),
+        access_type=AccessType.SYNC,
+    )
+
+    results = run_capability_checks(
+        build_confluence_doc_permission_sync_checks()
+        + build_confluence_group_sync_checks(),
+        context,
+    )
+
+    # The batch read is warning-only: CONFCLOUD-77618 fails it when the space
+    # has draft, outdated or trashed parent pages.
+    failures = {
+        result.check_id: result.message
+        for result in results
+        if result.applicable
+        and result.status != CapabilityCheckStatus.PASSED
+        and not (
+            result.check_id == "confluence_restrictions_batch_read"
+            and "CONFCLOUD-77618" in result.message
+        )
+    }
+    assert not failures, failures
+    applicable = {result.check_id for result in results if result.applicable}
+    assert applicable == {
+        "confluence_page_restrictions_read",
+        "confluence_restrictions_batch_read",
+        "confluence_space_permissions_read",
+        "confluence_permission_user_emails",
+        "confluence_user_listing",
+        "confluence_group_membership",
+        "confluence_group_user_emails",
+    }
+    verdicts = compute_capability_verdicts(
+        {
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
+        results,
+    )
+    assert verdicts[CredentialCapability.DOC_PERMISSION_SYNC] in (
+        CapabilityVerdict.PASSED,
+        CapabilityVerdict.PASSED_WITH_WARNINGS,
+    )
+    assert (
+        verdicts[CredentialCapability.EXTERNAL_GROUP_SYNC] == CapabilityVerdict.PASSED
+    )

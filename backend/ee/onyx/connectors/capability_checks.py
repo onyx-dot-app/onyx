@@ -16,6 +16,10 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.confluence.capability_checks import (
+    build_confluence_doc_permission_sync_checks,
+    build_confluence_group_sync_checks,
+)
 from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_doc_permission_sync_checks,
     build_onedrive_group_sync_checks,
@@ -32,6 +36,7 @@ from onyx.connectors.source_operations import get_source_operations_class
 # here.
 _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.SLACK: build_slack_doc_permission_sync_checks(),
+    DocumentSource.CONFLUENCE: build_confluence_doc_permission_sync_checks(),
     DocumentSource.OUTLOOK: build_outlook_doc_permission_sync_checks(),
     DocumentSource.ONEDRIVE: build_onedrive_doc_permission_sync_checks(),
 }
@@ -41,6 +46,7 @@ _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
 # mapping).
 _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.ONEDRIVE: build_onedrive_group_sync_checks(),
+    DocumentSource.CONFLUENCE: build_confluence_group_sync_checks(),
 }
 
 
