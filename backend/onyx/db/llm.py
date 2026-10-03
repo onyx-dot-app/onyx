@@ -1320,6 +1320,27 @@ def update_default_chat_naming_provider(
     if provider is None:
         raise ValueError(f"LLM Provider with id={provider_id} does not exist")
 
+    # CHAT_NAMING is a pointer flow, not a capability: nothing populates it
+    # during provider upsert, so the row has to be created before it can be
+    # defaulted.
+    model_config = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == provider_id,
+            ModelConfiguration.name == chat_naming_model,
+        )
+    )
+    if not model_config:
+        raise ValueError(
+            f"Model '{chat_naming_model}' is not a valid model for provider_id={provider_id}"
+        )
+
+    create_new_flow_mapping__no_commit(
+        db_session=db_session,
+        model_configuration_id=model_config.id,
+        flow_type=LLMModelFlowType.CHAT_NAMING,
+    )
+    db_session.flush()
+
     _update_default_model(
         db_session=db_session,
         provider_id=provider_id,
