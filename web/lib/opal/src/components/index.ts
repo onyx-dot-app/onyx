@@ -209,6 +209,7 @@ export {
   type ShadowDivProps,
   type ShadowDirection,
   type ShadowDivVariant,
+  type ShadowDivVariants,
 } from "@opal/components/shadow-div/components";
 
 /* Popover */

@@ -11,12 +11,14 @@
 
 .opal-dropdown {
   @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
+  /* A list matched to a narrow anchor still needs room for its rows. */
+  min-width: var(--block-width-dropdown-min);
 }
 
 /* The search field pinned above the rows: a borderless input on its own
-   row, with the same 4px inset as the rows below it. */
+   row, with a 4px inset on every side. */
 .opal-dropdown-search {
-  @apply p-1 pb-0;
+  @apply p-1;
 }
 
 /* The inner padding sits inside the ShadowDiv, so its scroll gradients span
@@ -26,6 +28,12 @@
 .opal-dropdown-scroll {
   @apply flex flex-col gap-1 overflow-x-hidden p-1;
   scrollbar-width: none;
+}
+
+/* Under a search field the rows take no top inset: the field's own 4px
+   below it is the gap. */
+.opal-dropdown-scroll[data-under-search] {
+  @apply pt-0;
 }
 .opal-dropdown-scroll::-webkit-scrollbar {
   display: none;

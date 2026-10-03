@@ -235,14 +235,19 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
         )}
         <ShadowDiv
           shadowHeight={3}
-          // Fade the rows themselves at the scroll edges. A painted shadow
-          // sat on top of the rows and read as a smudge on the light surface.
-          variant="mask"
+          // Rows fade out at the edges: a painted shadow sat on top of them
+          // and read as a smudge on the light surface. With a search field
+          // the top is different: the field casts a shadow on rows scrolled
+          // under it.
+          variant={hasSearch ? { top: "shadow", bottom: "mask" } : "mask"}
           // The rise-and-settle runs on this non-scrolling wrapper: a
           // transform on the scroller itself makes Chromium repaint it at
           // scroll offset 0 for a frame when compositing switches.
           containerClassName="opal-dropdown-content"
           className={cn("opal-dropdown-scroll", !maxHeight && "max-h-60")}
+          // The search field brings its own 4px below; the rows start right
+          // under that, with no inset of their own.
+          data-under-search={hasSearch || undefined}
           style={{
             // Scroll independently of whatever sits behind the portal.
             overscrollBehavior: "contain",

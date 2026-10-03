@@ -13,7 +13,7 @@ The gradients use the translucent `shadow-dark-01` token, black in both themes, 
 | `shadowHeight`       | `Spacing`                           | `6`                            | Height of each gradient, as a spacing step (`N / 4` rem) |
 | `scrollContainerRef` | `RefObject<HTMLDivElement \| null>` | —                              | External ref for programmatic scrolling       |
 | `shadowDirection`    | `ShadowDirection`                   | `"top-and-bottom"`             | `"top-and-bottom"`, `"top-only"`, or `"bottom-only"` |
-| `variant`            | `"shadow" \| "mask"`                | `"shadow"`                     | `"shadow"` paints translucent gradients over the content; `"mask"` fades the content itself, for surfaces a gradient could not match |
+| `variant`            | `"shadow" \| "mask" \| { top, bottom }` | `"shadow"`                 | `"shadow"` paints translucent gradients over the content; `"mask"` fades the content itself, for surfaces a gradient could not match. An object sets each edge: a shadow under a pinned header, a mask at the open end |
 | `className`          | `string`                            | —                              | Classes applied to the inner scroll container |
 
 All other `HTMLAttributes<HTMLDivElement>` props are forwarded to the inner scroll container.
