@@ -481,4 +481,4 @@ This is a parallel work item: doesn't block the client library landing behind th
 
 ## Open questions remaining
 
-None for the client library itself. The remaining decisions are out of scope (e.g., when to flip the flag, when to delete the ACP code per [`drop-acp-layer.md`](../drop-acp-layer.md)).
+None for the client library itself. The remaining decisions are out of scope (e.g., when to flip the flag, when to delete the ACP code per [`drop-acp-layer.md`](./drop-acp-layer.md)).
