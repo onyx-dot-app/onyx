@@ -134,7 +134,12 @@ def _resolve_allowlist_user_ids(
     when no allowlist is configured, meaning the bot has no invocation gate or
     response-visibility scope for the channel.
     """
-    allowlist = (channel_conf or {}).get("respond_member_group_list") or None
+    raw_allowlist = (channel_conf or {}).get("respond_member_group_list") or None
+    if not raw_allowlist:
+        return None, []
+
+    # Strip whitespace and drop blank/empty entries
+    allowlist = [item.strip() for item in raw_allowlist if isinstance(item, str) and item.strip()]
     if not allowlist:
         return None, []
 
