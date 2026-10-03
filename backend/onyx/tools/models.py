@@ -160,6 +160,8 @@ class DynamicSchemaInfo(BaseModel):
 class WebSearchToolOverrideKwargs(BaseModel):
     # To know what citation number to start at for constructing the string to the LLM
     starting_citation_num: int
+    # Number of chunks (token approx) to include in the string to the LLM
+    max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
 
 
 class OpenURLToolOverrideKwargs(BaseModel):
