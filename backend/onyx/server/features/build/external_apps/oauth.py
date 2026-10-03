@@ -1,14 +1,15 @@
-import base64
-import uuid
+import secrets
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import requests
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.pkce import generate_pkce_pair
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -22,7 +23,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_provider_or_raise
 from onyx.external_apps.token_utils import stamp_expires_at
-from onyx.redis.redis_pool import get_redis_client
+from onyx.oauth.authorization_attempt import (
+    AuthorizationAttemptStore,
+    canonical_json_fingerprint,
+)
+from onyx.oauth.models import OAuthConfigurationFingerprint, PKCECodeVerifier
 from onyx.server.features.build.external_apps.models import (
     OAuthCallbackRequest,
     OAuthCallbackResponse,
@@ -30,7 +35,6 @@ from onyx.server.features.build.external_apps.models import (
 )
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -40,9 +44,20 @@ router = APIRouter()
 # console.
 _FRONTEND_CALLBACK_PATH = "/craft/v1/apps/oauth/callback"
 
-# Distinct from `da_oauth:` used by the Slack-connector OAuth flow.
-_REDIS_KEY_PREFIX = "da_ea_oauth:"
-_REDIS_STATE_TTL_SECONDS = 600
+
+class _ExternalAppOAuthAttemptPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    external_app_id: int
+    configuration_fingerprint: OAuthConfigurationFingerprint
+    code_verifier: PKCECodeVerifier | None = None
+
+
+_AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
+    cache_backend_provider=lambda: get_cache_backend(),
+    namespace="external-app",
+    payload_type=_ExternalAppOAuthAttemptPayload,
+)
 
 
 def _oauth_client_credentials(app: ExternalApp) -> tuple[str, str]:
@@ -74,11 +89,21 @@ def _oauth_provider_or_raise(app: ExternalApp) -> OAuthExternalAppProvider:
     return provider
 
 
-class _OAuthStateRecord(BaseModel):
-    """Redis state — not part of the HTTP API."""
-
-    user_id: str
-    external_app_id: int
+def _configuration_fingerprint(
+    app: ExternalApp,
+    provider: OAuthExternalAppProvider,
+    client_id: str,
+    client_secret: str,
+) -> str:
+    return canonical_json_fingerprint(
+        {
+            "app_type": app.app_type.value,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": _frontend_callback_url(),
+            "oauth": provider.spec.oauth.model_dump(mode="json"),
+        },
+    )
 
 
 @router.get("/apps/{external_app_id}/oauth/start")
@@ -99,32 +124,37 @@ def start_external_app_oauth(
             "This app is currently disabled by an admin.",
         )
     provider = _oauth_provider_or_raise(app)
-    client_id, _client_secret = _oauth_client_credentials(app)
-
-    oauth_uuid = uuid.uuid4()
-    state = base64.urlsafe_b64encode(oauth_uuid.bytes).rstrip(b"=").decode("ascii")
-
-    tenant_id = get_current_tenant_id()
-    r = get_redis_client(tenant_id=tenant_id)
-    record = _OAuthStateRecord(user_id=str(user.id), external_app_id=external_app_id)
-    r.set(
-        f"{_REDIS_KEY_PREFIX}{oauth_uuid}",
-        record.model_dump_json(),
-        ex=_REDIS_STATE_TTL_SECONDS,
-    )
+    client_id, client_secret = _oauth_client_credentials(app)
 
     redirect_uri = _frontend_callback_url()
     oauth = provider.spec.oauth
     params: dict[str, str] = {
+        **oauth.extra_authorize_params,
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         oauth.scope_param: oauth.scope,
-        "state": state,
-        **oauth.extra_authorize_params,
     }
-    # Set after extra_authorize_params so a provider can't clobber it.
     if oauth.optional_scope:
         params[oauth.optional_scope_param] = oauth.optional_scope
+
+    code_verifier: str | None = None
+    if oauth.supports_pkce:
+        code_verifier, code_challenge = generate_pkce_pair()
+        params["code_challenge"] = code_challenge
+        params["code_challenge_method"] = "S256"
+
+    attempt = _AUTHORIZATION_ATTEMPTS.store(
+        owner_id=str(user.id),
+        payload=_ExternalAppOAuthAttemptPayload(
+            external_app_id=external_app_id,
+            configuration_fingerprint=_configuration_fingerprint(
+                app, provider, client_id, client_secret
+            ),
+            code_verifier=code_verifier,
+        ),
+    )
+    params["state"] = attempt.state
+
     # urlencode so URI-shaped scopes (Google) get `:` and `/`
     # percent-encoded.
     authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"
@@ -137,37 +167,16 @@ def handle_external_app_oauth_callback(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> OAuthCallbackResponse:
-    tenant_id = get_current_tenant_id()
-    r = get_redis_client(tenant_id=tenant_id)
+    attempt = _AUTHORIZATION_ATTEMPTS.consume(
+        owner_id=str(user.id), state=request.state
+    )
+    payload = attempt.payload
 
-    padded_state = request.state + "=" * (-len(request.state) % 4)
-    try:
-        uuid_bytes = base64.urlsafe_b64decode(padded_state)
-        oauth_uuid = uuid.UUID(bytes=uuid_bytes)
-    except (ValueError, TypeError):
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Malformed OAuth state.")
-
-    redis_key = f"{_REDIS_KEY_PREFIX}{oauth_uuid}"
-    record_bytes = r.get(redis_key)
-    if record_bytes is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "OAuth state expired or unknown — restart the connection flow.",
-        )
-    record = _OAuthStateRecord.model_validate_json(record_bytes.decode("utf-8"))
-
-    # Prevent one user's state from being redeemed by another.
-    if record.user_id != str(user.id):
-        raise OnyxError(
-            OnyxErrorCode.UNAUTHENTICATED,
-            "OAuth state does not match the calling user.",
-        )
-
-    app = get_external_app_by_id(db_session, record.external_app_id)
+    app = get_external_app_by_id(db_session, payload.external_app_id)
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
-            f"External app with id {record.external_app_id} no longer exists.",
+            f"External app with id {payload.external_app_id} no longer exists.",
         )
     if not app.enabled:
         raise OnyxError(
@@ -179,9 +188,21 @@ def handle_external_app_oauth_callback(
     oauth = provider.spec.oauth
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
+    if not secrets.compare_digest(
+        payload.configuration_fingerprint,
+        _configuration_fingerprint(app, provider, client_id, client_secret),
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "External app OAuth configuration changed while authorization was pending.",
+        )
 
     token_request = provider.build_token_exchange_request(
-        request.code, client_id, client_secret, _frontend_callback_url()
+        request.code,
+        client_id,
+        client_secret,
+        _frontend_callback_url(),
+        code_verifier=payload.code_verifier,
     )
     try:
         response = requests.post(
@@ -253,8 +274,5 @@ def handle_external_app_oauth_callback(
     # the now-usable skill bundle lands
     push_skills_for_users({user.id}, db_session)
     db_session.commit()
-
-    # One-shot — prevent replay.
-    r.delete(redis_key)
 
     return OAuthCallbackResponse(success=True, external_app_id=app.id)
