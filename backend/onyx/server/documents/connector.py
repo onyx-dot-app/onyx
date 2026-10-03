@@ -53,6 +53,7 @@ from onyx.connectors.credential_families import (
 )
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.factory import (
+    split_comma_separated_config_fields,
     validate_ccpair_for_user,
     validate_connector_config,
     validate_connector_credential_bindings,
@@ -1524,8 +1525,12 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
 
 def _validate_connector_request(connector_data: ConnectorBase) -> None:
     """Raises ``ValueError`` if the connector type is disabled or the config does
-    not match the source's typed config."""
+    not match the source's typed config. Splits comma-separated list fields in
+    place, so the stored config holds one value per entry."""
     _validate_connector_allowed(connector_data.source)
+    connector_data.connector_specific_config = split_comma_separated_config_fields(
+        connector_data.source, connector_data.connector_specific_config
+    )
     validate_connector_config(
         connector_data.source, connector_data.connector_specific_config
     )

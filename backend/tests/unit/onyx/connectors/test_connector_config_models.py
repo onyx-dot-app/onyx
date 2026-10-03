@@ -5,7 +5,10 @@ import typing
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.factory import build_connector_kwargs
+from onyx.connectors.factory import (
+    build_connector_kwargs,
+    split_comma_separated_config_fields,
+)
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 from onyx.connectors.sharepoint.config import (
     SharepointConnectorConfig,
@@ -86,3 +89,69 @@ def test_credential_binding_class_is_the_most_specific_binding() -> None:
         is SharepointCredentialBinding
     )
     assert WebConnectorConfig.credential_binding_class() is None
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    list(CONNECTOR_CLASS_MAP.values()),
+    ids=[source.value for source in CONNECTOR_CLASS_MAP],
+)
+def test_comma_separated_fields_are_list_fields(mapping: ConnectorMapping) -> None:
+    config_class = mapping.config_class
+    for name in (
+        config_class.COMMA_SEPARATED_FIELDS | config_class.COMMA_SEPARATED_URL_FIELDS
+    ):
+        annotation = config_class.model_fields[name].annotation
+        members = typing.get_args(annotation) or (annotation,)
+        assert list in {typing.get_origin(member) for member in members}, name
+
+
+def test_comma_separated_fields_are_split_and_stripped() -> None:
+    config = {
+        "sites": [
+            "https://a.sharepoint.com/sites/one, https://a.sharepoint.com/sites/two,",
+            " https://a.sharepoint.com/sites/three ",
+        ],
+        "excluded_paths": ["Archive/a,b.docx"],
+    }
+    expected_sites = [
+        "https://a.sharepoint.com/sites/one",
+        "https://a.sharepoint.com/sites/two",
+        "https://a.sharepoint.com/sites/three",
+    ]
+
+    assert split_comma_separated_config_fields(DocumentSource.SHAREPOINT, config) == {
+        "sites": expected_sites,
+        "excluded_paths": ["Archive/a,b.docx"],
+    }
+    assert build_connector_kwargs(DocumentSource.SHAREPOINT, config) == {
+        "sites": expected_sites,
+        "excluded_paths": ["Archive/a,b.docx"],
+    }
+
+
+def test_url_fields_keep_commas_inside_a_url() -> None:
+    folder_url = "https://a.sharepoint.com/sites/one/Shared Documents/Q1, Q2"
+    config = {
+        "sites": [f"{folder_url}, https://a.sharepoint.com/sites/two"],
+        "excluded_sites": ["https://a.sharepoint.com/sites/x,*://*/sites/archive-*"],
+    }
+
+    assert split_comma_separated_config_fields(DocumentSource.SHAREPOINT, config) == {
+        "sites": [folder_url, "https://a.sharepoint.com/sites/two"],
+        "excluded_sites": ["https://a.sharepoint.com/sites/x", "*://*/sites/archive-*"],
+    }
+
+
+@pytest.mark.parametrize(
+    "source,config",
+    [
+        (DocumentSource.SHAREPOINT, {"sites": [" , ", ""]}),
+        (DocumentSource.ONEDRIVE, {"users": [","]}),
+    ],
+)
+def test_entries_with_no_values_are_rejected(
+    source: DocumentSource, config: dict[str, list[str]]
+) -> None:
+    with pytest.raises(ValueError):
+        split_comma_separated_config_fields(source, config)
