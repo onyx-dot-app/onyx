@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "请先选择一个凭据。"
       },
+      "bindingGate": {
+        "enterField": "请输入“{field}”。",
+        "fixField": "请检查“{field}”。",
+        "awaitingCheck": "离开该字段后将使用凭据进行检查。",
+        "checking": "正在检查凭据…",
+        "fieldInvalid": "请检查“{field}”：{detail}",
+        "rejected": "此凭据无法与这些设置一起使用。{detail}"
+      },
       "credentialsLoadError": {
         "title": "加载凭据失败。"
       },
@@ -2937,6 +2945,17 @@
       "tabs": {
         "empty": {
           "label": "没有可显示的标签页。"
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "高级选项",
+        "errors": {
+          "missing": "请输入一个值。",
+          "invalid": "此值无效：{detail}"
         }
       },
       "scheduled": {
@@ -3328,8 +3347,7 @@
         "isSandbox": "是否为沙盒环境",
         "serviceUserEmail": "服务用户邮箱",
         "zuliprcContent": "Zuliprc 内容",
-        "authenticationMethod": "身份验证方式",
-        "scopedToken": "这是带作用域的 API 令牌"
+        "authenticationMethod": "身份验证方式"
       },
       "hints": {
         "boxUserEmail": "可选。要模拟的 Box 用户。",
@@ -3339,8 +3357,7 @@
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "PFX 文件。",
-        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
-        "scopedToken": "带作用域的令牌需要通过 Atlassian 的 API 网关进行路由。经典令牌请保持关闭。"
+        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。"
       },
       "methods": {
         "labels": {

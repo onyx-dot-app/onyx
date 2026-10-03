@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "最初に認証情報を選択してください。"
       },
+      "bindingGate": {
+        "enterField": "「{field}」を入力してください。",
+        "fixField": "「{field}」を確認してください。",
+        "awaitingCheck": "フィールドから移動すると、認証情報で確認します。",
+        "checking": "認証情報を確認しています…",
+        "fieldInvalid": "「{field}」を確認してください: {detail}",
+        "rejected": "この認証情報はこの設定では使用できません。{detail}"
+      },
       "credentialsLoadError": {
         "title": "認証情報の読み込みに失敗しました。"
       },
@@ -2937,6 +2945,17 @@
       "tabs": {
         "empty": {
           "label": "表示するタブはありません。"
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "詳細オプション",
+        "errors": {
+          "missing": "値を入力してください。",
+          "invalid": "この値は無効です: {detail}"
         }
       },
       "scheduled": {
@@ -3328,8 +3347,7 @@
         "isSandbox": "サンドボックス環境かどうか",
         "serviceUserEmail": "サービスユーザーのメールアドレス",
         "zuliprcContent": "Zuliprc の内容",
-        "authenticationMethod": "認証方法",
-        "scopedToken": "スコープ付きの API トークンです"
+        "authenticationMethod": "認証方法"
       },
       "hints": {
         "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
@@ -3339,8 +3357,7 @@
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "PFX ファイルです。",
-        "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
-        "scopedToken": "スコープ付きトークンは Atlassian の API ゲートウェイを経由する必要があります。クラシックトークンの場合はオフのままにしてください。"
+        "testrailBaseUrl": "例: https://yourcompany.testrail.io。"
       },
       "methods": {
         "labels": {

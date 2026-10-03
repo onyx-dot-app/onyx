@@ -75,9 +75,16 @@ export interface NumberOption extends Option {
   default?: number;
 }
 
+/** A key under `admin.connectorsList.checkboxTabs` in the message catalog. */
+export type CheckboxTabLabelKey = "confluenceCloud" | "confluenceDataCenter";
+
 export interface BooleanOption extends Option {
   type: "checkbox";
   default?: boolean;
+  /** The value the credential sets; the form uses it while the field is disabled. */
+  initial?: (currentCredential: Credential<any> | null) => boolean | undefined;
+  /** Shows the value as two tabs with these labels instead of a checkbox. */
+  tabLabels?: { true: CheckboxTabLabelKey; false: CheckboxTabLabelKey };
 }
 
 export interface FileOption extends Option {

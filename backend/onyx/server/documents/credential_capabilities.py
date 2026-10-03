@@ -7,6 +7,7 @@ content, never an HTTP error.
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -25,7 +26,13 @@ from onyx.connectors.capability_checks.draft_runs import (
 )
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
 from onyx.connectors.credential_families import is_credential_usable_for_source
-from onyx.connectors.factory import validate_connector_config
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.factory import (
+    CredentialBindingFieldError,
+    credential_binding_field_errors,
+    validate_connector_config,
+    validate_credential_binding,
+)
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
@@ -139,6 +146,22 @@ def _validate_credential_usable_for_source(
             OnyxErrorCode.INVALID_INPUT,
             f"Credential {credential.id} cannot be used by a {source.value} connector.",
         )
+
+
+def _fetch_credential_usable_for_source(
+    credential_id: int, source: DocumentSource, user: User, db_session: Session
+) -> Credential:
+    """The credential, for an unsaved form of ``source``. GATE 2 for
+    ``allow_scope``: the caller must see the credential. An unknown credential
+    is indistinguishable from an inaccessible one."""
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or is not accessible.",
+        )
+    _validate_credential_usable_for_source(credential, source)
+    return credential
 
 
 class CapabilityCheckRunRequest(BaseModel):
@@ -352,6 +375,78 @@ def list_capability_reports_for_source(
     ]
 
 
+class CredentialBindingCheckRequest(BaseModel):
+    """Body of the binding-check endpoint. Only the credential-bound fields of
+    ``connector_specific_config`` are read; other keys are ignored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: DocumentSource
+    connector_specific_config: dict[str, Any]
+
+
+class CredentialBindingRejectionCode(str, Enum):
+    BINDING_REJECTED = "binding_rejected"
+
+
+class CredentialBindingRejection(BaseModel):
+    code: CredentialBindingRejectionCode
+    # English text from the source's binding rule, e.g. which site the
+    # credential is for. Clients show their own message for ``code`` and may
+    # add this as detail.
+    detail: str
+
+
+class CredentialBindingCheckResponse(BaseModel):
+    """The bound fields are valid with the credential when both fields are
+    empty. Clients map ``kind`` and ``code`` to their own messages; the
+    English ``detail`` texts are for what no client message covers."""
+
+    # Bound field name to its error.
+    field_errors: dict[str, CredentialBindingFieldError]
+    # Set when the credential cannot be used with valid bound fields.
+    rejection: CredentialBindingRejection | None
+
+
+@router.post("/admin/credential/{credential_id}/binding-check")
+def check_credential_binding(
+    credential_id: int,
+    request: CredentialBindingCheckRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CredentialBindingCheckResponse:
+    """Checks the bound fields of an unsaved connector form against the
+    credential, as pairing does. Does no I/O to the source. A rejected binding
+    is response content, not an HTTP error."""
+    if request.source not in CONNECTOR_CLASS_MAP:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{request.source.value} has no connector configuration.",
+        )
+    credential = _fetch_credential_usable_for_source(
+        credential_id, request.source, user, db_session
+    )
+    field_errors = credential_binding_field_errors(
+        request.source, request.connector_specific_config
+    )
+    if field_errors:
+        return CredentialBindingCheckResponse(field_errors=field_errors, rejection=None)
+    try:
+        validate_credential_binding(
+            request.source, request.connector_specific_config, credential
+        )
+    except ConnectorValidationError as e:
+        return CredentialBindingCheckResponse(
+            field_errors={},
+            rejection=CredentialBindingRejection(
+                code=CredentialBindingRejectionCode.BINDING_REJECTED, detail=str(e)
+            ),
+        )
+    return CredentialBindingCheckResponse(field_errors={}, rejection=None)
+
+
 class DraftCheckRunRequest(BaseModel):
     """Body of the draft run endpoint: an unsaved connector form."""
 
@@ -389,17 +484,9 @@ def start_draft_check_run(
             OnyxErrorCode.INVALID_INPUT,
             f"{request.source.value} has no connector configuration.",
         )
-    # GATE 2 for ``allow_scope``: the caller must see the credential. An unknown
-    # credential is indistinguishable from an inaccessible one.
-    credential = fetch_credential_by_id_for_user(
-        request.credential_id, user, db_session
+    credential = _fetch_credential_usable_for_source(
+        request.credential_id, request.source, user, db_session
     )
-    if credential is None:
-        raise OnyxError(
-            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
-            f"Credential {request.credential_id} does not exist or is not accessible.",
-        )
-    _validate_credential_usable_for_source(credential, request.source)
     try:
         return start_draft_capability_check_run(
             user_id=user.id,

@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "먼저 자격 증명을 선택하세요."
       },
+      "bindingGate": {
+        "enterField": "‘{field}’을(를) 입력하세요.",
+        "fixField": "‘{field}’을(를) 확인하세요.",
+        "awaitingCheck": "필드를 벗어나면 자격 증명으로 확인합니다.",
+        "checking": "자격 증명을 확인하는 중…",
+        "fieldInvalid": "‘{field}’을(를) 확인하세요: {detail}",
+        "rejected": "이 자격 증명은 이 설정으로 사용할 수 없습니다. {detail}"
+      },
       "credentialsLoadError": {
         "title": "자격 증명을 불러오지 못했습니다."
       },
@@ -2937,6 +2945,17 @@
       "tabs": {
         "empty": {
           "label": "표시할 탭이 없습니다."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "고급 옵션",
+        "errors": {
+          "missing": "값을 입력하세요.",
+          "invalid": "이 값은 올바르지 않습니다: {detail}"
         }
       },
       "scheduled": {
@@ -3328,8 +3347,7 @@
         "isSandbox": "샌드박스 환경 여부",
         "serviceUserEmail": "서비스 사용자 이메일",
         "zuliprcContent": "Zuliprc 내용",
-        "authenticationMethod": "인증 방법",
-        "scopedToken": "범위가 지정된 API 토큰입니다"
+        "authenticationMethod": "인증 방법"
       },
       "hints": {
         "boxUserEmail": "선택 사항입니다. 대신 접근할 Box 사용자입니다.",
@@ -3339,8 +3357,7 @@
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "PFX 파일입니다.",
-        "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
-        "scopedToken": "범위가 지정된 토큰은 Atlassian의 API 게이트웨이를 거쳐야 합니다. 클래식 토큰이면 끈 상태로 두세요."
+        "testrailBaseUrl": "예: https://yourcompany.testrail.io."
       },
       "methods": {
         "labels": {

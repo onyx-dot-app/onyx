@@ -10,6 +10,7 @@ import {
   MIN_PRUNE_FREQ_HOURS,
   MIN_REFRESH_FREQ_MINUTES,
 } from "@/lib/connectors/connectors";
+import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
   PIPELINE_ORDER,
@@ -41,6 +42,50 @@ export function isLoadState(connector_name: string): boolean {
 }
 
 type ConnectorField = ConnectionConfiguration["values"][number];
+
+/** A connector form's fields, split by whether they are bound to the credential. */
+export interface CredentialBoundFieldSplit {
+  /** The bound fields of `values`, in their order. */
+  values: ConnectorField[];
+  /** The bound fields of `advanced_values`, in their order. */
+  advancedValues: ConnectorField[];
+  /** The configuration without the bound fields. */
+  rest: ConnectionConfiguration;
+}
+
+/**
+ * Source to the names of its credential-bound fields: the fields of the
+ * backend `CredentialBinding` model, whose valid values depend on the account
+ * behind the credential. `backend/scripts/generate_credential_bound_fields.py`
+ * writes the file, and a backend test keeps it equal to the models.
+ */
+const CREDENTIAL_BOUND_FIELDS: Partial<Record<ValidSources, string[]>> =
+  credentialBoundFields;
+
+/**
+ * Takes the credential-bound fields out of a configuration, so the create form
+ * can show them above the credential section. Only top-level fields move. A
+ * bound field inside a tab is not supported: it stays with its tab, and no
+ * source has one now.
+ */
+export function splitCredentialBoundFields(
+  source: ValidSources,
+  configuration: ConnectionConfiguration
+): CredentialBoundFieldSplit {
+  const boundNames = new Set(CREDENTIAL_BOUND_FIELDS[source] ?? []);
+  const isBound = (field: ConnectorField) => boundNames.has(field.name);
+  return {
+    values: configuration.values.filter(isBound),
+    advancedValues: configuration.advanced_values.filter(isBound),
+    rest: {
+      ...configuration,
+      values: configuration.values.filter((field) => !isBound(field)),
+      advanced_values: configuration.advanced_values.filter(
+        (field) => !isBound(field)
+      ),
+    },
+  };
+}
 
 interface ConnectorValidationMessages {
   oneDriveUsersRequired?: string;

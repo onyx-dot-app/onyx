@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "Wähle zuerst einen Zugang aus."
       },
+      "bindingGate": {
+        "enterField": "Geben Sie das Feld „{field}“ ein.",
+        "fixField": "Prüfen Sie das Feld „{field}“.",
+        "awaitingCheck": "Verlassen Sie das Feld, um es mit den Anmeldedaten zu prüfen.",
+        "checking": "Die Anmeldedaten werden geprüft…",
+        "fieldInvalid": "Prüfen Sie das Feld „{field}“: {detail}",
+        "rejected": "Diese Anmeldedaten können mit diesen Einstellungen nicht verwendet werden. {detail}"
+      },
       "credentialsLoadError": {
         "title": "Die Anmeldedaten konnten nicht geladen werden."
       },
@@ -2937,6 +2945,17 @@
       "tabs": {
         "empty": {
           "label": "Keine Tabs zum Anzeigen."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Erweiterte Optionen",
+        "errors": {
+          "missing": "Geben Sie einen Wert ein.",
+          "invalid": "Dieser Wert ist ungültig: {detail}"
         }
       },
       "scheduled": {
@@ -3328,8 +3347,7 @@
         "isSandbox": "Sandbox-Umgebung",
         "serviceUserEmail": "E-Mail-Adresse des Dienstbenutzers",
         "zuliprcContent": "Zuliprc-Inhalt",
-        "authenticationMethod": "Authentifizierungsmethode",
-        "scopedToken": "Dies ist ein API-Token mit Bereichen"
+        "authenticationMethod": "Authentifizierungsmethode"
       },
       "hints": {
         "boxUserEmail": "Optional. Der Box-Benutzer, dessen Identität übernommen wird.",
@@ -3339,8 +3357,7 @@
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indiziert wird.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
         "pfxFile": "Eine PFX-Datei.",
-        "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
-        "scopedToken": "Tokens mit Bereichen müssen über das API-Gateway von Atlassian geleitet werden. Lassen Sie diese Option für klassische Tokens deaktiviert."
+        "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io."
       },
       "methods": {
         "labels": {

@@ -236,9 +236,6 @@ export const CREDENTIAL_SPECS = {
     fields: {
       confluence_username: email("accountEmail"),
       confluence_access_token: secret("apiToken"),
-      // Hidden for now, until existing connectors' stored `scoped_token`
-      // config is migrated onto their credentials.
-      // scoped_token: checkbox("scopedToken", { hint: { key: "scopedToken" } }),
     },
   }),
   jira: defineCredentialSpec({
@@ -249,9 +246,6 @@ export const CREDENTIAL_SPECS = {
         hint: { key: "jiraUserEmail" },
       }),
       jira_api_token: secret("apiToken"),
-      // Hidden for now, until existing connectors' stored `scoped_token`
-      // config is migrated onto their credentials.
-      // scoped_token: checkbox("scopedToken", { hint: { key: "scopedToken" } }),
     },
   }),
   productboard: defineCredentialSpec({

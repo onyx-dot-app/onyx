@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "Selecciona primero una credencial."
       },
+      "bindingGate": {
+        "enterField": "Introduce el campo «{field}».",
+        "fixField": "Revisa el campo «{field}».",
+        "awaitingCheck": "Sal del campo para comprobarlo con la credencial.",
+        "checking": "Comprobando la credencial…",
+        "fieldInvalid": "Revisa el campo «{field}»: {detail}",
+        "rejected": "Esta credencial no se puede usar con esta configuración. {detail}"
+      },
       "credentialsLoadError": {
         "title": "No se pudieron cargar las credenciales."
       },
@@ -2937,6 +2945,17 @@
       "tabs": {
         "empty": {
           "label": "No hay pestañas que mostrar."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Opciones avanzadas",
+        "errors": {
+          "missing": "Introduce un valor.",
+          "invalid": "Este valor no es válido: {detail}"
         }
       },
       "scheduled": {
@@ -3328,8 +3347,7 @@
         "isSandbox": "Es un entorno de sandbox",
         "serviceUserEmail": "Correo del usuario de servicio",
         "zuliprcContent": "Contenido de zuliprc",
-        "authenticationMethod": "Método de autenticación",
-        "scopedToken": "Es un token de API con ámbitos"
+        "authenticationMethod": "Método de autenticación"
       },
       "hints": {
         "boxUserEmail": "Opcional. El usuario de Box al que suplantar.",
@@ -3339,8 +3357,7 @@
         "lumappsServiceUser": "El usuario en cuyo nombre se indexa.",
         "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
         "pfxFile": "Un archivo PFX.",
-        "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io.",
-        "scopedToken": "Los tokens con ámbitos deben enrutarse a través de la puerta de enlace de API de Atlassian. Déjalo desactivado para los tokens clásicos."
+        "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io."
       },
       "methods": {
         "labels": {

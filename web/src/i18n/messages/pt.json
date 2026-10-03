@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "Selecione uma credencial primeiro."
       },
+      "bindingGate": {
+        "enterField": "Insira o campo \"{field}\".",
+        "fixField": "Verifique o campo \"{field}\".",
+        "awaitingCheck": "Saia do campo para verificá-lo com a credencial.",
+        "checking": "Verificando a credencial…",
+        "fieldInvalid": "Verifique o campo \"{field}\": {detail}",
+        "rejected": "Esta credencial não pode ser usada com estas configurações. {detail}"
+      },
       "credentialsLoadError": {
         "title": "Falha ao carregar as credenciais."
       },
@@ -2937,6 +2945,17 @@
       "tabs": {
         "empty": {
           "label": "Nenhuma aba para mostrar."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Opções avançadas",
+        "errors": {
+          "missing": "Insira um valor.",
+          "invalid": "Este valor não é válido: {detail}"
         }
       },
       "scheduled": {
@@ -3328,8 +3347,7 @@
         "isSandbox": "Ambiente de sandbox",
         "serviceUserEmail": "E-mail do usuário de serviço",
         "zuliprcContent": "Conteúdo do Zuliprc",
-        "authenticationMethod": "Método de autenticação",
-        "scopedToken": "Este é um token de API com escopos"
+        "authenticationMethod": "Método de autenticação"
       },
       "hints": {
         "boxUserEmail": "Opcional. O usuário do Box a ser representado.",
@@ -3339,8 +3357,7 @@
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Um arquivo PFX.",
-        "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
-        "scopedToken": "Tokens com escopos precisam passar pelo gateway de API da Atlassian. Deixe desativado para tokens clássicos."
+        "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io."
       },
       "methods": {
         "labels": {

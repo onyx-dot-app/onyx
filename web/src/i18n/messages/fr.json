@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "Sélectionnez d'abord un identifiant."
       },
+      "bindingGate": {
+        "enterField": "Saisissez le champ « {field} ».",
+        "fixField": "Vérifiez le champ « {field} ».",
+        "awaitingCheck": "Quittez le champ pour le vérifier avec les identifiants.",
+        "checking": "Vérification des identifiants…",
+        "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
+        "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"
+      },
       "credentialsLoadError": {
         "title": "Échec du chargement des identifiants."
       },
@@ -2937,6 +2945,17 @@
       "tabs": {
         "empty": {
           "label": "Aucun onglet à afficher."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Options avancées",
+        "errors": {
+          "missing": "Saisissez une valeur.",
+          "invalid": "Cette valeur n’est pas valide : {detail}"
         }
       },
       "scheduled": {
@@ -3328,8 +3347,7 @@
         "isSandbox": "Environnement sandbox",
         "serviceUserEmail": "E-mail de l'utilisateur de service",
         "zuliprcContent": "Contenu de zuliprc",
-        "authenticationMethod": "Méthode d'authentification",
-        "scopedToken": "Ceci est un jeton d'API avec des portées"
+        "authenticationMethod": "Méthode d'authentification"
       },
       "hints": {
         "boxUserEmail": "Facultatif. L'utilisateur Box à usurper.",
@@ -3339,8 +3357,7 @@
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Un fichier PFX.",
-        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
-        "scopedToken": "Les jetons avec portées doivent passer par la passerelle d'API d'Atlassian. Laissez cette option désactivée pour les jetons classiques."
+        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io."
       },
       "methods": {
         "labels": {

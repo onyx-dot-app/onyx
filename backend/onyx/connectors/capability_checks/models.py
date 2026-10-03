@@ -117,6 +117,11 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
       to make a permission-sync check apply to all of them.
     - ``applies``: a predicate on the form state, for anything the two
       declarations above cannot express.
+
+    ``validates_binding`` marks a check that proves the credential works with
+    the credential-bound fields (e.g. it signs in to the site URL). Such a
+    check may require only bound fields. A create form can wait on these
+    checks before it unlocks the rest of the configuration.
     """
 
     # The source's config model. None for checks that never read the config.
@@ -137,6 +142,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         is_fallback: bool = False,
         remediation: str | None = None,
         docs_link: str | None = None,
+        validates_binding: bool = False,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -168,6 +174,7 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.is_fallback = is_fallback
         self.remediation = remediation
         self.docs_link = docs_link
+        self.validates_binding = validates_binding
 
     @abstractmethod
     def run(self, context: CapabilityCheckContext) -> None:
@@ -231,6 +238,7 @@ class CapabilityCheckResult(BaseModel):
     # False for a SKIPPED check that does not apply to the access type or the
     # config. It does not count toward the verdict.
     applicable: bool = True
+    validates_binding: bool = False
 
 
 class CredentialCapabilityReport(BaseModel):

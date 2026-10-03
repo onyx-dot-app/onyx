@@ -2677,6 +2677,14 @@
       "credentialRequired": {
         "tooltip": "اختر بيانات اعتماد أولاً."
       },
+      "bindingGate": {
+        "enterField": "أدخل «{field}».",
+        "fixField": "تحقق من «{field}».",
+        "awaitingCheck": "غادر الحقل للتحقق منه باستخدام بيانات الاعتماد.",
+        "checking": "جارٍ التحقق من بيانات الاعتماد…",
+        "fieldInvalid": "تحقق من «{field}»: {detail}",
+        "rejected": "لا يمكن استخدام بيانات الاعتماد هذه مع هذه الإعدادات. {detail}"
+      },
       "credentialsLoadError": {
         "title": "فشل تحميل بيانات الاعتماد."
       },
@@ -2937,6 +2945,17 @@
       "tabs": {
         "empty": {
           "label": "لا توجد تبويبات لعرضها."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "خيارات متقدمة",
+        "errors": {
+          "missing": "أدخل قيمة.",
+          "invalid": "هذه القيمة غير صالحة: {detail}"
         }
       },
       "scheduled": {
@@ -3328,8 +3347,7 @@
         "isSandbox": "بيئة تجريبية (Sandbox)",
         "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
         "zuliprcContent": "محتوى Zuliprc",
-        "authenticationMethod": "طريقة المصادقة",
-        "scopedToken": "هذا رمز API ذو نطاقات"
+        "authenticationMethod": "طريقة المصادقة"
       },
       "hints": {
         "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
@@ -3339,8 +3357,7 @@
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ملف PFX.",
-        "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
-        "scopedToken": "يجب توجيه الرموز ذات النطاقات عبر بوابة API الخاصة بـ Atlassian. اتركه معطّلًا للرموز الكلاسيكية."
+        "testrailBaseUrl": "مثل https://yourcompany.testrail.io."
       },
       "methods": {
         "labels": {
