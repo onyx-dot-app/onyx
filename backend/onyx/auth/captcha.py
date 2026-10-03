@@ -152,7 +152,7 @@ def _check_token_freshness(create_time: str | None) -> None:
             "Captcha verification failed: missing createTime"
         )
     try:
-        ts = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
+        ts = datetime.fromisoformat(create_time)
     except ValueError:
         logger.warning("Captcha createTime unparseable: %r", create_time)
         raise CaptchaVerificationError(

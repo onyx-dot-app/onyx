@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import User, VoiceProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.voice.interface import normalize_provider_type
 
 MIN_VOICE_PLAYBACK_SPEED = 0.5
 MAX_VOICE_PLAYBACK_SPEED = 2.0
@@ -20,12 +21,17 @@ def fetch_voice_providers(db_session: Session) -> list[VoiceProvider]:
 
 
 def fetch_voice_provider_by_id(
-    db_session: Session, provider_id: int
+    db_session: Session, provider_id: int, *, for_update: bool = False
 ) -> VoiceProvider | None:
-    """Fetch a voice provider by ID."""
-    return db_session.scalar(
-        select(VoiceProvider).where(VoiceProvider.id == provider_id)
-    )
+    """Fetch a voice provider by ID.
+
+    `for_update` locks the row until the transaction ends, so a concurrent
+    upsert cannot change the row between a capability check and an update.
+    """
+    stmt = select(VoiceProvider).where(VoiceProvider.id == provider_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    return db_session.scalar(stmt)
 
 
 def fetch_default_stt_provider(db_session: Session) -> VoiceProvider | None:
@@ -45,10 +51,23 @@ def fetch_default_tts_provider(db_session: Session) -> VoiceProvider | None:
 def fetch_voice_provider_by_type(
     db_session: Session, provider_type: str
 ) -> VoiceProvider | None:
-    """Fetch a voice provider by type."""
-    return db_session.scalar(
-        select(VoiceProvider).where(VoiceProvider.provider_type == provider_type)
-    )
+    """Fetch one provider by normalized type, rejecting ambiguous matches.
+
+    Rows are matched in Python with normalize_provider_type so legacy values
+    follow the same rule as requests. The table holds a handful of rows.
+    """
+    wanted = normalize_provider_type(provider_type)
+    providers = [
+        provider
+        for provider in db_session.scalars(select(VoiceProvider)).all()
+        if normalize_provider_type(provider.provider_type) == wanted
+    ]
+    if len(providers) > 1:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Multiple voice providers match this type. Provide an API key explicitly.",
+        )
+    return providers[0] if providers else None
 
 
 def upsert_voice_provider(

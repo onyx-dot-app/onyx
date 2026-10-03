@@ -11,6 +11,7 @@ import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import { InputErrorText, toast } from "@opal/layouts";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 // App domain should not be hardcoded
 const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
@@ -48,7 +49,9 @@ export default function NewTenantModal({
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+          const errorData: ErrorResponseBody = await response
+            .json()
+            .catch(() => ({}));
           throw new Error(
             errorData.detail ||
               errorData.message ||
@@ -94,7 +97,9 @@ export default function NewTenantModal({
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData: ErrorResponseBody = await response
+          .json()
+          .catch(() => ({}));
         throw new Error(
           errorData.detail ||
             errorData.message ||

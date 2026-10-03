@@ -38,7 +38,7 @@ import {
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
-import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { useCraftMcpServers } from "@/lib/mcp/hooks";
 import { compareByName } from "@/lib/skills/picker";
 
 // Apps and MCP servers are connected, governed, and taught to the agent
@@ -66,16 +66,19 @@ export default function ExternalAppsPage() {
         icon={SvgPlug}
         title={t("header.title")}
         description={t("header.description")}
-        rightChildren={
-          isAdmin ? (
-            <Button
-              href="/admin/craft/apps"
-              prominence="secondary"
-              icon={SvgSettings}
-            >
-              {t("header.manageButton")}
-            </Button>
-          ) : undefined
+        actions={
+          isAdmin
+            ? [
+                <Button
+                  key="manage"
+                  href="/admin/craft/apps"
+                  prominence="secondary"
+                  icon={SvgSettings}
+                >
+                  {t("header.manageButton")}
+                </Button>,
+              ]
+            : []
         }
       >
         <InputTypeIn
@@ -159,7 +162,7 @@ function AppConnections({ query }: AppConnectionsProps) {
 
   if (isLoading) {
     return (
-      <Card background="none" border="dashed" rounding={4}>
+      <Card color="transparent" border="dashed" rounding={4}>
         <Text font="main-content-body">{t("loading.label")}</Text>
       </Card>
     );
@@ -245,9 +248,9 @@ function KindSlot({ tab, panel, children }: KindSlotProps) {
             ) : active ? (
               <Tabs.Content value={kind}>{content}</Tabs.Content>
             ) : (
-              // Mirrors the top padding Tabs.Content applies, so the height an
-              // unselected kind holds matches what it occupies once selected.
-              <div className="w-full pt-4">{content}</div>
+              // Mirrors the w-full wrapper Tabs.Content applies, so the height
+              // an unselected kind holds matches what it occupies once selected.
+              <div className="w-full">{content}</div>
             )}
           </div>
         );
@@ -411,7 +414,7 @@ function ConnectableCard({
           highlight && "ring-2 ring-action-selection-04"
         )}
       >
-        <Card background="light" border="solid" rounding={4}>
+        <Card color="background-tint-00" border="solid" rounding={4}>
           <ContentAction
             sizePreset="main-ui"
             variant="section"

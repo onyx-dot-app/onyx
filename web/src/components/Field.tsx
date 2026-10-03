@@ -26,27 +26,25 @@ import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
 import remarkGfm from "remark-gfm";
-import { Button, Checkbox } from "@opal/components";
-
-import { Section } from "@/layouts/general-layouts";
-import { transformLinkUri } from "@/lib/utils";
-import { cn } from "@opal/utils";
-import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
-import { RichTextSubtext } from "./RichTextSubtext";
 import {
-  TypedFile,
-  createTypedFile,
-  getFileTypeDefinitionForField,
-  FILE_TYPE_DEFINITIONS,
-} from "@/lib/connectors/fileTypes";
-import Text from "@/refresh-components/texts/Text";
-
-import {
+  Button,
+  InputCheckbox,
+  InputDatePicker,
   InputTextArea,
   type InputTextAreaProps,
   Tooltip,
 } from "@opal/components";
+
+import { Section } from "@/layouts/general-layouts";
+import { transformLinkUri } from "@/lib/utils";
+import { cn } from "@opal/utils";
+import FileInput from "@/views/admin/connectors/AddConnectorPage/form/inputs/FileInput";
+import { RichTextSubtext } from "./RichTextSubtext";
+import { TypedFile, FILE_TYPE_DEFINITIONS } from "@/lib/connectors/fileTypes";
+import { createTypedFile } from "@/lib/connectors/utils";
+import { getCredentialFileType } from "@/lib/credentials/utils";
+import Text from "@/refresh-components/texts/Text";
+
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
 export function SectionHeader({
@@ -451,7 +449,7 @@ export function TypedFileUploadFormField({
   const [description, setDescription] = useState<string>("");
 
   useEffect(() => {
-    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    const typeDefinitionKey = getCredentialFileType(name);
     if (typeDefinitionKey) {
       setDescription(
         FILE_TYPE_DEFINITIONS[typeDefinitionKey].description || ""
@@ -506,7 +504,7 @@ export function TypedFileUploadFormField({
       return;
     }
 
-    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    const typeDefinitionKey = getCredentialFileType(name);
 
     if (!typeDefinitionKey) {
       setCustomError(t("fileValidation.noTypeDefinition", { name }));
@@ -770,7 +768,7 @@ export const BooleanFormField = memo(function BooleanFormField({
                     removeIndent ? "me-2" : "mx-3"
                   )}
                 >
-                  <Checkbox
+                  <InputCheckbox
                     aria-label={`${label
                       .toLowerCase()
                       .replace(" ", "-")}-checkbox`}
@@ -1100,9 +1098,10 @@ export function DatePickerField({
     <div>
       <FieldLabel label={label} name={name} subtext={subtext} />
       <InputDatePicker
-        selectedDate={field.value}
-        setSelectedDate={helper.setValue}
-        startYear={startYear}
+        id={name}
+        value={field.value}
+        onChange={helper.setValue}
+        minDate={new Date(startYear, 0, 1)}
         disabled={disabled}
       />
     </div>

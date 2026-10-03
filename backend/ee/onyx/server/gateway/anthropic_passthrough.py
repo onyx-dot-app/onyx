@@ -30,8 +30,7 @@ from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import llm_from_provider
-from onyx.llm.interfaces import LLM
-from onyx.llm.model_response import Usage
+from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.gateway.configs import (
     ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED,
@@ -124,6 +123,28 @@ def _build_upstream_request(
             OnyxErrorCode.INVALID_INPUT,
             "mcp_servers is not supported by the Onyx gateway.",
         )
+    if body.get("container") is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "container references are not supported by the Onyx gateway.",
+        )
+    pending: list[Any] = list(body.get("messages") or [])
+    while pending:
+        part = pending.pop()
+        if not isinstance(part, dict):
+            continue
+        source = part.get("source")
+        if part.get("file_id") or (
+            isinstance(source, dict) and source.get("type") == "file"
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "file_id references are not supported by the Onyx "
+                "gateway; send file content inline.",
+            )
+        content = part.get("content")
+        if isinstance(content, list):
+            pending.extend(content)
     body["model"] = model_name
     if stream is not None:
         # Always overwrite: opaque provider-side abuse attribution, never a
@@ -317,7 +338,7 @@ def handle_anthropic_passthrough(
             if isinstance(block, dict) and block.get("type") == "text"
         )
         converted_usage = _usage_from_anthropic_wire(usage) if usage else None
-        if converted_usage is not None and isinstance(llm, LitellmLLM):
+        if converted_usage is not None:
             # Managed-key cost accounting normally happens inside
             # LLM.invoke/stream, which this path bypasses.
             llm._track_llm_cost(converted_usage)
@@ -347,7 +368,7 @@ def _passthrough_stream_worker(
     url: str,
     headers: dict[str, str],
     body: dict[str, Any],
-    llm: LLM,
+    llm: LitellmLLM,
     flow: LLMFlow,
     input_messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
@@ -475,7 +496,7 @@ def _passthrough_stream_worker(
                 _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled)
             # Managed-key cost accounting normally happens inside
             # LLM.invoke/stream, which this path bypasses.
-            if state.usage is not None and isinstance(llm, LitellmLLM):
+            if state.usage is not None:
                 llm._track_llm_cost(state.usage)
 
 

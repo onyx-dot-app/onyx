@@ -143,7 +143,7 @@ export class UsersAdminPage {
 
   /**
    * Returns the text content of a specific column across all visible rows.
-   * Column indices: 0=Name, 1=Groups, 2=Account Type, 3=Status, 4=Last Updated.
+   * Column indices: 0=Name, 1=Groups, 2=Account Type, 3=Status, 4=Last Active.
    */
   async getColumnTexts(columnIndex: number): Promise<string[]> {
     const cells = this.tableRows.locator(`td:nth-child(${columnIndex + 2})`);

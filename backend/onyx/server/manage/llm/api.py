@@ -13,10 +13,11 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.auth.users import current_chat_accessible_user
+from onyx.auth.users import current_chat_accessible_user, scope_exempt
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
+    ModelConfigurationWindow,
     can_user_access_llm_provider,
     fetch_default_chat_naming_model,
     fetch_default_craft_model,
@@ -26,6 +27,7 @@ from onyx.db.llm import (
     fetch_existing_llm_providers,
     fetch_existing_models,
     fetch_model_configuration_by_id,
+    fetch_model_configurations_page,
     fetch_persona_with_groups,
     fetch_user_group_ids,
     remove_llm_provider,
@@ -39,7 +41,8 @@ from onyx.db.llm import (
     upsert_llm_provider,
     validate_persona_ids_exist,
 )
-from onyx.db.models import Persona, User
+from onyx.db.models import LLMProvider as LLMProviderModel
+from onyx.db.models import ModelConfiguration, Persona, User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -55,8 +58,8 @@ from onyx.llm.factory import (
     get_max_input_tokens_from_llm_provider,
 )
 from onyx.llm.model_capabilities import (
+    catalog_model_supports_image_input,
     get_bedrock_token_limit,
-    litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
 )
 from onyx.llm.utils import (
@@ -69,6 +72,7 @@ from onyx.llm.well_known_providers.auto_update_service import (
 )
 from onyx.llm.well_known_providers.constants import (
     LM_STUDIO_API_KEY_CONFIG_KEY,
+    VERCEL_AI_GATEWAY_DEFAULT_API_BASE,
     VERTEX_AUTH_METHOD_KWARG,
     VERTEX_AUTH_METHOD_SERVICE_ACCOUNT,
     VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY,
@@ -96,6 +100,7 @@ from onyx.server.manage.llm.models import (
     LLMProviderView,
     LMStudioFinalModelResponse,
     LMStudioModelsRequest,
+    ModelConfigurationPage,
     ModelConfigurationUpsertRequest,
     NebiusTokenfactoryFinalModelResponse,
     NebiusTokenfactoryModelsRequest,
@@ -111,6 +116,8 @@ from onyx.server.manage.llm.models import (
     PortkeyModelsRequest,
     SyncModelEntry,
     TestLLMRequest,
+    VercelAIGatewayFinalModelResponse,
+    VercelAIGatewayModelsRequest,
     VisionProviderResponse,
 )
 from onyx.server.manage.llm.provider_cache import (
@@ -406,6 +413,8 @@ def fetch_custom_provider_names(
     covered by a well-known provider modal)."""
     import litellm
 
+    # models_by_provider is the litellm *call-path* provider registry — which
+    # providers litellm can route a completion to — not the model price table.
     well_known = {p.value for p in WELL_KNOWN_PROVIDER_NAMES}
     return sorted(
         (
@@ -521,20 +530,58 @@ def test_default_provider(
 @admin_router.get("/provider")
 def list_llm_providers(
     include_image_gen: bool = Query(False),
+    page_models: bool = Query(
+        False,
+        description="Return each provider's first page of models plus the "
+        "workspace defaults, with next_model_configuration_offset, instead of "
+        "every model",
+    ),
     _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderResponse[LLMProviderView]:
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers")
 
-    llm_provider_list: list[LLMProviderView] = []
-    for llm_provider_model in fetch_existing_llm_providers(
+    providers = fetch_existing_llm_providers(
         db_session=db_session,
         flow_type_filter=[],
         exclude_image_generation_providers=not include_image_gen,
-    ):
+        include_model_configurations=not page_models,
+        include_model_flows=not page_models,
+    )
+    default_text_model = fetch_default_llm_model(db_session)
+    default_vision_model = fetch_default_vision_model(db_session)
+    default_chat_naming_model = fetch_default_chat_naming_model(db_session)
+    default_craft_model = fetch_default_craft_model(db_session)
+    # page_models is opt-in: the admin UI takes one page per provider plus the
+    # defaults, callers that omit it still get every model.
+    windows = (
+        _page_model_windows(
+            db_session,
+            providers,
+            [
+                default_text_model,
+                default_vision_model,
+                default_chat_naming_model,
+                default_craft_model,
+            ],
+        )
+        if page_models
+        else None
+    )
+
+    llm_provider_list: list[LLMProviderView] = []
+    for llm_provider_model in providers:
         from_model_start = datetime.now(timezone.utc)
-        full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        if windows is None:
+            full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        else:
+            window = windows[llm_provider_model.id]
+            full_llm_provider = LLMProviderView.from_model(
+                llm_provider_model,
+                model_configurations=window.model_configurations,
+                next_model_configuration_offset=window.next_offset,
+            )
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
@@ -553,18 +600,10 @@ def list_llm_providers(
 
     return LLMProviderResponse[LLMProviderView].from_models(
         providers=llm_provider_list,
-        default_text=DefaultModel.from_model_config(
-            fetch_default_llm_model(db_session)
-        ),
-        default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
-        ),
-        default_chat_naming=DefaultModel.from_model_config(
-            fetch_default_chat_naming_model(db_session)
-        ),
-        default_craft=DefaultModel.from_model_config(
-            fetch_default_craft_model(db_session)
-        ),
+        default_text=DefaultModel.from_model_config(default_text_model),
+        default_vision=DefaultModel.from_model_config(default_vision_model),
+        default_chat_naming=DefaultModel.from_model_config(default_chat_naming_model),
+        default_craft=DefaultModel.from_model_config(default_craft_model),
     )
 
 
@@ -904,6 +943,107 @@ def get_vision_capable_providers(
 """Endpoints for all"""
 
 
+def _fetch_persona_for_listing(
+    persona_id: int, user: User, db_session: Session
+) -> Persona:
+    persona = fetch_persona_with_groups(db_session, persona_id)
+    if not persona:
+        raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND, "Persona not found")
+
+    if not user_can_access_persona(db_session, persona_id, user, get_editable=False):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You don't have access to this assistant",
+        )
+    return persona
+
+
+def _page_model_windows(
+    db_session: Session,
+    providers: list[LLMProviderModel],
+    pinned_models: list[ModelConfiguration | None],
+) -> dict[int, ModelConfigurationWindow]:
+    """Each provider's first page of models, for listings whose client pages
+    the rest in. `pinned_models` (the defaults, None where unset) ride along
+    even when they sort past the page, so clients can resolve them."""
+    windows = fetch_model_configurations_page(
+        db_session, [provider.id for provider in providers]
+    )
+    for model in pinned_models:
+        if model is None:
+            continue
+        window = windows.get(model.llm_provider_id)
+        if window is None or any(
+            mc.id == model.id for mc in window.model_configurations
+        ):
+            continue
+        window.model_configurations.append(model)
+    return windows
+
+
+def _build_provider_descriptors(
+    db_session: Session,
+    providers: list[LLMProviderModel],
+    pinned_models: list[ModelConfiguration | None],
+) -> list[LLMProviderDescriptor]:
+    windows = _page_model_windows(db_session, providers, pinned_models)
+    return [
+        LLMProviderDescriptor.from_model(
+            provider,
+            windows[provider.id].model_configurations,
+            windows[provider.id].next_offset,
+        )
+        for provider in providers
+    ]
+
+
+@basic_router.get(
+    "/provider/{provider_id}/models", dependencies=[Depends(scope_exempt)]
+)
+def list_llm_provider_models(
+    provider_id: int,
+    offset: int = Query(0, ge=0),
+    query: str | None = Query(None, max_length=200),
+    persona_id: int | None = Query(None),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> ModelConfigurationPage:
+    """The next page of a provider's models after the listing's first page, or
+    with `query` one page of the models whose names contain it. `persona_id`
+    applies that persona's restrictions as the persona listing does."""
+    provider = fetch_existing_llm_provider_by_id(
+        provider_id, db_session, include_model_configurations=False
+    )
+    if provider is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"LLM provider {provider_id} does not exist"
+        )
+
+    persona = (
+        _fetch_persona_for_listing(persona_id, user, db_session)
+        if persona_id is not None
+        else None
+    )
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
+    user_group_ids = (
+        set() if can_manage_llms else fetch_user_group_ids(db_session, user)
+    )
+    if not can_user_access_llm_provider(
+        provider, user_group_ids, persona, can_manage_llms=can_manage_llms
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You don't have access to this LLM provider",
+        )
+
+    window = fetch_model_configurations_page(
+        db_session, [provider_id], offset=offset, name_query=query
+    )[provider_id]
+    return ModelConfigurationPage.from_model(
+        provider, window.model_configurations, window.next_offset
+    )
+
+
 @basic_router.get("/provider")
 def list_llm_provider_basics(
     user: User = Depends(current_chat_accessible_user),
@@ -932,7 +1072,13 @@ def list_llm_provider_basics(
     if cache_lookup.response is not None:
         return cache_lookup.response
 
-    all_providers = fetch_existing_llm_providers(db_session, [])
+    all_providers = fetch_existing_llm_providers(
+        db_session, [], include_model_configurations=False
+    )
+    default_text_model = fetch_default_llm_model(db_session)
+    default_vision_model = fetch_default_vision_model(db_session)
+    default_chat_naming_model = fetch_default_chat_naming_model(db_session)
+    default_craft_model = fetch_default_craft_model(db_session)
 
     # Use centralized access control logic with persona=None since we're
     # listing providers without a specific persona context. This correctly:
@@ -940,13 +1086,22 @@ def list_llm_provider_basics(
     # - Includes providers user can access via group membership
     # - Excludes providers with persona restrictions (requires specific persona)
     # - Excludes non-public providers with no restrictions (admin-only)
-    accessible_providers = [
-        LLMProviderDescriptor.from_model(provider)
-        for provider in all_providers
-        if can_user_access_llm_provider(
-            provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
-        )
-    ]
+    accessible_providers = _build_provider_descriptors(
+        db_session,
+        [
+            provider
+            for provider in all_providers
+            if can_user_access_llm_provider(
+                provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
+            )
+        ],
+        [
+            default_text_model,
+            default_vision_model,
+            default_chat_naming_model,
+            default_craft_model,
+        ],
+    )
 
     end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
@@ -958,18 +1113,10 @@ def list_llm_provider_basics(
 
     response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=accessible_providers,
-        default_text=DefaultModel.from_model_config(
-            fetch_default_llm_model(db_session)
-        ),
-        default_vision=DefaultModel.from_model_config(
-            fetch_default_vision_model(db_session)
-        ),
-        default_chat_naming=DefaultModel.from_model_config(
-            fetch_default_chat_naming_model(db_session)
-        ),
-        default_craft=DefaultModel.from_model_config(
-            fetch_default_craft_model(db_session)
-        ),
+        default_text=DefaultModel.from_model_config(default_text_model),
+        default_vision=DefaultModel.from_model_config(default_vision_model),
+        default_chat_naming=DefaultModel.from_model_config(default_chat_naming_model),
+        default_craft=DefaultModel.from_model_config(default_craft_model),
     )
     cache_provider_listing(
         persona_id=None,
@@ -1067,16 +1214,7 @@ def list_llm_providers_for_persona(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch LLM providers for persona %s", persona_id)
 
-    persona = fetch_persona_with_groups(db_session, persona_id)
-    if not persona:
-        raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND, "Persona not found")
-
-    # Verify user has access to this persona
-    if not user_can_access_persona(db_session, persona_id, user, get_editable=False):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You don't have access to this assistant",
-        )
+    persona = _fetch_persona_for_listing(persona_id, user, db_session)
 
     can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     user_group_ids = (
@@ -1090,25 +1228,9 @@ def list_llm_providers_for_persona(
         return cache_lookup.response
 
     all_providers = fetch_existing_llm_providers(
-        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
-    )
-
-    # Check access with persona context — respects persona restrictions
-    llm_provider_list: list[LLMProviderDescriptor] = [
-        LLMProviderDescriptor.from_model(llm_provider_model)
-        for llm_provider_model in all_providers
-        if can_user_access_llm_provider(
-            llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
-        )
-    ]
-
-    end_time = datetime.now(timezone.utc)
-    duration = (end_time - start_time).total_seconds()
-    logger.debug(
-        "Completed fetching %s LLM providers for persona %s in %s seconds",
-        len(llm_provider_list),
-        persona_id,
-        format(duration, ".2f"),
+        db_session,
+        [LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+        include_model_configurations=False,
     )
 
     default_text_model = fetch_default_llm_model(db_session)
@@ -1119,6 +1241,7 @@ def list_llm_providers_for_persona(
     default_text = DefaultModel.from_model_config(default_text_model)
     default_vision = DefaultModel.from_model_config(default_vision_model)
 
+    persona_default_model: ModelConfiguration | None = None
     if persona.default_model_configuration_id:
         model_config = fetch_model_configuration_by_id(
             db_session, persona.default_model_configuration_id
@@ -1129,10 +1252,36 @@ def list_llm_providers_for_persona(
             persona,
             can_manage_llms=can_manage_llms,
         ):
+            persona_default_model = model_config
             default_text = DefaultModel(
                 provider_id=model_config.llm_provider_id,
                 model_name=model_config.name,
             )
+
+    # Check access with persona context — respects persona restrictions
+    llm_provider_list = _build_provider_descriptors(
+        db_session,
+        [
+            llm_provider_model
+            for llm_provider_model in all_providers
+            if can_user_access_llm_provider(
+                llm_provider_model,
+                user_group_ids,
+                persona,
+                can_manage_llms=can_manage_llms,
+            )
+        ],
+        [default_text_model, default_vision_model, persona_default_model],
+    )
+
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+    logger.debug(
+        "Completed fetching %s LLM providers for persona %s in %s seconds",
+        len(llm_provider_list),
+        persona_id,
+        format(duration, ".2f"),
+    )
 
     response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,
@@ -1164,7 +1313,9 @@ def get_provider_contextual_cost(
       - the chunk_context
     - The per-token cost of the LLM used to generate the doc_summary and chunk_context
     """
-    providers = fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT])
+    providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT], include_model_flows=True
+    )
     costs = []
     for provider in providers:
         for model_configuration in provider.model_configurations:
@@ -1335,7 +1486,7 @@ def get_bedrock_available_models(
                                 else generate_bedrock_display_name(profile_id)
                             ),
                             "supports_image_input": (
-                                litellm_thinks_model_supports_image_input(
+                                catalog_model_supports_image_input(
                                     profile_id, LlmProviderNames.BEDROCK
                                 )
                             ),
@@ -1957,11 +2108,11 @@ def get_bifrost_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    # Vision support from the LiteLLM cost map, not a hardcoded list
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    # Vision support from the model catalog, not a hardcoded list
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.BIFROST
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.BIFROST
@@ -2207,10 +2358,10 @@ def get_openai_compatible_server_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
@@ -2269,6 +2420,95 @@ def _get_openai_compatible_server_response(
         source_name="OpenAI-Compatible",
         api_key=api_key,
     )
+
+
+@admin_router.post("/vercel-ai-gateway/available-models")
+def get_vercel_ai_gateway_available_models(
+    request: VercelAIGatewayModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[VercelAIGatewayFinalModelResponse]:
+    """Fetch available models from the Vercel AI Gateway catalog.
+
+    The catalog needs no credentials and carries richer metadata than LiteLLM's
+    static map, so it drives every field here.
+    """
+    api_base = (
+        (request.api_base or VERCEL_AI_GATEWAY_DEFAULT_API_BASE).strip().rstrip("/")
+    )
+    url = f"{api_base}/models" if api_base.endswith("/v1") else f"{api_base}/v1/models"
+
+    # On edit the form sends a masked key, so resolve the stored one.
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, api_base, db_session
+    )
+
+    response_json = _get_openai_compatible_models_response(
+        url=url,
+        source_name="Vercel AI Gateway",
+        api_key=api_key,
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found in the Vercel AI Gateway catalog",
+        )
+
+    results: list[VercelAIGatewayFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            # The catalog mixes language, embedding, and media models.
+            if not model_id or model.get("type") != "language":
+                continue
+
+            modalities = model.get("modalities") or {}
+            input_modalities = modalities.get("input") or []
+            supported_parameters = model.get("supported_parameters") or []
+
+            results.append(
+                VercelAIGatewayFinalModelResponse(
+                    name=model_id,
+                    display_name=model.get("name") or model_id,
+                    max_input_tokens=model.get("context_window"),
+                    supports_image_input="image" in input_modalities,
+                    supports_reasoning="reasoning" in supported_parameters,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Vercel AI Gateway model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found in the Vercel AI Gateway catalog",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Vercel AI Gateway",
+        )
+
+    return sorted_results
 
 
 def _get_portkey_models_response(api_base: str, api_key: str | None = None) -> dict:
@@ -2331,10 +2571,10 @@ def get_portkey_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=litellm_thinks_model_supports_image_input(
+                    supports_image_input=catalog_model_supports_image_input(
                         model_id, LlmProviderNames.PORTKEY
                     ),
-                    # Reasoning support from the LiteLLM cost map, with the
+                    # Reasoning support from the model catalog, with the
                     # substring heuristic covering models LiteLLM doesn't know
                     supports_reasoning=model_is_reasoning_model(
                         model_id, LlmProviderNames.PORTKEY

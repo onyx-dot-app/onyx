@@ -18,10 +18,10 @@ import { Code } from "@opal/components";
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `children` | `string` | — | **Required.** The code text to display. |
-| `showCopyButton` | `boolean` | `true` | Show the hover-reveal copy-to-clipboard button. |
+| Prop             | Type      | Default | Description                                     |
+| ---------------- | --------- | ------- | ----------------------------------------------- |
+| `children`       | `string`  | —       | **Required.** The code text to display.         |
+| `showCopyButton` | `boolean` | `true`  | Show the hover-reveal copy-to-clipboard button. |
 
 All other `HTMLElement` attributes (except `style` and `className`) are forwarded to the inner `<code>` element.
 

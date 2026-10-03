@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { mutate } from "swr";
@@ -7,7 +8,7 @@ import {
   Button,
   Card,
   InputTypeIn,
-  Switch,
+  InputSwitch,
   Table,
   createTableColumns,
 } from "@opal/components";
@@ -18,7 +19,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -31,7 +32,7 @@ import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import type { User } from "@/lib/types";
-import type { UserRow } from "@/views/admin/UsersPage/interfaces";
+import type { UserRow } from "@/views/admin/UsersPage/types";
 import GroupsCell from "@/views/admin/UsersPage/GroupsCell";
 import AccessCell from "./AccessCell";
 
@@ -166,7 +167,7 @@ export default function CraftPage() {
             </Text>
           ) : (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           )}
         </SettingsLayouts.Body>
@@ -205,7 +206,7 @@ export default function CraftPage() {
               }
               withLabel
             >
-              <Switch
+              <InputSwitch
                 checked={defaultEnabled}
                 disabled={isSavingDefault}
                 onCheckedChange={(checked) => setPendingDefault(checked)}
@@ -232,7 +233,7 @@ export default function CraftPage() {
 
           {isLoading && (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           )}
           {error ? (

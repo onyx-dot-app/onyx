@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import { InputDateRangePickerValue } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../Dropdown";
@@ -12,8 +12,8 @@ export function SearchDateRangeSelector({
   isHorizontal,
   className,
 }: {
-  value: DateRangePickerValue | null;
-  onValueChange: (value: DateRangePickerValue | null) => void;
+  value: InputDateRangePickerValue | null;
+  onValueChange: (value: InputDateRangePickerValue | null) => void;
   isHorizontal?: boolean;
   className?: string;
 }) {

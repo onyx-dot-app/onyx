@@ -8,9 +8,9 @@ import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
 import { planTagProps } from "@/lib/tier-badge";
 import { Section } from "@/layouts/general-layouts";
-import InputNumber from "@/refresh-components/inputs/InputNumber";
+import { InputNumber } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,109 +116,101 @@ function TokenLimitSection({
   }
 
   return (
-    <SimpleCollapsible>
-      <SimpleCollapsible.Header
-        title={t("tokenLimits.section.title")}
-        description={t("tokenLimits.section.description")}
-        tag={
-          disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined
-        }
-      />
-      <SimpleCollapsible.Content>
-        <Disabled disabled={disabled} tooltip={disabledTooltip}>
-          <Card border="solid" rounding={4}>
-            <Section alignItems="start" height="fit">
-              <Section
-                gap={2}
-                height="auto"
-                alignItems="stretch"
-                justifyContent="start"
-                width="full"
-              >
-                {/* Column headers */}
-                <div className="flex flex-wrap items-center gap-1 pe-[40px]">
-                  <div className="flex-1 flex items-center min-w-[160px]">
-                    <Text mainUiAction text04>
-                      {t("tokenLimits.tokenLimit.header")}
-                    </Text>
-                    <Text mainUiMuted text03 className="ms-0.5">
-                      {t("tokenLimits.tokenLimit.unit")}
-                    </Text>
-                  </div>
-                  <div className="flex-1 flex items-center min-w-[160px]">
-                    <Text mainUiAction text04>
-                      {t("tokenLimits.costLimit.header")}
-                    </Text>
-                    <Text mainUiMuted text03 className="ms-0.5">
-                      {t("tokenLimits.costLimit.unit")}
-                    </Text>
-                  </div>
-                  <div className="flex-1 flex items-center min-w-[160px]">
-                    <Text mainUiAction text04>
-                      {t("tokenLimits.timeWindow.header")}
-                    </Text>
-                    <Text mainUiMuted text03 className="ms-0.5">
-                      {t("tokenLimits.timeWindow.unit")}
-                    </Text>
-                  </div>
+    <Collapsible
+      title={t("tokenLimits.section.title")}
+      description={t("tokenLimits.section.description")}
+      tag={disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined}
+    >
+      <Disabled disabled={disabled} tooltip={disabledTooltip}>
+        <Card border="solid" rounding={4}>
+          <Section alignItems="start" height="fit">
+            <Section
+              gap={2}
+              height="auto"
+              alignItems="stretch"
+              justifyContent="start"
+              width="full"
+            >
+              {/* Column headers */}
+              <div className="flex flex-wrap items-center gap-1 pe-[40px]">
+                <div className="flex-1 flex items-center min-w-[160px]">
+                  <Text mainUiAction text04>
+                    {t("tokenLimits.tokenLimit.header")}
+                  </Text>
+                  <Text mainUiMuted text03 className="ms-0.5">
+                    {t("tokenLimits.tokenLimit.unit")}
+                  </Text>
                 </div>
+                <div className="flex-1 flex items-center min-w-[160px]">
+                  <Text mainUiAction text04>
+                    {t("tokenLimits.costLimit.header")}
+                  </Text>
+                  <Text mainUiMuted text03 className="ms-0.5">
+                    {t("tokenLimits.costLimit.unit")}
+                  </Text>
+                </div>
+                <div className="flex-1 flex items-center min-w-[160px]">
+                  <Text mainUiAction text04>
+                    {t("tokenLimits.timeWindow.header")}
+                  </Text>
+                  <Text mainUiMuted text03 className="ms-0.5">
+                    {t("tokenLimits.timeWindow.unit")}
+                  </Text>
+                </div>
+              </div>
 
-                {/* Limit rows */}
-                {limits.map((limit, i) => (
-                  <div
-                    key={rowKeys.keys[i]}
-                    className="flex items-center gap-1"
-                  >
-                    <div className="flex-1">
-                      <InputNumber
-                        value={limit.tokenBudget}
-                        onChange={(v) => updateLimit(i, "tokenBudget", v)}
-                        min={1}
-                        placeholder={t("tokenLimits.tokenLimit.placeholder")}
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <InputNumber
-                        value={limit.costBudgetDollars}
-                        onChange={(v) => updateLimit(i, "costBudgetDollars", v)}
-                        min={0.01}
-                        step={0.01}
-                        decimalPlaces={2}
-                        placeholder={t("tokenLimits.costLimit.placeholder")}
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <InputNumber
-                        value={limit.periodDays}
-                        onChange={(v) => updateLimit(i, "periodDays", v)}
-                        min={1}
-                        placeholder="1"
-                      />
-                    </div>
-                    <Button
-                      size="xs"
-                      prominence="internal"
-                      icon={SvgMinusCircle}
-                      onClick={() => removeLimit(i)}
+              {/* Limit rows */}
+              {limits.map((limit, i) => (
+                <div key={rowKeys.keys[i]} className="flex items-center gap-1">
+                  <div className="flex-1">
+                    <InputNumber
+                      value={limit.tokenBudget}
+                      onChange={(v) => updateLimit(i, "tokenBudget", v)}
+                      min={1}
+                      placeholder={t("tokenLimits.tokenLimit.placeholder")}
                     />
                   </div>
-                ))}
+                  <div className="flex-1">
+                    <InputNumber
+                      value={limit.costBudgetDollars}
+                      onChange={(v) => updateLimit(i, "costBudgetDollars", v)}
+                      min={0.01}
+                      step={0.01}
+                      decimalPlaces={2}
+                      placeholder={t("tokenLimits.costLimit.placeholder")}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <InputNumber
+                      value={limit.periodDays}
+                      onChange={(v) => updateLimit(i, "periodDays", v)}
+                      min={1}
+                      placeholder="1"
+                    />
+                  </div>
+                  <Button
+                    size="xs"
+                    prominence="internal"
+                    icon={SvgMinusCircle}
+                    onClick={() => removeLimit(i)}
+                  />
+                </div>
+              ))}
 
-                {/* Add button */}
-                <Button
-                  icon={SvgPlusCircle}
-                  prominence="secondary"
-                  size="md"
-                  onClick={addLimit}
-                >
-                  {t("tokenLimits.addLimit.label")}
-                </Button>
-              </Section>
+              {/* Add button */}
+              <Button
+                icon={SvgPlusCircle}
+                prominence="secondary"
+                size="md"
+                onClick={addLimit}
+              >
+                {t("tokenLimits.addLimit.label")}
+              </Button>
             </Section>
-          </Card>
-        </Disabled>
-      </SimpleCollapsible.Content>
-    </SimpleCollapsible>
+          </Section>
+        </Card>
+      </Disabled>
+    </Collapsible>
   );
 }
 

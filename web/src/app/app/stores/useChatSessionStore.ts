@@ -183,7 +183,7 @@ const createInitialSessionData = (
 ): ChatSessionData => ({
   sessionId,
   messageTree: new Map<number, Message>(),
-  chatState: "input" as ChatState,
+  chatState: "input",
   regenerationState: null,
   canContinue: false,
   submittedMessage: "",

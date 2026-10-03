@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,8 +16,8 @@ import {
   SvgCheckCircle,
   SvgOrganization,
   SvgPlus,
-  SvgSimpleLoader,
 } from "@opal/icons";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 export interface TenantByDomainResponse {
   tenant_id: string;
   number_of_users: number;
@@ -63,14 +64,14 @@ export default function NewTeamModal() {
       if (!response.ok) {
         throw new Error(`Failed to fetch team info: ${response.status}`);
       }
-      const responseJson = await response.json();
+      const responseJson: TenantByDomainResponse | null = await response.json();
       if (!responseJson) {
         setShowNewTeamModal(false);
         setExistingTenant(null);
         return;
       }
 
-      const data = responseJson as TenantByDomainResponse;
+      const data = responseJson;
       setExistingTenant(data);
     } catch (error) {
       console.error("Failed to fetch tenant info:", error);
@@ -96,7 +97,9 @@ export default function NewTeamModal() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData: ErrorResponseBody = await response
+          .json()
+          .catch(() => ({}));
         throw new Error(
           errorData.detail ||
             errorData.message ||
@@ -118,6 +121,7 @@ export default function NewTeamModal() {
 
   const handleContinueToNewOrg = () => {
     const newUrl = window.location.pathname;
+    // SAFETY: the current pathname is a route of this app.
     router.replace(newUrl as Route);
     setShowNewTeamModal(false);
   };
@@ -186,7 +190,7 @@ export default function NewTeamModal() {
                 disabled={isSubmitting}
                 onClick={handleRequestInvite}
                 width="full"
-                icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
+                icon={isSubmitting ? IconLoader : SvgArrowUp}
               >
                 {isSubmitting
                   ? t("requestButton.pendingLabel")

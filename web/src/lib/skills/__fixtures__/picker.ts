@@ -8,7 +8,7 @@ import {
   MCPAuthenticationType,
   MCPServerStatus,
   type MCPServer,
-} from "@/lib/tools/types";
+} from "@/lib/mcp/types";
 
 export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
   return {

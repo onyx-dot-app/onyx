@@ -1,7 +1,9 @@
 package auditcmd
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -12,14 +14,16 @@ import (
 
 // AuditOptions holds options for the audit command.
 type AuditOptions struct {
-	Web        bool
-	Python     bool
-	Dependabot bool
-	Actions    bool
-	Format     string
-	FailOn     string
-	IgnoreURL  string
-	Debug      bool
+	Format       string
+	FailOn       string
+	IgnoreURL    string
+	Web          bool
+	Python       bool
+	Dependabot   bool
+	Actions      bool
+	AllLockfiles bool
+	Strict       bool
+	Debug        bool
 }
 
 // NewRootCommand creates the root command of the `ods-audit` binary. `ods audit`
@@ -52,7 +56,7 @@ how it gates deploys.`,
 			})
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			runAudit(opts)
+			exitOnError(runAudit(opts, cmd.OutOrStdout(), cmd.ErrOrStderr()))
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", version, commit),
 	}
@@ -62,39 +66,83 @@ how it gates deploys.`,
 	cmd.Flags().BoolVar(&opts.Python, "python", false, "Audit Python dependencies (uv.lock)")
 	cmd.Flags().BoolVar(&opts.Dependabot, "dependabot", false, "Audit open Dependabot security alerts")
 	cmd.Flags().BoolVar(&opts.Actions, "actions", false, "Audit GitHub Actions in .github/workflows and .github/actions")
+	cmd.Flags().BoolVar(&opts.AllLockfiles, "all-lockfiles", false, "Scan every tracked bun.lock and uv.lock, not just the root and web ones")
+	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "Fail on any backend or per-action query failure instead of warning")
 	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format(s), comma-separated: text, json, sarif (e.g. sarif,text)")
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 
 	cmd.AddCommand(newAuditImageCommand())
-	cmd.AddCommand(newAuditIgnoreCommand())
+	cmd.AddCommand(newAuditGateCommand())
+	cmd.AddCommand(newAuditIgnoreCommand(terminalEditUI()))
+	cmd.AddCommand(newAuditAlertCommand())
 
 	return cmd
 }
 
-func runAudit(opts *AuditOptions) {
+// blockingError reports unignored findings at or above the --fail-on threshold.
+// It exits 1 like any other failure, but logs at error rather than fatal level.
+type blockingError struct {
+	count  int
+	failOn audit.Severity
+}
+
+func (e *blockingError) Error() string {
+	return fmt.Sprintf("%d finding(s) at or above %s severity must be resolved or suppressed", e.count, e.failOn)
+}
+
+// commandError is a command failure whose text is the exact line logged on
+// exit, so it may start with a capital letter.
+type commandError struct {
+	msg string
+}
+
+func (e *commandError) Error() string {
+	return e.msg
+}
+
+func failf(format string, args ...any) error {
+	return &commandError{msg: fmt.Sprintf(format, args...)}
+}
+
+// exitOnError ends the process when a command body returns an error.
+func exitOnError(err error) {
+	if err == nil {
+		return
+	}
+	var blocking *blockingError
+	if errors.As(err, &blocking) {
+		log.Error(blocking.Error())
+		os.Exit(1)
+	}
+	log.Fatal(err)
+}
+
+func runAudit(opts *AuditOptions, stdout, stderr io.Writer) error {
 	failOn := audit.ParseSeverity(opts.FailOn)
 	if failOn == audit.SeverityUnknown {
-		log.Fatalf("Invalid --fail-on %q (want critical, high, moderate, or low)", opts.FailOn)
+		return failf("Invalid --fail-on %q (want critical, high, moderate, or low)", opts.FailOn)
 	}
 
 	result, err := audit.Run(audit.Options{
-		Web:        opts.Web,
-		Python:     opts.Python,
-		Dependabot: opts.Dependabot,
-		Actions:    opts.Actions,
-		Format:     opts.Format,
-		FailOn:     failOn,
-		IgnoreURL:  opts.IgnoreURL,
-		Stdout:     os.Stdout,
-		Stderr:     os.Stderr,
+		Web:          opts.Web,
+		Python:       opts.Python,
+		Dependabot:   opts.Dependabot,
+		Actions:      opts.Actions,
+		AllLockfiles: opts.AllLockfiles,
+		Strict:       opts.Strict,
+		Format:       opts.Format,
+		FailOn:       failOn,
+		IgnoreURL:    opts.IgnoreURL,
+		Stdout:       stdout,
+		Stderr:       stderr,
 	})
 	if err != nil {
-		log.Fatalf("Audit failed: %v", err)
+		return failf("Audit failed: %v", err)
 	}
 
 	if len(result.Blocking) > 0 {
-		log.Errorf("%d finding(s) at or above %s severity must be resolved or suppressed", len(result.Blocking), failOn)
-		os.Exit(1)
+		return &blockingError{count: len(result.Blocking), failOn: failOn}
 	}
+	return nil
 }

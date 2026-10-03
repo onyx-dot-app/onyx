@@ -1,9 +1,10 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -55,14 +56,14 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
     [detail.secretField.name]: hasStoredKey
       ? Yup.string()
       : Yup.string().required(
-          t("field.required.error", { label: detail.secretField.label })
+          t("field.required.error", { label: t(detail.secretField.labelKey) })
         ),
   };
   for (const field of detail.configFields) {
     shape[field.name] = field.optional
       ? Yup.string()
       : Yup.string().required(
-          t("field.required.error", { label: field.label })
+          t("field.required.error", { label: t(field.labelKey) })
         );
   }
   const validationSchema = Yup.object().shape(shape);
@@ -137,7 +138,7 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
                 <Button
                   type="submit"
                   disabled={!dirty || !isValid || isSubmitting}
-                  icon={isSubmitting ? SvgSimpleLoader : undefined}
+                  icon={isSubmitting ? IconLoader : undefined}
                 >
                   {isEditing
                     ? t("setupModal.update.label")

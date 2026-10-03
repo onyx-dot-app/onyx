@@ -62,7 +62,13 @@ of: default, prod, no-letsencrypt (mapping to the three generated files).
   #!# <text>                  template-only comment, never emitted`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runGenerateCompose(write)
+			stale, err := runGenerateCompose(write)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if stale {
+				os.Exit(1)
+			}
 		},
 	}
 
@@ -71,18 +77,24 @@ of: default, prod, no-letsencrypt (mapping to the three generated files).
 	return cmd
 }
 
-func runGenerateCompose(write bool) {
-	dir := composeDir()
+// runGenerateCompose renders the compose variants and syncs the embedded
+// copies. In check mode it prints a diff for each out-of-date file and reports
+// whether any file is stale.
+func runGenerateCompose(write bool) (bool, error) {
+	dir, err := composeDir()
+	if err != nil {
+		return false, err
+	}
 
 	data, err := os.ReadFile(filepath.Join(dir, composegen.TemplateName))
 	if err != nil {
-		log.Fatalf("Failed to read template: %v", err)
+		return false, fatalErrorf("Failed to read template: %w", err)
 	}
 	templateLines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
 
 	rendered, err := composegen.GenerateAll(templateLines)
 	if err != nil {
-		log.Fatalf("%v", err)
+		return false, err
 	}
 
 	var stale []string
@@ -93,7 +105,7 @@ func runGenerateCompose(write bool) {
 
 		current, err := os.ReadFile(path)
 		if err != nil && !os.IsNotExist(err) {
-			log.Fatalf("Failed to read %s: %v", filename, err)
+			return false, fatalErrorf("Failed to read %s: %w", filename, err)
 		}
 		if string(current) == content {
 			continue
@@ -101,7 +113,7 @@ func runGenerateCompose(write bool) {
 
 		if write {
 			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-				log.Fatalf("Failed to write %s: %v", filename, err)
+				return false, fatalErrorf("Failed to write %s: %w", filename, err)
 			}
 			fmt.Printf("regenerated %s\n", filename)
 		} else {
@@ -114,7 +126,7 @@ func runGenerateCompose(write bool) {
 	// of docker-compose.yml reflects the freshly rendered output.
 	repoRoot, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return false, fatalErrorf("Failed to find git root: %w", err)
 	}
 	var results []deployfilessync.Result
 	if write {
@@ -123,7 +135,7 @@ func runGenerateCompose(write bool) {
 		results, err = deployfilessync.Check(repoRoot)
 	}
 	if err != nil {
-		log.Fatalf("%v", err)
+		return false, err
 	}
 	for _, r := range results {
 		if !r.Stale {
@@ -137,12 +149,10 @@ func runGenerateCompose(write bool) {
 		}
 	}
 
-	if len(stale) > 0 {
-		for _, filename := range stale {
-			fmt.Fprintf(os.Stderr, "%s is stale (re-run with --write).\n", filename)
-		}
-		os.Exit(1)
+	for _, filename := range stale {
+		fmt.Fprintf(os.Stderr, "%s is stale (re-run with --write).\n", filename)
 	}
+	return len(stale) > 0, nil
 }
 
 // lineDiff returns a compact line-based diff (changed lines only) between the

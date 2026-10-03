@@ -1,10 +1,11 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { use, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { SlackChannelConfigCreationForm } from "@/app/admin/bots/[bot-id]/channels/SlackChannelConfigCreationForm";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
@@ -42,7 +43,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
     isAgentsLoading ||
     (enterpriseTier && isStdAnswerLoading)
   ) {
-    return <SvgSimpleLoader />;
+    return <IconLoader />;
   }
 
   if (docSetsError || !documentSets) {
@@ -72,9 +73,9 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
       ? {
           paidEnterpriseFeaturesEnabled: true,
           categories: standardAnswerCategories ?? [],
-          ...(stdAnswerError
-            ? { error: { message: String(stdAnswerError) } }
-            : {}),
+          error: stdAnswerError
+            ? { message: String(stdAnswerError) }
+            : undefined,
         }
       : { paidEnterpriseFeaturesEnabled: false };
 
@@ -114,7 +115,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
         icon={SvgSlack}
         title={t("newChannel.header.title")}
         divider
-        backButton
+        cancel
       />
       <SettingsLayouts.Body>
         <NewChannelConfigContent slackBotId={slack_bot_id} />

@@ -10,12 +10,12 @@ import { getSourceMetadata } from "@/lib/sources";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
-import type { SearchDocWithContent } from "@/lib/search/interfaces";
-import type { ValidSources } from "@/lib/types";
+} from "@/lib/hierarchy/types";
+import type { SearchDocWithContent } from "@/lib/search/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import {
   Button,
-  Checkbox,
+  InputCheckbox,
   Divider,
   InputTypeIn,
   LineItemButton,
@@ -30,7 +30,7 @@ import {
   SvgXCircle,
 } from "@opal/icons";
 
-import type { KnowledgeSearchResults } from "@/sections/knowledge/agent-knowledge/interfaces";
+import type { KnowledgeSearchResults } from "@/sections/knowledge/agent-knowledge/types";
 
 interface KnowledgeSearchBarProps {
   query: string;
@@ -305,7 +305,7 @@ export function KnowledgeSearchResultsPanel({
                   aria-label={`search-node-${node.id}`}
                 >
                   <TableLayouts.CheckboxCell>
-                    <Checkbox
+                    <InputCheckbox
                       checked={isSelected}
                       onCheckedChange={() => onToggleFolder(node.id)}
                     />
@@ -370,7 +370,7 @@ export function KnowledgeSearchResultsPanel({
                 aria-label={`search-doc-${doc.document_id}`}
               >
                 <TableLayouts.CheckboxCell>
-                  <Checkbox
+                  <InputCheckbox
                     checked={isSelected}
                     onCheckedChange={() => onToggleDocument(doc.document_id)}
                   />

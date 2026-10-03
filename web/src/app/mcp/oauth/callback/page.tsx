@@ -13,7 +13,7 @@ import {
   SvgUnPlugged,
 } from "@opal/illustrations";
 import type { IconFunctionComponent } from "@opal/types";
-import { completeMCPUserOAuth } from "@/lib/tools/svc";
+import { completeMCPUserOAuth } from "@/lib/mcp/svc";
 import { useTranslations } from "next-intl";
 
 const AUTO_REDIRECT_DELAY_MS = 2000;
@@ -185,7 +185,12 @@ export default function MCPOAuthCallbackPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <Card padding={6} rounding={4} background="light" border="solid">
+        <Card
+          padding={6}
+          rounding={4}
+          color="background-tint-00"
+          border="solid"
+        >
           <div className="flex flex-col items-stretch gap-4">
             {state.phase === "processing" && (
               <div className="flex flex-col items-center gap-3 p-5 text-center">
@@ -238,7 +243,7 @@ export default function MCPOAuthCallbackPage() {
                 />
                 <Button
                   width="full"
-                  onClick={() => router.push(DEFAULT_REDIRECT_PATH as Route)}
+                  onClick={() => router.push(DEFAULT_REDIRECT_PATH)}
                 >
                   {t("mcpOauthCallback.backToChatButton.label")}
                 </Button>

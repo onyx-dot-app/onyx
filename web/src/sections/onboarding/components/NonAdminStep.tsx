@@ -7,14 +7,16 @@ import { InputTypeIn } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Button } from "@opal/components";
-import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import { InputAvatar } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function NonAdminStep() {
   const t = useTranslations("onboarding");
+  const { appName } = useSettings();
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, refreshUser } = useUser();
   const [name, setName] = useState("");
@@ -106,7 +108,7 @@ export default function NonAdminStep() {
             <InputHorizontal
               responsive
               icon={SvgUser}
-              title={t("nameStep.title")}
+              title={t("nameStep.title", { appName })}
               description={t("nameStep.description")}
             >
               <div className="flex w-full items-center gap-2">

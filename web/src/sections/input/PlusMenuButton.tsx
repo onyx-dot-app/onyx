@@ -2,10 +2,9 @@
 
 import { useState, useCallback, useRef, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Popover } from "@opal/components";
+import { Button, LineItemButton, Popover } from "@opal/components";
 import { SvgChevronRight, SvgPlus } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import LineItem from "@/refresh-components/buttons/LineItem";
 
 export interface PlusMenuFlyoutItem {
   key: string;
@@ -60,15 +59,16 @@ function FlyoutRow({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <Popover.Trigger asChild>
-        <LineItem
+        <LineItemButton
+          sizePreset="main-ui"
+          variant="section"
           icon={icon}
-          selected={open}
+          title={label}
+          state={open ? "selected" : "empty"}
           onPointerEnter={onHoverOpen}
           onPointerLeave={onHoverLeave}
           rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
-        >
-          {label}
-        </LineItem>
+        />
       </Popover.Trigger>
       <Popover.Content
         side="right"
@@ -149,27 +149,31 @@ export function PlusMenuButton({
           onHoverLeave={cancelPendingSwap}
         >
           {item.flyoutItems.map((sub) => (
-            <LineItem
+            <LineItemButton
               key={sub.key}
+              sizePreset="main-ui"
+              variant="section"
               icon={sub.icon}
+              title={sub.label}
               description={sub.description}
               rightChildren={sub.rightContent}
               onClick={() => {
                 sub.onSelect();
                 close();
               }}
-            >
-              {sub.label}
-            </LineItem>
+            />
           ))}
         </FlyoutRow>
       );
     }
 
     return (
-      <LineItem
+      <LineItemButton
         key={item.key}
+        sizePreset="main-ui"
+        variant="section"
         icon={item.icon}
+        title={item.label}
         onClick={() => {
           item.onSelect?.();
           close();
@@ -177,9 +181,7 @@ export function PlusMenuButton({
         // Hovering a non-flyout row collapses any open flyout (after a dwell).
         onPointerEnter={() => hoverRow(null)}
         onPointerLeave={cancelPendingSwap}
-      >
-        {item.label}
-      </LineItem>
+      />
     );
   });
 

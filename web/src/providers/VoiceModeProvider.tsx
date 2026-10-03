@@ -453,7 +453,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     if (!tokenResponse.ok) {
       throw new Error("Failed to get WebSocket authentication token");
     }
-    const { token } = await tokenResponse.json();
+    const { token }: { token: string } = await tokenResponse.json();
 
     // In development, the Next.js dev server (port 3000) does not proxy
     // WebSocket connections, so we connect directly to the backend (port 8080).

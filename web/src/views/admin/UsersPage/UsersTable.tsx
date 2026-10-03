@@ -1,11 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Table, createTableColumns } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
+import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import { AccountType, UserStatus } from "@/lib/types";
@@ -24,7 +25,7 @@ import type {
   GroupOption,
   StatusFilter,
   StatusCountMap,
-} from "./interfaces";
+} from "./types";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import type { User } from "@/lib/types";
 
@@ -62,10 +63,10 @@ function renderStatusColumn(
   );
 }
 
-function renderLastUpdatedColumn(value: string | null) {
+function renderLastActiveColumn(value: string | null, locale: string) {
   return (
     <Text as="span" secondaryBody text03>
-      {value ? (timeAgo(value) ?? "\u2014") : "\u2014"}
+      {value ? (timeAgo(value, locale) ?? "\u2014") : "\u2014"}
     </Text>
   );
 }
@@ -80,13 +81,17 @@ interface ColumnLabels {
   name: string;
   groups: string;
   accountType: string;
-  lastUpdated: string;
+  lastActive: string;
   statusHeader: string;
   status: Record<UserStatus, string>;
   scimSynced: string;
 }
 
-function buildColumns(onMutate: () => void, labels: ColumnLabels) {
+function buildColumns(
+  onMutate: () => void,
+  labels: ColumnLabels,
+  locale: string
+) {
   return [
     tc.qualifier({
       content: "icon",
@@ -124,10 +129,10 @@ function buildColumns(onMutate: () => void, labels: ColumnLabels) {
       weight: 14,
       cell: (value, row) => renderStatusColumn(value, row, labels),
     }),
-    tc.column("updated_at", {
-      header: labels.lastUpdated,
+    tc.column("last_active", {
+      header: labels.lastActive,
       weight: 14,
-      cell: renderLastUpdatedColumn,
+      cell: (value) => renderLastActiveColumn(value, locale),
     }),
     tc.actions({
       cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
@@ -155,6 +160,7 @@ export default function UsersTable({
   statusCounts,
 }: UsersTableProps) {
   const t = useTranslations("admin.users");
+  const locale = useLocale();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAccountTypes, setSelectedAccountTypes] = useState<
     AccountType[]
@@ -177,21 +183,25 @@ export default function UsersTable({
 
   const columns = useMemo(
     () =>
-      buildColumns(refresh, {
-        name: t("table.columns.name.header"),
-        groups: t("table.columns.groups.header"),
-        accountType: t("table.columns.accountType.header"),
-        lastUpdated: t("table.columns.lastUpdated.header"),
-        statusHeader: t("table.columns.status.header"),
-        status: {
-          [UserStatus.ACTIVE]: t("status.active.label"),
-          [UserStatus.INACTIVE]: t("status.inactive.label"),
-          [UserStatus.INVITED]: t("status.invited.label"),
-          [UserStatus.REQUESTED]: t("status.requested.label"),
+      buildColumns(
+        refresh,
+        {
+          name: t("table.columns.name.header"),
+          groups: t("table.columns.groups.header"),
+          accountType: t("table.columns.accountType.header"),
+          lastActive: t("table.columns.lastActive.header"),
+          statusHeader: t("table.columns.status.header"),
+          status: {
+            [UserStatus.ACTIVE]: t("status.active.label"),
+            [UserStatus.INACTIVE]: t("status.inactive.label"),
+            [UserStatus.INVITED]: t("status.invited.label"),
+            [UserStatus.REQUESTED]: t("status.requested.label"),
+          },
+          scimSynced: t("table.status.scimSynced.label"),
         },
-        scimSynced: t("table.status.scimSynced.label"),
-      }),
-    [refresh, t]
+        locale
+      ),
+    [refresh, t, locale]
   );
 
   // Client-side filtering
@@ -222,7 +232,7 @@ export default function UsersTable({
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }

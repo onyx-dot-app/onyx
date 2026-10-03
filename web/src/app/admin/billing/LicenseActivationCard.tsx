@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import InputFile from "@/refresh-components/inputs/InputFile";
+import { InputFile } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputVertical } from "@opal/layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/svc";
 import { LicenseStatus } from "@/lib/billing/interfaces";
 import { formatDateShort } from "@/lib/dateUtils";
+import { useSettings } from "@/lib/settings/hooks";
 
 const BILLING_HELP_URL = "https://docs.onyx.app/admins/billing/overview";
 
@@ -30,6 +31,8 @@ export default function LicenseActivationCard({
   hideClose,
 }: LicenseActivationCardProps) {
   const t = useTranslations("admin.billing");
+  const { appName } = useSettings();
+  const locale = useLocale();
   const [licenseKey, setLicenseKey] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +48,7 @@ export default function LicenseActivationCard({
     license?.status === "gated_access" ||
     isDateExpired;
   const expirationDate = license?.expires_at
-    ? formatDateShort(license.expires_at)
+    ? formatDateShort(license.expires_at, locale)
     : null;
 
   const handleActivate = async () => {
@@ -169,7 +172,7 @@ export default function LicenseActivationCard({
             </Button>
           </Section>
           <Text secondaryBody text03>
-            {t("license.description")}
+            {t("license.description", { appName })}
           </Text>
         </Section>
 

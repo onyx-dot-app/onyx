@@ -151,3 +151,45 @@ export const UndefinedColorIsNoColor: Story = {
     </div>
   ),
 };
+
+/**
+ * A presentational row makes no control of its own — no button role, no tab
+ * stop, no Enter/Space — for rows nested inside a primitive that already owns
+ * the interaction (a Radix Select.Item, a selectable table row). The palette
+ * stays live: the owner drives it through `state`.
+ */
+export const Presentational: Story = {
+  render: () => (
+    // tabIndex makes the owner the tab stop — ARIA roles alone add none,
+    // and the presentational rows deliberately have none of their own.
+    <div
+      className="flex w-96 flex-col gap-1"
+      role="listbox"
+      aria-label="demo"
+      tabIndex={0}
+    >
+      <div role="option" aria-selected={true}>
+        <LineItemButton
+          presentational
+          icon={SvgSearch}
+          title="Selected option"
+          description="The wrapping option owns focus and keyboard"
+          state="selected"
+          selectVariant="select-heavy"
+          sizePreset="main-ui"
+          variant="section"
+        />
+      </div>
+      <div role="option" aria-selected={false}>
+        <LineItemButton
+          presentational
+          icon={SvgSearch}
+          title="Unselected option"
+          description="Tab reaches the listbox, not the rows"
+          sizePreset="main-ui"
+          variant="section"
+        />
+      </div>
+    </div>
+  ),
+};

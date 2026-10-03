@@ -113,7 +113,7 @@ def _clean_email_and_extract_name(email: str) -> tuple[str, str | None]:
         # Handle format: "Display Name <email@domain.com>"
         display_name = email[: email.find("<")].strip()
         email_address = email[email.find("<") + 1 : email.find(">")].strip()
-        return email_address, display_name if display_name else None
+        return email_address, display_name or None
     else:
         # Handle plain email address
         return email.strip(), None

@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
   useEffect,
@@ -18,7 +19,7 @@ import {
   createTableColumns,
 } from "@opal/components";
 import SvgLock from "@opal/icons/lock";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { markdown } from "@opal/utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { Section } from "@/layouts/general-layouts";
@@ -133,7 +134,11 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
           <div className="flex flex-col gap-0.5">
-            <Text font="main-ui-body" color="text-05" nowrap>
+            <Text
+              font="main-ui-body"
+              color="text-05"
+              wordWrap="whitespace-nowrap"
+            >
               {formatAbsolute(value)}
             </Text>
             <Text font="secondary-body" color="text-03">
@@ -176,7 +181,11 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
       width: { weight: 12 },
       cell: (row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
-          <Text font="main-ui-body" color="text-03" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {formatRunDuration(row.started_at, row.finished_at)}
           </Text>
         </NonClickableCell>
@@ -194,7 +203,11 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
       enableSorting: false,
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
-          <Text font="main-ui-body" color="text-03" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {value === "MANUAL_RUN_NOW"
               ? t("trigger.runNow")
               : t("trigger.schedule")}
@@ -277,7 +290,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   if (isLoading && !data) {
     return (
       <div className="flex justify-center py-8">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }

@@ -9,7 +9,7 @@ dependencies = [
     "fastapi==0.133.1",
     "google-genai==2.18.1",
     "huggingface-hub==1.26.0",
-    "litellm[google]==1.93.0",
+    "litellm[google]==1.93.2",
     "openai==2.38.0",
     "pydantic==2.12.5",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
@@ -40,7 +40,7 @@ backend = [
     "celery==5.5.1",
     "chardet==5.2.0",
     "chonkie==1.0.10",
-    "croniter==6.2.2",
+    "croniter==6.2.4",
     "cron-descriptor==2.0.8",
     "dask==2026.1.1",
     "discord.py==2.7.1",
@@ -68,11 +68,10 @@ backend = [
     # get_markitdown_converter in
     # backend/onyx/file_processing/extract_file_text.py and what impacts
     # updating might have on this behavior.
-    "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.2",
+    "markitdown[pdf, docx, pptx, xlsx, xls]==0.1.7",
     "mcp[cli]==1.28.1",
-    "msal==1.34.0",
+    "msal==1.37.0",
     "msoffcrypto-tool==6.0.0",
-    "nltk==3.10.3",
     "Office365-REST-Python-Client==2.6.2",
     "oauthlib==3.2.2",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
@@ -93,7 +92,7 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.16.1",
+    "pypdf==6.19.0",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
@@ -118,7 +117,7 @@ backend = [
     "asana==5.0.8",
     "dropbox==12.0.2",
     "stripe==10.12.0",
-    "urllib3==2.7.0",
+    "urllib3==2.8.0",
     "mistune==3.3.3",
     "mitmproxy==12.2.3",
     "sendgrid==6.12.5",
@@ -136,17 +135,14 @@ backend = [
 dev = [
     "boto3-stubs[s3]==1.39.11",
     "celery-types==0.26.0",
-    "faker==40.1.2",
+    "faker==40.38.0",
     "hatchling==1.28.0",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.63",
-    # Keep in sync with the pinned `onyx-devtools==` in the `ods` hooks in
-    # .pre-commit-config.yaml, which install ods into an isolated overlay.
-    "onyx-devtools[audit]==0.13.2",
     "openapi-generator-cli==7.17.0",
-    "pre-commit==3.2.2",
+    "pre-commit==4.6.2",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.4.0",
     "pytest-dotenv==0.5.2",
@@ -155,10 +151,6 @@ dev = [
     "pytest-repeat==0.9.4",
     "pytest-xdist==3.8.0",
     "pytest==9.0.3",
-    "release-tag==0.5.2",
-    # Keep in sync with the pinned `ruff==` in the ruff / ruff-format hooks in
-    # .pre-commit-config.yaml, which install ruff into an isolated overlay.
-    "ruff==0.16.1",
     "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -173,11 +165,16 @@ dev = [
     "types-pytz==2023.3.1.1",
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
+    { include-group = "ods" },
+    { include-group = "ruff" },
     { include-group = "zizmor" },
 ]
 
-# Isolated group so CI can `uv sync --only-group zizmor` without pulling
-# the rest of the dev toolchain.
+# One-tool groups, installed with `--only-group` by the pre-commit hooks: each
+# tool comes from hash-verified uv.lock artifacts without a full project sync,
+# and each pin below is the only one in the repo.
+ods = ["onyx-devtools[audit]==0.13.9"]
+ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
 # Enterprise Edition features
@@ -195,10 +192,10 @@ loadtest = [
 
 # Model server specific dependencies (ML packages)
 model_server = [
-    "accelerate==1.14.0",
+    "accelerate==1.15.0",
     "einops==0.8.1",
     "numpy==2.4.1",
-    "sentence-transformers==5.4.1",
+    "sentence-transformers==5.6.0",
     "torch==2.9.1",
     "transformers==5.14.1",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
@@ -217,7 +214,7 @@ default-groups = ["backend", "dev", "ee", "model_server"]
 override-dependencies = [
     "brotli>=1.2.0,<2.0",
     "h11>=0.11,<1.0",
-    "cryptography>=42.0,<50.0",
+    "cryptography>=42.0,<51.0",
     "h2>=4.3.0,<5.0",
     "hyperframe>=6.1.0,<7.0",
     # mitmproxy 12.x already pins tornado to the 6.5 series; keep this floor
@@ -257,6 +254,15 @@ all = "error"
 missing-override-decorator = "ignore"  # ~1.1k methods across ~250 files.
 missing-type-argument = "ignore"  # ~1k bare generics across ~350 files.
 
+# Old migrations must not change, and some pass arguments that app models later
+# dropped (e.g. dbaa756c2ccf passes embedding_precision to IndexingSetting).
+# Pydantic discards them at runtime, so silence only this rule there.
+[[tool.ty.overrides]]
+include = ["backend/alembic/versions/**"]
+
+[tool.ty.overrides.rules]
+pydantic-discarded-extra-argument = "ignore"
+
 [tool.uv.workspace]
 members = ["tools/ods"]
 
@@ -276,6 +282,11 @@ target-version = "py313"
 [tool.ruff.lint]
 ignore = [
     "E501", # Long lines are handled by `ruff format`.
+    # flake8-async (ASYNC) rule ignored as inapplicable: it prescribes trio/anyio
+    # timeout scopes in place of a `timeout` parameter. This codebase is asyncio
+    # and times out with `asyncio.wait_for`, so the parameter is the right shape.
+    # Revisit only if we adopt trio or anyio cancel scopes.
+    "ASYNC109", # async-function-with-timeout.
     # flake8-bandit (S) rules ignored as noisy / low-signal:
     "S101", # `assert` — used heavily in pytest and as runtime invariant checks.
     "S105", # Hardcoded password string — very high false-positive rate.
@@ -294,7 +305,24 @@ ignore = [
     "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "B", "C901", "E", "F", "G004", "I", "PERF", "S", "W"]
+select = [
+  "ARG",
+  "ASYNC",
+  "B",
+  "C4",
+  "C901",
+  "E",
+  "F",
+  "FURB",
+  "G004",
+  "I",
+  "LOG",
+  "PERF",
+  "PIE",
+  "S",
+  "TID",
+  "W",
+]
 
 [tool.ruff.lint.mccabe]
 # Ruff's default is 10, which flags 429 functions. 20 is a ratchet: it stops new
@@ -352,7 +380,7 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/chat/process_message.py" = ["C901"] # 47
 "backend/onyx/connectors/blob/connector.py" = ["C901"] # 24
 "backend/onyx/connectors/confluence/connector.py" = ["C901"] # 22
-"backend/onyx/connectors/confluence/onyx_confluence.py" = ["C901"] # 22
+"backend/onyx/connectors/confluence/source_operations.py" = ["C901"] # 22
 "backend/onyx/connectors/connector_runner.py" = ["C901"] # 26
 "backend/onyx/connectors/drupal_wiki/connector.py" = ["C901"] # 21
 "backend/onyx/connectors/github/connector.py" = ["C901"] # 28
@@ -369,9 +397,7 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/db/persona.py" = ["C901"] # 49
 "backend/onyx/deep_research/dr_loop.py" = ["C901"] # 26
 "backend/onyx/document_index/opensearch/search.py" = ["C901"] # 48
-"backend/onyx/document_index/vespa/shared_utils/vespa_request_builders.py" = ["C901"] # 41
 "backend/onyx/federated_connectors/federated_retrieval.py" = ["C901"] # 21
-"backend/onyx/kg/extractions/extraction_processing.py" = ["C901"] # 30
 "backend/onyx/llm/multi_llm.py" = ["C901"] # 45
 "backend/onyx/llm/utils.py" = ["C901"] # 30
 "backend/onyx/onyxbot/slack/handlers/handle_message.py" = ["C901"] # 34
@@ -394,7 +420,6 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/tools/tool_constructor.py" = ["C901"] # 40
 "backend/onyx/tools/tool_implementations/search/search_tool.py" = ["C901"] # 25
 "backend/onyx/tools/tool_runner.py" = ["C901"] # 21
-"backend/onyx/utils/jsonriver/tokenize.py" = ["C901"] # 22
 "backend/onyx/voice/providers/elevenlabs.py" = ["C901"] # 21
 "backend/scripts/rotate_llm_provider_keys.py" = ["C901"] # 25
 "backend/scripts/tenant_cleanup/cleanup_tenants.py" = ["C901"] # 27

@@ -1,14 +1,21 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import {
+  redirect,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
-import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
+import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
-import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
@@ -24,8 +31,9 @@ import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
-import { SourceMetadata } from "@/lib/search/interfaces";
-import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
+import { SourceMetadata } from "@/lib/search/types";
+import { FederatedConnectorDetail } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
@@ -144,6 +152,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     },
   });
   const searchParams = useSearchParams();
+  const pathname = usePathname();
 
   // Use SWR hooks for data fetching
   const {
@@ -428,11 +437,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     resetInputBar,
   });
 
-  const {
-    onMessageSelection,
-    currentSessionFileTokenCount,
-    sessionFetchError,
-  } = useChatSessionController({
+  const { onMessageSelection, sessionFetchError } = useChatSessionController({
     existingChatSessionId: currentChatSessionId,
     searchParams,
     firstMessage,
@@ -452,6 +457,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   useSendChatMessageFromURL({
     onSubmit,
     deepResearch: deepResearchEnabledForCurrentWorkflow,
+    toolConfiguration,
   });
 
   useSendMessageToParent();
@@ -518,7 +524,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   ]);
 
   if (resolvedUser === null) {
-    redirect("/auth/login");
+    // Carries the current URL like the layout's redirect does, since both run
+    // on the same server render and either may reach the browser first.
+    const query = searchParams?.toString();
+    redirect(loginPath({ next: query ? `${pathname}?${query}` : pathname }));
   }
 
   const onChat = useCallback(
@@ -771,11 +780,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         ))}
 
       <div className="w-full h-full overflow-hidden">
+        {/* noPaste: the input bar already uploads pasted files itself. Without
+            it react-dropzone handles the same paste again and attaches the
+            image twice. */}
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
           }
           noClick
+          noPaste
         >
           {({ getRootProps }) => (
             <div
@@ -947,7 +960,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {onboardingVisible && (
-                      <ShadowDiv mask className="overscroll-contain">
+                      <ShadowDiv variant="mask" className="overscroll-contain">
                         <OnboardingFlow
                           showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
@@ -1011,12 +1024,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         stopGenerating={stopGenerating}
                         onSubmit={handleAppInputBarSubmit}
                         chatState={currentChatState}
-                        currentSessionFileTokenCount={
-                          currentChatSessionId
-                            ? currentSessionFileTokenCount
-                            : projectContextTokenCount
-                        }
-                        availableContextTokens={availableContextTokens}
                         activeAgent={activeAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}

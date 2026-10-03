@@ -79,12 +79,12 @@ class TestTenantProvisioningRollback:
             mock_redis.return_value.lock.return_value = mock_lock
 
             with patch(
-                "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.setup_tenant"
+                "ee.onyx.server.tenants.provisioning.setup_tenant"
             ) as mock_setup:
                 mock_setup.side_effect = Exception("Simulated provisioning failure")
 
                 with patch(
-                    "ee.onyx.background.celery.tasks.tenant_provisioning.tasks.create_schema_if_not_exists",
+                    "ee.onyx.server.tenants.schema_management.create_schema_if_not_exists",
                     side_effect=track_schema_creation,
                 ):
                     # Run pre-provisioning - it should fail and trigger rollback

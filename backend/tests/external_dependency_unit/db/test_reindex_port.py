@@ -54,7 +54,6 @@ from onyx.db.document import (
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
@@ -101,6 +100,7 @@ from onyx.db.port_orphan_candidate import (
 )
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
@@ -363,7 +363,6 @@ def test_use_port_flow_default_and_round_trip(
             passage_prefix="",
             provider_type=None,
             multipass_indexing=False,
-            embedding_precision=EmbeddingPrecision.FLOAT,
             index_name=f"test_port_flow_{uuid4().hex[:8]}",
             enable_contextual_rag=False,
         )
@@ -698,11 +697,14 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
             strategy,
             embedder,
             present_tokenizer=MagicMock(),
+            tenant_state=TenantState(tenant_id="public", multitenant=False),
         )
 
     assert written == 3
     assert aborted is False
-    present_client.iter_chunks_for_doc_ids.assert_called_once_with(["d1", "d2"])
+    present_client.iter_chunks_for_doc_ids.assert_called_once_with(
+        ["d1", "d2"], tenant_state=TenantState(tenant_id="public", multitenant=False)
+    )
     # re-embed once per page, with that page's chunks + prebuilt strategy/embedder
     assert mock_reembed.call_count == 2
     assert mock_reembed.call_args_list[0].args == (["c1", "c2"], strategy, embedder)
@@ -1654,7 +1656,7 @@ def test_port_target_settings_id() -> None:
 def test_delete_port_written_chunks_query() -> None:
     """Filters written_by_port + doc-ids; adds the tenant term only in multitenant mode
     (single-tenant has no tenant_id field, so it would match zero docs)."""
-    from onyx.document_index.interfaces_new import TenantState
+    from onyx.document_index.interfaces import TenantState
     from onyx.document_index.opensearch.schema import (
         DOCUMENT_ID_FIELD_NAME,
         TENANT_ID_FIELD_NAME,

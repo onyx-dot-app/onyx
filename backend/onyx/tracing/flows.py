@@ -7,7 +7,7 @@ flow tag should describe **what the call does**, not **who serves it**.
 
 A single source of truth here lets dashboards group/filter without typo drift,
 and makes it possible to enforce instrumentation coverage by searching for
-``LLMFlow.UNTAGGED_*`` (the sentinel used by the auto-wrap fallback).
+``LLMFlow.UNTAGGED_*`` (the sentinel used when a caller sets no flow).
 """
 
 from enum import StrEnum
@@ -17,8 +17,10 @@ class LLMFlow(StrEnum):
     # Chat / agent
     CHAT_RESPONSE = "chat_response"
     CHAT_HISTORY_SUMMARIZATION = "chat_history_summarization"
+    MODEL_VALIDATION = "model_validation"
 
     # Secondary LLM flows
+    SEARCH_FLOW_CLASSIFICATION = "search_flow_classification"
     SEMANTIC_QUERY_REPHRASE = "semantic_query_rephrase"
     KEYWORD_QUERY_EXPANSION = "keyword_query_expansion"
     SOURCE_FILTER_EXTRACTION = "source_filter_extraction"
@@ -44,10 +46,6 @@ class LLMFlow(StrEnum):
     CONTEXTUAL_RAG_CHUNK_CONTEXT = "contextual_rag_chunk_context"
     IMAGE_SUMMARIZATION = "image_summarization"
 
-    # Knowledge graph
-    KG_DOCUMENT_CLASSIFICATION = "kg_document_classification"
-    KG_DEEP_EXTRACTION = "kg_deep_extraction"
-
     # Image generation
     IMAGE_GENERATION = "image_generation"
     IMAGE_EDIT = "image_edit"
@@ -62,13 +60,20 @@ class LLMFlow(StrEnum):
     RERANK = "rerank"
     INTENT_CLASSIFICATION = "intent_classification"
 
-    # Sentinels — emitted by the LLM auto-wrap fallback when a caller did not
-    # tag the call. Showing up in dashboards is a signal to add an explicit
-    # ``llm_generation_span`` at the call site with the right tag.
+    # Sentinels — emitted when a caller did not tag the call. Showing up in
+    # dashboards is a signal to set ``GenerationContext.flow`` at the call site.
     UNTAGGED_INVOKE = "untagged_invoke"
     UNTAGGED_STREAM = "untagged_stream"
 
 
 IMAGE_FLOWS: frozenset[LLMFlow] = frozenset(
     {LLMFlow.IMAGE_GENERATION, LLMFlow.IMAGE_EDIT}
+)
+
+SYSTEM_TEXT_GENERATION_FLOWS: frozenset[LLMFlow] = frozenset(
+    {
+        LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+        LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
+        LLMFlow.IMAGE_SUMMARIZATION,
+    }
 )

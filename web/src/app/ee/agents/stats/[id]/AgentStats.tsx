@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useTranslations } from "next-intl";
-import { Card, Text } from "@opal/components";
+import { useLocale, useTranslations } from "next-intl";
+import { Card, DateRange, InputDateRangePicker, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
-import {
-  DateRangePicker,
-  DateRange,
-} from "@/refresh-components/DateRangePicker";
 import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import {
@@ -35,6 +31,7 @@ interface SummaryMetricProps {
 }
 
 function SummaryMetric({ label, value }: SummaryMetricProps) {
+  const locale = useLocale();
   return (
     <Section
       flexDirection="column"
@@ -47,7 +44,7 @@ function SummaryMetric({ label, value }: SummaryMetricProps) {
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
-      <Text font="heading-h3">{value.toLocaleString()}</Text>
+      <Text font="heading-h3">{value.toLocaleString(locale)}</Text>
     </Section>
   );
 }
@@ -90,7 +87,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
           throw new Error(t("agentStats.fetchFailed.message"));
         }
 
-        const data = (await res.json()) as AgentStatsResponse;
+        const data: AgentStatsResponse = await res.json();
         setAgentStats(data);
       } catch (err) {
         setError(
@@ -139,7 +136,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
       {/* sm:flex-row / sm:items-center / sm:justify-between have no Section equivalent, kept as a raw div */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Text font="heading-h2">{t("analytics.agentChart.title")}</Text>
-        <DateRangePicker value={dateRange} onValueChange={setDateRange} />
+        <InputDateRangePicker value={dateRange} onValueChange={setDateRange} />
       </div>
 
       <Section

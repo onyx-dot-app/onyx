@@ -16,7 +16,7 @@ import { numToDisplay } from "./constants";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { HoverPopup } from "@/components/HoverPopup";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { ScoreSection } from "../ScoreEditor";
 import { truncateString } from "@/lib/utils";
 import { clickOnKeyDown } from "@opal/utils";
@@ -48,7 +48,7 @@ const IsVisibleSection = ({
           >
             <div className="select-none">{t("visibility.hidden.label")}</div>
             <div className="ms-1 my-auto">
-              <Checkbox checked={false} />
+              <InputCheckbox checked={false} />
             </div>
           </div>
         ) : (
@@ -64,7 +64,7 @@ const IsVisibleSection = ({
               {t("visibility.visible.label")}
             </div>
             <div className="ms-1 my-auto">
-              <Checkbox checked={true} />
+              <InputCheckbox checked={true} />
             </div>
           </div>
         )

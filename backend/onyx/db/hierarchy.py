@@ -537,6 +537,9 @@ def get_all_hierarchy_nodes_for_source(
     return list(db_session.execute(stmt).scalars().all())
 
 
+# MIT hierarchy queries intentionally omit permission filters.
+# Supported Community connectors are public; private/group and permission-sync
+# connector access are Business features handled by the EE implementation.
 def _get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
@@ -689,7 +692,7 @@ def get_document_parent_hierarchy_node_ids(
     )
     results = db_session.execute(stmt).all()
 
-    return {doc_id: parent_id for doc_id, parent_id in results}
+    return {doc_id: parent_id for doc_id, parent_id in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def update_document_parent_hierarchy_nodes(

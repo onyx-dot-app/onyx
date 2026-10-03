@@ -1,7 +1,8 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { format, startOfDay, subDays } from "date-fns";
 import useSWR from "swr";
 import {
@@ -13,12 +14,12 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
+import { ContentAction, Section, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import {
   SvgCalendar,
   SvgDownload,
   SvgDownloadCloud,
-  SvgSimpleLoader,
   SvgSpreadsheetFile,
   SvgX,
 } from "@opal/icons";
@@ -46,10 +47,15 @@ const POLL_INTERVAL_MS = 3_000;
 const SLOW_REPORT_AFTER_MS = 20_000;
 const REPORT_TIMEOUT_MS = 5 * 60_000;
 
-function periodLabel(report: UsageReport, allTimeLabel: string): string {
+function periodLabel(
+  report: UsageReport,
+  allTimeLabel: string,
+  locale: string
+): string {
   return report.period_from
-    ? `${humanReadableFormat(report.period_from)} – ${humanReadableFormat(
-        report.period_to!
+    ? `${humanReadableFormat(report.period_from, locale)} – ${humanReadableFormat(
+        report.period_to!,
+        locale
       )}`
     : allTimeLabel;
 }
@@ -79,7 +85,7 @@ function PendingReportRow({ rangeLabel, slow }: PendingReportRowProps) {
         padding={1}
         center
         rightChildren={
-          <SvgSimpleLoader
+          <IconLoader
             size={16}
             className="shrink-0 animate-spin stroke-text-03 motion-reduce:animate-none"
           />
@@ -96,7 +102,8 @@ interface ReportRowProps {
 
 function ReportRow({ report, justArrived }: ReportRowProps) {
   const t = useTranslations("admin.analytics");
-  const label = periodLabel(report, t("reports.period.allTime.label"));
+  const locale = useLocale();
+  const label = periodLabel(report, t("reports.period.allTime.label"), locale);
   return (
     <div
       className={
@@ -112,7 +119,7 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
         title={label}
         description={t("reports.row.description", {
           requestor: report.requestor ?? t("reports.row.systemRequestor.label"),
-          time: humanReadableFormatWithTime(report.time_created),
+          time: humanReadableFormatWithTime(report.time_created, locale),
         })}
         padding={1}
         center

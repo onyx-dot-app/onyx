@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.db.enums import SystemUsageAttribution
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.span_data import (
     FunctionSpanData,
@@ -75,6 +76,7 @@ def processor(
     monkeypatch.setattr(proc_mod, "get_session_with_tenant", _fake_session)
     monkeypatch.setattr(proc_mod, "compute_cost_cents", lambda *_a, **_k: (1.0, 2.0))
     monkeypatch.setattr(proc_mod, "record_user_usage", _capture_record)
+    monkeypatch.setattr(proc_mod, "record_system_usage", _capture_record)
 
     p = UserUsageTracingProcessor(flush_interval_seconds=0.05)
     try:
@@ -106,14 +108,15 @@ def test_records_usage_when_user_id_set(
     assert len(recorded_calls) == 1
     call = recorded_calls[0]
     assert call["user_id"] == user_id
-    assert call["input_tokens"] == 100
-    assert call["output_tokens"] == 50
-    assert call["cache_read_tokens"] == 20
-    assert call["model"] == "gpt-4o"
-    assert call["provider"] == "openai"
-    assert call["flow"] == "chat_response"
-    assert call["cost_cents"] == pytest.approx(3.0)  # 1.0 input + 2.0 output
-    window_start = call["window_start"]
+    usage = call["usage"]
+    assert usage.input_tokens == 100
+    assert usage.output_tokens == 50
+    assert usage.cache_read_tokens == 20
+    assert usage.model == "gpt-4o"
+    assert usage.provider == "openai"
+    assert usage.flow == "chat_response"
+    assert usage.cost_cents == pytest.approx(3.0)  # 1.0 input + 2.0 output
+    window_start = usage.window_start
     assert (
         window_start.hour
         == window_start.minute
@@ -140,8 +143,9 @@ def test_normalizes_prompt_completion_token_aliases(
     processor.force_flush()
 
     assert len(recorded_calls) == 1
-    assert recorded_calls[0]["input_tokens"] == 7
-    assert recorded_calls[0]["output_tokens"] == 3
+    usage = recorded_calls[0]["usage"]
+    assert usage.input_tokens == 7
+    assert usage.output_tokens == 3
 
 
 def test_batch_aggregates_matching_ledger_dimensions(
@@ -198,10 +202,42 @@ def test_batch_aggregates_cache_creation_tokens(
     assert aggregated[0].cache_creation_tokens == 30
 
 
-def test_no_record_when_user_id_unset(
+def test_records_system_usage_when_user_id_unset(
     processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
-    processor.on_span_end(_generation_span(usage={"input_tokens": 5}))
+    processor.on_span_end(
+        _generation_span(
+            flow=LLMFlow.IMAGE_SUMMARIZATION.value,
+            usage={"input_tokens": 5, "output_tokens": 2},
+        )
+    )
+    processor.force_flush()
+    assert len(recorded_calls) == 1
+    assert recorded_calls[0]["attribution"] == SystemUsageAttribution.ATTRIBUTED
+    assert recorded_calls[0]["usage"].flow == LLMFlow.IMAGE_SUMMARIZATION.value
+
+
+def test_records_unknown_non_user_flow_as_unattributed(
+    processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
+) -> None:
+    processor.on_span_end(_generation_span(flow="unknown", usage={"input_tokens": 5}))
+    processor.force_flush()
+    assert len(recorded_calls) == 1
+    assert recorded_calls[0]["attribution"] == SystemUsageAttribution.UNATTRIBUTED
+
+
+def test_ignores_non_user_generation_without_token_usage(
+    processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
+) -> None:
+    processor.on_span_end(
+        _fake_span(
+            GenerationSpanData(
+                model="dall-e-3",
+                model_config={"flow": LLMFlow.IMAGE_GENERATION.value},
+                image_count=1,
+            )
+        )
+    )
     processor.force_flush()
     assert recorded_calls == []
 
@@ -258,8 +294,9 @@ def test_records_image_span_without_token_usage(
 
     processor.force_flush()
     assert len(recorded_calls) == 1
-    assert recorded_calls[0]["input_tokens"] == 0
-    assert recorded_calls[0]["output_tokens"] == 0
+    usage = recorded_calls[0]["usage"]
+    assert usage.input_tokens == 0
+    assert usage.output_tokens == 0
 
 
 def test_on_span_end_never_raises_on_internal_error(
@@ -317,6 +354,7 @@ def test_passes_cache_inclusive_usage_to_shared_pricing(
 
     monkeypatch.setattr(proc_mod, "compute_cost_cents", _capture_cost)
     monkeypatch.setattr(proc_mod, "record_user_usage", _capture_record)
+    monkeypatch.setattr(proc_mod, "record_system_usage", _capture_record)
 
     p = UserUsageTracingProcessor(flush_interval_seconds=0.05)
     try:
@@ -341,9 +379,10 @@ def test_passes_cache_inclusive_usage_to_shared_pricing(
 
     assert priced == [(3000, 500, 2000, 500)]
     assert len(recorded_calls) == 1
-    assert recorded_calls[0]["input_tokens"] == 3000
-    assert recorded_calls[0]["cache_read_tokens"] == 2000
-    assert recorded_calls[0]["cache_creation_tokens"] == 500
+    usage = recorded_calls[0]["usage"]
+    assert usage.input_tokens == 3000
+    assert usage.cache_read_tokens == 2000
+    assert usage.cache_creation_tokens == 500
 
 
 def test_flush_swallows_record_errors(

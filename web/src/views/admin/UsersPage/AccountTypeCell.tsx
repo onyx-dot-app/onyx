@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { SvgGlobe, SvgUser, SvgSlack, SvgKey } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import type { UserRow } from "./interfaces";
+import type { UserRow } from "./types";
 import { AccountType } from "@/lib/types";
 
 const ACCOUNT_TYPE_ICONS: Partial<Record<AccountType, IconFunctionComponent>> =

@@ -2,11 +2,12 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { deleteTokenRateLimit, updateTokenRateLimit } from "./lib";
-import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
+import { ContentAction, Section, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { TokenRateLimitDisplay } from "./types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import { Button, Switch, Text } from "@opal/components";
+import { Button, InputSwitch, Text } from "@opal/components";
 import { SvgTrash, SvgUsers, SvgWallet } from "@opal/icons";
 import { formatCurrencyFromCents, formatTokenCount } from "@/lib/format";
 
@@ -62,7 +63,7 @@ function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
         center
         rightChildren={
           <div className="flex items-center gap-2">
-            <Switch
+            <InputSwitch
               checked={limit.enabled}
               disabled={!isAdmin}
               onCheckedChange={() => onToggle(limit.token_id)}

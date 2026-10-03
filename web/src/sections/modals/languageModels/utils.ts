@@ -8,6 +8,7 @@ import {
 import {
   ALL_REASONING_STOPS,
   maxReasoningStop,
+  minReasoningStop,
 } from "@/sections/model-selector/setting-controls";
 import * as Yup from "yup";
 import type { useTranslations } from "next-intl";
@@ -152,10 +153,13 @@ export function clampModelSettings<
 >(model: T): T {
   const highestIndex = maxReasoningStop(model.supported_reasoning_efforts);
   if (highestIndex < 0) return model;
-  const bound = (effort: ReasoningEffortOverride | null | undefined) =>
-    effort && ALL_REASONING_STOPS.indexOf(effort) > highestIndex
-      ? ALL_REASONING_STOPS[highestIndex]
-      : effort;
+  const lowestIndex = minReasoningStop(model.supported_reasoning_efforts);
+  const bound = (effort: ReasoningEffortOverride | null | undefined) => {
+    if (!effort) return effort;
+    const index = ALL_REASONING_STOPS.indexOf(effort);
+    if (index > highestIndex) return ALL_REASONING_STOPS[highestIndex];
+    return index < lowestIndex ? ALL_REASONING_STOPS[lowestIndex] : effort;
+  };
   return {
     ...model,
     reasoning_effort_max: bound(model.reasoning_effort_max),

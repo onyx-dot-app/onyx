@@ -8,7 +8,6 @@ import { Button } from "@opal/components";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { can } from "@/lib/permissions/resource-actions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -94,7 +93,7 @@ export default function AgentCard({ agent, onView }: AgentCardProps) {
                           icon={SvgBarChart}
                           prominence="tertiary"
                           onClick={noProp(() =>
-                            router.push(`/ee/agents/stats/${agent.id}` as Route)
+                            router.push(`/ee/agents/stats/${agent.id}`)
                           )}
                           tooltip={t("card.viewStats.tooltip")}
                         />
@@ -106,7 +105,7 @@ export default function AgentCard({ agent, onView }: AgentCardProps) {
                           icon={SvgEdit}
                           prominence="tertiary"
                           onClick={noProp(() =>
-                            router.push(`/app/agents/edit/${agent.id}` as Route)
+                            router.push(`/app/agents/edit/${agent.id}`)
                           )}
                           tooltip={t("card.edit.tooltip")}
                         />

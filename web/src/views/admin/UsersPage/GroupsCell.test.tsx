@@ -5,7 +5,7 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { AccountType, UserStatus } from "@/lib/types";
 import GroupsCell from "./GroupsCell";
-import type { UserRow } from "./interfaces";
+import type { UserRow } from "./types";
 
 /** Every node handed to a ResizeObserver, in observe order. */
 const observedNodes: Element[] = [];
@@ -33,6 +33,7 @@ const user: UserRow = {
   personal_name: null,
   created_at: null,
   updated_at: null,
+  last_active: null,
   groups: [],
 };
 

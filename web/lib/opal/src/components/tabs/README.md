@@ -14,13 +14,14 @@ import { Tabs } from "@opal/components";
   </Tabs.List>
   <Tabs.Content value="overview">Overview content</Tabs.Content>
   <Tabs.Content value="details">Details content</Tabs.Content>
-</Tabs>
+</Tabs>;
 ```
 
 ## Variants
 
 ### Contained (default)
-Equal-width tabs laid out in a grid on a tinted background. Active tab gets a white card with a subtle shadow. Best for primary page-level navigation.
+
+Equal-width tabs, 36px tall, laid out in a grid on a tinted background. The active tab sits on a white card with a subtle shadow, which slides to the next tab when the selection changes. Best for primary page-level navigation.
 
 ```tsx
 <Tabs variant="contained">
@@ -32,7 +33,8 @@ Equal-width tabs laid out in a grid on a tinted background. Active tab gets a wh
 ```
 
 ### Pill
-Content-width tabs with a sliding underline indicator that animates between active tabs. Good for secondary navigation or filter-style tabs.
+
+Content-width tabs. The active tab's filled background and the underline indicator both slide between tabs. Good for secondary navigation or filter-style tabs.
 
 ```tsx
 <Tabs variant="pill">
@@ -44,7 +46,8 @@ Content-width tabs with a sliding underline indicator that animates between acti
 ```
 
 ### Underline
-Like pill but without the filled active background on the trigger — only the underline indicator is shown.
+
+Like pill but without the filled active background — only the underline indicator is shown, and it slides between tabs.
 
 ```tsx
 <Tabs variant="underline">
@@ -54,6 +57,12 @@ Like pill but without the filled active background on the trigger — only the u
   </Tabs.List>
 </Tabs>
 ```
+
+### Animation
+
+The active state slides from the old tab to the new one: in `contained` the white card, in `pill` both the filled background and the underline bar, in `underline` the bar. It moves with a `transform`, holds still on its first placement and while the tabs scroll, and turns off for reduced motion. Panels (`Tabs.Content`) swap without animation.
+
+A string label renders as an Opal `Content` with `color="interactive"`: each tab is an interactive surface whose state sets `--interactive-foreground` and `--interactive-foreground-icon`, so title and icon colours fade with the slide. Contained labels use the `main-ui` size (16px icon); pill and underline use `secondary` (12px icon).
 
 ## Features
 
@@ -92,7 +101,9 @@ When tabs overflow the available width, show navigation arrows:
 <Tabs variant="pill">
   <Tabs.List enableScrollArrows>
     {manyTabs.map((t) => (
-      <Tabs.Trigger key={t.value} value={t.value}>{t.label}</Tabs.Trigger>
+      <Tabs.Trigger key={t.value} value={t.value}>
+        {t.label}
+      </Tabs.Trigger>
     ))}
   </Tabs.List>
 </Tabs>
@@ -105,6 +116,17 @@ When tabs overflow the available width, show navigation arrows:
   …
 </Tabs>
 ```
+
+### Space below the tab list
+
+```tsx
+<Tabs value={activeTab} onValueChange={setActiveTab} gap={4}>
+  …
+</Tabs>
+```
+
+`gap` puts that spacing step (`N / 4` rem) between the list and the panel.
+Unset, the panel sits flush against the list.
 
 ### Content padding
 
@@ -120,34 +142,36 @@ When tabs overflow the available width, show navigation arrows:
 
 Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/components/tabs) props except `className` / `style`.
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `variant` | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group |
-| `defaultValue` | `string` | — | Initially active tab (uncontrolled) |
-| `value` | `string` | — | Controlled active tab |
-| `onValueChange` | `(value: string) => void` | — | Called when active tab changes |
+| Prop            | Type                                   | Default       | Description                            |
+| --------------- | -------------------------------------- | ------------- | -------------------------------------- |
+| `variant`       | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group |
+| `gap`           | `Spacing`                              | —             | Space between the tab list and the panel (`N / 4` rem); unset, flush |
+| `defaultValue`  | `string`                               | —             | Initially active tab (uncontrolled)    |
+| `value`         | `string`                               | —             | Controlled active tab                  |
+| `onValueChange` | `(value: string) => void`              | —             | Called when active tab changes         |
 
 ### `Tabs.List`
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `rightChildren` | `ReactNode` | — | Content pinned to the right (pill/underline only) |
-| `enableScrollArrows` | `boolean` | `false` | Show scroll arrows on overflow (pill/underline only) |
+| Prop                 | Type        | Default | Description                                          |
+| -------------------- | ----------- | ------- | ---------------------------------------------------- |
+| `rightChildren`      | `ReactNode` | —       | Content pinned to the right (pill/underline only)    |
+| `enableScrollArrows` | `boolean`   | `false` | Show scroll arrows on overflow (pill/underline only) |
 
 ### `Tabs.Trigger`
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `value` | `string` | **required** | Tab value |
-| `icon` | `FunctionComponent<IconProps>` | — | Icon before the label |
-| `tooltip` | `string` | — | Tooltip on hover |
-| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"top"` | Tooltip placement |
-| `disabled` | `boolean` | — | Disables the tab (tooltip still shows) |
-| `isLoading` | `boolean` | — | Shows a spinner after the label |
+| Prop          | Type                                     | Default      | Description                            |
+| ------------- | ---------------------------------------- | ------------ | -------------------------------------- |
+| `value`       | `string`                                 | **required** | Tab value                              |
+| `icon`        | `FunctionComponent<IconProps>`           | —            | Icon before the label                  |
+| `tooltip`     | `string`                                 | —            | Tooltip on hover                       |
+| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"top"`      | Tooltip placement                      |
+| `disabled`    | `boolean`                                | —            | Disables the tab (tooltip still shows) |
+| `isLoading`   | `boolean`                                | —            | Shows a spinner after the label        |
 
 ### `Tabs.Content`
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `value` | `string` | **required** | Must match a `Tabs.Trigger` value |
-| `padding` | `Spacing` | `0` | Additional inner padding, as a spacing step (`N / 4` rem) |
+| Prop          | Type      | Default      | Description                                                                            |
+| ------------- | --------- | ------------ | -------------------------------------------------------------------------------------- |
+| `value`       | `string`  | **required** | Must match a `Tabs.Trigger` value                                                      |
+| `padding`     | `Spacing` | `0`          | Additional inner padding, as a spacing step (`N / 4` rem)                              |
+| `keepMounted` | `boolean` | `false`      | Keeps the panel mounted but hidden while inactive, so form state survives a tab switch |

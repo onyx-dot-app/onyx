@@ -1,7 +1,8 @@
+"use client";
+
 import "@opal/components/loader/styles.css";
 import { cn } from "@opal/utils";
-import type { IconFunctionComponent } from "@opal/types";
-import { SvgLoader } from "@opal/icons";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Shared
@@ -32,41 +33,6 @@ const COLOR_CLASS: Record<LoaderColor, string> = {
   "status-success-05": "text-status-success-05",
   "status-warning-05": "text-status-warning-05",
 };
-
-// ---------------------------------------------------------------------------
-// IconLoader
-// ---------------------------------------------------------------------------
-
-interface IconLoaderProps {
-  /** Icon to spin. @default the generic `SvgLoader` spinner */
-  icon?: IconFunctionComponent;
-
-  /** Size of the icon, in pixels. @default 24 */
-  size?: number;
-
-  /** Mark color token. @default "border-02" */
-  color?: LoaderColor;
-}
-
-/**
- * Generic loader: continuously spins the given icon. Pass any `@opal/icons`
- * icon, or use the default spinner. Holds still under `prefers-reduced-motion`.
- * For the Onyx-branded octagon mark, use `OnyxLoader`.
- */
-function IconLoader({
-  icon: Icon = SvgLoader,
-  size = 24,
-  color = "border-02",
-}: IconLoaderProps) {
-  return (
-    <Icon
-      size={size}
-      role="status"
-      aria-label="Loading"
-      className={cn("shrink-0 motion-safe:animate-spin", COLOR_CLASS[color])}
-    />
-  );
-}
 
 // ---------------------------------------------------------------------------
 // OnyxLoader
@@ -113,10 +79,11 @@ const MARK_PATHS = [
  * For a full-page loading state with a label, use `PageLoader`.
  */
 function OnyxLoader({ size = 64, color = "border-02" }: OnyxLoaderProps) {
+  const strings = useOpalStrings();
   return (
     <div
       role="status"
-      aria-label="Loading"
+      aria-label={strings.loading}
       className={cn("relative shrink-0", COLOR_CLASS[color])}
       style={{ width: size, height: size }}
     >
@@ -151,10 +118,4 @@ function OnyxLoader({ size = 64, color = "border-02" }: OnyxLoaderProps) {
   );
 }
 
-export {
-  IconLoader,
-  type IconLoaderProps,
-  OnyxLoader,
-  type OnyxLoaderProps,
-  type LoaderColor,
-};
+export { OnyxLoader, type OnyxLoaderProps, type LoaderColor };

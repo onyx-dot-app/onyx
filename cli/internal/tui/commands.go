@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/onyx-dot-app/onyx/cli/internal/agents"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
@@ -52,22 +53,10 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdNew(m)
 
 	case "/connectors":
-		url := config.OnyxWebURL(m.config.ServerURL) + "/admin/indexing/status"
-		if browser.OpenBrowser(url) {
-			m.viewport.addInfo("Opened " + url + " in browser")
-		} else {
-			m.viewport.addWarning("Failed to open browser. Visit: " + url)
-		}
-		return m, nil
+		return cmdOpenWebPage(m, "/admin/indexing/status"), nil
 
 	case "/settings":
-		url := config.OnyxWebURL(m.config.ServerURL) + "/app/settings/general"
-		if browser.OpenBrowser(url) {
-			m.viewport.addInfo("Opened " + url + " in browser")
-		} else {
-			m.viewport.addWarning("Failed to open browser. Visit: " + url)
-		}
-		return m, nil
+		return cmdOpenWebPage(m, "/app/settings/general"), nil
 
 	case "/experiments":
 		m.viewport.addInfo(config.ExperimentsText(m.config.Features))
@@ -80,6 +69,24 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		m.viewport.addWarning(fmt.Sprintf("Unknown command: %s. Type /help for available commands.", command))
 		return m, nil
 	}
+}
+
+// openBrowser is a variable so tests can observe launches.
+var openBrowser = browser.OpenBrowser
+
+// cmdOpenWebPage opens a page of the Onyx web app. Over SSH it only prints
+// the URL, so a remote session never starts a program on the server host.
+func cmdOpenWebPage(m Model, path string) Model {
+	url := config.OnyxWebURL(m.config.ServerURL) + path
+	switch {
+	case RemoteMode:
+		m.viewport.addInfo("Visit: " + url)
+	case openBrowser(url):
+		m.viewport.addInfo("Opened " + url + " in browser")
+	default:
+		m.viewport.addWarning("Failed to open browser. Visit: " + url)
+	}
+	return m
 }
 
 func cmdNew(m Model) (Model, tea.Cmd) {
@@ -112,22 +119,68 @@ func cmdShowAgents(m Model) (Model, tea.Cmd) {
 }
 
 func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
+	idStr = strings.TrimSpace(idStr)
+	if idStr == "" {
+		return cmdShowAgents(m)
+	}
+
+	return applyAgentSelection(m, func() (*models.AgentSummary, error) {
+		if len(m.agents) == 0 {
+			return nil, fmt.Errorf("no agents available; run /agent to refresh the list")
+		}
+
+		// Exact name wins over numeric ID parsing (e.g. agent named "42").
+		switch exact := agents.ExactNameMatches(m.agents, idStr); len(exact) {
+		case 1:
+			return &exact[0], nil
+		case 0:
+			// fall through
+		default:
+			agent, err := agents.ResolveByName(m.agents, idStr)
+			if err != nil {
+				return nil, err
+			}
+			return &agent, nil
+		}
+
+		if pid, err := strconv.Atoi(idStr); err == nil {
+			for i := range m.agents {
+				if m.agents[i].ID == pid {
+					return &m.agents[i], nil
+				}
+			}
+			return nil, fmt.Errorf("agent %d not found. Use /agent to see available agents", pid)
+		}
+
+		agent, err := agents.ResolveByName(m.agents, idStr)
+		if err != nil {
+			return nil, err
+		}
+		return &agent, nil
+	})
+}
+
+func cmdSelectAgentByID(m Model, idStr string) (Model, tea.Cmd) {
 	pid, err := strconv.Atoi(strings.TrimSpace(idStr))
 	if err != nil {
 		m.viewport.addWarning("Invalid agent ID. Use a number.")
 		return m, nil
 	}
 
-	var target *models.AgentSummary
-	for i := range m.agents {
-		if m.agents[i].ID == pid {
-			target = &m.agents[i]
-			break
+	return applyAgentSelection(m, func() (*models.AgentSummary, error) {
+		for i := range m.agents {
+			if m.agents[i].ID == pid {
+				return &m.agents[i], nil
+			}
 		}
-	}
+		return nil, fmt.Errorf("agent %d not found. Use /agent to see available agents", pid)
+	})
+}
 
-	if target == nil {
-		m.viewport.addWarning(fmt.Sprintf("Agent %d not found. Use /agent to see available agents.", pid))
+func applyAgentSelection(m Model, lookup func() (*models.AgentSummary, error)) (Model, tea.Cmd) {
+	target, err := lookup()
+	if err != nil {
+		m.viewport.addWarning(err.Error())
 		return m, nil
 	}
 
@@ -136,9 +189,11 @@ func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 	m.status.setAgent(target.Name)
 	m.viewport.addInfo("Switched to agent: " + target.Name)
 
-	// Save preference
-	m.config.DefaultAgentID = target.ID
-	_ = config.Save(m.config)
+	// Over SSH the selection is session-only: the config file belongs to the host operator.
+	if !RemoteMode {
+		m.config.DefaultAgentID = target.ID
+		_ = config.Save(m.config)
+	}
 
 	return m, nil
 }
@@ -220,6 +275,10 @@ func cmdSelectModel(m Model, idxStr string) (Model, tea.Cmd) {
 }
 
 func cmdAttach(m Model, pathStr string) (Model, tea.Cmd) {
+	if RemoteMode {
+		m.viewport.addWarning("/attach is disabled over SSH: paths resolve on the server host, not yours.")
+		return m, nil
+	}
 	if pathStr == "" {
 		m.viewport.addWarning("Usage: /attach <file_path>")
 		return m, nil

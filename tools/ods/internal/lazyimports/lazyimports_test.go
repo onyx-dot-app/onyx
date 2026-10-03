@@ -706,6 +706,9 @@ func TestDefaultLazyImportModules(t *testing.T) {
 		"trafilatura",
 		"pypdf",
 		"unstructured_client",
+		"braintrust",
+		"exa_py",
+		"playwright",
 	}
 
 	for _, mod := range expectedModules {
@@ -728,6 +731,71 @@ func TestDefaultLazyImportModules(t *testing.T) {
 	for _, ignore := range expectedLitellmIgnores {
 		if _, ok := litellmIgnores[ignore]; !ok {
 			t.Errorf("Expected %s in litellm ignore files", ignore)
+		}
+	}
+
+	// Gateway modules are the only files allowed to import these at module level.
+	expectedGatewayIgnores := map[string][]string{
+		"braintrust": {
+			"onyx/evals/providers/braintrust.py",
+			"onyx/tracing/braintrust_tracing_processor.py",
+		},
+		"exa_py": {
+			"onyx/tools/tool_implementations/web_search/clients/exa_client.py",
+		},
+		"playwright": {
+			"onyx/connectors/highspot/utils.py",
+			"onyx/connectors/web/connector.py",
+			"onyx/utils/playwright_fetch.py",
+		},
+	}
+	for mod, ignores := range expectedGatewayIgnores {
+		for _, ignore := range ignores {
+			if _, ok := modules[mod].IgnoreFiles[ignore]; !ok {
+				t.Errorf("Expected %s in %s ignore files", ignore, mod)
+			}
+		}
+	}
+}
+
+func TestBraintrustAndExaViolations(t *testing.T) {
+	// Both packages pull in openai (and braintrust also litellm) at import time.
+	testContent := `
+import braintrust
+from braintrust import Eval
+from exa_py import Exa
+from exa_py.api import HighlightsContentsOptions
+import braintrust_langchain  # Different package, not flagged
+
+def allowed_function():
+    from braintrust import init_dataset
+    from exa_py import Exa
+    return init_dataset, Exa
+`
+
+	testPath := createTempPythonFile(t, testContent)
+	defer func() { _ = os.Remove(testPath) }()
+
+	patterns := createPatterns([]string{"braintrust", "exa_py"})
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
+
+	lineNumbers := extractLineNumbers(result.ViolationLines)
+	expectedLines := []int{2, 3, 4, 5}
+	if len(lineNumbers) != len(expectedLines) {
+		t.Errorf("Expected %d violations, got %d (lines %v)", len(expectedLines), len(lineNumbers), lineNumbers)
+	}
+	for _, expected := range expectedLines {
+		if !containsLineNum(lineNumbers, expected) {
+			t.Errorf("Expected line %d in violations", expected)
+		}
+	}
+
+	for _, mod := range []string{"braintrust", "exa_py"} {
+		if _, ok := result.ViolatedModules[mod]; !ok {
+			t.Errorf("Expected %s in violated modules", mod)
 		}
 	}
 }

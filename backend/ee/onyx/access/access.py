@@ -49,13 +49,12 @@ def _get_access_for_documents(
         document_ids=document_ids,
         db_session=db_session,
     )
-    user_group_info: dict[str, list[str]] = {
-        document_id: group_names
-        for document_id, group_names in fetch_user_groups_for_documents(
+    user_group_info: dict[str, list[str]] = dict(
+        fetch_user_groups_for_documents(
             db_session=db_session,
             document_ids=document_ids,
         )
-    }
+    )
     documents = get_documents_by_ids(
         db_session=db_session,
         document_ids=document_ids,

@@ -37,6 +37,7 @@ export type {
 export type {
   InteractiveStatefulProps,
   InteractiveStatefulVariant,
+  InteractiveStatefulProminence,
   InteractiveStatefulState,
   InteractiveStatefulInteraction,
 } from "@opal/core/interactive/stateful/components";

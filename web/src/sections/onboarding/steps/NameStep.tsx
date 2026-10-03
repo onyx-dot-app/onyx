@@ -9,11 +9,12 @@ import {
   OnboardingActions,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-import InputAvatar from "@/refresh-components/inputs/InputAvatar";
+import { InputAvatar } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 import { InputHorizontal } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
+import { useSettings } from "@/lib/settings/hooks";
 
 export interface NameStepProps {
   state: OnboardingState;
@@ -23,6 +24,7 @@ export interface NameStepProps {
 const NameStep = React.memo(
   ({ state: onboardingState, actions: onboardingActions }: NameStepProps) => {
     const t = useTranslations("onboarding");
+    const { appName } = useSettings();
     const { userName } = onboardingState.data;
     const { updateName, goToStep, setButtonActive, nextStep } =
       onboardingActions;
@@ -61,7 +63,7 @@ const NameStep = React.memo(
           <InputHorizontal
             responsive
             icon={SvgUser}
-            title={t("nameStep.title")}
+            title={t("nameStep.title", { appName })}
             description={t("nameStep.description")}
           >
             <InputTypeIn

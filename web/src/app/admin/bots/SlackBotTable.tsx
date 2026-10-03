@@ -2,8 +2,8 @@
 
 import { PageSelector } from "@/components/PageSelector";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { useEffect, useState } from "react";
 import {
   Table,
@@ -24,18 +24,18 @@ function ClickableTableRow({
   children,
   ...props
 }: {
-  url: string;
+  url: `/admin/bots/${number}`;
   children: React.ReactNode;
   [key: string]: any;
 }) {
   const router = useRouter();
 
   useEffect(() => {
-    router.prefetch(url as Route);
+    router.prefetch(url);
   }, [router, url]);
 
   const navigate = () => {
-    router.push(url as Route);
+    router.push(url);
   };
 
   return (
@@ -47,6 +47,7 @@ function ClickableTableRow({
 
 export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
   const t = useTranslations("admin.slackBots");
+  const { appName } = useSettings();
   const [page, setPage] = useState(1);
 
   // sort by id for consistent ordering
@@ -117,7 +118,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                {t("table.empty.message")}
+                {t("table.empty.message", { appName })}
               </TableCell>
             </TableRow>
           )}
@@ -129,14 +130,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
             <PageSelector
               totalPages={Math.ceil(slackBots.length / NUM_IN_PAGE)}
               currentPage={page}
-              onPageChange={(newPage) => {
-                setPage(newPage);
-                window.scrollTo({
-                  top: 0,
-                  left: 0,
-                  behavior: "smooth",
-                });
-              }}
+              onPageChange={setPage}
             />
           </div>
         </div>

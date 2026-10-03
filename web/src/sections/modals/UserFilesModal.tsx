@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { InputTypeIn } from "@opal/components";
 import { ProjectFile } from "@/lib/projects/providers";
@@ -7,11 +8,12 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/lib/projects/types";
-import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
+import { isFilePending } from "@/lib/projects/utils";
 import { Modal } from "@opal/components";
 import { useModal } from "@opal/components";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import {
+  SvgExternalLink,
   SvgEye,
   SvgFiles,
   SvgFileText,
@@ -19,20 +21,21 @@ import {
   SvgPlusCircle,
   SvgTrash,
   SvgXCircle,
-  SvgSimpleLoader,
 } from "@opal/icons";
+import { Hoverable } from "@opal/core";
+import { AttachmentItemButton, Text as OpalText } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { timeAgo } from "@opal/time";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 function getIcon(
   file: ProjectFile,
   isProcessing: boolean
 ): React.FunctionComponent<IconProps> {
-  if (isProcessing) return SvgSimpleLoader;
+  if (isProcessing) return IconLoader;
   const ext = getFileExtension(file.name).toLowerCase();
   if (isImageExtension(ext)) return SvgImage;
   return SvgFileText;
@@ -49,7 +52,8 @@ interface FileStatusLabels {
 function getDescription(file: ProjectFile, labels: FileStatusLabels): string {
   const s = String(file.status || "");
   const typeLabel = getFileExtension(file.name);
-  if (s === UserFileStatus.PROCESSING) return labels.processing;
+  if (s === UserFileStatus.PROCESSING || s === UserFileStatus.INDEXING)
+    return labels.processing;
   if (s === UserFileStatus.UPLOADING) return labels.uploading;
   if (s === UserFileStatus.DELETING) return labels.deleting;
   if (s === UserFileStatus.COMPLETED) return typeLabel;
@@ -72,10 +76,9 @@ function FileAttachment({
   onDelete,
 }: FileAttachmentProps) {
   const t = useTranslations("chat.modals.userFiles");
+  const locale = useLocale();
   const isProcessing =
-    String(file.status) === UserFileStatus.PROCESSING ||
-    String(file.status) === UserFileStatus.UPLOADING ||
-    String(file.status) === UserFileStatus.DELETING;
+    isFilePending(file.status) || file.status === UserFileStatus.DELETING;
 
   const Icon = getIcon(file, isProcessing);
   const description = getDescription(file, {
@@ -84,23 +87,53 @@ function FileAttachment({
     deleting: t("fileStatus.deleting.label"),
   });
   const rightText = file.last_accessed_at
-    ? (timeAgo(file.last_accessed_at) ?? "")
+    ? (timeAgo(file.last_accessed_at, locale) ?? "")
     : "";
 
   return (
-    <AttachmentButton
-      onClick={onClick}
-      icon={Icon}
-      description={description}
-      rightText={rightText}
-      selected={isSelected}
-      processing={isProcessing}
-      onView={onView}
-      actionIcon={SvgTrash}
-      onAction={onDelete}
-    >
-      {file.name}
-    </AttachmentButton>
+    <Hoverable.Root group="user-file-row">
+      <AttachmentItemButton
+        prominence="primary"
+        onClick={onClick}
+        icon={Icon}
+        title={file.name}
+        description={description}
+        state={isSelected ? "selected" : undefined}
+        centerChildren={
+          rightText ? (
+            <Section alignItems="end">
+              <OpalText font="secondary-body" color="text-03" maxLines={1}>
+                {rightText}
+              </OpalText>
+            </Section>
+          ) : undefined
+        }
+        rightChildren={
+          <Hoverable.Item group="user-file-row">
+            <Section flexDirection="row" gap={0} padding={1.5}>
+              {onView && (
+                <Button
+                  icon={SvgExternalLink}
+                  onClick={onView}
+                  prominence="internal"
+                  size="sm"
+                  tooltip={t("fileRow.viewButton.ariaLabel")}
+                />
+              )}
+              {onDelete && (
+                <Button
+                  icon={SvgTrash}
+                  onClick={onDelete}
+                  prominence="internal"
+                  size="sm"
+                  tooltip={t("fileRow.deleteButton.ariaLabel")}
+                />
+              )}
+            </Section>
+          </Hoverable.Item>
+        }
+      />
+    </Hoverable.Root>
   );
 }
 
@@ -227,7 +260,7 @@ export default function UserFilesModal({
             {filtered.length === 0 ? (
               <Text text03>{t("emptyState.description")}</Text>
             ) : (
-              <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
+              <ScrollIndicatorDiv className="p-1 gap-1 max-h-[70vh]">
                 {filtered.map((projectFle) => {
                   const isSelected = selectedIds.has(projectFle.id);
                   return (

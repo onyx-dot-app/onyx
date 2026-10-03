@@ -76,8 +76,8 @@ from onyx.db.enums import (
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     DefaultAppMode,
-    EmbeddingPrecision,
     EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
@@ -97,8 +97,6 @@ from onyx.db.enums import (
     MCPServerStatus,
     MCPTransport,
     NotificationSeverity,
-    OpenSearchDocumentMigrationStatus,
-    OpenSearchTenantMigrationStatus,
     PatType,
     Permission,
     PermissionSyncStatus,
@@ -117,9 +115,12 @@ from onyx.db.enums import (
     SwitchoverType,
     SyncStatus,
     SyncType,
+    SystemUsageAttribution,
     TaskStatus,
     ThemePreference,
+    UsageActorKind,
     UserFileStatus,
+    VectorQuantization,
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
@@ -128,6 +129,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
@@ -520,6 +522,22 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     def is_anonymous(self) -> bool:
         """Returns True if this is the anonymous user."""
         return str(self.id) == ANONYMOUS_USER_UUID
+
+    @property
+    def live_oauth_token(self) -> str | None:
+        """Access token of the link with the latest expiry, across providers.
+
+        A row can hold several links for one provider, one per re-issued
+        subject. The relationship has no order, so row position cannot pick
+        the live one. A link with no expiry ranks lowest. Ties keep row order.
+        Needs fully loaded links: a `load_only` collection lazy-loads each row.
+        """
+        if not self.oauth_accounts:
+            return None
+        live: OAuthAccount = max(
+            self.oauth_accounts, key=lambda link: link.expires_at or 0
+        )
+        return live.access_token
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -965,7 +983,7 @@ class ConnectorCredentialPair(Base):
     )
 
     # Determines how documents are processed after fetching:
-    # REGULAR: Full pipeline (chunk → embed → Vespa)
+    # REGULAR: Full pipeline (chunk → embed → document index)
     # FILE_SYSTEM: Write to file system only (for CLI agent sandbox)
     processing_mode: Mapped[ProcessingMode] = mapped_column(
         Enum(ProcessingMode, native_enum=False),
@@ -1140,7 +1158,7 @@ class Document(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Number of chunks in the document (in Vespa)
+    # Number of chunks in the document (in the document index)
     # Only null for documents indexed prior to this change
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -1149,13 +1167,13 @@ class Document(Base):
     # Null for documents indexed before this column was added.
     content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # last time any vespa relevant row metadata or the doc changed.
+    # last time any document-index-relevant row metadata or the doc changed.
     # does not include last_synced
     last_modified: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True, default=func.now()
     )
 
-    # last successful sync to vespa
+    # last successful sync to the document index
     last_synced: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
@@ -1252,121 +1270,6 @@ class Document(Base):
             "id",
             postgresql_where=text("secondary_only_sync_pending IS TRUE"),
         ),
-    )
-
-
-class OpenSearchDocumentMigrationRecord(Base):
-    """Tracks the migration status of documents from Vespa to OpenSearch.
-
-    This table can be dropped when the migration is complete for all Onyx
-    instances.
-    """
-
-    __tablename__ = "opensearch_document_migration_record"
-
-    document_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("document.id", ondelete="CASCADE"),
-        primary_key=True,
-        nullable=False,
-        index=True,
-    )
-    status: Mapped[OpenSearchDocumentMigrationStatus] = mapped_column(
-        Enum(OpenSearchDocumentMigrationStatus, native_enum=False),
-        default=OpenSearchDocumentMigrationStatus.PENDING,
-        nullable=False,
-        index=True,
-    )
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    attempts_count: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False, index=True
-    )
-    last_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-        index=True,
-    )
-
-    document: Mapped["Document"] = relationship("Document")
-
-
-class OpenSearchTenantMigrationRecord(Base):
-    """Tracks the state of the OpenSearch migration for a tenant.
-
-    Should only contain one row.
-
-    This table can be dropped when the migration is complete for all Onyx
-    instances.
-    """
-
-    __tablename__ = "opensearch_tenant_migration_record"
-    __table_args__ = (
-        # Singleton pattern - unique index on constant ensures only one row.
-        Index("idx_opensearch_tenant_migration_singleton", text("(true)"), unique=True),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
-    document_migration_record_table_population_status: Mapped[
-        OpenSearchTenantMigrationStatus
-    ] = mapped_column(
-        Enum(OpenSearchTenantMigrationStatus, native_enum=False),
-        default=OpenSearchTenantMigrationStatus.PENDING,
-        nullable=False,
-    )
-    num_times_observed_no_additional_docs_to_populate_migration_table: Mapped[int] = (
-        mapped_column(Integer, default=0, nullable=False)
-    )
-    overall_document_migration_status: Mapped[OpenSearchTenantMigrationStatus] = (
-        mapped_column(
-            Enum(OpenSearchTenantMigrationStatus, native_enum=False),
-            default=OpenSearchTenantMigrationStatus.PENDING,
-            nullable=False,
-        )
-    )
-    num_times_observed_no_additional_docs_to_migrate: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        nullable=False,
-    )
-    last_updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-    # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started".
-    # Otherwise contains a serialized mapping between slice ID and continuation
-    # token for that slice.
-    vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    total_chunks_migrated: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    total_chunks_errored: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    total_chunks_in_vespa: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    migration_completed_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    enable_opensearch_retrieval: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    approx_chunk_count_in_vespa: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
     )
 
 
@@ -2307,12 +2210,13 @@ class SearchSettings(Base):
         postgresql.ARRAY(Integer), nullable=True
     )
 
-    # allows for quantization -> less memory usage for a small performance hit.
-    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
-    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
-    embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False),
-        default=EmbeddingPrecision.FLOAT,
+    # OpenSearch scalar quantization of the vector fields. Part of the index
+    # mapping, so it is fixed for the life of this row's index.
+    vector_quantization: Mapped[VectorQuantization] = mapped_column(
+        Enum(VectorQuantization, native_enum=False),
+        nullable=False,
+        default=VectorQuantization.NONE,
+        server_default=VectorQuantization.NONE.name,
     )
 
     # can be used to reduce dimensionality of vectors and save memory with
@@ -3796,7 +3700,7 @@ class VoiceProvider(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
     provider_type: Mapped[str] = mapped_column(
         String
-    )  # "openai", "azure", "elevenlabs"
+    )  # "openai", "azure", "elevenlabs", "zoom"
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
@@ -3857,6 +3761,9 @@ class CloudEmbeddingProvider(Base):
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(EncryptedString())
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    vertex_config: Mapped[VertexEmbeddingConfigDict | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",
@@ -4177,9 +4084,8 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Owner user. SET NULL (not CASCADE) so deleting a user orphans shared
-    # personas instead of destroying them; the delete flow soft-deletes the
-    # private ones first.
+    # Owner user. SET NULL (not CASCADE) so deleting a user orphans their
+    # personas for the admins instead of destroying them.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
@@ -4793,6 +4699,10 @@ class SecuritySettings(Base):
     llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # Lets synced connectors narrow document access to chosen user groups.
+    allow_connector_group_restrictions: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )
@@ -4863,6 +4773,11 @@ class FileRecord(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # The legacy copy looks records up by object, once per copied file.
+    __table_args__ = (
+        Index("ix_file_record_bucket_name_object_key", "bucket_name", "object_key"),
     )
 
 
@@ -5088,9 +5003,32 @@ class UserGroup__ConnectorCredentialPair(Base):
         default=True,
         primary_key=True,
     )
+    role: Mapped[ConnectorManageRole] = mapped_column(
+        Enum(ConnectorManageRole, native_enum=False), nullable=False
+    )
 
     cc_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair",
+    )
+
+
+class UserGroup__CCPairDataAccess(Base):
+    """Data-access groups of a cc-pair: groups whose members may read its
+    documents. For a PRIVATE pair, members see every document. For a
+    SYNC_RESTRICTED pair, members see only what the source's own permissions
+    allow. Separate from UserGroup__ConnectorCredentialPair, which scopes who
+    may manage the pair."""
+
+    __tablename__ = "user_group__cc_pair_data_access"
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
     )
 
 
@@ -5188,7 +5126,8 @@ class UserGroup(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
-    # whether or not changes to the UserGroup have been propagated to Vespa
+    # whether or not changes to the UserGroup have been propagated to the
+    # document index
     is_up_to_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # tell the sync job to clean up the group
     is_up_for_deletion: Mapped[bool] = mapped_column(
@@ -5730,6 +5669,27 @@ class AvailableTenant(PublicBase):
     shard_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class TenantSchemaSnapshot(PublicBase):
+    """SQL dump of a shard's template schema at one head revision, written by the
+    rollout job. apply_snapshot builds a tenant schema from it instead of replaying
+    the migration chain. The newest two per shard are kept so the image being
+    replaced keeps its own snapshot until the rollout completes."""
+
+    __tablename__ = "tenant_schema_snapshot"
+    __table_args__ = (
+        UniqueConstraint("shard_name", "alembic_revision"),
+        {"schema": "public"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shard_name: Mapped[str] = mapped_column(String, nullable=False)
+    alembic_revision: Mapped[str] = mapped_column(String, nullable=False)
+    dump: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 # This is a mapping from tenant IDs to anonymous user paths
 class TenantAnonymousUserPath(PublicBase):
     __tablename__ = "tenant_anonymous_user_path"
@@ -6186,11 +6146,9 @@ class TenantUsage(Base):
 
 
 class UserUsage(Base):
-    """
-    Daily per-user LLM usage rollup for cost/token attribution and budget checks.
-
-    One accumulating row per (user, window, model, flow, provider, incognito),
-    not per call.
+    """Daily user and system LLM usage rollup. ``user_usage`` is a legacy
+    physical name retained for deployment compatibility; partial indexes
+    provide each actor kind's accumulation key.
     """
 
     __tablename__ = "user_usage"
@@ -6200,6 +6158,15 @@ class UserUsage(Base):
     # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    actor_kind: Mapped[UsageActorKind] = mapped_column(
+        Enum(UsageActorKind, native_enum=False),
+        nullable=False,
+        default=UsageActorKind.USER,
+        server_default=UsageActorKind.USER.value,
+    )
+    system_attribution: Mapped[SystemUsageAttribution | None] = mapped_column(
+        Enum(SystemUsageAttribution, native_enum=False), nullable=True
     )
 
     window_start: Mapped[datetime.datetime] = mapped_column(
@@ -6241,9 +6208,14 @@ class UserUsage(Base):
     )
 
     __table_args__ = (
-        # Upsert key: accumulate into one row per dimension tuple per window.
-        # provider is non-null ('' when absent), so a plain unique index dedups
-        # correctly on every Postgres version (no NULLS NOT DISTINCT needed).
+        CheckConstraint(
+            "(actor_kind = 'USER' AND system_attribution IS NULL) OR "
+            "(actor_kind = 'SYSTEM' AND user_id IS NULL "
+            f"AND system_attribution IN ('{SystemUsageAttribution.ATTRIBUTED.value}', "
+            f"'{SystemUsageAttribution.UNATTRIBUTED.value}') "
+            "AND incognito = false)",
+            name="ck_user_usage_actor",
+        ),
         Index(
             "uq_user_usage_dims",
             "user_id",
@@ -6253,6 +6225,17 @@ class UserUsage(Base):
             "provider",
             "incognito",
             unique=True,
+            postgresql_where=text("actor_kind = 'USER'"),
+        ),
+        Index(
+            "uq_system_usage_dims",
+            "system_attribution",
+            "window_start",
+            "model",
+            "flow",
+            "provider",
+            unique=True,
+            postgresql_where=text("actor_kind = 'SYSTEM'"),
         ),
     )
 
@@ -7370,7 +7353,8 @@ class GatedApp(Base):
             if self.external_app_id is not None
             else self.mcp_server_id
         )
-        assert tid is not None  # guaranteed by ck_gated_app_single_target
+        if tid is None:
+            raise ValueError("Gated app must have a target")
         return tid
 
     @property

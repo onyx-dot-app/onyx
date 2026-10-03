@@ -30,16 +30,16 @@ type CustomToolWrite struct {
 // CustomHeaders come back in full, values included. The whole snapshot is
 // therefore secret-bearing and the resource marks the attribute sensitive.
 type CustomTool struct {
-	ID              int64          `json:"id"`
+	CustomHeaders   []Header       `json:"custom_headers"`
 	Name            string         `json:"name"`
 	Description     string         `json:"description"`
-	Definition      map[string]any `json:"definition"`
 	DisplayName     string         `json:"display_name"`
+	ID              int64          `json:"id"`
+	Definition      map[string]any `json:"definition"`
 	InCodeToolID    *string        `json:"in_code_tool_id"`
-	CustomHeaders   []Header       `json:"custom_headers"`
-	PassthroughAuth bool           `json:"passthrough_auth"`
 	MCPServerID     *int64         `json:"mcp_server_id"`
 	OAuthConfigID   *int64         `json:"oauth_config_id"`
+	PassthroughAuth bool           `json:"passthrough_auth"`
 	Enabled         bool           `json:"enabled"`
 }
 

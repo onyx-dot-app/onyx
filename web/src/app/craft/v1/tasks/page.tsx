@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
@@ -16,13 +17,7 @@ import {
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import {
-  SvgClock,
-  SvgPlus,
-  SvgRefreshCw,
-  SvgTrash,
-  SvgSimpleLoader,
-} from "@opal/icons";
+import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
 import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,
@@ -62,7 +57,7 @@ function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
       weight: 25,
       enableSorting: false,
       cell: (value) => (
-        <Text font="main-ui-body" color="text-05" nowrap>
+        <Text font="main-ui-body" color="text-05" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       ),
@@ -72,7 +67,7 @@ function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
       weight: 22,
       enableSorting: false,
       cell: (value) => (
-        <Text font="main-ui-body" color="text-03" nowrap>
+        <Text font="main-ui-body" color="text-03" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       ),
@@ -119,7 +114,11 @@ function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
         }
         return (
           <Tooltip tooltip={formatAbsolute(nextRunAt)} side="top">
-            <Text font="main-ui-body" color="text-03" nowrap>
+            <Text
+              font="main-ui-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {formatRelativeShort(nextRunAt)}
             </Text>
           </Tooltip>
@@ -193,6 +192,7 @@ export default function ScheduledTasksListPage() {
   const headerActions = useMemo(
     () => (
       <Button
+        key="new"
         variant="default"
         prominence="primary"
         icon={SvgPlus}
@@ -211,12 +211,12 @@ export default function ScheduledTasksListPage() {
         icon={SvgClock}
         title={t("header.title")}
         description={t("header.description")}
-        rightChildren={headerActions}
+        actions={[headerActions]}
       />
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SvgSimpleLoader className="h-6 w-6" />
+            <IconLoader className="h-6 w-6" />
           </div>
         ) : error ? (
           <Section gap={2}>

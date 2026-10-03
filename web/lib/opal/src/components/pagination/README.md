@@ -58,31 +58,31 @@ Item-count display (`X~Y of Z`) with prev/next arrows. Designed for table footer
 
 ## Props (shared)
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `variant` | `"list" \| "simple" \| "count"` | `"list"` | Display variant |
-| `currentPage` | `number` | **(required)** | 1-based current page number |
-| `totalPages` | `number` | **(required)** | Total number of pages |
-| `onChange` | `(page: number) => void` | — | Called when the page changes |
-| `size` | `PaginationSize` | `"lg"` | Button and text sizing |
+| Prop          | Type                            | Default        | Description                  |
+| ------------- | ------------------------------- | -------------- | ---------------------------- |
+| `variant`     | `"list" \| "simple" \| "count"` | `"list"`       | Display variant              |
+| `currentPage` | `number`                        | **(required)** | 1-based current page number  |
+| `totalPages`  | `number`                        | **(required)** | Total number of pages        |
+| `onChange`    | `(page: number) => void`        | —              | Called when the page changes |
+| `size`        | `PaginationSize`                | `"lg"`         | Button and text sizing       |
 
 ## Props (variant-specific)
 
 ### `"simple"`
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `hidePages` | `boolean` | `false` | Hides the `currentPage/totalPages` text between arrows |
-| `units` | `string` | — | Label after the summary (e.g. `"pages"`), always 4px spacing |
+| Prop        | Type      | Default | Description                                                  |
+| ----------- | --------- | ------- | ------------------------------------------------------------ |
+| `hidePages` | `boolean` | `false` | Hides the `currentPage/totalPages` text between arrows       |
+| `units`     | `string`  | —       | Label after the summary (e.g. `"pages"`), always 4px spacing |
 
 ### `"count"`
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `pageSize` | `number` | **(required)** | Items per page (for range calculation) |
-| `totalItems` | `number` | **(required)** | Total item count |
-| `hidePages` | `boolean` | `false` | Hides the current page number between arrows |
-| `units` | `string` | — | Label after the total (e.g. `"items"`), always 4px spacing |
+| Prop         | Type      | Default        | Description                                                |
+| ------------ | --------- | -------------- | ---------------------------------------------------------- |
+| `pageSize`   | `number`  | **(required)** | Items per page (for range calculation)                     |
+| `totalItems` | `number`  | **(required)** | Total item count                                           |
+| `hidePages`  | `boolean` | `false`        | Hides the current page number between arrows               |
+| `units`      | `string`  | —              | Label after the total (e.g. `"items"`), always 4px spacing |
 
 ### `PaginationSize`
 

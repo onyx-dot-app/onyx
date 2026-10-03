@@ -93,7 +93,11 @@ export default function CraftToolGroup({
             >
               <div className="flex items-center gap-2 min-w-0 w-full">
                 {renderStatusIcon(toolCalls)}
-                <Text font="main-ui-muted" color="text-04" nowrap>
+                <Text
+                  font="main-ui-muted"
+                  color="text-04"
+                  wordWrap="whitespace-nowrap"
+                >
                   {t("working.label")}
                 </Text>
                 <span className="ms-auto shrink-0 flex items-center gap-2">

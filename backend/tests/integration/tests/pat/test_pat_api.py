@@ -183,7 +183,7 @@ def test_pat_expiration_flow(reset: None) -> None:  # noqa: ARG001
     )
 
     assert pat.expires_at is not None
-    expires_at = datetime.fromisoformat(pat.expires_at.replace("Z", "+00:00"))
+    expires_at = datetime.fromisoformat(pat.expires_at)
 
     # Verify end-of-day expiration
     assert expires_at.hour == 23

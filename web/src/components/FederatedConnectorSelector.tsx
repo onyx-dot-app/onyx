@@ -3,8 +3,8 @@ import { useTranslations } from "next-intl";
 import {
   FederatedConnectorDetail,
   FederatedConnectorConfig,
-  federatedSourceToRegularSource,
 } from "@/lib/types";
+import { federatedSourceToRegularSource } from "@/lib/connectors/types/source";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";

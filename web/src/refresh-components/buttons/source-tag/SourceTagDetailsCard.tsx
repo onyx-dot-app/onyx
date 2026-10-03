@@ -11,8 +11,9 @@ import {
 } from "@opal/icons";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { timeAgo } from "@opal/time";
+import { useLocale } from "next-intl";
 import type { IconProps } from "@opal/types";
 import { SubQuestionDetail } from "@/app/app/interfaces";
 
@@ -70,6 +71,7 @@ const SourceTagDetailsCardInner = ({
   onPrev,
   onNext,
 }: SourceTagDetailsCardProps) => {
+  const locale = useLocale();
   const currentSource = sources[currentIndex];
   if (!currentSource) return null;
 
@@ -81,7 +83,8 @@ const SourceTagDetailsCardInner = ({
   const relativeDate = timeAgo(
     currentSource.metadata?.date instanceof Date
       ? currentSource.metadata.date.toISOString()
-      : currentSource.metadata?.date
+      : currentSource.metadata?.date,
+    locale
   );
 
   return (

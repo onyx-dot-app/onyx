@@ -160,7 +160,7 @@ module "eks" {
           v.instance_types
         )
       },
-      # Only add subnet_ids override for vespa node group if specified
+      # Only add subnet_ids override for the document-index node group if specified
       k == "vespa" && length(var.vespa_node_subnet_ids) > 0 ? {
         subnet_ids = var.vespa_node_subnet_ids
       } : {},
@@ -178,7 +178,7 @@ module "eks" {
         max_size     = coalesce(var.main_node_max_size, v.max_size)
         desired_size = try(v.desired_size, coalesce(var.main_node_min_size, v.min_size))
       } : {},
-      # Disk override for the Vespa/document-index node; null keeps the map
+      # Disk override for the document-index node; null keeps the map
       # default. Merge preserves any other device mappings on the group.
       k == "vespa" && var.vespa_node_disk_size_gb != null ? {
         block_device_mappings = merge(try(v.block_device_mappings, {}), {

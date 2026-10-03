@@ -107,6 +107,11 @@ def test_default_group_rejects_every_non_membership_write(
             },
             headers=headers,
         ),
+        "managed_connectors": client.put(
+            f"{GROUP_URL}/{group.id}/managed-cc-pairs",
+            json={"cc_pairs": [{"cc_pair_id": 999999, "role": "editor"}]},
+            headers=headers,
+        ),
         "delete": client.delete(f"{GROUP_URL}/{group.id}", headers=headers),
         # token limits live on their own router, so they need their own guard
         "token_limit_create": client.post(

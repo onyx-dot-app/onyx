@@ -651,6 +651,7 @@ function Footer() {
           color="text-03"
           as="p"
           wordWrap="wrap-anywhere"
+          textPosition="text-center"
         >
           {markdown(customFooterContent)}
         </Text>

@@ -92,8 +92,10 @@ def test_connector_scoped_report_round_trips(admin_user: DATestUser) -> None:
 
 def test_scopes_without_rows_return_null(admin_user: DATestUser) -> None:
     # Precondition.
+    # A source without named checks: for one with named checks, credential
+    # creation starts a credential-scoped run, which writes a row.
     credential = CredentialManager.create(
-        source=DocumentSource.SLACK, user_performing_action=admin_user
+        source=DocumentSource.WEB, user_performing_action=admin_user
     )
 
     # Under test and postcondition.

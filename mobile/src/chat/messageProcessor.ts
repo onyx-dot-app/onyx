@@ -19,7 +19,6 @@ import {
   Stop,
   StopReason,
   ToolCallArgumentDelta,
-  TopLevelBranching,
 } from "@/chat/streamingModels";
 import {
   isActualToolCallPacket,
@@ -41,7 +40,6 @@ export interface ProcessedMessageState {
   groupedPacketsMap: Map<string, Packet[]>;
   seenGroupKeys: Set<string>;
   groupKeysWithSectionEnd: Set<string>;
-  expectedBranches: Map<number, number>;
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
@@ -75,7 +73,6 @@ export function createInitialState(nodeId: number): ProcessedMessageState {
     groupedPacketsMap: new Map(),
     seenGroupKeys: new Set(),
     groupKeysWithSectionEnd: new Set(),
-    expectedBranches: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
     isGeneratingImage: false,
@@ -155,17 +152,6 @@ const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.IMAGE_GENERATION_TOOL_START,
   PacketType.IMAGE_GENERATION_TOOL_DELTA,
 ]);
-
-function handleTopLevelBranching(
-  state: ProcessedMessageState,
-  packet: Packet,
-): void {
-  const branchingPacket = packet.obj as TopLevelBranching;
-  state.expectedBranches.set(
-    packet.placement.turn_index,
-    branchingPacket.num_parallel_branches,
-  );
-}
 
 // A new turn_index closes every prior open group (a new tab_index within a seen turn does not).
 function handleTurnTransition(
@@ -299,10 +285,8 @@ function addPacketToGroup(
 function processPacket(state: ProcessedMessageState, packet: Packet): void {
   if (!packet) return;
 
-  if (packet.obj.type === PacketType.TOP_LEVEL_BRANCHING) {
-    handleTopLevelBranching(state, packet);
-    return;
-  }
+  // Older servers still send this; it must not become the first packet of a group.
+  if (packet.obj.type === PacketType.TOP_LEVEL_BRANCHING) return;
 
   handleTurnTransition(state, packet);
 

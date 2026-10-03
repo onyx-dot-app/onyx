@@ -20,7 +20,7 @@ from onyx.context.search.pipeline import merge_individual_chunks, search_pipelin
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.llm.factory import get_default_llm
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.tools.tool_implementations.search.search_utils import (
@@ -81,8 +81,7 @@ def stream_search_query(
     """
     # Get document index.
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     # Determine queries to execute
     original_query = request.search_query
@@ -112,7 +111,7 @@ def stream_search_query(
             db_session=db_session,
             user_id=user.id,
             query=request.search_query,
-            query_expansions=keyword_expansions if keyword_expansions else None,
+            query_expansions=keyword_expansions or None,
         )
 
     # Execute search(es)
