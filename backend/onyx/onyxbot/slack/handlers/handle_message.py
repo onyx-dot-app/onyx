@@ -17,6 +17,7 @@ from onyx.db.users import add_slack_user_if_not_exists, get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
+from onyx.onyxbot.slack.config import clean_respond_member_group_list
 from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.handlers.handle_standard_answers import handle_standard_answers
 from onyx.onyxbot.slack.models import SlackMessageInfo
@@ -134,7 +135,12 @@ def _resolve_allowlist_user_ids(
     when no allowlist is configured, meaning the bot has no invocation gate or
     response-visibility scope for the channel.
     """
-    allowlist = (channel_conf or {}).get("respond_member_group_list") or None
+    # Blank entries are stripped here too, so configs already persisted with a
+    # blank member (e.g. saved before this was normalized on write) don't enforce
+    # an allowlist that resolves to nobody.
+    allowlist = clean_respond_member_group_list(
+        (channel_conf or {}).get("respond_member_group_list")
+    )
     if not allowlist:
         return None, []
 
