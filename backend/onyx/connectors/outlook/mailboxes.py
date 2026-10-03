@@ -4,26 +4,24 @@ Validation and the capability checks probe the same addresses the same way, so
 the rule lives here once and neither path can drift from the other.
 """
 
-from typing import Any
-
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.errors import (
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     USER_LISTING_DENIED,
     raise_for_graph_error,
 )
-from onyx.connectors.outlook.models import OutlookGraphError, OutlookMailbox
+from onyx.connectors.outlook.models import OutlookMailbox
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 
-# Connector config key holding the explicit mailbox list. Empty means every
-# mailbox the app may open.
-CONFIG_MAILBOXES = "mailboxes"
 
-
-def configured_addresses(config: dict[str, Any] | None) -> list[str]:
-    raw = (config or {}).get(CONFIG_MAILBOXES) or []
-    return [str(address).strip() for address in raw if str(address).strip()]
+def configured_addresses(config: OutlookConnectorConfig) -> list[str]:
+    """The explicit mailbox list without blanks. Empty means every mailbox the app may open."""
+    return [address.strip() for address in config.mailboxes or [] if address.strip()]
 
 
 def resolve_mailbox_for_validation(

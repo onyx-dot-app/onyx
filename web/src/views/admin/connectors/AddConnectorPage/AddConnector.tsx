@@ -1,42 +1,42 @@
 "use client";
 
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { IconLoader } from "@opal/loaders";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import useSWR, { mutate } from "swr";
-import { buildSimilarCredentialInfoURL } from "@/lib/connectors/utils";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
-import { useEffect, useRef, useState } from "react";
+import {
+  getSourceDisplayName,
+  getSourceDocLink,
+  getSourceMetadata,
+} from "@/lib/sources";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/lib/app/components";
-import { deleteCredential, linkCredential } from "@/lib/credential";
+import { linkCredential } from "@/lib/credentials/svc";
+import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
 import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
-import CreateCredential from "@/lib/credentials/components/CreateCredential";
-import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
+import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
 import {
-  CredentialCreationMethod,
-  getCredentialCreationActionLabel,
-  getCredentialCreationMethods,
-  shouldRedirectToOAuth,
-} from "@/lib/credentials/credentialCreation";
-import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
+  useBindingGateMessage,
+  type UseBoundFieldsGateResult,
+} from "@/lib/connectors/hooks";
 import {
   ConfigurableSources,
-  oauthSupportedSources,
   ValidSources,
-} from "@/lib/types";
-import { credentialTemplates } from "@/lib/connectors/credentials";
-import type { Credential } from "@/lib/connectors/types";
+} from "@/lib/connectors/types/source";
+import { getCredentialSpec } from "@/lib/credentials/utils";
+import type { Credential } from "@/lib/credentials/types";
 import {
-  connectorConfigs,
   defaultRefreshFreqMinutes,
+  useConnectorConfiguration,
 } from "@/lib/connectors/connectors";
 import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
   isLoadState,
+  splitCredentialBoundFields,
 } from "@/lib/connectors/utils";
 import type {
   ConnectionConfiguration,
@@ -44,29 +44,34 @@ import type {
   ConnectorBase,
 } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
-import { Card, MessageCard, Modal } from "@opal/components";
+import { Card, Divider, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
+  useCredentialLoad,
   useGoogleDriveCredentials,
-} from "@/lib/connectors/hooks";
+} from "@/lib/credentials/hooks";
 import { Formik } from "formik";
 import { useRouter } from "next/navigation";
-import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
+import { Button } from "@opal/components";
 import {
-  EE_ENABLED,
-  NEXT_PUBLIC_CLOUD_ENABLED,
-  NEXT_PUBLIC_TEST_ENV,
-} from "@/lib/constants";
-import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { useOAuthDetails } from "@/lib/connectors/hooks";
-import { Button, Text as OpalText } from "@opal/components";
-import { Content, Section, SettingsLayouts, toast } from "@opal/layouts";
+  Content,
+  IllustrationContent,
+  PageCenter,
+  Section,
+  SettingsLayouts,
+  toast,
+} from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
+import { SvgPlugBroken } from "@opal/illustrations";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
-import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
-import { SvgArrowExchange, SvgKey, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { useTranslations } from "next-intl";
-import { toWireAccess } from "@/lib/connectors/accessType";
+import {
+  SYNC_RESTRICTED_ACCESS_TYPE,
+  toWireAccess,
+} from "@/lib/connectors/accessType";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -141,23 +146,7 @@ export default function AddConnector({
   connector: ConfigurableSources;
 }) {
   const t = useTranslations("admin.connectorsList");
-  const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
-  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
-  const [isAuthorizing, setIsAuthorizing] = useState(false);
-  const [isAuthorizeVisible, setIsAuthorizeVisible] = useState(false);
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setCurrentPageUrl(window.location.href);
-    }
-
-    if (EE_ENABLED && (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV)) {
-      const sourceMetadata = getSourceMetadata(connector);
-      if (sourceMetadata?.oauthSupported == true) {
-        setIsAuthorizeVisible(true);
-      }
-    }
-  }, []);
-
+  const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
   const router = useRouter();
   const settings = useSettings();
   const defaultPruneFreqHours = settings.default_pruning_freq
@@ -167,32 +156,26 @@ export default function AddConnector({
   // State for managing credentials and files
   const [currentCredential, setCurrentCredential] =
     useState<Credential<any> | null>(null);
-  const [credentialCreationMethod, setCredentialCreationMethod] =
-    useState<CredentialCreationMethod | null>(null);
 
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
   );
 
-  // Fetch credentials data
-  const { data: credentials } = useSWR<Credential<any>[]>(
-    buildSimilarCredentialInfoURL(connector),
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
+  // Get credential spec and configuration
+  const credentialSpec = getCredentialSpec(connector);
+  const configuration: ConnectionConfiguration =
+    useConnectorConfiguration(connector);
+  // Fields bound to the credential sit above the credential section. The
+  // submit below still reads the full configuration.
+  const credentialBoundFields = splitCredentialBoundFields(
+    connector,
+    configuration
   );
-
-  const { data: editableCredentials } = useSWR<Credential<any>[]>(
-    buildSimilarCredentialInfoURL(connector, true),
-    errorHandlingFetcher,
-    { refreshInterval: 5000 }
+  const formControlFieldNames = new Set(
+    [...configuration.values, ...configuration.advanced_values]
+      .filter((field) => field.type === "tab")
+      .map((field) => field.name)
   );
-
-  const { data: oauthDetails, isLoading: oauthDetailsLoading } =
-    useOAuthDetails(connector);
-
-  // Get credential template and configuration
-  const credentialTemplate = credentialTemplates[connector];
-  const configuration: ConnectionConfiguration = connectorConfigs[connector];
 
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
@@ -219,117 +202,66 @@ export default function AddConnector({
     (connector === "gmail" && liveGmailCredential) ||
     currentCredential;
 
-  // Sources without a credential template skip the credential section.
-  const noCredentials = credentialTemplate == null;
+  // Sources without a credential spec skip the credential section.
+  const noCredentials = credentialSpec == null;
   const canCreate = noCredentials || credentialActivated != null;
+
+  // The page body waits for the source's saved credentials: no connector
+  // can be set up without them. Sources without credentials fetch nothing and go
+  // straight to the form. The credential step calls the same hook; SWR
+  // shares the requests.
+  const { isLoading: credentialsLoading, error: credentialLoadError } =
+    useCredentialLoad(connector, { enabled: !noCredentials });
+
+  // The configuration unlocks once the credential and the credential-bound
+  // fields are a valid combination. `BoundFieldsGate` reports it.
+  const [gate, setGate] = useState<UseBoundFieldsGateResult | null>(null);
+  const onGateChange = useCallback(
+    (next: UseBoundFieldsGateResult) => setGate(next),
+    []
+  );
+  const configUnlocked = gate?.status === "unlocked";
+  const gateMessage = useBindingGateMessage(gate?.reason ?? null);
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
   };
 
   const displayName = getSourceDisplayName(connector) || connector;
+
+  // The docs sit at the end of the header sentence, so the whole page has
+  // one pointer to them rather than one per form. One message holds both,
+  // so translators place the link.
+  const docsLink = getSourceDocLink(connector);
+  const headerSentence = t("header.description", {
+    source: displayName,
+    // Admin-set, so escaped whenever the sentence is parsed as markdown.
+    appName: docsLink ? escapeMarkdown(settings.appName) : settings.appName,
+    hasDocs: docsLink ? "true" : "false",
+    url: docsLink ?? "",
+  });
+  const headerDescription = docsLink
+    ? markdown(headerSentence)
+    : headerSentence;
   const sourceMetadata = getSourceMetadata(connector);
   const hasFederatedOption = sourceMetadata.federated === true;
-  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
-  const showExplicitCredentialMethods = credentialCreationMethods.length > 1;
-
-  if (!credentials || !editableCredentials) {
-    return <></>;
-  }
-
-  // Credential handler functions
-  const refresh = () => {
-    mutate(buildSimilarCredentialInfoURL(connector));
-  };
-
-  const onDeleteCredential = async (credential: Credential<any | null>) => {
-    const response = await deleteCredential(credential.id, true);
-    if (response.ok) {
-      toast.success(t("add.credentialDeleted.toast"));
-    } else {
-      const errorData = await response.json();
-      toast.error(errorData.detail || errorData.message);
-    }
-  };
-
-  const onSwap = async (selectedCredential: Credential<any>) => {
-    setCurrentCredential(selectedCredential);
-    toast.success(t("add.credentialSwapped.toast"));
-    refresh();
-  };
-
   const onSuccess = () => {
     router.push("/admin/indexing-status?message=connector-created");
   };
 
-  const closeCredentialModal = () => setCredentialCreationMethod(null);
-
-  const attemptOauthRedirect = async () => {
-    try {
-      const redirectUrl = await getConnectorOauthRedirectUrl(connector, {});
-      window.location.href = redirectUrl;
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("add.oauthStartFailed.toast")
-      );
-    }
-  };
-
-  const openCredentialCreationMethod = async (
-    method: CredentialCreationMethod
-  ) => {
-    if (
-      method === CredentialCreationMethod.OAuth &&
-      oauthDetails &&
-      shouldRedirectToOAuth(oauthDetails)
-    ) {
-      await attemptOauthRedirect();
-      return;
-    }
-    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
-      return;
-    }
-    setCredentialCreationMethod(method);
-  };
-
-  const handleAuthorize = async () => {
-    // authorize button handler
-    // gets an auth url from the server and directs the user to it in a popup
-
-    if (!currentPageUrl) return;
-
-    setIsAuthorizing(true);
-    try {
-      const response = await prepareOAuthAuthorizationRequest(
-        connector,
-        currentPageUrl,
-        t("add.oauthStartFailed.toast")
-      );
-      if (response.url) {
-        setOauthUrl(response.url);
-        window.open(response.url, "_blank", "noopener,noreferrer");
-      } else {
-        toast.error(t("add.oauthUrlFailed.toast"));
-      }
-    } catch (error: unknown) {
-      // Narrow the type of error
-      if (error instanceof Error) {
-        toast.error(t("add.error.toast", { detail: error.message }));
-      } else {
-        // Handle non-standard errors
-        toast.error(t("add.unknownError.toast"));
-      }
-    } finally {
-      setIsAuthorizing(false);
-    }
-  };
+  const credentialsFailed = credentialLoadError !== undefined;
 
   return (
     <Formik
       initialValues={createConnectorInitialValues(connector)}
       validationSchema={createConnectorValidationSchema(
         connector,
-        isScopedManager
+        isScopedManager,
+        {
+          oneDriveUsersRequired: oneDriveT(
+            "indexingScope.specific.users.required"
+          ),
+        }
       )}
       onSubmit={async (values) => {
         const {
@@ -356,6 +288,9 @@ export default function AddConnector({
           connector_specific_config
         ).reduce(
           (acc, [key, value]) => {
+            if (formControlFieldNames.has(key)) {
+              return acc;
+            }
             // Filter out empty strings from arrays
             if (Array.isArray(value)) {
               value = (value as any[]).filter(
@@ -381,9 +316,12 @@ export default function AddConnector({
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
-          pruneFreq: (pruneFreq ?? defaultPruneFreqHours) * 3600,
+          // The backend stores whole seconds.
+          pruneFreq: Math.round((pruneFreq ?? defaultPruneFreqHours) * 3600),
           indexingStart: convertStringToDateTime(indexingStart),
-          refreshFreq: (refreshFreq ?? defaultRefreshFreqMinutes) * 60,
+          refreshFreq: Math.round(
+            (refreshFreq ?? defaultRefreshFreqMinutes) * 60
+          ),
         };
 
         // File-specific handling
@@ -482,15 +420,17 @@ export default function AddConnector({
                 currentCredential ||
                 liveGDriveCredential ||
                 liveGmailCredential;
-              // TODO(evan, ENG-4342): send wireAccess.restriction_group_ids
-              // once the backend accepts them; this call creates the cc-pair.
               const linkCredentialResponse = await linkCredential(
                 response.id,
                 credential!.id,
                 name,
                 access_type,
                 groups,
-                auto_sync_options
+                auto_sync_options,
+                undefined,
+                access_type === SYNC_RESTRICTED_ACCESS_TYPE
+                  ? wireAccess.restriction_group_ids
+                  : undefined
               );
               if (linkCredentialResponse.ok) {
                 onSuccess();
@@ -540,6 +480,24 @@ export default function AddConnector({
     >
       {(formikProps) => {
         const busy = uploading || creatingConnector;
+        const formCredential =
+          currentCredential ||
+          liveGDriveCredential ||
+          liveGmailCredential ||
+          null;
+        const showAdvancedBoundFields =
+          !configuration.advancedValuesVisibleCondition ||
+          configuration.advancedValuesVisibleCondition(
+            formikProps.values,
+            formCredential
+          );
+        const visibleBoundFields = [
+          ...credentialBoundFields.values,
+          ...(showAdvancedBoundFields
+            ? credentialBoundFields.advancedValues
+            : []),
+        ].filter((field) => !field.hidden);
+        const hasVisibleBoundFields = visibleBoundFields.length > 0;
         return (
           <SettingsLayouts.Root width="sm">
             <SettingsLayouts.Header
@@ -547,10 +505,18 @@ export default function AddConnector({
               moreIcon1={SvgArrowExchange}
               moreIcon2={Logo}
               title={displayName}
-              description={t("header.description", {
-                source: displayName,
-                appName: settings.appName,
-              })}
+              // Failed, the page offers nothing to set up, so the header drops
+              // its docs pointer; the Connect button stays, disabled.
+              description={
+                credentialsFailed
+                  ? t("header.description", {
+                      source: displayName,
+                      appName: settings.appName,
+                      hasDocs: "false",
+                      url: "",
+                    })
+                  : headerDescription
+              }
               divider
               actions={[
                 <Button
@@ -561,10 +527,18 @@ export default function AddConnector({
                 >
                   {t("header.cancelButton.label")}
                 </Button>,
+                // Always present; disabled while the credentials load or
+                // after they fail, since nothing can be connected then.
                 <Button
                   key="connect"
-                  disabled={!formikProps.isValid || !canCreate || busy}
-                  icon={busy ? SvgSimpleLoader : undefined}
+                  disabled={
+                    credentialsLoading ||
+                    credentialsFailed ||
+                    !formikProps.isValid ||
+                    !configUnlocked ||
+                    busy
+                  }
+                  icon={busy ? IconLoader : undefined}
                   onClick={() => formikProps.handleSubmit()}
                 >
                   {t("header.connectButton.label")}
@@ -574,7 +548,8 @@ export default function AddConnector({
               {hasFederatedOption && (
                 <MessageCard
                   variant="info"
-                  title={t("add.federated.tooltip.description")}
+                  title={t("add.federated.tooltip.title")}
+                  description={t("add.federated.tooltip.description")}
                   bottomChildren={
                     <Button
                       prominence="secondary"
@@ -592,187 +567,135 @@ export default function AddConnector({
             </SettingsLayouts.Header>
 
             <SettingsLayouts.Body>
-              <Section gap={4} alignItems="stretch" width="full">
-                {!noCredentials && (
-                  <Card border="solid" rounding={4} padding={6}>
-                    <Section gap={4} alignItems="start" width="full">
-                      <Content
-                        title={t("add.credentialStep.title")}
-                        sizePreset="main-content"
-                        variant="section"
-                      />
-
+              {credentialsLoading ? (
+                <PageLoader />
+              ) : credentialsFailed ? (
+                // The same frame as PageLoader, so loading and failure sit
+                // in one place.
+                <PageCenter>
+                  <IllustrationContent
+                    illustration={SvgPlugBroken}
+                    title={t("add.credentialsLoadFailed.title")}
+                    description={t("add.credentialsLoadFailed.description")}
+                  />
+                </PageCenter>
+              ) : (
+                <>
+                  <BoundFieldsGate
+                    source={connector}
+                    credentialId={
+                      noCredentials ? null : (formCredential?.id ?? null)
+                    }
+                    credentialSelected={canCreate}
+                    currentCredential={formCredential}
+                    allBoundFields={[
+                      ...credentialBoundFields.values,
+                      ...credentialBoundFields.advancedValues,
+                    ]}
+                    visibleBoundFields={visibleBoundFields}
+                    onChange={onGateChange}
+                  />
+                  <Section gap={6} alignItems="stretch" width="full">
+                    {hasVisibleBoundFields && (
                       <>
-                        <ModifyCredential
-                          showIfEmpty
-                          accessType={formikProps.values.access_type}
-                          defaultedCredential={currentCredential!}
-                          credentials={credentials}
-                          editableCredentials={editableCredentials}
-                          onDeleteCredential={onDeleteCredential}
-                          onSwitch={onSwap}
+                        <CredentialBoundFields
+                          fields={credentialBoundFields.values}
+                          advancedFields={credentialBoundFields.advancedValues}
+                          showAdvancedFields={showAdvancedBoundFields}
+                          values={formikProps.values}
+                          connector={connector}
+                          currentCredential={formCredential}
+                          fieldErrors={gate?.fieldErrors}
+                          onFieldBlur={gate?.requestCheck}
                         />
-                        {credentialCreationMethod === null && (
-                          <Section
-                            flexDirection="row"
-                            justifyContent="start"
-                            gap={1}
-                            className="mt-6"
-                          >
-                            {oauthDetailsLoading ? (
-                              <Button disabled>
-                                {t("add.createCredentialButton.label")}
-                              </Button>
-                            ) : (
-                              credentialCreationMethods.map((method) => (
-                                <Button
-                                  key={method}
-                                  onClick={() =>
-                                    openCredentialCreationMethod(method)
-                                  }
-                                >
-                                  {getCredentialCreationActionLabel(
-                                    method,
-                                    displayName,
-                                    showExplicitCredentialMethods
-                                  )}
-                                </Button>
-                              ))
-                            )}
-                            {oauthSupportedSources.includes(connector) &&
-                              (NEXT_PUBLIC_CLOUD_ENABLED ||
-                                NEXT_PUBLIC_TEST_ENV) && (
-                                <Button
-                                  disabled={isAuthorizing}
-                                  variant="action"
-                                  onClick={handleAuthorize}
-                                  hidden={!isAuthorizeVisible}
-                                >
-                                  {isAuthorizing
-                                    ? t("add.authorizeButton.pendingLabel")
-                                    : t("add.authorizeButton.label", {
-                                        source: displayName,
-                                      })}
-                                </Button>
-                              )}
-                          </Section>
-                        )}
-
-                        {credentialCreationMethod !== null && (
-                          <Modal open onOpenChange={closeCredentialModal}>
-                            <Modal.Content>
-                              <Modal.Header
-                                icon={SvgKey}
-                                title={t("add.credentialModal.title", {
-                                  source: displayName,
-                                })}
-                                onClose={closeCredentialModal}
-                              />
-                              <Modal.Body alignItems="stretch">
-                                {oauthDetailsLoading ? null : credentialCreationMethod ===
-                                    CredentialCreationMethod.OAuth &&
-                                  oauthDetails ? (
-                                  shouldRedirectToOAuth(oauthDetails) ? (
-                                    <Section alignItems="start">
-                                      <OpalText
-                                        as="p"
-                                        font="main-ui-body"
-                                        color="text-03"
-                                      >
-                                        {t("add.oauthRedirectFailed.message", {
-                                          source: displayName,
-                                        })}
-                                      </OpalText>
-                                      <Button onClick={attemptOauthRedirect}>
-                                        {t("add.retryButton.label")}
-                                      </Button>
-                                    </Section>
-                                  ) : (
-                                    <CreateStdOAuthCredential
-                                      sourceType={connector}
-                                      additionalFields={
-                                        oauthDetails.additional_kwargs
-                                      }
-                                    />
-                                  )
-                                ) : (
-                                  <CreateCredential
-                                    close
-                                    refresh={refresh}
-                                    sourceType={connector}
-                                    accessType={formikProps.values.access_type}
-                                    onSwitch={onSwap}
-                                    onClose={closeCredentialModal}
-                                  />
-                                )}
-                              </Modal.Body>
-                            </Modal.Content>
-                          </Modal>
+                        {!noCredentials && (
+                          <Divider
+                            paddingParallel={0}
+                            paddingPerpendicular={2}
+                          />
                         )}
                       </>
-                    </Section>
-                  </Card>
-                )}
+                    )}
 
-                {/* The wizard could not reach these sections without a
-                    credential; on one page they stay disabled until one is
-                    selected instead. */}
-                <Disabled
-                  disabled={!canCreate}
-                  tooltip={t("credentialRequired.tooltip")}
-                >
-                  <Card
-                    border="solid"
-                    rounding={4}
-                    padding={6}
-                    disabled={!canCreate}
-                  >
-                    {/* A disabled fieldset also takes the controls out of the
-                        tab order; the wrapper above only blocks the pointer. */}
-                    <fieldset disabled={!canCreate} className="contents">
-                      <Section gap={4} alignItems="start" width="full">
-                        <Content
-                          title={t("sections.configuration.title")}
-                          sizePreset="main-content"
-                          variant="section"
-                        />
-                        <DynamicConnectionForm
-                          values={formikProps.values}
-                          config={configuration}
-                          connector={connector}
-                          currentCredential={
-                            currentCredential ||
-                            liveGDriveCredential ||
-                            liveGmailCredential ||
-                            null
-                          }
-                        />
-                        <ConnectorDocsLink sourceType={connector} />
-                      </Section>
-                    </fieldset>
-                  </Card>
-                </Disabled>
+                    {!noCredentials && (
+                      <CredentialsConfigurer
+                        connector={connector}
+                        accessType={formikProps.values.access_type}
+                        currentCredential={currentCredential}
+                        onCredentialChange={setCurrentCredential}
+                      />
+                    )}
 
-                {connector !== "file" && (
-                  <Disabled
-                    disabled={!canCreate}
-                    tooltip={t("credentialRequired.tooltip")}
-                  >
-                    <Card
-                      border="solid"
-                      rounding={4}
-                      padding={6}
-                      disabled={!canCreate}
+                    {/* The wizard could not reach these sections without a
+                      valid credential; on one page they stay disabled until
+                      the credential and the bound fields are valid instead. */}
+                    <Disabled
+                      disabled={!configUnlocked}
+                      tooltip={gateMessage ?? undefined}
                     >
-                      <fieldset disabled={!canCreate} className="contents">
-                        <AdvancedFormPage
-                          defaultPruneFreqHours={defaultPruneFreqHours}
-                        />
-                      </fieldset>
-                    </Card>
-                  </Disabled>
-                )}
-              </Section>
+                      <Card
+                        border="solid"
+                        rounding={4}
+                        padding={6}
+                        disabled={!configUnlocked}
+                      >
+                        {/* A disabled fieldset also takes the controls out of
+                          the tab order; the wrapper above only blocks the
+                          pointer. */}
+                        <fieldset
+                          disabled={!configUnlocked}
+                          className="contents"
+                          data-testid="connector-form"
+                        >
+                          <Section gap={4} alignItems="start" width="full">
+                            {/* Announces why the configuration is locked
+                              when the reason changes. */}
+                            <Section
+                              alignItems="start"
+                              width="full"
+                              height="fit"
+                              aria-live="polite"
+                            >
+                              <Content
+                                title={t("sections.configuration.title")}
+                                description={gateMessage ?? undefined}
+                                sizePreset="main-content"
+                                variant="section"
+                              />
+                            </Section>
+                            <DynamicConnectionForm
+                              values={formikProps.values}
+                              config={credentialBoundFields.rest}
+                              connector={connector}
+                              currentCredential={formCredential}
+                            />
+                          </Section>
+                        </fieldset>
+                      </Card>
+                    </Disabled>
+
+                    {connector !== "file" && (
+                      <>
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
+                        <Disabled
+                          disabled={!configUnlocked}
+                          tooltip={gateMessage ?? undefined}
+                        >
+                          <fieldset
+                            disabled={!configUnlocked}
+                            className="contents"
+                          >
+                            <AdvancedFormPage
+                              defaultPruneFreqHours={defaultPruneFreqHours}
+                              disabled={!configUnlocked}
+                            />
+                          </fieldset>
+                        </Disabled>
+                      </>
+                    )}
+                  </Section>
+                </>
+              )}
             </SettingsLayouts.Body>
           </SettingsLayouts.Root>
         );

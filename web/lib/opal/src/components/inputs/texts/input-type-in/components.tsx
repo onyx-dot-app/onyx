@@ -98,7 +98,7 @@ export default function InputTypeIn({
 
       {Icon && (
         <div className="opal-input-leading-icon">
-          <Icon className="opal-input-leading-icon-svg" />
+          <Icon className="opal-input-leading-icon-svg opal-input-option-icon" />
         </div>
       )}
 

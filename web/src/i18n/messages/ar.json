@@ -808,13 +808,7 @@
         "description": "اربط {appName} بمصادر بياناتك."
       },
       "search": {
-        "placeholder": "البحث في الموصلات..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>موصل موحّد مهيأ بالفعل.</strong> انقر لتعديل الموصل الحالي.",
-          "slackCredentialsFound": "<strong>تم العثور على بيانات اعتماد Slack موجودة.</strong> انقر لإدارة موصل Slack الخاص بك."
-        }
+        "placeholder": "ابحث في الموصلات أو اضغط \"/\" للتركيز..."
       },
       "sourceCard": {
         "connectButton": {
@@ -911,6 +905,12 @@
         },
         "sharepoint": {
           "description": "شبكة Microsoft الداخلية"
+        },
+        "onedrive": {
+          "description": "تخزين Microsoft السحابي"
+        },
+        "zoom": {
+          "description": "تسجيلات الاجتماعات والندوات عبر الإنترنت"
         },
         "teams": {
           "description": "دردشات فرق Microsoft"
@@ -2053,7 +2053,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "معرّف المستند",
+          "documentId": "معرّف الفشل",
           "errorMessage": "رسالة الخطأ",
           "status": "الحالة",
           "time": "الوقت"
@@ -2562,10 +2562,50 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "تهيئة موصل OneDrive",
+        "indexingScope": {
+          "label": "ملفات OneDrive الخاصة بمن يجب أن يفهرسها Onyx؟",
+          "general": {
+            "label": "عام",
+            "description": "فهرسة جميع المستخدمين المؤهلين الذين يمكن لتطبيق Microsoft الوصول إليهم."
+          },
+          "specific": {
+            "label": "محدد",
+            "users": {
+              "label": "المستخدمون",
+              "description": "أضف اسم المستخدم الأساسي أو عنوان البريد الإلكتروني الأساسي لكل مستخدم تريد فهرسته.",
+              "required": "أضف مستخدمًا واحدًا على الأقل للنطاق المحدد"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "المسارات المستبعدة",
+          "description": "أنماط Glob المطابقة لكل مسار ملف واسم ملف، مثل '*.tmp' أو 'Archive/*'."
+        },
+        "organizationLinks": {
+          "label": "معاملة روابط المؤسسة كروابط عامة",
+          "description": "اجعل الملفات المشتركة عبر رابط على مستوى المؤسسة مرئية لجميع مستخدمي Onyx."
+        },
+        "authorityHost": {
+          "label": "مضيف المرجع",
+          "description": "مضيف مرجع هوية Microsoft. استخدم https://login.microsoftonline.us لـ GCC High أو DoD."
+        },
+        "graphApiHost": {
+          "label": "مضيف Graph API",
+          "description": "مضيف Microsoft Graph. استخدم https://graph.microsoft.us لـ GCC High أو DoD."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "التفويض عبر {source}",
           "pendingLabel": "جارٍ التفويض..."
+        },
+        "collapseButton": {
+          "ariaLabel": "طي"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "إنشاء جديد"
@@ -2576,8 +2616,13 @@
         "credentialModal": {
           "title": "إنشاء بيانات اعتماد {source}"
         },
+        "credentialsLoadFailed": {
+          "description": "لا يمكن إعداد بيانات الاعتماد الآن. أعد تحميل الصفحة أو حاول لاحقًا.",
+          "title": "تعذّر تحميل بيانات الاعتماد"
+        },
         "credentialStep": {
-          "title": "اختر بيانات اعتماد"
+          "description": "استخدم حساب خدمة مشتركًا. يفهرس {appName} المحتوى باسم هذا الحساب.",
+          "title": "حساب المصادقة"
         },
         "credentialSwapped": {
           "toast": "تم تبديل بيانات الاعتماد بنجاح!"
@@ -2585,16 +2630,26 @@
         "error": {
           "toast": "خطأ: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "توسيع"
+        },
         "federated": {
           "tooltip": {
-            "description": "يتوفر خيار بحث موحّد لهذا الموصل. سيؤدي إلى زمن استجابة أكبر وجودة بحث أقل.",
+            "description": "سيؤدي إلى زمن استجابة أكبر وجودة بحث أقل.",
             "link": {
               "label": "استخدم النسخة الموحّدة بدلًا من ذلك ←"
-            }
+            },
+            "title": "يتوفر خيار بحث موحّد لهذا الموصل."
           }
         },
         "fileUploadFailed": {
           "toast": "خطأ في رفع الملفات"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "حساب {source} جديد"
         },
         "oauthRedirectFailed": {
           "message": "تعذّر تحويلك لتسجيل الدخول عبر {source}. يرجى المحاولة مرة أخرى."
@@ -2608,6 +2663,9 @@
         "retryButton": {
           "label": "إعادة المحاولة"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}"
+        },
         "timeout": {
           "toast": "انتهت مهلة العملية بعد {seconds} ثانية. هل تتحقق من إعداداتك بحثًا عن أخطاء؟"
         },
@@ -2615,30 +2673,20 @@
           "toast": "حدث خطأ غير معروف"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "تاريخ بدء الفهرسة",
-          "subtext": "لن تُجلب المستندات السابقة لهذا التاريخ"
-        },
-        "pruneFrequency": {
-          "description": "يفحص جميع المستندات مقابل المصدر لحذف ما لم يعد موجودًا. ملاحظة: تفحص هذه العملية كل مستند، فكن حذرًا عند زيادة التكرار. الافتراضي {hours} ساعة ({days} أيام). تُدعم الساعات العشرية (مثل 0.1 ساعة = 6 دقائق). أدخل 0 لتعطيل التقليم لهذا الموصل.",
-          "label": "تكرار التقليم (ساعات)"
-        },
-        "refreshFrequency": {
-          "description": "هذا هو تكرار جلب المستندات الجديدة من المصدر (بالدقائق). إذا أدخلت 0، فلن نجلب مستندات جديدة لهذا الموصل أبدًا.",
-          "label": "تكرار التحديث (دقائق)"
-        },
-        "resetButton": {
-          "label": "إعادة تعيين"
-        },
-        "title": "تهيئة متقدمة"
-      },
       "connectorName": {
         "label": "اسم الموصل",
         "subtext": "اسم وصفي للموصل."
       },
       "credentialRequired": {
         "tooltip": "اختر بيانات اعتماد أولاً."
+      },
+      "bindingGate": {
+        "enterField": "أدخل «{field}».",
+        "fixField": "تحقق من «{field}».",
+        "awaitingCheck": "غادر الحقل للتحقق منه باستخدام بيانات الاعتماد.",
+        "checking": "جارٍ التحقق من بيانات الاعتماد…",
+        "fieldInvalid": "تحقق من «{field}»: {detail}",
+        "rejected": "لا يمكن استخدام بيانات الاعتماد هذه مع هذه الإعدادات. {detail}"
       },
       "credentialsLoadError": {
         "title": "فشل تحميل بيانات الاعتماد."
@@ -2681,7 +2729,8 @@
         },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Drive الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth"
+          "title": "الخيار 1: تطبيق OAuth",
+          "sharedScopesNote": "يطلب Google الوصول إلى Google Drive وGmail معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Google Drive فقط، ألغِ تحديد نطاقات Gmail في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
@@ -2739,7 +2788,8 @@
         },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Gmail الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth"
+          "title": "الخيار 1: تطبيق OAuth",
+          "sharedScopesNote": "يطلب Google الوصول إلى Gmail وGoogle Drive معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Gmail فقط، ألغِ تحديد نطاقات Google Drive في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
@@ -2774,7 +2824,7 @@
         "connectButton": {
           "label": "اتصال"
         },
-        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}."
+        "description": "اتصل بـ {source} وقم بإعداد الموصّل لـ {appName}.{hasDocs, select, true { عرض [الوثائق]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -2898,6 +2948,38 @@
       "tabs": {
         "empty": {
           "label": "لا توجد تبويبات لعرضها."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "خيارات متقدمة",
+        "errors": {
+          "missing": "أدخل قيمة.",
+          "invalid": "هذه القيمة غير صالحة: {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "حدّد كيف سيُجري الموصل الفهرسة. سيتمكن المشغّل من تعديل هذا القسم.",
+        "indexingStart": {
+          "description": "سيتم تجاهل المستندات التي يسبق تاريخ آخر تحديث لها هذا التاريخ.",
+          "placeholder": "كل الأوقات",
+          "title": "فهرسة المستندات بعد"
+        },
+        "pruneFrequency": {
+          "description": "فحص المصدر وحذف المستندات التي لم تعد موجودة.",
+          "title": "التنظيف كل"
+        },
+        "refreshFrequency": {
+          "description": "سحب المستندات الجديدة من المصدر.",
+          "title": "التحديث كل"
+        },
+        "title": "الجدولة",
+        "units": {
+          "hours": "ساعات",
+          "minutes": "دقائق"
         }
       }
     },
@@ -3161,15 +3243,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "استخدم البريد الإلكتروني للحساب الذي يملك رمز API."
+        },
+        "apiTokenField": {
+          "subDescription": "الصق رمز API للوصول إلى {source}."
+        },
         "createButton": {
           "label": "إنشاء"
         },
         "created": {
           "toast": "تم إنشاء بيانات اعتماد جديدة!"
         },
-        "name": {
-          "label": "الاسم:",
-          "placeholder": "(اختياري) اسم بيانات الاعتماد..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "المسؤولون",
+            "description": "يمكن لجميع المسؤولين إعادة استخدام هذا الحساب لإنشاء الموصلات.",
+            "suffix": "(افتراضي)"
+          },
+          "adminsAndGroups": {
+            "description": "يمكن للمسؤولين والمجموعات التي تحددها إعادة استخدام هذا الحساب.",
+            "label": "المسؤولون والمجموعات"
+          },
+          "onlyMe": {
+            "label": "أنا فقط"
+          },
+          "description": "اسمح للمجموعات بإعادة استخدام هذا الحساب لإنشاء الموصلات.",
+          "title": "مشاركة هذا الحساب"
         },
         "submitError": {
           "toast": "حدث خطأ أثناء إرسال بيانات الاعتماد"
@@ -3204,6 +3307,80 @@
           "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
         }
       },
+      "displayNames": {
+        "accessKeyId": "معرّف مفتاح الوصول إلى {source}",
+        "secretAccessKey": "مفتاح الوصول السري إلى {source}",
+        "accountId": "معرّف حساب {source}",
+        "apiToken": "رمز API",
+        "clientId": "معرّف عميل {source}",
+        "clientSecret": "سر عميل {source}",
+        "clientToken": "رمز عميل {source}",
+        "directoryId": "معرّف الدليل في {source}",
+        "certificatePassword": "كلمة مرور شهادة {source}",
+        "privateKey": "المفتاح الخاص لـ {source}",
+        "certificate": "شهادة {source}",
+        "baseUrl": "عنوان URL الأساسي لـ {source}",
+        "apiBaseUrl": "عنوان URL الأساسي لـ {source} API",
+        "url": "عنوان URL لـ {source}",
+        "enterpriseServerUrl": "عنوان URL لخادم {source} Enterprise",
+        "botToken": "رمز بوت {source}",
+        "username": "اسم مستخدم {source}",
+        "apiUsername": "اسم مستخدم API لـ {source}",
+        "userEmail": "بريد مستخدم {source} الإلكتروني",
+        "accountEmail": "بريد حساب {source} الإلكتروني",
+        "password": "كلمة مرور {source}",
+        "subdomain": "النطاق الفرعي لـ {source}",
+        "domain": "نطاق {source}",
+        "enterpriseId": "معرّف مؤسسة {source}",
+        "teamId": "معرّف فريق {source}",
+        "applicationId": "معرّف تطبيق {source}",
+        "apiTokenId": "معرّف رمز API لـ {source}",
+        "apiTokenSecret": "السر الخاص برمز API لـ {source}",
+        "securityToken": "رمز الأمان لـ {source}",
+        "integrationToken": "رمز تكامل {source}",
+        "accessKey": "مفتاح الوصول إلى {source}",
+        "accessKeySecret": "سر مفتاح الوصول إلى {source}",
+        "key": "مفتاح {source}",
+        "secret": "سر {source}",
+        "roleArn": "ARN لدور {source}",
+        "namespace": "مساحة أسماء {source}",
+        "region": "منطقة {source}",
+        "portalId": "معرّف بوابة {source}",
+        "oauthTokens": "رموز {source} OAuth",
+        "isSandbox": "بيئة تجريبية (Sandbox)",
+        "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
+        "zuliprcContent": "محتوى Zuliprc",
+        "authenticationMethod": "طريقة المصادقة"
+      },
+      "hints": {
+        "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
+        "githubBaseUrl": "اختياري. حدد مضيف الخادم لديك، مثل https://github.example.com. اتركه فارغًا لاستخدام github.com.",
+        "gongBaseUrl": "اختياري. للبيانات خارج الولايات المتحدة، حدد مضيف منطقتك، مثل https://[region].api.gong.io.",
+        "jiraUserEmail": "مطلوب لـ Jira Cloud.",
+        "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
+        "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
+        "pfxFile": "ملف PFX.",
+        "testrailBaseUrl": "مثل https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "سر العميل",
+          "certificateAuthentication": "المصادقة بالشهادة",
+          "certificate": "الشهادة",
+          "accessKeyAndSecret": "مفتاح الوصول والسر",
+          "iamRole": "دور IAM",
+          "assumeRole": "تولّي الدور"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint سر العميل للمصادقة. ستحتاج إلى تقديم معرّف العميل وسر العميل.",
+          "sharepointCertificate": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint شهادة للمصادقة. ستحتاج إلى تقديم معرّف العميل ومعرّف الدليل وكلمة مرور الشهادة وبيانات PFX.",
+          "teamsClientSecret": "يسجّل الموصل الدخول باستخدام سر العميل الخاص بتسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل والسر. رسائل القنوات وأعضاؤها فقط: يرفض SharePoint السر، لذا يتطلب خيار تضمين المرفقات استخدام الشهادة.",
+          "teamsCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها. مطلوب لخيار تضمين المرفقات، الذي يقرأ ملفات القنوات وقرّاءها من SharePoint.",
+          "outlookClientSecret": "يسجّل الموصل الدخول باستخدام سر العميل الخاص بتسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل والسر.",
+          "outlookCertificate": "يسجّل الموصل الدخول باستخدام شهادة مرفوعة إلى تسجيل التطبيق. قدّم معرّف العميل ومعرّف الدليل وحزمة PFX وكلمة مرورها.",
+          "s3AssumeRole": "إذا اخترت هذا الوضع، فسيتولّى مثيل Amazon EC2 دوره الحالي للوصول إلى S3. لا حاجة إلى بيانات اعتماد إضافية."
+        }
+      },
       "modal": {
         "createTitle": "إنشاء بيانات اعتماد {source}",
         "editTitle": "تعديل بيانات الاعتماد",
@@ -3232,6 +3409,10 @@
         },
         "retryButton": {
           "label": "إعادة المحاولة"
+        },
+        "signIn": {
+          "description": "يتطلب {appName} نطاقات للقراءة فقط.",
+          "title": "تسجيل الدخول باستخدام {source}"
         },
         "startError": {
           "message": "تعذر بدء OAuth"
@@ -3284,6 +3465,13 @@
         "success": {
           "toast": "تم تحديث بيانات الاعتماد"
         }
+      },
+      "validation": {
+        "authMethodRequired": "يُرجى اختيار طريقة المصادقة",
+        "empty": "لا يمكن ترك {field} فارغًا",
+        "fileRequired": "يُرجى اختيار ملف {field}",
+        "invalidEmail": "يُرجى إدخال بريد إلكتروني صالح في {field}",
+        "required": "يُرجى إدخال {field}"
       }
     },
     "customAnalytics": {
@@ -4782,6 +4970,12 @@
         "azureGptImage2": {
           "description": "نموذج توليد الصور GPT Image 2 مستضاف على Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "نموذج توليد الصور GPT Image 2.5 Flare مستضاف على Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "نموذج توليد الصور GPT Image 2.5 Sunburst مستضاف على Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "نموذج Gemini 2.5 Flash Image ‏(Nano Banana) مصمم للسرعة والكفاءة."
         },
@@ -4798,7 +4992,13 @@
           "description": "نموذج توليد الصور الرائد السابق من OpenAI."
         },
         "openaiGptImage2": {
-          "description": "أحدث نموذج توليد صور من OpenAI بأعلى دقة التزام بالمطالبات."
+          "description": "نموذج توليد الصور من الجيل السابق من OpenAI بدقة عالية في الالتزام بالمطالبات."
+        },
+        "openaiGptImage25Flare": {
+          "description": "أحدث نموذج توليد صور من OpenAI بجودة عالية وسرعة توليد كبيرة."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "نموذج توليد الصور المتميز من OpenAI لأدق عمليات التعديل."
         }
       },
       "setDefaultError": {
@@ -4817,6 +5017,9 @@
           "label": "تطبيق وإعادة فهرسة",
           "statusesFailed": "تعذّر تحميل حالات الموصلات، أعد المحاولة قبل إعادة الفهرسة.",
           "statusesLoading": "جارٍ تحميل حالات الموصلات…"
+        },
+        "applyWithoutReindex": {
+          "label": "تطبيق بدون إعادة الفهرسة"
         },
         "rebuildAll": {
           "label": "إعادة بناء جميع المستندات الحالية"
@@ -4851,7 +5054,7 @@
         "title": "إلغاء إعادة الفهرسة"
       },
       "captioningModel": {
-        "description": "سيُستخدم هذا النموذج لتحليل الصور أثناء الفهرسة. لا يمكن اختيار إلا النماذج التي تدعم الرؤية. تسري التحديثات على المستندات المفهرسة لاحقًا، فالتعليقات الحالية مدمجة في التضمينات السابقة.",
+        "description": "سيُستخدم هذا النموذج لتحليل الصور أثناء الفهرسة.",
         "title": "نموذج LLM للتعليقات"
       },
       "changesBanner": {
@@ -4867,8 +5070,16 @@
           "description": "يتطلب تعديل إعدادات التضمين أو الاسترجاع إعادة فهرسة كاملة لجميع المستندات لتسري، وقد يستغرق ذلك **ساعات أو أيامًا** بحسب حجم المحتوى. [اعرف المزيد](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "تتطلب التغييرات إعادة فهرسة كاملة."
         },
+        "doNotReindex": {
+          "description": "ستسري إعدادات معالجة الصور فقط على المستندات المفهرسة من الآن فصاعدًا. لن يتم تحديث المستندات الحالية ما لم تقم بإعادة فهرسة كاملة.\n\nقد تستغرق إعادة الفهرسة *ساعات أو أيامًا* حسب حجم المحتوى. [اعرف المزيد](https://docs.onyx.app/security/architecture/data_flows).",
+          "title": "تنطبق التغييرات على المحتوى المفهرس حديثًا فقط."
+        },
         "orSeparator": {
           "label": "أو"
+        },
+        "reindex": {
+          "description": "قد تستغرق إعادة الفهرسة *ساعات أو أيامًا* حسب حجم المحتوى. [اعرف المزيد](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "ستُجرى إعادة فهرسة كاملة."
         }
       },
       "cloudDisabled": {
@@ -4955,6 +5166,9 @@
           "description": "تُضاف هذه البادئة إلى استعلامات البحث قبل تمريرها إلى النموذج، إذا تطلبها نموذج التضمين. البادئات الخاطئة أو المفقودة تضعف جودة التضمين.",
           "placeholder": "مثل 'query: '",
           "title": "بادئة الاستعلامات"
+        },
+        "googleWorkloadIdentity": {
+          "description": "استخدم بيانات اعتماد GKE لخادم API وعمال التضمين. لا يلزم مفتاح JSON."
         }
       },
       "forwardOnlyModal": {
@@ -4965,12 +5179,13 @@
         "description": "هيّئ كيفية فهرسة المستندات وتضمينها وتجهيزها للبحث والاسترجاع."
       },
       "imageExtraction": {
-        "description": "استخرج الصور المضمّنة من الملفات المرفوعة (PDF وDOCX وغيرها) ولخّصها بنموذج LLM يدعم الرؤية حتى تصبح المستندات المصوّرة فقط قابلة للبحث والإجابة. يتطلب نموذج LLM افتراضيًا يدعم الرؤية.",
+        "description": "استخرج الصور أثناء فهرسة المستندات وأنشئ أوصافًا قابلة للبحث.",
         "title": "استخراج الصور وتعليقها"
       },
       "imageProcessing": {
         "description": "استخدم نموذج LLM لتحليل الصور وإضافة أوصاف لها أثناء الفهرسة.",
         "enableFirstTooltip": "فعّل استخراج الصور وتعليقها لتهيئة هذا.",
+        "noModelSelected": "لم يتم اختيار نموذج",
         "noVisionModelsTooltip": "معالجة الصور معطّلة لعدم وجود نماذج تدعم الرؤية. قم بإعداد [نموذج لغة]({link}) يدعم الرؤية أولًا.",
         "title": "معالجة الصور"
       },
@@ -4984,7 +5199,7 @@
         }
       },
       "maxImageSize": {
-        "description": "ستُتخطى الصور الأكبر من هذا الحجم للحد من استهلاك الموارد.",
+        "description": "سيتم تخطي الصور التي تتجاوز هذا الحجم للحد من استخدام الموارد.",
         "suffix": "(ميغابايت)",
         "title": "الحد الأقصى لحجم الصورة للتحليل"
       },
@@ -5151,24 +5366,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "واصل استخدام فهرس المستندات الحالي بالإعدادات الحالية حتى تكمل جميع الموصلات النشطة (غير الموقوفة/قيد الحذف) محاولة فهرسة ناجحة.",
+          "description": "استمر في استخدام فهرس المستندات الحالي بالإعدادات الحالية حتى تُكمل جميع الموصّلات **النشطة** (غير المتوقفة مؤقتًا/قيد الحذف) محاولة فهرسة ناجحة.",
           "label": "إعادة فهرسة الموصلات النشطة ثم التبديل"
         },
+        "doNotReindex": {
+          "description": "**الخيار الأكثر أمانًا.** طبّق التغييرات فقط على المحتوى المفهرس حديثًا.",
+          "label": "عدم إعادة الفهرسة"
+        },
         "instant": {
-          "description": "امسح فهرس المستندات الحالي فورًا وبدّل إلى الإعدادات الجديدة. يتطلب إعادة فهرسة جميع الموصلات قبل إعادة ملء الفهرس للبحث.",
+          "description": "**امسح فهرس المستندات الحالي** فورًا وانتقل إلى الإعدادات الجديدة. يتطلب إعادة فهرسة جميع الموصّلات قبل أن يُعاد ملء الفهرس للبحث.",
           "label": "التبديل قبل إعادة الفهرسة"
         },
         "placeholder": "اختر استراتيجية تبديل",
         "reindexAll": {
-          "description": "الخيار الأكثر أمانًا. واصل استخدام فهرس المستندات الحالي بالإعدادات الحالية حتى تكمل جميع الموصلات محاولة فهرسة ناجحة.",
+          "description": "استمر في استخدام فهرس المستندات الحالي بالإعدادات الحالية حتى تُكمل جميع الموصّلات محاولة فهرسة ناجحة.",
           "label": "إعادة فهرسة جميع الموصلات ثم التبديل"
+        },
+        "reindexOptions": {
+          "label": "خيارات إعادة الفهرسة"
         }
       },
       "toasts": {
         "applyFailed": "فشل تطبيق الإعدادات",
         "cancelReindexFailed": "فشل إلغاء إعادة الفهرسة",
-        "captioningUpdateFailed": "فشل تحديث نموذج LLM للتعليقات",
-        "captioningUpdated": "تم تحديث نموذج LLM للتعليقات",
+        "captioningModelRequired": "اختر نموذج LLM للتعليق قبل التطبيق.",
         "contextualModelRequired": "اختر نموذج LLM للاسترجاع السياقي قبل إعادة الفهرسة.",
         "contextualModelUpdateFailed": "فشل تحديث نموذج LLM للاسترجاع السياقي",
         "contextualModelUpdated": "تم تحديث نموذج LLM للاسترجاع السياقي",
@@ -5191,7 +5412,24 @@
         "serviceAccountJsonInvalid": "يجب أن يكون ملف JSON صالحًا لحساب خدمة Google",
         "serviceAccountJsonRequired": "JSON حساب الخدمة مطلوب",
         "targetUrlRequired": "عنوان URL الهدف مطلوب",
-        "urlInvalid": "يجب أن يكون عنوان URL صالحًا"
+        "urlInvalid": "يجب أن يكون عنوان URL صالحًا",
+        "googleProjectRequired": "معرّف مشروع GCP مطلوب"
+      },
+      "vectorQuantization": {
+        "description": "خزّن متجهات المستندات بعدد أقل من البتات لاستخدام ذاكرة أقل. قد يؤدي تقليل عدد البتات إلى خفض جودة البحث.",
+        "none": {
+          "description": "دقة كاملة 32 بت.",
+          "label": "بدون"
+        },
+        "scalar1Bit": {
+          "description": "ذاكرة أقل بمقدار 32 مرة. يتطلب OpenSearch 3.6 أو إصدارًا أحدث.",
+          "label": "1 بت"
+        },
+        "scalar7Bit": {
+          "description": "ذاكرة أقل بمقدار 4 مرات. دون خسارة تُذكر في جودة البحث.",
+          "label": "7 بت"
+        },
+        "title": "تكميم المتجهات"
       },
       "wontPortConsentModal": {
         "connector": "{name} — {status}",
@@ -5779,6 +6017,9 @@
           "optionalSuffix": {
             "label": "اختياري"
           },
+          "slowSave": {
+            "text": "يستغرق هذا وقتًا أطول من المعتاد. قد تستغرق قوائم النماذج الكبيرة دقيقة."
+          },
           "submitButton": {
             "invalidTooltip": "يرجى ملء جميع الحقول المطلوبة.",
             "pristineTooltip": "لا توجد تغييرات للحفظ."
@@ -5825,10 +6066,12 @@
             "title": "مفتاح API"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "المنطقة التي تُستضاف فيها نماذج Google Vertex AI الخاصة بك. راجع القائمة الكاملة للمناطق المدعومة في Google Cloud.",
             "title": "اسم منطقة Google Cloud"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "مشروع GCP الذي فُعّل فيه Vertex AI. مطلوب لأن ADC لا يمكنه استنتاج المشروع الهدف بموثوقية عند انتحال حساب الخدمة.",
             "title": "معرّف مشروع GCP"
           },
@@ -5870,6 +6113,7 @@
       "toasts": {
         "providerDeleteFailed": "فشل حذف الموفر: {message}",
         "providerDeleted": "تم حذف الموفر بنجاح!",
+        "providerLoadFailed": "تعذر تحميل المزود: {message}",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "settingsUpdated": "تم تحديث الإعدادات",
         "unknownError": "خطأ غير معروف"
@@ -6027,12 +6271,6 @@
         "imageSummarization": {
           "label": "تلخيص الصور"
         },
-        "kgDeepExtraction": {
-          "label": "استخراج الرسم البياني المعرفي"
-        },
-        "kgDocumentClassification": {
-          "label": "تصنيف الرسم البياني المعرفي"
-        },
         "other": {
           "label": "أخرى"
         },
@@ -6049,8 +6287,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله {appName} في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
-        "emptyDescription": "استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله {appName} في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية واستخراج الرسم البياني المعرفي.",
+        "description": "{start} – {end} · استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله {appName} في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية.",
+        "emptyDescription": "استخدام النظام هو نشاط نماذج اللغة الكبيرة الذي يشغّله {appName} في الخلفية بدلًا من تشغيله لمستخدم محدد. تشمل الأمثلة تلخيص الصور ومعالجة RAG السياقية.",
         "error": {
           "title": "تعذر تحميل استخدام النظام لهذه الفترة."
         },
@@ -9119,6 +9357,7 @@
         "loginRequired": "يجب تسجيل الدخول عبر موفر الهوية أولًا.",
         "oauthUserAlreadyExists": "يوجد حساب بهذا البريد الإلكتروني بطريقة تسجيل دخول مختلفة. سجّل الدخول بالطريقة التي استخدمتها أول مرة، أو اطلب من المسؤول ربط هذا الموفر.",
         "serverError": "واجه موفر الهوية خطأً. يرجى المحاولة مرة أخرى.",
+        "staleSignIn": "انتهت صلاحية رابط تسجيل الدخول هذا أو لم يعد صالحًا. يرجى تسجيل الدخول مرة أخرى.",
         "temporarilyUnavailable": "موفر الهوية غير متاح مؤقتًا. يرجى المحاولة لاحقًا."
       },
       "credentialsIssue": {
@@ -10749,6 +10988,9 @@
         },
         "loading": {
           "text": "جارٍ تحميل النماذج..."
+        },
+        "loadingMore": {
+          "text": "جارٍ تحميل المزيد من النماذج..."
         }
       },
       "modelSettingsButton": {
@@ -11495,6 +11737,12 @@
       },
       "poweredBy": {
         "label": "مدعوم من Onyx"
+      }
+    },
+    "modelSelectors": {
+      "placeholder": "اختر نموذجًا",
+      "globalDefault": {
+        "label": "الافتراضي العام"
       }
     },
     "nonSelectableConnectors": {
@@ -13002,6 +13250,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "توسيع",
+      "expandSection": "توسيع {title}",
+      "fold": "طي",
+      "foldSection": "طي {title}"
+    },
     "comboBox": {
       "close": "إغلاق القائمة المنسدلة",
       "create": "إنشاء",
@@ -13022,6 +13276,7 @@
       "loading": "جارٍ التحميل",
       "loadingPage": "جارٍ التحميل…",
       "openCalendar": "فتح التقويم",
+      "optional": "(اختياري)",
       "progress": "التقدم",
       "remove": "إزالة",
       "removeItem": "إزالة {title}",

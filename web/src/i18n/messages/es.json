@@ -808,13 +808,7 @@
         "description": "Conecta {appName} a tus fuentes de datos."
       },
       "search": {
-        "placeholder": "Buscar conectores..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>El conector federado ya está configurado.</strong> Haz clic para editar el conector existente.",
-          "slackCredentialsFound": "<strong>Se encontraron credenciales de Slack existentes.</strong> Haz clic para gestionar tu conector de Slack."
-        }
+        "placeholder": "Busca conectores o pulsa \"/\" para enfocar..."
       },
       "sourceCard": {
         "connectButton": {
@@ -911,6 +905,12 @@
         },
         "sharepoint": {
           "description": "Intranet de Microsoft"
+        },
+        "onedrive": {
+          "description": "Almacenamiento en la nube de Microsoft"
+        },
+        "zoom": {
+          "description": "Grabaciones de reuniones y seminarios web"
         },
         "teams": {
           "description": "Chats de equipo de Microsoft"
@@ -2053,7 +2053,7 @@
       },
       "errorsModal": {
         "columns": {
-          "documentId": "ID del documento",
+          "documentId": "ID del fallo",
           "errorMessage": "Mensaje de error",
           "status": "Estado",
           "time": "Hora"
@@ -2562,10 +2562,50 @@
       }
     },
     "connectorsList": {
+      "oneDrive": {
+        "description": "Configurar el conector de OneDrive",
+        "indexingScope": {
+          "label": "¿Qué archivos de OneDrive debe indexar Onyx?",
+          "general": {
+            "label": "General",
+            "description": "Indexa todos los usuarios aptos a los que puede acceder la aplicación de Microsoft."
+          },
+          "specific": {
+            "label": "Específico",
+            "users": {
+              "label": "Usuarios",
+              "description": "Añade el nombre principal o la dirección de correo electrónico principal de cada usuario que quieras indexar.",
+              "required": "Añade al menos un usuario para el ámbito específico"
+            }
+          }
+        },
+        "excludedPaths": {
+          "label": "Rutas excluidas",
+          "description": "Patrones glob que se comparan con cada ruta y nombre de archivo, como '*.tmp' o 'Archive/*'."
+        },
+        "organizationLinks": {
+          "label": "Tratar los enlaces de la organización como públicos",
+          "description": "Haz que los archivos compartidos mediante un enlace para toda la organización sean visibles para todos los usuarios de Onyx."
+        },
+        "authorityHost": {
+          "label": "Host de autoridad",
+          "description": "Host de autoridad de identidad de Microsoft. Usa https://login.microsoftonline.us para GCC High o DoD."
+        },
+        "graphApiHost": {
+          "label": "Host de Graph API",
+          "description": "Host de Microsoft Graph. Usa https://graph.microsoft.us para GCC High o DoD."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "Autorizar con {source}",
           "pendingLabel": "Autorizando..."
+        },
+        "collapseButton": {
+          "ariaLabel": "Contraer"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Crear una nueva"
@@ -2576,8 +2616,13 @@
         "credentialModal": {
           "title": "Crear una credencial de {source}"
         },
+        "credentialsLoadFailed": {
+          "description": "Ahora no se pueden configurar credenciales. Recarga la página o inténtalo más tarde.",
+          "title": "No se pudieron cargar tus credenciales"
+        },
         "credentialStep": {
-          "title": "Selecciona una credencial"
+          "description": "Usa una cuenta de servicio compartida. {appName} indexa el contenido como esta cuenta.",
+          "title": "Cuenta de autenticación"
         },
         "credentialSwapped": {
           "toast": "¡Credencial cambiada!"
@@ -2585,16 +2630,26 @@
         "error": {
           "toast": "Error: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Expandir"
+        },
         "federated": {
           "tooltip": {
-            "description": "Este conector tiene una opción de búsqueda federada. Aumentará la latencia y reducirá la calidad de la búsqueda.",
+            "description": "Aumentará la latencia y reducirá la calidad de la búsqueda.",
             "link": {
               "label": "Usar la versión federada →"
-            }
+            },
+            "title": "Este conector tiene una opción de búsqueda federada."
           }
         },
         "fileUploadFailed": {
           "toast": "Error al subir los archivos"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "Nueva cuenta de {source}"
         },
         "oauthRedirectFailed": {
           "message": "No pudimos redirigirte para iniciar sesión con {source}. Inténtalo de nuevo."
@@ -2608,6 +2663,9 @@
         "retryButton": {
           "label": "Reintentar"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}"
+        },
         "timeout": {
           "toast": "La operación agotó el tiempo de espera tras {seconds} segundos. ¿Quieres revisar tu configuración por si hay errores?"
         },
@@ -2615,30 +2673,20 @@
           "toast": "Ocurrió un error desconocido"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Fecha de inicio de la indexación",
-          "subtext": "Los documentos anteriores a esta fecha no se obtendrán"
-        },
-        "pruneFrequency": {
-          "description": "Comprueba todos los documentos con la fuente para eliminar los que ya no existen. Nota: este proceso revisa todos los documentos, así que ten cuidado al aumentar la frecuencia. El valor predeterminado es {hours} horas ({days} días). Se admiten horas decimales (p. ej., 0.1 horas = 6 minutos). Introduce 0 para desactivar la purga de este conector.",
-          "label": "Frecuencia de purga (horas)"
-        },
-        "refreshFrequency": {
-          "description": "Es la frecuencia con la que obtenemos documentos nuevos de la fuente (en minutos). Si introduces 0, nunca obtendremos documentos nuevos para este conector.",
-          "label": "Frecuencia de actualización (minutos)"
-        },
-        "resetButton": {
-          "label": "Restablecer"
-        },
-        "title": "Configuración avanzada"
-      },
       "connectorName": {
         "label": "Nombre del conector",
         "subtext": "Un nombre descriptivo para el conector."
       },
       "credentialRequired": {
         "tooltip": "Selecciona primero una credencial."
+      },
+      "bindingGate": {
+        "enterField": "Introduce el campo «{field}».",
+        "fixField": "Revisa el campo «{field}».",
+        "awaitingCheck": "Sal del campo para comprobarlo con la credencial.",
+        "checking": "Comprobando la credencial…",
+        "fieldInvalid": "Revisa el campo «{field}»: {detail}",
+        "rejected": "Esta credencial no se puede usar con esta configuración. {detail}"
       },
       "credentialsLoadError": {
         "title": "No se pudieron cargar las credenciales."
@@ -2681,7 +2729,8 @@
         },
         "oauthOption": {
           "description": "Sube el JSON de la app de OAuth desde la consola de Google Cloud ([instrucciones de configuración]({docsUrl})) y luego autentícate con la cuenta de Google cuyo Drive quieres indexar.",
-          "title": "Opción 1: app de OAuth"
+          "title": "Opción 1: app de OAuth",
+          "sharedScopesNote": "Google solicita acceso a Google Drive y a Gmail a la vez, para que una sola cuenta sirva a ambos conectores. Para usar esta cuenta solo con Google Drive, desmarca los permisos de Gmail en la pantalla de consentimiento ([por qué lo pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Sube o pega el JSON de tu app de OAuth"
@@ -2739,7 +2788,8 @@
         },
         "oauthOption": {
           "description": "Sube el JSON de la app de OAuth desde la consola de Google Cloud ([instrucciones de configuración]({docsUrl})) y luego autentícate con la cuenta de Google cuyo Gmail quieres indexar.",
-          "title": "Opción 1: app de OAuth"
+          "title": "Opción 1: app de OAuth",
+          "sharedScopesNote": "Google solicita acceso a Gmail y a Google Drive a la vez, para que una sola cuenta sirva a ambos conectores. Para usar esta cuenta solo con Gmail, desmarca los permisos de Google Drive en la pantalla de consentimiento ([por qué lo pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Sube o pega el JSON de tu app de OAuth"
@@ -2774,7 +2824,7 @@
         "connectButton": {
           "label": "Conectar"
         },
-        "description": "Conéctate a {source} y configura el conector para {appName}."
+        "description": "Conéctate a {source} y configura el conector para {appName}.{hasDocs, select, true { Ver [documentación]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -2898,6 +2948,38 @@
       "tabs": {
         "empty": {
           "label": "No hay pestañas que mostrar."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Opciones avanzadas",
+        "errors": {
+          "missing": "Introduce un valor.",
+          "invalid": "Este valor no es válido: {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "Especifica cómo realizará el conector la indexación. El operador podrá editar esta sección.",
+        "indexingStart": {
+          "description": "Se ignorarán los documentos con una fecha de última actualización anterior a esta.",
+          "placeholder": "Todo el tiempo",
+          "title": "Indexar documentos posteriores a"
+        },
+        "pruneFrequency": {
+          "description": "Revisar la fuente y eliminar los documentos que ya no existen.",
+          "title": "Depurar cada"
+        },
+        "refreshFrequency": {
+          "description": "Obtener documentos nuevos de la fuente.",
+          "title": "Actualizar cada"
+        },
+        "title": "Programación",
+        "units": {
+          "hours": "horas",
+          "minutes": "minutos"
         }
       }
     },
@@ -3161,15 +3243,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Usa el correo de la cuenta a la que pertenece el token de API."
+        },
+        "apiTokenField": {
+          "subDescription": "Pega tu token de API para acceder a {source}."
+        },
         "createButton": {
           "label": "Crear"
         },
         "created": {
           "toast": "¡Nueva credencial creada!"
         },
-        "name": {
-          "label": "Nombre:",
-          "placeholder": "(Opcional) nombre de la credencial..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Administradores",
+            "description": "Todos los administradores pueden reutilizar esta cuenta para crear conectores.",
+            "suffix": "(Predeterminado)"
+          },
+          "adminsAndGroups": {
+            "description": "Los administradores y los grupos que indiques pueden reutilizar esta cuenta.",
+            "label": "Administradores y grupos"
+          },
+          "onlyMe": {
+            "label": "Solo yo"
+          },
+          "description": "Permite que los grupos reutilicen esta cuenta para crear conectores.",
+          "title": "Compartir esta cuenta"
         },
         "submitError": {
           "toast": "Error al enviar la credencial"
@@ -3204,6 +3307,80 @@
           "toast": "Error al actualizar la credencial"
         }
       },
+      "displayNames": {
+        "accessKeyId": "ID de clave de acceso de {source}",
+        "secretAccessKey": "Clave de acceso secreta de {source}",
+        "accountId": "ID de cuenta de {source}",
+        "apiToken": "Token de API",
+        "clientId": "ID de cliente de {source}",
+        "clientSecret": "Secreto de cliente de {source}",
+        "clientToken": "Token de cliente de {source}",
+        "directoryId": "ID de directorio de {source}",
+        "certificatePassword": "Contraseña del certificado de {source}",
+        "privateKey": "Clave privada de {source}",
+        "certificate": "Certificado de {source}",
+        "baseUrl": "URL base de {source}",
+        "apiBaseUrl": "URL base de API de {source}",
+        "url": "URL de {source}",
+        "enterpriseServerUrl": "URL del servidor de {source} Enterprise",
+        "botToken": "Token del bot de {source}",
+        "username": "Nombre de usuario de {source}",
+        "apiUsername": "Nombre de usuario de API de {source}",
+        "userEmail": "Correo del usuario de {source}",
+        "accountEmail": "Correo de la cuenta de {source}",
+        "password": "Contraseña de {source}",
+        "subdomain": "Subdominio de {source}",
+        "domain": "Dominio de {source}",
+        "enterpriseId": "ID de empresa de {source}",
+        "teamId": "ID de equipo de {source}",
+        "applicationId": "ID de aplicación de {source}",
+        "apiTokenId": "ID del token de API de {source}",
+        "apiTokenSecret": "Secreto del token de API de {source}",
+        "securityToken": "Token de seguridad de {source}",
+        "integrationToken": "Token de integración de {source}",
+        "accessKey": "Clave de acceso de {source}",
+        "accessKeySecret": "Secreto de la clave de acceso de {source}",
+        "key": "Clave de {source}",
+        "secret": "Secreto de {source}",
+        "roleArn": "ARN del rol de {source}",
+        "namespace": "Namespace de {source}",
+        "region": "Región de {source}",
+        "portalId": "ID de portal de {source}",
+        "oauthTokens": "Tokens de OAuth de {source}",
+        "isSandbox": "Es un entorno de sandbox",
+        "serviceUserEmail": "Correo del usuario de servicio",
+        "zuliprcContent": "Contenido de zuliprc",
+        "authenticationMethod": "Método de autenticación"
+      },
+      "hints": {
+        "boxUserEmail": "Opcional. El usuario de Box al que suplantar.",
+        "githubBaseUrl": "Opcional. Indica el host de tu servidor, como https://github.example.com. Déjalo en blanco para github.com.",
+        "gongBaseUrl": "Opcional. Para datos fuera de EE. UU., indica el host de tu región, como https://[region].api.gong.io.",
+        "jiraUserEmail": "Obligatorio para Jira Cloud.",
+        "lumappsServiceUser": "El usuario en cuyo nombre se indexa.",
+        "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
+        "pfxFile": "Un archivo PFX.",
+        "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Secreto de cliente",
+          "certificateAuthentication": "Autenticación con certificado",
+          "certificate": "Certificado",
+          "accessKeyAndSecret": "Clave de acceso y secreto",
+          "iamRole": "Rol de IAM",
+          "assumeRole": "Asumir rol"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "Si seleccionas este modo, el conector de SharePoint usará un secreto de cliente para autenticarse. Deberás proporcionar el ID de cliente y el secreto de cliente.",
+          "sharepointCertificate": "Si seleccionas este modo, el conector de SharePoint usará un certificado para autenticarse. Deberás proporcionar el ID de cliente, el ID de directorio, la contraseña del certificado y los datos PFX.",
+          "teamsClientSecret": "El conector inicia sesión con un secreto de cliente del registro de la aplicación. Proporciona el ID de cliente, el ID de directorio y el secreto. Solo mensajes y miembros de canales: SharePoint rechaza un secreto, así que Incluir archivos adjuntos necesita la opción de certificado.",
+          "teamsCertificate": "El conector inicia sesión con un certificado cargado en el registro de la aplicación. Proporciona el ID de cliente, el ID de directorio, el paquete PFX y su contraseña. Es obligatorio para Incluir archivos adjuntos, que lee los archivos de los canales y sus lectores desde SharePoint.",
+          "outlookClientSecret": "El conector inicia sesión con un secreto de cliente del registro de la aplicación. Proporciona el ID de cliente, el ID de directorio y el secreto.",
+          "outlookCertificate": "El conector inicia sesión con un certificado cargado en el registro de la aplicación. Proporciona el ID de cliente, el ID de directorio, el paquete PFX y su contraseña.",
+          "s3AssumeRole": "Si seleccionas este modo, la instancia de Amazon EC2 asumirá su rol existente para acceder a S3. No se necesitan más credenciales."
+        }
+      },
       "modal": {
         "createTitle": "Crear credencial de {source}",
         "editTitle": "Editar credencial",
@@ -3232,6 +3409,10 @@
         },
         "retryButton": {
           "label": "Reintentar"
+        },
+        "signIn": {
+          "description": "{appName} requiere permisos de solo lectura.",
+          "title": "Iniciar sesión con {source}"
         },
         "startError": {
           "message": "No se pudo iniciar OAuth"
@@ -3284,6 +3465,13 @@
         "success": {
           "toast": "Credencial actualizada"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Selecciona un método de autenticación",
+        "empty": "El campo {field} no puede estar vacío",
+        "fileRequired": "Selecciona un archivo para {field}",
+        "invalidEmail": "Introduce un correo electrónico válido en {field}",
+        "required": "Introduce el valor de {field}"
       }
     },
     "customAnalytics": {
@@ -4782,6 +4970,12 @@
         "azureGptImage2": {
           "description": "Modelo de generación de imágenes GPT Image 2 alojado en Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "Modelo de generación de imágenes GPT Image 2.5 Flare alojado en Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Modelo de generación de imágenes GPT Image 2.5 Sunburst alojado en Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "El modelo Gemini 2.5 Flash Image (Nano Banana) está diseñado para la velocidad y la eficiencia."
         },
@@ -4798,7 +4992,13 @@
           "description": "El anterior modelo insignia de generación de imágenes de OpenAI."
         },
         "openaiGptImage2": {
-          "description": "El último modelo de generación de imágenes de OpenAI, con la mayor fidelidad al prompt."
+          "description": "El modelo de generación de imágenes de la generación anterior de OpenAI, con alta fidelidad al prompt."
+        },
+        "openaiGptImage25Flare": {
+          "description": "El último modelo de generación de imágenes de OpenAI, con alta calidad y generación rápida."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "El modelo premium de generación de imágenes de OpenAI, para las ediciones más precisas."
         }
       },
       "setDefaultError": {
@@ -4817,6 +5017,9 @@
           "label": "Aplicar y reindexar",
           "statusesLoading": "Cargando el estado de los conectores…",
           "statusesFailed": "No se pudo cargar el estado de los conectores: inténtalo de nuevo antes de reindexar."
+        },
+        "applyWithoutReindex": {
+          "label": "Aplicar sin reindexar"
         },
         "rebuildAll": {
           "label": "Reconstruir todos los documentos existentes"
@@ -4851,7 +5054,7 @@
         "title": "Cancelar la reindexación"
       },
       "captioningModel": {
-        "description": "Este modelo se usará para analizar las imágenes durante la indexación. Solo se pueden seleccionar modelos con capacidad de visión. Las actualizaciones se aplican a los documentos indexados a partir de ahora: las descripciones existentes ya están integradas en los embeddings anteriores.",
+        "description": "Este modelo se usará para analizar imágenes durante la indexación.",
         "title": "LLM de descripción de imágenes"
       },
       "changesBanner": {
@@ -4867,8 +5070,16 @@
           "description": "Modificar la configuración de embeddings o de recuperación requiere una reindexación completa de todos los documentos para que surta efecto, lo que puede tardar **horas o días** según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Los cambios requieren una reindexación completa."
         },
+        "doNotReindex": {
+          "description": "La configuración de procesamiento de imágenes solo tendrá efecto en los documentos indexados a partir de ahora. Los documentos existentes no se actualizarán a menos que ejecutes una reindexación completa.\n\nLa reindexación puede tardar *horas o días* según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows).",
+          "title": "Los cambios se aplican solo al contenido indexado a partir de ahora."
+        },
         "orSeparator": {
           "label": "o"
+        },
+        "reindex": {
+          "description": "La reindexación puede tardar *horas o días* según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "Se ejecutará una reindexación completa."
         }
       },
       "cloudDisabled": {
@@ -4955,6 +5166,9 @@
           "description": "Esto se antepone a las consultas de búsqueda antes de pasarlas al modelo, si tu modelo de embeddings lo requiere. Los prefijos incorrectos o ausentes degradan la calidad de los embeddings.",
           "placeholder": "p. ej., 'query: '",
           "title": "Prefijo de consulta"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Use las credenciales de GKE del servidor API y los trabajadores de embeddings. No se requiere una clave JSON."
         }
       },
       "forwardOnlyModal": {
@@ -4965,12 +5179,13 @@
         "description": "Configura cómo se indexan y se preparan los documentos, y cómo se generan sus embeddings para la búsqueda y la recuperación."
       },
       "imageExtraction": {
-        "description": "Extrae las imágenes incrustadas en los archivos subidos (PDF, DOCX, etc.) y resúmelas con un LLM con capacidad de visión para que los documentos que solo tienen imágenes se puedan buscar y responder. Requiere un LLM predeterminado con capacidad de visión.",
+        "description": "Extrae imágenes durante la indexación de documentos y genera descripciones buscables.",
         "title": "Extraer y describir imágenes"
       },
       "imageProcessing": {
         "description": "Usa un modelo LLM para analizar las imágenes y añadirles descripciones durante la indexación.",
         "enableFirstTooltip": "Activa Extraer y describir imágenes para configurar esto.",
+        "noModelSelected": "Ningún modelo seleccionado",
         "noVisionModelsTooltip": "El procesamiento de imágenes está desactivado porque no tienes modelos con capacidad de visión configurados. Configura primero un [modelo de lenguaje]({link}) con capacidad de visión.",
         "title": "Procesamiento de imágenes"
       },
@@ -5151,24 +5366,30 @@
       },
       "switchover": {
         "activeOnly": {
-          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores activos (no pausados ni en eliminación) hayan completado un intento de indexación correcto.",
+          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores **activos** (no pausados/en eliminación) completen un intento de indexación correcto.",
           "label": "Reindexar los conectores activos y luego cambiar"
         },
+        "doNotReindex": {
+          "description": "**Opción más segura.** Aplica los cambios solo al contenido indexado a partir de ahora.",
+          "label": "No reindexar"
+        },
         "instant": {
-          "description": "Vacía de inmediato el índice de documentos actual y cambia a la nueva configuración. Requiere reindexar todos los conectores antes de que el índice se vuelva a llenar para la búsqueda.",
+          "description": "**Borra de inmediato el índice de documentos actual** y cambia a la nueva configuración. Requiere reindexar todos los conectores antes de que el índice vuelva a estar disponible para la búsqueda.",
           "label": "Cambiar antes de reindexar"
         },
         "placeholder": "Selecciona una estrategia de cambio",
         "reindexAll": {
-          "description": "La opción más segura. Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores hayan completado un intento de indexación correcto.",
+          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores completen un intento de indexación correcto.",
           "label": "Reindexar todos los conectores y luego cambiar"
+        },
+        "reindexOptions": {
+          "label": "Opciones de reindexación"
         }
       },
       "toasts": {
         "applyFailed": "No se pudo aplicar la configuración",
         "cancelReindexFailed": "No se pudo cancelar la reindexación",
-        "captioningUpdateFailed": "No se pudo actualizar el LLM de descripción de imágenes",
-        "captioningUpdated": "LLM de descripción de imágenes actualizado",
+        "captioningModelRequired": "Selecciona un LLM de subtitulado antes de aplicar.",
         "contextualModelRequired": "Selecciona un LLM de recuperación contextual antes de reindexar.",
         "contextualModelUpdateFailed": "No se pudo actualizar el LLM de recuperación contextual",
         "contextualModelUpdated": "LLM de recuperación contextual actualizado",
@@ -5191,7 +5412,24 @@
         "serviceAccountJsonInvalid": "Debe ser un archivo JSON válido de cuenta de servicio de Google",
         "serviceAccountJsonRequired": "El JSON de la cuenta de servicio es obligatorio",
         "targetUrlRequired": "La URL de destino es obligatoria",
-        "urlInvalid": "Debe ser una URL válida"
+        "urlInvalid": "Debe ser una URL válida",
+        "googleProjectRequired": "Se requiere el ID del proyecto de GCP"
+      },
+      "vectorQuantization": {
+        "description": "Almacena los vectores de los documentos con menos bits para usar menos memoria. Menos bits pueden reducir la calidad de la búsqueda.",
+        "none": {
+          "description": "Precisión completa de 32 bits.",
+          "label": "Ninguna"
+        },
+        "scalar1Bit": {
+          "description": "32 veces menos memoria. Requiere OpenSearch 3.6 o posterior.",
+          "label": "1 bit"
+        },
+        "scalar7Bit": {
+          "description": "4 veces menos memoria. Casi sin pérdida de calidad de búsqueda.",
+          "label": "7 bits"
+        },
+        "title": "Cuantización de vectores"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Este conector se eliminará} other {Estos # conectores se eliminarán}}",
@@ -5779,6 +6017,9 @@
           "optionalSuffix": {
             "label": "opcional"
           },
+          "slowSave": {
+            "text": "Esto está tardando más de lo habitual. Las listas de modelos grandes pueden tardar un minuto."
+          },
           "submitButton": {
             "invalidTooltip": "Rellena todos los campos obligatorios.",
             "pristineTooltip": "No hay cambios que guardar."
@@ -5825,10 +6066,12 @@
             "title": "Clave de API"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Región donde se alojan tus modelos de Google Vertex AI. Consulta la lista completa de regiones compatibles en Google Cloud.",
             "title": "Nombre de la región de Google Cloud"
           },
           "projectField": {
+            "placeholder": "mi-proyecto-vertex",
             "description": "El proyecto de GCP donde Vertex AI está activado. Es obligatorio porque ADC no puede deducir de forma fiable el proyecto de destino con la suplantación de cuentas de servicio.",
             "title": "ID del proyecto de GCP"
           },
@@ -5870,6 +6113,7 @@
       "toasts": {
         "providerDeleteFailed": "No se pudo eliminar el proveedor: {message}",
         "providerDeleted": "¡Proveedor eliminado correctamente!",
+        "providerLoadFailed": "No se pudo cargar el proveedor: {message}",
         "settingsUpdateFailed": "No se pudo actualizar la configuración",
         "settingsUpdated": "Configuración actualizada",
         "unknownError": "Error desconocido"
@@ -6027,12 +6271,6 @@
         "imageSummarization": {
           "label": "Resumen de imágenes"
         },
-        "kgDeepExtraction": {
-          "label": "Extracción del grafo de conocimiento"
-        },
-        "kgDocumentClassification": {
-          "label": "Clasificación del grafo de conocimiento"
-        },
         "other": {
           "label": "Otros"
         },
@@ -6049,8 +6287,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · El uso del sistema es actividad del LLM que {appName} ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
-        "emptyDescription": "El uso del sistema es actividad del LLM que {appName} ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes, el procesamiento RAG contextual y la extracción del grafo de conocimiento.",
+        "description": "{start} – {end} · El uso del sistema es actividad del LLM que {appName} ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes y el procesamiento RAG contextual.",
+        "emptyDescription": "El uso del sistema es actividad del LLM que {appName} ejecuta en segundo plano, no para un usuario específico. Algunos ejemplos son los resúmenes de imágenes y el procesamiento RAG contextual.",
         "error": {
           "title": "No se pudo cargar el uso del sistema de este periodo."
         },
@@ -9119,6 +9357,7 @@
         "loginRequired": "Primero debes iniciar sesión con tu proveedor de identidad.",
         "oauthUserAlreadyExists": "Ya existe una cuenta con este correo con otro método de inicio de sesión. Inicia sesión como lo hiciste la primera vez, o pide a tu administrador que vincule este proveedor.",
         "serverError": "Tu proveedor de identidad encontró un error. Inténtalo de nuevo.",
+        "staleSignIn": "Este enlace de inicio de sesión caducó o ya no es válido. Vuelve a iniciar sesión.",
         "temporarilyUnavailable": "Tu proveedor de identidad no está disponible temporalmente. Inténtalo de nuevo más tarde."
       },
       "credentialsIssue": {
@@ -10749,6 +10988,9 @@
         },
         "loading": {
           "text": "Cargando modelos..."
+        },
+        "loadingMore": {
+          "text": "Cargando más modelos..."
         }
       },
       "modelSettingsButton": {
@@ -11495,6 +11737,12 @@
       },
       "poweredBy": {
         "label": "Con tecnología de Onyx"
+      }
+    },
+    "modelSelectors": {
+      "placeholder": "Seleccionar modelo",
+      "globalDefault": {
+        "label": "Predeterminado global"
       }
     },
     "nonSelectableConnectors": {
@@ -13002,6 +13250,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "Expandir",
+      "expandSection": "Expandir {title}",
+      "fold": "Contraer",
+      "foldSection": "Contraer {title}"
+    },
     "comboBox": {
       "close": "Cerrar desplegable",
       "create": "Crear",
@@ -13022,6 +13276,7 @@
       "loading": "Cargando",
       "loadingPage": "Cargando…",
       "openCalendar": "Abrir calendario",
+      "optional": "(Opcional)",
       "progress": "Progreso",
       "remove": "Quitar",
       "removeItem": "Quitar {title}",

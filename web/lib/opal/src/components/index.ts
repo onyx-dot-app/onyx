@@ -160,6 +160,12 @@ export {
   type EmptyMessageCardProps,
 } from "@opal/components/cards/empty-message-card/components";
 
+/* Collapsible */
+export {
+  Collapsible,
+  type CollapsibleProps,
+} from "@opal/components/collapsible/components";
+
 /* MessageCard */
 export {
   MessageCard,
@@ -168,8 +174,6 @@ export {
 
 /* Loader */
 export {
-  IconLoader,
-  type IconLoaderProps,
   OnyxLoader,
   type OnyxLoaderProps,
   type LoaderColor,

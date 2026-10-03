@@ -41,9 +41,11 @@ export enum SwitchoverType {
   INSTANT = "instant",
 }
 
-export enum EmbeddingPrecision {
-  FLOAT = "float",
-  BFLOAT16 = "bfloat16",
+/** Mirrors backend `VectorQuantization`. Changing it needs a re-index. */
+export enum VectorQuantization {
+  NONE = "none",
+  SCALAR_7_BIT = "scalar_7_bit",
+  SCALAR_1_BIT = "scalar_1_bit",
 }
 
 // ---------------------------------------------------------------------------
@@ -146,12 +148,19 @@ export interface EmbeddingModelRequest {
 }
 
 /** Shape returned by `GET /api/admin/embedding/embedding-provider`. */
+export interface VertexEmbeddingConfig {
+  auth_method: "service_account_json" | "workload_identity";
+  project_id: string | null;
+  location: string | null;
+}
+
 export interface ConfiguredEmbeddingProvider {
   provider_type: EmbeddingProviderName;
   api_key: string | null;
   api_url: string | null;
   api_version: string | null;
   deployment_name: string | null;
+  vertex_config?: VertexEmbeddingConfig | null;
 }
 
 export interface RerankingDetails {
@@ -170,8 +179,8 @@ export interface AdvancedSearchConfiguration {
   disable_rerank_for_streaming: boolean;
   api_url: string | null;
   num_rerank: number;
-  embedding_precision: EmbeddingPrecision;
   reduced_dimension: number | null;
+  vector_quantization: VectorQuantization;
 }
 
 export interface SavedSearchSettings
@@ -215,13 +224,3 @@ export interface ReindexErrorRow {
 
 // ---------------------------------------------------------------------------
 // Image processing
-// ---------------------------------------------------------------------------
-
-/**
- * The tenant's image processing (captioning) configuration. `null` from the
- * API means the feature is off; a value means it is on with that model.
- */
-export interface ImageProcessingSettings {
-  model_configuration_id: number;
-  max_size_mb: number;
-}

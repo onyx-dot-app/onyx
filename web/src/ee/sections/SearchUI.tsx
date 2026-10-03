@@ -1,26 +1,28 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  BaseFilters,
-  MinimalOnyxDocument,
-  SourceMetadata,
-} from "@/lib/search/types";
+import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
 import { Divider, Pagination } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
 import { IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
-import { Tag, ValidSources } from "@/lib/types";
+import { Tag } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import {
+  countDocumentsBySource,
+  documentMatchesAnySource,
+} from "@/lib/search/utils";
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import { Popover, PopoverMenu } from "@opal/components";
-import { SvgCheck, SvgClock, SvgTag, SvgSimpleLoader } from "@opal/icons";
+import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import { FilterButton } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
@@ -74,7 +76,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [error]);
 
   // Filter state
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<ValidSources[]>([]);
   const [timeFilter, setTimeFilter] = useState<TimeFilter | null>(null);
   const [timeFilterOpen, setTimeFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
@@ -125,16 +127,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
-    const filtered = results.filter((doc) => {
-      // Source filter (client-side)
-      if (selectedSources.length > 0) {
-        if (!doc.source_type || !selectedSources.includes(doc.source_type)) {
-          return false;
-        }
-      }
-
-      return true;
-    });
+    const filtered = results.filter((doc) =>
+      documentMatchesAnySource(doc, selectedSources)
+    );
 
     // Sort: LLM-selected first, then by score
     return filtered.sort((a, b) => {
@@ -160,34 +155,16 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
   // Extract unique sources with metadata for the source filter
   const sourcesWithMeta = useMemo(() => {
-    const sourceMap = new Map<
-      string,
-      { meta: SourceMetadata; count: number }
-    >();
-
-    for (const doc of results) {
-      if (doc.source_type) {
-        const existing = sourceMap.get(doc.source_type);
-        if (existing) {
-          existing.count++;
-        } else {
-          sourceMap.set(doc.source_type, {
-            meta: getSourceMetadata(doc.source_type as ValidSources),
-            count: 1,
-          });
-        }
-      }
-    }
-
-    return Array.from(sourceMap.entries())
-      .map(([source, data]) => ({
+    return Array.from(countDocumentsBySource(results).entries())
+      .map(([source, count]) => ({
         source,
-        ...data,
+        meta: getSourceMetadata(source),
+        count,
       }))
       .sort((a, b) => b.count - a.count);
   }, [results]);
 
-  const handleSourceToggle = (source: string) => {
+  const handleSourceToggle = (source: ValidSources) => {
     setCurrentPage(1);
     if (selectedSources.includes(source)) {
       setSelectedSources(selectedSources.filter((s) => s !== source));
@@ -202,7 +179,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   if (state.phase === "searching") {
     return (
       <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-        <SvgSimpleLoader />
+        <IconLoader />
       </div>
     );
   }
@@ -376,11 +353,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                 <LineItemButton
                   key={source}
                   icon={(props) => (
-                    <SourceIcon
-                      sourceType={source as ValidSources}
-                      iconSize={16}
-                      {...props}
-                    />
+                    <SourceIcon sourceType={source} iconSize={16} {...props} />
                   )}
                   onClick={() => handleSourceToggle(source)}
                   state={

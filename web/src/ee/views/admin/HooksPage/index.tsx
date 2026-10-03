@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -29,7 +30,6 @@ import {
   SvgSettings,
   SvgTrash,
   SvgUnplug,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
@@ -541,7 +541,7 @@ export default function HooksPage() {
   }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router, t]);
 
   if (settings.isLoading || !enterpriseTier || !settings.hooks_enabled) {
-    return <SvgSimpleLoader />;
+    return <IconLoader />;
   }
 
   const isLoading = specsLoading || hooksLoading;
@@ -607,7 +607,7 @@ export default function HooksPage() {
         />
         <SettingsLayouts.Body>
           {isLoading ? (
-            <SvgSimpleLoader />
+            <IconLoader />
           ) : specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError

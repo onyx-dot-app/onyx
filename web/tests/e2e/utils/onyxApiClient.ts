@@ -1,4 +1,12 @@
 import { APIRequestContext, expect, APIResponse } from "@playwright/test";
+import {
+  MOCK_LLM_API_KEY,
+  MOCK_LLM_DEFAULT_MODEL,
+  MOCK_LLM_MAX_INPUT_TOKENS,
+  MOCK_LLM_MODELS,
+  MOCK_LLM_PROVIDER_NAME,
+  mockLlmApiBase,
+} from "@tests/e2e/utils/mockLlm";
 
 const E2E_LLM_PROVIDER_API_KEY =
   process.env.E2E_LLM_PROVIDER_API_KEY ||
@@ -76,7 +84,7 @@ export interface CreateAgentOptions {
  *
  * **LLM Providers:**
  * - `listLlmProviders()` - Lists LLM providers (admin endpoint, includes is_public)
- * - `ensurePublicProvider(name?)` - Idempotently creates a public default LLM provider
+ * - `ensurePublicProvider()` - Idempotently makes the public mock LLM provider the default
  * - `createRestrictedProvider(name, groupId)` - Creates a restricted LLM provider assigned to a group
  * - `setProviderAsDefault(id)` - Sets an LLM provider as the default for chat
  * - `deleteProvider(id)` - Deletes an LLM provider
@@ -657,66 +665,75 @@ export class OnyxApiClient {
   /**
    * Lists LLM providers visible to the admin (includes `is_public`).
    *
-   * @returns Array of LLM providers with id and is_public fields
+   * @returns Array of LLM providers with id, name, and is_public fields
    */
   async listLlmProviders(): Promise<
     Array<{
       id: number;
+      name: string;
       is_public?: boolean;
     }>
   > {
     const response = await this.get("/admin/llm/provider");
     const data = await this.handleResponse<{
-      providers: Array<{ id: number; is_public?: boolean }>;
+      providers: Array<{ id: number; name: string; is_public?: boolean }>;
     }>(response, "Failed to list LLM providers");
     return data.providers;
   }
 
   /**
-   * Ensure at least one public LLM provider exists and is set as default.
+   * Ensure the public mock LLM provider exists, points at the mock LLM
+   * server's default script, and is the default for chat.
    *
-   * Idempotent — returns `null` if a public provider already exists,
+   * Idempotent — returns `null` if the provider already existed,
    * or the new provider ID if one was created.
    *
-   * @param providerName - Name for the provider (default: "PW Default Provider")
    * @returns The provider ID if one was created, or `null` if already present
    */
-  async ensurePublicProvider(
-    providerName: string = "PW Default Provider"
-  ): Promise<number | null> {
+  async ensurePublicProvider(): Promise<number | null> {
     const providers = await this.listLlmProviders();
-    const hasPublic = providers.some((p) => p.is_public);
+    const existing = providers.find((p) => p.name === MOCK_LLM_PROVIDER_NAME);
 
-    if (hasPublic) {
-      return null;
-    }
-
-    const defaultModelName = "gpt-4o";
     const response = await this.request.put(
-      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      `${this.baseUrl}/admin/llm/provider${existing ? "" : "?is_creation=true"}`,
       {
         data: {
-          name: providerName,
-          provider: "openai",
-          api_key: E2E_LLM_PROVIDER_API_KEY,
+          id: existing?.id,
+          name: MOCK_LLM_PROVIDER_NAME,
+          provider: "openai_compatible",
+          api_key: MOCK_LLM_API_KEY,
+          api_key_changed: true,
+          api_base: mockLlmApiBase(),
           is_public: true,
           groups: [],
           personas: [],
-          model_configurations: [{ name: defaultModelName, is_visible: true }],
+          model_configurations: MOCK_LLM_MODELS.map((model) => ({
+            name: model.name,
+            custom_display_name: model.displayName,
+            is_visible: true,
+            max_input_tokens: MOCK_LLM_MAX_INPUT_TOKENS,
+            supports_image_input: true,
+          })),
         },
       }
     );
 
     const responseData = await this.handleResponse<{ id: number }>(
       response,
-      "Failed to create public provider"
+      "Failed to upsert the mock LLM provider"
     );
 
     // Set as default so get_default_llm() works (needed for tokenization, etc.)
-    await this.setProviderAsDefault(responseData.id, defaultModelName);
+    await this.setProviderAsDefault(
+      responseData.id,
+      MOCK_LLM_DEFAULT_MODEL.name
+    );
 
+    if (existing) {
+      return null;
+    }
     this.log(
-      `Created public LLM provider: ${providerName} (ID: ${responseData.id})`
+      `Created mock LLM provider: ${MOCK_LLM_PROVIDER_NAME} (ID: ${responseData.id})`
     );
     return responseData.id;
   }

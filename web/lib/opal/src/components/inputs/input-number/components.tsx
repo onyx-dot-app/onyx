@@ -4,6 +4,7 @@ import * as React from "react";
 import "@opal/components/inputs/input-number/styles.css";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components/buttons/button/components";
+import { Text } from "@opal/components";
 import { SvgChevronUp, SvgChevronDown, SvgRevert } from "@opal/icons";
 
 type InputNumberVariant =
@@ -66,6 +67,10 @@ export interface InputNumberProps {
   variant?: InputNumberVariant;
   disabled?: boolean;
   placeholder?: string;
+  /** Unit text shown after the value, inside the field (e.g. "minutes"). */
+  suffix?: string;
+  /** Applied to the input so a `<label htmlFor>` can target it. */
+  id?: string;
 }
 
 export default function InputNumber({
@@ -80,6 +85,8 @@ export default function InputNumber({
   variant = "primary",
   disabled = false,
   placeholder,
+  suffix,
+  id,
 }: InputNumberProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [inputValue, setInputValue] = React.useState(
@@ -127,6 +134,8 @@ export default function InputNumber({
     // On blur, if empty, keep as null so placeholder shows
     if (inputValue.trim() === "") {
       onChange(null);
+    } else if (value !== null && min !== undefined && value < min) {
+      onChange(min);
     } else {
       setInputValue(value === null ? "" : String(value));
     }
@@ -150,10 +159,9 @@ export default function InputNumber({
     if (!Number.isFinite(val)) {
       return;
     }
-    let newValue = val;
-    if (min !== undefined) newValue = Math.max(newValue, min);
-    if (max !== undefined) newValue = Math.min(newValue, max);
-    onChange(newValue);
+    // Clamp to max while typing, but to min only on blur: a value below min is
+    // often the start of a valid one (the "0" of "0.5").
+    onChange(max !== undefined ? Math.min(val, max) : val);
   };
 
   return (
@@ -167,6 +175,7 @@ export default function InputNumber({
     >
       <input
         ref={inputRef}
+        id={id}
         type="text"
         inputMode={decimalPlaces === 0 ? "numeric" : "decimal"}
         pattern={inputPattern}
@@ -182,6 +191,11 @@ export default function InputNumber({
       />
 
       <div className="flex flex-row items-center gap-1">
+        {suffix && (
+          <Text font="main-ui-body" color={isDisabled ? "text-01" : "text-03"}>
+            {suffix}
+          </Text>
+        )}
         {showReset && (
           <Button
             disabled={!canReset || isDisabled}

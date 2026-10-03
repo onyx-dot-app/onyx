@@ -1,4 +1,5 @@
-import type { ValidInputTypes, ValidSources } from "@/lib/types";
+import type { ValidInputTypes } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 
 export interface ConnectorBase<T> {
   name: string;

@@ -16,6 +16,7 @@ from ee.onyx.external_permissions.google_drive.models import (
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.utils import build_domain_group_id
 from onyx.configs.app_configs import JOB_TIMEOUT
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.resources import (
@@ -505,7 +506,9 @@ def gdrive_group_sync(
 ) -> Generator[ExternalUserGroup, None, None]:
     # Initialize connector and build credential/service objects
     google_drive_connector = GoogleDriveConnector(
-        **cc_pair.connector.connector_specific_config
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
     )
     google_drive_connector.load_credentials(credential_json(cc_pair))
     admin_service = get_admin_service(

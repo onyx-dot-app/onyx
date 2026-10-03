@@ -5,9 +5,8 @@ import {
   BraintrustIcon,
   BoxIcon,
 } from "@/components/icons/icons";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SourceCategory, SourceMetadata } from "@/lib/search/types";
-import { Agent } from "@/lib/agents/types";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
@@ -45,6 +44,7 @@ import {
   SvgLumapps,
   SvgMediawiki,
   SvgNotion,
+  SvgOnedrive,
   SvgOracle,
   SvgOutline,
   SvgOutlook,
@@ -58,6 +58,7 @@ import {
   SvgWikipedia,
   SvgXenforo,
   SvgZendesk,
+  SvgZoom,
   SvgZulip,
 } from "@opal/logos";
 
@@ -209,6 +210,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     oauthSupported: true,
     isPopular: true,
   },
+  onedrive: {
+    icon: SvgOnedrive,
+    displayName: "OneDrive",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/onedrive`,
+  },
   box: {
     icon: BoxIcon,
     displayName: "Box",
@@ -329,6 +336,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Outlook",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/outlook`,
+  },
+  zoom: {
+    icon: SvgZoom,
+    displayName: "Zoom",
+    category: SourceCategory.Messaging,
   },
   gmail: {
     icon: SvgGmail,
@@ -520,7 +532,9 @@ export function listSourceMetadata(): SourceMetadata[] {
         // user_file is for internal use (projects), not the Add Connector page
         source !== "user_file" &&
         // craft_file backs the Craft user library, which has its own upload UI
-        source !== "craft_file"
+        source !== "craft_file" &&
+        // TODO: unhide once the rest of the Zoom connector stack has merged
+        source !== "zoom"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);

@@ -20,7 +20,8 @@ from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters, TimeRange
-from onyx.document_index.interfaces_new import TenantState
+from onyx.db.enums import VectorQuantization
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import (
     OpenSearchDocumentMissingError,
     OpenSearchIndexClient,
@@ -1959,11 +1960,13 @@ class TestOpenSearchClient:
             f"excluding untagged content. Got: {result_ids}"
         )
 
+    @pytest.mark.parametrize("vector_quantization", list(VectorQuantization))
     def test_hybrid_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
         self,
         test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
+        vector_quantization: VectorQuantization,
     ) -> None:
         """
         Tests search with a normalization pipeline and filters returns chunks
@@ -1974,7 +1977,9 @@ class TestOpenSearchClient:
         _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=tenant_x.multitenant
+            vector_dimension=128,
+            multitenant=tenant_x.multitenant,
+            vector_quantization=vector_quantization,
         )
         settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -2052,6 +2057,7 @@ class TestOpenSearchClient:
             # Explicitly pass in an empty list to enforce private doc filtering.
             index_filters=IndexFilters(access_control_list=[], tenant_id=None),
             include_hidden=False,
+            vector_quantization=vector_quantization,
         )
         pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
@@ -2744,21 +2750,28 @@ class TestOpenSearchClient:
         assert results[1].match_highlights.get(CONTENT_FIELD_NAME, [])
         assert results[1].score < results[0].score
 
+    @pytest.mark.parametrize("vector_quantization", list(VectorQuantization))
     def test_semantic_search(
         self,
         test_client: OpenSearchIndexClient,
         monkeypatch: pytest.MonkeyPatch,
+        vector_quantization: VectorQuantization,
     ) -> None:
         """
         Tests semantic search with filters for ACL, hidden documents, and tenant
         isolation.
+
+        The exact score assertions also check that quantized fields are
+        rescored with the full-precision vectors.
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=tenant_x.multitenant
+            vector_dimension=128,
+            multitenant=tenant_x.multitenant,
+            vector_quantization=vector_quantization,
         )
         settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -2844,6 +2857,7 @@ class TestOpenSearchClient:
                 tenant_id=None,
             ),
             include_hidden=False,
+            vector_quantization=vector_quantization,
         )
 
         # Under test.

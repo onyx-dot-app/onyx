@@ -4,8 +4,9 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
 
 /**
  * The credential gate on the single-page connector setup: for a source that
- * needs a credential, the configuration stays disabled and Connect stays
- * disabled until one is selected; once selected and the required fields are
+ * needs a credential, the configuration and Connect stay disabled until a
+ * credential is selected and the credential-bound fields (for Confluence, the
+ * site URL) form a valid combination with it. Once the required fields are
  * filled, Connect enables.
  *
  * Confluence is the source because it needs a credential and the credential
@@ -15,34 +16,39 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
  */
 const SOURCE = "confluence";
 const WIKI_BASE = "https://example.atlassian.net/wiki";
+const OTHER_WIKI_BASE = "https://other-example.atlassian.net/wiki";
 
 test.describe("Credentialed connector setup", () => {
   let credentialName: string;
-  let credentialId: number | null = null;
+  // Every credential a test creates, deleted after the test.
+  let credentialIds: number[] = [];
 
   test.beforeEach(async ({ page }) => {
     credentialName = `Confluence Credential E2E ${Date.now()}`;
     const apiClient = new OnyxApiClient(page.request);
-    credentialId = await apiClient.createCredential(SOURCE, credentialName, {
-      confluence_username: "e2e@example.com",
-      confluence_access_token: "placeholder",
-    });
+    credentialIds = [
+      await apiClient.createCredential(SOURCE, credentialName, {
+        confluence_username: "e2e@example.com",
+        confluence_access_token: "placeholder",
+      }),
+    ];
   });
 
   test.afterEach(async ({ page }) => {
-    if (credentialId === null) return;
     const apiClient = new OnyxApiClient(page.request);
-    try {
-      await apiClient.deleteCredential(credentialId);
-    } catch (error) {
-      console.warn(
-        `Failed to clean up credential "${credentialName}": ${error}`
-      );
+    for (const credentialId of credentialIds) {
+      try {
+        await apiClient.deleteCredential(credentialId);
+      } catch (error) {
+        console.warn(`Failed to clean up credential ${credentialId}: ${error}`);
+      }
     }
-    credentialId = null;
+    credentialIds = [];
   });
 
-  test("configuration and Connect wait for a credential", async ({ page }) => {
+  test("configuration unlocks once the credential and site URL pass the binding check", async ({
+    page,
+  }) => {
     const setupPage = new ConnectorSetupPage(page, SOURCE);
     await setupPage.goto();
 
@@ -56,15 +62,53 @@ test.describe("Credentialed connector setup", () => {
 
     await setupPage.selectCredential(credentialName);
 
-    // Selecting a credential unlocks the configuration. Connect still waits
-    // for the required fields, since validation runs as soon as the form
-    // changes.
-    await expect(setupPage.connectorNameInput).toBeEnabled();
+    // A credential alone does not unlock the configuration: the site URL is a
+    // credential-bound field and is still empty.
+    await expect(setupPage.connectorNameInput).toBeDisabled();
+
+    // The bound field sits above the credential and is editable already. Once
+    // it is filled and the binding check passes, the configuration unlocks.
+    // Connect still waits for the required fields.
+    const siteUrl = setupPage.textField("wiki_base");
+    await expect(siteUrl).toBeEnabled();
+    await siteUrl.fill(WIKI_BASE);
+    await siteUrl.blur();
+    await expect(setupPage.connectorNameInput).toBeEnabled({ timeout: 10_000 });
     await expect(setupPage.createConnectorButton).toBeDisabled();
 
     await setupPage.connectorNameInput.fill(`Confluence E2E ${Date.now()}`);
-    await setupPage.textField("wiki_base").fill(WIKI_BASE);
 
     await expect(setupPage.createConnectorButton).toBeEnabled();
+  });
+
+  test("an OAuth credential fills in its authorized site and locks it", async ({
+    page,
+  }) => {
+    // An OAuth-style credential names the one site it was authorized for.
+    const oauthCredentialName = `Confluence OAuth Credential E2E ${Date.now()}`;
+    const apiClient = new OnyxApiClient(page.request);
+    credentialIds.push(
+      await apiClient.createCredential(SOURCE, oauthCredentialName, {
+        confluence_access_token: "placeholder",
+        confluence_refresh_token: "placeholder",
+        wiki_base: WIKI_BASE,
+      })
+    );
+
+    const setupPage = new ConnectorSetupPage(page, SOURCE);
+    await setupPage.goto();
+    await expect(setupPage.credentialRow(oauthCredentialName)).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // A site entered before the credential is replaced by the authorized one.
+    const siteUrl = setupPage.textField("wiki_base");
+    await siteUrl.fill(OTHER_WIKI_BASE);
+    await siteUrl.blur();
+    await setupPage.selectCredential(oauthCredentialName);
+
+    await expect(siteUrl).toHaveValue(WIKI_BASE);
+    await expect(siteUrl).toBeDisabled();
+    await expect(setupPage.connectorNameInput).toBeEnabled({ timeout: 10_000 });
   });
 });

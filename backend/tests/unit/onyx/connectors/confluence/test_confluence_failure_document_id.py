@@ -27,8 +27,13 @@ from onyx.connectors.confluence.connector import (
     ConfluenceConnector,
     _extract_page_id_from_url,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence,
+)
 from onyx.connectors.models import ConnectorFailure, Document
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
+)
 
 _PAGE_ID = "555"
 
@@ -45,9 +50,9 @@ def _make_connector() -> ConfluenceConnector:
     connector = ConfluenceConnector(
         wiki_base="https://example.atlassian.net/wiki", is_cloud=True
     )
-    confluence_client = mock.Mock(spec=OnyxConfluence)
+    confluence_client = mock.Mock(spec=_OnyxConfluence)
     confluence_client.paginated_cql_retrieval.return_value = iter([])
-    connector._confluence_client = confluence_client
+    connector._source_operations = gateway_with_client(confluence_client)
     return connector
 
 

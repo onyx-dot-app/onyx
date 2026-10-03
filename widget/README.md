@@ -123,6 +123,7 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 | `text-color`       | string  | `#000000bf`   | Text color (75% opacity black)           |
 | `mode`             | string  | `"launcher"`  | Display mode: `"launcher"` or `"inline"` |
 | `include-citations`| boolean | `false`       | Include citation markers in responses    |
+| `start-expanded`   | boolean | `false`       | Inline mode: show the full chat panel before the first message, instead of the compact input bar |
 
 **Note**: These attributes must be provided as HTML attributes. Only `backend-url` and `api-key` can optionally be set via environment variables for self-hosted builds.
 
@@ -232,7 +233,21 @@ The widget is embedded directly in your page layout. Perfect for dedicated suppo
 </div>
 ```
 
-**CSS Tip**: The widget will fill its container's dimensions in inline mode.
+**CSS Tip**: The widget will fill its container's dimensions in inline mode. Give the container an explicit height; otherwise the panel grows with the conversation.
+
+Before the first message, inline mode shows a compact input bar. Add `start-expanded` to show the full chat panel at the container's size from the start:
+
+```html
+<div style="height: 600px;">
+  <onyx-chat-widget mode="inline" start-expanded></onyx-chat-widget>
+</div>
+```
+
+## Keyboard Events
+
+Key presses typed into the widget do not propagate to the host page (except Escape). The widget uses Shadow DOM, so a page-level handler sees `event.target` as `<onyx-chat-widget>`, not the text field. Without this, handlers that block Backspace outside text fields would also block it in the widget.
+
+Handlers registered in the capture phase still run first. If such a handler blocks keys outside text fields, check `event.composedPath()[0]` instead of `event.target`.
 
 ## Development
 

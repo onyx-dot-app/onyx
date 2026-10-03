@@ -35,7 +35,7 @@ interface DividerSharedProps {
  * across the surfaces it separates, so an arbitrary step would only ever put one
  * divider out of step with the rest.
  */
-type DividerSpacing = 0 | 0.5 | 1 | 2 | 4 | 6;
+type DividerSpacing = 0 | 0.5 | 1 | 2 | 3 | 4 | 6;
 
 /** Plain line — no title, no description. */
 type DividerBareProps = Omit<
@@ -81,7 +81,10 @@ type DividerFoldableProps = Omit<
   defaultOpen?: boolean;
   /** Callback when open state changes. */
   onOpenChange?: (open: boolean) => void;
-  /** Content revealed when open. */
+  /**
+   * Content revealed when open. Stays mounted while closed, inert and
+   * hidden from assistive tech, so the fold animates both ways.
+   */
   children?: React.ReactNode;
   /**
    * Overrides the header's interaction state (a listbox highlights the
@@ -217,7 +220,16 @@ function FoldableDivider({
           </div>
         </Interactive.Container>
       </Interactive.Stateless>
-      {isOpen && children}
+      {/* The content stays mounted so the fold can close as smoothly as it
+          opens; closed, it is inert and hidden from assistive tech. */}
+      <div
+        className="opal-divider-fold"
+        data-open={isOpen}
+        aria-hidden={!isOpen || undefined}
+        inert={!isOpen || undefined}
+      >
+        <div className="opal-divider-fold-inner">{children}</div>
+      </div>
     </>
   );
 }

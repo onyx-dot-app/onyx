@@ -4,10 +4,19 @@ from operator import and_
 from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import Select, delete, func, select, union_all
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
+from ee.onyx.db.cc_pair_data_access import (
+    add_cc_pair_data_access__no_commit,
+    apply_group_cc_pair_change_to_data_access__no_commit,
+    assert_restricted_cc_pairs_keep_a_group,
+    fetch_cc_pair_ids_with_data_access,
+    fetch_data_access_cc_pair_ids_for_user_group,
+    lock_cc_pairs_for_data_access__no_commit,
+    remove_cc_pair_data_access__no_commit,
+)
 from ee.onyx.server.user_group.models import (
     UserGroupCreate,
     UserGroupUpdate,
@@ -22,13 +31,18 @@ from onyx.auth.permissions import (
 from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_cc_pair_groups_for_ids,
     get_connector_credential_pair_from_id,
+    get_managed_cc_pair_ids,
+    verify_user_can_manage_all_cc_pairs,
 )
+from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
     AccountType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     GrantSource,
     Permission,
     PermissionAuthority,
@@ -52,6 +66,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup,
+    UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.permissions import (
@@ -192,6 +207,22 @@ def _cleanup_user_group__cc_pair_relationships__no_commit(
     user_group__cc_pair_relationships = db_session.scalars(stmt)
     for user_group__cc_pair_relationship in user_group__cc_pair_relationships:
         db_session.delete(user_group__cc_pair_relationship)
+
+
+def _cleanup_data_access__user_group_relationships__no_commit(
+    db_session: Session, user_group_id: int
+) -> None:
+    """Removes the rows now, not by cascade when the group row goes, so the
+    documents' group: entries drop the group before the group is deleted.
+
+    NOTE: does not commit the transaction."""
+    cc_pair_ids = fetch_data_access_cc_pair_ids_for_user_group(
+        db_session, user_group_id
+    )
+    remove_cc_pair_data_access__no_commit(
+        db_session, cc_pair_ids=cc_pair_ids, user_group_ids=[user_group_id]
+    )
+    mark_cc_pair_documents_for_sync__no_commit(db_session, cc_pair_ids)
 
 
 def _cleanup_document_set__user_group_relationships__no_commit(
@@ -419,26 +450,41 @@ def fetch_user_groups_for_documents(
     db_session: Session,
     document_ids: list[str],
 ) -> Sequence[tuple[str, list[str]]]:
-    """
-    Fetches all user groups that have access to the given documents.
-
-    NOTE: this doesn't include groups if the cc_pair is access type SYNC
-    """
-    stmt = (
-        select(Document.id, func.array_agg(UserGroup.name))
-        .join(
-            UserGroup__ConnectorCredentialPair,
-            UserGroup.id == UserGroup__ConnectorCredentialPair.user_group_id,
+    """The group: ACL entries of the given documents. PRIVATE pairs give their
+    data-access groups. PUBLIC pairs give their current manage groups, which
+    changes nothing because their documents are public. Perm-synced pairs give
+    no groups."""
+    group_cc_pairs = union_all(
+        select(
+            UserGroup__ConnectorCredentialPair.user_group_id.label("user_group_id"),
+            UserGroup__ConnectorCredentialPair.cc_pair_id.label("cc_pair_id"),
         )
         .join(
             ConnectorCredentialPair,
-            and_(
-                ConnectorCredentialPair.id
-                == UserGroup__ConnectorCredentialPair.cc_pair_id,
-                ConnectorCredentialPair.access_type.notin_(
-                    AccessType.perm_synced_types()
-                ),
-            ),
+            ConnectorCredentialPair.id == UserGroup__ConnectorCredentialPair.cc_pair_id,
+        )
+        .where(
+            UserGroup__ConnectorCredentialPair.is_current.is_(True),
+            ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+        ),
+        select(
+            UserGroup__CCPairDataAccess.user_group_id,
+            UserGroup__CCPairDataAccess.cc_pair_id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            ConnectorCredentialPair.id == UserGroup__CCPairDataAccess.cc_pair_id,
+        )
+        .where(ConnectorCredentialPair.access_type == AccessType.PRIVATE),
+    ).subquery()
+
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id, func.array_agg(UserGroup.name))
+        .select_from(group_cc_pairs)
+        .join(UserGroup, UserGroup.id == group_cc_pairs.c.user_group_id)
+        .join(
+            ConnectorCredentialPair,
+            ConnectorCredentialPair.id == group_cc_pairs.c.cc_pair_id,
         )
         .join(
             DocumentByConnectorCredentialPair,
@@ -449,13 +495,11 @@ def fetch_user_groups_for_documents(
                 == ConnectorCredentialPair.credential_id,
             ),
         )
-        .join(Document, Document.id == DocumentByConnectorCredentialPair.id)
-        .where(Document.id.in_(document_ids))
-        .where(UserGroup__ConnectorCredentialPair.is_current == True)  # noqa: E712
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
         # don't include CC pairs that are being deleted
         # NOTE: CC pairs can never go from DELETING to any other state -> it's safe to ignore them
         .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
-        .group_by(Document.id)
+        .group_by(DocumentByConnectorCredentialPair.id)
     )
 
     return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
@@ -500,14 +544,18 @@ def _add_user__user_group_relationships__no_commit(
 
 
 def _add_user_group__cc_pair_relationships__no_commit(
-    db_session: Session, user_group_id: int, cc_pair_ids: list[int]
+    db_session: Session,
+    user_group_id: int,
+    manage_roles: dict[int, ConnectorManageRole],
 ) -> list[UserGroup__ConnectorCredentialPair]:
-    """NOTE: does not commit the transaction."""
+    """``manage_roles`` maps each cc_pair id to the group's role on it.
+
+    NOTE: does not commit the transaction."""
     relationships = [
         UserGroup__ConnectorCredentialPair(
-            user_group_id=user_group_id, cc_pair_id=cc_pair_id
+            user_group_id=user_group_id, cc_pair_id=cc_pair_id, role=role
         )
-        for cc_pair_id in cc_pair_ids
+        for cc_pair_id, role in manage_roles.items()
     ]
     db_session.add_all(relationships)
     return relationships
@@ -552,7 +600,13 @@ def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserG
     _add_user_group__cc_pair_relationships__no_commit(
         db_session=db_session,
         user_group_id=db_user_group.id,
-        cc_pair_ids=user_group.cc_pair_ids,
+        manage_roles=dict.fromkeys(user_group.cc_pair_ids, ConnectorManageRole.EDITOR),
+    )
+    apply_group_cc_pair_change_to_data_access__no_commit(
+        db_session,
+        user_group_id=db_user_group.id,
+        added_cc_pair_ids=user_group.cc_pair_ids,
+        removed_cc_pair_ids=[],
     )
 
     recompute_user_permissions__no_commit(user_group.user_ids, db_session)
@@ -577,7 +631,7 @@ def _mark_user_group__cc_pair_relationships_outdated__no_commit(
 def _current_cc_pair_ids(db_user_group: UserGroup) -> list[int]:
     """The cc_pairs currently attached to the group — is_current junction rows only.
 
-    A removed cc_pair keeps a stale ``is_current=False`` row until the Vespa sync
+    A removed cc_pair keeps a stale ``is_current=False`` row until the document index sync
     deletes it, and the plain ``cc_pairs`` relationship has no is_current filter, so
     it would still surface the removed pair. Reading it as "current" lets a removed
     (possibly public / out-of-scope) pair be re-attached without re-clearing the
@@ -710,21 +764,20 @@ def _assert_default_group_update_allowed(
         )
 
 
-def _assert_group_update_within_scope(
+def assert_cc_pairs_attachable_to_group(
     db_session: Session,
     user: User,
     user_group_id: int,
-    added_cc_pair_ids: set[int],
+    cc_pair_ids: set[int],
+    access_level: CCPairAccessLevel,
 ) -> None:
-    """GATE 2 for a scoped manager editing a group: the group must be one they
-    manage, and every newly-attached cc_pair must be a private one within their
-    managed scope — otherwise the junction rewrite could attach a public or
-    out-of-scope connector to the group, granting its members access. Admins /
-    global holders bypass both checks."""
-    assert_manages_group(user, db_session, group_id=user_group_id)
-
-    # The cc_pair re-attach vector only applies to scoped managers; a global
-    # MANAGE_USER_GROUPS holder keeps today's unrestricted attach behavior.
+    """GATE 2 for attaching cc_pairs to a group, or changing the group's role on
+    them: for a scoped manager, every pair must be a private one within their
+    managed scope, or a groupless one they created. Otherwise the write could
+    attach a public or out-of-scope connector to the group. The manager must
+    also hold ``access_level`` on each pair, so they can't give a group more
+    than they have. A global MANAGE_USER_GROUPS holder is not restricted. The
+    caller checks that it manages the group."""
     if (
         has_permission(user, Permission.MANAGE_USER_GROUPS)
         is not PermissionAuthority.SCOPED
@@ -732,7 +785,7 @@ def _assert_group_update_within_scope(
         return
 
     current_groups_by_cc_pair: dict[int, list[int]] = defaultdict(list)
-    for row in get_cc_pair_groups_for_ids(db_session, list(added_cc_pair_ids)):
+    for row in get_cc_pair_groups_for_ids(db_session, list(cc_pair_ids)):
         if row.is_current and row.cc_pair_id is not None:
             current_groups_by_cc_pair[row.cc_pair_id].append(row.user_group_id)
 
@@ -740,12 +793,12 @@ def _assert_group_update_within_scope(
         cc_pair.id: cc_pair
         for cc_pair in db_session.scalars(
             select(ConnectorCredentialPair).where(
-                ConnectorCredentialPair.id.in_(added_cc_pair_ids)
+                ConnectorCredentialPair.id.in_(cc_pair_ids)
             )
         )
     }
 
-    for cc_pair_id in added_cc_pair_ids:
+    for cc_pair_id in cc_pair_ids:
         cc_pair = cc_pairs_by_id.get(cc_pair_id)
         if cc_pair is None:
             raise OnyxError(
@@ -754,7 +807,7 @@ def _assert_group_update_within_scope(
             )
         # A groupless cc_pair has no current group for within_scope to judge, so it
         # would pass on the requested group alone. Only its creator may attach it —
-        # the same fallback that makes it editable at all (see _add_user_filters).
+        # the same fallback that makes it manageable at all (_manage_access_clause).
         if not current_groups_by_cc_pair[cc_pair_id] and cc_pair.creator_id != user.id:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -768,6 +821,15 @@ def _assert_group_update_within_scope(
             current_group_ids=current_groups_by_cc_pair[cc_pair_id],
             requested_group_ids=[user_group_id],
             is_non_public=cc_pair.access_type != AccessType.PUBLIC,
+        )
+
+    if cc_pair_ids and not verify_user_can_manage_all_cc_pairs(
+        cc_pair_ids, db_session, user, access_level
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Group managers can't give a group more access to a connector "
+            "than they have.",
         )
 
 
@@ -803,8 +865,8 @@ def update_user_group(
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
     """If successful, this can set db_user_group.is_up_to_date = False.
-    That will be processed by check_for_vespa_user_groups_sync_task and trigger
-    a long running background sync to Vespa.
+    That will be processed by check_for_vespa_sync_task and trigger
+    a long running background sync to the document index.
     """
     # Gate before any read so a non-manager can't confirm the group exists; the
     # cc_pair scope check below needs the group row and runs after.
@@ -834,11 +896,13 @@ def update_user_group(
         db_user_group,
         attaching_cc_pairs=bool(added_cc_pair_ids),
     )
-    _assert_group_update_within_scope(
+    # A newly attached pair gets EDITOR.
+    assert_cc_pairs_attachable_to_group(
         db_session,
         user,
         user_group_id,
-        added_cc_pair_ids=added_cc_pair_ids,
+        cc_pair_ids=added_cc_pair_ids,
+        access_level=CCPairAccessLevel.EDIT,
     )
 
     current_user_ids = {user.id for user in db_user_group.users}
@@ -894,13 +958,29 @@ def update_user_group(
 
     cc_pairs_updated = current_cc_pair_ids != requested_cc_pair_ids
     if cc_pairs_updated:
+        # Read before the rows are marked outdated. Kept pairs keep their role;
+        # newly attached pairs get EDITOR, today's full scoped-manager power.
+        current_roles = {
+            relationship.cc_pair_id: relationship.role
+            for relationship in db_user_group.cc_pair_relationships
+            if relationship.is_current
+        }
         _mark_user_group__cc_pair_relationships_outdated__no_commit(
             db_session=db_session, user_group_id=user_group_id
         )
         _add_user_group__cc_pair_relationships__no_commit(
             db_session=db_session,
             user_group_id=db_user_group.id,
-            cc_pair_ids=list(requested_cc_pair_ids),
+            manage_roles={
+                cc_pair_id: current_roles.get(cc_pair_id, ConnectorManageRole.EDITOR)
+                for cc_pair_id in requested_cc_pair_ids
+            },
+        )
+        apply_group_cc_pair_change_to_data_access__no_commit(
+            db_session,
+            user_group_id=user_group_id,
+            added_cc_pair_ids=added_cc_pair_ids,
+            removed_cc_pair_ids=current_cc_pair_ids - requested_cc_pair_ids,
         )
 
     if cc_pairs_updated and not DISABLE_VECTOR_DB:
@@ -938,6 +1018,74 @@ def update_user_group(
         )
 
     return db_user_group
+
+
+def set_user_group_data_access_cc_pairs(
+    db_session: Session,
+    user: User,
+    user_group_id: int,
+    cc_pair_ids: set[int],
+) -> set[int]:
+    """Sets the PRIVATE and SYNC_RESTRICTED pairs whose documents the group's
+    members may read. Every added pair must be one the user may edit. Current
+    pairs the user cannot edit stay. Returns the group's data-access pair ids."""
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
+    db_user_group = fetch_user_group(db_session, user_group_id)
+    if db_user_group is None:
+        raise ValueError(f"UserGroup with id '{user_group_id}' not found")
+    _check_user_group_is_modifiable(db_user_group)
+
+    current_cc_pair_ids = fetch_data_access_cc_pair_ids_for_user_group(
+        db_session, user_group_id
+    )
+    added_cc_pair_ids = cc_pair_ids - current_cc_pair_ids
+    # Like the pair-side setter, the caller changes only what they can manage.
+    removed_cc_pair_ids = get_managed_cc_pair_ids(
+        current_cc_pair_ids - cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
+    )
+    final_cc_pair_ids = (current_cc_pair_ids - removed_cc_pair_ids) | added_cc_pair_ids
+    _assert_default_group_update_allowed(
+        user, db_user_group, attaching_cc_pairs=bool(added_cc_pair_ids)
+    )
+    changed_cc_pair_ids = added_cc_pair_ids | removed_cc_pair_ids
+    if not changed_cc_pair_ids:
+        return current_cc_pair_ids
+
+    assert_cc_pairs_attachable_to_group(
+        db_session,
+        user,
+        user_group_id,
+        cc_pair_ids=added_cc_pair_ids,
+        access_level=CCPairAccessLevel.EDIT,
+    )
+    if not verify_user_can_manage_all_cc_pairs(
+        changed_cc_pair_ids, db_session, user, CCPairAccessLevel.EDIT
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only change data access of connectors you can edit.",
+        )
+    if invalid_ids := added_cc_pair_ids - fetch_cc_pair_ids_with_data_access(
+        db_session, added_cc_pair_ids
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Data access can only be set on private or restricted connectors: "
+            f"{sorted(invalid_ids)}",
+        )
+
+    lock_cc_pairs_for_data_access__no_commit(db_session, removed_cc_pair_ids)
+    add_cc_pair_data_access__no_commit(
+        db_session, cc_pair_ids=added_cc_pair_ids, user_group_ids=[user_group_id]
+    )
+    remove_cc_pair_data_access__no_commit(
+        db_session, cc_pair_ids=removed_cc_pair_ids, user_group_ids=[user_group_id]
+    )
+    assert_restricted_cc_pairs_keep_a_group(db_session, removed_cc_pair_ids)
+    mark_cc_pair_documents_for_sync__no_commit(db_session, changed_cc_pair_ids)
+    db_session.commit()
+    return final_cc_pair_ids
 
 
 def _set_group_manager__no_commit(
@@ -988,13 +1136,16 @@ def rename_user_group(
     db_user_group.name = new_name
     db_user_group.time_last_modified_by_user = func.now()
 
-    # CC pair documents in Vespa contain the group name, so we need to
-    # trigger a sync to update them with the new name.
-    _mark_user_group__cc_pair_relationships_outdated__no_commit(
-        db_session=db_session, user_group_id=user_group_id
-    )
+    # Documents in the index carry the group name, so re-sync them. The group's
+    # cc_pair rows stay current: the sync reaches every document of the group's
+    # cc_pairs, and marking the rows outdated would make the sync delete them.
+    # The sync does not reach the group's data-access pairs, so mark those.
     if not DISABLE_VECTOR_DB:
         db_user_group.is_up_to_date = False
+        mark_cc_pair_documents_for_sync__no_commit(
+            db_session,
+            fetch_data_access_cc_pair_ids_for_user_group(db_session, user_group_id),
+        )
 
     db_session.commit()
     return db_user_group
@@ -1043,6 +1194,9 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
     ]
 
     _mark_user_group__cc_pair_relationships_outdated__no_commit(
+        db_session=db_session, user_group_id=user_group_id
+    )
+    _cleanup_data_access__user_group_relationships__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
 

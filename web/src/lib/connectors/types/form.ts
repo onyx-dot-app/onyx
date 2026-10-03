@@ -1,5 +1,5 @@
 /** The schema a connector's creation form is rendered from. */
-import type { Credential } from "./credential";
+import type { Credential } from "@/lib/credentials/types";
 
 export type InputType =
   | "list"
@@ -75,9 +75,16 @@ export interface NumberOption extends Option {
   default?: number;
 }
 
+/** A key under `admin.connectorsList.checkboxTabs` in the message catalog. */
+export type CheckboxTabLabelKey = "confluenceCloud" | "confluenceDataCenter";
+
 export interface BooleanOption extends Option {
   type: "checkbox";
   default?: boolean;
+  /** The value the credential sets; the form uses it while the field is disabled. */
+  initial?: (currentCredential: Credential<any> | null) => boolean | undefined;
+  /** Shows the value as two tabs with these labels instead of a checkbox. */
+  tabLabels?: { true: CheckboxTabLabelKey; false: CheckboxTabLabelKey };
 }
 
 export interface FileOption extends Option {
@@ -90,23 +97,24 @@ export interface StringTabOption extends Option {
   default?: string;
 }
 
+export type ConnectorValueField =
+  | BooleanOption
+  | ListOption
+  | StringPairListOption
+  | TextOption
+  | NumberOption
+  | SelectOption
+  | MultiSelectOption
+  | FileOption
+  | StringTabOption;
+
 export interface TabOption extends Option {
   type: "tab";
   defaultTab?: string;
   tabs: {
     label: string;
     value: string;
-    fields: (
-      | BooleanOption
-      | ListOption
-      | StringPairListOption
-      | TextOption
-      | NumberOption
-      | SelectOption
-      | MultiSelectOption
-      | FileOption
-      | StringTabOption
-    )[];
+    fields: ConnectorValueField[];
   }[];
   default?: [];
 }
@@ -115,28 +123,8 @@ export interface ConnectionConfiguration {
   description: string;
   subtext?: string;
   initialConnectorName?: string; // a key in the credential to prepopulate the connector name field
-  values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
-  advanced_values: (
-    | BooleanOption
-    | ListOption
-    | StringPairListOption
-    | TextOption
-    | NumberOption
-    | SelectOption
-    | MultiSelectOption
-    | FileOption
-    | TabOption
-  )[];
+  values: (ConnectorValueField | TabOption)[];
+  advanced_values: (ConnectorValueField | TabOption)[];
   overrideDefaultFreq?: number;
   advancedValuesVisibleCondition?: (
     values: any,

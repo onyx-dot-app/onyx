@@ -29,6 +29,8 @@ export interface WidgetConfig {
 
   // Optional - Display
   mode?: "launcher" | "inline";
+  // Inline mode: show the full chat panel before the first message.
+  startExpanded?: boolean;
 
   // Optional - Citations
   includeCitations?: boolean;

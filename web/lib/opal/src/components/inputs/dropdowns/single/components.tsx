@@ -84,6 +84,8 @@ function SingleDropdown({
   showOtherOptions = false,
   dropdownMaxHeight,
   search = false,
+  onSearchChange,
+  onReachEnd,
   ...rest
 }: WithoutStyles<SingleDropdownProps>) {
   const typeIn = trigger === "type-in";
@@ -107,6 +109,7 @@ function SingleDropdown({
     dropdownRef,
     setFloatingRef,
     floatingStyles,
+    isPositioned,
   } = useSelectOverlay();
   const fieldContext = useContext(FieldContext);
 
@@ -165,8 +168,10 @@ function SingleDropdown({
   // with the list.
   const [searchText, setSearchText] = useState("");
   useEffect(() => {
-    if (!isOpen) setSearchText("");
-  }, [isOpen]);
+    if (isOpen) return;
+    setSearchText("");
+    onSearchChange?.("");
+  }, [isOpen, onSearchChange]);
   const filterText = typeIn ? inputValue : search ? searchText : "";
 
   // Filtering: each section filters independently; empty ones disappear.
@@ -238,6 +243,13 @@ function SingleDropdown({
     isSelected: isSelectedOption,
     searching: hasSearchTerm,
   });
+  const shownOptions = useMemo(
+    () =>
+      foldedSections
+        .filter((group) => !group.folded)
+        .flatMap((group) => group.options),
+    [foldedSections]
+  );
 
   // The keyboard's stops in render order: the create row when shown, then
   // each group's title (when foldable) and its rows.
@@ -451,6 +463,12 @@ function SingleDropdown({
       // portalled, so its clicks bubble here through React's tree too: a
       // foldable title, the search field or the padding must not toggle
       // the list. Only a pick closes it, and the rows do that themselves.
+      //
+      // A wrapping <label> forwards a click on anything but the input to
+      // the input, which would reach here and toggle a second time: a click
+      // on the field's padding would open and close at once. Cancelling the
+      // click's default action drops the forwarded click; nothing else in
+      // here relies on it, since focus moves on mousedown.
       onClick={
         typeIn
           ? undefined
@@ -461,6 +479,7 @@ function SingleDropdown({
               ) {
                 return;
               }
+              event.preventDefault();
               toggleDropdown();
             }
       }
@@ -547,6 +566,7 @@ function SingleDropdown({
           isOpen={isOpen}
           disabled={disabled}
           floatingStyles={floatingStyles}
+          isPositioned={isPositioned}
           setFloatingRef={setFloatingRef}
           fieldId={fieldId}
           placeholder={placeholder ?? ""}
@@ -570,12 +590,14 @@ function SingleDropdown({
           dropdownMaxHeight={dropdownMaxHeight}
           keyboardNav={isKeyboardNav}
           onToggleGroup={toggleGroup}
+          onReachEnd={onReachEnd && (() => onReachEnd(shownOptions))}
           searchField={
             search
               ? {
                   value: searchText,
                   onChange: (next) => {
                     setSearchText(next);
+                    onSearchChange?.(next);
                     // Typing never highlights; only walking the list does.
                     setHighlightedIndex(-1);
                     setIsKeyboardNav(false);

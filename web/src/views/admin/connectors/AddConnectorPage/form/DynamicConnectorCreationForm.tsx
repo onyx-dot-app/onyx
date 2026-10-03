@@ -6,8 +6,8 @@ import { TextFormField } from "@/components/Field";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
 import { AccessTypeGroupSelector } from "@/components/admin/connectors/AccessTypeGroupSelector";
-import { ConfigurableSources } from "@/lib/types";
-import type { Credential } from "@/lib/connectors/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import type { Credential } from "@/lib/credentials/types";
 import { RenderField } from "./FieldRendering";
 import { useFormikContext } from "formik";
 

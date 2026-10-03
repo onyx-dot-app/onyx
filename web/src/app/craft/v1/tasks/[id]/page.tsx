@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
@@ -13,7 +14,6 @@ import {
   SvgPauseCircle,
   SvgPlayCircle,
   SvgTrash,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   deleteScheduledTask,
@@ -195,7 +195,7 @@ export default function ScheduledTaskDetailPage() {
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SvgSimpleLoader className="h-6 w-6" />
+            <IconLoader className="h-6 w-6" />
           </div>
         ) : error || !data ? (
           <Text font="main-ui-body" color="text-03">

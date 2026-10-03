@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
@@ -11,7 +12,6 @@ import {
 } from "@/components/ui/table";
 import Text from "@/refresh-components/texts/Text";
 import { InputSingleSelect } from "@opal/components";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
@@ -347,7 +347,7 @@ export function QueryHistoryTable({
                 <TableRow>
                   <TableCell colSpan={6} className="text-center">
                     <div className="flex justify-center">
-                      <SvgSimpleLoader className="h-6 w-6" />
+                      <IconLoader className="h-6 w-6" />
                     </div>
                   </TableCell>
                 </TableRow>

@@ -16,6 +16,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     ExternalAppType,
     SandboxStatus,
     SkillSharePermission,
@@ -213,7 +214,9 @@ def _make_private_cc_pair(
     db_session.flush()
     db_session.add(
         UserGroup__ConnectorCredentialPair(
-            user_group_id=group.id, cc_pair_id=cc_pair.id
+            user_group_id=group.id,
+            cc_pair_id=cc_pair.id,
+            role=ConnectorManageRole.EDITOR,
         )
     )
     db_session.flush()

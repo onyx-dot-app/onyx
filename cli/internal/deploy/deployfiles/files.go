@@ -57,7 +57,7 @@ var (
 		Mode:      0644,
 	}
 	// DevOverlay publishes the service ports (API, Postgres, Redis,
-	// OpenSearch, model server, MinIO, code interpreter) on the host. Stacked
+	// OpenSearch, model server, object store, MinIO, code interpreter) on the host. Stacked
 	// on Compose like LiteOverlay, but flag-only (--dev): it takes the
 	// deployment's internals out from behind nginx.
 	DevOverlay = File{

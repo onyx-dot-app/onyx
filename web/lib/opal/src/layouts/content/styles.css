@@ -34,6 +34,11 @@
   initial-value: transparent;
 }
 
+/* `titleColor` sets --content-title-color inline on the wrapper. It stays
+   unregistered on purpose: only an unregistered variable honours the var()
+   fallback each colour mode gives the title, and the disabled rule below
+   assigns --content-foreground directly, so it still outranks the override. */
+
 /* ---------------------------------------------------------------------------
    Color modes — driven by `data-content-color` on the dispatcher wrapper
    --------------------------------------------------------------------------- */
@@ -42,55 +47,70 @@
    them. A mode that needs its own can still override below. */
 [data-content-color] {
   --content-foreground-secondary: var(--text-03);
+  /* Custom properties inherit, so a nested Content would take an outer
+     titleColor. Reset at every boundary; an override set inline on this
+     element still wins over this rule. */
+  --content-title-color: initial;
 }
 
 [data-content-color="default"] {
-  --content-foreground: var(--text-04);
+  --content-foreground: var(--content-title-color, var(--text-04));
   --content-foreground-icon: var(--text-04);
   color: var(--content-foreground);
 }
 
 [data-content-color="muted"] {
-  --content-foreground: var(--text-03);
+  --content-foreground: var(--content-title-color, var(--text-03));
   --content-foreground-icon: var(--text-03);
   color: var(--content-foreground);
 }
 
+/* Status glyph against muted body text: the icon carries the state and the
+   text stays secondary. */
 [data-content-color="success"] {
-  --content-foreground: var(--text-04);
+  --content-foreground: var(--content-title-color, var(--text-03));
   --content-foreground-icon: var(--status-success-05);
-  color: var(--content-foreground);
-}
-
-[data-content-color="danger"] {
-  --content-foreground: var(--status-error-05);
-  --content-foreground-icon: var(--status-error-05);
   color: var(--content-foreground);
 }
 
 [data-content-color="warning"] {
-  --content-foreground: var(--status-warning-05);
+  --content-foreground: var(--content-title-color, var(--text-03));
   --content-foreground-icon: var(--status-warning-05);
   color: var(--content-foreground);
 }
 
-/* Status glyph against muted body text: the field-message pairing, where the
-   icon carries the state and the text stays secondary. */
-[data-content-color="muted-success"] {
-  --content-foreground: var(--text-03);
-  --content-foreground-icon: var(--status-success-05);
+[data-content-color="danger"] {
+  --content-foreground: var(--content-title-color, var(--text-03));
+  --content-foreground-icon: var(--status-error-05);
   color: var(--content-foreground);
 }
 
-[data-content-color="muted-warning"] {
-  --content-foreground: var(--text-03);
-  --content-foreground-icon: var(--status-warning-05);
-  color: var(--content-foreground);
-}
-
+/* Interactive is default plus the interactivity: outside an Interactive
+   surface it renders exactly as default. Inside one it hands the icon and
+   text to the interactive foregrounds, so hover, selected and disabled
+   reach them; the registered interactive variables never fall back on
+   their own, which is why the bare case is spelled out. */
 [data-content-color="interactive"] {
+  --content-foreground: var(--content-title-color, var(--text-04));
+  --content-foreground-icon: var(--text-04);
+  color: var(--content-foreground);
+}
+
+.interactive [data-content-color="interactive"] {
   color: inherit;
   --content-foreground-icon: var(--interactive-foreground-icon);
+}
+
+/* A title override on an interactive Content holds at rest only: any
+   hover, press, focus, selection or disabled state on the surface drops
+   back to the inherited interactive foreground. */
+.interactive:not(:hover):not(:active):not(:focus-visible):not(
+    [data-interaction="hover"]
+  ):not([data-interaction="active"]):not(
+    [data-interactive-state="selected"]
+  ):not([data-disabled])
+  [data-content-color="interactive"] {
+  color: var(--content-title-color, inherit);
 }
 
 /* Disabled is a state, so it outranks whatever the content normally looks
@@ -375,8 +395,11 @@
   @apply w-full;
 }
 
+/* items-start: the icon container is exactly one title line tall (its icon
+   is lineHeight - 4px, plus 2px padding each side), so a one-line title reads
+   centred and a wrapped title keeps its icon on the first line. */
 .opal-content-md-header {
-  @apply flex flex-row items-center w-full;
+  @apply flex flex-row items-start w-full;
   gap: 0.125rem;
 }
 
@@ -405,8 +428,8 @@
   /* min-w-0: as a flex item next to the icon, the row's automatic minimum
      width would push a clamped title past the container edge, clipping the
      ellipsis out of view. */
-  @apply flex items-center w-full min-w-0;
-  gap: 0.25rem;
+  /* gap-0: each Text's own 2px inline padding spaces the row. */
+  @apply flex items-center w-full min-w-0 gap-0;
 }
 
 .opal-content-md-input-sizer {
@@ -477,8 +500,9 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-sm {
-  /* since `ContentSm` doesn't have a description, it's possible to center-align the icon and text */
-  @apply flex items-center;
+  /* items-start: as in ContentMd, the icon container is one title line tall,
+     so a wrapped title keeps its icon on the first line. */
+  @apply flex items-start;
   gap: 0.125rem;
 }
 

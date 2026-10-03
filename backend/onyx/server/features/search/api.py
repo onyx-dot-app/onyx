@@ -156,7 +156,7 @@ def search(
 
     # 4. Get document index
     search_settings = get_current_search_settings(db_session)
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     # 5. Get tool_id
     all_tools = get_tools(db_session)

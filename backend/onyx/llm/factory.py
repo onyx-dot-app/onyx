@@ -291,7 +291,7 @@ def llm_from_provider(
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
     user_defaults: UserChatDefaults | None = None,
-) -> LLM:
+) -> LitellmLLM:
     model_configuration = _get_model_configuration(
         llm_provider=llm_provider, model_name=model_name
     )
@@ -412,7 +412,7 @@ def get_llm(
     reasoning_effort_default: ReasoningEffort | None = None,
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,
-) -> LLM:
+) -> LitellmLLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
 

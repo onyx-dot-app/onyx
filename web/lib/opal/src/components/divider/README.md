@@ -15,8 +15,8 @@ A plain line with no title or description.
 | Prop                   | Type                           | Default        | Description                                                      |
 | ---------------------- | ------------------------------ | -------------- | ---------------------------------------------------------------- |
 | `orientation`          | `"horizontal" \| "vertical"`   | `"horizontal"` | Direction of the line                                            |
-| `paddingParallel`      | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `2`            | Inset along the line direction, as a spacing step (`N / 4` rem)  |
-| `paddingPerpendicular` | `0 \| 0.5 \| 1 \| 2 \| 4 \| 6` | `1`            | Inset perpendicular to the line, as a spacing step (`N / 4` rem) |
+| `paddingParallel`      | `0 \| 0.5 \| 1 \| 2 \| 3 \| 4 \| 6` | `2`            | Inset along the line direction, as a spacing step (`N / 4` rem)  |
+| `paddingPerpendicular` | `0 \| 0.5 \| 1 \| 2 \| 3 \| 4 \| 6` | `1`            | Inset perpendicular to the line, as a spacing step (`N / 4` rem) |
 
 ### Titled divider
 
@@ -40,7 +40,7 @@ A plain line with no title or description.
 | `open`         | `boolean`                 | —              | Controlled open state           |
 | `defaultOpen`  | `boolean`                 | `false`        | Uncontrolled initial open state |
 | `onOpenChange` | `(open: boolean) => void` | —              | Callback when toggled           |
-| `children`     | `ReactNode`               | —              | Content revealed when open      |
+| `children`     | `ReactNode`               | —              | Content revealed when open; stays mounted while closed, inert and hidden from assistive tech, so the fold animates both ways |
 
 ## Usage Examples
 

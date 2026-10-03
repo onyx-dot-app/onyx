@@ -8,6 +8,7 @@ from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import (
     build_python_chat_files_from_search_docs,
     create_tool_call_failure_messages,
+    create_tool_call_failure_response,
 )
 from onyx.chat.citation_processor import (
     CitationMapping,
@@ -16,11 +17,7 @@ from onyx.chat.citation_processor import (
 )
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
-from onyx.chat.llm_step import (
-    _looks_like_xml_tool_call_payload,
-    extract_tool_calls_from_response_text,
-    run_llm_step,
-)
+from onyx.chat.llm_step import extract_tool_calls_from_response_text, run_llm_step
 from onyx.chat.models import (
     ChatMessageSimple,
     ContextFileMetadata,
@@ -46,9 +43,10 @@ from onyx.db.models import Persona
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
+from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import is_true_openai_model
-from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
+from onyx.llm.tool_parsing import looks_like_xml_tool_call_payload
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
@@ -61,7 +59,6 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     ToolCallDebug,
-    TopLevelBranching,
 )
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES, STOPPING_TOOLS_NAMES
 from onyx.tools.constants import FILE_READER_TOOL_NAME
@@ -246,9 +243,9 @@ def _try_fallback_tool_extraction(
         llm_step_result.reasoning and not llm_step_result.answer and no_tool_calls
     )
     xml_tool_call_text_detected = no_tool_calls and (
-        _looks_like_xml_tool_call_payload(llm_step_result.answer)
-        or _looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
-        or _looks_like_xml_tool_call_payload(llm_step_result.reasoning)
+        looks_like_xml_tool_call_payload(llm_step_result.answer)
+        or looks_like_xml_tool_call_payload(llm_step_result.raw_answer)
+        or looks_like_xml_tool_call_payload(llm_step_result.reasoning)
     )
     should_try_fallback = (
         (tool_choice == ToolChoiceOptions.REQUIRED and no_tool_calls)
@@ -1175,16 +1172,6 @@ def run_llm_loop(
                         )
                     )
 
-            if len(tool_calls) > 1:
-                emitter.emit(
-                    Packet(
-                        placement=Placement(
-                            turn_index=tool_calls[0].placement.turn_index
-                        ),
-                        obj=TopLevelBranching(num_parallel_branches=len(tool_calls)),
-                    )
-                )
-
             # Quick note for why citation_mapping and citation_processors are both needed:
             # 1. Tools return lightweight string mappings, not SearchDoc objects
             # 2. The SearchDoc resolution is deliberately deferred to llm_loop.py
@@ -1216,6 +1203,11 @@ def run_llm_loop(
                 )
                 simple_chat_history.extend(failure_messages)
                 continue
+
+            available_tool_names = {tool.name for tool in final_tools}
+            unknown_tool_calls = [
+                tc for tc in tool_calls if tc.tool_name not in available_tool_names
+            ]
 
             for tool_response in tool_responses:
                 # Extract tool_call from the response (set by run_tool_calls)
@@ -1401,12 +1393,9 @@ def run_llm_loop(
 
                 # Build ToolCallSimple list for all tool calls in this turn
                 tool_calls_simple: list[ToolCallSimple] = []
-                for tool_response in valid_tool_responses:
-                    tc = tool_response.tool_call
-                    assert (
-                        tc is not None
-                    )  # Already filtered above, this is just for typing purposes
-
+                for tc in [
+                    tr.tool_call for tr in valid_tool_responses if tr.tool_call
+                ] + unknown_tool_calls:
                     tool_call_message = tc.to_msg_str()
                     tool_call_token_count = token_counter(tool_call_message)
 
@@ -1446,6 +1435,12 @@ def run_llm_loop(
                         image_files=None,
                     )
                     simple_chat_history.append(tool_response_msg)
+
+                # Unknown tools were not run; answer them so every call is paired
+                simple_chat_history.extend(
+                    create_tool_call_failure_response(tc.tool_call_id)
+                    for tc in unknown_tool_calls
+                )
 
             # If no tool calls, then it must have answered, wrap up
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:

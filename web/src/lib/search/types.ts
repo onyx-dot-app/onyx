@@ -1,5 +1,6 @@
 import { InputDateRangePickerValue } from "@opal/components";
-import { Tag, ValidSources } from "../types";
+import { Tag } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { Agent } from "@/lib/agents/types";
 
 export const FlowType = {
@@ -60,6 +61,7 @@ export interface MinimalOnyxDocument {
 export interface OnyxDocument extends MinimalOnyxDocument {
   link: string;
   source_type: ValidSources;
+  source_types?: ValidSources[] | null;
   blurb: string;
   boost: number;
   hidden: boolean;
@@ -247,6 +249,7 @@ export interface SearchDocWithContent {
   link: string | null;
   blurb: string;
   source_type: ValidSources;
+  source_types?: ValidSources[] | null;
   boost: number;
   hidden: boolean;
   metadata: Record<string, string | string[]>;

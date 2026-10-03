@@ -5,7 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@opal/components";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
-import { ConfluenceAccessibleResource, ValidSources } from "@/lib/types";
+import { ConfluenceAccessibleResource } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import CardSection from "@/components/admin/CardSection";
 import {
   handleOAuthConfluenceFinalize,

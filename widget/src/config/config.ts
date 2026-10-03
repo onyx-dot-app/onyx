@@ -23,6 +23,7 @@ export function resolveConfig(attributes: Partial<WidgetConfig>): WidgetConfig {
     logo: attributes.logo,
     mode: attributes.mode || "launcher",
     includeCitations: attributes.includeCitations ?? false,
+    startExpanded: attributes.startExpanded ?? false,
   };
 
   if (!config.backendUrl) {

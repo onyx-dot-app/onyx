@@ -16,14 +16,15 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from onyx.chat.llm_step import run_llm_step_pkt_generator
-from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
-    FunctionCall,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
 )
+from onyx.llm.models import ToolChoiceOptions
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
@@ -45,7 +46,7 @@ def _narration_then_tool_stream() -> Iterator[ModelResponseStream]:
                 ChatCompletionDeltaToolCall(
                     id="call_1",
                     index=0,
-                    function=FunctionCall(name="internal_search", arguments=""),
+                    function=ResponseFunctionCall(name="internal_search", arguments=""),
                 )
             ]
         )
@@ -56,7 +57,9 @@ def _narration_then_tool_stream() -> Iterator[ModelResponseStream]:
                 ChatCompletionDeltaToolCall(
                     index=0,
                     id=None,
-                    function=FunctionCall(name=None, arguments='{"queries": ["x"]}'),
+                    function=ResponseFunctionCall(
+                        name=None, arguments='{"queries": ["x"]}'
+                    ),
                 )
             ]
         )
@@ -64,11 +67,11 @@ def _narration_then_tool_stream() -> Iterator[ModelResponseStream]:
 
 
 def _make_llm() -> MagicMock:
-    llm = MagicMock()
+    llm = MagicMock(spec=LitellmLLM)
     llm.config.model_name = "test-model"
     llm.config.model_provider = "openai"
     llm.config.api_base = None
-    llm.stream.return_value = _narration_then_tool_stream()
+    llm.stream_raw.return_value = _narration_then_tool_stream()
     return llm
 
 

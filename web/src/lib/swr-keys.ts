@@ -44,7 +44,12 @@ export const SWR_KEYS = {
   llmProviders: "/api/llm/provider",
   llmProvidersForAgent: (agentId: number) =>
     `/api/llm/persona/${agentId}/providers`,
+  llmProviderModels: (providerId: number) =>
+    `/api/llm/provider/${providerId}/models`,
   adminLlmProviders: "/api/admin/llm/provider",
+  adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
+  adminLlmProvider: (providerId: number) =>
+    `/api/admin/llm/provider/${providerId}`,
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
@@ -84,7 +89,6 @@ export const SWR_KEYS = {
 
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
-  imageProcessingSettings: "/api/admin/image-processing",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
   reindexProgress: "/api/search-settings/reindex-progress",
   reindexErrors: "/api/search-settings/reindex-errors",
@@ -242,10 +246,9 @@ export const SWR_KEYS = {
   connector: "/api/manage/connector",
   connectorOAuthDetails: (source: string) =>
     `/api/connector/oauth/details/${source}`,
-  // Credentials of one source the caller may attach; `editable` narrows to
-  // the ones the caller may also edit.
-  similarCredentials: (source: string, editable: boolean = false) =>
-    `/api/manage/admin/similar-credentials/${source}${editable ? "?get_editable=True" : ""}`,
+  // Credentials of one source the caller may attach.
+  similarCredentials: (source: string) =>
+    `/api/manage/admin/similar-credentials/${source}`,
 
   // ── CC-Pairs ──────────────────────────────────────────────────────────────
   ccPair: (ccPairId: string | number) =>
