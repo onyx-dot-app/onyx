@@ -37,6 +37,7 @@ OPENAI_COMPATIBLE_SURFACES = frozenset(
 _STATIC_SURFACES: dict[str, LlmApiSurface] = {
     LlmProviderNames.OPENAI_COMPATIBLE: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
     LlmProviderNames.NEBIUS_TOKENFACTORY: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
+    LlmProviderNames.AVIAN: LlmApiSurface.OPENAI_CHAT_COMPLETIONS,
 }
 
 # Admin-selected surfaces: {provider: (config_key, {stored value: surface}, default)}
