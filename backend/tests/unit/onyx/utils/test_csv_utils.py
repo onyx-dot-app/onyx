@@ -1,6 +1,7 @@
 import pytest
 
 from onyx.utils.csv_utils import (
+    detect_csv_delimiter,
     sanitize_csv_cell,
     sanitize_csv_cell_or_none,
     sanitize_csv_row,
@@ -61,3 +62,56 @@ def test_sanitize_csv_row_keys_unchanged() -> None:
     # Keys come from our own model fields, not user input — only values are
     # sanitized.
     assert sanitize_csv_row(row) == {"=key": "value"}
+
+
+class TestDetectCsvDelimiter:
+    """`csv.reader` defaults to a comma; a .csv is not always comma-separated."""
+
+    ROWS = ["Name;Region;Units", "Widget;EU;12", "Gadget;US;7"]
+
+    @pytest.mark.parametrize("delimiter", [",", ";", "\t", "|"])
+    def test_detects_the_delimiter_the_file_was_written_with(
+        self, delimiter: str
+    ) -> None:
+        text = "\n".join(row.replace(";", delimiter) for row in self.ROWS) + "\n"
+
+        assert detect_csv_delimiter(text) == delimiter
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            # A separator inside a quoted field is not a separator.
+            'Name,Note\nWidget,"a; b"\nGadget,"c; d"\n',
+            # Rows that do not line up leave the default in place.
+            "Note\na; b\nc; d\n",
+            "name,value\nAlice,1\nBob,2,extra\n",
+            "",
+            "\n\n",
+        ],
+    )
+    def test_falls_back_to_a_comma(self, text: str) -> None:
+        assert detect_csv_delimiter(text) == ","
+
+    def test_a_single_column_header_is_not_split(self) -> None:
+        """csv.Sniffer splits `Note` on the `t` inside it; this must not."""
+        assert detect_csv_delimiter("Note\nalpha\nbeta\n") == ","
+
+    def test_a_whitespace_only_line_is_not_a_row(self) -> None:
+        assert detect_csv_delimiter("Name;Region\nWidget;EU\n   \nGadget;US\n") == ";"
+
+    def test_a_comma_that_lines_up_is_kept(self) -> None:
+        """A `|` that occurs the same number of times in every row is data."""
+        assert detect_csv_delimiter("id,tags|x|y\n1,a|b|c\n2,d|e|f\n") == ","
+
+    def test_the_row_the_sample_cuts_is_left_out(self) -> None:
+        """Fewer than the sampled rows fit in the sample, so it ends inside a row."""
+        cell = "x" * 4000
+        text = "a;b;c\n" + "".join(f"{i};{cell};{cell}\n" for i in range(60))
+
+        assert detect_csv_delimiter(text) == ";"
+
+    def test_the_sample_can_end_inside_a_quoted_line_break(self) -> None:
+        cell = '"' + ("y" * 70 + "\n") * 60 + '"'
+        text = "a;b;c\n" + "".join(f"{i};{cell};end\n" for i in range(40))
+
+        assert detect_csv_delimiter(text) == ";"
