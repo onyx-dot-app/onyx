@@ -6,7 +6,7 @@ import pytest
 
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.source_operations import (
-    _OnyxConfluence as OnyxConfluence,
+    _OnyxConfluence,
 )
 from onyx.connectors.models import Document
 from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
@@ -69,7 +69,7 @@ def test_attachment_section_link_uses_platform_specific_url(
     expected_link: str,
 ) -> None:
     connector = ConfluenceConnector(wiki_base=wiki_base, is_cloud=is_cloud)
-    confluence_client = mock.Mock(spec=OnyxConfluence)
+    confluence_client = mock.Mock(spec=_OnyxConfluence)
     confluence_client.paginated_cql_retrieval.return_value = iter([_ATTACHMENT])
 
     with (
@@ -100,7 +100,7 @@ def test_attachment_failure_uses_attachment_document_id() -> None:
     connector = ConfluenceConnector(
         wiki_base="https://wiki.example.com", is_cloud=False
     )
-    confluence_client = mock.Mock(spec=OnyxConfluence)
+    confluence_client = mock.Mock(spec=_OnyxConfluence)
     confluence_client.paginated_cql_retrieval.return_value = iter([_ATTACHMENT])
 
     with (

@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import Any
 from unittest import mock
@@ -11,12 +12,19 @@ from onyx.connectors.confluence import utils as confluence_utils
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.source_operations import (
     ConfluenceProbeVariant,
+    ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceRetriesExhaustedError,
     ConfluenceSourceOperations,
     ConfluenceSpaceNotFoundError,
+    ConfluenceSpacePermissionsVariant,
+    ConfluenceUserEmailVariant,
+    ConfluenceUserListVariant,
     _OnyxConfluence,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
     gateway_with_client,
@@ -235,3 +243,105 @@ def test_get_space_translates_the_sdk_error() -> None:
     client.retrieve_confluence_spaces.return_value = iter([{"key": "Y"}])
     with pytest.raises(ConnectorValidationError, match="Invalid Confluence space key"):
         connector.validate_connector_settings()
+
+
+def _json_response(status_code: int, payload: Any) -> requests.Response:
+    return _response(status_code, json.dumps(payload).encode())
+
+
+def _dc_gateway(sdk: mock.Mock) -> ConfluenceSourceOperations:
+    return gateway_with_client(_transport(sdk), wiki_base=_WIKI_BASE)
+
+
+def test_dc_rest_space_permissions_404_signals_fallback() -> None:
+    sdk = mock.Mock()
+    sdk.get.return_value = _json_response(404, {})
+
+    with pytest.raises(ConfluenceRestSpacePermissionsNotAvailableError):
+        _dc_gateway(sdk).get_space_permissions(
+            variant=ConfluenceSpacePermissionsVariant.DC_REST, space_key="ENG"
+        )
+
+
+def test_dc_rest_space_permissions_500_means_not_admin() -> None:
+    sdk = mock.Mock()
+    sdk.get.return_value = _json_response(500, {})
+
+    with pytest.raises(InsufficientPermissionsError, match="CONFSERVER-99908"):
+        _dc_gateway(sdk).get_space_permissions(
+            variant=ConfluenceSpacePermissionsVariant.DC_REST, space_key="ENG"
+        )
+
+
+def test_dc_jsonrpc_space_permissions_websudo_html() -> None:
+    sdk = mock.Mock()
+    html = _response(200, b"<html>WebSudoRequiredException</html>")
+    html.headers["Content-Type"] = "text/html"
+    sdk.post.return_value = html
+
+    with pytest.raises(ConnectorValidationError, match="WebSudo"):
+        _dc_gateway(sdk).get_space_permissions(
+            variant=ConfluenceSpacePermissionsVariant.DC_JSONRPC, space_key="ENG"
+        )
+
+
+def test_dc_jsonrpc_space_permissions_returns_result() -> None:
+    permission_sets = [{"type": "VIEWSPACE", "spacePermissions": []}]
+    sdk = mock.Mock()
+    sdk.post.return_value = _json_response(200, {"result": permission_sets})
+
+    assert (
+        _dc_gateway(sdk).get_space_permissions(
+            variant=ConfluenceSpacePermissionsVariant.DC_JSONRPC, space_key="ENG"
+        )
+        == permission_sets
+    )
+
+
+@pytest.mark.parametrize("status_code", [403, 404])
+def test_content_read_restrictions_unreadable_is_none(status_code: int) -> None:
+    sdk = mock.Mock()
+    sdk.get.return_value = _response(status_code, b"draft")
+
+    assert _dc_gateway(sdk).get_content_read_restrictions(content_id="1") is None
+
+
+def test_list_users_rejects_a_mismatched_variant() -> None:
+    gateway = gateway_with_client(mock.Mock(spec=_OnyxConfluence), is_cloud=False)
+
+    with pytest.raises(ValueError):
+        gateway.list_users(variant=ConfluenceUserListVariant.CLOUD)
+
+
+@pytest.mark.parametrize(
+    ("variant", "is_cloud"),
+    [
+        (ConfluenceSpacePermissionsVariant.CLOUD, False),
+        (ConfluenceSpacePermissionsVariant.DC_REST, True),
+        (ConfluenceSpacePermissionsVariant.DC_JSONRPC, True),
+    ],
+)
+def test_get_space_permissions_rejects_a_mismatched_variant(
+    variant: ConfluenceSpacePermissionsVariant, is_cloud: bool
+) -> None:
+    client = mock.Mock()
+    gateway = gateway_with_client(client, is_cloud=is_cloud)
+
+    with pytest.raises(ValueError):
+        gateway.get_space_permissions(variant=variant, space_key="ENG")
+    client.get_space.assert_not_called()
+
+
+def test_username_email_lookup_swallows_errors() -> None:
+    source_operations._USERNAME_TO_EMAIL_CACHE.clear()
+    client = mock.Mock(spec=_OnyxConfluence)
+    client._url = _WIKI_BASE
+    client.get_mobile_parameters = mock.Mock(
+        side_effect=requests.HTTPError(response=_response(403))
+    )
+
+    email = gateway_with_client(client).get_user_email(
+        variant=ConfluenceUserEmailVariant.USERNAME, user="alice"
+    )
+
+    assert email is None

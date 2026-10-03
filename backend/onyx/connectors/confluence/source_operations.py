@@ -8,8 +8,7 @@ the credential plus the bound config fields (``wiki_base``, ``is_cloud``,
 returns plain data.
 
 ``_OnyxConfluence`` is the transport: rate-limit retries, OAuth refresh, and the
-pagination engine. The EE perm-sync modules still call it directly through the
-temporary ``onyx_confluence`` re-export; #15454 moves those calls to operations.
+pagination engine. Only the gateway calls it.
 
 Pagination notes: the Cloud ``search/user`` and ``user/memberof`` endpoints use
 offset pagination, while page retrieval uses cursors. The default for Cloud is
@@ -99,6 +98,10 @@ _USER_NOT_FOUND = "Unknown Confluence User"
 # Keyed by (instance base url, user id): one worker process can serve several
 # Confluence instances, and DC userkeys are unique only per instance.
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[tuple[str, str], str | None] = {}
+# Same keying for the DC email lookups. DC 9.1+ REST space permissions give only
+# the userKey (CONFSERVER-100505), so emails resolve by username or by userKey.
+_USERNAME_TO_EMAIL_CACHE: dict[tuple[str, str], str | None] = {}
+_USER_KEY_TO_EMAIL_CACHE: dict[tuple[str, str], str | None] = {}
 _DEFAULT_PAGINATION_LIMIT = 1000
 _MINIMUM_PAGINATION_LIMIT = 5
 
@@ -1180,18 +1183,6 @@ class _OnyxConfluence:
         version_str = info.get("version") or ""
         return _parse_dc_version(version_str)
 
-    def supports_rest_space_permissions(self) -> bool:
-        """Whether the upstream instance has the DC 9.1+ space-permissions
-        REST API (CONFSERVER-78176). Always False for Cloud (different API
-        surface, branched on `is_cloud` upstream of any version check) and
-        for DC instances older than 9.1.0 or where the version probe fails.
-        """
-        version = self.get_server_version()
-        return (
-            version is not None
-            and version >= _MIN_DC_VERSION_FOR_REST_SPACE_PERMISSIONS
-        )
-
     def get_all_space_permissions_server_rest(
         self,
         space_key: str,
@@ -1291,6 +1282,16 @@ class _OnyxConfluence:
         return payload
 
 
+def supports_rest_space_permissions(server_version: tuple[int, int] | None) -> bool:
+    """Whether a DC version has the 9.1+ REST space-permissions API
+    (CONFSERVER-78176). False when the version is unknown (Cloud, or a failed
+    probe): callers then use JSON-RPC."""
+    return (
+        server_version is not None
+        and server_version >= _MIN_DC_VERSION_FOR_REST_SPACE_PERMISSIONS
+    )
+
+
 def _parse_dc_version(version_str: str) -> tuple[int, int] | None:
     """Parse 'X.Y.Z[...]' into (X, Y); returns None on malformed input."""
     if not version_str:
@@ -1329,6 +1330,70 @@ def _get_user(confluence_client: _OnyxConfluence, user_id: str) -> str:
     return _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) or _USER_NOT_FOUND
 
 
+def _http_status(e: HTTPError) -> int | str:
+    return e.response.status_code if e.response is not None else "N/A"
+
+
+def _get_user_email_by_username(
+    confluence_client: _OnyxConfluence, user_name: str
+) -> str | None:
+    """DC username -> email through the mobile profile endpoint. A None result
+    is not cached, so the next sync tries the lookup again."""
+    cache_key = (confluence_client._url, user_name)
+    if _USERNAME_TO_EMAIL_CACHE.get(cache_key) is None:
+        try:
+            response = confluence_client.get_mobile_parameters(user_name)
+            email = response.get("email")
+        except HTTPError as e:
+            logger.warning(
+                "Failed to get confluence email for %s: HTTP %s - %s",
+                user_name,
+                _http_status(e),
+                e,
+            )
+            email = None
+        except Exception as e:
+            logger.warning(
+                "Failed to get confluence email for %s: %s - %s",
+                user_name,
+                type(e).__name__,
+                e,
+            )
+            email = None
+        _USERNAME_TO_EMAIL_CACHE[cache_key] = email
+    return _USERNAME_TO_EMAIL_CACHE[cache_key]
+
+
+def _get_user_email_by_userkey(
+    confluence_client: _OnyxConfluence, user_key: str
+) -> str | None:
+    """DC userKey -> email through ``rest/api/user?key=``. A None result is
+    cached too, so an unresolvable user costs one call per process."""
+    cache_key = (confluence_client._url, user_key)
+    if cache_key not in _USER_KEY_TO_EMAIL_CACHE:
+        try:
+            response = confluence_client.get_user_details_by_userkey(user_key)
+            email = response.get("email") if isinstance(response, dict) else None
+        except HTTPError as e:
+            logger.warning(
+                "Failed to get confluence email for userKey %s: HTTP %s - %s",
+                user_key,
+                _http_status(e),
+                e,
+            )
+            email = None
+        except Exception as e:
+            logger.warning(
+                "Failed to get confluence email for userKey %s: %s - %s",
+                user_key,
+                type(e).__name__,
+                e,
+            )
+            email = None
+        _USER_KEY_TO_EMAIL_CACHE[cache_key] = email
+    return _USER_KEY_TO_EMAIL_CACHE[cache_key]
+
+
 class ConfluenceSpaceNotFoundError(Exception):
     """The space key does not exist, or the credential cannot read the space."""
 
@@ -1354,6 +1419,40 @@ class ConfluenceSearchVariant(str, Enum):
 
 
 _SEARCH_VARIANTS = tuple(ConfluenceSearchVariant)
+
+
+class ConfluenceSpacePermissionsVariant(str, Enum):
+    """API of a space-permissions read. Each needs different rights.
+
+    ``cloud`` (``get_space?expand=permissions``) lists subjects only for a space
+    admin. ``dc_rest`` (DC 9.1+) needs admin rights and returns 500 without them.
+    ``dc_jsonrpc`` (older DC) needs the Remote API on and WebSudo off.
+    """
+
+    CLOUD = "cloud"
+    DC_REST = "dc_rest"
+    DC_JSONRPC = "dc_jsonrpc"
+
+
+class ConfluenceUserEmailVariant(str, Enum):
+    """Identifier of a DC email lookup: ``username`` uses the mobile profile
+    endpoint, ``userkey`` uses ``rest/api/user?key=``."""
+
+    USERNAME = "username"
+    USERKEY = "userkey"
+
+
+class ConfluenceUserListVariant(str, Enum):
+    """User listing API: Cloud user search or the DC user list."""
+
+    CLOUD = "cloud"
+    DC = "dc"
+
+
+_USERNAME_LOOKUP_UNTESTED = (
+    "Opt-in workaround (CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC) for the DC "
+    "user list before 10.1 (CONFSERVER-95999); no check probes it."
+)
 
 
 class ConfluenceSourceOperations(SourceOperations):
@@ -1393,6 +1492,7 @@ class ConfluenceSourceOperations(SourceOperations):
             credentials_provider=self.credentials_provider,
             timeout=_FAST_TIMEOUT if fast else None,
             scoped_token=binding.scoped_token,
+            confluence_user_profiles_override=CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE,
             scoped_api_url=(
                 self._scoped_api_url(wiki_base) if binding.scoped_token else None
             ),
@@ -1412,11 +1512,6 @@ class ConfluenceSourceOperations(SourceOperations):
                 else:
                     self._cached_client = cached
         return cached
-
-    def _legacy_client(self, *, fast: bool = False) -> _OnyxConfluence:
-        """Temporary: the perm-sync paths still pass the client to the EE
-        modules. #15454 moves those calls to operations and deletes this."""
-        return self._client(fast=fast)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -1620,6 +1715,154 @@ class ConfluenceSourceOperations(SourceOperations):
         endpoint and then the account-id endpoint for every id."""
         return _get_user(self._client(), user_id)
 
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=_UNTESTED,
+    )
+    def get_content_read_restrictions(
+        self, *, content_id: str
+    ) -> dict[str, Any] | None:
+        """Returns the restrictions of one page or blog post
+        (``restriction/byOperation``). Returns None on 403 or 404, which mean
+        the content cannot be read (for example another user's draft)."""
+        return self._client().fetch_content_read_restrictions(content_id)
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        variants=tuple(ConfluenceSpacePermissionsVariant),
+        untested=_UNTESTED,
+    )
+    def get_space_permissions(
+        self,
+        *,
+        variant: ConfluenceSpacePermissionsVariant,
+        space_key: str,
+        fast: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Returns the raw permission entries of a space, in the shape of the
+        variant's API.
+
+        ``dc_rest`` raises ``ConfluenceRestSpacePermissionsNotAvailableError``
+        on 404 and ``InsufficientPermissionsError`` on 500 (CONFSERVER-99908).
+        ``dc_jsonrpc`` raises ``ConnectorValidationError`` on a non-JSON 200
+        (WebSudo).
+        """
+        is_cloud = self._binding().is_cloud
+        if (variant == ConfluenceSpacePermissionsVariant.CLOUD) != is_cloud:
+            raise ValueError(
+                f"get_space_permissions variant {variant.value!r} does not match "
+                f"is_cloud={is_cloud}."
+            )
+        client = self._client(fast=fast)
+        if variant == ConfluenceSpacePermissionsVariant.CLOUD:
+            space: dict[str, Any] | None = client.get_space(
+                space_key=space_key, expand="permissions"
+            )
+            if space is None:
+                raise ConfluenceRetriesExhaustedError(
+                    f"Confluence returned no body for space {space_key}.",
+                    last_status_code=None,
+                )
+            permissions: list[dict[str, Any]] = space.get("permissions", [])
+            return permissions
+        if variant == ConfluenceSpacePermissionsVariant.DC_REST:
+            return client.get_all_space_permissions_server_rest(space_key=space_key)
+        return client.get_all_space_permissions_server(space_key=space_key)
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=_UNTESTED,
+    )
+    def get_anonymous_space_permissions(
+        self, *, space_key: str
+    ) -> list[dict[str, Any]]:
+        """Returns the anonymous operations of a space (DC 9.1+ REST). Returns
+        an empty list on 404; raises ``InsufficientPermissionsError`` on 500."""
+        return self._client().get_anonymous_space_permissions_server_rest(
+            space_key=space_key
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=_UNTESTED,
+    )
+    def get_server_version(self, *, fast: bool = False) -> tuple[int, int] | None:
+        """Returns the DC (major, minor) version. Returns None for Cloud or when
+        the probe fails. Each client probes once and keeps the result."""
+        return self._client(fast=fast).get_server_version()
+
+    @source_operation(
+        capabilities={
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
+        consumes=OperationConsumes.CREDENTIAL,
+        variants=tuple(ConfluenceUserEmailVariant),
+        untested=_UNTESTED,
+    )
+    def get_user_email(
+        self, *, variant: ConfluenceUserEmailVariant, user: str
+    ) -> str | None:
+        """Returns the email of a DC user (a username or a userKey, per the
+        variant), or None. Logs and swallows lookup errors. Results are cached
+        per Confluence site; the username variant does not cache a None
+        result."""
+        client = self._client()
+        if variant == ConfluenceUserEmailVariant.USERNAME:
+            return _get_user_email_by_username(client, user)
+        return _get_user_email_by_userkey(client, user)
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        variants=tuple(ConfluenceUserListVariant),
+        untested=_UNTESTED,
+    )
+    def list_users(
+        self, *, variant: ConfluenceUserListVariant
+    ) -> Iterator[ConfluenceUser]:
+        """Yields the users of the site. When
+        CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE is set, yields those
+        profiles instead and makes no call."""
+        is_cloud = self._binding().is_cloud
+        if (variant == ConfluenceUserListVariant.CLOUD) != is_cloud:
+            raise ValueError(
+                f"list_users variant {variant.value!r} does not match "
+                f"is_cloud={is_cloud}."
+            )
+        return self._client().paginated_cql_user_retrieval()
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=_UNTESTED,
+    )
+    def list_user_groups(self, *, user_id: str) -> Iterator[dict[str, Any]]:
+        """Yields the groups of a user (``rest/api/user/memberof``). ``user_id``
+        is the accountId on Cloud and the userKey on DC."""
+        return self._client().paginated_groups_by_user_retrieval(user_id)
+
+    @source_operation(
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=_USERNAME_LOOKUP_UNTESTED,
+    )
+    def get_user_by_username(self, *, username: str) -> dict[str, Any]:
+        """Returns the DC user details of a username. Raises on failure."""
+        details: dict[str, Any] | None = self._client().get_user_details_by_username(
+            username
+        )
+        if details is None:
+            raise ConfluenceRetriesExhaustedError(
+                f"Confluence returned no body for user {username}.",
+                last_status_code=None,
+            )
+        return details
+
 
 def _search(
     client: _OnyxConfluence,
@@ -1651,4 +1894,34 @@ def _attachment_download_link(
     return (
         api_url
         + f"/rest/api/content/{parent_content_id}/child/attachment/{attachment['id']}/download"
+    )
+
+
+def build_probed_confluence_gateway(
+    *,
+    credentials_provider: CredentialsProviderInterface,
+    connector_specific_config: dict[str, Any],
+) -> ConfluenceSourceOperations:
+    """Builds the gateway and proves the credential works for the bound site,
+    with the probe variant the bound config needs. Raises on failure."""
+    gateway = ConfluenceSourceOperations(
+        credentials_provider=credentials_provider,
+        connector_specific_config=connector_specific_config,
+    )
+    gateway.probe_site(
+        variant=(
+            ConfluenceProbeVariant.SCOPED
+            if gateway._binding().scoped_token
+            else ConfluenceProbeVariant.UNSCOPED
+        )
+    )
+    return gateway
+
+
+def user_list_variant(gateway: ConfluenceSourceOperations) -> ConfluenceUserListVariant:
+    """The ``list_users`` variant of the gateway's bound site."""
+    return (
+        ConfluenceUserListVariant.CLOUD
+        if gateway._binding().is_cloud
+        else ConfluenceUserListVariant.DC
     )

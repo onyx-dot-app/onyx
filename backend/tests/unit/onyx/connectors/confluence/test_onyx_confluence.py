@@ -6,18 +6,14 @@ import pytest
 import requests
 from requests import HTTPError
 
-from onyx.connectors.confluence import onyx_confluence as onyx_confluence_module
 from onyx.connectors.confluence import source_operations as source_operations_module
-from onyx.connectors.confluence.onyx_confluence import (
-    get_user_email_from_userkey__server,
-)
 from onyx.connectors.confluence.source_operations import (
     _DEFAULT_PAGINATION_LIMIT,
     _MINIMUM_PAGINATION_LIMIT,
     ConfluenceRestSpacePermissionsNotAvailableError,
-)
-from onyx.connectors.confluence.source_operations import (
-    _OnyxConfluence as OnyxConfluence,
+    _get_user_email_by_userkey,
+    _OnyxConfluence,
+    supports_rest_space_permissions,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -66,8 +62,8 @@ def mock_credentials_provider() -> mock.Mock:
 
 
 @pytest.fixture
-def confluence_server_client(mock_credentials_provider: mock.Mock) -> OnyxConfluence:
-    confluence = OnyxConfluence(
+def confluence_server_client(mock_credentials_provider: mock.Mock) -> _OnyxConfluence:
+    confluence = _OnyxConfluence(
         is_cloud=False,
         url="http://fake-confluence.com",
         credentials_provider=mock_credentials_provider,
@@ -85,7 +81,7 @@ def confluence_server_client(mock_credentials_provider: mock.Mock) -> OnyxConflu
 
 
 def test_cql_paginate_all_expansions_handles_internal_pagination_error(
-    confluence_server_client: OnyxConfluence, caplog: pytest.LogCaptureFixture
+    confluence_server_client: _OnyxConfluence, caplog: pytest.LogCaptureFixture
 ) -> None:
     """
     Tests that cql_paginate_all_expansions correctly handles HTTP 500 errors
@@ -390,7 +386,7 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
 
 
 def test_paginated_cql_retrieval_handles_pagination_error(
-    confluence_server_client: OnyxConfluence, caplog: pytest.LogCaptureFixture
+    confluence_server_client: _OnyxConfluence, caplog: pytest.LogCaptureFixture
 ) -> None:
     """
     Tests that paginated_cql_retrieval correctly handles HTTP 500 errors
@@ -589,7 +585,7 @@ def test_paginated_cql_retrieval_handles_pagination_error(
 
 
 def test_paginated_cql_retrieval_skips_completely_failing_page(
-    confluence_server_client: OnyxConfluence, caplog: pytest.LogCaptureFixture
+    confluence_server_client: _OnyxConfluence, caplog: pytest.LogCaptureFixture
 ) -> None:
     """
     Tests that paginated_cql_retrieval skips an entire page if the initial
@@ -724,7 +720,7 @@ def test_paginated_cql_retrieval_cloud_reduces_limit_on_error(
     progressively halves the limit on server errors (500/504) and eventually
     raises once the limit floor is reached.
     """
-    confluence_cloud_client = OnyxConfluence(
+    confluence_cloud_client = _OnyxConfluence(
         is_cloud=True,
         url="https://fake-cloud.atlassian.net",
         credentials_provider=mock_credentials_provider,
@@ -794,7 +790,7 @@ def test_paginate_url_reduces_limit_on_504_cloud(
     succeeds at the reduced limit, pagination continues at that limit and
     yields all results.
     """
-    client = OnyxConfluence(
+    client = _OnyxConfluence(
         is_cloud=True,
         url="https://fake-cloud.atlassian.net",
         credentials_provider=mock_credentials_provider,
@@ -856,7 +852,7 @@ def test_paginate_url_reduces_limit_on_504_cloud(
 
 
 def test_paginate_url_reduces_limit_on_500_server(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """
     On Server, a 500 triggers limit halving first. If the reduced limit
@@ -903,7 +899,7 @@ def test_paginate_url_reduces_limit_on_500_server(
 
 
 def test_paginate_url_server_falls_back_to_one_by_one_after_limit_floor(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """
@@ -973,7 +969,7 @@ def test_paginate_url_504_halves_multiple_times(
     Verifies that the limit is halved repeatedly on consecutive 504s until
     the request finally succeeds at a smaller limit.
     """
-    client = OnyxConfluence(
+    client = _OnyxConfluence(
         is_cloud=True,
         url="https://fake-cloud.atlassian.net",
         credentials_provider=mock_credentials_provider,
@@ -1022,7 +1018,7 @@ def test_paginate_url_504_halves_multiple_times(
 
 
 def test_retrieve_confluence_spaces_server_paginates_past_capped_page(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """
     Regression test for #4129: Confluence Server/DC silently caps
@@ -1096,7 +1092,7 @@ def test_retrieve_confluence_spaces_server_paginates_past_capped_page(
 
 
 def test_paginate_url_server_re_derives_start_when_dc_under_counts(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """#4129: no-callback Server callers (paginated_cql_retrieval, slim
     docs, etc.) must re-derive ``start`` when DC under-counts
@@ -1160,7 +1156,7 @@ def test_paginate_url_server_re_derives_start_when_dc_under_counts(
 
 
 def test_retrieve_confluence_spaces_server_stops_when_next_link_absent(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """
     Regression test for CONFSERVER-95272 / CONFSERVER-95312 (DC 8.5.8,
@@ -1211,7 +1207,7 @@ def test_retrieve_confluence_spaces_server_stops_when_next_link_absent(
 
 
 def test_jsonrpc_websudo_html_response_raises_validation_error(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """
     Regression test for the production failure against Confluence DC 10.2.10.
@@ -1286,7 +1282,7 @@ def _server_information_payload(version: str) -> dict[str, Any]:
 
 
 def test_supports_rest_space_permissions_true_for_dc_91_plus(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """DC 10.2.10 (the customer's actual deployed version) should report
     support for the REST API. Cached after first probe, so a subsequent
@@ -1295,9 +1291,15 @@ def test_supports_rest_space_permissions_true_for_dc_91_plus(
     server_info_mock = mock.Mock(return_value=_server_information_payload("10.2.10"))
     confluence_server_client._confluence.get = server_info_mock
 
-    assert confluence_server_client.supports_rest_space_permissions() is True
+    assert (
+        supports_rest_space_permissions(confluence_server_client.get_server_version())
+        is True
+    )
     assert confluence_server_client.get_server_version() == (10, 2)
-    assert confluence_server_client.supports_rest_space_permissions() is True
+    assert (
+        supports_rest_space_permissions(confluence_server_client.get_server_version())
+        is True
+    )
     assert server_info_mock.call_count == 1
     # Regression-guard the path itself: the Jira-style /rest/api/serverInfo
     # 404s on Confluence DC 10.x; the documented Confluence path is the
@@ -1307,17 +1309,20 @@ def test_supports_rest_space_permissions_true_for_dc_91_plus(
 
 
 def test_supports_rest_space_permissions_false_for_dc_pre_91(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     server_info_mock = mock.Mock(return_value=_server_information_payload("8.9.1"))
     confluence_server_client._confluence.get = server_info_mock
 
-    assert confluence_server_client.supports_rest_space_permissions() is False
+    assert (
+        supports_rest_space_permissions(confluence_server_client.get_server_version())
+        is False
+    )
     assert confluence_server_client.get_server_version() == (8, 9)
 
 
 def test_supports_rest_space_permissions_false_when_probe_fails(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """Negative probe is cached: a flaky server-information call doesn't
     make us re-probe on every space-permissions sync. Also pins the
@@ -1327,14 +1332,17 @@ def test_supports_rest_space_permissions_false_when_probe_fails(
     server_info_mock = mock.Mock(side_effect=requests.ConnectionError("boom"))
     confluence_server_client._confluence.get = server_info_mock
 
-    assert confluence_server_client.supports_rest_space_permissions() is False
+    assert (
+        supports_rest_space_permissions(confluence_server_client.get_server_version())
+        is False
+    )
     assert confluence_server_client.get_server_version() is None
-    confluence_server_client.supports_rest_space_permissions()
+    supports_rest_space_permissions(confluence_server_client.get_server_version())
     assert server_info_mock.call_count == 1
 
 
 def test_get_all_space_permissions_server_rest_404_raises_unavailable(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """A 404 from the REST endpoint means the upstream DC version is too
     old for this API; surface as the typed signal so the dispatcher can
@@ -1353,7 +1361,7 @@ def test_get_all_space_permissions_server_rest_404_raises_unavailable(
 
 
 def test_get_all_space_permissions_server_rest_500_raises_insufficient_permissions(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """CONFSERVER-99908: the REST endpoint returns 500 (not 403) when the
     bot account lacks Confluence/space-admin rights. Make sure we surface
@@ -1374,7 +1382,7 @@ def test_get_all_space_permissions_server_rest_500_raises_insufficient_permissio
 
 
 def test_get_all_space_permissions_server_rest_happy_path(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """Verifies advanced_mode is on (so non-200s reach our handlers) and
     that the raw list shape from CONFSERVER-78176 is returned unchanged
@@ -1420,14 +1428,14 @@ def test_get_all_space_permissions_server_rest_happy_path(
 
 
 def test_get_user_email_from_userkey_caches_lookups(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """Cache hit-rate is the only thing keeping per-space user resolution
     from being O(N_users * N_spaces) network calls. Regression-guard the
     cache.
     """
     user_key = "test_userkey_unique_to_this_case"
-    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.clear()
+    source_operations_module._USER_KEY_TO_EMAIL_CACHE.clear()
 
     user_details_mock = mock.Mock(
         return_value={
@@ -1439,12 +1447,8 @@ def test_get_user_email_from_userkey_caches_lookups(
     )
     confluence_server_client._confluence.get_user_details_by_userkey = user_details_mock
 
-    first = get_user_email_from_userkey__server(
-        confluence_server_client, user_key=user_key
-    )
-    second = get_user_email_from_userkey__server(
-        confluence_server_client, user_key=user_key
-    )
+    first = _get_user_email_by_userkey(confluence_server_client, user_key)
+    second = _get_user_email_by_userkey(confluence_server_client, user_key)
 
     assert first == "alice@example.com"
     assert second == "alice@example.com"
@@ -1452,26 +1456,22 @@ def test_get_user_email_from_userkey_caches_lookups(
 
 
 def test_get_user_email_from_userkey_caches_negative_result(
-    confluence_server_client: OnyxConfluence,
+    confluence_server_client: _OnyxConfluence,
 ) -> None:
     """A user we couldn't resolve (HTTPError, no email field, etc.) should
     cache as None so we don't keep retrying every sync. This both saves
     HTTP load and keeps the warning log from spamming.
     """
     user_key = "missing_userkey_unique_to_this_case"
-    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.clear()
+    source_operations_module._USER_KEY_TO_EMAIL_CACHE.clear()
 
     user_details_mock = mock.Mock(
         side_effect=HTTPError(response=_create_mock_response(404, {}, "x"))
     )
     confluence_server_client._confluence.get_user_details_by_userkey = user_details_mock
 
-    first = get_user_email_from_userkey__server(
-        confluence_server_client, user_key=user_key
-    )
-    second = get_user_email_from_userkey__server(
-        confluence_server_client, user_key=user_key
-    )
+    first = _get_user_email_by_userkey(confluence_server_client, user_key)
+    second = _get_user_email_by_userkey(confluence_server_client, user_key)
 
     assert first is None
     assert second is None
@@ -1515,7 +1515,7 @@ def test_token_refresh_keeps_the_oauth_site(monkeypatch: pytest.MonkeyPatch) -> 
             "cloud_id": "cloud",
         },
     )
-    confluence = OnyxConfluence(
+    confluence = _OnyxConfluence(
         is_cloud=True, url="https://acme.atlassian.net", credentials_provider=provider
     )
 
