@@ -195,22 +195,26 @@ func TestLockfilePaths_selectsExistingLockfiles(t *testing.T) {
 	root := chdirNewRepo(t)
 	writeFixture(t, root, "web/bun.lock", "")
 	writeFixture(t, root, "uv.lock", "")
+	writeFixture(t, root, "desktop/src-tauri/Cargo.lock", "")
+	writeFixture(t, root, "cli/go.mod", "")
 	// A directory named like a lockfile is not a lockfile.
 	writeFixture(t, root, "bun.lock/placeholder", "")
 
 	cases := []struct {
-		name        string
-		web, python bool
-		want        []string
+		name  string
+		kinds lockfileKinds
+		want  []string
 	}{
-		{"web", true, false, []string{filepath.Join(root, "web", "bun.lock")}},
-		{"python", false, true, []string{filepath.Join(root, "uv.lock")}},
-		{"both", true, true, []string{filepath.Join(root, "web", "bun.lock"), filepath.Join(root, "uv.lock")}},
-		{"neither", false, false, nil},
+		{"web", lockfileKinds{Web: true}, []string{filepath.Join(root, "web", "bun.lock")}},
+		{"python", lockfileKinds{Python: true}, []string{filepath.Join(root, "uv.lock")}},
+		{"rust", lockfileKinds{Rust: true}, []string{filepath.Join(root, "desktop", "src-tauri", "Cargo.lock")}},
+		{"go", lockfileKinds{Go: true}, []string{filepath.Join(root, "cli", "go.mod")}},
+		{"web and python", lockfileKinds{Web: true, Python: true}, []string{filepath.Join(root, "web", "bun.lock"), filepath.Join(root, "uv.lock")}},
+		{"neither", lockfileKinds{}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := lockfilePaths(tc.web, tc.python, false)
+			got, err := lockfilePaths(tc.kinds, false)
 			if err != nil {
 				t.Fatalf("lockfilePaths: %v", err)
 			}
@@ -227,6 +231,10 @@ func TestLockfilePaths_allKeepsTrackedLockfilesBesideTheirManifest(t *testing.T)
 		"bun.lock", "package.json",
 		"uv.lock", "pyproject.toml",
 		"web/bun.lock", "web/package.json",
+		"desktop/src-tauri/Cargo.lock", "desktop/src-tauri/Cargo.toml",
+		"cli/go.mod", "cli/go.sum",
+		// A module with no dependencies has no go.sum.
+		"tools/empty/go.mod",
 		// A lockfile whose project is gone.
 		"stale/uv.lock",
 		// Only the exact name counts.
@@ -240,17 +248,19 @@ func TestLockfilePaths_allKeepsTrackedLockfilesBesideTheirManifest(t *testing.T)
 	writeFixture(t, root, "scratch/package.json", "")
 
 	cases := []struct {
-		name        string
-		web, python bool
-		want        []string
+		name  string
+		kinds lockfileKinds
+		want  []string
 	}{
-		{"web", true, false, []string{"bun.lock", "web/bun.lock"}},
-		{"python", false, true, []string{"uv.lock"}},
-		{"both", true, true, []string{"bun.lock", "uv.lock", "web/bun.lock"}},
+		{"web", lockfileKinds{Web: true}, []string{"bun.lock", "web/bun.lock"}},
+		{"python", lockfileKinds{Python: true}, []string{"uv.lock"}},
+		{"rust", lockfileKinds{Rust: true}, []string{"desktop/src-tauri/Cargo.lock"}},
+		{"go", lockfileKinds{Go: true}, []string{"cli/go.mod"}},
+		{"web and python", lockfileKinds{Web: true, Python: true}, []string{"bun.lock", "uv.lock", "web/bun.lock"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := lockfilePaths(tc.web, tc.python, true)
+			got, err := lockfilePaths(tc.kinds, true)
 			if err != nil {
 				t.Fatalf("lockfilePaths: %v", err)
 			}

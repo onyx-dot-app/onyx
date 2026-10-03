@@ -22,6 +22,9 @@ func fakeGateScans(t *testing.T, deps *audit.Result, depsErr error, images map[s
 		if !opts.Strict {
 			t.Fatal("the gate must run the dependency audit strictly")
 		}
+		if !opts.AllLockfiles {
+			t.Fatal("the gate must scan every tracked lockfile")
+		}
 		return deps, depsErr
 	}
 	runImage = func(opts audit.ImageOptions) (*audit.Result, error) {
