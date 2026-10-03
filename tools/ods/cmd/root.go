@@ -71,6 +71,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewDevCommand())
 	cmd.AddCommand(NewWebCommand())
 	cmd.AddCommand(NewWhoisCommand())
+	cmd.AddCommand(NewImpersonateCommand())
 	cmd.AddCommand(NewTraceCommand())
 	cmd.AddCommand(NewUpdateBaseDigestsCommand())
 	cmd.AddCommand(NewInstallSkillCommand())
