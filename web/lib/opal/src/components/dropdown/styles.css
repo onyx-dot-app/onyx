@@ -1,7 +1,7 @@
 @reference "#reference.css";
 
 /* ============================================================================
-   Select dropdown — the family-internal listbox
+   Dropdown — the floating list under a trigger
 
    State styling rides data attributes set by the components:
      Rows are presentational LineItemButtons: selection, hover, press and
@@ -9,13 +9,13 @@
      the search field, the groups and the create row's icon.
    ============================================================================ */
 
-.opal-select-dropdown {
+.opal-dropdown {
   @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
 }
 
 /* The search field pinned above the rows: a borderless input on its own
    row, with the same 4px inset as the rows below it. */
-.opal-select-search {
+.opal-dropdown-search {
   @apply p-1 pb-0;
 }
 
@@ -23,11 +23,11 @@
    the bordered box edge to edge instead of stopping at the padding. The
    list scrolls without a visible scrollbar: the mask fade at each edge
    already says there is more. */
-.opal-select-dropdown-scroll {
+.opal-dropdown-scroll {
   @apply flex flex-col gap-1 overflow-x-hidden p-1;
   scrollbar-width: none;
 }
-.opal-select-dropdown-scroll::-webkit-scrollbar {
+.opal-dropdown-scroll::-webkit-scrollbar {
   display: none;
 }
 
@@ -37,59 +37,59 @@
    transform there makes Chromium repaint it at scroll offset 0 for a
    frame). `data-state="closed"` is the exit, kept mounted by usePresence
    until the animation ends. */
-.opal-select-dropdown[data-state="open"] {
-  animation: opal-select-dropdown-in 120ms ease-out;
+.opal-dropdown[data-state="open"] {
+  animation: opal-dropdown-in 120ms ease-out;
 }
 
-.opal-select-dropdown[data-state="open"] .opal-select-dropdown-content {
-  animation: opal-select-dropdown-content-in 120ms ease-out;
+.opal-dropdown[data-state="open"] .opal-dropdown-content {
+  animation: opal-dropdown-content-in 120ms ease-out;
 }
 
-.opal-select-dropdown[data-state="closed"] {
-  animation: opal-select-dropdown-out 80ms ease-in forwards;
+.opal-dropdown[data-state="closed"] {
+  animation: opal-dropdown-out 80ms ease-in forwards;
   pointer-events: none;
 }
 
-.opal-select-dropdown[data-state="closed"] .opal-select-dropdown-content {
-  animation: opal-select-dropdown-content-out 80ms ease-in forwards;
+.opal-dropdown[data-state="closed"] .opal-dropdown-content {
+  animation: opal-dropdown-content-out 80ms ease-in forwards;
 }
 
-@keyframes opal-select-dropdown-in {
+@keyframes opal-dropdown-in {
   from {
     opacity: 0;
   }
 }
 
-@keyframes opal-select-dropdown-out {
+@keyframes opal-dropdown-out {
   to {
     opacity: 0;
   }
 }
 
-@keyframes opal-select-dropdown-content-in {
+@keyframes opal-dropdown-content-in {
   from {
     transform: translateY(-4px) scale(0.98);
   }
 }
 
-@keyframes opal-select-dropdown-content-out {
+@keyframes opal-dropdown-content-out {
   to {
     transform: translateY(-4px) scale(0.98);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .opal-select-dropdown[data-state],
-  .opal-select-dropdown[data-state] .opal-select-dropdown-content {
+  .opal-dropdown[data-state],
+  .opal-dropdown[data-state] .opal-dropdown-content {
     animation: none;
   }
 }
 
-.opal-select-empty-set {
+.opal-dropdown-empty-set {
   @apply p-2;
 }
 
-.opal-select-no-match {
+.opal-dropdown-no-match {
   @apply px-2 py-2 text-text-02 font-secondary-body;
 }
 
@@ -102,27 +102,27 @@
 /* Keyboard mode: rows and titles ignore the pointer, so the pointer's hover
    cannot paint a second highlight beside the keyboard's. A pointer movement
    over the list drops the flag and hover returns. */
-.opal-select-dropdown[data-keyboard-nav] [role="option"],
-.opal-select-dropdown[data-keyboard-nav] .opal-select-group {
+.opal-dropdown[data-keyboard-nav] [role="option"],
+.opal-dropdown[data-keyboard-nav] .opal-dropdown-group {
   pointer-events: none;
 }
 
 /* A foldable group wraps its title and its fold. The row gap lives inside
    the fold, so a closed group collapses to its title with no stray gap. */
-.opal-select-group {
+.opal-dropdown-group {
   @apply flex flex-col;
 }
-.opal-select-group-rows {
+.opal-dropdown-group-rows {
   @apply flex flex-col gap-1 pt-1;
 }
 
 /* Keyboard scrolling brings a stop to the nearest edge; the mask fade there
    is 12px, so a stop keeps that much clear of the edge. */
-.opal-select-dropdown-scroll [role="option"],
-.opal-select-group > :first-child {
+.opal-dropdown-scroll [role="option"],
+.opal-dropdown-group > :first-child {
   scroll-margin-block: 0.75rem;
 }
 
-.opal-select-create-icon {
+.opal-dropdown-create-icon {
   @apply ms-2 h-4 w-4 shrink-0 text-text-03;
 }

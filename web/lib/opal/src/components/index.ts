@@ -257,6 +257,20 @@ export {
   type InputDatePickerProps,
 } from "@opal/components/inputs/chrono/input-date-picker/components";
 
+/* Dropdown */
+export {
+  Dropdown,
+  type DropdownProps,
+  type DropdownAnchorProps,
+  type DropdownTriggerProps,
+  type DropdownDataProps,
+} from "@opal/components/dropdown/components";
+export {
+  type DropdownItem,
+  type DropdownOption,
+  type DropdownGroup,
+} from "@opal/components/dropdown/types";
+
 /* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
 export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";
 export { InputSingleComboBox } from "@opal/components/inputs/dropdowns/input-single-combo-box/components";
