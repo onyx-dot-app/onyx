@@ -29,6 +29,9 @@ from onyx.db.enums import Permission
 from onyx.db.models import DocumentSource, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.capability_check_runs import (
+    start_capability_checks_for_new_pairing,
+)
 from onyx.server.documents.models import (
     CredentialBase,
     CredentialDataUpdateRequest,
@@ -193,6 +196,11 @@ def swap_credentials_for_connector(
         connector_id=credential_swap_req.connector_id,
         db_session=db_session,
         user=user,
+    )
+    start_capability_checks_for_new_pairing(
+        db_session,
+        credential_id=new_credential_id,
+        connector_id=credential_swap_req.connector_id,
     )
 
     return StatusResponse(

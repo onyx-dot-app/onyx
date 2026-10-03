@@ -14,18 +14,10 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import (
     DocumentSource,
-    OnyxCeleryPriority,
-    OnyxCeleryQueues,
-    OnyxCeleryTask,
 )
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
-from onyx.connectors.capability_checks.runner import (
-    capability_check_run_ceiling_seconds,
-    capability_check_run_stale_after,
-)
 from onyx.connectors.credential_families import is_credential_usable_for_source
 from onyx.connectors.factory import validate_connector_config
 from onyx.db.connector import fetch_connector_by_id
@@ -37,8 +29,6 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.credential_capability import (
     get_capability_report_row,
     get_capability_report_rows_for_source,
-    mark_capability_report_running,
-    mark_capability_run_failed,
 )
 from onyx.db.credentials import (
     fetch_credential_by_id,
@@ -50,9 +40,12 @@ from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus, Per
 from onyx.db.models import CredentialCapabilityReportRow, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.capability_check_runs import (
+    CapabilityRunEnqueueError,
+    start_capability_check_run,
+)
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -210,14 +203,22 @@ def trigger_capability_check(
                 )
             except ValueError as e:
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-    row = mark_capability_report_running(
-        db_session,
-        credential_id=credential_id,
-        connector_id=request.connector_id,
-        source=run_source,
-        trigger=CapabilityCheckTrigger.MANUAL,
-        active_within=capability_check_run_stale_after(run_source),
-    )
+    try:
+        row = start_capability_check_run(
+            db_session,
+            credential_id=credential_id,
+            connector_id=request.connector_id,
+            source=run_source,
+            trigger=CapabilityCheckTrigger.MANUAL,
+            connector_specific_config=request.connector_specific_config,
+        )
+    except CapabilityRunEnqueueError as e:
+        # No run was enqueued: FAILED_TO_RUN is the truth pollers read, and it
+        # does not block an immediate re-trigger.
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Could not enqueue the capability check run; try again shortly.",
+        ) from e
     if row is None:
         # An unexpired run is in flight; return its row without re-enqueueing.
         standing = get_capability_report_row(
@@ -233,52 +234,7 @@ def trigger_capability_check(
                 "deleted while the request was in flight.",
             )
         return CapabilityReportSnapshot.from_row(standing)
-    snapshot = CapabilityReportSnapshot.from_row(row)
-    run_id = row.run_id
-    assert run_id is not None, "The RUNNING mark always stamps a run_id."
-    # Commit before enqueueing so the worker can only observe the RUNNING mark.
-    db_session.commit()
-    try:
-        client_app.send_task(
-            OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
-            kwargs={
-                "credential_id": credential_id,
-                "connector_id": request.connector_id,
-                "connector_specific_config": request.connector_specific_config,
-                "tenant_id": get_current_tenant_id(),
-                # The attempt's fence: the task's terminal writes land only
-                # while this id still owns the row.
-                "run_id": str(run_id),
-            },
-            queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
-            priority=OnyxCeleryPriority.HIGH,
-            # Queue wait is bounded by one execution ceiling; the staleness
-            # cutoff above allows for both, so an expired task never strands the
-            # scope.
-            expires=capability_check_run_ceiling_seconds(run_source),
-        )
-    except Exception:
-        # The 503 handler logs no traceback, so record the cause here (broker
-        # down and a bad task payload must stay distinguishable in the logs).
-        logger.exception(
-            "Capability check enqueue failed for credential %s, connector %s.",
-            credential_id,
-            request.connector_id,
-        )
-        # No run was enqueued: FAILED_TO_RUN is the truth pollers should read,
-        # and it does not block an immediate re-trigger.
-        mark_capability_run_failed(
-            db_session,
-            credential_id=credential_id,
-            connector_id=request.connector_id,
-            run_id=run_id,
-        )
-        db_session.commit()
-        raise OnyxError(
-            OnyxErrorCode.SERVICE_UNAVAILABLE,
-            "Could not enqueue the capability check run; try again shortly.",
-        )
-    return snapshot
+    return CapabilityReportSnapshot.from_row(row)
 
 
 @router.get("/admin/credential/{credential_id}/capability-report")
