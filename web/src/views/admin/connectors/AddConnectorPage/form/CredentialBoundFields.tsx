@@ -1,7 +1,6 @@
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
-import { Text } from "@opal/components";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible, Text } from "@opal/components";
 import type { CredentialBindingFieldError } from "@/lib/connectors/bindingGate";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
@@ -82,17 +81,11 @@ export default function CredentialBoundFields({
     >
       {visibleFields.map(renderField)}
       {visibleAdvancedFields.length > 0 && (
-        <SimpleCollapsible defaultOpen={false}>
-          <SimpleCollapsible.Header
-            title={t("advancedOptions")}
-            sizePreset="main-ui"
-          />
-          <SimpleCollapsible.Content>
-            <Section gap={4} alignItems="start" width="full">
-              {visibleAdvancedFields.map(renderField)}
-            </Section>
-          </SimpleCollapsible.Content>
-        </SimpleCollapsible>
+        <Collapsible defaultOpen={false} title={t("advancedOptions")}>
+          <Section gap={4} alignItems="start" width="full">
+            {visibleAdvancedFields.map(renderField)}
+          </Section>
+        </Collapsible>
       )}
     </Section>
   );
