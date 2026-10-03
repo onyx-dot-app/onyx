@@ -3347,8 +3347,7 @@
         "isSandbox": "Ambiente de sandbox",
         "serviceUserEmail": "E-mail do usuário de serviço",
         "zuliprcContent": "Conteúdo do Zuliprc",
-        "authenticationMethod": "Método de autenticação",
-        "scopedToken": "Este é um token de API com escopos"
+        "authenticationMethod": "Método de autenticação"
       },
       "hints": {
         "boxUserEmail": "Opcional. O usuário do Box a ser representado.",
@@ -3358,8 +3357,7 @@
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
         "pfxFile": "Um arquivo PFX.",
-        "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
-        "scopedToken": "Tokens com escopos precisam passar pelo gateway de API da Atlassian. Deixe desativado para tokens clássicos."
+        "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io."
       },
       "methods": {
         "labels": {

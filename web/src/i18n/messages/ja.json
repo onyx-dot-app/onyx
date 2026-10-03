@@ -3347,8 +3347,7 @@
         "isSandbox": "サンドボックス環境かどうか",
         "serviceUserEmail": "サービスユーザーのメールアドレス",
         "zuliprcContent": "Zuliprc の内容",
-        "authenticationMethod": "認証方法",
-        "scopedToken": "スコープ付きの API トークンです"
+        "authenticationMethod": "認証方法"
       },
       "hints": {
         "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
@@ -3358,8 +3357,7 @@
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "PFX ファイルです。",
-        "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
-        "scopedToken": "スコープ付きトークンは Atlassian の API ゲートウェイを経由する必要があります。クラシックトークンの場合はオフのままにしてください。"
+        "testrailBaseUrl": "例: https://yourcompany.testrail.io。"
       },
       "methods": {
         "labels": {
