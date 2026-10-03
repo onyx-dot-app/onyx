@@ -1968,6 +1968,13 @@ DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
 
+# How long a signup waits for a worker to build its tenant before the request
+# fails and asks the user to retry. A tenant built from scratch runs every
+# alembic migration, which takes about 90 seconds.
+TENANT_PROVISIONING_WAIT_SECONDS = int(
+    os.environ.get("TENANT_PROVISIONING_WAIT_SECONDS", "180")
+)
+
 # Master switch for the tenant work-gating feature. Controls the `enabled`
 # axis only — flipping this True puts the feature in shadow mode (compute
 # the gate, log skip counts, but do not actually skip). The `enforce` axis
