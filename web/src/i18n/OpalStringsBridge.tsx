@@ -60,6 +60,12 @@ export default function OpalStringsBridge({
       valueCannotBeRevealed: t("input.valueCannotBeRevealed"),
       scrollTabsLeft: t("tabs.scrollLeft"),
       scrollTabsRight: t("tabs.scrollRight"),
+      collapsibleFold: t("collapsible.fold"),
+      collapsibleExpand: t("collapsible.expand"),
+      collapsibleFoldSection: (title) =>
+        t("collapsible.foldSection", { title }),
+      collapsibleExpandSection: (title) =>
+        t("collapsible.expandSection", { title }),
       previousPage: t("pagination.previousPage"),
       nextPage: t("pagination.nextPage"),
       goToPage: t("pagination.goToPage"),

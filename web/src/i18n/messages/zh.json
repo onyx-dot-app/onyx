@@ -13227,6 +13227,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "展开",
+      "expandSection": "展开{title}",
+      "fold": "折叠",
+      "foldSection": "折叠{title}"
+    },
     "comboBox": {
       "close": "关闭下拉菜单",
       "create": "创建",

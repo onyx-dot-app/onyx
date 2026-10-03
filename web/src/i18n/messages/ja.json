@@ -13227,6 +13227,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "展開",
+      "expandSection": "{title}を展開",
+      "fold": "折りたたむ",
+      "foldSection": "{title}を折りたたむ"
+    },
     "comboBox": {
       "close": "ドロップダウンを閉じる",
       "create": "作成",
