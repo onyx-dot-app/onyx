@@ -7,6 +7,9 @@ import re
 import tempfile
 import zipfile
 from collections.abc import Callable, Iterator, Sequence
+from email.header import decode_header
+from email.header import make_header
+from email.message import Message
 from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
@@ -719,6 +722,137 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     )
 
 
+# Which .eml attachments are worth opening, and how large is too large. Both are module
+# constants so a deployment can narrow them. Every entry must be one
+# extract_file_text_locally actually parses -- .htm is deliberately absent because it is
+# in no extension set, so it would fall through to the raw-text reader and index markup.
+# test_the_allowlist_only_promises_what_the_parser_handles pins that.
+EML_ATTACHMENT_EXTENSIONS = {
+    ".pdf",
+    ".docx",
+    ".pptx",
+    ".xlsx",
+    ".xlsm",
+    ".html",
+    ".txt",
+    ".csv",
+}
+EML_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
+
+
+def _decode_email_part(part: Message) -> str | None:
+    """Text of one MIME part, with its transfer encoding removed.
+
+    ``get_payload()`` with no ``decode=True`` returns the *encoded* string, so a
+    ``Content-Transfer-Encoding: base64`` part — most mail from Outlook and Exchange —
+    is indexed as base64. Nothing raises: the document count is right, the chunks are
+    the right size, and the index is full of gibberish.
+
+    Falls back to the previous behaviour if decoding raises, so no message that indexes
+    today stops indexing.
+    """
+    try:
+        payload = part.get_payload(decode=True)
+    except Exception as decode_error:
+        logger.warning("EML part could not be decoded: %s", decode_error)
+        payload = None
+
+    if isinstance(payload, bytes):
+        charset = part.get_content_charset() or "utf-8"
+        try:
+            return payload.decode(charset, errors="replace")
+        except LookupError:
+            # An unknown charset label is not a reason to lose the part.
+            return payload.decode("utf-8", errors="replace")
+
+    raw = part.get_payload()
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, list):
+        return "".join(item for item in raw if isinstance(item, str)) or None
+    logger.warning("Unexpected payload type: %s", type(raw))
+    return None
+
+
+def _extract_email_attachments(message: Message) -> Iterator[tuple[str, str]]:
+    """Yield ``(filename, text)`` for each readable attachment.
+
+    One non-recursive pass. Nested ``.eml`` is deliberately not followed — one level
+    only, so a mail chain cannot expand without bound. An attachment that cannot be read
+    is logged and skipped rather than failing the whole message.
+    """
+    for part in message.walk():
+        name = part.get_filename()
+        if not name:
+            continue
+        extension = get_file_ext(name)
+        if extension not in EML_ATTACHMENT_EXTENSIONS:
+            continue
+
+        try:
+            blob = part.get_payload(decode=True)
+        except Exception as attachment_error:
+            logger.warning(
+                "EML attachment %s could not be decoded: %s", name, attachment_error
+            )
+            continue
+
+        if not isinstance(blob, bytes) or not blob:
+            continue
+        if len(blob) > EML_ATTACHMENT_MAX_BYTES:
+            logger.warning(
+                "EML attachment %s skipped: %d bytes over the %d limit",
+                name,
+                len(blob),
+                EML_ATTACHMENT_MAX_BYTES,
+            )
+            continue
+
+        try:
+            # extract_file_text_locally, not extract_file_text: the latter reads the
+            # Unstructured key from the database, and eml_to_text is itself reached from
+            # extract_file_text, so recursing into it would make an attachment cost a DB
+            # round trip and re-enter the path that called us.
+            attachment_text = extract_file_text_locally(
+                io.BytesIO(blob), name, extension=extension
+            )
+        except Exception as extract_error:
+            logger.warning(
+                "EML attachment %s could not be read: %s", name, extract_error
+            )
+            continue
+
+        if attachment_text and attachment_text.strip():
+            yield name, attachment_text
+
+
+EML_ENVELOPE_FIELDS = ("From", "To", "Cc", "Date", "Subject")
+
+
+def _envelope_headers(message: Message) -> str:
+    """The message's own headers, decoded, one field per line.
+
+    Without these the only ``From:`` an extracted email can contain is body text: the quoted
+    header block of an earlier message in the thread. The nearest sender to a sentence is then
+    the wrong one, which is worse than having no sender at all.
+    """
+    lines: list[str] = []
+    for field in EML_ENVELOPE_FIELDS:
+        raw = message.get(field)
+        if not raw:
+            continue
+        try:
+            # RFC 2047 encoded-words are common in real mail and index as mojibake undecoded.
+            value = str(make_header(decode_header(raw)))
+        except Exception:
+            value = str(raw)
+        # Folded headers arrive with embedded newlines, which would break one field per line.
+        value = " ".join(value.split())
+        if value:
+            lines.append(f"{field}: {value}")
+    return "\n".join(lines)
+
+
 def eml_to_text(file: IO[Any]) -> str:
     encoding = detect_encoding(file)
     text_file = io.TextIOWrapper(file, encoding=encoding)
@@ -740,16 +874,42 @@ def eml_to_text(file: IO[Any]) -> str:
         except Exception:
             pass
 
-    text_content = []
+    text_content: list[str] = []
+    html_content: list[str] = []
     for part in message.walk():
-        if part.get_content_type().startswith("text/plain"):
-            payload = part.get_payload()
-            if isinstance(payload, str):
-                text_content.append(payload)
-            elif isinstance(payload, list):
-                text_content.extend(item for item in payload if isinstance(item, str))
-            else:
-                logger.warning("Unexpected payload type: %s", type(payload))
+        content_type = part.get_content_type()
+        # A part with an attachment disposition is handled by the attachment pass below.
+        # Without this an attached .txt or .html would be read twice.
+        disposition = str(part.get("Content-Disposition") or "")
+        is_attachment = disposition.lower().strip().startswith("attachment")
+
+        if content_type.startswith("text/plain") and not is_attachment:
+            decoded = _decode_email_part(part)
+            if decoded is not None:
+                text_content.append(decoded)
+        elif content_type.startswith("text/html") and not is_attachment:
+            decoded = _decode_email_part(part)
+            if decoded is not None:
+                html_content.append(decoded)
+
+    # HTML is a fallback, not a preference: ordinary multipart/alternative mail keeps the
+    # behaviour it has today, and HTML-only mail stops indexing as nothing.
+    if not text_content and html_content:
+        text_content = [parse_html_page_basic(io.StringIO(html)) for html in html_content]
+
+    for name, attachment_text in _extract_email_attachments(message):
+        text_content.append(f"[attachment: {name}]\n{attachment_text}")
+
+    # The envelope leads the document, so a message's own sender is the nearest attribution to
+    # its own content rather than the quoted headers of the mail it replies to.
+    #
+    # Prepended HERE, after the HTML fallback, not before it: that fallback fires on
+    # `not text_content`, so an envelope added earlier would make an HTML-only message look like
+    # it already had a body and its actual content would be dropped.
+    envelope = _envelope_headers(message)
+    if envelope:
+        text_content = [envelope] + text_content
+
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
