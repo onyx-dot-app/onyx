@@ -107,7 +107,7 @@ jobs:
       - name: Run dependency audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync ods audit --fail-on=critical
+        run: uv run --no-sync ods audit --fail-on=critical --all-lockfiles
 
       # The same registry credentials the builds use, fetched the same way, so
       # the bases scanned are the bases shipped. Missing credentials fail the

@@ -113,10 +113,12 @@ type Finding struct {
 type Options struct {
 	Web        bool
 	Python     bool
+	Rust       bool
+	Go         bool
 	Dependabot bool
 	Actions    bool
-	// AllLockfiles widens the lockfile scan from the root and web lockfiles the
-	// deploy gate covers to every tracked one.
+	// AllLockfiles widens the lockfile scan from the fixed set of shipped
+	// lockfiles to every tracked one of the selected kinds.
 	AllLockfiles bool
 	// Strict fails the run on any backend or per-action query failure, for
 	// callers that read a missing finding as a resolved one.
@@ -142,22 +144,26 @@ type Result struct {
 // report to opts.Stdout/opts.Stderr, and returns the result. With no selector
 // flags set, all backends are run.
 func Run(opts Options) (*Result, error) {
-	runAll := !opts.Web && !opts.Python && !opts.Dependabot && !opts.Actions
-	scanWeb := runAll || opts.Web
-	scanPython := runAll || opts.Python
+	runAll := !opts.Web && !opts.Python && !opts.Rust && !opts.Go && !opts.Dependabot && !opts.Actions
+	kinds := lockfileKinds{
+		Web:    runAll || opts.Web,
+		Python: runAll || opts.Python,
+		Rust:   runAll || opts.Rust,
+		Go:     runAll || opts.Go,
+	}
 	scanDependabot := runAll || opts.Dependabot
 	scanActionsSrc := runAll || opts.Actions
 
-	// A lockfile scan (web/python) is the primary deploy gate. While one is
-	// running, a flaky Dependabot/Actions backend is downgraded to a warning
-	// unless Strict. Otherwise a failure of an explicitly requested backend is
-	// fatal, so the audit can't report success without having checked anything.
-	warnOnBackendFailure := (scanWeb || scanPython) && !opts.Strict
+	// A lockfile scan is the primary deploy gate. While one is running, a
+	// flaky Dependabot/Actions backend is downgraded to a warning unless
+	// Strict. Otherwise a failure of an explicitly requested backend is fatal,
+	// so the audit can't report success without having checked anything.
+	warnOnBackendFailure := kinds.any() && !opts.Strict
 
 	var findings []Finding
 
-	if scanWeb || scanPython {
-		lockfiles, err := lockfilePaths(scanWeb, scanPython, opts.AllLockfiles)
+	if kinds.any() {
+		lockfiles, err := lockfilePaths(kinds, opts.AllLockfiles)
 		if err != nil {
 			return nil, fmt.Errorf("failed to locate lockfiles: %w", err)
 		}
@@ -225,26 +231,63 @@ func Run(opts Options) (*Result, error) {
 	return result, nil
 }
 
+// lockfileKinds selects which lockfile ecosystems a scan reads.
+type lockfileKinds struct {
+	Web, Python, Rust, Go bool
+}
+
+func (k lockfileKinds) any() bool { return k.Web || k.Python || k.Rust || k.Go }
+
+// names lists the lockfile basenames of the selected kinds.
+func (k lockfileKinds) names() []string {
+	var names []string
+	if k.Web {
+		names = append(names, "bun.lock")
+	}
+	if k.Python {
+		names = append(names, "uv.lock")
+	}
+	if k.Rust {
+		names = append(names, "Cargo.lock")
+	}
+	if k.Go {
+		names = append(names, "go.mod")
+	}
+	return names
+}
+
 // lockfilePaths returns the lockfiles to scan based on the selectors, skipping
-// any that don't exist. With all set, it returns every tracked lockfile of the
-// selected kinds instead of the fixed set.
-func lockfilePaths(web, python, all bool) ([]string, error) {
+// any that don't exist. The fixed set is what the shipped products install
+// from: the web app and the desktop app's JS (root workspace), the backend,
+// the desktop app's Rust shell, and the CLI and Terraform provider modules.
+// With all set, it returns every tracked lockfile of the selected kinds
+// instead.
+func lockfilePaths(kinds lockfileKinds, all bool) ([]string, error) {
 	root, err := paths.GitRoot()
 	if err != nil {
 		return nil, err
 	}
 	if all {
-		return trackedLockfiles(root, web, python)
+		return trackedLockfiles(root, kinds)
 	}
 	var candidates []string
-	if web {
+	if kinds.Web {
 		candidates = append(candidates,
 			filepath.Join(root, "web", "bun.lock"),
 			filepath.Join(root, "bun.lock"),
 		)
 	}
-	if python {
+	if kinds.Python {
 		candidates = append(candidates, filepath.Join(root, "uv.lock"))
+	}
+	if kinds.Rust {
+		candidates = append(candidates, filepath.Join(root, "desktop", "src-tauri", "Cargo.lock"))
+	}
+	if kinds.Go {
+		candidates = append(candidates,
+			filepath.Join(root, "cli", "go.mod"),
+			filepath.Join(root, "terraform-provider-onyx", "go.mod"),
+		)
 	}
 	var existing []string
 	for _, c := range candidates {
@@ -260,23 +303,18 @@ func lockfilePaths(web, python, all bool) ([]string, error) {
 // lockfileManifests maps each lockfile name to the manifest that must sit beside
 // it, so a lockfile left behind by a removed project is not scanned.
 var lockfileManifests = map[string]string{
-	"bun.lock": "package.json",
-	"uv.lock":  "pyproject.toml",
+	"bun.lock":   "package.json",
+	"uv.lock":    "pyproject.toml",
+	"Cargo.lock": "Cargo.toml",
+	// go.mod is its own manifest; a module without go.sum has no dependencies.
+	"go.mod": "go.sum",
 }
 
 // trackedLockfiles lists the lockfiles git tracks anywhere under root, in index
 // order, keeping those whose manifest is still beside them.
-func trackedLockfiles(root string, web, python bool) ([]string, error) {
-	var names []string
-	if web {
-		names = append(names, "bun.lock")
-	}
-	if python {
-		names = append(names, "uv.lock")
-	}
-
+func trackedLockfiles(root string, kinds lockfileKinds) ([]string, error) {
 	args := []string{"-C", root, "ls-files", "-z", "--"}
-	for _, name := range names {
+	for _, name := range kinds.names() {
 		args = append(args, ":(glob)**/"+name)
 	}
 	out, err := exec.Command("git", args...).Output()

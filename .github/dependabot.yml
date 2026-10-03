@@ -45,6 +45,27 @@ updates:
     open-pull-requests-limit: 3
     labels:
       - "dependabot:javascript"
+  - package-ecosystem: "cargo"
+    directory: "/desktop/src-tauri"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    labels:
+      - "dependabot:rust"
+  - package-ecosystem: "gomod"
+    directories:
+      - "/cli"
+      - "/terraform-provider-onyx"
+      - "/tools/ods"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    labels:
+      - "dependabot:go"
   - package-ecosystem: "bun"
     directory: "/mobile"
     schedule:
