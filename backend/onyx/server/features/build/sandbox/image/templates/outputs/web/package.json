@@ -25,7 +25,7 @@
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.7",
     "react-resizable-panels": "^4.11.2",
-    "recharts": "^2.15.4",
+    "recharts": "^3.10.1",
     "shadcn": "^4.16.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
