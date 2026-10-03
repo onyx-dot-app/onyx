@@ -44,9 +44,9 @@ type DividerBareProps = Omit<
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: OrientationVariants;
-  /** Padding along the line direction, as a spacing step. Default: 6px. */
+  /** Padding along the line direction, as a spacing step. Default: 0.375rem. */
   paddingParallel?: DividerSpacing;
-  /** Padding perpendicular to the line, as a spacing step. Default: 4px. */
+  /** Padding perpendicular to the line, as a spacing step. Default: 0.25rem. */
   paddingPerpendicular?: DividerSpacing;
 };
 
@@ -117,7 +117,7 @@ function Divider(props: DividerProps) {
     paddingPerpendicular,
   } = props;
 
-  // The stylesheet carries the default inset (6px along the line, 4px
+  // The stylesheet carries the default inset (0.375rem along the line, 0.25rem
   // across, the same for every variant); a bare line's steps override it.
   const inset = {
     ...(paddingParallel !== undefined && {
