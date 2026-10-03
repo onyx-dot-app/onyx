@@ -32,8 +32,12 @@ from onyx.server.manage.web_search.models import (
     WebSearchProviderUpsertRequest,
     WebSearchProviderView,
 )
+from onyx.tools.tool_implementations.open_url.firecrawl import FIRECRAWL_SCRAPE_URL
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
+)
+from onyx.tools.tool_implementations.web_search.clients.firecrawl_client import (
+    FIRECRAWL_SEARCH_URL,
 )
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.tools.tool_implementations.web_search.providers import (
@@ -57,13 +61,58 @@ _SEARCH_TO_CONTENT_SYNC: list[
 ] = [
     (WebSearchProviderType.EXA, "Exa", WebContentProviderType.EXA),
     (WebSearchProviderType.TAVILY, "Tavily", WebContentProviderType.TAVILY),
+    (WebSearchProviderType.FIRECRAWL, "Firecrawl", WebContentProviderType.FIRECRAWL),
 ]
 _CONTENT_TO_SEARCH_SYNC: list[
     tuple[WebContentProviderType, str, WebSearchProviderType]
 ] = [
     (WebContentProviderType.EXA, "Exa", WebSearchProviderType.EXA),
     (WebContentProviderType.TAVILY, "Tavily", WebSearchProviderType.TAVILY),
+    (WebContentProviderType.FIRECRAWL, "Firecrawl", WebSearchProviderType.FIRECRAWL),
 ]
+
+_FIRECRAWL_SCRAPE_PATH = "/v2/scrape"
+_FIRECRAWL_SEARCH_PATH = "/v2/search"
+
+
+def _sibling_firecrawl_url(
+    base_url: str | None, *, from_path: str, to_path: str
+) -> str | None:
+    """Derive the other Firecrawl endpoint on the same origin.
+
+    Both Firecrawl endpoints require a full URL, so a synced row needs one too.
+    Returns None when the source URL does not end in the expected path; the
+    synced row then stays disconnected until the admin enters a URL.
+    """
+    if not base_url or not base_url.endswith(from_path):
+        return None
+    return base_url[: -len(from_path)] + to_path
+
+
+def _synced_content_config(
+    content_type: WebContentProviderType, search_config: dict[str, str] | None
+) -> WebContentProviderConfig | None:
+    if content_type != WebContentProviderType.FIRECRAWL:
+        return None
+    search_url = (search_config or {}).get("base_url") or FIRECRAWL_SEARCH_URL
+    scrape_url = _sibling_firecrawl_url(
+        search_url, from_path=_FIRECRAWL_SEARCH_PATH, to_path=_FIRECRAWL_SCRAPE_PATH
+    )
+    return WebContentProviderConfig(base_url=scrape_url) if scrape_url else None
+
+
+def _synced_search_config(
+    search_type: WebSearchProviderType, content_config: WebContentProviderConfig | None
+) -> dict[str, str] | None:
+    if search_type != WebSearchProviderType.FIRECRAWL:
+        return None
+    scrape_url = (content_config.base_url if content_config else None) or (
+        FIRECRAWL_SCRAPE_URL
+    )
+    search_url = _sibling_firecrawl_url(
+        scrape_url, from_path=_FIRECRAWL_SCRAPE_PATH, to_path=_FIRECRAWL_SEARCH_PATH
+    )
+    return {"base_url": search_url} if search_url else None
 
 
 @admin_router.get("/search-providers", response_model=list[WebSearchProviderView])
@@ -117,10 +166,11 @@ def upsert_search_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync API key from search provider to content provider (Exa / Tavily)
+    # Sync API key from search provider to content provider (Exa / Tavily / Firecrawl)
     if request.api_key_changed and request.api_key:
         for search_type, name, content_type in _SEARCH_TO_CONTENT_SYNC:
             if request.provider_type == search_type:
+                # Config is only seeded on insert; an existing row keeps its own.
                 stmt = (
                     insert(InternetContentProvider)
                     .values(
@@ -128,6 +178,7 @@ def upsert_search_provider_endpoint(
                         provider_type=content_type.value,
                         api_key=request.api_key,
                         is_active=False,
+                        config=_synced_content_config(content_type, request.config),
                     )
                     .on_conflict_do_update(
                         index_elements=["name"],
@@ -297,10 +348,11 @@ def upsert_content_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync API key from content provider to search provider (Exa / Tavily)
+    # Sync API key from content provider to search provider (Exa / Tavily / Firecrawl)
     if request.api_key_changed and request.api_key:
         for content_type, name, search_type in _CONTENT_TO_SEARCH_SYNC:
             if request.provider_type == content_type:
+                # Config is only seeded on insert; an existing row keeps its own.
                 stmt = (
                     insert(InternetSearchProvider)
                     .values(
@@ -308,6 +360,7 @@ def upsert_content_provider_endpoint(
                         provider_type=search_type.value,
                         api_key=request.api_key,
                         is_active=False,
+                        config=_synced_search_config(search_type, request.config),
                     )
                     .on_conflict_do_update(
                         index_elements=["name"],
