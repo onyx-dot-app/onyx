@@ -20,6 +20,7 @@ describe("SUPPORTED_LOCALES", () => {
       "zh",
       "ko",
       "ar",
+      "az",
     ]);
   });
 });
