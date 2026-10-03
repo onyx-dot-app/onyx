@@ -2670,24 +2670,6 @@
           "toast": "알 수 없는 오류가 발생했습니다"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "인덱싱 시작 날짜",
-          "subtext": "이 날짜 이전의 문서는 가져오지 않습니다"
-        },
-        "pruneFrequency": {
-          "description": "모든 문서를 소스와 대조하여 더 이상 존재하지 않는 문서를 삭제합니다. 참고: 이 과정은 모든 문서를 확인하므로 실행 빈도를 높일 때는 주의하세요. 기본값은 {hours}시간({days}일)입니다. 소수점 시간도 지원합니다(예: 0.1시간 = 6분). 이 커넥터의 정리를 사용하지 않으려면 0을 입력하세요.",
-          "label": "정리 주기(시간)"
-        },
-        "refreshFrequency": {
-          "description": "소스에서 새 문서를 가져오는 주기입니다(분 단위). 0을 입력하면 이 커넥터의 새 문서를 가져오지 않습니다.",
-          "label": "새로 고침 주기(분)"
-        },
-        "resetButton": {
-          "label": "초기화"
-        },
-        "title": "고급 설정"
-      },
       "connectorName": {
         "label": "커넥터 이름",
         "subtext": "커넥터를 설명하는 이름입니다."
@@ -2955,6 +2937,27 @@
       "tabs": {
         "empty": {
           "label": "표시할 탭이 없습니다."
+        }
+      },
+      "scheduled": {
+        "description": "커넥터가 인덱싱을 수행하는 방식을 지정합니다. 운영자가 이 섹션을 편집할 수 있습니다.",
+        "indexingStart": {
+          "description": "마지막 업데이트 날짜가 이보다 이전인 문서는 무시됩니다.",
+          "placeholder": "전체 기간",
+          "title": "다음 날짜 이후 문서 색인"
+        },
+        "pruneFrequency": {
+          "description": "소스를 확인하고 더 이상 존재하지 않는 문서를 삭제합니다.",
+          "title": "정리 주기"
+        },
+        "refreshFrequency": {
+          "description": "소스에서 새 문서를 가져옵니다.",
+          "title": "새로 고침 주기"
+        },
+        "title": "일정",
+        "units": {
+          "hours": "시간",
+          "minutes": "분"
         }
       }
     },
@@ -13253,6 +13256,7 @@
       "loading": "로딩 중",
       "loadingPage": "로딩 중…",
       "openCalendar": "캘린더 열기",
+      "optional": "(선택 사항)",
       "progress": "진행률",
       "remove": "제거",
       "removeItem": "{title} 제거",

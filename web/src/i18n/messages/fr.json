@@ -2670,24 +2670,6 @@
           "toast": "Une erreur inconnue est survenue"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Date de début de l'indexation",
-          "subtext": "Les documents antérieurs à cette date ne seront pas récupérés"
-        },
-        "pruneFrequency": {
-          "description": "Vérifie tous les documents par rapport à la source pour supprimer ceux qui n'existent plus. Remarque : ce processus vérifie chaque document, soyez donc prudent lorsque vous augmentez la fréquence. La valeur par défaut est de {hours} heures ({days} jours). Les heures décimales sont prises en charge (ex. : 0.1 heure = 6 minutes). Saisissez 0 pour désactiver l'élagage pour ce connecteur.",
-          "label": "Fréquence d'élagage (heures)"
-        },
-        "refreshFrequency": {
-          "description": "Indique la fréquence à laquelle nous récupérons de nouveaux documents depuis la source (en minutes). Si vous saisissez 0, nous ne récupérerons jamais de nouveaux documents pour ce connecteur.",
-          "label": "Fréquence d'actualisation (minutes)"
-        },
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
-        "title": "Configuration avancée"
-      },
       "connectorName": {
         "label": "Nom du connecteur",
         "subtext": "Un nom descriptif pour le connecteur."
@@ -2955,6 +2937,27 @@
       "tabs": {
         "empty": {
           "label": "Aucun onglet à afficher."
+        }
+      },
+      "scheduled": {
+        "description": "Indiquez comment le connecteur effectuera l'indexation. L'opérateur pourra modifier cette section.",
+        "indexingStart": {
+          "description": "Les documents dont la date de dernière mise à jour est antérieure seront ignorés.",
+          "placeholder": "Toute la période",
+          "title": "Indexer les documents après"
+        },
+        "pruneFrequency": {
+          "description": "Vérifier la source et supprimer les documents qui n'existent plus.",
+          "title": "Nettoyer toutes les"
+        },
+        "refreshFrequency": {
+          "description": "Récupérer les nouveaux documents depuis la source.",
+          "title": "Actualiser toutes les"
+        },
+        "title": "Planification",
+        "units": {
+          "hours": "heures",
+          "minutes": "minutes"
         }
       }
     },
@@ -13253,6 +13256,7 @@
       "loading": "Chargement",
       "loadingPage": "Chargement…",
       "openCalendar": "Ouvrir le calendrier",
+      "optional": "(Facultatif)",
       "progress": "Progression",
       "remove": "Retirer",
       "removeItem": "Retirer {title}",

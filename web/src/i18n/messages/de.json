@@ -2670,24 +2670,6 @@
           "toast": "Ein unbekannter Fehler ist aufgetreten"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Startdatum der Indizierung",
-          "subtext": "Dokumente vor diesem Datum werden nicht abgerufen"
-        },
-        "pruneFrequency": {
-          "description": "Prüft alle Dokumente gegen die Quelle, um jene zu löschen, die nicht mehr vorhanden sind. Hinweis: Dieser Vorgang prüft jedes Dokument. Erhöhen Sie die Häufigkeit daher mit Bedacht. Standard sind {hours} Stunden ({days} Tage). Dezimalstunden werden unterstützt (z. B. 0,1 Stunden = 6 Minuten). Geben Sie 0 ein, um die Bereinigung für diesen Konnektor zu deaktivieren.",
-          "label": "Bereinigungsintervall (Stunden)"
-        },
-        "refreshFrequency": {
-          "description": "So oft rufen wir neue Dokumente aus der Quelle ab (in Minuten). Wenn Sie 0 eingeben, rufen wir für diesen Konnektor nie neue Dokumente ab.",
-          "label": "Aktualisierungsintervall (Minuten)"
-        },
-        "resetButton": {
-          "label": "Zurücksetzen"
-        },
-        "title": "Erweiterte Konfiguration"
-      },
       "connectorName": {
         "label": "Konnektorname",
         "subtext": "Ein aussagekräftiger Name für den Konnektor."
@@ -2955,6 +2937,27 @@
       "tabs": {
         "empty": {
           "label": "Keine Tabs zum Anzeigen."
+        }
+      },
+      "scheduled": {
+        "description": "Legen Sie fest, wie der Connector die Indexierung durchführt. Der Betreiber kann diesen Abschnitt bearbeiten.",
+        "indexingStart": {
+          "description": "Dokumente, deren letztes Änderungsdatum davor liegt, werden ignoriert.",
+          "placeholder": "Gesamter Zeitraum",
+          "title": "Dokumente indexieren ab"
+        },
+        "pruneFrequency": {
+          "description": "Die Quelle prüfen und Dokumente löschen, die nicht mehr existieren.",
+          "title": "Bereinigen alle"
+        },
+        "refreshFrequency": {
+          "description": "Neue Dokumente aus der Quelle abrufen.",
+          "title": "Aktualisieren alle"
+        },
+        "title": "Zeitplan",
+        "units": {
+          "hours": "Stunden",
+          "minutes": "Minuten"
         }
       }
     },
@@ -13253,6 +13256,7 @@
       "loading": "Wird geladen",
       "loadingPage": "Wird geladen …",
       "openCalendar": "Kalender öffnen",
+      "optional": "(optional)",
       "progress": "Fortschritt",
       "remove": "Entfernen",
       "removeItem": "{title} entfernen",

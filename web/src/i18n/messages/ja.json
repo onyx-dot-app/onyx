@@ -2670,24 +2670,6 @@
           "toast": "不明なエラーが発生しました"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "インデックス作成の開始日",
-          "subtext": "この日付より前のドキュメントは取り込まれません"
-        },
-        "pruneFrequency": {
-          "description": "すべてのドキュメントをソースと照合し、すでに存在しないものを削除します。注意: この処理はすべてのドキュメントを確認するため、頻度を上げるときは注意してください。既定値は {hours} 時間（{days} 日）です。小数の時間も指定できます（例: 0.1 時間 = 6 分）。このコネクターのプルーニングを無効にするには 0 を入力してください。",
-          "label": "プルーニング頻度（時間）"
-        },
-        "refreshFrequency": {
-          "description": "ソースから新しいドキュメントを取得する間隔です（分単位）。0 を入力すると、このコネクターで新しいドキュメントを取得しません。",
-          "label": "更新頻度（分）"
-        },
-        "resetButton": {
-          "label": "リセット"
-        },
-        "title": "詳細設定"
-      },
       "connectorName": {
         "label": "コネクター名",
         "subtext": "コネクターの内容がわかる名前です。"
@@ -2955,6 +2937,27 @@
       "tabs": {
         "empty": {
           "label": "表示するタブはありません。"
+        }
+      },
+      "scheduled": {
+        "description": "コネクタがインデックス作成をどのように実行するかを指定します。オペレーターはこのセクションを編集できます。",
+        "indexingStart": {
+          "description": "最終更新日がこの日付より前のドキュメントは無視されます。",
+          "placeholder": "すべての期間",
+          "title": "インデックス対象の開始日"
+        },
+        "pruneFrequency": {
+          "description": "ソースを確認し、存在しなくなったドキュメントを削除します。",
+          "title": "削除チェック間隔"
+        },
+        "refreshFrequency": {
+          "description": "ソースから新しいドキュメントを取得します。",
+          "title": "更新間隔"
+        },
+        "title": "スケジュール",
+        "units": {
+          "hours": "時間",
+          "minutes": "分"
         }
       }
     },
@@ -13253,6 +13256,7 @@
       "loading": "読み込み中",
       "loadingPage": "読み込み中…",
       "openCalendar": "カレンダーを開く",
+      "optional": "（任意）",
       "progress": "進行状況",
       "remove": "削除",
       "removeItem": "{title} を削除",

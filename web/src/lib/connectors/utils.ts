@@ -5,7 +5,11 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { connectorConfigs } from "@/lib/connectors/connectors";
+import {
+  connectorConfigs,
+  MIN_PRUNE_FREQ_HOURS,
+  MIN_REFRESH_FREQ_MINUTES,
+} from "@/lib/connectors/connectors";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
   PIPELINE_ORDER,
@@ -142,11 +146,11 @@ export function createConnectorValidationSchema(
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
     pruneFreq: Yup.number().min(
-      0.083,
+      MIN_PRUNE_FREQ_HOURS,
       "Prune frequency must be at least 0.083 hours (5 minutes)"
     ),
     refreshFreq: Yup.number().min(
-      1,
+      MIN_REFRESH_FREQ_MINUTES,
       "Refresh frequency must be at least 1 minute"
     ),
   });

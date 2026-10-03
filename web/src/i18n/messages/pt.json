@@ -2670,24 +2670,6 @@
           "toast": "Ocorreu um erro desconhecido"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Data de início da indexação",
-          "subtext": "Documentos anteriores a esta data não serão buscados"
-        },
-        "pruneFrequency": {
-          "description": "Verifica todos os documentos na origem para excluir os que não existem mais. Observação: este processo verifica cada documento, portanto tenha cuidado ao aumentar a frequência. O padrão é {hours} horas ({days} dias). São aceitas horas decimais (por exemplo, 0,1 hora = 6 minutos). Digite 0 para desativar a limpeza deste conector.",
-          "label": "Frequência de limpeza (horas)"
-        },
-        "refreshFrequency": {
-          "description": "É com esta frequência que buscamos novos documentos na origem (em minutos). Se você digitar 0, nunca vamos buscar novos documentos para este conector.",
-          "label": "Frequência de atualização (minutos)"
-        },
-        "resetButton": {
-          "label": "Redefinir"
-        },
-        "title": "Configuração avançada"
-      },
       "connectorName": {
         "label": "Nome do conector",
         "subtext": "Um nome descritivo para o conector."
@@ -2955,6 +2937,27 @@
       "tabs": {
         "empty": {
           "label": "Nenhuma aba para mostrar."
+        }
+      },
+      "scheduled": {
+        "description": "Especifique como o conector fará a indexação. O operador poderá editar esta seção.",
+        "indexingStart": {
+          "description": "Documentos com data de última atualização anterior a esta serão ignorados.",
+          "placeholder": "Todo o período",
+          "title": "Indexar documentos após"
+        },
+        "pruneFrequency": {
+          "description": "Verificar a fonte e excluir documentos que não existem mais.",
+          "title": "Limpar a cada"
+        },
+        "refreshFrequency": {
+          "description": "Buscar novos documentos da fonte.",
+          "title": "Atualizar a cada"
+        },
+        "title": "Agendamento",
+        "units": {
+          "hours": "horas",
+          "minutes": "minutos"
         }
       }
     },
@@ -13253,6 +13256,7 @@
       "loading": "Carregando",
       "loadingPage": "Carregando…",
       "openCalendar": "Abrir calendário",
+      "optional": "(Opcional)",
       "progress": "Progresso",
       "remove": "Remover",
       "removeItem": "Remover {title}",

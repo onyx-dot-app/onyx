@@ -37,7 +37,7 @@ import type {
   ConnectorBase,
 } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
-import { Card, MessageCard } from "@opal/components";
+import { Card, Divider, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
@@ -293,9 +293,12 @@ export default function AddConnector({
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
-          pruneFreq: (pruneFreq ?? defaultPruneFreqHours) * 3600,
+          // The backend stores whole seconds.
+          pruneFreq: Math.round((pruneFreq ?? defaultPruneFreqHours) * 3600),
           indexingStart: convertStringToDateTime(indexingStart),
-          refreshFreq: (refreshFreq ?? defaultRefreshFreqMinutes) * 60,
+          refreshFreq: Math.round(
+            (refreshFreq ?? defaultRefreshFreqMinutes) * 60
+          ),
         };
 
         // File-specific handling
@@ -536,7 +539,7 @@ export default function AddConnector({
                   />
                 </PageCenter>
               ) : (
-                <Section gap={4} alignItems="stretch" width="full">
+                <Section gap={6} alignItems="stretch" width="full">
                   {!noCredentials && (
                     <CredentialsConfigurer
                       connector={connector}
@@ -589,23 +592,20 @@ export default function AddConnector({
                   </Disabled>
 
                   {connector !== "file" && (
-                    <Disabled
-                      disabled={!canCreate}
-                      tooltip={t("credentialRequired.tooltip")}
-                    >
-                      <Card
-                        border="solid"
-                        rounding={4}
-                        padding={6}
+                    <>
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
+                      <Disabled
                         disabled={!canCreate}
+                        tooltip={t("credentialRequired.tooltip")}
                       >
                         <fieldset disabled={!canCreate} className="contents">
                           <AdvancedFormPage
                             defaultPruneFreqHours={defaultPruneFreqHours}
+                            disabled={!canCreate}
                           />
                         </fieldset>
-                      </Card>
-                    </Disabled>
+                      </Disabled>
+                    </>
                   )}
                 </Section>
               )}
