@@ -44,9 +44,9 @@ type DividerBareProps = Omit<
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: OrientationVariants;
-  /** Padding along the line direction, as a spacing step. Default: `2` (0.5rem). */
+  /** Padding along the line direction, as a spacing step. Default: 6px. */
   paddingParallel?: DividerSpacing;
-  /** Padding perpendicular to the line, as a spacing step. Default: `1` (0.25rem). */
+  /** Padding perpendicular to the line, as a spacing step. Default: 4px. */
   paddingPerpendicular?: DividerSpacing;
 };
 
@@ -113,9 +113,20 @@ function Divider(props: DividerProps) {
     title,
     description,
     orientation = "horizontal",
-    paddingParallel = 2,
-    paddingPerpendicular = 1,
+    paddingParallel,
+    paddingPerpendicular,
   } = props;
+
+  // The stylesheet carries the default inset (6px along the line, 4px
+  // across, the same for every variant); a bare line's steps override it.
+  const inset = {
+    ...(paddingParallel !== undefined && {
+      parallel: spacingToRem(paddingParallel),
+    }),
+    ...(paddingPerpendicular !== undefined && {
+      perpendicular: spacingToRem(paddingPerpendicular),
+    }),
+  };
 
   if (orientation === "vertical") {
     return (
@@ -123,8 +134,8 @@ function Divider(props: DividerProps) {
         ref={ref}
         className="opal-divider-vertical"
         style={{
-          paddingInline: spacingToRem(paddingPerpendicular),
-          paddingBlock: spacingToRem(paddingParallel),
+          paddingInline: inset.perpendicular,
+          paddingBlock: inset.parallel,
         }}
       >
         <div className="opal-divider-line-vertical" />
@@ -137,8 +148,8 @@ function Divider(props: DividerProps) {
       ref={ref}
       className="opal-divider"
       style={{
-        paddingInline: spacingToRem(paddingParallel),
-        paddingBlock: spacingToRem(paddingPerpendicular),
+        paddingInline: inset.parallel,
+        paddingBlock: inset.perpendicular,
       }}
     >
       <div className="opal-divider-row">
