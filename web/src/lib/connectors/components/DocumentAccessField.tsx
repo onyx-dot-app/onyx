@@ -160,6 +160,7 @@ export default function DocumentAccessField({
   return (
     <Section gap={3} alignItems="stretch" height="fit">
       <InputHorizontal
+        withLabel="access_type"
         title={t("title")}
         description={t("description")}
         disabled={disabled}
@@ -167,6 +168,7 @@ export default function DocumentAccessField({
         center
       >
         <InputSingleSelect
+          id="access_type"
           value={accessType.value}
           onValueChange={(value) => {
             // A re-pick emits "": the pick stands.
