@@ -220,7 +220,7 @@ jobs:
           [ "${WEB}" = failure ] && failed="${failed} web"
           [ "${MODEL_SERVER}" = failure ] && failed="${failed} model-server"
           [ "${BACKEND}" = failure ] && failed="${failed} backend"
-          echo "::warning::The Security tab upload failed for:${failed}. The scans passed; the tab is stale until the next nightly upload succeeds."
+          echo "::warning::The Security tab upload failed for:${failed}. The tab is stale until the next nightly upload succeeds."
           echo "Security tab upload failed for:${failed}" >> "${GITHUB_STEP_SUMMARY}"
 
   # Validate that a pushed release tag is versioned correctly, via
