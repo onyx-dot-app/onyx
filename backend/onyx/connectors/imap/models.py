@@ -1,6 +1,7 @@
 import email.header
 import email.utils
-from datetime import datetime
+import hashlib
+from datetime import datetime, timezone
 from email.message import Message
 from enum import Enum
 
@@ -36,22 +37,37 @@ class EmailHeaders(BaseModel):
             if not value:
                 return None
 
-            decoded_value, encoding = email.header.decode_header(value)[0]
-            if isinstance(decoded_value, bytes):
-                encoding = encoding or "utf-8"
-                return decoded_value.decode(encoding, errors="replace")
-            elif isinstance(decoded_value, str):
-                return decoded_value
-            else:
-                return None
+            parts: list[str] = []
+            for decoded_value, encoding in email.header.decode_header(value):
+                if isinstance(decoded_value, bytes):
+                    encoding = encoding or "utf-8"
+                    try:
+                        parts.append(
+                            decoded_value.decode(encoding, errors="replace")
+                        )
+                    except LookupError:
+                        # Bogus charset labels such as "unknown-8bit" are not
+                        # registered Python codecs and raise LookupError, which
+                        # errors="replace" does not cover.
+                        parts.append(
+                            decoded_value.decode("utf-8", errors="replace")
+                        )
+                elif isinstance(decoded_value, str):
+                    parts.append(decoded_value)
+            return "".join(parts) or None
 
-        def _parse_date(date_str: str | None) -> datetime | None:
-            if not date_str:
-                return None
+        def _parse_date(date_str: str | None) -> datetime:
             try:
-                return email.utils.parsedate_to_datetime(date_str)
+                parsed = (
+                    email.utils.parsedate_to_datetime(date_str)
+                    if date_str
+                    else None
+                )
             except (TypeError, ValueError):
-                return None
+                parsed = None
+            # Mails without a parseable Date still need a value; the epoch
+            # keeps them sortable rather than dropping them.
+            return parsed or datetime.fromtimestamp(0, tz=timezone.utc)
 
         message_id = _decode(header=Header.MESSAGE_ID_HEADER)
         # It's possible for the subject line to not exist or be an empty string.
@@ -60,16 +76,20 @@ class EmailHeaders(BaseModel):
         to = _decode(header=Header.TO_HEADER)
         if not to:
             to = _decode(header=Header.DELIVERED_TO_HEADER)
-        date_str = _decode(header=Header.DATE_HEADER)
-        date = _parse_date(date_str=date_str)
+        date = _parse_date(date_str=_decode(header=Header.DATE_HEADER))
 
-        # If any of the above are `None`, model validation will fail.
-        # Therefore, no guards (i.e.: `if <header> is None: raise RuntimeError(..)`) were written.
+        if not message_id:
+            # Mails without Message-ID must still get a stable document id;
+            # derive one from the raw message so re-fetches dedupe correctly.
+            message_id = "generated-" + hashlib.sha256(
+                email_msg.as_bytes()
+            ).hexdigest()
+
         return cls.model_validate(
             {
                 "id": message_id,
                 "subject": subject,
-                "sender": from_,
+                "sender": from_ or "",
                 "recipients": to,
                 "date": date,
             }
