@@ -197,6 +197,7 @@ func TestLockfilePaths_selectsExistingLockfiles(t *testing.T) {
 	writeFixture(t, root, "uv.lock", "")
 	writeFixture(t, root, "desktop/src-tauri/Cargo.lock", "")
 	writeFixture(t, root, "cli/go.mod", "")
+	writeFixture(t, root, "tools/ods/go.mod", "")
 	// A directory named like a lockfile is not a lockfile.
 	writeFixture(t, root, "bun.lock/placeholder", "")
 
@@ -208,7 +209,7 @@ func TestLockfilePaths_selectsExistingLockfiles(t *testing.T) {
 		{"web", lockfileKinds{Web: true}, []string{filepath.Join(root, "web", "bun.lock")}},
 		{"python", lockfileKinds{Python: true}, []string{filepath.Join(root, "uv.lock")}},
 		{"rust", lockfileKinds{Rust: true}, []string{filepath.Join(root, "desktop", "src-tauri", "Cargo.lock")}},
-		{"go", lockfileKinds{Go: true}, []string{filepath.Join(root, "cli", "go.mod")}},
+		{"go", lockfileKinds{Go: true}, []string{filepath.Join(root, "cli", "go.mod"), filepath.Join(root, "tools", "ods", "go.mod")}},
 		{"web and python", lockfileKinds{Web: true, Python: true}, []string{filepath.Join(root, "web", "bun.lock"), filepath.Join(root, "uv.lock")}},
 		{"neither", lockfileKinds{}, nil},
 	}
@@ -233,7 +234,7 @@ func TestLockfilePaths_allKeepsTrackedLockfilesBesideTheirManifest(t *testing.T)
 		"web/bun.lock", "web/package.json",
 		"desktop/src-tauri/Cargo.lock", "desktop/src-tauri/Cargo.toml",
 		"cli/go.mod", "cli/go.sum",
-		// A module with no dependencies has no go.sum.
+		// A module is its own manifest, with or without go.sum.
 		"tools/empty/go.mod",
 		// A lockfile whose project is gone.
 		"stale/uv.lock",
@@ -255,7 +256,7 @@ func TestLockfilePaths_allKeepsTrackedLockfilesBesideTheirManifest(t *testing.T)
 		{"web", lockfileKinds{Web: true}, []string{"bun.lock", "web/bun.lock"}},
 		{"python", lockfileKinds{Python: true}, []string{"uv.lock"}},
 		{"rust", lockfileKinds{Rust: true}, []string{"desktop/src-tauri/Cargo.lock"}},
-		{"go", lockfileKinds{Go: true}, []string{"cli/go.mod"}},
+		{"go", lockfileKinds{Go: true}, []string{"cli/go.mod", "tools/empty/go.mod"}},
 		{"web and python", lockfileKinds{Web: true, Python: true}, []string{"bun.lock", "uv.lock", "web/bun.lock"}},
 	}
 	for _, tc := range cases {

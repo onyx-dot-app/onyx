@@ -259,7 +259,8 @@ func (k lockfileKinds) names() []string {
 // lockfilePaths returns the lockfiles to scan based on the selectors, skipping
 // any that don't exist. The fixed set is what the shipped products install
 // from: the web app and the desktop app's JS (root workspace), the backend,
-// the desktop app's Rust shell, and the CLI and Terraform provider modules.
+// the desktop app's Rust shell, and the CLI, Terraform provider, and ods
+// modules (ods ships as the onyx-devtools wheel).
 // With all set, it returns every tracked lockfile of the selected kinds
 // instead.
 func lockfilePaths(kinds lockfileKinds, all bool) ([]string, error) {
@@ -287,6 +288,7 @@ func lockfilePaths(kinds lockfileKinds, all bool) ([]string, error) {
 		candidates = append(candidates,
 			filepath.Join(root, "cli", "go.mod"),
 			filepath.Join(root, "terraform-provider-onyx", "go.mod"),
+			filepath.Join(root, "tools", "ods", "go.mod"),
 		)
 	}
 	var existing []string
@@ -306,8 +308,8 @@ var lockfileManifests = map[string]string{
 	"bun.lock":   "package.json",
 	"uv.lock":    "pyproject.toml",
 	"Cargo.lock": "Cargo.toml",
-	// go.mod is its own manifest; a module without go.sum has no dependencies.
-	"go.mod": "go.sum",
+	// go.mod is its own manifest.
+	"go.mod": "go.mod",
 }
 
 // trackedLockfiles lists the lockfiles git tracks anywhere under root, in index
