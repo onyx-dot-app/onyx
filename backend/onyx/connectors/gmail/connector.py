@@ -1,5 +1,6 @@
 from base64 import urlsafe_b64decode
 from collections.abc import Callable, Iterator
+from email.utils import getaddresses
 from typing import Any, Dict, cast
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
@@ -107,16 +108,14 @@ def _build_time_range_query(
     return query
 
 
-def _clean_email_and_extract_name(email: str) -> tuple[str, str | None]:
-    email = email.strip()
-    if "<" in email and ">" in email:
-        # Handle format: "Display Name <email@domain.com>"
-        display_name = email[: email.find("<")].strip()
-        email_address = email[email.find("<") + 1 : email.find(">")].strip()
-        return email_address, display_name or None
-    else:
-        # Handle plain email address
-        return email.strip(), None
+def _parse_address_header(value: str) -> list[tuple[str, str | None]]:
+    """Parse an address header into (email, display name) pairs. One header can
+    hold several comma-separated addresses, e.g. `A <a@x.com>, b@x.com`."""
+    return [
+        (email_address.strip(), display_name.strip() or None)
+        for display_name, email_address in getaddresses([value])
+        if email_address.strip()
+    ]
 
 
 def _get_owners_from_emails(emails: dict[str, str | None]) -> list[BasicExpertInfo]:
@@ -237,15 +236,10 @@ def thread_to_document(
 
         for name, value in message_metadata.items():
             if name in EMAIL_FIELDS:
-                email, display_name = _clean_email_and_extract_name(value)
-                if name == "from":
-                    from_emails[email] = (
-                        display_name if not from_emails.get(email) else None
-                    )
-                else:
-                    other_emails[email] = (
-                        display_name if not other_emails.get(email) else None
-                    )
+                emails = from_emails if name == "from" else other_emails
+                for email, display_name in _parse_address_header(value):
+                    # Keep the first name seen for an address.
+                    emails[email] = emails.get(email) or display_name
 
         # If we haven't set the semantic identifier yet, set it to the subject of the first message
         if not semantic_identifier:

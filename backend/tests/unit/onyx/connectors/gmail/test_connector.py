@@ -89,6 +89,53 @@ def test_thread_to_document_skips_unparseable_dates() -> None:
         assert doc.id == "192edefb315737c3"
 
 
+def test_thread_to_document_keeps_owner_names_across_messages() -> None:
+    # In the fixture, the admin sends messages 1 and 3 and receives messages 2 and 4.
+    json_path = os.path.join(os.path.dirname(__file__), "thread.json")
+    with open(json_path, "r") as f:
+        full_email_thread = json.load(f)
+
+    doc = thread_to_document(full_email_thread, "admin@onyx-test.com")
+    assert isinstance(doc, Document)
+
+    senders = {o.email: o for o in doc.primary_owners or []}
+    recipients = {o.email: o for o in doc.secondary_owners or []}
+    for owners in (senders, recipients):
+        admin = owners["admin@onyx-test.com"]
+        assert (admin.first_name, admin.last_name) == ("Test Admin", "Admin")
+
+
+def _thread_with_to_header(to_header: str) -> dict[str, Any]:
+    json_path = os.path.join(os.path.dirname(__file__), "thread.json")
+    with open(json_path, "r") as f:
+        thread = cast(dict[str, Any], json.load(f))
+    thread["messages"] = thread["messages"][:1]
+    for header in thread["messages"][0]["payload"]["headers"]:
+        if header.get("name") == "To":
+            header["value"] = to_header
+    return thread
+
+
+def test_thread_to_document_keeps_every_recipient_in_a_header() -> None:
+    thread = _thread_with_to_header(
+        'Alice Smith <alice@example.com>, "Doe, Jane" <jane@example.com>, '
+        "bob@example.com"
+    )
+
+    doc = thread_to_document(thread, "admin@onyx-test.com")
+    assert isinstance(doc, Document)
+
+    recipients = {o.email: o for o in doc.secondary_owners or []}
+    assert set(recipients) == {
+        "alice@example.com",
+        "jane@example.com",
+        "bob@example.com",
+    }
+    assert recipients["alice@example.com"].first_name == "Alice"
+    assert recipients["alice@example.com"].last_name == "Smith"
+    assert recipients["bob@example.com"].first_name is None
+
+
 def test_gmail_checkpoint_progression() -> None:
     connector = GmailConnector()
     connector._creds = MagicMock()
