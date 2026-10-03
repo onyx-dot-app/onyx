@@ -2,7 +2,7 @@ from typing import Annotated, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -21,10 +21,10 @@ from onyx.oauth.authorization_attempt import (
     AuthorizationAttemptStore,
     generate_authorization_state,
 )
+from onyx.oauth.models import PKCECodeVerifier, SafeOAuthReturnPath
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
 from onyx.utils.subclasses import find_all_subclasses_in_package
-from onyx.utils.url import sanitize_next_url
 
 logger = setup_logger()
 
@@ -83,25 +83,16 @@ def _validate_additional_kwargs(
 class _ConnectorOAuthAttemptPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    desired_return_path: str
+    desired_return_path: SafeOAuthReturnPath
     additional_kwargs: dict[str, str]
-    code_verifier: str | None = None
-
-    @field_validator("desired_return_path")
-    @classmethod
-    def validate_return_path(cls, value: str) -> str:
-        if sanitize_next_url(value) != value or any(
-            not character.isprintable() for character in value
-        ):
-            raise ValueError("OAuth return path must be a local application path")
-        return value
+    code_verifier: PKCECodeVerifier | None = None
 
 
 def _authorization_attempt_store(
     source: DocumentSource,
 ) -> AuthorizationAttemptStore[_ConnectorOAuthAttemptPayload]:
     return AuthorizationAttemptStore(
-        get_cache_backend(),
+        cache_backend_provider=get_cache_backend,
         namespace=f"{_OAUTH_ATTEMPT_NAMESPACE_PREFIX}-{source.value}",
         payload_type=_ConnectorOAuthAttemptPayload,
         ttl_seconds=_OAUTH_STATE_EXPIRATION_SECONDS,

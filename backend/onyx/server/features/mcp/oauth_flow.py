@@ -18,6 +18,7 @@ from pydantic import AnyUrl
 from onyx.auth.oauth_token_manager import (
     OAuthFlowParams,
     build_oauth_authorization_url,
+    conflicting_authorization_params,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import MCPTransport
@@ -36,7 +37,6 @@ from onyx.server.features.mcp.credentials import (
 )
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
-    RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS,
     MCPOAuthFlowState,
     MCPOAuthServerSnapshot,
     MCPPendingOAuthAuthorization,
@@ -85,8 +85,8 @@ def _known_provider_flow_params(
             "Known-provider OAuth requires oauth_authorization_endpoint, "
             "oauth_token_endpoint, and a non-empty client_id.",
         )
-    reserved_params = RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS.intersection(
-        mcp_server.oauth_additional_auth_params or {}
+    reserved_params = conflicting_authorization_params(
+        mcp_server.oauth_additional_auth_params
     )
     if reserved_params:
         raise OnyxError(
@@ -180,7 +180,7 @@ def validate_mcp_oauth_flow_configuration(
 
 def mcp_oauth_attempt_store() -> AuthorizationAttemptStore[MCPOAuthFlowState]:
     return AuthorizationAttemptStore(
-        get_cache_backend(),
+        cache_backend_provider=get_cache_backend,
         namespace="mcp",
         payload_type=MCPOAuthFlowState,
         ttl_seconds=MCP_OAUTH_FLOW_TTL_SECONDS,
