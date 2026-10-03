@@ -71,6 +71,14 @@ describe("DocumentAccessField", () => {
     );
   });
 
+  it("defaults to auto sync on a source that supports it", async () => {
+    renderForm(ValidSources.GoogleDrive as ConfigurableSources);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("access-type")).toHaveTextContent("sync")
+    );
+  });
+
   it("prefers auto sync over private on a source that supports it", async () => {
     usePermissionAuthority.mockReturnValue({
       isGlobalHolder: false,

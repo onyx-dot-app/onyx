@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect, type SelectOption } from "@opal/components";
@@ -124,10 +124,24 @@ export default function DocumentAccessField({
     appName,
   ]);
 
-  // Move off an access type the user is not offered.
+  // Sync is the default wherever it is offered and enabled, until the user
+  // picks an option themselves.
+  const userChoseRef = useRef(false);
+  const syncAvailable = showAutoSync && !isSyncDisabledByAuth;
+  useEffect(() => {
+    if (userChoseRef.current || !syncAvailable) return;
+    if (accessType.value !== "sync") accessTypeHelpers.setValue("sync");
+  }, [syncAvailable, accessType.value, accessTypeHelpers]);
+
+  // Move off an access type the user is not offered, or that is disabled.
   useEffect(() => {
     if (!businessTier || !options.length) return;
-    if (options.some((option) => option.value === accessType.value)) return;
+    if (
+      options.some(
+        (option) => option.value === accessType.value && !option.disabled
+      )
+    )
+      return;
     const fallback =
       options.find(
         (option) => option.value === defaultAccess && !option.disabled
@@ -157,7 +171,9 @@ export default function DocumentAccessField({
           onValueChange={(value) => {
             // A re-pick emits "": the pick stands.
             const option = options.find((o) => o.value === value);
-            if (option) accessTypeHelpers.setValue(option.value as AccessType);
+            if (!option) return;
+            userChoseRef.current = true;
+            accessTypeHelpers.setValue(option.value as AccessType);
           }}
           options={options}
           placeholder={t("title")}
