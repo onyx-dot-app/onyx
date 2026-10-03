@@ -476,6 +476,17 @@ jobs:
         with:
           name: docker-all-logs-${{ matrix.edition }}-${{ matrix.test-dir.name }}
           path: ${{ github.workspace }}/docker-compose.log
+
+      # The worker and beat logs, only when the tests fail or time out: a job
+      # that hits timeout-minutes counts as cancelled, not failed.
+      - name: Upload worker logs on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: worker-logs-${{ matrix.edition }}-${{ matrix.test-dir.name }}
+          path: ${{ github.workspace }}/backend/log/*.log
+          retention-days: 7
+          if-no-files-found: ignore
       # ------------------------------------------------------------
 
   onyx-lite-tests:
@@ -697,6 +708,17 @@ jobs:
         with:
           name: docker-all-logs-multitenant
           path: ${{ github.workspace }}/docker-compose-multitenant.log
+
+      # The worker and beat logs, only when the tests fail or time out: a job
+      # that hits timeout-minutes counts as cancelled, not failed.
+      - name: Upload worker logs on failure (multi-tenant)
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: worker-logs-multitenant
+          path: ${{ github.workspace }}/backend/log/*.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Stop multi-tenant Docker containers
         if: always()
