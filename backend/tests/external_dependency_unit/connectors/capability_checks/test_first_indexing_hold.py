@@ -40,6 +40,7 @@ from onyx.db.enums import (
     CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
     IndexingStatus,
+    IndexModelStatus,
 )
 from onyx.db.index_attempt import (
     cc_pair_has_dispatched_index_attempts,
@@ -67,6 +68,7 @@ from tests.external_dependency_unit.conftest import create_test_user, delete_tes
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
+    make_future_search_settings,
 )
 
 _TRIGGER = CapabilityCheckTrigger.CC_PAIR_VALIDATION
@@ -725,3 +727,53 @@ def test_nothing_waits_with_connector_checks_off(
         ).indexing_hold
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "settings_status, indexes",
+    [(IndexModelStatus.FUTURE, True), (IndexModelStatus.PRESENT, False)],
+)
+def test_a_paused_pair_indexes_only_into_a_future_index(
+    db_session: Session,
+    slack_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+    settings_status: IndexModelStatus,
+    indexes: bool,
+) -> None:
+    """A model switch reindexes paused pairs too, so creation skips a PAUSED
+    pair only for the live index."""
+    slack_pair.status = ConnectorCredentialPairStatus.PAUSED
+    db_session.commit()
+    target = (
+        make_future_search_settings(db_session)
+        if settings_status == IndexModelStatus.FUTURE
+        else search_settings
+    )
+    beat = _Beat(db_session, slack_pair, target)
+    try:
+        attempt_id = try_creating_docfetching_task(
+            beat.celery_app,
+            slack_pair,
+            target,
+            False,
+            db_session,
+            get_redis_client(),
+            get_current_tenant_id(),
+        )
+        if indexes:
+            assert attempt_id is not None
+            assert beat.assert_started().id == attempt_id
+        else:
+            assert attempt_id is None
+            assert beat.attempts() == []
+            assert beat.sent_attempt_ids() == []
+    finally:
+        if target is not search_settings:
+            db_session.rollback()
+            db_session.execute(
+                delete(IndexAttempt).where(IndexAttempt.search_settings_id == target.id)
+            )
+            db_session.execute(
+                delete(SearchSettings).where(SearchSettings.id == target.id)
+            )
+            db_session.commit()

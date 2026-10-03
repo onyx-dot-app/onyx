@@ -12,7 +12,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
-from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import ConnectorCredentialPairStatus, IndexModelStatus
 from onyx.db.index_attempt import claim_waiting_index_attempt, mark_attempt_failed
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
@@ -27,6 +27,21 @@ def _new_docfetching_task_id(
     cc_pair: ConnectorCredentialPair, search_settings: SearchSettings
 ) -> str:
     return f"docfetching_{cc_pair.id}_{search_settings.id}_{uuid4()}"
+
+
+def _skips_indexing(
+    cc_pair: ConnectorCredentialPair, search_settings: SearchSettings
+) -> bool:
+    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+        return True
+    # Mirrors should_index: a legacy FUTURE reindex still indexes a paused pair,
+    # or the model swap never completes.
+    if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+        return (
+            search_settings.status != IndexModelStatus.FUTURE
+            or search_settings.use_port_flow
+        )
+    return False
 
 
 def _send_docfetching_task(
@@ -106,10 +121,7 @@ def try_creating_docfetching_task(
         # Basic status checks
         db_session.refresh(cc_pair)
         # A pause that commits after the beat read the pair ends here.
-        if cc_pair.status in (
-            ConnectorCredentialPairStatus.DELETING,
-            ConnectorCredentialPairStatus.PAUSED,
-        ):
+        if _skips_indexing(cc_pair, search_settings):
             return None
 
         # A first attempt that waits for the capability checks is created
@@ -194,10 +206,7 @@ def try_dispatching_waiting_attempt(
     claimed = False
     try:
         db_session.refresh(cc_pair)
-        if cc_pair.status in (
-            ConnectorCredentialPairStatus.DELETING,
-            ConnectorCredentialPairStatus.PAUSED,
-        ):
+        if _skips_indexing(cc_pair, search_settings):
             return False
         if get_first_indexing_hold(db_session, cc_pair) is not None:
             return False
