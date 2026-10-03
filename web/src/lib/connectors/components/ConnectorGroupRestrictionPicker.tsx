@@ -25,7 +25,7 @@ const GROUP_IDS_FIELD: FieldName = "restriction_group_ids";
  * Separate from the management-access groups, which decide who can configure
  * the connector.
  */
-export function ConnectorGroupRestrictionPicker() {
+export default function ConnectorGroupRestrictionPicker() {
   const t = useTranslations("admin.connector.groupRestriction");
   const { data: userGroups } = useUserGroups();
   const [restrict, , restrictHelpers] = useField<boolean>(RESTRICT_FIELD);
@@ -83,6 +83,7 @@ export function ConnectorGroupRestrictionPicker() {
               icon={SvgUsers}
               title={t("empty.title")}
               description={t("empty.description")}
+              padding={2}
             />
           ) : (
             <div className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
