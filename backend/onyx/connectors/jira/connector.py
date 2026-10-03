@@ -20,7 +20,6 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    credential_uses_scoped_token,
     is_atlassian_date_error,
     time_str_to_utc,
 )
@@ -705,11 +704,6 @@ class JiraConnector(
         return project_key
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        # The credential now carries the flag; older connectors set it in
-        # their own config.
-        self.scoped_token = self.scoped_token or credential_uses_scoped_token(
-            credentials
-        )
         self._jira_client = build_jira_client(
             credentials=credentials,
             jira_base=self.jira_base,

@@ -36,7 +36,6 @@ from onyx.connectors.confluence.utils import (
 )
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    credential_uses_scoped_token,
     is_atlassian_date_error,
 )
 from onyx.connectors.exceptions import (
@@ -431,11 +430,6 @@ class ConfluenceConnector(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
         self.credentials_provider = credentials_provider
-        # The credential now carries the flag; older connectors set it in
-        # their own config.
-        self.scoped_token = self.scoped_token or credential_uses_scoped_token(
-            credentials_provider.get_credentials()
-        )
 
         # raises exception if there's a problem
         confluence_client = OnyxConfluence(

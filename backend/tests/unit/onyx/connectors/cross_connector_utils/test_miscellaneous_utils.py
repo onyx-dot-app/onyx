@@ -2,10 +2,7 @@ import datetime
 
 import pytest
 
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    credential_uses_scoped_token,
-    time_str_to_utc,
-)
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 
 
 def test_time_str_to_utc() -> None:
@@ -54,23 +51,3 @@ def test_time_str_to_utc_raises_on_impossible_dates() -> None:
     ):
         with pytest.raises(ValueError):
             time_str_to_utc(bad)
-
-
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        (True, True),
-        (False, False),
-        ("true", True),
-        ("True", True),
-        ("false", False),
-        ("", False),
-        (None, False),
-    ],
-)
-def test_credential_uses_scoped_token(value: object, expected: bool) -> None:
-    assert credential_uses_scoped_token({"scoped_token": value}) is expected
-
-
-def test_credential_uses_scoped_token_without_the_key() -> None:
-    assert credential_uses_scoped_token({}) is False
