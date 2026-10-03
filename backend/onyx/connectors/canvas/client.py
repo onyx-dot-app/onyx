@@ -111,7 +111,7 @@ class CanvasApiClient:
 
         if response.status_code >= 400:
             # Try to extract the most specific error message from the
-            # Canvas response body.  Canvas uses three different shapes
+            # Canvas response body.  Canvas uses four different shapes
             # depending on the endpoint and error type:
             default_error: str = response.reason or f"HTTP {response.status_code}"
             error = default_error
@@ -136,6 +136,12 @@ class CanvasApiClient:
                             msg = first_error.get("message", "")
                             if msg:
                                 error = msg
+                # Shape 4: {"message": "That page has been disabled for this
+                # course"}.  Used when a course tool is disabled.
+                if error == default_error:
+                    top_level_message = response_json.get("message")
+                    if isinstance(top_level_message, str) and top_level_message:
+                        error = top_level_message
             raise OnyxError(
                 _error_code_for_status(response.status_code),
                 detail=error,
