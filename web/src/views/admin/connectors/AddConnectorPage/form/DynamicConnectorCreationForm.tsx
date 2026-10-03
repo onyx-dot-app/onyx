@@ -1,11 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
 import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
-import { TextFormField } from "@/components/Field";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
-import { AccessTypeGroupSelector } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { Credential } from "@/lib/credentials/types";
 import { RenderField } from "./FieldRendering";
@@ -24,7 +20,6 @@ export default function DynamicConnectionForm({
   connector,
   currentCredential,
 }: DynamicConnectionFormProps) {
-  const t = useTranslations("admin.connectorsList");
   const { setFieldValue } = useFormikContext<any>(); // Get Formik's context functions
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -51,13 +46,6 @@ export default function DynamicConnectionForm({
         <CredentialSubText>{config.subtext}</CredentialSubText>
       )}
 
-      <TextFormField
-        subtext={t("connectorName.subtext")}
-        type={"text"}
-        label={t("connectorName.label")}
-        name={"name"}
-      />
-
       {config.values.map(
         (field) =>
           !field.hidden && (
@@ -70,12 +58,6 @@ export default function DynamicConnectionForm({
             />
           )
       )}
-
-      <AccessTypeForm
-        connector={connector}
-        currentCredential={currentCredential}
-      />
-      <AccessTypeGroupSelector connector={connector} />
 
       {config.advanced_values.length > 0 &&
         (!config.advancedValuesVisibleCondition ||

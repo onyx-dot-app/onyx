@@ -15,6 +15,7 @@ import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsC
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
+import ConnectorSettings from "@/views/admin/connectors/AddConnectorPage/form/ConnectorSettings";
 import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
@@ -267,6 +268,7 @@ export default function AddConnector({
         const {
           name,
           groups,
+          data_access_group_ids,
           access_type: formAccessType,
           restrict_access_to_groups,
           restriction_group_ids,
@@ -430,7 +432,9 @@ export default function AddConnector({
                 undefined,
                 access_type === SYNC_RESTRICTED_ACCESS_TYPE
                   ? wireAccess.restriction_group_ids
-                  : undefined
+                  : access_type === "private"
+                    ? data_access_group_ids
+                    : undefined
               );
               if (linkCredentialResponse.ok) {
                 onSuccess();
@@ -672,6 +676,20 @@ export default function AddConnector({
                           </Section>
                         </fieldset>
                       </Card>
+                    </Disabled>
+
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    <Disabled
+                      disabled={!configUnlocked}
+                      tooltip={gateMessage ?? undefined}
+                    >
+                      <fieldset disabled={!configUnlocked} className="contents">
+                        <ConnectorSettings
+                          connector={connector}
+                          currentCredential={formCredential}
+                          disabled={!configUnlocked}
+                        />
+                      </fieldset>
                     </Disabled>
 
                     {connector !== "file" && (

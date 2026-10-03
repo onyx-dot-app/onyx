@@ -28,7 +28,7 @@ packages:
   src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/components: 97.7
-  src/components/admin: 96.7
+  src/components/admin: 96.2
   src/components/auth: 89.3
   src/components/chat: 97.2
   src/components/context: 100

@@ -1963,25 +1963,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "Sincronizaremos automaticamente as permissões da fonte. Um documento só poderá ser pesquisado no {appName} se o usuário que realiza a pesquisa tiver permissão para acessar o documento na fonte.",
-          "disabledReason": "O método de autenticação da credencial atual não oferece suporte à sincronização automática de permissões. Altere o método de autenticação da credencial para um compatível.",
-          "name": "Sincronização automática de permissões"
-        },
-        "heading": {
-          "description": "Controle quem tem acesso aos documentos indexados por este conector.",
-          "title": "Acesso a documentos"
-        },
-        "privateOption": {
-          "description": "Apenas usuários que receberam acesso explícito a este conector (pela página de Grupos de usuários) podem acessar os documentos importados por este conector",
-          "name": "Privado"
-        },
-        "publicOption": {
-          "description": "Qualquer pessoa com uma conta no {appName} pode acessar os documentos importados por este conector",
-          "name": "Público"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# dia} other {# dias}}",
@@ -2167,23 +2148,6 @@
         "toggle": {
           "description": "Limite o acesso aos membros dos grupos selecionados. As permissões sincronizadas continuam valendo.",
           "title": "Restringir acesso a grupos"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "Atribuir acesso de grupos a este conector"
-        },
-        "assignToGroup": {
-          "title": "Grupos que podem gerenciar este conector"
-        },
-        "scopedManagerGroups": {
-          "description": "Selecione um ou mais dos grupos que você gerencia para dar acesso a este conector"
-        },
-        "syncGroups": {
-          "description": "Os grupos abaixo controlam quem pode gerenciar este conector. O acesso aos seus documentos é herdado das permissões da própria fonte."
-        },
-        "visibleToGroups": {
-          "description": "Este conector ficará visível/acessível para os grupos selecionados abaixo"
         }
       },
       "indexAttemptsTable": {
@@ -2670,10 +2634,6 @@
           "toast": "Ocorreu um erro desconhecido"
         }
       },
-      "connectorName": {
-        "label": "Nome do conector",
-        "subtext": "Um nome descritivo para o conector."
-      },
       "credentialRequired": {
         "tooltip": "Selecione uma credencial primeiro."
       },
@@ -2978,6 +2938,40 @@
           "hours": "horas",
           "minutes": "minutos"
         }
+      },
+      "settings": {
+        "description": "Informações e acesso do conector",
+        "displayName": {
+          "title": "Nome de exibição do conector"
+        },
+        "documentAccess": {
+          "description": "Controle quem pode acessar os documentos indexados por este conector.",
+          "everyone": {
+            "description": "Os documentos indexados por este conector serão públicos para todos na sua organização.",
+            "title": "Todos na sua organização"
+          },
+          "specificGroups": {
+            "description": "Indique os grupos que podem acessar os documentos deste conector.",
+            "title": "Grupos específicos"
+          },
+          "sync": {
+            "description": "O {appName} sincroniza as permissões com a fonte. Os usuários só podem pesquisar o que conseguem ver na fonte.",
+            "disabledReason": "O método de autenticação da credencial atual não oferece suporte à sincronização automática de permissões. Altere o método de autenticação da credencial para um compatível.",
+            "title": "Sincronizar com {source}"
+          },
+          "title": "Acesso aos documentos"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "Sempre compartilhado",
+            "title": "Administradores"
+          },
+          "description": "Controle quem pode operar (agendar e monitorar a indexação) e/ou editar as configurações do conector.",
+          "note": "Somente usuários com permissão “Gerenciar conectores” (função de gerente de grupo ou permissões de grupo) terão acesso para operar e/ou editar conectores.",
+          "placeholder": "Adicionar grupos para compartilhar este conector",
+          "title": "Acesso de gerenciamento do conector"
+        },
+        "title": "Configurações do conector"
       }
     },
     "costOverrides": {
