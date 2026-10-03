@@ -18,3 +18,6 @@ Free typing is validated on blur; stepping clamps to `min`/`max`.
 | `showReset`     | `boolean`                         | `false`     | Shows the reset button              |
 | `variant`       | input variant union               | `"primary"` | Chrome variant (`data-variant` CSS) |
 | `disabled`      | `boolean`                         | `false`     | Disables input and steppers         |
+| `placeholder`   | `string`                          | —           | Shown while the field is empty      |
+| `suffix`        | `string`                          | —           | Unit text after the value           |
+| `id`            | `string`                          | —           | Input id, for `<label htmlFor>`     |

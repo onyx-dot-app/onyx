@@ -4,6 +4,7 @@ import * as React from "react";
 import "@opal/components/inputs/input-number/styles.css";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components/buttons/button/components";
+import { Text } from "@opal/components";
 import { SvgChevronUp, SvgChevronDown, SvgRevert } from "@opal/icons";
 
 type InputNumberVariant =
@@ -66,6 +67,10 @@ export interface InputNumberProps {
   variant?: InputNumberVariant;
   disabled?: boolean;
   placeholder?: string;
+  /** Unit text shown after the value, inside the field (e.g. "minutes"). */
+  suffix?: string;
+  /** Applied to the input so a `<label htmlFor>` can target it. */
+  id?: string;
 }
 
 export default function InputNumber({
@@ -80,6 +85,8 @@ export default function InputNumber({
   variant = "primary",
   disabled = false,
   placeholder,
+  suffix,
+  id,
 }: InputNumberProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [inputValue, setInputValue] = React.useState(
@@ -167,6 +174,7 @@ export default function InputNumber({
     >
       <input
         ref={inputRef}
+        id={id}
         type="text"
         inputMode={decimalPlaces === 0 ? "numeric" : "decimal"}
         pattern={inputPattern}
@@ -182,6 +190,11 @@ export default function InputNumber({
       />
 
       <div className="flex flex-row items-center gap-1">
+        {suffix && (
+          <Text font="main-ui-body" color={isDisabled ? "text-01" : "text-03"}>
+            {suffix}
+          </Text>
+        )}
         {showReset && (
           <Button
             disabled={!canReset || isDisabled}
