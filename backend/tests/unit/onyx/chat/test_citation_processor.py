@@ -553,6 +553,53 @@ def test_num_cited_documents_property(mock_search_docs: CitationMapping) -> None
     assert processor.num_cited_documents == 2
 
 
+@pytest.mark.parametrize("first_number, second_number", [(4, 8), (8, 4)])
+@pytest.mark.parametrize("citation_mode", list(CitationMode))
+def test_same_document_with_different_citation_numbers(
+    first_number: int, second_number: int, citation_mode: CitationMode
+) -> None:
+    processor = DynamicCitationProcessor(citation_mode=citation_mode)
+    first_doc = create_test_search_doc(chunk_ind=0)
+    second_doc = create_test_search_doc(
+        chunk_ind=1, link="https://example.com/doc1#chunk2"
+    )
+    processor.update_citation_mapping({first_number: first_doc})
+
+    first_output, first_citations = process_tokens(
+        processor, ["First [", str(first_number), "]."]
+    )
+    processor.update_citation_mapping({second_number: second_doc})
+    second_output, second_citations = process_tokens(
+        processor, [" More details [", str(second_number), "]."]
+    )
+
+    if citation_mode == CitationMode.HYPERLINK:
+        assert first_output + second_output == (
+            f"First [[{first_number}]]({first_doc.link})."
+            f" More details [[{first_number}]]({second_doc.link})."
+        )
+        assert first_citations == [
+            CitationInfo(
+                citation_number=first_number, document_id=first_doc.document_id
+            )
+        ]
+        assert processor.get_cited_documents() == [first_doc]
+    elif citation_mode == CitationMode.KEEP_MARKERS:
+        assert first_output + second_output == (
+            f"First [{first_number}]. More details [{second_number}]."
+        )
+        assert first_citations == []
+    else:
+        assert first_output + second_output == "First. More details."
+        assert first_citations == []
+
+    assert second_citations == []
+    assert processor.get_seen_citations() == {
+        first_number: first_doc,
+        second_number: second_doc,
+    }
+
+
 def test_multiple_citations_same_document_no_duplicate(
     mock_search_docs: CitationMapping,
 ) -> None:
