@@ -1206,6 +1206,90 @@ def test_retrieve_confluence_spaces_server_stops_when_next_link_absent(
     assert len(mock_get_call_paths) == 2
 
 
+@pytest.mark.parametrize(
+    "sdk_url,expected_paths",
+    [
+        # API-token Cloud: the site URL already ends in /wiki.
+        (
+            "https://acme.atlassian.net/wiki",
+            ["api/v2/spaces?limit=1", "api/v2/spaces?cursor=abc&limit=1"],
+        ),
+        # OAuth: the gateway URL has no /wiki.
+        (
+            "https://api.atlassian.com/ex/confluence/cloud-id",
+            [
+                "wiki/api/v2/spaces?limit=1",
+                "wiki/api/v2/spaces?cursor=abc&limit=1",
+            ],
+        ),
+    ],
+)
+def test_retrieve_confluence_spaces_cloud_v2_paths_do_not_double_wiki(
+    mock_credentials_provider: mock.Mock,
+    sdk_url: str,
+    expected_paths: list[str],
+) -> None:
+    client = _OnyxConfluence(
+        is_cloud=True,
+        url="https://acme.atlassian.net/wiki",
+        credentials_provider=mock_credentials_provider,
+    )
+    internal_client = mock.Mock()
+    internal_client.url = sdk_url
+    client._confluence = internal_client
+    client._kwargs = client.shared_base_kwargs
+    paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        paths.append(path)
+        is_first_page = len(paths) == 1
+        return _create_mock_response(
+            200,
+            {
+                "results": [{"key": f"S{len(paths)}"}],
+                # v2 next links are rooted at the site, with /wiki.
+                "_links": (
+                    {"next": "/wiki/api/v2/spaces?cursor=abc&limit=1"}
+                    if is_first_page
+                    else {}
+                ),
+            },
+            url=path,
+        )
+
+    internal_client.get.side_effect = get_side_effect
+
+    returned = list(client.retrieve_confluence_spaces(limit=1))
+
+    assert [space["key"] for space in returned] == ["S1", "S2"]
+    assert paths == expected_paths
+
+
+def test_retrieve_confluence_spaces_cloud_v2_caps_the_limit(
+    mock_credentials_provider: mock.Mock,
+) -> None:
+    client = _OnyxConfluence(
+        is_cloud=True,
+        url="https://acme.atlassian.net/wiki",
+        credentials_provider=mock_credentials_provider,
+    )
+    internal_client = mock.Mock()
+    internal_client.url = "https://acme.atlassian.net/wiki"
+    internal_client.get.return_value = _create_mock_response(
+        200, {"results": [{"key": "S"}], "_links": {}}
+    )
+    client._confluence = internal_client
+    client._kwargs = client.shared_base_kwargs
+
+    list(client.retrieve_confluence_spaces(limit=5000))
+
+    assert internal_client.get.call_args.args[0] == "api/v2/spaces?limit=250"
+
+
 def test_jsonrpc_websudo_html_response_raises_validation_error(
     confluence_server_client: _OnyxConfluence,
 ) -> None:
