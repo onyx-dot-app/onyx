@@ -3,6 +3,7 @@ import gc
 import io
 import json
 import os
+import posixpath
 import re
 import tempfile
 import zipfile
@@ -11,10 +12,12 @@ from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, NamedTuple, Optional, cast
+from urllib.parse import unquote
 from zipfile import BadZipFile
 
 import chardet
 import openpyxl
+from defusedxml import ElementTree as DefusedElementTree
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 
 from onyx.configs.app_configs import (
@@ -37,6 +40,7 @@ from onyx.file_processing.unstructured import (
     unstructured_to_text,
 )
 from onyx.file_processing.zip_limits import (
+    ZipSizeLimitError,
     assert_zip_container_within_limits,
     assert_zip_within_limits,
     read_zip_member,
@@ -753,14 +757,92 @@ def eml_to_text(file: IO[Any]) -> str:
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
+_EPUB_CONTAINER_PATH = "META-INF/container.xml"
+_EPUB_CONTAINER_NS = "urn:oasis:names:tc:opendocument:xmlns:container"
+_EPUB_OPF_NS = "http://www.idpf.org/2007/opf"
+
+
+def _epub_spine_documents(epub: zipfile.ZipFile) -> list[str]:
+    """The content documents of an EPUB, in the order the book is read.
+
+    `infolist()` is storage order, which the format promises nothing about, and
+    it also picks up the navigation document and any XHTML that is not part of
+    the book at all. The spine of the package document answers both questions.
+
+    Returns an empty list when the package document cannot be read, which leaves
+    the caller to fall back on scanning the archive.
+    """
+    try:
+        container = DefusedElementTree.fromstring(
+            read_zip_member(epub, epub.getinfo(_EPUB_CONTAINER_PATH))
+        )
+        rootfile = container.find(f".//{{{_EPUB_CONTAINER_NS}}}rootfile")
+        package_path = rootfile.get("full-path") if rootfile is not None else None
+        if not package_path:
+            logger.warning(
+                "EPUB container.xml names no package document; "
+                "falling back to archive order"
+            )
+            return []
+        package = DefusedElementTree.fromstring(
+            read_zip_member(epub, epub.getinfo(package_path))
+        )
+    except ZipSizeLimitError:
+        raise
+    except Exception:
+        logger.warning("Could not read the EPUB package document", exc_info=True)
+        return []
+
+    hrefs = {
+        item.get("id"): item.get("href")
+        for item in package.iterfind(
+            f"{{{_EPUB_OPF_NS}}}manifest/{{{_EPUB_OPF_NS}}}item"
+        )
+    }
+    package_dir = posixpath.dirname(package_path)
+
+    documents = []
+    for itemref in package.iterfind(
+        f"{{{_EPUB_OPF_NS}}}spine/{{{_EPUB_OPF_NS}}}itemref"
+    ):
+        href = hrefs.get(itemref.get("idref"))
+        if not href:
+            continue
+        # A manifest href is a URL reference relative to the package document.
+        target = unquote(href.split("#", 1)[0])
+        documents.append(posixpath.normpath(posixpath.join(package_dir, target)))
+
+    return documents
+
+
 def epub_to_text(file: IO[Any]) -> str:
     with zipfile.ZipFile(file) as epub:
         assert_zip_within_limits(epub)
+        names = _epub_spine_documents(epub)
+        if not names:
+            names = [
+                item.filename
+                for item in epub.infolist()
+                if item.filename.endswith((".xhtml", ".html"))
+            ]
+
         text_content = []
-        for item in epub.infolist():
-            if item.filename.endswith(".xhtml") or item.filename.endswith(".html"):
-                html_file: BytesIO = BytesIO(read_zip_member(epub, item))
+        for name in names:
+            try:
+                html_file = BytesIO(read_zip_member(epub, epub.getinfo(name)))
                 text_content.append(parse_html_page_basic(html_file))
+            except ZipSizeLimitError:
+                # A member past the size limits refuses the whole file, the same
+                # as assert_zip_within_limits does for the sizes it declares.
+                raise
+            except Exception:
+                # One damaged, encrypted or missing entry must not cost the rest
+                # of the book: zipfile raises BadZipFile for a failed CRC and
+                # RuntimeError for an encrypted entry, and a spine can point at a
+                # file the archive does not carry.
+                logger.warning(
+                    "Skipping unreadable EPUB entry: %s", name, exc_info=True
+                )
         return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
