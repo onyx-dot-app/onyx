@@ -37,14 +37,6 @@ export class ConnectorSetupPage {
     return this.page.getByTestId(fieldName);
   }
 
-  /**
-   * The configuration section. While it is locked, its description says why,
-   * e.g. that the credential rejects the site URL.
-   */
-  get configurationSection(): Locator {
-    return this.page.getByTestId("connector-form");
-  }
-
   /** A select field from the connector config, by its config name. */
   selectField(fieldName: string): Locator {
     return this.page.locator(`select[name="${fieldName}"]`);

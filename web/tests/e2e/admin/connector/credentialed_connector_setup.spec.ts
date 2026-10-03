@@ -17,10 +17,6 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
 const SOURCE = "confluence";
 const WIKI_BASE = "https://example.atlassian.net/wiki";
 const OTHER_WIKI_BASE = "https://other-example.atlassian.net/wiki";
-// The end of the backend message for a site the account was not authorized
-// for (`ConfluenceCredentialBinding`).
-const REJECTION_TEXT =
-  "is not the Confluence site this account was authorized for";
 
 test.describe("Credentialed connector setup", () => {
   let credentialName: string;
@@ -85,7 +81,7 @@ test.describe("Credentialed connector setup", () => {
     await expect(setupPage.createConnectorButton).toBeEnabled();
   });
 
-  test("a site URL the credential is not authorized for keeps the configuration locked", async ({
+  test("an OAuth credential fills in its authorized site and locks it", async ({
     page,
   }) => {
     // An OAuth-style credential names the one site it was authorized for.
@@ -104,25 +100,15 @@ test.describe("Credentialed connector setup", () => {
     await expect(setupPage.credentialRow(oauthCredentialName)).toBeVisible({
       timeout: 10_000,
     });
-    await setupPage.selectCredential(oauthCredentialName);
 
+    // A site entered before the credential is replaced by the authorized one.
     const siteUrl = setupPage.textField("wiki_base");
     await siteUrl.fill(OTHER_WIKI_BASE);
     await siteUrl.blur();
+    await setupPage.selectCredential(oauthCredentialName);
 
-    // The backend rejects the pair, and the configuration says why.
-    await expect(
-      setupPage.configurationSection.getByText(REJECTION_TEXT)
-    ).toBeVisible({ timeout: 10_000 });
-    await expect(setupPage.connectorNameInput).toBeDisabled();
-    await expect(setupPage.createConnectorButton).toBeDisabled();
-
-    // The authorized site unlocks it.
-    await siteUrl.fill(WIKI_BASE);
-    await siteUrl.blur();
+    await expect(siteUrl).toHaveValue(WIKI_BASE);
+    await expect(siteUrl).toBeDisabled();
     await expect(setupPage.connectorNameInput).toBeEnabled({ timeout: 10_000 });
-    await expect(
-      setupPage.configurationSection.getByText(REJECTION_TEXT)
-    ).toHaveCount(0);
   });
 });
