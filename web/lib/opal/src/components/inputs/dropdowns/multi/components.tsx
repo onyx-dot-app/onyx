@@ -17,14 +17,14 @@ import {
   flattenOptions,
   toDropdownItems,
 } from "@opal/components/inputs/dropdowns/utils";
-import type { MultiDropdownProps } from "../types";
+import type { MultiSelectFieldProps } from "../types";
 
 // ---------------------------------------------------------------------------
-// MultiDropdown
+// MultiSelectField
 // ---------------------------------------------------------------------------
 
 /**
- * MultiDropdown — the multi-arity implementation behind the family's two
+ * MultiSelectField — the multi-arity implementation behind the family's two
  * public components. Internal to Opal; app code uses `InputMultiSelect`
  * (button trigger) or `InputMultiComboBox` (type-in trigger).
  *
@@ -37,18 +37,18 @@ import type { MultiDropdownProps } from "../types";
  * The `TagField` renders its own input, out of `Dropdown.Trigger`'s reach,
  * so this engine wires the trigger through the dropdown's context.
  */
-function MultiDropdown(props: MultiDropdownProps) {
+function MultiSelectField(props: MultiSelectFieldProps) {
   const autoId = useId();
   const fieldId = `multi-select-${autoId}`;
   return (
     // Tab walks the rows from either trigger: the field keeps focus.
     <Dropdown id={fieldId} disabled={props.disabled ?? false} tabKey="walk">
-      <MultiDropdownField {...props} />
+      <MultiSelectFieldInner {...props} />
     </Dropdown>
   );
 }
 
-function MultiDropdownField(props: MultiDropdownProps) {
+function MultiSelectFieldInner(props: MultiSelectFieldProps) {
   const {
     tags,
     onRemoveTag,
@@ -277,4 +277,4 @@ function MultiDropdownField(props: MultiDropdownProps) {
   );
 }
 
-export { MultiDropdown, type TagItem };
+export { MultiSelectField, type TagItem };

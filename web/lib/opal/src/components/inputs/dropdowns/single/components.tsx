@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SingleDropdown — the single-arity implementation behind the family's two
+ * SingleSelectField — the single-arity implementation behind the family's two
  * public components. Internal to Opal; app code uses `InputSingleSelect`
  * (button trigger) or `InputSingleComboBox` (type-in trigger).
  *
@@ -52,22 +52,22 @@ import {
   toDropdownItems,
 } from "@opal/components/inputs/dropdowns/utils";
 import { useValidation } from "./validation";
-import type { SingleDropdownProps } from "../types";
+import type { SingleSelectFieldProps } from "../types";
 import type { WithoutStyles } from "@opal/types";
 
-function SingleDropdown(props: WithoutStyles<SingleDropdownProps>) {
+function SingleSelectField(props: WithoutStyles<SingleSelectFieldProps>) {
   const fieldContext = useContext(FieldContext);
   const autoId = useId();
   const fieldId = fieldContext?.baseId || props.name || `combo-box-${autoId}`;
   return (
     // Tab walks the rows from either trigger: the field keeps focus.
     <Dropdown id={fieldId} disabled={props.disabled ?? false} tabKey="walk">
-      <SingleDropdownField {...props} fieldId={fieldId} />
+      <SingleSelectFieldInner {...props} fieldId={fieldId} />
     </Dropdown>
   );
 }
 
-function SingleDropdownField({
+function SingleSelectFieldInner({
   fieldId,
   value,
   onChange,
@@ -90,7 +90,7 @@ function SingleDropdownField({
   onSearchChange,
   onReachEnd,
   ...rest
-}: WithoutStyles<SingleDropdownProps> & { fieldId: string }) {
+}: WithoutStyles<SingleSelectFieldProps> & { fieldId: string }) {
   const typeIn = trigger === "type-in";
   // A button trigger has no text to commit, so its set is always closed.
   const strict = !typeIn || mode !== "open";
@@ -473,4 +473,4 @@ function SingleDropdownField({
   );
 }
 
-export { SingleDropdown };
+export { SingleSelectField };
