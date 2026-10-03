@@ -15,6 +15,7 @@ export type WebSearchProviderType =
   | "exa"
   | "searxng"
   | "brave"
+  | "ollama"
   | "tavily";
 
 export type WebContentProviderType =
