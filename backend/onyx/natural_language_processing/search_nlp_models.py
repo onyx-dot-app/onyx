@@ -605,7 +605,10 @@ class CloudEmbedding:
         import openai
 
         try:
-            if self.provider in (EmbeddingProvider.OPENAI, EmbeddingProvider.OPENAI_COMPATIBLE):
+            if self.provider in (
+                EmbeddingProvider.OPENAI,
+                EmbeddingProvider.OPENAI_COMPATIBLE,
+            ):
                 return await self._embed_openai(texts, model_name, reduced_dimension)
             elif self.provider == EmbeddingProvider.AZURE:
                 return await self._embed_azure(texts, f"azure/{deployment_name}")
