@@ -408,10 +408,16 @@ class GoogleDriveConnector(
         let resolution match whichever is indexed. `normalized_url` is a single best
         guess for callers that don't consult the candidate list.
         """
-        parsed = urlparse(url)
-        netloc = parsed.netloc.lower()
+        try:
+            parsed = urlparse(url)
+            hostname = parsed.hostname.lower() if parsed.hostname else ""
+        except ValueError:
+            return NormalizationResult(normalized_url=None, use_default=False)
 
-        if not netloc.startswith(("docs.google.com", "drive.google.com")):
+        # Exact hostname match: startswith would accept spoofed hosts such as
+        # "docs.google.com.evil.com" and normalize them as real Drive documents.
+
+        if hostname not in {"docs.google.com", "drive.google.com"}:
             return NormalizationResult(normalized_url=None, use_default=False)
 
         file_id = _extract_drive_file_id(parsed)
