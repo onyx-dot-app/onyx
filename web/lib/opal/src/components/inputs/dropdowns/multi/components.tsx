@@ -41,7 +41,8 @@ function MultiDropdown(props: MultiDropdownProps) {
   const autoId = useId();
   const fieldId = `multi-select-${autoId}`;
   return (
-    <Dropdown id={fieldId} disabled={props.disabled ?? false}>
+    // Tab walks the rows from either trigger: the field keeps focus.
+    <Dropdown id={fieldId} disabled={props.disabled ?? false} tabKey="walk">
       <MultiDropdownField {...props} />
     </Dropdown>
   );

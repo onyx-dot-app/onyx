@@ -217,6 +217,20 @@ describe("Dropdown picker", () => {
     expect(onCreate).toHaveBeenCalledWith("kiwi");
   });
 
+  test("Tab walks the rows from a type-in and keeps the list open", async () => {
+    const user = setupUser();
+    render(<Harness />);
+    const trigger = screen.getByRole("combobox", { name: "Fruit" });
+    await user.click(trigger);
+    await user.keyboard("{ArrowDown}");
+    expect(highlighted()).toEqual(["Apple"]);
+
+    await user.keyboard("{Tab}");
+    expect(highlighted()).not.toEqual(["Apple"]);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).toHaveFocus();
+  });
+
   test("a selected value reads as selected", async () => {
     const user = setupUser();
     render(<Harness />);
@@ -296,6 +310,31 @@ describe("Dropdown menu", () => {
 
     await user.keyboard("{ArrowRight}");
     expect(onSecondary).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("Tab closes a button-triggered menu and lets focus move on", async () => {
+    const user = setupUser();
+    render(<MenuHarness onAction={jest.fn()} onToggle={jest.fn()} />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    await user.keyboard("{ArrowDown}");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    await user.keyboard("{Tab}");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).not.toHaveFocus();
+  });
+
+  test("letters type ahead to the row they start", async () => {
+    const user = setupUser();
+    render(<MenuHarness onAction={jest.fn()} onToggle={jest.fn()} />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    await user.keyboard("p");
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Pinned" })
+    ).toHaveAttribute("data-interaction", "hover");
     expect(trigger).toHaveAttribute("aria-expanded", "true");
   });
 

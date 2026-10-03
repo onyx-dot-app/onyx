@@ -22,6 +22,7 @@ import {
   useDropdownKeyboard,
   useDropdownOverlay,
   useFoldedGroups,
+  type DropdownTabKey,
   type DropdownVirtualAnchor,
   type DropdownWidth,
   type ListModel,
@@ -75,6 +76,12 @@ interface DropdownProps {
   virtualAnchor?: DropdownVirtualAnchor;
   /** Where the list portals to, for a dropdown inside a modal. */
   container?: HTMLElement | null;
+  /**
+   * What Tab does while the list is open. By default a type-in trigger
+   * walks the rows and any other trigger closes the list and lets focus
+   * move on; set it to make every trigger behave one way.
+   */
+  tabKey?: DropdownTabKey;
   children: React.ReactNode;
 }
 
@@ -99,6 +106,7 @@ function Dropdown({
   width = "anchor",
   virtualAnchor,
   container,
+  tabKey,
   children,
 }: DropdownProps) {
   const autoId = useId();
@@ -128,6 +136,7 @@ function Dropdown({
     setHighlightedIndex,
     setIsKeyboardNav,
     listRef,
+    tabKey,
   });
 
   const getTriggerProps = useCallback(
@@ -138,7 +147,9 @@ function Dropdown({
       "aria-controls": `${id}-listbox`,
       "aria-activedescendant": isOpen ? activeId : undefined,
       "aria-autocomplete": typeIn ? "list" : undefined,
-      onKeyDown: handleKeyDown,
+      // A type-in's letters are its filter; any other trigger types ahead.
+      onKeyDown: (event) =>
+        handleKeyDown(event, { typeIn, typeAhead: !typeIn }),
     }),
     [mode, isOpen, activeId, id, handleKeyDown]
   );
@@ -659,7 +670,9 @@ function DropdownData(props: DropdownDataProps) {
                 setIsKeyboardNav(false);
               },
               onKeyDown: (event) => {
-                handleKeyDown(event);
+                // The field's letters are the filter, so no type-ahead; Tab
+                // follows the dropdown's setting, else leaves.
+                handleKeyDown(event, { typeIn: false, typeAhead: false });
                 // Escape closes the list; focus goes back to the trigger so
                 // the field is not left orphaned.
                 if (event.key === "Escape") focusTrigger();
@@ -688,6 +701,7 @@ export {
   type DropdownTriggerElementProps as DropdownTriggerProps,
   type DropdownTriggerBehavior,
   type DropdownDataProps,
+  type DropdownTabKey,
   type DropdownWidth,
   type DropdownVirtualAnchor,
 };

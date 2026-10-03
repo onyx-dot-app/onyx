@@ -1,7 +1,11 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { DropdownWidth, ListModel } from "@opal/components/dropdown/hooks";
+import type {
+  DropdownKeyOptions,
+  DropdownWidth,
+  ListModel,
+} from "@opal/components/dropdown/hooks";
 import type { DropdownMode } from "@opal/components/dropdown/types";
 
 /**
@@ -42,7 +46,10 @@ export interface DropdownContextValue {
   /** The highlighted stop's element id, for `aria-activedescendant`. */
   activeId: string | undefined;
   setActiveId: (id: string | undefined) => void;
-  handleKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+  handleKeyDown: (
+    event: React.KeyboardEvent<HTMLElement>,
+    options: DropdownKeyOptions
+  ) => void;
   /**
    * The attributes a trigger carries: the list it controls, whether it is
    * open, and the highlighted stop, plus the keyboard handler. A picker's

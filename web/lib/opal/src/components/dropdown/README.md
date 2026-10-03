@@ -67,6 +67,7 @@ A picker on a type-in:
 | `width`         | `"anchor" \| "sm" \| "md" \| "lg" \| "xl"` | `"anchor"` | Match the anchor's width, or a fixed preset (10, 12, 15, 18rem)             |
 | `virtualAnchor` | `{ getBoundingClientRect, contextElement? }` | —        | A rectangle to position against instead of an element, like a text caret   |
 | `container`     | `HTMLElement \| null`                      | body       | Where the list portals to, for a dropdown inside a modal                    |
+| `tabKey`        | `"walk" \| "leave"`                        | by trigger | What Tab does while open: walk the rows, or close and move on. Default: walk for a type-in, leave otherwise |
 
 ### `Dropdown.Trigger`
 
@@ -132,7 +133,11 @@ Every row takes `keywords?` (what a search matches beyond the title) and `disabl
 
 ## Keyboard
 
-Focus stays on the trigger (or the search field); the dropdown moves a highlight and `aria-activedescendant` follows it. Enter or ArrowDown opens a closed list. Open, the arrows and Tab walk the stops and wrap, Enter activates the highlighted stop, ArrowRight reaches a custom row's secondary control, and Escape closes. A trigger's own `onKeyDown` runs first; a key it cancels is left alone.
+Focus stays on the trigger (or the search field); the dropdown moves a highlight and `aria-activedescendant` follows it. Enter or ArrowDown opens a closed list. Open, the arrows walk the stops and wrap, Enter activates the highlighted stop, ArrowRight reaches a custom row's secondary control, and Escape closes. A trigger's own `onKeyDown` runs first; a key it cancels is left alone.
+
+**Tab** depends on the trigger: from a type-in it walks the rows like the arrows, since the field must keep focus; from any other trigger it closes the list and lets focus move on, as a native menu does. `tabKey` on `Dropdown` fixes it one way for every trigger.
+
+**Type-ahead:** on a trigger with nothing to type into, letters jump the highlight to the next row whose title starts with them; the letters clear after half a second. A custom row matches on its first keyword. A type-in's letters are its filter instead, and a search field's go to the field.
 
 ## Still to come
 

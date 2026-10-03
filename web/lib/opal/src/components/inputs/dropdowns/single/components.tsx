@@ -60,7 +60,8 @@ function SingleDropdown(props: WithoutStyles<SingleDropdownProps>) {
   const autoId = useId();
   const fieldId = fieldContext?.baseId || props.name || `combo-box-${autoId}`;
   return (
-    <Dropdown id={fieldId} disabled={props.disabled ?? false}>
+    // Tab walks the rows from either trigger: the field keeps focus.
+    <Dropdown id={fieldId} disabled={props.disabled ?? false} tabKey="walk">
       <SingleDropdownField {...props} fieldId={fieldId} />
     </Dropdown>
   );

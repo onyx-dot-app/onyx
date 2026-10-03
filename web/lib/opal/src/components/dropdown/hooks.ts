@@ -118,6 +118,21 @@ export interface ListModel {
   secondary: (item: NavItem) => boolean;
 }
 
+/**
+ * What Tab does while the list is open: `"walk"` moves the highlight
+ * through the rows and wraps, for a field that must keep focus; `"leave"`
+ * closes the list and lets focus move on, as a native menu does.
+ */
+export type DropdownTabKey = "walk" | "leave";
+
+/** How the key arrived: from which kind of trigger, and whether letters type ahead. */
+export interface DropdownKeyOptions {
+  /** A text input: its letters are the filter, and Tab walks the rows. */
+  typeIn: boolean;
+  /** Letters jump the highlight to the row they start. */
+  typeAhead: boolean;
+}
+
 interface UseDropdownKeyboardProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
@@ -125,7 +140,17 @@ interface UseDropdownKeyboardProps {
   setHighlightedIndex: (index: number | ((prev: number) => number)) => void;
   setIsKeyboardNav: (isKeyboard: boolean) => void;
   listRef: React.RefObject<ListModel>;
+  /** Overrides what Tab does, for every trigger of this dropdown. */
+  tabKey?: DropdownTabKey;
 }
+
+/** The text a type-ahead matches: a row's title, or a custom row's first keyword. */
+function rowLabel(row: DropdownRow): string {
+  if (row.kind === "custom") return row.keywords?.[0] ?? "";
+  return row.title;
+}
+
+const TYPE_AHEAD_RESET_MS = 500;
 
 /**
  * Keyboard navigation for the list, the same for every trigger: Enter or
@@ -144,7 +169,14 @@ export function useDropdownKeyboard({
   setHighlightedIndex,
   setIsKeyboardNav,
   listRef,
+  tabKey,
 }: UseDropdownKeyboardProps) {
+  // The letters typed in quick succession; they clear after a pause, so
+  // "ba" finds Banana rather than cycling through the B's.
+  const typeAheadRef = useRef("");
+  const typeAheadTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(typeAheadTimer.current), []);
+
   // A disabled row is not a stop: the walk passes over it.
   const isStop = useCallback(
     (index: number) => {
@@ -181,9 +213,27 @@ export function useDropdownKeyboard({
     [listRef, isStop]
   );
 
+  // The next row, after the highlight and wrapping, whose label starts with
+  // the typed letters; -1 when none does.
+  const typeAheadMatch = useCallback(
+    (text: string) => {
+      const { items } = listRef.current;
+      const count = items.length;
+      for (let step = 1; step <= count; step++) {
+        const index = (highlightedIndex + step) % count;
+        const item = items[index];
+        if (!item || item.kind !== "row" || item.row.disabled) continue;
+        if (rowLabel(item.row).toLowerCase().startsWith(text)) return index;
+      }
+      return -1;
+    },
+    [listRef, highlightedIndex]
+  );
+
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLElement>) => {
+    (e: React.KeyboardEvent<HTMLElement>, options: DropdownKeyOptions) => {
       if (e.defaultPrevented) return;
+      const tab = tabKey ?? (options.typeIn ? "walk" : "leave");
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
@@ -211,6 +261,12 @@ export function useDropdownKeyboard({
         }
         case "Tab":
           if (!isOpen) break;
+          if (tab === "leave") {
+            // The list closes and focus moves on: the key keeps its default.
+            setIsOpen(false);
+            setIsKeyboardNav(false);
+            break;
+          }
           // Inside the list Tab walks the stops, both ways, wrapping.
           e.preventDefault();
           setIsKeyboardNav(true);
@@ -236,14 +292,33 @@ export function useDropdownKeyboard({
           setIsOpen(false);
           setIsKeyboardNav(false);
           break;
+        default: {
+          // Type-ahead: a letter jumps to the row it starts. Only on a
+          // trigger with nothing to type into; a type-in's letters filter.
+          if (!options.typeAhead || !isOpen) break;
+          if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) break;
+          window.clearTimeout(typeAheadTimer.current);
+          typeAheadRef.current += e.key.toLowerCase();
+          typeAheadTimer.current = window.setTimeout(() => {
+            typeAheadRef.current = "";
+          }, TYPE_AHEAD_RESET_MS);
+          const index = typeAheadMatch(typeAheadRef.current);
+          if (index < 0) break;
+          e.preventDefault();
+          setIsKeyboardNav(true);
+          setHighlightedIndex(index);
+          break;
+        }
       }
     },
     [
       isOpen,
       highlightedIndex,
       listRef,
+      tabKey,
       next,
       previous,
+      typeAheadMatch,
       setIsOpen,
       setHighlightedIndex,
       setIsKeyboardNav,
