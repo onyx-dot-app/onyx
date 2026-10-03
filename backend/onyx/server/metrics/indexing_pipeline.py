@@ -63,6 +63,7 @@ _QUEUE_LABEL_MAP: dict[str, str] = {
     OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP: "index_attempt_cleanup",
     OnyxCeleryQueues.CSV_GENERATION: "csv_generation",
     OnyxCeleryQueues.CAPABILITY_CHECKS: "capability_checks",
+    OnyxCeleryQueues.CAPABILITY_CHECKS_DRAFT: "capability_checks_draft",
     OnyxCeleryQueues.USER_FILE_PROCESSING: "user_file_processing",
     OnyxCeleryQueues.USER_FILE_PROJECT_SYNC: "user_file_project_sync",
     OnyxCeleryQueues.USER_FILE_DELETE: "user_file_delete",

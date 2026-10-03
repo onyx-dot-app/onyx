@@ -8,18 +8,25 @@ content, never an HTTP error.
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.configs.constants import (
     DocumentSource,
 )
+from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckRunSnapshot,
+    DraftRerunMode,
+    read_draft_run_for_user,
+)
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
 from onyx.connectors.credential_families import is_credential_usable_for_source
 from onyx.connectors.factory import validate_connector_config
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
@@ -36,13 +43,19 @@ from onyx.db.credentials import (
     fetch_credentials_by_source_for_user,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus, Permission
-from onyx.db.models import CredentialCapabilityReportRow, User
+from onyx.db.enums import (
+    AccessType,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
+    Permission,
+)
+from onyx.db.models import Credential, CredentialCapabilityReportRow, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.capability_check_runs import (
     CapabilityRunEnqueueError,
     start_capability_check_run,
+    start_draft_capability_check_run,
 )
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
@@ -108,6 +121,24 @@ def _connector_pairing_visible(
         )
         is not None
     )
+
+
+def _validate_credential_usable_for_source(
+    credential: Credential, source: DocumentSource
+) -> None:
+    if not is_credential_usable_for_source(
+        credential.source,
+        (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        ),
+        source,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Credential {credential.id} cannot be used by a {source.value} connector.",
+        )
 
 
 class CapabilityCheckRunRequest(BaseModel):
@@ -180,21 +211,7 @@ def trigger_capability_check(
                 f"Connector {request.connector_id} does not exist or is not "
                 "accessible.",
             )
-        if not is_credential_usable_for_source(
-            credential.source,
-            (
-                credential.credential_json.get_value(apply_mask=False)
-                if credential.credential_json
-                else {}
-            ),
-            connector.source,
-        ):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Connector {request.connector_id} is a "
-                f"{connector.source.value} connector; credential "
-                f"{credential_id} cannot be used by it.",
-            )
+        _validate_credential_usable_for_source(credential, connector.source)
         run_source = connector.source
         if request.connector_specific_config is not None:
             try:
@@ -333,3 +350,93 @@ def list_capability_reports_for_source(
         for row in get_capability_report_rows_for_source(db_session, source)
         if is_visible(row)
     ]
+
+
+class DraftCheckRunRequest(BaseModel):
+    """Body of the draft run endpoint: an unsaved connector form."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: DocumentSource
+    credential_id: int
+    access_type: AccessType | None = None
+    # Client-chosen id of one form session. A new run for the same key
+    # supersedes the earlier one.
+    draft_key: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    form_state: dict[str, Any]
+    # Cached results to ignore. The client sends FAILED when the admin asks to
+    # create, so a fix made at the source is seen, and ALL to re-run every check.
+    rerun: DraftRerunMode = DraftRerunMode.NONE
+
+
+@router.post("/admin/connector-checks/runs")
+def start_draft_check_run(
+    request: DraftCheckRunRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> DraftCheckRunSnapshot:
+    """Starts the capability checks for an unsaved connector form.
+
+    Checks that cannot run yet resolve at once (waiting, not applicable), and
+    fresh cached results fill others; one task runs the rest. The caller polls
+    the GET with the returned ``run_id``. Never writes a stored report.
+    """
+    mapping = CONNECTOR_CLASS_MAP.get(request.source)
+    if mapping is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{request.source.value} has no connector configuration.",
+        )
+    # GATE 2 for ``allow_scope``: the caller must see the credential. An unknown
+    # credential is indistinguishable from an inaccessible one.
+    credential = fetch_credential_by_id_for_user(
+        request.credential_id, user, db_session
+    )
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {request.credential_id} does not exist or is not accessible.",
+        )
+    _validate_credential_usable_for_source(credential, request.source)
+    try:
+        return start_draft_capability_check_run(
+            user_id=user.id,
+            credential=credential,
+            source=request.source,
+            config_class=mapping.config_class,
+            access_type=request.access_type,
+            draft_key=request.draft_key,
+            form_values=request.form_state,
+            rerun=request.rerun,
+        )
+    except CapabilityRunEnqueueError as e:
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Could not enqueue the capability check run; try again shortly.",
+        ) from e
+
+
+@router.get("/admin/connector-checks/runs/{run_id}")
+def get_draft_check_run(
+    run_id: UUID,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> DraftCheckRunSnapshot:
+    """Returns a draft run's per-check progress. Only the user who started the
+    run may read it, and only while they can still see its credential."""
+    snapshot = read_draft_run_for_user(run_id, user.id)
+    # GATE 2 again: the check messages come from the credential.
+    if (
+        snapshot is None
+        or fetch_credential_by_id_for_user(snapshot.credential_id, user, db_session)
+        is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Capability check run {run_id} does not exist or has expired.",
+        )
+    return snapshot

@@ -9,6 +9,7 @@ hard kills and expired tasks leave their row RUNNING for the beat sweep to
 retire once the mark outlives its source's run ceiling.
 """
 
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
@@ -16,9 +17,25 @@ from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.connectors.capability_checks.models import compute_connector_config_hash
+from onyx.connectors.capability_checks.draft_runs import (
+    DRAFT_CHECK_TIMEOUT_SECONDS,
+    DraftCheckStateKind,
+    DraftRunStatus,
+    apply_check_result,
+    cache_draft_result,
+    is_superseded,
+    load_draft_run,
+    save_draft_run,
+)
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckResult,
+    compute_connector_config_hash,
+)
+from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
+    CAPABILITY_CHECK_TIMEOUT_SECONDS,
     capability_check_run_stale_after,
+    effective_check_timeout_seconds,
     generate_capability_report,
 )
 from onyx.connectors.models import InputType
@@ -146,6 +163,108 @@ def run_capability_checks_task(
                 run_id=parsed_run_id,
             )
             db_session.commit()
+        raise
+
+
+class _DraftRunSupersededError(Exception):
+    """A newer run for the same draft key started; this run stops."""
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.RUN_DRAFT_CAPABILITY_CHECKS,
+    bind=True,
+)
+def run_draft_capability_checks_task(
+    self: Task,  # noqa: ARG001
+    *,
+    run_id: str,
+    connector_specific_config: dict[str, Any] | None,
+    tenant_id: str | None,
+) -> None:
+    """Runs a draft run's PENDING checks and writes each result into the stored
+    run as it lands. The task is the only writer of the run after its start.
+    Before each next check it stops if a newer run for the same draft key
+    started."""
+    run = load_draft_run(UUID(run_id))
+    if run is None:
+        task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
+        return
+    snapshot = run.snapshot
+    pending = [
+        check for check in snapshot.checks if check.state == DraftCheckStateKind.PENDING
+    ]
+    timeout_by_check_id = {
+        check.check_id: min(
+            effective_check_timeout_seconds(check), DRAFT_CHECK_TIMEOUT_SECONDS
+        )
+        for check in get_capability_checks(snapshot.source)
+    }
+
+    def mark_next_running() -> None:
+        if (
+            next_check := next(
+                (c for c in pending if c.state == DraftCheckStateKind.PENDING), None
+            )
+        ) is not None:
+            next_check.state = DraftCheckStateKind.RUNNING
+            # The check's hang guard, plus the guard of a connector
+            # instantiation that can run before it.
+            run.renew_lease(
+                timeout_by_check_id[next_check.check_id]
+                + min(CAPABILITY_CHECK_TIMEOUT_SECONDS, DRAFT_CHECK_TIMEOUT_SECONDS)
+            )
+
+    def on_result(results: Sequence[CapabilityCheckResult]) -> None:
+        result = results[-1]
+        check_state = next(
+            check
+            for check in pending
+            if check.check_id == result.check_id
+            and check.capability == result.capability
+        )
+        apply_check_result(check_state, result)
+        cache_draft_result(run.result_cache_keys[result.check_id], result)
+        if is_superseded(run):
+            raise _DraftRunSupersededError()
+        mark_next_running()
+        save_draft_run(run)
+
+    try:
+        if is_superseded(run):
+            raise _DraftRunSupersededError()
+        with get_session_with_current_tenant() as db_session:
+            credential = fetch_credential_by_id(snapshot.credential_id, db_session)
+        if credential is None:
+            task_logger.info(
+                f"Draft capability run {run_id} stopped: credential "
+                f"{snapshot.credential_id} was deleted (tenant {tenant_id})."
+            )
+            snapshot.status = DraftRunStatus.FAILED_TO_RUN
+            save_draft_run(run)
+            return
+        mark_next_running()
+        save_draft_run(run)
+        generate_capability_report(
+            credential,
+            source=snapshot.source,
+            connector_specific_config=connector_specific_config,
+            access_type=snapshot.access_type,
+            on_result=on_result,
+            check_ids=frozenset(check.check_id for check in pending),
+            timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
+        )
+        snapshot.status = DraftRunStatus.COMPLETED
+        save_draft_run(run)
+    except _DraftRunSupersededError:
+        task_logger.info(
+            f"Draft capability run {run_id} stopped: a newer run for its draft "
+            f"key started (tenant {tenant_id})."
+        )
+        snapshot.status = DraftRunStatus.SUPERSEDED
+        save_draft_run(run)
+    except Exception:
+        snapshot.status = DraftRunStatus.FAILED_TO_RUN
+        save_draft_run(run)
         raise
 
 
