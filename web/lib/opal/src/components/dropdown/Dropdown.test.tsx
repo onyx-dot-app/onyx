@@ -114,7 +114,7 @@ function MenuHarness({ onAction, onToggle, onSecondary }: MenuHarnessProps) {
     },
   ];
   return (
-    <Dropdown width="md">
+    <Dropdown>
       <Dropdown.Trigger asChild>
         <button type="button">Actions</button>
       </Dropdown.Trigger>

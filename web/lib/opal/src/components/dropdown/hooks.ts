@@ -239,9 +239,9 @@ export function useDropdownKeyboard({
           e.preventDefault();
           setIsKeyboardNav(true);
           if (!isOpen) {
-            // Opening lands on the first row.
+            // Opening lands on the first enabled stop.
             setIsOpen(true);
-            setHighlightedIndex(0);
+            setHighlightedIndex(next(-1));
           } else {
             setHighlightedIndex(next);
           }
@@ -332,12 +332,6 @@ export function useDropdownKeyboard({
 // HOOK: useDropdownOverlay
 // =============================================================================
 
-/**
- * `"anchor"` matches the anchor's width (6px wider on each side, so the
- * rows line up under its content); a preset is a fixed width.
- */
-export type DropdownWidth = "anchor" | "sm" | "md" | "lg" | "xl";
-
 /** A rectangle to position against, like a text caret: no element needed. */
 export interface DropdownVirtualAnchor {
   getBoundingClientRect: () => DOMRect;
@@ -348,20 +342,21 @@ export interface DropdownVirtualAnchor {
 interface UseDropdownOverlayProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  width: DropdownWidth;
+  /** A disabled dropdown never opens, from a click or a key alike. */
+  disabled: boolean;
   virtualAnchor?: DropdownVirtualAnchor;
 }
 
 /**
  * Everything the overlay shares across triggers: open, highlight and
  * keyboard-nav state with their close-reset, the floating-ui positioning
- * (anchor width or a preset, flip and shift), the refs, and outside-click
+ * (the anchor's width, flip and shift), the refs, and outside-click
  * dismissal scoped to the reference element, its label and the portal.
  */
 export function useDropdownOverlay({
   open: openProp,
   onOpenChange,
-  width,
+  disabled,
   virtualAnchor,
 }: UseDropdownOverlayProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
@@ -377,10 +372,11 @@ export function useDropdownOverlay({
       const resolved =
         typeof next === "function" ? next(isOpenRef.current) : next;
       if (resolved === isOpenRef.current) return;
+      if (resolved && disabled) return;
       if (openProp === undefined) setUncontrolledOpen(resolved);
       onOpenChange?.(resolved);
     },
-    [openProp, onOpenChange]
+    [openProp, onOpenChange, disabled]
   );
 
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -404,30 +400,25 @@ export function useDropdownOverlay({
     }
   }, [isOpen]);
 
-  const matchAnchor = width === "anchor";
   const { refs, floatingStyles, isPositioned } = useFloating<ReferenceType>({
     open: isOpen,
     placement: "bottom-start",
     middleware: [
-      // The list starts 6px before the anchor: with its 4px inset and 1px
-      // border, the rows' bounding boxes then align flush with the anchor's
-      // content, inside its own border. Matching the anchor's width, it is
-      // 6px wider on each side too, so the end edge punches out the same.
-      // crossAxis is direction-aware, so RTL mirrors.
+      // The list starts 6px before the anchor and is 6px wider on each
+      // side: with its 4px inset and 1px border, the rows' bounding boxes
+      // then align flush with the anchor's content, inside its own border.
+      // The stylesheet floors the width, so a narrow anchor still gets a
+      // usable list. crossAxis is direction-aware, so RTL mirrors.
       offset({ mainAxis: 4, crossAxis: -6 }),
       flip(),
       shift({ padding: 8 }),
-      ...(matchAnchor
-        ? [
-            size({
-              apply({ rects, elements }) {
-                Object.assign(elements.floating.style, {
-                  width: `${rects.reference.width + 12}px`,
-                });
-              },
-            }),
-          ]
-        : []),
+      size({
+        apply({ rects, elements }) {
+          Object.assign(elements.floating.style, {
+            width: `${rects.reference.width + 12}px`,
+          });
+        },
+      }),
     ],
     whileElementsMounted: autoUpdate,
   });

@@ -24,7 +24,6 @@ import {
   useFoldedGroups,
   type DropdownTabKey,
   type DropdownVirtualAnchor,
-  type DropdownWidth,
   type ListModel,
 } from "@opal/components/dropdown/hooks";
 import {
@@ -35,6 +34,7 @@ import {
   navItemElementId,
   normalizeItems,
   optionMatchesExactly,
+  rowElementId,
   rowKey,
 } from "@opal/components/dropdown/model";
 import { DropdownList } from "@opal/components/dropdown/list";
@@ -63,12 +63,6 @@ interface DropdownProps {
    * tie its label and messages to them. Generated when left out.
    */
   id?: string;
-  /**
-   * `"anchor"` matches the anchor's width; a preset is a fixed width. A
-   * type-in trigger wants `"anchor"`, a button a preset.
-   * @default "anchor"
-   */
-  width?: DropdownWidth;
   /**
    * A rectangle to position against instead of an element, like a text
    * caret. Takes precedence over `Dropdown.Anchor` and the trigger.
@@ -103,7 +97,6 @@ function Dropdown({
   onOpenChange,
   disabled = false,
   id: idProp,
-  width = "anchor",
   virtualAnchor,
   container,
   tabKey,
@@ -114,7 +107,7 @@ function Dropdown({
   const overlay = useDropdownOverlay({
     open,
     onOpenChange,
-    width,
+    disabled,
     virtualAnchor,
   });
   const {
@@ -158,7 +151,6 @@ function Dropdown({
     () => ({
       id,
       disabled,
-      width,
       container,
       isOpen,
       setIsOpen,
@@ -185,7 +177,6 @@ function Dropdown({
     [
       id,
       disabled,
-      width,
       container,
       isOpen,
       setIsOpen,
@@ -300,6 +291,7 @@ function DropdownTrigger({
 
   const triggerProps = getTriggerProps({ typeIn });
   const onKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (disabled) return;
     claim();
     triggerProps.onKeyDown(event);
   };
@@ -446,7 +438,6 @@ function DropdownData(props: DropdownDataProps) {
   const {
     id,
     disabled,
-    width,
     container,
     isOpen,
     setIsOpen,
@@ -543,11 +534,8 @@ function DropdownData(props: DropdownDataProps) {
           if (closeOnSelect) setIsOpen(false);
           break;
         case "action":
+          // A link action's row is an anchor: the click itself navigates.
           row.onSelect?.();
-          if (row.href) {
-            if (row.target) window.open(row.href, row.target, "noopener");
-            else window.location.assign(row.href);
-          }
           if (!row.keepOpen) setIsOpen(false);
           break;
         case "toggle":
@@ -563,11 +551,19 @@ function DropdownData(props: DropdownDataProps) {
   );
   const activate = useCallback(
     (item: NavItem) => {
-      if (item.kind === "row") activateRow(item.row);
-      else if (item.kind === "create") onCreate?.(item.text);
+      if (item.kind === "row") {
+        const { row } = item;
+        if (row.kind === "action" && row.href !== undefined) {
+          // Enter clicks the anchor, so the browser navigates as it would
+          // for a pointer click; the click handler then runs activateRow.
+          document.getElementById(rowElementId(id, row.id))?.click();
+          return;
+        }
+        activateRow(row);
+      } else if (item.kind === "create") onCreate?.(item.text);
       else toggleGroup(item.group);
     },
-    [activateRow, onCreate, toggleGroup]
+    [id, activateRow, onCreate, toggleGroup]
   );
   const secondary = useCallback((item: NavItem) => {
     if (item.kind !== "row" || item.row.kind !== "custom") return false;
@@ -629,7 +625,6 @@ function DropdownData(props: DropdownDataProps) {
       ref={floatingRef}
       listId={id}
       mode={mode}
-      width={width}
       container={container}
       isOpen={isOpen}
       disabled={disabled}
@@ -702,6 +697,5 @@ export {
   type DropdownTriggerBehavior,
   type DropdownDataProps,
   type DropdownTabKey,
-  type DropdownWidth,
   type DropdownVirtualAnchor,
 };

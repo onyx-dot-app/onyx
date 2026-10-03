@@ -15,7 +15,7 @@ A menu on a button:
 ```tsx
 import { Dropdown, Button } from "@opal/components";
 
-<Dropdown width="lg">
+<Dropdown>
   <Dropdown.Trigger asChild>
     <Button icon={SvgMoreHorizontal} prominence="tertiary" />
   </Dropdown.Trigger>
@@ -58,13 +58,14 @@ A picker on a type-in:
 
 ### `Dropdown`
 
+The list is always its anchor's width, 6px wider on each side so the rows line up under the anchor's content, and never narrower than `--block-width-dropdown-min` (17.5rem), so a narrow button trigger still gets a usable list.
+
 | Prop            | Type                                       | Default    | Description                                                                 |
 | --------------- | ------------------------------------------ | ---------- | --------------------------------------------------------------------------- |
 | `open`          | `boolean`                                  | —          | Controlled open state. Uncontrolled when left out.                          |
 | `onOpenChange`  | `(open: boolean) => void`                  | —          | Called with the next state                                                  |
 | `disabled`      | `boolean`                                  | `false`    | Never opens and renders no list                                             |
 | `id`            | `string`                                   | auto       | Prefix for the list's and the rows' element ids, so a field can tie into it |
-| `width`         | `"anchor" \| "sm" \| "md" \| "lg" \| "xl"` | `"anchor"` | Match the anchor's width (6px wider on each side), or a fixed preset (10, 12, 15, 18rem). Either way the list starts 6px before the anchor |
 | `virtualAnchor` | `{ getBoundingClientRect, contextElement? }` | —        | A rectangle to position against instead of an element, like a text caret   |
 | `container`     | `HTMLElement \| null`                      | body       | Where the list portals to, for a dropdown inside a modal                    |
 | `tabKey`        | `"walk" \| "leave"`                        | by trigger | What Tab does while open: walk the rows, or close and move on. Default: walk for a type-in, leave otherwise |
@@ -107,7 +108,7 @@ The element the list positions against and matches in width, when that is not th
 | Kind     | Fields                                                                       | Enter                                    |
 | -------- | ---------------------------------------------------------------------------- | ---------------------------------------- |
 | `option` | `value`, `title`, `description?`, `suffix?`, `icon?`                          | `onSelect(option)`; closes (single)      |
-| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `href?`, `target?`, `onSelect?`, `keepOpen?` | runs, follows `href`; closes unless `keepOpen` |
+| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `href?`, `target?`, `onSelect?`, `keepOpen?` | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen` |
 | `toggle` | `id`, `title`, `description?`, `icon?`, `checked`, `onCheckedChange`          | flips `checked`; stays open              |
 | `custom` | `id`, `render(row)`, `onActivate?`, `onSecondary?`, `keepOpen?`               | `onActivate`; closes unless `keepOpen`   |
 | `group`  | `title?`, `foldable?` (titled only), `items`                                  | a foldable title folds and unfolds       |

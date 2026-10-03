@@ -16,8 +16,7 @@ import {
   rowElementId,
   rowKey,
 } from "@opal/components/dropdown/model";
-import { Row } from "@opal/components/dropdown/rows";
-import type { DropdownWidth } from "@opal/components/dropdown/hooks";
+import { Row, targetTakesFocus } from "@opal/components/dropdown/rows";
 import type {
   DropdownMode,
   DropdownRow,
@@ -27,7 +26,6 @@ import type {
 interface DropdownListProps {
   listId: string;
   mode: DropdownMode;
-  width: DropdownWidth;
   container: HTMLElement | null | undefined;
   isOpen: boolean;
   disabled: boolean;
@@ -77,14 +75,6 @@ interface DropdownListProps {
 
 const SCROLL_END_THRESHOLD_PX = 48;
 
-const WIDTH_CLASSES: Record<DropdownWidth, string | undefined> = {
-  anchor: undefined,
-  sm: "w-40",
-  md: "w-48",
-  lg: "w-60",
-  xl: "w-72",
-};
-
 /**
  * The list in a portal: the box, the search field, the groups with their
  * dividers, the create row and the rows. Scrolls the keyboard stop into
@@ -95,7 +85,6 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     {
       listId,
       mode,
-      width,
       container,
       isOpen,
       disabled,
@@ -194,13 +183,14 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
         // stop. The first pointer movement hands control back.
         data-keyboard-nav={keyboardNav || undefined}
         onMouseMove={onMouseMove}
-        className={cn("opal-dropdown", WIDTH_CLASSES[width])}
+        className="opal-dropdown"
         style={floatingStyles}
         onAnimationEnd={presence.onAnimationEnd}
         onMouseDown={(e) => {
           // Clicks on padding, gaps, or dividers must not steal focus from
-          // the trigger (the list is tabIndex={-1} for AT only).
-          e.preventDefault();
+          // the trigger (the list is tabIndex={-1} for AT only). A control
+          // that needs focus keeps the default.
+          if (!targetTakesFocus(e)) e.preventDefault();
         }}
         onWheel={(e) => {
           // Scroll here, not in whatever sits behind the portal.

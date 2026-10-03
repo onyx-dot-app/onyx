@@ -3,7 +3,6 @@
 import { createContext, useContext } from "react";
 import type {
   DropdownKeyOptions,
-  DropdownWidth,
   ListModel,
 } from "@opal/components/dropdown/hooks";
 import type { DropdownMode } from "@opal/components/dropdown/types";
@@ -18,7 +17,6 @@ export interface DropdownContextValue {
   /** Prefix for the list's and the rows' element ids. */
   id: string;
   disabled: boolean;
-  width: DropdownWidth;
   /** Where the list portals to; `document.body` when left out. */
   container: HTMLElement | null | undefined;
   isOpen: boolean;

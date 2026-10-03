@@ -93,7 +93,7 @@ function ButtonPickerDemo() {
     .filter((row): row is DropdownOption => row.kind === "option")
     .find((option) => option.value === picked)?.title;
   return (
-    <Dropdown width="md">
+    <Dropdown>
       <Dropdown.Trigger asChild>
         <Button prominence="secondary" rightIcon={SvgChevronDown}>
           {title ?? "Pick a fruit"}
@@ -184,7 +184,7 @@ function MenuDemo() {
   ];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <Dropdown width="lg">
+      <Dropdown>
         <Dropdown.Trigger asChild>
           <Button icon={SvgMoreHorizontal} prominence="tertiary" />
         </Dropdown.Trigger>

@@ -322,9 +322,5 @@
   "backdrop-blur-03": {
     "value": "1px",
     "type": "dimension"
-  },
-  "block-width-dropdown-min": {
-    "value": "17.5rem",
-    "type": "dimension"
   }
 }

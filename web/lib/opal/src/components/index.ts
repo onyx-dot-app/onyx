@@ -267,7 +267,6 @@ export {
   type DropdownDataProps,
   type DropdownTriggerBehavior,
   type DropdownTabKey,
-  type DropdownWidth,
   type DropdownVirtualAnchor,
 } from "@opal/components/dropdown/components";
 export {
