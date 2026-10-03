@@ -159,7 +159,7 @@ export class OneDriveConnectorSetupPage {
   }
 
   async expectConfigurationEnabled() {
-    await expect(this.connectorForm.getByTestId("name")).toBeEnabled();
+    await expect(this.page.getByTestId("connector-name")).toBeEnabled();
   }
 
   async selectSpecificScope(user?: string) {
@@ -174,7 +174,7 @@ export class OneDriveConnectorSetupPage {
   }
 
   async submitConnector(name: string) {
-    await this.connectorForm.getByTestId("name").fill(name);
+    await this.page.getByTestId("connector-name").fill(name);
     const responsePromise = this.page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
@@ -188,7 +188,7 @@ export class OneDriveConnectorSetupPage {
   }
 
   async submitInvalidConnector(name: string, message: string) {
-    await this.connectorForm.getByTestId("name").fill(name);
+    await this.page.getByTestId("connector-name").fill(name);
     await expect(
       this.page.getByRole("button", { name: "Connect", exact: true })
     ).toBeDisabled();
@@ -202,11 +202,6 @@ export class OneDriveConnectorSetupPage {
   /** The creation form, once its card is expanded. */
   private get credentialForm() {
     return this.page.getByTestId("credential-form");
-  }
-
-  /** The connector's own form. It has a name field too, so both are scoped. */
-  private get connectorForm() {
-    return this.page.getByTestId("connector-form");
   }
 
   private async openCredentialForm() {

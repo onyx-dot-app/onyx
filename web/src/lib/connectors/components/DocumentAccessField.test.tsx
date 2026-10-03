@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { Formik } from "formik";
-import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
+import DocumentAccessField from "@/lib/connectors/components/DocumentAccessField";
 import {
   ConfigurableSources,
   ValidSources,
@@ -15,6 +15,10 @@ jest.mock("@/hooks/useTierAtLeast", () => ({
 jest.mock("@/components/admin/connectors/AutoSyncOptions", () => ({
   AutoSyncOptions: () => null,
 }));
+jest.mock("@/lib/connectors/components/GroupShareList", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 
 const { usePermissionAuthority } = jest.requireMock("@/lib/permissions/hooks");
 const { useTierAtLeast } = jest.requireMock("@/hooks/useTierAtLeast");
@@ -22,12 +26,16 @@ const { useTierAtLeast } = jest.requireMock("@/hooks/useTierAtLeast");
 function renderForm(connector: ConfigurableSources) {
   return render(
     <Formik
-      initialValues={{ access_type: "public", groups: [] }}
+      initialValues={{
+        access_type: "public",
+        groups: [],
+        data_access_group_ids: [],
+      }}
       onSubmit={() => {}}
     >
       {({ values }) => (
         <>
-          <AccessTypeForm connector={connector} />
+          <DocumentAccessField connector={connector} />
           <output data-testid="access-type">{values.access_type}</output>
         </>
       )}
@@ -35,7 +43,7 @@ function renderForm(connector: ConfigurableSources) {
   );
 }
 
-describe("AccessTypeForm", () => {
+describe("DocumentAccessField", () => {
   beforeEach(() => {
     useTierAtLeast.mockReturnValue(true);
     usePermissionAuthority.mockReturnValue({

@@ -1,6 +1,8 @@
 import * as Yup from "yup";
-import type { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
-import type { ConnectorGroupRestrictionFormValues } from "@/lib/connectors/accessType";
+import type {
+  ConnectorAccessFormValues,
+  ConnectorGroupRestrictionFormValues,
+} from "@/lib/connectors/accessType";
 import { ValidSources } from "@/lib/connectors/types/source";
 import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
@@ -73,13 +75,14 @@ const buildInitialValuesForFields = (
 export function createConnectorInitialValues(
   connector: ConfigurableSources
 ): Record<string, any> &
-  AccessTypeGroupSelectorFormType &
+  ConnectorAccessFormValues &
   ConnectorGroupRestrictionFormValues {
   const configuration = connectorConfigs[connector];
 
   return {
     name: "",
     groups: [],
+    data_access_group_ids: [],
     access_type: "public",
     restrict_access_to_groups: false,
     restriction_group_ids: [],

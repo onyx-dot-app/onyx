@@ -1963,25 +1963,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "我们将自动从数据源同步权限。只有当执行搜索的用户在数据源中有权访问该文档时，该文档才能在 {appName} 中被搜索到。",
-          "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
-          "name": "自动同步权限"
-        },
-        "heading": {
-          "description": "控制谁可以访问此连接器索引的文档。",
-          "title": "文档访问权限"
-        },
-        "privateOption": {
-          "description": "只有（通过用户组页面）被明确授予此连接器访问权限的用户才能访问此连接器导入的文档",
-          "name": "私有"
-        },
-        "publicOption": {
-          "description": "拥有 {appName} 账户的所有人都可以访问此连接器导入的文档",
-          "name": "公开"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# 天} other {# 天}}",
@@ -2167,23 +2148,6 @@
         "toggle": {
           "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
           "title": "限制为群组访问"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "为此连接器分配组访问权限"
-        },
-        "assignToGroup": {
-          "title": "可以管理此连接器的群组"
-        },
-        "scopedManagerGroups": {
-          "description": "选择一个或多个您管理的组以授予对此连接器的访问权限"
-        },
-        "syncGroups": {
-          "description": "以下的组控制谁可以管理此连接器。其文档的访问权限继承自数据源本身的权限。"
-        },
-        "visibleToGroups": {
-          "description": "此连接器将对以下所选的组可见/可访问"
         }
       },
       "indexAttemptsTable": {
@@ -2670,10 +2634,6 @@
           "toast": "发生未知错误"
         }
       },
-      "connectorName": {
-        "label": "连接器名称",
-        "subtext": "用于描述该连接器的名称。"
-      },
       "credentialRequired": {
         "tooltip": "请先选择一个凭据。"
       },
@@ -2959,6 +2919,40 @@
           "hours": "小时",
           "minutes": "分钟"
         }
+      },
+      "settings": {
+        "description": "连接器信息与访问权限",
+        "displayName": {
+          "title": "连接器显示名称"
+        },
+        "documentAccess": {
+          "description": "控制谁可以访问此连接器索引的文档。",
+          "everyone": {
+            "description": "此连接器索引的文档将对组织中的所有人公开。",
+            "title": "组织中的所有人"
+          },
+          "specificGroups": {
+            "description": "指定可以访问此连接器文档的群组。",
+            "title": "特定群组"
+          },
+          "sync": {
+            "description": "{appName} 会与来源同步权限。用户只能搜索他们在来源中可见的内容。",
+            "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
+            "title": "与 {source} 同步"
+          },
+          "title": "文档访问"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "始终共享",
+            "title": "管理员"
+          },
+          "description": "控制谁可以运行（安排和监控索引）和/或编辑连接器配置。",
+          "note": "只有拥有“管理连接器”权限（群组管理员角色或群组权限）的用户才能运行和/或编辑连接器。",
+          "placeholder": "添加群组以共享此连接器",
+          "title": "连接器管理权限"
+        },
+        "title": "连接器设置"
       }
     },
     "costOverrides": {

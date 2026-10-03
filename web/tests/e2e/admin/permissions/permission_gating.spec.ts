@@ -315,10 +315,13 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
 
       // a global holder defaults to public, which has no groups to scope
       // must be the picker, not "assigned to group X" — the old code auto-assigned
-      await page.getByText("Public", { exact: true }).first().click();
-      await page.getByText("Private", { exact: true }).first().click();
+      await page
+        .getByText("Everyone in Your Organization", { exact: true })
+        .first()
+        .click();
+      await page.getByText("Specific Groups", { exact: true }).first().click();
       await expect(
-        page.getByText("Assign group access for this Connector")
+        page.getByPlaceholder("Add groups to restrict access to this connector")
       ).toBeVisible({ timeout: 10000 });
 
       // Drive's credential form used to render an empty fragment for non-admins

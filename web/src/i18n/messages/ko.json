@@ -1963,25 +1963,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "소스에서 권한을 자동으로 동기화합니다. 검색을 수행하는 사용자가 소스에서 해당 문서에 액세스할 권한이 있는 경우에만 {appName}에서 문서를 검색할 수 있습니다.",
-          "disabledReason": "현재 자격 증명의 인증 방식은 권한 자동 동기화를 지원하지 않습니다. 지원되는 인증 방식으로 변경해 주세요.",
-          "name": "권한 자동 동기화"
-        },
-        "heading": {
-          "description": "이 커넥터가 색인한 문서에 대한 액세스 권한을 관리합니다.",
-          "title": "문서 액세스"
-        },
-        "privateOption": {
-          "description": "(사용자 그룹 페이지를 통해) 이 커넥터에 대한 액세스 권한을 명시적으로 부여받은 사용자만 이 커넥터가 가져온 문서에 액세스할 수 있습니다",
-          "name": "비공개"
-        },
-        "publicOption": {
-          "description": "{appName} 계정이 있는 모든 사용자가 이 커넥터가 가져온 문서에 액세스할 수 있습니다",
-          "name": "공개"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {#일} other {#일}}",
@@ -2167,23 +2148,6 @@
         "toggle": {
           "description": "선택한 그룹의 멤버로 접근을 제한합니다. 동기화된 권한은 계속 적용됩니다.",
           "title": "그룹으로 접근 제한"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "이 커넥터에 대한 그룹 액세스 할당"
-        },
-        "assignToGroup": {
-          "title": "이 커넥터를 관리할 수 있는 그룹"
-        },
-        "scopedManagerGroups": {
-          "description": "이 커넥터에 대한 액세스 권한을 부여하려면 관리 중인 그룹을 하나 이상 선택하세요"
-        },
-        "syncGroups": {
-          "description": "아래 그룹은 이 커넥터를 관리할 수 있는 사용자를 제어합니다. 문서에 대한 액세스는 소스 자체의 권한에서 상속됩니다."
-        },
-        "visibleToGroups": {
-          "description": "이 커넥터는 아래에서 선택한 그룹에 표시되고 액세스할 수 있습니다"
         }
       },
       "indexAttemptsTable": {
@@ -2670,10 +2634,6 @@
           "toast": "알 수 없는 오류가 발생했습니다"
         }
       },
-      "connectorName": {
-        "label": "커넥터 이름",
-        "subtext": "커넥터를 설명하는 이름입니다."
-      },
       "credentialRequired": {
         "tooltip": "먼저 자격 증명을 선택하세요."
       },
@@ -2959,6 +2919,40 @@
           "hours": "시간",
           "minutes": "분"
         }
+      },
+      "settings": {
+        "description": "커넥터 정보 및 액세스",
+        "displayName": {
+          "title": "커넥터 표시 이름"
+        },
+        "documentAccess": {
+          "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",
+          "everyone": {
+            "description": "이 커넥터가 색인한 문서는 조직의 모든 사용자에게 공개됩니다.",
+            "title": "조직의 모든 사용자"
+          },
+          "specificGroups": {
+            "description": "이 커넥터의 문서에 액세스할 수 있는 그룹을 지정합니다.",
+            "title": "특정 그룹"
+          },
+          "sync": {
+            "description": "{appName}이(가) 소스와 권한을 동기화합니다. 사용자는 소스에서 볼 수 있는 항목만 검색할 수 있습니다.",
+            "disabledReason": "현재 자격 증명의 인증 방식은 권한 자동 동기화를 지원하지 않습니다. 지원되는 인증 방식으로 변경해 주세요.",
+            "title": "{source}와(과) 동기화"
+          },
+          "title": "문서 액세스"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "항상 공유됨",
+            "title": "관리자"
+          },
+          "description": "커넥터를 운영(색인 예약 및 모니터링)하거나 커넥터 구성을 편집할 수 있는 사용자를 관리합니다.",
+          "note": "“커넥터 관리” 권한(그룹 관리자 역할 또는 그룹 권한)이 있는 사용자만 커넥터를 운영하거나 편집할 수 있습니다.",
+          "placeholder": "그룹을 추가하여 이 커넥터 공유",
+          "title": "커넥터 관리 액세스"
+        },
+        "title": "커넥터 설정"
       }
     },
     "costOverrides": {
