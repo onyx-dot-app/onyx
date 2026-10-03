@@ -707,7 +707,7 @@ finding at or above `--fail-on` (default `critical`) remains, which is how it
 gates deploys.
 
 ```shell
-ods audit [--web] [--python] [--dependabot] [--format text[,json][,sarif]] [--fail-on critical|high|moderate|low] [--ignore-url s3://...]
+ods audit [--web] [--python] [--rust] [--go] [--dependabot] [--all-lockfiles] [--format text[,json][,sarif]] [--fail-on critical|high|moderate|low] [--ignore-url s3://...]
 ```
 
 `--format` takes a comma-separated list. The machine-readable formats (`json`,
@@ -735,8 +735,9 @@ ods audit --python --format=sarif > audit.sarif
 # SARIF to a file for upload, readable report to the log (used by CI gates)
 ods audit --format=sarif,text > audit.sarif
 
-# Every tracked bun.lock and uv.lock, not just the root and web ones
-ods audit --all-lockfiles --web --python
+# Every tracked lockfile of the selected kinds (the deploy gate and nightly run
+# this way), not just the shipped set
+ods audit --all-lockfiles --web --python --rust --go
 ```
 
 #### Checking a release branch before a tag

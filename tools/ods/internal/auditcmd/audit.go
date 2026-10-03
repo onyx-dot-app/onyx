@@ -19,6 +19,8 @@ type AuditOptions struct {
 	IgnoreURL    string
 	Web          bool
 	Python       bool
+	Rust         bool
+	Go           bool
 	Dependabot   bool
 	Actions      bool
 	AllLockfiles bool
@@ -64,9 +66,11 @@ how it gates deploys.`,
 	cmd.PersistentFlags().BoolVar(&opts.Debug, "debug", false, "run in debug mode")
 	cmd.Flags().BoolVar(&opts.Web, "web", false, "Audit web/JS dependencies (bun.lock)")
 	cmd.Flags().BoolVar(&opts.Python, "python", false, "Audit Python dependencies (uv.lock)")
+	cmd.Flags().BoolVar(&opts.Rust, "rust", false, "Audit Rust dependencies (Cargo.lock)")
+	cmd.Flags().BoolVar(&opts.Go, "go", false, "Audit Go dependencies (go.mod)")
 	cmd.Flags().BoolVar(&opts.Dependabot, "dependabot", false, "Audit open Dependabot security alerts")
 	cmd.Flags().BoolVar(&opts.Actions, "actions", false, "Audit GitHub Actions in .github/workflows and .github/actions")
-	cmd.Flags().BoolVar(&opts.AllLockfiles, "all-lockfiles", false, "Scan every tracked bun.lock and uv.lock, not just the root and web ones")
+	cmd.Flags().BoolVar(&opts.AllLockfiles, "all-lockfiles", false, "Scan every tracked lockfile of the selected kinds, not just the shipped set")
 	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "Fail on any backend or per-action query failure instead of warning")
 	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format(s), comma-separated: text, json, sarif (e.g. sarif,text)")
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
@@ -127,6 +131,8 @@ func runAudit(opts *AuditOptions, stdout, stderr io.Writer) error {
 	result, err := audit.Run(audit.Options{
 		Web:          opts.Web,
 		Python:       opts.Python,
+		Rust:         opts.Rust,
+		Go:           opts.Go,
 		Dependabot:   opts.Dependabot,
 		Actions:      opts.Actions,
 		AllLockfiles: opts.AllLockfiles,

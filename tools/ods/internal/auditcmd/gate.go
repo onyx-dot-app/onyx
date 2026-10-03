@@ -34,7 +34,8 @@ func newAuditGateCommand() *cobra.Command {
 		Short: "Run the deploy audit gate on the checked-out tree, as a tag build would",
 		Long: `Run the deploy audit gate on the checked-out tree, as a tag build would.
 
-Scans what deployment.yml's audit-gate scans: the lockfiles, the open Dependabot
+Scans what deployment.yml's audit-gate scans: every tracked lockfile (JS, Python,
+Rust, and Go), the open Dependabot
 alerts, the pinned Actions, and the OS layer each shipped image carries (the
 pinned runtime base for web and model-server, the backend apt stage built from
 backend/Dockerfile). Run it from the repository root on the commit you are
@@ -58,12 +59,13 @@ Example usage:
 
 func runAuditGate(opts *AuditGateOptions, stdout, stderr io.Writer) error {
 	result, err := runDeps(audit.Options{
-		Format:    "text",
-		FailOn:    audit.SeverityCritical,
-		IgnoreURL: opts.IgnoreURL,
-		Strict:    true,
-		Stdout:    stdout,
-		Stderr:    stderr,
+		Format:       "text",
+		FailOn:       audit.SeverityCritical,
+		IgnoreURL:    opts.IgnoreURL,
+		AllLockfiles: true,
+		Strict:       true,
+		Stdout:       stdout,
+		Stderr:       stderr,
 	})
 	if err != nil {
 		return failf("Audit failed: %v", err)
