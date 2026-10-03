@@ -7,6 +7,7 @@ import re
 import tempfile
 import zipfile
 from collections.abc import Callable, Iterator, Sequence
+from email.message import Message
 from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
@@ -719,6 +720,37 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     )
 
 
+# A body is stored in the file the way it was transferred, and only these two
+# transfer encodings actually change the bytes.
+_ENCODED_TRANSFER_ENCODINGS = frozenset({"base64", "quoted-printable"})
+
+
+def _decode_text_payload(part: Message, payload: str) -> str:
+    """Undo the transfer encoding a text part was stored with.
+
+    ``get_payload()`` hands back the part exactly as it sits in the file, so a
+    base64 body reaches the index as base64 and a quoted-printable body keeps
+    its ``=0D=0A`` and ``=C3=BC`` escapes. Parts stored as 7bit or 8bit are
+    already text and are left alone: for those ``get_payload(decode=True)``
+    would first push the string back through ``raw-unicode-escape``, which is
+    lossy for anything outside Latin-1.
+    """
+    transfer_encoding = str(part.get("content-transfer-encoding", "")).strip().lower()
+    if transfer_encoding not in _ENCODED_TRANSFER_ENCODINGS:
+        return payload
+
+    decoded = part.get_payload(decode=True)
+    if not isinstance(decoded, bytes):
+        return payload
+
+    charset = part.get_content_charset() or "utf-8"
+    try:
+        return decoded.decode(charset, errors="replace")
+    except LookupError:
+        logger.warning("Unknown charset in EML part: %s", charset)
+        return decoded.decode("utf-8", errors="replace")
+
+
 def eml_to_text(file: IO[Any]) -> str:
     encoding = detect_encoding(file)
     text_file = io.TextIOWrapper(file, encoding=encoding)
@@ -741,16 +773,38 @@ def eml_to_text(file: IO[Any]) -> str:
             pass
 
     text_content = []
+    html_content = []
+    attachment_text = []
     for part in message.walk():
-        if part.get_content_type().startswith("text/plain"):
-            payload = part.get_payload()
-            if isinstance(payload, str):
-                text_content.append(payload)
-            elif isinstance(payload, list):
-                text_content.extend(item for item in payload if isinstance(item, str))
-            else:
-                logger.warning("Unexpected payload type: %s", type(payload))
-    return TEXT_SECTION_SEPARATOR.join(text_content)
+        content_type = part.get_content_type()
+        if not content_type.startswith("text/"):
+            continue
+
+        payload = part.get_payload()
+        if isinstance(payload, str):
+            decoded = _decode_text_payload(part, payload)
+        elif isinstance(payload, list):
+            decoded = "".join(item for item in payload if isinstance(item, str))
+        else:
+            logger.warning("Unexpected payload type: %s", type(payload))
+            continue
+
+        # An attached text file is indexed with the mail, as before, but it is
+        # not the body, so it cannot stand in for a missing plain-text part.
+        if part.get_content_disposition() == "attachment":
+            if content_type.startswith("text/plain"):
+                attachment_text.append(decoded)
+        elif content_type.startswith("text/plain"):
+            text_content.append(decoded)
+        elif content_type == "text/html":
+            html_content.append(decoded)
+
+    # A mail with no plain-text alternative is ordinary -- it is what Outlook and
+    # most newsletters send -- and its body is in the HTML part.
+    if not any(part.strip() for part in text_content) and html_content:
+        text_content = [parse_html_page_basic(part) for part in html_content]
+
+    return TEXT_SECTION_SEPARATOR.join(text_content + attachment_text)
 
 
 def epub_to_text(file: IO[Any]) -> str:
