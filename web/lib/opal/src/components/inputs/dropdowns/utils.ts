@@ -24,7 +24,8 @@ export function toDropdownItems(options: SelectOptions = []): DropdownItem[] {
 }
 
 export function toDropdownOption(option: SelectOption): DropdownOption {
-  return { kind: "option", ...option };
+  // `kind` last: an option carrying a stray `kind` must still be an option.
+  return { ...option, kind: "option" };
 }
 
 /** Flat option list in render order, dividers unwrapped. */

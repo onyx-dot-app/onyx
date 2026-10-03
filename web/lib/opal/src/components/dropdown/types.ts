@@ -23,10 +23,11 @@ export interface DropdownOption extends DropdownRowBase {
 }
 
 /**
- * A row that runs a command: `onSelect`, or `href` to follow. The dropdown
- * closes after it unless `keepOpen` is set.
+ * A row that runs a command: `onSelect`, or `href` to follow (a real link,
+ * so middle-click and copy-link work), or both. The dropdown closes after
+ * it unless `keepOpen` is set.
  */
-export interface DropdownAction extends DropdownRowBase {
+export type DropdownAction = DropdownRowBase & {
   kind: "action";
   id: string;
   title: string;
@@ -34,12 +35,16 @@ export interface DropdownAction extends DropdownRowBase {
   icon?: IconFunctionComponent;
   /** A destructive command: the row reads in the danger colour. */
   danger?: boolean;
-  href?: string;
-  /** Link target, with `href`. */
-  target?: string;
-  onSelect?: () => void;
   keepOpen?: boolean;
-}
+} & (
+    | {
+        href: string;
+        /** Link target, with `href`. */
+        target?: string;
+        onSelect?: () => void;
+      }
+    | { href?: never; target?: never; onSelect: () => void }
+  );
 
 /** A row with a switch. Activating it flips `checked`; the dropdown stays open. */
 export interface DropdownToggle extends DropdownRowBase {
@@ -134,6 +139,8 @@ export type DropdownMode = "picker" | "menu";
  * consecutive runs, titled when the run below it has a title.
  */
 export interface RowGroup {
+  /** Stable within the list: two groups may share a title, never a key. */
+  key: string;
   title?: string;
   rows: DropdownRow[];
   /** The rows fold behind the title. */

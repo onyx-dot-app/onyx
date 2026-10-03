@@ -20,6 +20,7 @@ export function normalizeItems(
   for (const entry of items) {
     if (entry.kind === "group") {
       groups.push({
+        key: String(groups.length),
         title: entry.title,
         rows: entry.items,
         foldable: entry.foldable,
@@ -30,7 +31,7 @@ export function normalizeItems(
     if (looseRun) {
       looseRun.rows.push(entry);
     } else {
-      looseRun = { rows: [entry] };
+      looseRun = { key: String(groups.length), rows: [entry] };
       groups.push(looseRun);
     }
   }
@@ -144,8 +145,13 @@ export function rowElementId(listId: string, key: string): string {
   return `${listId}-option-${sanitizeId(key)}`;
 }
 
-export function groupElementId(listId: string, title: string): string {
-  return `${listId}-group-${sanitizeId(title)}`;
+export function groupElementId(listId: string, key: string): string {
+  return `${listId}-group-${sanitizeId(key)}`;
+}
+
+/** The create row's id: its own namespace, so it never collides with an option. */
+export function createElementId(listId: string): string {
+  return `${listId}-create`;
 }
 
 /** The element id of a keyboard stop, for `aria-activedescendant`. */
@@ -155,8 +161,8 @@ export function navItemElementId(
 ): string | undefined {
   if (!item) return undefined;
   if (item.kind === "row") return rowElementId(listId, rowKey(item.row));
-  if (item.kind === "create") return rowElementId(listId, item.text);
+  if (item.kind === "create") return createElementId(listId);
   return item.group.title === undefined
     ? undefined
-    : groupElementId(listId, item.group.title);
+    : groupElementId(listId, item.group.key);
 }

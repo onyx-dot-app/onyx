@@ -12,8 +12,8 @@ import { Text } from "@opal/components/text/components";
 import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { SvgPlus } from "@opal/icons";
 import {
+  createElementId,
   groupElementId,
-  rowElementId,
   rowKey,
 } from "@opal/components/dropdown/model";
 import { Row, targetTakesFocus } from "@opal/components/dropdown/rows";
@@ -332,7 +332,7 @@ function Rows({
           sizePreset="main-ui"
           variant="body"
           rightChildren={<SvgPlus className="opal-dropdown-create-icon" />}
-          id={rowElementId(listId, create.text)}
+          id={createElementId(listId)}
           data-index={0}
           role={mode === "picker" ? "option" : "menuitem"}
           tabIndex={-1}
@@ -384,11 +384,11 @@ function Rows({
         if (isFoldable && group.title !== undefined) {
           return (
             <div
-              key={groupIndex}
+              key={group.key}
               // Plumbing only: the id for aria-activedescendant and the
               // index for scroll-into-view. Hover and press styling are the
               // Divider's own Interactive.
-              id={groupElementId(listId, group.title)}
+              id={groupElementId(listId, group.key)}
               role="presentation"
               className="opal-dropdown-group"
               data-index={headerIndex}
@@ -410,7 +410,7 @@ function Rows({
           );
         }
         return (
-          <React.Fragment key={groupIndex}>
+          <React.Fragment key={group.key}>
             {group.title !== undefined ? (
               <Divider title={group.title} />
             ) : (

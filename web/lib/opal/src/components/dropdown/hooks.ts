@@ -72,7 +72,7 @@ export function useFoldedGroups({
   const isGroupOpen = useCallback(
     (group: RowGroup) => {
       if (!group.foldable || group.title === undefined) return true;
-      const choice = toggled.get(group.title);
+      const choice = toggled.get(group.key);
       if (choice !== undefined) return choice;
       return searching || group.rows.some(sessionIsSelected);
     },
@@ -82,9 +82,8 @@ export function useFoldedGroups({
   const toggleGroup = useCallback(
     (group: RowGroup) => {
       if (group.title === undefined) return;
-      const title = group.title;
       const open = isGroupOpen(group);
-      setToggled((prev) => new Map(prev).set(title, !open));
+      setToggled((prev) => new Map(prev).set(group.key, !open));
     },
     [isGroupOpen]
   );

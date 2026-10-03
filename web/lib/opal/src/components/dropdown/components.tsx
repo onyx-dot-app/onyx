@@ -371,7 +371,7 @@ interface DropdownDataBaseProps {
   onReachEnd?: (shown: DropdownOption[]) => void;
 }
 
-interface DropdownPickerProps extends DropdownDataBaseProps {
+type DropdownPickerProps = DropdownDataBaseProps & {
   /** The rows: options, other rows and groups, in order. */
   items: DropdownItem[];
   /** A click or Enter on an option. What a pick means is the caller's. */
@@ -381,7 +381,7 @@ interface DropdownPickerProps extends DropdownDataBaseProps {
    * @default true for a single `value`, false for `values`
    */
   closeOnSelect?: boolean;
-}
+};
 
 /**
  * A picker: something is selected. With `value` one row reads as
@@ -398,13 +398,13 @@ type DropdownMultiPickerProps = DropdownPickerProps & {
 };
 
 /** A menu: commands, toggles and custom rows. Nothing is selected, so no options. */
-interface DropdownMenuProps extends DropdownDataBaseProps {
+type DropdownMenuProps = DropdownDataBaseProps & {
   items: DropdownMenuItem[];
   value?: never;
   values?: never;
   onSelect?: never;
   closeOnSelect?: never;
-}
+};
 
 type DropdownDataProps =
   | DropdownSinglePickerProps
@@ -484,7 +484,10 @@ function DropdownData(props: DropdownDataProps) {
       const visible = new Set(flattenGroups(filtered).map(rowKey));
       const unmatched = allRows.filter((row) => !visible.has(rowKey(row)));
       if (unmatched.length > 0) {
-        return [...filtered, { title: otherOptionsTitle, rows: unmatched }];
+        return [
+          ...filtered,
+          { key: "other", title: otherOptionsTitle, rows: unmatched },
+        ];
       }
     }
     return filtered;

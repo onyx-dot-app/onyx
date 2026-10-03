@@ -144,7 +144,8 @@ describe("Dropdown picker", () => {
     expect(trigger).toHaveAttribute("aria-autocomplete", "list");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 
-    await user.click(trigger);
+    // Focus without a click: a click on a type-in opens it by itself.
+    trigger.focus();
     await user.keyboard("{ArrowDown}");
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("listbox", { name: "Fruit" })).toBeInTheDocument();

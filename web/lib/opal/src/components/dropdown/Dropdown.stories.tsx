@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Button,
@@ -59,6 +59,7 @@ function TypeInDemo() {
         <Dropdown.Trigger asChild typeIn>
           <InputTypeIn
             placeholder="Fruit"
+            aria-label="Fruit"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -114,6 +115,7 @@ function ButtonPickerDemo() {
 export const ButtonPicker: Story = { render: () => <ButtonPickerDemo /> };
 
 function MenuDemo() {
+  const settingsRef = useRef<HTMLButtonElement>(null);
   const [pinned, setPinned] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const note = (text: string) => setLog((prev) => [...prev, text]);
@@ -140,7 +142,8 @@ function MenuDemo() {
       keywords: ["settings", "configure"],
       keepOpen: true,
       onActivate: () => note("settings: activate"),
-      onSecondary: () => note("settings: secondary"),
+      // ArrowRight hands the keyboard to the row's own control.
+      onSecondary: () => settingsRef.current?.focus(),
       render: ({ highlighted, props }) => (
         <LineItemButton
           presentational
@@ -154,6 +157,7 @@ function MenuDemo() {
           variant="heading"
           rightChildren={
             <Button
+              ref={settingsRef}
               icon={SvgSettings}
               size="sm"
               prominence="internal"

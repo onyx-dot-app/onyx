@@ -93,9 +93,9 @@ export const Row = React.memo(function Row({
         // The switch only shows the state: the row is the control, so the
         // switch takes no pointer or focus of its own.
         rightChildren={
-          <span inert className="opal-dropdown-toggle">
+          <div inert className="opal-dropdown-toggle">
             <InputSwitch checked={row.checked} />
-          </span>
+          </div>
         }
         id={id}
         data-index={index}

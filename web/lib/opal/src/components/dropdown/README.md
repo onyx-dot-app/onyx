@@ -6,7 +6,7 @@ A floating list under a trigger. The dropdown handles positioning, the keyboard,
 
 With a `value` or `values`, `Dropdown.Data` is a **picker**: a `listbox` where something is selected. Without, it is a **menu**: commands, toggles and custom rows, and no `option` rows (a type error). No Radix: positioning is `@floating-ui/react-dom`.
 
-The four input dropdowns (`InputSingleSelect`, `InputSingleComboBox`, `InputMultiSelect`, `InputMultiComboBox`) are pickers built on it with a type-in trigger.
+The four input dropdowns are pickers built on it: the ComboBoxes (`InputSingleComboBox`, `InputMultiComboBox`) with a type-in trigger whose text filters the rows, the Selects (`InputSingleSelect`, `InputMultiSelect`) with an input-shaped button trigger and an optional search field in the list.
 
 ## Usage
 
@@ -40,9 +40,14 @@ A picker on a type-in:
 ```tsx
 <Dropdown open={open} onOpenChange={setOpen}>
   <Dropdown.Trigger asChild typeIn>
-    <InputTypeIn value={query} onChange={(e) => setQuery(e.target.value)} />
+    <InputTypeIn
+      aria-label="Fruit"
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+    />
   </Dropdown.Trigger>
   <Dropdown.Data
+    label="Fruit"
     items={[
       { kind: "option", value: "apple", title: "Apple" },
       { kind: "group", title: "Citrus", foldable: true, items: [...] },
@@ -108,7 +113,7 @@ The element the list positions against and matches in width, when that is not th
 | Kind     | Fields                                                                       | Enter                                    |
 | -------- | ---------------------------------------------------------------------------- | ---------------------------------------- |
 | `option` | `value`, `title`, `description?`, `suffix?`, `icon?`                          | `onSelect(option)`; closes (single)      |
-| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `href?`, `target?`, `onSelect?`, `keepOpen?` | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen` |
+| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `keepOpen?`, and `onSelect` and/or `href` (+ `target?`) | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen` |
 | `toggle` | `id`, `title`, `description?`, `icon?`, `checked`, `onCheckedChange`          | flips `checked`; stays open              |
 | `custom` | `id`, `render(row)`, `onActivate?`, `onSecondary?`, `keepOpen?`               | `onActivate`; closes unless `keepOpen`   |
 | `group`  | `title?`, `foldable?` (titled only), `items`                                  | a foldable title folds and unfolds       |
