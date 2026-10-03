@@ -70,6 +70,10 @@ export interface Settings {
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
 
+  // Workspace-wide switch for the LLM gateway (direct model API access via
+  // /api/gateway). When false, all gateway routes reject requests.
+  llm_gateway_enabled?: boolean;
+
   // Workspace-wide instructions injected into every Craft agent's system
   // prompt (AGENTS.md).
   craft_instructions?: string | null;
