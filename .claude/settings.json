@@ -1,7 +1,8 @@
 {
   "enabledPlugins": {
     "security-guidance@claude-plugins-official": true,
-    "claude-security@claude-plugins-official": true
+    "claude-security@claude-plugins-official": true,
+    "jira-service-management@claude-plugins-official": true
   },
   "hooks": {
     "SessionStart": [
