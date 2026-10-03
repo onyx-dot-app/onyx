@@ -5989,6 +5989,12 @@
             "placeholder": "您的 Vercel AI Gateway 基础 URL"
           }
         },
+        "requesty": {
+          "apiBaseField": {
+            "description": "使用 Requesty 路由器，或位于 https://router.eu.requesty.ai/v1 的欧盟路由器。",
+            "placeholder": "您的 Requesty 基础 URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "当 {appName} 在容器中运行时，请使用 `host.docker.internal` 代替 `localhost` 来访问主机上的服务。",

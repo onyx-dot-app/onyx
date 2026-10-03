@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import boto3
 import botocore.session
@@ -72,6 +73,8 @@ from onyx.llm.well_known_providers.auto_update_service import (
 )
 from onyx.llm.well_known_providers.constants import (
     LM_STUDIO_API_KEY_CONFIG_KEY,
+    REQUESTY_ALLOWED_HOSTS,
+    REQUESTY_DEFAULT_API_BASE,
     VERCEL_AI_GATEWAY_DEFAULT_API_BASE,
     VERTEX_AUTH_METHOD_KWARG,
     VERTEX_AUTH_METHOD_SERVICE_ACCOUNT,
@@ -114,6 +117,8 @@ from onyx.server.manage.llm.models import (
     OpenRouterModelsRequest,
     PortkeyFinalModelResponse,
     PortkeyModelsRequest,
+    RequestyFinalModelResponse,
+    RequestyModelsRequest,
     SyncModelEntry,
     TestLLMRequest,
     VercelAIGatewayFinalModelResponse,
@@ -2506,6 +2511,133 @@ def get_vercel_ai_gateway_available_models(
                 for r in sorted_results
             ],
             source_label="Vercel AI Gateway",
+        )
+
+    return sorted_results
+
+
+def _validate_requesty_api_base(api_base: str) -> None:
+    """Only send a Requesty key to the Requesty routers over https."""
+    parsed = urlparse(api_base)
+    if parsed.scheme != "https" or parsed.hostname not in REQUESTY_ALLOWED_HOSTS:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Requesty API base must be an https URL on a Requesty router "
+            "(for example https://router.requesty.ai/v1).",
+        )
+
+
+def _get_requesty_models(api_base: str, api_key: str | None) -> list[dict]:
+    """Return managed policies first, then the full `vendor/model` catalog.
+
+    The lists are fetched separately, so one failing request does not hide the
+    other. The error is raised only when both fail.
+    """
+    models: list[dict] = []
+    first_error: OnyxError | None = None
+    for path, source_name in (
+        ("/models/managed", "Requesty managed models"),
+        ("/models", "Requesty"),
+    ):
+        try:
+            response_json = _get_openai_compatible_models_response(
+                url=f"{api_base}{path}",
+                source_name=source_name,
+                api_key=api_key,
+            )
+        except OnyxError as e:
+            logger.warning(
+                "Failed to fetch a Requesty model list",
+                extra={"source": source_name},
+            )
+            first_error = first_error or e
+            continue
+        data = response_json.get("data")
+        if isinstance(data, list):
+            models.extend(data)
+
+    if not models and first_error is not None:
+        raise first_error
+    return models
+
+
+@admin_router.post("/requesty/available-models")
+def get_requesty_available_models(
+    request: RequestyModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[RequestyFinalModelResponse]:
+    """Fetch chat models from Requesty. Both lists need no credentials; with a
+    key, Requesty returns only the models the organization allows."""
+    requested_base = (request.api_base or REQUESTY_DEFAULT_API_BASE).strip().rstrip("/")
+    _validate_requesty_api_base(requested_base)
+    api_base = (
+        requested_base if requested_base.endswith("/v1") else f"{requested_base}/v1"
+    )
+
+    # On edit the form sends a masked key, so resolve the stored one.
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, requested_base, db_session
+    )
+
+    models = _get_requesty_models(api_base=api_base, api_key=api_key)
+    if not models:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from Requesty",
+        )
+
+    results: list[RequestyFinalModelResponse] = []
+    seen_ids: set[str] = set()
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            # Drop empty ids and ids with control characters, since ids are
+            # rendered in the admin UI.
+            if not model_id or not model_id.isprintable() or model_id in seen_ids:
+                continue
+            if model.get("api", "chat") != "chat":
+                continue
+            seen_ids.add(model_id)
+
+            results.append(
+                RequestyFinalModelResponse(
+                    name=model_id,
+                    display_name=model_id,
+                    max_input_tokens=model.get("context_window") or None,
+                    supports_image_input=bool(model.get("supports_vision")),
+                    supports_reasoning=bool(model.get("supports_reasoning")),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Requesty model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Requesty",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Requesty",
         )
 
     return sorted_results

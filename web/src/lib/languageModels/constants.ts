@@ -18,6 +18,7 @@ import {
   SvgGoogle,
   SvgNebius,
   SvgPortkey,
+  SvgRequesty,
   SvgVercel,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
@@ -37,6 +38,7 @@ import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompat
 import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 import PortkeyModal from "@/sections/modals/languageModels/PortkeyModal";
 import VercelAIGatewayModal from "@/sections/modals/languageModels/VercelAIGatewayModal";
+import RequestyModal from "@/sections/modals/languageModels/RequestyModal";
 import type { ProviderEntry } from "@/lib/languageModels/types";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
@@ -132,6 +134,12 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "Vercel",
     Modal: VercelAIGatewayModal,
   },
+  [LLMProviderName.REQUESTY]: {
+    icon: SvgRequesty,
+    productName: "Requesty",
+    companyName: "Requesty",
+    Modal: RequestyModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: "Custom Models",
@@ -172,6 +180,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.PORTKEY,
   LLMProviderName.VERCEL_AI_GATEWAY,
+  LLMProviderName.REQUESTY,
   LLMProviderName.VERTEX_AI,
 ]);
 
@@ -191,6 +200,7 @@ export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
   [LLMProviderName.VERCEL_AI_GATEWAY]: SvgVercel,
+  [LLMProviderName.REQUESTY]: SvgRequesty,
 
   amazon: SvgAws,
   gpt: SvgOpenai,
