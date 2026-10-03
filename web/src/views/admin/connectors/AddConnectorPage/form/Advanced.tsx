@@ -47,7 +47,6 @@ export default function AdvancedFormPage({
     <Collapsible
       title={t("title")}
       description={t("description")}
-      defaultOpen={false}
       disabled={disabled}
     >
       <Card border="solid" rounding={4} padding={4} disabled={disabled}>

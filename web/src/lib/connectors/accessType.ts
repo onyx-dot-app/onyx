@@ -9,6 +9,14 @@ export function isPermSynced(accessType: AccessType): boolean {
   return accessType === "sync" || accessType === SYNC_RESTRICTED_ACCESS_TYPE;
 }
 
+// Who reads the documents (access_type, plus data_access_group_ids for
+// private) and who manages the connector (groups, as Editors).
+export interface ConnectorAccessFormValues {
+  access_type: AccessType;
+  groups: number[];
+  data_access_group_ids: number[];
+}
+
 export interface ConnectorGroupRestrictionFormValues {
   restrict_access_to_groups: boolean;
   restriction_group_ids: number[];

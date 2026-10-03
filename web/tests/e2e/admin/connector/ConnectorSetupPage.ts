@@ -22,10 +22,8 @@ export class ConnectorSetupPage {
     this.page = page;
     this.source = source;
     this.pageTitle = page.locator('[aria-label="admin-page-title"]');
-    // Scoped: a credential form on the same page carries a name field too.
-    this.connectorNameInput = page
-      .getByTestId("connector-form")
-      .getByTestId("name");
+    // Its own test id: a credential form on the same page has a name field too.
+    this.connectorNameInput = page.getByTestId("connector-name");
     this.createConnectorButton = page.getByRole("button", {
       name: "Connect",
       exact: true,
