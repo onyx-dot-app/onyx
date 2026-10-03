@@ -71,7 +71,7 @@ A picker on a type-in:
 
 ### `Dropdown.Trigger`
 
-The element that holds focus and takes the keyboard. It carries `aria-expanded`, `aria-controls` and `aria-activedescendant`, `aria-haspopup` for the mode, and for a picker `role="combobox"`. A dropdown may have several triggers; the one that opened the list anchors it and takes focus back.
+The element that holds focus and takes the keyboard. It carries `aria-expanded`, `aria-controls` and `aria-activedescendant`, `aria-haspopup` for the mode, and for a picker `role="combobox"`. A dropdown may have several triggers; the one that opened the list anchors it and takes focus back. A trigger that is the control inside an Opal field (an `InputTypeIn`'s `<input>`) anchors the list to the field's chrome.
 
 | Prop       | Type                              | Default                   | Description                                                                   |
 | ---------- | --------------------------------- | ------------------------- | ----------------------------------------------------------------------------- |

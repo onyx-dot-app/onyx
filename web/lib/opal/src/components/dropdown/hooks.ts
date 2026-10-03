@@ -452,11 +452,16 @@ export function useDropdownOverlay({
     [setReference]
   );
   // The trigger that opened the list, or the last one mounted: it takes
-  // focus back after a pick and anchors the list when nothing else does.
+  // focus back after a pick and anchors the list when nothing else does. A
+  // trigger that is the control inside an Opal field (a type-in's <input>)
+  // anchors to the field's chrome, so the list lines up with the field, not
+  // with the control 7px inside it.
   const setTriggerRef = useCallback(
     (node: HTMLElement | null) => {
       triggerRef.current = node;
-      if (anchorRef.current === null) setReference(node);
+      if (anchorRef.current === null) {
+        setReference(node?.closest<HTMLElement>(".opal-input") ?? node);
+      }
     },
     [setReference]
   );
