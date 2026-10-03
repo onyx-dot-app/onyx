@@ -293,9 +293,12 @@ export default function AddConnector({
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
-          pruneFreq: (pruneFreq ?? defaultPruneFreqHours) * 3600,
+          // The backend stores whole seconds.
+          pruneFreq: Math.round((pruneFreq ?? defaultPruneFreqHours) * 3600),
           indexingStart: convertStringToDateTime(indexingStart),
-          refreshFreq: (refreshFreq ?? defaultRefreshFreqMinutes) * 60,
+          refreshFreq: Math.round(
+            (refreshFreq ?? defaultRefreshFreqMinutes) * 60
+          ),
         };
 
         // File-specific handling
