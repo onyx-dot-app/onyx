@@ -102,8 +102,7 @@
 /* Keyboard mode: rows and titles ignore the pointer, so the pointer's hover
    cannot paint a second highlight beside the keyboard's. A pointer movement
    over the list drops the flag and hover returns. */
-.opal-dropdown[data-keyboard-nav] [role="option"],
-.opal-dropdown[data-keyboard-nav] .opal-dropdown-group {
+.opal-dropdown[data-keyboard-nav] [data-index] {
   pointer-events: none;
 }
 
@@ -118,9 +117,14 @@
 
 /* Keyboard scrolling brings a stop to the nearest edge; the mask fade there
    is 12px, so a stop keeps that much clear of the edge. */
-.opal-dropdown-scroll [role="option"],
+.opal-dropdown-scroll [data-index],
 .opal-dropdown-group > :first-child {
   scroll-margin-block: 0.75rem;
+}
+
+/* A toggle row's switch shows the state; the row is the control. */
+.opal-dropdown-toggle {
+  @apply ms-2 flex shrink-0 items-center;
 }
 
 .opal-dropdown-create-icon {

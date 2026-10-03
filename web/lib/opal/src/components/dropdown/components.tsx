@@ -22,21 +22,29 @@ import {
   useDropdownKeyboard,
   useDropdownOverlay,
   useFoldedGroups,
+  type DropdownVirtualAnchor,
+  type DropdownWidth,
   type ListModel,
 } from "@opal/components/dropdown/hooks";
 import {
   buildNavItems,
   filterGroups,
   flattenGroups,
+  isOption,
   navItemElementId,
   normalizeItems,
   optionMatchesExactly,
+  rowKey,
 } from "@opal/components/dropdown/model";
 import { DropdownList } from "@opal/components/dropdown/list";
 import type {
   DropdownItem,
+  DropdownMenuItem,
+  DropdownMode,
   DropdownOption,
-  OptionGroup,
+  DropdownRow,
+  NavItem,
+  RowGroup,
 } from "@opal/components/dropdown/types";
 
 // ---------------------------------------------------------------------------
@@ -54,14 +62,26 @@ interface DropdownProps {
    * tie its label and messages to them. Generated when left out.
    */
   id?: string;
+  /**
+   * `"anchor"` matches the anchor's width; a preset is a fixed width. A
+   * type-in trigger wants `"anchor"`, a button a preset.
+   * @default "anchor"
+   */
+  width?: DropdownWidth;
+  /**
+   * A rectangle to position against instead of an element, like a text
+   * caret. Takes precedence over `Dropdown.Anchor` and the trigger.
+   */
+  virtualAnchor?: DropdownVirtualAnchor;
+  /** Where the list portals to, for a dropdown inside a modal. */
+  container?: HTMLElement | null;
   children: React.ReactNode;
 }
 
 const EMPTY_LIST: ListModel = {
   items: [],
-  onSelect: () => {},
-  onToggleGroup: () => {},
-  onCreate: () => {},
+  activate: () => {},
+  secondary: () => false,
 };
 
 /**
@@ -76,11 +96,19 @@ function Dropdown({
   onOpenChange,
   disabled = false,
   id: idProp,
+  width = "anchor",
+  virtualAnchor,
+  container,
   children,
 }: DropdownProps) {
   const autoId = useId();
   const id = idProp ?? `dropdown-${autoId}`;
-  const overlay = useDropdownOverlay({ open, onOpenChange });
+  const overlay = useDropdownOverlay({
+    open,
+    onOpenChange,
+    width,
+    virtualAnchor,
+  });
   const {
     isOpen,
     setIsOpen,
@@ -90,6 +118,7 @@ function Dropdown({
   } = overlay;
 
   const listRef = useRef<ListModel>(EMPTY_LIST);
+  const [mode, setMode] = useState<DropdownMode>("picker");
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
 
   const { handleKeyDown } = useDropdownKeyboard({
@@ -103,21 +132,23 @@ function Dropdown({
 
   const getTriggerProps = useCallback(
     ({ typeIn }: { typeIn: boolean }): DropdownTriggerProps => ({
-      role: "combobox",
+      role: mode === "picker" ? "combobox" : undefined,
       "aria-expanded": isOpen,
-      "aria-haspopup": "listbox",
+      "aria-haspopup": mode === "picker" ? "listbox" : "menu",
       "aria-controls": `${id}-listbox`,
       "aria-activedescendant": isOpen ? activeId : undefined,
       "aria-autocomplete": typeIn ? "list" : undefined,
       onKeyDown: handleKeyDown,
     }),
-    [isOpen, activeId, id, handleKeyDown]
+    [mode, isOpen, activeId, id, handleKeyDown]
   );
 
   const value = useMemo<DropdownContextValue>(
     () => ({
       id,
       disabled,
+      width,
+      container,
       isOpen,
       setIsOpen,
       highlightedIndex,
@@ -126,12 +157,15 @@ function Dropdown({
       setIsKeyboardNav,
       setAnchorRef: overlay.setAnchorRef,
       setTriggerRef: overlay.setTriggerRef,
+      releaseTriggerRef: overlay.releaseTriggerRef,
       focusTrigger: overlay.focusTrigger,
       floatingRef: overlay.floatingRef,
       setFloatingRef: overlay.setFloatingRef,
       floatingStyles: overlay.floatingStyles,
       isPositioned: overlay.isPositioned,
       listRef,
+      mode,
+      setMode,
       activeId,
       setActiveId,
       handleKeyDown,
@@ -140,6 +174,8 @@ function Dropdown({
     [
       id,
       disabled,
+      width,
+      container,
       isOpen,
       setIsOpen,
       highlightedIndex,
@@ -148,11 +184,13 @@ function Dropdown({
       setIsKeyboardNav,
       overlay.setAnchorRef,
       overlay.setTriggerRef,
+      overlay.releaseTriggerRef,
       overlay.focusTrigger,
       overlay.floatingRef,
       overlay.setFloatingRef,
       overlay.floatingStyles,
       overlay.isPositioned,
+      mode,
       activeId,
       handleKeyDown,
       getTriggerProps,
@@ -160,7 +198,9 @@ function Dropdown({
   );
 
   return (
-    <DropdownContext.Provider value={value}>{children}</DropdownContext.Provider>
+    <DropdownContext.Provider value={value}>
+      {children}
+    </DropdownContext.Provider>
   );
 }
 
@@ -189,36 +229,90 @@ function DropdownAnchor({ asChild, children }: DropdownAnchorProps) {
 // Dropdown.Trigger
 // ---------------------------------------------------------------------------
 
+/**
+ * What a click does: `"toggle"` opens and closes, like a button; `"open"`
+ * only opens, like a type-in whose second click must not close the list;
+ * `"none"` leaves clicks to the child.
+ */
+type DropdownTriggerBehavior = "toggle" | "open" | "none";
+
 interface DropdownTriggerElementProps {
   /** Merge onto the child element instead of rendering a `<button>`. */
   asChild?: boolean;
   /**
    * The trigger is a text input whose text filters the list (pass the text
-   * to `Dropdown.Data` as `query`). Announces list autocomplete.
+   * to `Dropdown.Data` as `query`). Announces list autocomplete and opens
+   * on click instead of toggling.
    */
   typeIn?: boolean;
+  /** @default `"open"` for a type-in, `"toggle"` otherwise */
+  behavior?: DropdownTriggerBehavior;
   children: React.ReactNode;
 }
 
 /**
  * The element that holds focus and takes the keyboard: arrows walk the
- * list, Enter picks, Escape closes. It also carries the combobox role and
- * the ids that tie it to the list. Opening and closing on click is the
- * child's own behaviour, since a button toggles while a type-in only opens.
+ * list, Enter activates, Escape closes. It also carries the ids that tie
+ * it to the list, and for a picker the combobox role. A dropdown may have
+ * several triggers; the one that opened the list anchors it and takes
+ * focus back.
  */
 function DropdownTrigger({
   asChild,
   typeIn = false,
+  behavior = typeIn ? "open" : "toggle",
   children,
 }: DropdownTriggerElementProps) {
-  const { setTriggerRef, getTriggerProps } = useDropdownContext();
+  const {
+    disabled,
+    setIsOpen,
+    setHighlightedIndex,
+    setTriggerRef,
+    releaseTriggerRef,
+    getTriggerProps,
+  } = useDropdownContext();
+  const nodeRef = useRef<HTMLElement | null>(null);
+  const ref = useCallback(
+    (node: HTMLElement | null) => {
+      if (node) {
+        nodeRef.current = node;
+        setTriggerRef(node);
+      } else {
+        releaseTriggerRef(nodeRef.current);
+        nodeRef.current = null;
+      }
+    },
+    [setTriggerRef, releaseTriggerRef]
+  );
+  // This trigger is the one in use: it anchors the list and takes focus back.
+  const claim = () => setTriggerRef(nodeRef.current);
+
   const triggerProps = getTriggerProps({ typeIn });
+  const onKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    claim();
+    triggerProps.onKeyDown(event);
+  };
+  const onClick = (event: React.MouseEvent) => {
+    if (behavior === "none" || disabled || event.defaultPrevented) return;
+    claim();
+    if (behavior === "open") {
+      setIsOpen(true);
+      return;
+    }
+    setIsOpen((prev) => {
+      if (!prev) setHighlightedIndex(-1);
+      return !prev;
+    });
+  };
+
   const Component = asChild ? Slot : "button";
   return (
     <Component
-      ref={setTriggerRef}
+      ref={ref}
       {...(asChild ? {} : { type: "button" as const })}
       {...triggerProps}
+      onKeyDown={onKeyDown}
+      onClick={onClick}
     >
       {children}
     </Component>
@@ -229,9 +323,7 @@ function DropdownTrigger({
 // Dropdown.Data
 // ---------------------------------------------------------------------------
 
-interface DropdownDataProps {
-  /** The rows: loose options and groups, in order. */
-  items: DropdownItem[];
+interface DropdownDataBaseProps {
   /** Names the list for assistive technology. */
   label?: string;
   /**
@@ -245,23 +337,17 @@ interface DropdownDataProps {
    * the trigger. `onChange` reports the text, and `""` when the list closes.
    */
   search?: { placeholder: string; onChange?: (query: string) => void };
-  /** The selected value: its row reads as selected. */
-  value?: string;
-  /** The selected values (a multi pick): every one reads as selected. */
-  values?: ReadonlySet<string>;
   /**
-   * Text whose exact match (a row's value or title) also reads as selected,
-   * for a type-in whose text is the pick before it is committed. The first
-   * match only.
+   * Text whose exact match (an option's value or title) also reads as
+   * selected, for a type-in whose text is the pick before it is committed.
+   * The first match only.
    */
   exactText?: string;
   /**
-   * Move the highlight to the row the query matches exactly, unless the
+   * Move the highlight to the option the query matches exactly, unless the
    * keyboard is driving. A type-in combobox behaviour.
    */
   highlightExactQuery?: boolean;
-  /** A click or Enter on a row. Picking semantics are the caller's. */
-  onSelect: (option: DropdownOption) => void;
   /**
    * A create row pinned first, showing `text`; a click or Enter commits it.
    * Shown only while given.
@@ -275,36 +361,84 @@ interface DropdownDataProps {
   /** Max height of the list in CSS units. Defaults to 15rem. */
   maxHeight?: string;
   /**
-   * The rows scrolled near their end. `shown` is the rows on show, a folded
-   * group's rows left out, so a caller pages in only what is being read.
+   * The rows scrolled near their end. `shown` is the options on show, a
+   * folded group's rows left out, so a caller pages in only what is being
+   * read.
    */
   onReachEnd?: (shown: DropdownOption[]) => void;
 }
+
+interface DropdownPickerProps extends DropdownDataBaseProps {
+  /** The rows: options, other rows and groups, in order. */
+  items: DropdownItem[];
+  /** A click or Enter on an option. What a pick means is the caller's. */
+  onSelect: (option: DropdownOption) => void;
+  /**
+   * Close after a pick.
+   * @default true for a single `value`, false for `values`
+   */
+  closeOnSelect?: boolean;
+}
+
+/**
+ * A picker: something is selected. With `value` one row reads as
+ * selected; with `values` every one does, and the list stays open for
+ * more picks.
+ */
+type DropdownSinglePickerProps = DropdownPickerProps & {
+  value: string;
+  values?: never;
+};
+type DropdownMultiPickerProps = DropdownPickerProps & {
+  values: ReadonlySet<string>;
+  value?: never;
+};
+
+/** A menu: commands, toggles and custom rows. Nothing is selected, so no options. */
+interface DropdownMenuProps extends DropdownDataBaseProps {
+  items: DropdownMenuItem[];
+  value?: never;
+  values?: never;
+  onSelect?: never;
+  closeOnSelect?: never;
+}
+
+type DropdownDataProps =
+  | DropdownSinglePickerProps
+  | DropdownMultiPickerProps
+  | DropdownMenuProps;
 
 /**
  * The rows, as data, and the list that renders them in a portal. Filters by
  * the trigger's text or its own search field, folds groups, keeps the
  * keyboard order in step with what is on show, and marks the selection.
+ * With a `value` or `values` it is a picker (a listbox); without, a menu.
  */
-function DropdownData({
-  items,
-  label,
-  query,
-  search,
-  value,
-  values,
-  exactText,
-  highlightExactQuery = false,
-  onSelect,
-  create,
-  otherOptionsTitle,
-  maxHeight,
-  onReachEnd,
-}: DropdownDataProps) {
+function DropdownData(props: DropdownDataProps) {
+  const {
+    items,
+    label,
+    query,
+    search,
+    exactText,
+    highlightExactQuery = false,
+    create,
+    otherOptionsTitle,
+    maxHeight,
+    onReachEnd,
+    value,
+    values,
+    onSelect,
+  } = props;
+  const isPicker = value !== undefined || values !== undefined;
+  const closeOnSelect = props.closeOnSelect ?? values === undefined;
   const {
     id,
     disabled,
+    width,
+    container,
     isOpen,
+    setIsOpen,
     highlightedIndex,
     setHighlightedIndex,
     isKeyboardNav,
@@ -315,10 +449,17 @@ function DropdownData({
     floatingStyles,
     isPositioned,
     listRef,
+    mode,
+    setMode,
     setActiveId,
     handleKeyDown,
   } = useDropdownContext();
   const strings = useOpalStrings();
+
+  // The trigger reads the mode for its role, before the first paint.
+  useLayoutEffect(() => {
+    setMode(isPicker ? "picker" : "menu");
+  }, [isPicker, setMode]);
 
   // The search field's text is transient: it clears with the list.
   const [searchText, setSearchText] = useState("");
@@ -332,27 +473,30 @@ function DropdownData({
   const searching = filterText.trim() !== "";
 
   const groups = useMemo(() => normalizeItems(items), [items]);
-  const allOptions = useMemo(() => flattenGroups(groups), [groups]);
+  const allRows = useMemo(() => flattenGroups(groups), [groups]);
+  const allOptions = useMemo(() => allRows.filter(isOption), [allRows]);
 
   const visibleGroups = useMemo(() => {
     const filtered = filterGroups(groups, filterText);
     if (searching && otherOptionsTitle !== undefined) {
-      const visible = new Set(
-        flattenGroups(filtered).map((option) => option.value)
-      );
-      const unmatched = allOptions.filter(
-        (option) => !visible.has(option.value)
-      );
+      const visible = new Set(flattenGroups(filtered).map(rowKey));
+      const unmatched = allRows.filter((row) => !visible.has(rowKey(row)));
       if (unmatched.length > 0) {
-        return [...filtered, { title: otherOptionsTitle, options: unmatched }];
+        return [...filtered, { title: otherOptionsTitle, rows: unmatched }];
       }
     }
     return filtered;
-  }, [groups, filterText, searching, otherOptionsTitle, allOptions]);
+  }, [groups, filterText, searching, otherOptionsTitle, allRows]);
 
+  // The selection: a picked option, or a toggle that is on. Both keep a
+  // foldable group open when the list opens.
   const isSelected = useCallback(
-    (option: DropdownOption) =>
-      values ? values.has(option.value) : option.value === value,
+    (row: DropdownRow) => {
+      if (row.kind === "option") {
+        return values ? values.has(row.value) : row.value === value;
+      }
+      return row.kind === "toggle" && row.checked;
+    },
     [values, value]
   );
   const { foldedGroups, toggleGroup } = useFoldedGroups({
@@ -365,7 +509,8 @@ function DropdownData({
     () =>
       foldedGroups
         .filter((group) => !group.folded)
-        .flatMap((group) => group.options),
+        .flatMap((group) => group.rows)
+        .filter(isOption),
     [foldedGroups]
   );
 
@@ -374,16 +519,56 @@ function DropdownData({
     [foldedGroups, create?.text]
   );
 
+  // What Enter, or a click, does to a stop. An action or a custom row
+  // closes the list unless it asked to stay; a toggle and a multi pick keep
+  // it open for the next one.
+  const onCreate = create?.onCreate;
+  const activateRow = useCallback(
+    (row: DropdownRow) => {
+      if (row.disabled) return;
+      switch (row.kind) {
+        case "option":
+          onSelect?.(row);
+          if (closeOnSelect) setIsOpen(false);
+          break;
+        case "action":
+          row.onSelect?.();
+          if (row.href) {
+            if (row.target) window.open(row.href, row.target, "noopener");
+            else window.location.assign(row.href);
+          }
+          if (!row.keepOpen) setIsOpen(false);
+          break;
+        case "toggle":
+          row.onCheckedChange(!row.checked);
+          break;
+        case "custom":
+          row.onActivate?.();
+          if (!row.keepOpen) setIsOpen(false);
+          break;
+      }
+    },
+    [onSelect, closeOnSelect, setIsOpen]
+  );
+  const activate = useCallback(
+    (item: NavItem) => {
+      if (item.kind === "row") activateRow(item.row);
+      else if (item.kind === "create") onCreate?.(item.text);
+      else toggleGroup(item.group);
+    },
+    [activateRow, onCreate, toggleGroup]
+  );
+  const secondary = useCallback((item: NavItem) => {
+    if (item.kind !== "row" || item.row.kind !== "custom") return false;
+    if (!item.row.onSecondary || item.row.disabled) return false;
+    item.row.onSecondary();
+    return true;
+  }, []);
+
   // The keyboard reads the stops through the ref at event time; the
   // trigger reads the highlighted stop's id for aria-activedescendant.
-  const onCreate = create?.onCreate;
   useLayoutEffect(() => {
-    listRef.current = {
-      items: navItems,
-      onSelect,
-      onToggleGroup: toggleGroup,
-      onCreate: onCreate ?? (() => {}),
-    };
+    listRef.current = { items: navItems, activate, secondary };
   });
   useLayoutEffect(() => {
     setActiveId(
@@ -393,7 +578,7 @@ function DropdownData({
     );
   }, [id, navItems, highlightedIndex, setActiveId]);
 
-  // A type-in combobox highlights the row its text matches exactly; the
+  // A type-in combobox highlights the option its text matches exactly; the
   // keyboard, once it drives, keeps its own stop.
   useEffect(() => {
     if (!highlightExactQuery || isKeyboardNav || !isOpen || !searching) {
@@ -401,7 +586,9 @@ function DropdownData({
     }
     const index = navItems.findIndex(
       (item) =>
-        item.kind === "option" && optionMatchesExactly(item.option, filterText)
+        item.kind === "row" &&
+        item.row.kind === "option" &&
+        optionMatchesExactly(item.row, filterText)
     );
     if (index >= 0) setHighlightedIndex(index);
   }, [
@@ -422,7 +609,7 @@ function DropdownData({
   }, [allOptions, exactText]);
 
   const handleGroupToggle = useCallback(
-    (group: OptionGroup) => toggleGroup(group),
+    (group: RowGroup) => toggleGroup(group),
     [toggleGroup]
   );
 
@@ -430,6 +617,9 @@ function DropdownData({
     <DropdownList
       ref={floatingRef}
       listId={id}
+      mode={mode}
+      width={width}
+      container={container}
       isOpen={isOpen}
       disabled={disabled}
       label={label ?? ""}
@@ -437,12 +627,12 @@ function DropdownData({
       isPositioned={isPositioned}
       setFloatingRef={setFloatingRef}
       groups={foldedGroups}
-      emptySet={allOptions.length === 0}
+      emptySet={allRows.length === 0}
       isSelected={isSelected}
       exactValue={exactValue}
       highlightedIndex={highlightedIndex}
       keyboardNav={isKeyboardNav}
-      onSelect={onSelect}
+      onActivate={activateRow}
       onToggleGroup={handleGroupToggle}
       create={create}
       maxHeight={maxHeight}
@@ -459,7 +649,8 @@ function DropdownData({
         search
           ? {
               value: searchText,
-              placeholder: search.placeholder || strings.selectSearchPlaceholder,
+              placeholder:
+                search.placeholder || strings.selectSearchPlaceholder,
               onChange: (next) => {
                 setSearchText(next);
                 search.onChange?.(next);
@@ -495,5 +686,8 @@ export {
   type DropdownProps,
   type DropdownAnchorProps,
   type DropdownTriggerElementProps as DropdownTriggerProps,
+  type DropdownTriggerBehavior,
   type DropdownDataProps,
+  type DropdownWidth,
+  type DropdownVirtualAnchor,
 };

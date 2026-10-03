@@ -264,11 +264,22 @@ export {
   type DropdownAnchorProps,
   type DropdownTriggerProps,
   type DropdownDataProps,
+  type DropdownTriggerBehavior,
+  type DropdownWidth,
+  type DropdownVirtualAnchor,
 } from "@opal/components/dropdown/components";
 export {
   type DropdownItem,
+  type DropdownMenuItem,
+  type DropdownRow,
+  type DropdownMenuRow,
   type DropdownOption,
+  type DropdownAction,
+  type DropdownToggle,
+  type DropdownCustom,
   type DropdownGroup,
+  type DropdownRowState,
+  type DropdownRowProps,
 } from "@opal/components/dropdown/types";
 
 /* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */

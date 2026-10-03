@@ -263,6 +263,7 @@ function MultiDropdownField(props: MultiDropdownProps) {
           search ? { placeholder: strings.selectSearchPlaceholder } : undefined
         }
         values={selectedValues}
+        closeOnSelect={false}
         onSelect={handleOptionSelect}
         create={
           showCreateOption

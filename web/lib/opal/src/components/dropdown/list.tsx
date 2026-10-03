@@ -11,12 +11,24 @@ import { Divider } from "@opal/components/divider/components";
 import { Text } from "@opal/components/text/components";
 import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { SvgPlus } from "@opal/icons";
-import { groupElementId, optionElementId } from "@opal/components/dropdown/model";
-import { OptionRow } from "@opal/components/dropdown/rows";
-import type { DropdownOption, OptionGroup } from "@opal/components/dropdown/types";
+import {
+  groupElementId,
+  rowElementId,
+  rowKey,
+} from "@opal/components/dropdown/model";
+import { Row } from "@opal/components/dropdown/rows";
+import type { DropdownWidth } from "@opal/components/dropdown/hooks";
+import type {
+  DropdownMode,
+  DropdownRow,
+  RowGroup,
+} from "@opal/components/dropdown/types";
 
 interface DropdownListProps {
   listId: string;
+  mode: DropdownMode;
+  width: DropdownWidth;
+  container: HTMLElement | null | undefined;
   isOpen: boolean;
   disabled: boolean;
   /** The list's accessible name. */
@@ -29,10 +41,10 @@ interface DropdownListProps {
   isPositioned: boolean;
   setFloatingRef: (node: HTMLDivElement | null) => void;
   /** Post-filter, post-fold groups in render order. */
-  groups: OptionGroup[];
+  groups: RowGroup[];
   /** The supplied set itself is empty, not merely filtered out. */
   emptySet: boolean;
-  isSelected: (option: DropdownOption) => boolean;
+  isSelected: (row: DropdownRow) => boolean;
   /** One more row that reads as selected: the trigger text's exact match. */
   exactValue: string | undefined;
   highlightedIndex: number;
@@ -42,8 +54,8 @@ interface DropdownListProps {
    * scroll the list under itself.
    */
   keyboardNav: boolean;
-  onSelect: (option: DropdownOption) => void;
-  onToggleGroup: (group: OptionGroup) => void;
+  onActivate: (row: DropdownRow) => void;
+  onToggleGroup: (group: RowGroup) => void;
   /** The pointer moved inside the list: the keyboard highlight yields. */
   onMouseMove: () => void;
   create?: { text: string; onCreate: (text: string) => void };
@@ -65,6 +77,14 @@ interface DropdownListProps {
 
 const SCROLL_END_THRESHOLD_PX = 48;
 
+const WIDTH_CLASSES: Record<DropdownWidth, string | undefined> = {
+  anchor: undefined,
+  sm: "w-40",
+  md: "w-48",
+  lg: "w-60",
+  xl: "w-72",
+};
+
 /**
  * The list in a portal: the box, the search field, the groups with their
  * dividers, the create row and the rows. Scrolls the keyboard stop into
@@ -74,6 +94,9 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
   (
     {
       listId,
+      mode,
+      width,
+      container,
       isOpen,
       disabled,
       label,
@@ -86,7 +109,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       exactValue,
       highlightedIndex,
       keyboardNav,
-      onSelect,
+      onActivate,
       onToggleGroup,
       onMouseMove,
       create,
@@ -145,12 +168,13 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       return null;
     }
 
-    const totalOptions = groups.reduce(
-      (count, group) => count + group.options.length,
+    const totalRows = groups.reduce(
+      (count, group) => count + group.rows.length,
       0
     );
 
     return createPortal(
+      // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- the role is always listbox or menu; the rule cannot read a ternary
       <div
         ref={(node) => {
           listRef.current = node;
@@ -159,7 +183,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
           else if (ref) ref.current = node;
         }}
         id={`${listId}-listbox`}
-        role="listbox"
+        role={mode === "picker" ? "listbox" : "menu"}
         tabIndex={-1}
         aria-label={label}
         // Closed while exiting: invisible to AT and to the pointer.
@@ -170,7 +194,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
         // stop. The first pointer movement hands control back.
         data-keyboard-nav={keyboardNav || undefined}
         onMouseMove={onMouseMove}
-        className="opal-dropdown"
+        className={cn("opal-dropdown", WIDTH_CLASSES[width])}
         style={floatingStyles}
         onAnimationEnd={presence.onAnimationEnd}
         onMouseDown={(e) => {
@@ -230,7 +254,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
             if (remaining <= SCROLL_END_THRESHOLD_PX) onReachEnd?.();
           }}
         >
-          {totalOptions === 0 && !create ? (
+          {totalRows === 0 && !create ? (
             // An empty SET gets the icon'd empty state; a filter that
             // matched nothing keeps the lightweight text row.
             emptySet ? (
@@ -247,18 +271,19 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
           ) : (
             <Rows
               listId={listId}
+              mode={mode}
               groups={groups}
               isSelected={isSelected}
               exactValue={exactValue}
               highlightedIndex={highlightedIndex}
-              onSelect={onSelect}
+              onActivate={onActivate}
               onToggleGroup={onToggleGroup}
               create={create}
             />
           )}
         </ShadowDiv>
       </div>,
-      document.body
+      container ?? document.body
     );
   }
 );
@@ -271,27 +296,29 @@ DropdownList.displayName = "DropdownList";
 
 interface RowsProps {
   listId: string;
-  groups: OptionGroup[];
-  isSelected: (option: DropdownOption) => boolean;
+  mode: DropdownMode;
+  groups: RowGroup[];
+  isSelected: (row: DropdownRow) => boolean;
   exactValue: string | undefined;
   highlightedIndex: number;
-  onSelect: (option: DropdownOption) => void;
-  onToggleGroup: (group: OptionGroup) => void;
+  onActivate: (row: DropdownRow) => void;
+  onToggleGroup: (group: RowGroup) => void;
   create?: { text: string; onCreate: (text: string) => void };
 }
 
 /**
  * The grouped rows: a titled Divider above each titled group, plain rows
- * for loose options, and the create row pinned first. The stops are
- * numbered in render order, the same order the keyboard walks.
+ * for loose rows, and the create row pinned first. The stops are numbered
+ * in render order, the same order the keyboard walks.
  */
 function Rows({
   listId,
+  mode,
   groups,
   isSelected,
   exactValue,
   highlightedIndex,
-  onSelect,
+  onActivate,
   onToggleGroup,
   create,
 }: RowsProps) {
@@ -310,11 +337,11 @@ function Rows({
           sizePreset="main-ui"
           variant="body"
           rightChildren={<SvgPlus className="opal-dropdown-create-icon" />}
-          id={optionElementId(listId, create.text)}
+          id={rowElementId(listId, create.text)}
           data-index={0}
-          role="option"
+          role={mode === "picker" ? "option" : "menuitem"}
           tabIndex={-1}
-          aria-selected={false}
+          {...(mode === "picker" && { "aria-selected": false })}
           aria-label={strings.comboBoxCreateOption(
             strings.comboBoxCreate,
             create.text
@@ -337,20 +364,23 @@ function Rows({
         const headerIndex = isFoldable ? index++ : -1;
         // A folded group's rows stay mounted for the fold animation but
         // hold no keyboard stop: no index, no highlight.
-        const rows = group.options.map((option) => {
+        const rows = group.rows.map((row) => {
           const rowIndex = group.folded ? -1 : index++;
           return (
-            <OptionRow
-              key={option.value}
+            <Row
+              key={rowKey(row)}
               listId={listId}
-              option={option}
+              mode={mode}
+              row={row}
               index={rowIndex}
               isHighlighted={rowIndex >= 0 && rowIndex === highlightedIndex}
               isSelected={
-                isSelected(option) ||
-                (!group.folded && option.value === exactValue)
+                isSelected(row) ||
+                (!group.folded &&
+                  row.kind === "option" &&
+                  row.value === exactValue)
               }
-              onSelect={onSelect}
+              onActivate={onActivate}
             />
           );
         });
@@ -375,7 +405,9 @@ function Rows({
                 onOpenChange={() => onToggleGroup(group)}
                 // Only the keyboard stop reads as hover; an open title stays
                 // at rest, unlike a standalone foldable Divider.
-                interaction={headerIndex === highlightedIndex ? "hover" : "rest"}
+                interaction={
+                  headerIndex === highlightedIndex ? "hover" : "rest"
+                }
               >
                 <div className="opal-dropdown-group-rows">{rows}</div>
               </Divider>

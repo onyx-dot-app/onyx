@@ -340,7 +340,9 @@ function SingleDropdownField({
               }
         }
       >
-        <Dropdown.Trigger asChild typeIn={typeIn}>
+        {/* Clicks are the field's own: a type-in resets its text on open, and
+            a button trigger toggles from the root, padding included. */}
+        <Dropdown.Trigger asChild typeIn={typeIn} behavior="none">
           <InputTypeIn
             name={name}
             placeholder={placeholder}
@@ -432,6 +434,8 @@ function SingleDropdownField({
               : undefined
           }
           value={effectiveValue}
+          // A pick closes through `commit`; a re-pick unselects and stays open.
+          closeOnSelect={false}
           exactText={typeIn ? inputValue || effectiveValue : effectiveValue}
           onSelect={handleOptionSelect}
           create={

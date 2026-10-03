@@ -13,12 +13,13 @@ import {
   shift,
   size,
   useFloating,
+  type ReferenceType,
 } from "@floating-ui/react-dom";
 import { useClickOutside } from "@opal/hooks/useClickOutside";
 import type {
-  DropdownOption,
+  DropdownRow,
   NavItem,
-  OptionGroup,
+  RowGroup,
 } from "@opal/components/dropdown/types";
 
 // =============================================================================
@@ -28,8 +29,8 @@ import type {
 interface UseFoldedGroupsProps {
   isOpen: boolean;
   /** Post-filter groups in render order. */
-  groups: OptionGroup[];
-  isSelected: (option: DropdownOption) => boolean;
+  groups: RowGroup[];
+  isSelected: (row: DropdownRow) => boolean;
   /** A search is on: groups open to show their matches, until folded. */
   searching: boolean;
 }
@@ -69,17 +70,17 @@ export function useFoldedGroups({
   }, [isOpen, searching]);
 
   const isGroupOpen = useCallback(
-    (group: OptionGroup) => {
+    (group: RowGroup) => {
       if (!group.foldable || group.title === undefined) return true;
       const choice = toggled.get(group.title);
       if (choice !== undefined) return choice;
-      return searching || group.options.some(sessionIsSelected);
+      return searching || group.rows.some(sessionIsSelected);
     },
     [toggled, searching, sessionIsSelected]
   );
 
   const toggleGroup = useCallback(
-    (group: OptionGroup) => {
+    (group: RowGroup) => {
       if (group.title === undefined) return;
       const title = group.title;
       const open = isGroupOpen(group);
@@ -105,14 +106,16 @@ export function useFoldedGroups({
 
 /**
  * What `Dropdown.Data` registers for the keyboard: the stops in render
- * order and what Enter does to each. Read through a ref at event time, so
- * the handler never goes stale and the list never re-renders the trigger.
+ * order and what Enter and ArrowRight do to each. Read through a ref at
+ * event time, so the handler never goes stale and the list never
+ * re-renders the trigger.
  */
 export interface ListModel {
   items: NavItem[];
-  onSelect: (option: DropdownOption) => void;
-  onToggleGroup: (group: OptionGroup) => void;
-  onCreate: (text: string) => void;
+  /** Enter, or a click: pick, run, flip, unfold or create. */
+  activate: (item: NavItem) => void;
+  /** ArrowRight: the row's secondary control. Returns whether it took the key. */
+  secondary: (item: NavItem) => boolean;
 }
 
 interface UseDropdownKeyboardProps {
@@ -127,12 +130,12 @@ interface UseDropdownKeyboardProps {
 /**
  * Keyboard navigation for the list, the same for every trigger: Enter or
  * ArrowDown opens a closed list; open, the arrows and Tab walk the stops
- * and wrap around from the last row to the first, Enter picks the
- * highlighted row or toggles the highlighted title, and Escape closes. A
- * closed list leaves Tab alone, so it moves on as normal. Physical focus
- * stays on the trigger or the search field; the highlight moves and
- * `aria-activedescendant` follows it. A handler that ran before this one
- * and cancelled the event keeps the key.
+ * and wrap around from the last row to the first, Enter activates the
+ * highlighted stop, ArrowRight reaches a row's secondary control, and
+ * Escape closes. A closed list leaves Tab alone, so it moves on as normal.
+ * Physical focus stays on the trigger or the search field; the highlight
+ * moves and `aria-activedescendant` follows it. A handler that ran before
+ * this one and cancelled the event keeps the key.
  */
 export function useDropdownKeyboard({
   isOpen,
@@ -146,9 +149,7 @@ export function useDropdownKeyboard({
   const isStop = useCallback(
     (index: number) => {
       const item = listRef.current.items[index];
-      return (
-        item !== undefined && !(item.kind === "option" && item.option.disabled)
-      );
+      return item !== undefined && !(item.kind === "row" && item.row.disabled);
     },
     [listRef]
   );
@@ -180,15 +181,6 @@ export function useDropdownKeyboard({
     [listRef, isStop]
   );
 
-  const activate = useCallback(() => {
-    const { items, onSelect, onToggleGroup, onCreate } = listRef.current;
-    const item = items[highlightedIndex];
-    if (!item) return;
-    if (item.kind === "option") onSelect(item.option);
-    else if (item.kind === "create") onCreate(item.text);
-    else onToggleGroup(item.group);
-  }, [listRef, highlightedIndex]);
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
       if (e.defaultPrevented) return;
@@ -209,6 +201,14 @@ export function useDropdownKeyboard({
           setIsKeyboardNav(true);
           if (isOpen) setHighlightedIndex(previous);
           break;
+        case "ArrowRight": {
+          // Only a row with a secondary control takes the key; a type-in
+          // keeps it for its caret otherwise.
+          if (!isOpen) break;
+          const item = listRef.current.items[highlightedIndex];
+          if (item && listRef.current.secondary(item)) e.preventDefault();
+          break;
+        }
         case "Tab":
           if (!isOpen) break;
           // Inside the list Tab walks the stops, both ways, wrapping.
@@ -216,7 +216,7 @@ export function useDropdownKeyboard({
           setIsKeyboardNav(true);
           setHighlightedIndex(e.shiftKey ? previous : next);
           break;
-        case "Enter":
+        case "Enter": {
           if (!isOpen) {
             e.preventDefault();
             setIsOpen(true);
@@ -227,8 +227,10 @@ export function useDropdownKeyboard({
           // open, so the key never reaches an enclosing form.
           e.preventDefault();
           e.stopPropagation();
-          activate();
+          const item = listRef.current.items[highlightedIndex];
+          if (item) listRef.current.activate(item);
           break;
+        }
         case "Escape":
           e.preventDefault();
           setIsOpen(false);
@@ -238,9 +240,10 @@ export function useDropdownKeyboard({
     },
     [
       isOpen,
+      highlightedIndex,
+      listRef,
       next,
       previous,
-      activate,
       setIsOpen,
       setHighlightedIndex,
       setIsKeyboardNav,
@@ -254,20 +257,37 @@ export function useDropdownKeyboard({
 // HOOK: useDropdownOverlay
 // =============================================================================
 
+/**
+ * `"anchor"` matches the anchor's width (6px wider on each side, so the
+ * rows line up under its content); a preset is a fixed width.
+ */
+export type DropdownWidth = "anchor" | "sm" | "md" | "lg" | "xl";
+
+/** A rectangle to position against, like a text caret: no element needed. */
+export interface DropdownVirtualAnchor {
+  getBoundingClientRect: () => DOMRect;
+  /** An element in the same scroll context, so the list follows it. */
+  contextElement?: Element;
+}
+
 interface UseDropdownOverlayProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  width: DropdownWidth;
+  virtualAnchor?: DropdownVirtualAnchor;
 }
 
 /**
  * Everything the overlay shares across triggers: open, highlight and
  * keyboard-nav state with their close-reset, the floating-ui positioning
- * (reference width, flip and shift), the refs, and outside-click dismissal
- * scoped to the reference element, its label and the portal.
+ * (anchor width or a preset, flip and shift), the refs, and outside-click
+ * dismissal scoped to the reference element, its label and the portal.
  */
 export function useDropdownOverlay({
   open: openProp,
   onOpenChange,
+  width,
+  virtualAnchor,
 }: UseDropdownOverlayProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isOpen = openProp ?? uncontrolledOpen;
@@ -279,7 +299,8 @@ export function useDropdownOverlay({
   }, [isOpen]);
   const setIsOpen = useCallback(
     (next: boolean | ((prev: boolean) => boolean)) => {
-      const resolved = typeof next === "function" ? next(isOpenRef.current) : next;
+      const resolved =
+        typeof next === "function" ? next(isOpenRef.current) : next;
       if (resolved === isOpenRef.current) return;
       if (openProp === undefined) setUncontrolledOpen(resolved);
       onOpenChange?.(resolved);
@@ -291,7 +312,7 @@ export function useDropdownOverlay({
   const [isKeyboardNav, setIsKeyboardNav] = useState(false);
 
   // The element the list positions against and measures: the anchor when
-  // there is one, otherwise the trigger.
+  // there is one, otherwise the trigger that opened it.
   const anchorRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const referenceRef = useRef<HTMLElement | null>(null);
@@ -308,24 +329,29 @@ export function useDropdownOverlay({
     }
   }, [isOpen]);
 
-  const { refs, floatingStyles, isPositioned } = useFloating({
+  const matchAnchor = width === "anchor";
+  const { refs, floatingStyles, isPositioned } = useFloating<ReferenceType>({
     open: isOpen,
     placement: "bottom-start",
     middleware: [
-      // 6px wider on each side than the reference, shifted start-ward by
-      // 6px: with the list's 4px inset and its 1px border, the rows'
-      // bounding boxes then align flush with the reference's content, inside
-      // its own border. crossAxis is direction-aware, so RTL mirrors.
-      offset({ mainAxis: 4, crossAxis: -6 }),
+      // Matching the anchor: 6px wider on each side than it, shifted
+      // start-ward by 6px: with the list's 4px inset and its 1px border, the
+      // rows' bounding boxes then align flush with the anchor's content,
+      // inside its own border. crossAxis is direction-aware, so RTL mirrors.
+      offset({ mainAxis: 4, crossAxis: matchAnchor ? -6 : 0 }),
       flip(),
       shift({ padding: 8 }),
-      size({
-        apply({ rects, elements }) {
-          Object.assign(elements.floating.style, {
-            width: `${rects.reference.width + 12}px`,
-          });
-        },
-      }),
+      ...(matchAnchor
+        ? [
+            size({
+              apply({ rects, elements }) {
+                Object.assign(elements.floating.style, {
+                  width: `${rects.reference.width + 12}px`,
+                });
+              },
+            }),
+          ]
+        : []),
     ],
     whileElementsMounted: autoUpdate,
   });
@@ -334,10 +360,14 @@ export function useDropdownOverlay({
     (node: HTMLElement | null) => {
       referenceRef.current = node;
       labelRef.current = node?.closest("label") ?? null;
-      refs.setReference(node);
+      if (!virtualAnchor) refs.setReference(node);
     },
-    [refs]
+    [refs, virtualAnchor]
   );
+  useEffect(() => {
+    if (virtualAnchor) refs.setReference(virtualAnchor);
+  }, [refs, virtualAnchor]);
+
   const setAnchorRef = useCallback(
     (node: HTMLElement | null) => {
       anchorRef.current = node;
@@ -345,12 +375,20 @@ export function useDropdownOverlay({
     },
     [setReference]
   );
+  // The trigger that opened the list, or the last one mounted: it takes
+  // focus back after a pick and anchors the list when nothing else does.
   const setTriggerRef = useCallback(
     (node: HTMLElement | null) => {
       triggerRef.current = node;
       if (anchorRef.current === null) setReference(node);
     },
     [setReference]
+  );
+  const releaseTriggerRef = useCallback(
+    (node: HTMLElement | null) => {
+      if (triggerRef.current === node) setTriggerRef(null);
+    },
+    [setTriggerRef]
   );
   const setFloatingRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -383,6 +421,7 @@ export function useDropdownOverlay({
     setIsKeyboardNav,
     setAnchorRef,
     setTriggerRef,
+    releaseTriggerRef,
     focusTrigger,
     floatingRef,
     setFloatingRef,

@@ -3,7 +3,11 @@ import { render, screen } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Dropdown, InputTypeIn } from "@opal/components";
-import type { DropdownItem, DropdownOption } from "@opal/components";
+import type {
+  DropdownItem,
+  DropdownMenuItem,
+  DropdownOption,
+} from "@opal/components";
 
 // Mock createPortal for dropdown rendering
 jest.mock("react-dom", () => ({
@@ -65,7 +69,6 @@ function Harness({ items = ITEMS, onSelect, onCreate }: HarnessProps) {
         onSelect={(option) => {
           setPicked(option.value);
           onSelect?.(option);
-          setOpen(false);
         }}
         create={
           onCreate && query.trim() !== ""
@@ -73,6 +76,49 @@ function Harness({ items = ITEMS, onSelect, onCreate }: HarnessProps) {
             : undefined
         }
       />
+    </Dropdown>
+  );
+}
+
+interface MenuHarnessProps {
+  onAction: jest.Mock;
+  onToggle: jest.Mock;
+  onSecondary?: jest.Mock;
+}
+
+/** A button trigger over a menu: an action, a toggle and a custom row. */
+function MenuHarness({ onAction, onToggle, onSecondary }: MenuHarnessProps) {
+  const [checked, setChecked] = useState(false);
+  const items: DropdownMenuItem[] = [
+    { kind: "action", id: "rename", title: "Rename", onSelect: onAction },
+    {
+      kind: "toggle",
+      id: "pin",
+      title: "Pinned",
+      checked,
+      onCheckedChange: (next) => {
+        setChecked(next);
+        onToggle(next);
+      },
+    },
+    {
+      kind: "custom",
+      id: "custom",
+      keywords: ["settings"],
+      onSecondary,
+      render: ({ highlighted, props }) => (
+        <div data-highlighted={highlighted || undefined} {...props}>
+          Settings
+        </div>
+      ),
+    },
+  ];
+  return (
+    <Dropdown width="md">
+      <Dropdown.Trigger asChild>
+        <button type="button">Actions</button>
+      </Dropdown.Trigger>
+      <Dropdown.Data label="Actions" items={items} />
     </Dropdown>
   );
 }
@@ -88,12 +134,13 @@ function highlighted() {
     .map((o) => o.textContent);
 }
 
-describe("Dropdown", () => {
+describe("Dropdown picker", () => {
   test("the trigger carries the combobox wiring and ArrowDown opens the list", async () => {
     const user = setupUser();
     render(<Harness />);
     const trigger = screen.getByRole("combobox", { name: "Fruit" });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("aria-haspopup", "listbox");
     expect(trigger).toHaveAttribute("aria-autocomplete", "list");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 
@@ -131,7 +178,7 @@ describe("Dropdown", () => {
     expect(highlighted()).toEqual(["Apple"]);
   });
 
-  test("Enter picks the highlighted row and Escape closes", async () => {
+  test("Enter picks the highlighted row and closes; Escape closes", async () => {
     const user = setupUser();
     const onSelect = jest.fn();
     render(<Harness onSelect={onSelect} />);
@@ -185,5 +232,78 @@ describe("Dropdown", () => {
       "aria-selected",
       "false"
     );
+  });
+});
+
+describe("Dropdown menu", () => {
+  test("a button trigger toggles a menu, with menu semantics", async () => {
+    const user = setupUser();
+    render(<MenuHarness onAction={jest.fn()} onToggle={jest.fn()} />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(trigger).not.toHaveAttribute("role", "combobox");
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("menu", { name: "Actions" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Rename" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Pinned" })
+    ).toHaveAttribute("aria-checked", "false");
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("an action closes the menu; a toggle flips and stays open", async () => {
+    const user = setupUser();
+    const onAction = jest.fn();
+    const onToggle = jest.fn();
+    render(<MenuHarness onAction={onAction} onToggle={onToggle} />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Pinned" }));
+    expect(onToggle).toHaveBeenCalledWith(true);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Pinned" })
+    ).toHaveAttribute("aria-checked", "true");
+
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("a custom row is a keyboard stop and ArrowRight reaches its secondary control", async () => {
+    const user = setupUser();
+    const onSecondary = jest.fn();
+    render(
+      <MenuHarness
+        onAction={jest.fn()}
+        onToggle={jest.fn()}
+        onSecondary={onSecondary}
+      />
+    );
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+    const custom = screen.getByRole("menuitem", { name: "Settings" });
+    expect(custom).toHaveAttribute("data-highlighted", "true");
+    expect(trigger).toHaveAttribute("aria-activedescendant", custom.id);
+
+    await user.keyboard("{ArrowRight}");
+    expect(onSecondary).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+  });
+
+  test("a menu rejects option rows at the type level", () => {
+    const items: DropdownMenuItem[] = [
+      // @ts-expect-error an option needs a picker (a `value`)
+      { kind: "option", value: "apple", title: "Apple" },
+    ];
+    expect(items).toHaveLength(1);
   });
 });
