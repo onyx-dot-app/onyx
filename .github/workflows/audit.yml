@@ -8,11 +8,14 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "web/bun.lock"
-      - "web/package.json"
-      - "bun.lock"
-      - "pyproject.toml"
-      - "uv.lock"
+      - "**/bun.lock"
+      - "**/package.json"
+      - "**/pyproject.toml"
+      - "**/uv.lock"
+      - "**/Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/go.mod"
+      - "**/go.sum"
       - ".github/dependabot.yml"
       # Any workflow or composite-action change can bump a pinned action to a
       # vulnerable version, so gate the PR that makes the change (not just nightly).
@@ -65,7 +68,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync ods audit --fail-on=critical
+        run: uv run --no-sync ods audit --fail-on=critical --all-lockfiles
 
       - name: Run audit (SARIF report)
         if: github.event_name != 'pull_request'
@@ -74,7 +77,7 @@ jobs:
         # Don't fail the report job on findings; the SARIF upload surfaces them.
         # SARIF goes to stdout (the uploaded file); the text report goes to stderr
         # so the run's findings are also readable in the log.
-        run: uv run --no-sync ods audit --format=sarif,text > audit.sarif || true
+        run: uv run --no-sync ods audit --all-lockfiles --format=sarif,text > audit.sarif || true
 
       - name: Upload SARIF file
         if: github.event_name != 'pull_request'
