@@ -1,9 +1,10 @@
 """Celery tasks for the granular capability check runs.
 
-The run task is enqueued by ``start_capability_check_run`` (the manual trigger
-endpoint, cc-pair creation and credential swap) after it marks the scope's row
-RUNNING, and writes through the unconditional upsert: a granular
-run is the freshest truth and replaces whatever is stored (see the accessors'
+The run task is enqueued by ``send_capability_check_run_task`` after the
+caller marks the scope's row RUNNING: from ``start_capability_check_run`` (the
+manual trigger endpoint and credential creation), and from cc-pair creation and
+credential swap for the checks that did not finish in the blocking budget. It
+writes through the unconditional upsert: a granular run is the freshest truth and replaces whatever is stored (see the accessors'
 writer model). A run that fails gracefully records FAILED_TO_RUN itself; only
 hard kills and expired tasks leave their row RUNNING for the beat sweep to
 retire once the mark outlives its source's run ceiling.
@@ -37,6 +38,7 @@ from onyx.connectors.capability_checks.runner import (
     capability_check_run_stale_after,
     effective_check_timeout_seconds,
     generate_capability_report,
+    merge_capability_results,
 )
 from onyx.connectors.models import InputType
 from onyx.db.connector import fetch_connector_by_id
@@ -69,8 +71,14 @@ def run_capability_checks_task(
     # What started the run. Defaults to MANUAL for tasks enqueued before this
     # argument existed.
     trigger: str = CapabilityCheckTrigger.MANUAL.value,
+    # The pair's access type, for a run started before the pair exists.
+    access_type: str | None = None,
+    # Limits the run to these checks; ``prior_results`` hold the results of
+    # the others, which the stored report includes.
+    check_ids: list[str] | None = None,
+    prior_results: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Runs every capability check for the scope and stores the report.
+    """Runs the capability checks for the scope and stores the report.
 
     Terminal writes are fenced on ``run_id``: if this attempt was retired and
     the scope re-triggered, both the completion and the failure write no-op
@@ -93,7 +101,9 @@ def run_capability_checks_task(
                 )
                 return
             input_type: InputType | None = None
-            access_type: AccessType | None = None
+            parsed_access_type = (
+                AccessType(access_type) if access_type is not None else None
+            )
             config = connector_specific_config
             # A family credential can serve connectors of other sources, so a
             # connector-scoped run checks the connector's source.
@@ -117,8 +127,8 @@ def run_capability_checks_task(
                 cc_pair = get_connector_credential_pair(
                     db_session, connector_id, credential_id
                 )
-                if cc_pair is not None:
-                    access_type = cc_pair.access_type
+                if cc_pair is not None and parsed_access_type is None:
+                    parsed_access_type = cc_pair.access_type
         report = generate_capability_report(
             credential,
             source=source,
@@ -126,8 +136,17 @@ def run_capability_checks_task(
             connector_id=connector_id,
             input_type=input_type,
             trigger=parsed_trigger,
-            access_type=access_type,
+            access_type=parsed_access_type,
+            check_ids=frozenset(check_ids) if check_ids is not None else None,
         )
+        if prior_results:
+            report = merge_capability_results(
+                report,
+                [
+                    CapabilityCheckResult.model_validate(result)
+                    for result in prior_results
+                ],
+            )
         with get_session_with_current_tenant() as db_session:
             completed_row = upsert_completed_capability_report(
                 db_session,

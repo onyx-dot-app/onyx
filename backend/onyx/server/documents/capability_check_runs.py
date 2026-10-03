@@ -6,6 +6,9 @@ from uuid import UUID, uuid4
 from pydantic_core import to_jsonable_python
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.capability_checks.enqueue import (
+    send_capability_check_run_task,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import (
     DocumentSource,
@@ -30,17 +33,17 @@ from onyx.connectors.capability_checks.draft_runs import (
     set_latest_draft_run,
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
-from onyx.connectors.capability_checks.models import CapabilityCheckContext
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckContext,
+)
 from onyx.connectors.capability_checks.registry import (
     get_capability_checks,
     has_named_capability_checks,
 )
 from onyx.connectors.capability_checks.runner import (
-    capability_check_run_ceiling_seconds,
     capability_check_run_stale_after,
 )
 from onyx.connectors.connector_config import ConnectorConfig
-from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credential_capability import (
     mark_capability_report_running,
     mark_capability_run_failed,
@@ -96,24 +99,13 @@ def start_capability_check_run(
     assert run_id is not None, "The RUNNING mark always stamps a run_id."
     db_session.commit()
     try:
-        client_app.send_task(
-            OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
-            kwargs={
-                "credential_id": credential_id,
-                "connector_id": connector_id,
-                "connector_specific_config": connector_specific_config,
-                "tenant_id": get_current_tenant_id(),
-                # The attempt's fence: the task's terminal writes land only
-                # while this id still owns the row.
-                "run_id": str(run_id),
-                "trigger": trigger.value,
-            },
-            queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
-            priority=OnyxCeleryPriority.HIGH,
-            # Queue wait is bounded by one execution ceiling; the staleness
-            # cutoff allows for both, so an expired task never strands the
-            # scope.
-            expires=capability_check_run_ceiling_seconds(source),
+        send_capability_check_run_task(
+            credential_id=credential_id,
+            connector_id=connector_id,
+            source=source,
+            trigger=trigger,
+            run_id=run_id,
+            connector_specific_config=connector_specific_config,
         )
     except Exception as e:
         # Broker down and a bad task payload must stay distinguishable in the
@@ -134,40 +126,33 @@ def start_capability_check_run(
     return row
 
 
-def start_capability_checks_for_new_pairing(
-    db_session: Session,
-    *,
-    credential_id: int,
-    connector_id: int,
+def start_capability_checks_for_new_credential(
+    db_session: Session, credential: Credential
 ) -> None:
-    """Best-effort background run of the source's named checks for a new or
-    re-credentialed pairing; failures are logged and leave the stored
-    blocking-validation report in place."""
+    """After a credential is created, runs its source's credential-scoped
+    checks in the background, so the token checks have a result before any
+    connector form is filled. Best-effort: the credential is already created,
+    so any failure here is logged, the session is rolled back, and creation
+    still succeeds."""
+    credential_id = credential.id
+    source = credential.source
     try:
-        connector = fetch_connector_by_id(connector_id, db_session)
-        if connector is None:
-            raise ValueError(f"Connector {connector_id} of a new pairing is missing.")
-        if not has_named_capability_checks(connector.source):
+        if not has_named_capability_checks(source):
             return
         start_capability_check_run(
             db_session,
             credential_id=credential_id,
-            connector_id=connector_id,
-            source=connector.source,
-            trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+            connector_id=None,
+            source=source,
+            trigger=CapabilityCheckTrigger.CREDENTIAL_CREATED,
         )
     except CapabilityRunEnqueueError:
         logger.warning(
-            "The full capability run for connector %s, credential %s did not "
-            "start; the report keeps the creation-time validation result.",
-            connector_id,
-            credential_id,
+            "The capability run for new credential %s did not start.", credential_id
         )
     except Exception:
         logger.exception(
-            "The full capability run for connector %s, credential %s could not "
-            "be started; the report keeps the creation-time validation result.",
-            connector_id,
+            "The capability run for new credential %s could not be started.",
             credential_id,
         )
         db_session.rollback()

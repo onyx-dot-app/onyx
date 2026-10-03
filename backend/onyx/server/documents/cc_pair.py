@@ -30,6 +30,7 @@ from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     get_cc_pair_groups_for_ids,
     get_cc_pair_ids_for_connector,
+    get_connector_credential_pair,
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
     remove_credential_from_connector,
@@ -71,9 +72,6 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.documents.capability_check_runs import (
-    start_capability_checks_for_new_pairing,
-)
 from onyx.server.documents.models import (
     CCPairFullInfo,
     CCPairSyncAttemptsResponse,
@@ -906,6 +904,19 @@ def associate_credential_to_connector(
             f"Credential {credential_id} does not exist or does not belong to user",
         )
 
+    # Validation claims the pairing's report row, so a duplicate request must
+    # stop before it: it would replace the live pair's report and fence out its
+    # run. The add below still answers a concurrent duplicate.
+    if (
+        get_connector_credential_pair(db_session, connector_id, credential_id)
+        is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Connector {connector_id} is already associated with credential "
+            f"{credential_id}.",
+        )
+
     try:
         validate_ccpair_for_user(
             connector_id, credential_id, metadata.access_type, db_session
@@ -929,10 +940,6 @@ def associate_credential_to_connector(
             # the body and the *connector* id in data, so a caller checking the
             # status stored the wrong id and reported a no-op as a success.
             raise OnyxError(OnyxErrorCode.CONFLICT, response.message)
-
-        start_capability_checks_for_new_pairing(
-            db_session, credential_id=credential_id, connector_id=connector_id
-        )
 
         # Tenant-work-gating lifecycle hook: keep new-tenant latency to
         # seconds instead of one full-fanout interval.

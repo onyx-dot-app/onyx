@@ -47,6 +47,7 @@ from onyx.connectors.slack.connector import (
     get_channels,
     get_channels_across_teams,
     list_grid_team_ids,
+    validate_channel_regexes,
 )
 from onyx.connectors.slack.source_operations import (
     SlackApiError,
@@ -571,6 +572,31 @@ class _UserProfileReadCheck(CapabilityCheck):
             )
 
 
+class _ChannelPatternsCheck(CapabilityCheck[SlackConnectorConfig]):
+    """Verifies the channel include and exclude regexes compile. Indexing
+    cannot filter channels with a malformed regex."""
+
+    config_class = SlackConnectorConfig
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="slack_channel_patterns",
+            display_name="Channel patterns are valid regexes",
+            requires_connector_instance=False,
+            requires_connector_config=True,
+            remediation="Fix the channel regex in the connector settings.",
+            docs_link=_SLACK_DOCS_LINK,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config = self.config(context)
+        if config.channel_regex_enabled:
+            validate_channel_regexes(config.channels, "channel")
+        if config.exclude_channel_regex_enabled:
+            validate_channel_regexes(config.exclude_channels, "excluded channel")
+
+
 class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
     """Verifies every configured channel name is visible to the bot.
 
@@ -866,6 +892,7 @@ def build_slack_indexing_checks() -> list[CapabilityCheck]:
         _ChannelJoinScopeCheck(),
         _GridWorkspaceListingCheck(),
         _UserProfileReadCheck(),
+        _ChannelPatternsCheck(),
         _ConfiguredChannelsVisibleCheck(),
     ]
 
