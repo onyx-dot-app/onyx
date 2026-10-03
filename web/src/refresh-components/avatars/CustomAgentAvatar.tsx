@@ -3,6 +3,7 @@
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
+import { nameInitials } from "@/lib/nameInitials";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";
@@ -131,17 +132,12 @@ export default function CustomAgentAvatar({
     );
   }
 
-  // Display first letter of name if available, otherwise fall back to two-line-small icon
-  const trimmedName = name?.trim();
-  const firstLetter =
-    trimmedName && trimmedName.length > 0
-      ? trimmedName[0]!.toUpperCase()
-      : undefined;
-  const validFirstLetter = !!firstLetter && /^[a-zA-Z]$/.test(firstLetter);
-  if (validFirstLetter) {
+  // One glyph per the name's script (see nameInitials), else the icon.
+  const glyph = name ? nameInitials(name, 1) : null;
+  if (glyph) {
     return (
       <SvgOctagonWrapper size={size}>
-        <Text style={{ fontSize: size * 0.5 }}>{firstLetter}</Text>
+        <Text style={{ fontSize: size * 0.5 }}>{glyph}</Text>
       </SvgOctagonWrapper>
     );
   }
