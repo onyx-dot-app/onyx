@@ -24,6 +24,7 @@ class EmbedTextType(str, Enum):
 class WebSearchProviderType(str, Enum):
     GOOGLE_PSE = "google_pse"
     SERPER = "serper"
+    LITESCRAPE = "litescrape"
     EXA = "exa"
     SEARXNG = "searxng"
     BRAVE = "brave"
