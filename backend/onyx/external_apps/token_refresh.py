@@ -23,11 +23,11 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import ExternalApp
 from onyx.external_apps.providers.base import (
-    OAuthExternalAppProvider,
+    OAuthFlowHandler,
     TokenRefreshTerminalError,
     TokenRefreshTransientError,
 )
-from onyx.external_apps.providers.registry import get_provider_for_app
+from onyx.external_apps.providers.registry import resolve_oauth_handler
 from onyx.external_apps.token_utils import needs_refresh, stamp_expires_at
 from onyx.redis.lock_context import RedisSharedLockAcquisitionError, redis_shared_lock
 from onyx.skills.push import push_skills_for_users
@@ -40,8 +40,8 @@ logger = setup_logger()
 _LOCK_HELD_S = 30.0
 _LOCK_WAIT_S = 5.0
 
-# Gathered inside a session for the POST: provider, stored creds, client id/secret.
-_RefreshInputs = tuple[OAuthExternalAppProvider, dict[str, Any], str, str]
+# Gathered inside a session for the POST: handler, stored creds, client id/secret.
+_RefreshInputs = tuple[OAuthFlowHandler, dict[str, Any], str, str]
 
 
 def ensure_fresh_credentials(
@@ -101,11 +101,11 @@ def _refresh_under_lock(
         inputs = _load_refresh_inputs(db, external_app_id, user_id)
     if inputs is None:
         return
-    provider, stored, client_id, client_secret = inputs
+    handler, stored, client_id, client_secret = inputs
 
     # POST with no DB connection held.
     try:
-        refreshed = provider.refresh_credentials(stored, client_id, client_secret)
+        refreshed = handler.refresh_credentials(stored, client_id, client_secret)
     except TokenRefreshTransientError as exc:
         # Keep the existing token; retry on a later request.
         logger.warning(
@@ -152,8 +152,9 @@ def _load_refresh_inputs(
     app = get_external_app_by_id(db, external_app_id)
     if app is None:
         return None
-    provider = get_provider_for_app(app)
-    if not isinstance(provider, OAuthExternalAppProvider):
+    # Built-in OAuth provider, or the config-driven handler of a CUSTOM app.
+    handler = resolve_oauth_handler(app)
+    if handler is None:
         return None
 
     stored = _read_stored_credentials(db, external_app_id, user_id)
@@ -167,7 +168,7 @@ def _load_refresh_inputs(
         )
         return None
     client_id, client_secret = client
-    return provider, stored, client_id, client_secret
+    return handler, stored, client_id, client_secret
 
 
 def _read_stored_credentials(

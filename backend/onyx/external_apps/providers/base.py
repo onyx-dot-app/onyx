@@ -1,6 +1,9 @@
+import base64
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from enum import Enum
 from typing import Any, ClassVar
+from urllib.parse import quote_plus, urlencode
 
 import requests
 from pydantic import BaseModel, ConfigDict
@@ -79,6 +82,15 @@ class OrgCredentialField(BaseModel):
     label: str
     description: str
     secret: bool = False
+
+
+class TokenEndpointAuthMethod(str, Enum):
+    """How the client authenticates to the token endpoint (RFC 6749 §2.3.1):
+    credentials form-encoded in the body, or an HTTP Basic ``Authorization``
+    header."""
+
+    CLIENT_SECRET_POST = "client_secret_post"
+    CLIENT_SECRET_BASIC = "client_secret_basic"
 
 
 class OAuthFlowSpec(BaseModel):
@@ -248,17 +260,32 @@ class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
         return None
 
 
-class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
-    """A provider whose users authenticate via OAuth 2.0. Subclasses supply an
-    :class:`OAuthProviderSpec` and implement :meth:`extract_credentials`.
+class OAuthFlowHandler(ABC):
+    """The OAuth 2.0 mechanics for one app, independent of *where* the flow
+    parameters come from: authorize-URL construction, the authorization-code
+    token-exchange request, and token refresh.
 
-    :meth:`refresh_credentials` is a template method: a divergent provider
+    Built-in providers implement it via :class:`OAuthExternalAppProvider`
+    (flow from the class-level ``spec``); admin-defined CUSTOM apps use the
+    config-driven ``CustomOAuthHandler`` (flow from ``external_app.oauth_config``).
+    The OAuth routes and the lazy-refresh path dispatch on this interface only,
+    resolved per row by ``providers.registry.resolve_oauth_handler``.
+
+    :meth:`refresh_credentials` is a template method: a divergent implementation
     overrides one hook (`build_refresh_request`, `classify_token_response`) or
     class property below, not the whole POST/error-handling flow.
     """
 
-    spec: ClassVar[OAuthProviderSpec]
-    _spec_type: ClassVar[type[ProviderSpec]] = OAuthProviderSpec
+    # How client credentials ride on token-endpoint requests. A plain attribute
+    # (not a ClassVar) so a config-driven handler can set it per instance.
+    token_endpoint_auth_method: TokenEndpointAuthMethod = (
+        TokenEndpointAuthMethod.CLIENT_SECRET_POST
+    )
+
+    @property
+    @abstractmethod
+    def oauth(self) -> OAuthFlowSpec:
+        """The flow parameters (authorize/token URLs, scope, authorize params)."""
 
     # --- Refresh configuration (override per provider as needed) ---
 
@@ -285,28 +312,74 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         """
         return parse_granted_scopes(response_data.get("scope"))
 
+    # --- Authorize URL (RFC 6749 §4.1.1) ---
+
+    def build_authorize_url(
+        self, *, client_id: str, redirect_uri: str, state: str
+    ) -> str:
+        """The provider authorize URL the user's browser is sent to."""
+        oauth = self.oauth
+        params: dict[str, str] = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+        }
+        # An empty scope omits the param entirely (provider-default scopes).
+        if oauth.scope:
+            params[oauth.scope_param] = oauth.scope
+        params["state"] = state
+        params.update(oauth.extra_authorize_params)
+        # Set after extra_authorize_params so a provider can't clobber it.
+        if oauth.optional_scope:
+            params[oauth.optional_scope_param] = oauth.optional_scope
+        # urlencode so URI-shaped scopes (Google) get `:` and `/`
+        # percent-encoded.
+        return f"{oauth.authorize_url}?{urlencode(params)}"
+
+    # --- Client authentication to the token endpoint (RFC 6749 §2.3.1) ---
+
+    def _apply_client_auth(
+        self,
+        headers: dict[str, str],
+        body: dict[str, str],
+        client_id: str,
+        client_secret: str,
+    ) -> None:
+        """Attach client credentials per ``token_endpoint_auth_method``: HTTP
+        Basic header, or form fields in the body (the RFC default)."""
+        if (
+            self.token_endpoint_auth_method
+            is TokenEndpointAuthMethod.CLIENT_SECRET_BASIC
+        ):
+            # RFC 6749 §2.3.1: form-encode each part before the `id:secret`
+            # join so a `:` in either can't corrupt the pair.
+            basic = base64.b64encode(
+                f"{quote_plus(client_id)}:{quote_plus(client_secret)}".encode()
+            ).decode("ascii")
+            headers["Authorization"] = f"Basic {basic}"
+        else:
+            body["client_id"] = client_id
+            body["client_secret"] = client_secret
+
     # --- Initial-grant token exchange (override for divergent client auth) ---
 
     def build_token_exchange_request(
         self, code: str, client_id: str, client_secret: str, redirect_uri: str
     ) -> TokenExchangeRequest:
         """Build the authorization-code → token exchange POST. The default sends
-        RFC-6749 form-encoded client credentials in the body. Override for a
-        provider that requires HTTP Basic client auth and/or a JSON body (e.g.
-        Notion)."""
-        return TokenExchangeRequest(
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-            },
-            body={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": code,
-                "redirect_uri": redirect_uri,
-            },
-        )
+        RFC-6749 form-encoded client credentials in the body (or HTTP Basic when
+        ``token_endpoint_auth_method`` says so). Override for a provider that
+        needs a JSON body or other divergent shape (e.g. Notion)."""
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        }
+        body = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+        }
+        self._apply_client_auth(headers, body, client_id, client_secret)
+        return TokenExchangeRequest(headers=headers, body=body)
 
     # --- Refresh template method (override a hook below, not this) ---
 
@@ -332,18 +405,14 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
                 "No refresh token stored; the user must reconnect."
             )
 
+        refresh_request = self.build_refresh_token_request(
+            refresh_token, client_id, client_secret
+        )
         try:
             response = requests.post(
-                self.spec.oauth.token_url,
-                # Ask for JSON so providers that default to form-encoded
-                # refresh responses (e.g. GitHub) still parse via response.json().
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Accept": "application/json",
-                },
-                data=self.build_refresh_request(
-                    refresh_token, client_id, client_secret
-                ),
+                self.oauth.token_url,
+                headers=refresh_request.headers,
+                data=refresh_request.body,
                 timeout=self.refresh_http_timeout_seconds,
             )
         except requests.RequestException as exc:
@@ -378,6 +447,29 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         # refresh token survive a refresh that returns only the rotated subset.
         return {**stored, **mapped}
 
+    def build_refresh_token_request(
+        self, refresh_token: str, client_id: str, client_secret: str
+    ) -> TokenExchangeRequest:
+        """The full refresh POST (headers + form body). The default wraps
+        :meth:`build_refresh_request`, moving the client credentials into an
+        HTTP Basic header when ``token_endpoint_auth_method`` requires it."""
+        body = self.build_refresh_request(refresh_token, client_id, client_secret)
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            # Ask for JSON so providers that default to form-encoded
+            # refresh responses (e.g. GitHub) still parse via response.json().
+            "Accept": "application/json",
+        }
+        if (
+            self.token_endpoint_auth_method
+            is TokenEndpointAuthMethod.CLIENT_SECRET_BASIC
+        ):
+            body = {
+                k: v for k, v in body.items() if k not in ("client_id", "client_secret")
+            }
+            self._apply_client_auth(headers, body, client_id, client_secret)
+        return TokenExchangeRequest(headers=headers, body=body)
+
     def build_refresh_request(
         self, refresh_token: str, client_id: str, client_secret: str
     ) -> dict[str, str]:
@@ -397,3 +489,17 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         providers whose failure signalling isn't covered by
         :func:`token_response_error`."""
         return token_response_error(response, body)
+
+
+class OAuthExternalAppProvider(ExternalAppProvider, OAuthFlowHandler, abstract=True):
+    """A built-in provider whose users authenticate via OAuth 2.0. Subclasses
+    supply an :class:`OAuthProviderSpec` and implement
+    :meth:`extract_credentials`; the flow mechanics come from
+    :class:`OAuthFlowHandler`, driven by ``spec.oauth``."""
+
+    spec: ClassVar[OAuthProviderSpec]
+    _spec_type: ClassVar[type[ProviderSpec]] = OAuthProviderSpec
+
+    @property
+    def oauth(self) -> OAuthFlowSpec:
+        return self.spec.oauth

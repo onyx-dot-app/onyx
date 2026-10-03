@@ -11948,6 +11948,8 @@
         "creatingButton": "Criando…",
         "disabled": {
           "nameMissing": "Digite um nome antes de criar este app personalizado.",
+          "oauthClientMissing": "Enter the OAuth client ID and client secret.",
+          "oauthUrlsMissing": "Enter the OAuth authorize URL and token URL.",
           "patternMissing": "Adicione ao menos um padrão de URL de destino. Digite um padrão e pressione Enter.",
           "pristine": "Faça uma alteração antes de salvar.",
           "saving": "Um salvamento já está em andamento."
@@ -11958,6 +11960,12 @@
           "saveFailedTitle": "Não foi possível salvar"
         },
         "fields": {
+          "authMode": {
+            "description": "How users authenticate with this app.",
+            "label": "Authentication",
+            "oauth": "OAuth 2.0 — each user connects their own account",
+            "static": "Static credentials — API keys or tokens"
+          },
           "headers": {
             "addButton": "Adicionar cabeçalho",
             "description": "Opcional: cabeçalhos injetados nas solicitações de saída. Use '{placeholder}' para valores fornecidos pelo usuário (ou pela organização abaixo), ex.: \"Bearer '{api_key}'\". Deixe vazio para liberar os padrões de destino sem injetar credenciais.",
@@ -11968,6 +11976,33 @@
           "name": {
             "label": "Nome",
             "placeholder": "Meu app personalizado"
+          },
+          "oauth": {
+            "authorizeUrl": {
+              "label": "Authorize URL"
+            },
+            "clientId": {
+              "label": "Client ID"
+            },
+            "clientSecret": {
+              "label": "Client secret"
+            },
+            "redirectUri": {
+              "description": "Register this redirect URL in the third-party app's OAuth settings: {uri}",
+              "label": "Redirect URL"
+            },
+            "scopes": {
+              "description": "Scopes to request. Type a scope and press Enter. Leave empty to use the provider's defaults.",
+              "label": "Scopes"
+            },
+            "tokenAuthMethod": {
+              "basic": "HTTP Basic authorization header",
+              "label": "Token endpoint client authentication",
+              "post": "Client credentials in request body (default)"
+            },
+            "tokenUrl": {
+              "label": "Token URL"
+            }
           },
           "orgCredentials": {
             "addButton": "Adicionar credencial",

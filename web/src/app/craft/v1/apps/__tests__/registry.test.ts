@@ -19,7 +19,7 @@ function descriptor(app_type: ExternalAppType): BuiltInExternalAppDescriptor {
 
 function configuredApp(
   app_type: ExternalAppType,
-  overrides: Partial<ExternalAppAdminResponse> = {}
+  overrides: Partial<ExternalAppAdminResponse> = {},
 ): ExternalAppAdminResponse {
   return {
     id: 1,
@@ -33,6 +33,8 @@ function configuredApp(
     actions: [],
     associated_skills: [],
     is_onyx_managed: false,
+    oauth_config: null,
+    oauth_redirect_uri: null,
     ...overrides,
   };
 }
@@ -47,7 +49,7 @@ const ALL_DESCRIPTORS = [
 describe("availableBuiltInDescriptors", () => {
   it("returns every built-in when nothing is configured", () => {
     expect(availableBuiltInDescriptors(ALL_DESCRIPTORS, [])).toEqual(
-      ALL_DESCRIPTORS
+      ALL_DESCRIPTORS,
     );
   });
 

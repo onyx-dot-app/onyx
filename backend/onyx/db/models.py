@@ -7207,6 +7207,13 @@ class ExternalApp(Base):
         nullable=False,
         default=dict,
     )
+    # CUSTOM apps only: a serialized `CustomOAuthConfig` (admin-defined
+    # authorize/token URLs, scopes, …; no secrets — the client id/secret live
+    # in `organization_credentials`). NULL means static credentials; always
+    # NULL for built-ins, whose flow comes from their provider.
+    oauth_config: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -7217,6 +7224,14 @@ class ExternalApp(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    __table_args__ = (
+        # Schema-level backstop for the `oauth_config` invariant above.
+        CheckConstraint(
+            "app_type = 'CUSTOM' OR oauth_config IS NULL",
+            name="ck_external_app_oauth_config_custom_only",
+        ),
     )
 
     associated_skills: Mapped[list["Skill"]] = relationship(
