@@ -1,6 +1,7 @@
 package auditcmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -73,6 +74,13 @@ func runAuditGate(opts *AuditGateOptions, stdout, stderr io.Writer) error {
 		resolve := exec.Command(opts.Script, component)
 		resolve.Stderr = stderr
 		out, err := resolve.Output()
+		// The resolver exits 2 for a component it does not know: a release
+		// branch from before that component joined the gate ships without it.
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() == 2 {
+			_, _ = fmt.Fprintf(stderr, "\nSkipping %s: this branch's gate does not scan it\n", component)
+			continue
+		}
 		if err != nil {
 			return failf("Failed to resolve the %s image: %v", component, err)
 		}

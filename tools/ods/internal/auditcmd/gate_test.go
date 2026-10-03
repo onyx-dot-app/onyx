@@ -96,6 +96,17 @@ func TestRunAuditGate_failures(t *testing.T) {
 			t.Fatalf("expected the resolve error, got %v", err)
 		}
 	})
+	t.Run("component unknown to the branch is skipped", func(t *testing.T) {
+		scanned := fakeGateScans(t, &audit.Result{}, nil, map[string]*audit.Result{"a": {}, "b": {}, "c": {}}, nil)
+		script := writeGateScript(t, `case "$1" in web) echo a;; model-server) echo b;; backend) echo c;; *) echo "unknown component: $1" >&2; exit 2;; esac`)
+		var stderr bytes.Buffer
+		if err := runAuditGate(&AuditGateOptions{Script: script}, &bytes.Buffer{}, &stderr); err != nil {
+			t.Fatalf("expected the gate to pass without the sandbox, got %v", err)
+		}
+		if strings.Join(*scanned, ",") != "a,b,c" || !strings.Contains(stderr.String(), "Skipping sandbox") {
+			t.Fatalf("scanned %v, stderr:\n%s", *scanned, stderr.String())
+		}
+	})
 	t.Run("image audit error", func(t *testing.T) {
 		fakeGateScans(t, &audit.Result{}, nil, nil, errors.New("pull denied"))
 		script := writeGateScript(t, `echo img`)
