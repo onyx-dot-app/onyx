@@ -134,6 +134,8 @@ export default function InputNumber({
     // On blur, if empty, keep as null so placeholder shows
     if (inputValue.trim() === "") {
       onChange(null);
+    } else if (value !== null && min !== undefined && value < min) {
+      onChange(min);
     } else {
       setInputValue(value === null ? "" : String(value));
     }
@@ -157,10 +159,9 @@ export default function InputNumber({
     if (!Number.isFinite(val)) {
       return;
     }
-    let newValue = val;
-    if (min !== undefined) newValue = Math.max(newValue, min);
-    if (max !== undefined) newValue = Math.min(newValue, max);
-    onChange(newValue);
+    // Clamp to max while typing, but to min only on blur: a value below min is
+    // often the start of a valid one (the "0" of "0.5").
+    onChange(max !== undefined ? Math.min(val, max) : val);
   };
 
   return (
