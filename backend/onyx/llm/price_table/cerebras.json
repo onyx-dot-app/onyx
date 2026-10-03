@@ -37,8 +37,8 @@
       },
       "family": "qwen",
       "limit": {
-        "context": 65536,
-        "output": 32768
+        "context": 131072,
+        "output": 40960
       },
       "modalities": {
         "input": [

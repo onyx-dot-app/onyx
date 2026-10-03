@@ -841,7 +841,7 @@
       "family": "gpt",
       "limit": {
         "context": 16384,
-        "output": 16384
+        "output": 4096
       },
       "modalities": {
         "input": [
@@ -868,7 +868,7 @@
       "family": "gpt",
       "limit": {
         "context": 16384,
-        "output": 16384
+        "output": 4096
       },
       "modalities": {
         "input": [
@@ -1147,7 +1147,7 @@
     },
     "gpt-4o-mini-tts": {
       "cost": {
-        "input": 2.5,
+        "input": 0.6,
         "output": 10.0,
         "second": 0.00025
       },
@@ -1333,7 +1333,8 @@
       "family": "gpt-pro",
       "limit": {
         "context": 400000,
-        "output": 272000
+        "input": 272000,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -1432,6 +1433,7 @@
       "family": "gpt-codex",
       "limit": {
         "context": 400000,
+        "input": 272000,
         "output": 128000
       },
       "modalities": {
@@ -2105,9 +2107,9 @@
         "output": 30
       },
       "limit": {
-        "context": 128000,
-        "input": 111616,
-        "output": 16384
+        "context": 400000,
+        "input": 272000,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -2299,6 +2301,50 @@
       "temperature": false,
       "tool_call": false
     },
+    "gpt-live-1": {
+      "cost": {
+        "second_input": 0.000833333333333
+      },
+      "mode": "realtime",
+      "name": "gpt-live-1"
+    },
+    "gpt-live-transcribe": {
+      "cost": {
+        "second_input": 0.000283333333333
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "audio_transcription",
+      "name": "gpt-live-transcribe"
+    },
+    "gpt-realtime": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "input": 4.0,
+        "output": 16.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime"
+    },
+    "gpt-realtime-1.5": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "input": 4.0,
+        "output": 16.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-1.5"
+    },
     "gpt-realtime-1.5-2026-02-23": {
       "cost": {
         "cache_read": 0.39999999999999997,
@@ -2311,6 +2357,19 @@
       },
       "mode": "realtime",
       "name": "gpt-realtime-1.5-2026-02-23"
+    },
+    "gpt-realtime-2": {
+      "cost": {
+        "cache_read": 0.39999999999999997,
+        "input": 4.0,
+        "output": 24.0
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-2"
     },
     "gpt-realtime-2.1": {
       "cost": {
@@ -2377,12 +2436,30 @@
       "mode": "realtime",
       "name": "gpt-realtime-mini-2025-10-06"
     },
+    "gpt-realtime-translate": {
+      "cost": {
+        "second_input": 0.000566666666667
+      },
+      "limit": {
+        "context": 32000,
+        "output": 4096
+      },
+      "mode": "realtime",
+      "name": "gpt-realtime-translate"
+    },
     "gpt-realtime-whisper": {
       "cost": {
         "second_input": 0.0002833333333333333
       },
       "mode": "audio_transcription",
       "name": "gpt-realtime-whisper"
+    },
+    "gpt-transcribe": {
+      "cost": {
+        "second_input": 7.5e-05
+      },
+      "mode": "audio_transcription",
+      "name": "gpt-transcribe"
     },
     "grok-4-1-fast-non-reasoning": {
       "attachment": true,
@@ -3226,7 +3303,7 @@
       },
       "family": "text-embedding",
       "limit": {
-        "context": 8191,
+        "context": 8192,
         "output": 3072
       },
       "modalities": {
@@ -3252,7 +3329,7 @@
       },
       "family": "text-embedding",
       "limit": {
-        "context": 8191,
+        "context": 8192,
         "output": 1536
       },
       "modalities": {

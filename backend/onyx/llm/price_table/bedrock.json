@@ -2227,7 +2227,7 @@
       "family": "kimi-k3",
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -2605,7 +2605,7 @@
       },
       "family": "gemma",
       "limit": {
-        "context": 202752,
+        "context": 131072,
         "output": 8192
       },
       "modalities": {
@@ -3308,7 +3308,7 @@
       },
       "family": "minimax",
       "limit": {
-        "context": 204800,
+        "context": 196608,
         "output": 131072
       },
       "modalities": {
@@ -3362,7 +3362,7 @@
       },
       "family": "devstral",
       "limit": {
-        "context": 256000,
+        "context": 262144,
         "output": 8192
       },
       "modalities": {
@@ -3501,7 +3501,7 @@
       },
       "family": "mistral-large",
       "limit": {
-        "context": 256000,
+        "context": 262144,
         "output": 8192
       },
       "modalities": {
@@ -3612,7 +3612,7 @@
       },
       "family": "kimi-thinking",
       "limit": {
-        "context": 262143,
+        "context": 262144,
         "output": 16000
       },
       "modalities": {
@@ -3639,7 +3639,7 @@
       },
       "family": "kimi-k2",
       "limit": {
-        "context": 262143,
+        "context": 262144,
         "output": 16384
       },
       "modalities": {
@@ -3668,7 +3668,7 @@
       },
       "family": "nemotron",
       "limit": {
-        "context": 128000,
+        "context": 131072,
         "output": 8192
       },
       "modalities": {
@@ -3778,7 +3778,7 @@
       },
       "family": "gpt",
       "limit": {
-        "context": 272000,
+        "context": 1000000,
         "output": 128000
       },
       "modalities": {
@@ -3808,7 +3808,7 @@
       },
       "family": "gpt",
       "limit": {
-        "context": 272000,
+        "context": 1000000,
         "output": 128000
       },
       "modalities": {
@@ -4029,6 +4029,106 @@
       "temperature": false,
       "tool_call": true
     },
+    "openai.gpt-6-luna": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "context_over_200k": {
+          "cache_read": 0.022,
+          "cache_write": 0.275,
+          "input": 0.22,
+          "output": 0.825
+        },
+        "input": 0.11,
+        "output": 0.55,
+        "tiers": [
+          {
+            "cache_read": 0.022,
+            "cache_write": 0.275,
+            "input": 0.22,
+            "output": 0.825,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-luna",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Luna",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "openai.gpt-6-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.22,
+        "cache_write": 2.75,
+        "context_over_200k": {
+          "cache_read": 0.44,
+          "cache_write": 5.5,
+          "input": 4.4,
+          "output": 16.5
+        },
+        "input": 2.2,
+        "output": 11,
+        "tiers": [
+          {
+            "cache_read": 0.44,
+            "cache_write": 5.5,
+            "input": 4.4,
+            "output": 16.5,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GPT-6 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "openai.gpt-oss-120b": {
       "attachment": false,
       "cost": {
@@ -4037,8 +4137,8 @@
       },
       "family": "gpt-oss",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 131072,
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -4064,8 +4164,8 @@
       },
       "family": "gpt-oss",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 131072,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -4091,8 +4191,8 @@
       },
       "family": "gpt-oss",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 131072,
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -4118,8 +4218,8 @@
       },
       "family": "gpt-oss",
       "limit": {
-        "context": 128000,
-        "output": 16384
+        "context": 131072,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -5504,7 +5604,7 @@
       "family": "kimi-k3",
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -6040,7 +6140,7 @@
       },
       "family": "glm",
       "limit": {
-        "context": 204800,
+        "context": 202752,
         "output": 131072
       },
       "modalities": {
@@ -6067,7 +6167,7 @@
       },
       "family": "glm-flash",
       "limit": {
-        "context": 200000,
+        "context": 202752,
         "output": 131072
       },
       "modalities": {

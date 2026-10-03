@@ -3,6 +3,10 @@
   "models": {
     "c4ai-aya-expanse-32b": {
       "attachment": false,
+      "cost": {
+        "input": 0.5,
+        "output": 1.5
+      },
       "limit": {
         "context": 128000,
         "output": 4000
@@ -15,6 +19,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Aya Expanse 32B",
       "open_weights": true,
       "reasoning": false,
