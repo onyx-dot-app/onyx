@@ -409,11 +409,12 @@ export function useDropdownOverlay({
     open: isOpen,
     placement: "bottom-start",
     middleware: [
-      // Matching the anchor: 6px wider on each side than it, shifted
-      // start-ward by 6px: with the list's 4px inset and its 1px border, the
-      // rows' bounding boxes then align flush with the anchor's content,
-      // inside its own border. crossAxis is direction-aware, so RTL mirrors.
-      offset({ mainAxis: 4, crossAxis: matchAnchor ? -6 : 0 }),
+      // The list starts 6px before the anchor: with its 4px inset and 1px
+      // border, the rows' bounding boxes then align flush with the anchor's
+      // content, inside its own border. Matching the anchor's width, it is
+      // 6px wider on each side too, so the end edge punches out the same.
+      // crossAxis is direction-aware, so RTL mirrors.
+      offset({ mainAxis: 4, crossAxis: -6 }),
       flip(),
       shift({ padding: 8 }),
       ...(matchAnchor
