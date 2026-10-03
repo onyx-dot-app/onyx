@@ -19,6 +19,7 @@ from uuid import UUID
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import RedisError
 from redis.exceptions import TimeoutError as RedisTimeoutError
+from redis_lua_py import Key, redis, script
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -55,40 +56,30 @@ _INVITE_PUT_TENANT_DAY_KEY = "ratelimit:invite_put:tenant:{tenant_id}:day"
 _INVITE_REMOVE_ADMIN_MIN_KEY = "ratelimit:invite_remove:admin:{user_id}:min"
 _INVITE_REMOVE_ADMIN_DAY_KEY = "ratelimit:invite_remove:admin:{user_id}:day"
 
+
 # Atomic multi-bucket check+increment.
-# ARGV[1] = N (bucket count). For each bucket i=1..N, ARGV[2+(i-1)*3..4+(i-1)*3]
-# carry increment, limit, ttl. KEYS[i] is the bucket's Redis key.
+# ``buckets`` holds an (increment, limit, ttl) triple for each key, in order.
 #
 # Buckets with limit <= 0 or increment <= 0 are skipped (a disabled tier). On
 # reject, returns the 1-indexed bucket number that failed so the caller can
 # report which scope tripped; on success returns 0. TTL is set with NX semantics
 # so pre-existing keys without a TTL are still given one, but fresh increments
 # do not reset the window (fixed-window, not sliding).
-_CHECK_AND_INCREMENT_SCRIPT = """
-local n = tonumber(ARGV[1])
-for i = 1, n do
-    local key = KEYS[i]
-    local increment = tonumber(ARGV[2 + (i - 1) * 3])
-    local limit = tonumber(ARGV[3 + (i - 1) * 3])
-    if limit > 0 and increment > 0 then
-        local current = tonumber(redis.call('get', key)) or 0
-        if current + increment > limit then
-            return i
-        end
-    end
-end
-for i = 1, n do
-    local key = KEYS[i]
-    local increment = tonumber(ARGV[2 + (i - 1) * 3])
-    local limit = tonumber(ARGV[3 + (i - 1) * 3])
-    local ttl = tonumber(ARGV[4 + (i - 1) * 3])
-    if limit > 0 and increment > 0 then
-        redis.call('incrby', key, increment)
-        redis.call('expire', key, ttl, 'NX')
-    end
-end
-return 0
-"""
+@script
+def _check_and_increment(keys: list[Key], buckets: list[int]) -> int:
+    for i in range(len(keys)):
+        increment = buckets[3 * i]
+        limit = buckets[3 * i + 1]
+        if limit > 0 and increment > 0:
+            if int(redis.get(keys[i]) or 0) + increment > limit:
+                return i + 1
+    for i in range(len(keys)):
+        increment = buckets[3 * i]
+        limit = buckets[3 * i + 1]
+        if limit > 0 and increment > 0:
+            redis.incrby(keys[i], increment)
+            redis.expire(keys[i], buckets[3 * i + 2], "NX")
+    return 0
 
 
 @dataclass(frozen=True)
@@ -112,16 +103,12 @@ def _run_atomic(redis_client: TenantRedisClient, buckets: list[_Bucket]) -> None
         return
 
     keys = [b.key for b in buckets]
-    argv: list[str] = [str(len(buckets))]
+    argv: list[int] = []
     for b in buckets:
-        argv.extend([str(b.increment), str(b.limit), str(b.ttl_seconds)])
+        argv.extend([b.increment, b.limit, b.ttl_seconds])
 
     try:
-        result = redis_client.eval(
-            _CHECK_AND_INCREMENT_SCRIPT,
-            keys=keys,
-            args=argv,
-        )
+        failed_index = _check_and_increment(redis_client, keys=keys, buckets=argv)
     except (RedisConnectionError, RedisTimeoutError) as e:
         logger.warning(
             "Invite rate limiter skipped — Redis unavailable: %s. Rate limiting is disabled for this request.",
@@ -135,7 +122,6 @@ def _run_atomic(redis_client: TenantRedisClient, buckets: list[_Bucket]) -> None
         )
         return
 
-    failed_index = int(result) if isinstance(result, (int, str, bytes)) else 0
     if failed_index <= 0:
         return
 

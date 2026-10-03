@@ -1,5 +1,6 @@
 """Unit tests for the Redis-backed invite + remove-invited rate limits."""
 
+from collections.abc import Callable, Sequence
 from typing import cast
 from unittest.mock import patch
 from uuid import uuid4
@@ -19,7 +20,7 @@ from onyx.server.manage.invite_rate_limit import (
 class _StubRedis:
     """In-memory stand-in that mirrors the Lua script's semantics.
 
-    The production rate limiter drives all state via a single EVAL call.
+    The production rate limiter drives all state via a single script call.
     The stub reimplements that logic in Python so unit tests can assert
     behavior without a live Redis — matching semantics including the
     NX-style TTL that leaves existing TTLs intact on re-increment.
@@ -30,29 +31,29 @@ class _StubRedis:
         self.ttls: dict[str | bytes, int] = {}
         self.eval_fail: Exception | None = None
 
-    def eval(
+    def register_script(self, _script: str) -> Callable[..., int]:
+        return self._run
+
+    def _run(
         self,
-        _script: str,
-        keys: list[str] | list[bytes],
-        args: list[str] | list[bytes] | list[int] | list[float] | None = None,
+        keys: Sequence[str | bytes],
+        args: Sequence[str | bytes],
+        client: object = None,  # noqa: ARG002
     ) -> int:
         if self.eval_fail is not None:
             raise self.eval_fail
-        argv = list(args or [])
-        n = int(argv[0])
-        for i in range(n):
-            key = keys[i]
-            increment = int(argv[1 + i * 3])
-            limit = int(argv[2 + i * 3])
+        argv = list(args)
+        for i, key in enumerate(keys):
+            increment = int(argv[i * 3])
+            limit = int(argv[1 + i * 3])
             if limit > 0 and increment > 0:
                 current = self.store.get(key, 0)
                 if current + increment > limit:
                     return i + 1
-        for i in range(n):
-            key = keys[i]
-            increment = int(argv[1 + i * 3])
-            limit = int(argv[2 + i * 3])
-            ttl = int(argv[3 + i * 3])
+        for i, key in enumerate(keys):
+            increment = int(argv[i * 3])
+            limit = int(argv[1 + i * 3])
+            ttl = int(argv[2 + i * 3])
             if limit > 0 and increment > 0:
                 self.store[key] = self.store.get(key, 0) + increment
                 if key not in self.ttls:

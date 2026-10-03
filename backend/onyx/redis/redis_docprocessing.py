@@ -1,5 +1,7 @@
 from typing import cast
 
+from redis_lua_py import Key, redis, script
+
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 # Safety-net TTL against leaked keys if cleanup() fails silently. Long enough
@@ -25,31 +27,27 @@ _COUNTER_TTL_SECONDS = 15 * 24 * 3600  # 15 days
 # Plain Python INCR is used for incr_pending since concurrent increments cannot
 # lose updates — each adds 1 regardless of ordering.
 
+
 # Atomically move one batch from pending → in_flight.
 # The if-guard prevents pending from going negative if cleanup() races with a
 # late task_prerun signal. Serialized execution on the Redis server prevents
 # lost decrements when multiple workers pick up batches concurrently.
-# KEYS[1]=pending, KEYS[2]=in_flight, ARGV[1]=ttl_seconds
-_PICKUP_SCRIPT = """
-if tonumber(redis.call('GET', KEYS[1]) or 0) > 0 then
-    redis.call('DECR', KEYS[1])
-end
-local inflight = redis.call('INCR', KEYS[2])
-if inflight == 1 then
-    redis.call('EXPIRE', KEYS[2], ARGV[1])
-end
-"""
+@script
+def _pick_up_batch(pending: Key, in_flight: Key, ttl: int) -> None:
+    if int(redis.get(pending) or 0) > 0:
+        redis.decr(pending)
+    if redis.incr(in_flight) == 1:
+        redis.expire(in_flight, ttl)
+
 
 # Atomically decrement in_flight, guarding against underflow.
 # The if-guard prevents in_flight from going negative if cleanup() races with
 # a late task_postrun signal. Serialized execution on the Redis server prevents
 # lost decrements when multiple workers complete batches concurrently.
-# KEYS[1]=in_flight
-_DECR_IN_FLIGHT_SCRIPT = """
-if tonumber(redis.call('GET', KEYS[1]) or 0) > 0 then
-    redis.call('DECR', KEYS[1])
-end
-"""
+@script
+def _finish_batch(in_flight: Key) -> None:
+    if int(redis.get(in_flight) or 0) > 0:
+        redis.decr(in_flight)
 
 
 class RedisDocprocessing:
@@ -82,14 +80,15 @@ class RedisDocprocessing:
             self.redis.expire(self.pending_key, _COUNTER_TTL_SECONDS)
 
     def decr_pending_incr_in_flight(self) -> None:
-        self.redis.eval(
-            _PICKUP_SCRIPT,
-            keys=[self.pending_key, self.in_flight_key],
-            args=[str(_COUNTER_TTL_SECONDS)],
+        _pick_up_batch(
+            self.redis,
+            pending=self.pending_key,
+            in_flight=self.in_flight_key,
+            ttl=_COUNTER_TTL_SECONDS,
         )
 
     def decr_in_flight(self) -> None:
-        self.redis.eval(_DECR_IN_FLIGHT_SCRIPT, keys=[self.in_flight_key])
+        _finish_batch(self.redis, in_flight=self.in_flight_key)
 
     def pending(self) -> int:
         return max(0, int(cast(bytes, self.redis.get(self.pending_key)) or 0))
