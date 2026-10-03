@@ -2940,7 +2940,7 @@
         }
       },
       "settings": {
-        "description": "Informations et accès du connecteur",
+        "description": "Informations et accès du connecteur.",
         "displayName": {
           "title": "Nom d'affichage du connecteur"
         },

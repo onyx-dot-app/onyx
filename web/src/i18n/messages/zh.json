@@ -2940,7 +2940,7 @@
         }
       },
       "settings": {
-        "description": "连接器信息与访问权限",
+        "description": "连接器信息与访问权限。",
         "displayName": {
           "title": "连接器显示名称"
         },

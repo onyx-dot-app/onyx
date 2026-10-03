@@ -2940,7 +2940,7 @@
         }
       },
       "settings": {
-        "description": "커넥터 정보 및 액세스",
+        "description": "커넥터 정보 및 액세스.",
         "displayName": {
           "title": "커넥터 표시 이름"
         },

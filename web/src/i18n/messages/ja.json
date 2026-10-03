@@ -2940,7 +2940,7 @@
         }
       },
       "settings": {
-        "description": "コネクタの情報とアクセス",
+        "description": "コネクタの情報とアクセス。",
         "displayName": {
           "title": "コネクタの表示名"
         },
