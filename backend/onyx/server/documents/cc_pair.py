@@ -21,6 +21,8 @@ from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryTask,
 )
+from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
+from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
@@ -49,6 +51,7 @@ from onyx.db.enums import (
     PermissionSyncStatus,
 )
 from onyx.db.index_attempt import (
+    cancel_waiting_index_attempt__no_commit,
     count_index_attempt_errors_for_cc_pair,
     count_index_attempts_for_cc_pair,
     get_error_counts_for_index_attempts,
@@ -57,6 +60,7 @@ from onyx.db.index_attempt import (
     get_latest_index_attempt_for_cc_pair_id,
     get_latest_successful_index_attempt_for_cc_pair_id,
     get_paginated_index_attempts_for_cc_pair_id,
+    get_waiting_index_attempt,
 )
 from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.indexing_coordination import IndexingCoordination
@@ -66,6 +70,7 @@ from onyx.db.permission_sync_attempt import (
     get_recent_doc_permission_sync_attempts_for_cc_pair,
     get_relevant_external_group_sync_attempts_for_cc_pair,
 )
+from onyx.db.search_settings import get_current_search_settings
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
@@ -350,6 +355,26 @@ def get_cc_pair_external_group_sync_attempts(
     )
 
 
+def _get_indexing_hold(
+    db_session: Session, cc_pair: ConnectorCredentialPair, *, can_operate: bool
+) -> IndexingHold | None:
+    """The hold on the pair's first index attempt, with the attempt that waits
+    when it is created. The failed checks are report internals, which are
+    management data, so a viewer who cannot operate the pair gets only the
+    reason."""
+    hold = get_first_indexing_hold(db_session, cc_pair)
+    if hold is None:
+        return None
+    waiting = get_waiting_index_attempt(
+        db_session, cc_pair.id, get_current_search_settings(db_session).id
+    )
+    return IndexingHold(
+        reason=hold.reason,
+        failed_checks=hold.failed_checks if can_operate else [],
+        index_attempt_id=waiting.id if waiting is not None else None,
+    )
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}", tags=PUBLIC_API_TAGS)
 def get_cc_pair_full_info(
     cc_pair_id: int,
@@ -447,6 +472,7 @@ def get_cc_pair_full_info(
         ),
         num_docs_indexed=documents_indexed,
         is_editable_for_current_user=can_operate,
+        indexing_hold=_get_indexing_hold(db_session, cc_pair, can_operate=can_operate),
         indexing=bool(
             latest_attempt and latest_attempt.status == IndexingStatus.IN_PROGRESS
         ),
@@ -546,6 +572,17 @@ def update_cc_pair_status(
 
         for attempt in active_attempts:
             try:
+                # A first attempt that waits for the capability checks has no
+                # task to see a cancel request, so end it now. It stays
+                # undispatched, so the next attempt still waits for the checks.
+                # The status commit below also commits this cancel.
+                if (
+                    attempt.celery_task_id is None
+                    and cancel_waiting_index_attempt__no_commit(
+                        db_session, attempt.id, reason="Connector paused."
+                    )
+                ):
+                    continue
                 IndexingCoordination.request_cancellation(db_session, attempt.id)
                 # Revoke the task to prevent it from running
                 if attempt.celery_task_id:
