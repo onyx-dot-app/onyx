@@ -13,6 +13,7 @@ from onyx.db.web_search import (
     deactivate_web_search_provider,
     delete_web_content_provider,
     delete_web_search_provider,
+    fetch_web_content_provider_by_id,
     fetch_web_content_provider_by_name,
     fetch_web_content_provider_by_type,
     fetch_web_content_providers,
@@ -24,6 +25,8 @@ from onyx.db.web_search import (
     upsert_web_content_provider,
     upsert_web_search_provider,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.web_search.models import (
     WebContentProviderTestRequest,
     WebContentProviderUpsertRequest,
@@ -285,6 +288,31 @@ def upsert_content_provider_endpoint(
             status_code=400,
             detail=f"A content provider named '{request.name}' already exists.",
         )
+
+    if MULTI_TENANT and request.id is not None:
+        stored_provider = fetch_web_content_provider_by_id(request.id, db_session)
+        if (
+            stored_provider is not None
+            and stored_provider.api_key
+            and (
+                not request.api_key_changed
+                or request.api_key
+                == stored_provider.api_key.get_value(apply_mask=False)
+            )
+        ):
+            stored_config = stored_provider.config or WebContentProviderConfig()
+            request_config = request.config or WebContentProviderConfig()
+            if (
+                request.provider_type.value != stored_provider.provider_type
+                or request_config.base_url != stored_config.base_url
+            ):
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    (
+                        "Provider type and base URL cannot differ from the stored "
+                        "provider when reusing the stored API key"
+                    ),
+                )
 
     provider = upsert_web_content_provider(
         provider_id=request.id,

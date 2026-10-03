@@ -14,6 +14,7 @@ See https://elevenlabs.io/docs for API reference.
 import asyncio
 import base64
 import json
+import re
 from collections.abc import AsyncIterator
 from enum import StrEnum
 from typing import Any
@@ -40,6 +41,10 @@ DEFAULT_TARGET_SAMPLE_RATE = 16000  # What ElevenLabs Scribe expects
 
 # Default streaming TTS output format
 DEFAULT_TTS_OUTPUT_FORMAT = "mp3_44100_64"
+
+DEFAULT_TTS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
+
+_VOICE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 # Default TTS voice settings
 DEFAULT_VOICE_STABILITY = 0.5
@@ -687,6 +692,12 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         )
         self.default_voice = default_voice
 
+    def _validated_voice_id(self, voice: str | None) -> str:
+        voice_id = voice or self.default_voice or DEFAULT_TTS_VOICE_ID
+        if not _VOICE_ID_RE.fullmatch(voice_id):
+            raise ValueError("Invalid ElevenLabs voice id")
+        return voice_id
+
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
         """
         Transcribe audio using ElevenLabs Speech-to-Text API.
@@ -788,7 +799,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         if not self.api_key:
             raise ValueError("ElevenLabs API key required for TTS")
 
-        voice_id = voice or self.default_voice or "21m00Tcm4TlvDq8ikWAM"  # Rachel
+        voice_id = self._validated_voice_id(voice)
 
         url = f"{self.api_base}/v1/text-to-speech/{voice_id}/stream"
 
@@ -934,7 +945,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
         """Create a streaming TTS session."""
         if not self.api_key:
             raise ValueError("API key required for streaming TTS")
-        voice_id = voice or self.default_voice or "21m00Tcm4TlvDq8ikWAM"
+        voice_id = self._validated_voice_id(voice)
         synthesizer = ElevenLabsStreamingSynthesizer(
             api_key=self.api_key,
             voice_id=voice_id,
