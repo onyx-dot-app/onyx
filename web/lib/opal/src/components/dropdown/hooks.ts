@@ -333,7 +333,7 @@ export function useDropdownKeyboard({
 // =============================================================================
 
 /**
- * `"anchor"` matches the anchor's width (6px wider on each side, so the
+ * `"anchor"` matches the anchor's width (4px wider on each side, so the
  * rows line up under its content); a preset is a fixed width.
  */
 export type DropdownWidth = "anchor" | "sm" | "md" | "lg" | "xl";
@@ -409,12 +409,11 @@ export function useDropdownOverlay({
     open: isOpen,
     placement: "bottom-start",
     middleware: [
-      // The list starts 6px before the anchor: with its 4px inset and 1px
-      // border, the rows' bounding boxes then align flush with the anchor's
-      // content, inside its own border. Matching the anchor's width, it is
-      // 6px wider on each side too, so the end edge punches out the same.
-      // crossAxis is direction-aware, so RTL mirrors.
-      offset({ mainAxis: 4, crossAxis: -6 }),
+      // The list sits 4px below the anchor and starts 4px before it.
+      // Matching the anchor's width, it is 4px wider on each side too, so
+      // the end edge punches out the same. crossAxis is direction-aware, so
+      // RTL mirrors.
+      offset({ mainAxis: 4, crossAxis: -4 }),
       flip(),
       shift({ padding: 8 }),
       ...(matchAnchor
@@ -422,7 +421,7 @@ export function useDropdownOverlay({
             size({
               apply({ rects, elements }) {
                 Object.assign(elements.floating.style, {
-                  width: `${rects.reference.width + 12}px`,
+                  width: `${rects.reference.width + 8}px`,
                 });
               },
             }),

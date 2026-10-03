@@ -64,7 +64,7 @@ A picker on a type-in:
 | `onOpenChange`  | `(open: boolean) => void`                  | —          | Called with the next state                                                  |
 | `disabled`      | `boolean`                                  | `false`    | Never opens and renders no list                                             |
 | `id`            | `string`                                   | auto       | Prefix for the list's and the rows' element ids, so a field can tie into it |
-| `width`         | `"anchor" \| "sm" \| "md" \| "lg" \| "xl"` | `"anchor"` | Match the anchor's width (6px wider on each side), or a fixed preset (10, 12, 15, 18rem). Either way the list starts 6px before the anchor |
+| `width`         | `"anchor" \| "sm" \| "md" \| "lg" \| "xl"` | `"anchor"` | Match the anchor's width (4px wider on each side), or a fixed preset (10, 12, 15, 18rem). Either way the list sits 4px below the anchor and starts 4px before it |
 | `virtualAnchor` | `{ getBoundingClientRect, contextElement? }` | —        | A rectangle to position against instead of an element, like a text caret   |
 | `container`     | `HTMLElement \| null`                      | body       | Where the list portals to, for a dropdown inside a modal                    |
 | `tabKey`        | `"walk" \| "leave"`                        | by trigger | What Tab does while open: walk the rows, or close and move on. Default: walk for a type-in, leave otherwise |

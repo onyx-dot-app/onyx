@@ -105,7 +105,7 @@
    Option rows
    --------------------------------------------------------------------------- */
 
-/* 8px side padding: with the listbox 6px wider than the trigger on each
+/* 8px side padding: with the listbox 4px wider than the trigger on each
    side, a row's text and icon then sit exactly under the trigger's. */
 /* Keyboard mode: rows and titles ignore the pointer, so the pointer's hover
    cannot paint a second highlight beside the keyboard's. A pointer movement
