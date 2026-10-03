@@ -2670,24 +2670,6 @@
           "toast": "发生未知错误"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "索引起始日期",
-          "subtext": "早于此日期的文档不会被拉取"
-        },
-        "pruneFrequency": {
-          "description": "对照数据源检查所有文档，删除已不存在的文档。注意：此过程会检查每一个文档，因此提高频率时请谨慎。默认为 {hours} 小时（{days} 天）。支持小数小时（例如 0.1 小时 = 6 分钟）。输入 0 可为此连接器禁用清理。",
-          "label": "清理频率（小时）"
-        },
-        "refreshFrequency": {
-          "description": "这是我们从数据源拉取新文档的频率（以分钟计）。如果输入 0，我们将不再为此连接器拉取新文档。",
-          "label": "刷新频率（分钟）"
-        },
-        "resetButton": {
-          "label": "重置"
-        },
-        "title": "高级配置"
-      },
       "connectorName": {
         "label": "连接器名称",
         "subtext": "用于描述该连接器的名称。"
@@ -2955,6 +2937,27 @@
       "tabs": {
         "empty": {
           "label": "没有可显示的标签页。"
+        }
+      },
+      "scheduled": {
+        "description": "指定连接器如何执行索引。操作员可以编辑此部分。",
+        "indexingStart": {
+          "description": "最后更新日期早于此日期的文档将被忽略。",
+          "placeholder": "全部时间",
+          "title": "索引此日期之后的文档"
+        },
+        "pruneFrequency": {
+          "description": "检查来源并删除已不存在的文档。",
+          "title": "清理间隔"
+        },
+        "refreshFrequency": {
+          "description": "从来源拉取新文档。",
+          "title": "刷新间隔"
+        },
+        "title": "计划",
+        "units": {
+          "hours": "小时",
+          "minutes": "分钟"
         }
       }
     },
@@ -13253,6 +13256,7 @@
       "loading": "加载中",
       "loadingPage": "加载中…",
       "openCalendar": "打开日历",
+      "optional": "（可选）",
       "progress": "进度",
       "remove": "移除",
       "removeItem": "移除 {title}",

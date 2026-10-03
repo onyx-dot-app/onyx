@@ -2670,24 +2670,6 @@
           "toast": "Ocurrió un error desconocido"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Fecha de inicio de la indexación",
-          "subtext": "Los documentos anteriores a esta fecha no se obtendrán"
-        },
-        "pruneFrequency": {
-          "description": "Comprueba todos los documentos con la fuente para eliminar los que ya no existen. Nota: este proceso revisa todos los documentos, así que ten cuidado al aumentar la frecuencia. El valor predeterminado es {hours} horas ({days} días). Se admiten horas decimales (p. ej., 0.1 horas = 6 minutos). Introduce 0 para desactivar la purga de este conector.",
-          "label": "Frecuencia de purga (horas)"
-        },
-        "refreshFrequency": {
-          "description": "Es la frecuencia con la que obtenemos documentos nuevos de la fuente (en minutos). Si introduces 0, nunca obtendremos documentos nuevos para este conector.",
-          "label": "Frecuencia de actualización (minutos)"
-        },
-        "resetButton": {
-          "label": "Restablecer"
-        },
-        "title": "Configuración avanzada"
-      },
       "connectorName": {
         "label": "Nombre del conector",
         "subtext": "Un nombre descriptivo para el conector."
@@ -2955,6 +2937,27 @@
       "tabs": {
         "empty": {
           "label": "No hay pestañas que mostrar."
+        }
+      },
+      "scheduled": {
+        "description": "Especifica cómo realizará el conector la indexación. El operador podrá editar esta sección.",
+        "indexingStart": {
+          "description": "Se ignorarán los documentos con una fecha de última actualización anterior a esta.",
+          "placeholder": "Todo el tiempo",
+          "title": "Indexar documentos posteriores a"
+        },
+        "pruneFrequency": {
+          "description": "Revisar la fuente y eliminar los documentos que ya no existen.",
+          "title": "Depurar cada"
+        },
+        "refreshFrequency": {
+          "description": "Obtener documentos nuevos de la fuente.",
+          "title": "Actualizar cada"
+        },
+        "title": "Programación",
+        "units": {
+          "hours": "horas",
+          "minutes": "minutos"
         }
       }
     },
@@ -13253,6 +13256,7 @@
       "loading": "Cargando",
       "loadingPage": "Cargando…",
       "openCalendar": "Abrir calendario",
+      "optional": "(Opcional)",
       "progress": "Progreso",
       "remove": "Quitar",
       "removeItem": "Quitar {title}",

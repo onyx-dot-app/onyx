@@ -2258,3 +2258,10 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
   },
 };
 export const defaultRefreshFreqMinutes = 30; // 30 minutes
+// Match the backend minimums in Connector.validate_refresh_freq / validate_prune_freq.
+export const MIN_REFRESH_FREQ_MINUTES = 1;
+export const MIN_PRUNE_FREQ_HOURS = 0.083;
+// The columns are 32-bit integers of seconds; larger values fail on save.
+const MAX_FREQ_SECONDS = 2_147_483_647;
+export const MAX_REFRESH_FREQ_MINUTES = Math.floor(MAX_FREQ_SECONDS / 60);
+export const MAX_PRUNE_FREQ_HOURS = Math.floor(MAX_FREQ_SECONDS / 3600);

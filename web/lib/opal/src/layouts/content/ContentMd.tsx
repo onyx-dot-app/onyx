@@ -76,7 +76,7 @@ interface ContentMdProps {
 
   /**
    * Muted suffix rendered beside the title.
-   * Use `"optional"` for the standard "(Optional)" label, or pass any string.
+   * Use `"optional"` for the translated "(Optional)" label (`OpalStrings.contentOptional`), or pass any string.
    */
   suffix?: ContentMdSuffix;
 
@@ -278,7 +278,7 @@ function ContentMd({
           {suffix && (
             <div className="opal-content-md-suffix">
               <Text as="p" font={config.optionalFont} color="inherit">
-                {suffix === "optional" ? "(Optional)" : suffix}
+                {suffix === "optional" ? strings.contentOptional : suffix}
               </Text>
             </div>
           )}

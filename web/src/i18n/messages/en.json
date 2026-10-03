@@ -2670,24 +2670,6 @@
           "toast": "An unknown error occurred"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Indexing Start Date",
-          "subtext": "Documents prior to this date will not be pulled in"
-        },
-        "pruneFrequency": {
-          "description": "Checks all documents against the source to delete those that no longer exist. Note: This process checks every document, so be cautious when increasing frequency. Default is {hours} hours ({days} days). Decimal hours are supported (e.g., 0.1 hours = 6 minutes). Enter 0 to disable pruning for this connector.",
-          "label": "Prune Frequency (hours)"
-        },
-        "refreshFrequency": {
-          "description": "This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector.",
-          "label": "Refresh Frequency (minutes)"
-        },
-        "resetButton": {
-          "label": "Reset"
-        },
-        "title": "Advanced Configuration"
-      },
       "connectorName": {
         "label": "Connector Name",
         "subtext": "A descriptive name for the connector."
@@ -2955,6 +2937,27 @@
       "tabs": {
         "empty": {
           "label": "No tabs to display."
+        }
+      },
+      "scheduled": {
+        "description": "Specify how the connector will operate indexing. Operator will be able to edit this section.",
+        "indexingStart": {
+          "description": "Documents with a last-updated date prior to this will be ignored.",
+          "placeholder": "All time",
+          "title": "Index Documents After"
+        },
+        "pruneFrequency": {
+          "description": "Check the source and delete documents that no longer exist.",
+          "title": "Prune Every"
+        },
+        "refreshFrequency": {
+          "description": "Pull new documents from the source.",
+          "title": "Refresh Every"
+        },
+        "title": "Schedule",
+        "units": {
+          "hours": "hours",
+          "minutes": "minutes"
         }
       }
     },
@@ -13253,6 +13256,7 @@
       "loading": "Loading",
       "loadingPage": "Loading …",
       "openCalendar": "Open calendar",
+      "optional": "(Optional)",
       "progress": "Progress",
       "remove": "Remove",
       "removeItem": "Remove {title}",
