@@ -5,8 +5,13 @@ from unittest import mock
 import pytest
 
 from onyx.connectors.confluence.connector import ConfluenceConnector
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence as OnyxConfluence,
+)
 from onyx.connectors.models import Document
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
+)
 
 _PAGE_ID = "111"
 _ATTACHMENT_PAGE_ID = "222"
@@ -70,9 +75,9 @@ def test_attachment_section_link_uses_platform_specific_url(
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=confluence_client,
+            return_value=gateway_with_client(confluence_client),
         ),
         mock.patch(
             "onyx.connectors.confluence.connector.convert_attachment_to_content",
@@ -101,9 +106,9 @@ def test_attachment_failure_uses_attachment_document_id() -> None:
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=confluence_client,
+            return_value=gateway_with_client(confluence_client),
         ),
         mock.patch(
             "onyx.connectors.confluence.connector.convert_attachment_to_content",

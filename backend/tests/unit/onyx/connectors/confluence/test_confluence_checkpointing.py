@@ -12,7 +12,9 @@ from onyx.connectors.confluence.connector import (
     ConfluenceCheckpoint,
     ConfluenceConnector,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence as OnyxConfluence,
+)
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InsufficientPermissionsError,
@@ -24,6 +26,9 @@ from onyx.connectors.models import (
     DocumentFailure,
     HierarchyNode,
     SlimDocument,
+)
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
 )
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
@@ -69,8 +74,7 @@ def confluence_connector(
         batch_size=2,
     )
     # Initialize the client directly
-    connector._confluence_client = mock_confluence_client
-    connector._low_timeout_confluence_client = mock_confluence_client
+    connector._source_operations = gateway_with_client(mock_confluence_client)
     with patch("onyx.connectors.confluence.connector._SLIM_DOC_BATCH_SIZE", 2):
         yield connector
 
@@ -151,8 +155,7 @@ def test_load_from_checkpoint_happy_path(
     )
 
     # Mock paginated_cql_retrieval to return our mock pages
-    confluence_client = confluence_connector._confluence_client
-    assert confluence_client is not None, "bad test setup"
+    confluence_client = confluence_connector.source_operations._client()
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
     confluence_client.retrieve_confluence_spaces = MagicMock(
@@ -222,8 +225,7 @@ def test_load_from_checkpoint_with_page_processing_error(
     mock_page2 = create_mock_page(id="2", title="Page 2")
 
     # Mock paginated_cql_retrieval to return our mock pages
-    confluence_client = confluence_connector._confluence_client
-    assert confluence_client is not None, "bad test setup"
+    confluence_client = confluence_connector.source_operations._client()
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
     confluence_client.retrieve_confluence_spaces = MagicMock(
@@ -317,8 +319,7 @@ def test_retrieve_all_slim_docs_perm_sync(
     mock_page2 = create_mock_page(id="2")
 
     # Mock paginated_cql_retrieval to return our mock pages
-    confluence_client = confluence_connector._confluence_client
-    assert confluence_client is not None, "bad test setup"
+    confluence_client = confluence_connector.source_operations._client()
 
     # Mock space retrieval for hierarchy nodes
     confluence_client.retrieve_confluence_spaces = MagicMock(
@@ -389,7 +390,7 @@ def test_validate_connector_settings_errors(
     error = HTTPError(response=MagicMock(status_code=status_code))
 
     with patch(
-        "onyx.connectors.confluence.onyx_confluence.OnyxConfluence.retrieve_confluence_spaces"
+        "onyx.connectors.confluence.source_operations._OnyxConfluence.retrieve_confluence_spaces"
     ) as mock_retrieve:
         mock_retrieve.side_effect = error
 
@@ -402,7 +403,7 @@ def test_validate_connector_settings_success(
     confluence_connector: ConfluenceConnector,
 ) -> None:
     """Test successful validation"""
-    low_client = confluence_connector.low_timeout_confluence_client
+    low_client = confluence_connector.source_operations._client(fast=True)
     with (
         patch.object(
             low_client,
@@ -442,8 +443,7 @@ def test_checkpoint_progress(
     )
 
     # Mock paginated_cql_retrieval to return our mock pages
-    confluence_client = confluence_connector._confluence_client
-    assert confluence_client is not None, "bad test setup"
+    confluence_client = confluence_connector.source_operations._client()
 
     # Mock space retrieval for hierarchy nodes (called at start of first batch)
     confluence_client.retrieve_confluence_spaces = MagicMock(

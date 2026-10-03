@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
 
-from atlassian.errors import ApiError
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
@@ -22,21 +21,25 @@ from onyx.connectors.confluence.access import (
     get_page_restrictions,
     get_page_restrictions_with_per_ancestor_fetch,
 )
-from onyx.connectors.confluence.onyx_confluence import (
+from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import (
     Confcloud77618Error,
-    OnyxConfluence,
-    extract_text_from_confluence_html,
+    ConfluenceProbeVariant,
+    ConfluenceSearchVariant,
+    ConfluenceSourceOperations,
+    ConfluenceSpaceNotFoundError,
 )
 from onyx.connectors.confluence.utils import (
     build_confluence_document_id,
+    build_cql_url,
     convert_attachment_to_content,
     datetime_from_string,
+    extract_text_from_confluence_html,
     update_param_in_path,
     validate_attachment_filetype,
 )
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    credential_uses_scoped_token,
     is_atlassian_date_error,
 )
 from onyx.connectors.exceptions import (
@@ -200,8 +203,7 @@ class ConfluenceConnector(
         self.timezone_offset = timezone_offset
         self.scoped_token = scoped_token
         self.include_attachments = include_attachments
-        self._confluence_client: OnyxConfluence | None = None
-        self._low_timeout_confluence_client: OnyxConfluence | None = None
+        self._source_operations: ConfluenceSourceOperations | None = None
         self._fetched_titles: set[str] = set()
         self.allow_images = False
 
@@ -241,16 +243,6 @@ class ConfluenceConnector(
         self.timezone: timezone = timezone(offset=timedelta(hours=timezone_offset))
         self.credentials_provider: CredentialsProviderInterface | None = None
 
-        self.probe_kwargs = {
-            "max_backoff_retries": 6,
-            "max_backoff_seconds": 10,
-        }
-
-        self.final_kwargs = {
-            "max_backoff_retries": 10,
-            "max_backoff_seconds": 60,
-        }
-
         # deprecated
         self.continue_on_failure = continue_on_failure
 
@@ -264,7 +256,7 @@ class ConfluenceConnector(
         """Yield hierarchy nodes for all spaces we're indexing."""
         space_keys = [self.space] if self.space else None
 
-        for space in self.confluence_client.retrieve_confluence_spaces(
+        for space in self.source_operations.list_spaces(
             space_keys=space_keys,
             limit=50,
         ):
@@ -416,51 +408,38 @@ class ConfluenceConnector(
         )
 
     @property
-    def confluence_client(self) -> OnyxConfluence:
-        if self._confluence_client is None:
+    def source_operations(self) -> ConfluenceSourceOperations:
+        if self._source_operations is None:
             raise ConnectorMissingCredentialError("Confluence")
-        return self._confluence_client
+        return self._source_operations
 
     @property
-    def low_timeout_confluence_client(self) -> OnyxConfluence:
-        if self._low_timeout_confluence_client is None:
-            raise ConnectorMissingCredentialError("Confluence")
-        return self._low_timeout_confluence_client
+    def _perm_sync_client(self) -> OnyxConfluence:
+        """Temporary: the EE perm-sync helpers still take the client. #15454
+        moves them to gateway operations."""
+        return self.source_operations._legacy_client()
 
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
         self.credentials_provider = credentials_provider
-        # The credential now carries the flag; older connectors set it in
-        # their own config.
-        self.scoped_token = self.scoped_token or credential_uses_scoped_token(
-            credentials_provider.get_credentials()
+        source_operations = ConfluenceSourceOperations(
+            credentials_provider=credentials_provider,
+            connector_specific_config={
+                "wiki_base": self.wiki_base,
+                "is_cloud": self.is_cloud,
+                "scoped_token": self.scoped_token,
+            },
         )
-
         # raises exception if there's a problem
-        confluence_client = OnyxConfluence(
-            is_cloud=self.is_cloud,
-            url=self.wiki_base,
-            credentials_provider=credentials_provider,
-            scoped_token=self.scoped_token,
+        source_operations.probe_site(
+            variant=(
+                ConfluenceProbeVariant.SCOPED
+                if self.scoped_token
+                else ConfluenceProbeVariant.UNSCOPED
+            )
         )
-        confluence_client._probe_connection(**self.probe_kwargs)
-        confluence_client._initialize_connection(**self.final_kwargs)
-
-        self._confluence_client = confluence_client
-
-        # create a low timeout confluence client for sync flows
-        low_timeout_confluence_client = OnyxConfluence(
-            is_cloud=self.is_cloud,
-            url=self.wiki_base,
-            credentials_provider=credentials_provider,
-            timeout=3,
-            scoped_token=self.scoped_token,
-        )
-        low_timeout_confluence_client._probe_connection(**self.probe_kwargs)
-        low_timeout_confluence_client._initialize_connection(**self.final_kwargs)
-
-        self._low_timeout_confluence_client = low_timeout_confluence_client
+        self._source_operations = source_operations
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError("Use set_credentials_provider with this connector.")
@@ -520,13 +499,13 @@ class ConfluenceConnector(
         comment_cql += self.cql_label_filter
         expand = ",".join(_COMMENT_EXPANSION_FIELDS)
 
-        for comment in self.confluence_client.paginated_cql_retrieval(
+        for comment in self.source_operations.search_comments(
             cql=comment_cql,
             expand=expand,
         ):
             comment_string += "\nComment:\n"
             comment_string += extract_text_from_confluence_html(
-                confluence_client=self.confluence_client,
+                source_operations=self.source_operations,
                 confluence_object=comment,
                 fetched_titles=set(),
             )
@@ -551,7 +530,7 @@ class ConfluenceConnector(
 
             # Get the page content
             page_content = extract_text_from_confluence_html(
-                self.confluence_client, page, self._fetched_titles
+                self.source_operations, page, self._fetched_titles
             )
 
             # Create the main section for the page content
@@ -651,7 +630,8 @@ class ConfluenceConnector(
         page_hierarchy_node_yielded = False
 
         try:
-            for attachment in self.confluence_client.paginated_cql_retrieval(
+            for attachment in self.source_operations.search_attachments(
+                variant=ConfluenceSearchVariant.CONTENT,
                 cql=attachment_query,
                 expand=",".join(_ATTACHMENT_EXPANSION_FIELDS),
             ):
@@ -705,11 +685,10 @@ class ConfluenceConnector(
                     continue
                 try:
                     response = convert_attachment_to_content(
-                        confluence_client=self.confluence_client,
+                        source_operations=self.source_operations,
                         attachment=attachment,
                         page_id=_get_page_id(page),
                         allow_images=self.allow_images,
-                        is_cloud=self.is_cloud,
                     )
                     if response is None:
                         continue
@@ -895,8 +874,8 @@ class ConfluenceConnector(
         def store_next_page_url(next_page_url: str) -> None:
             checkpoint.next_page_url = next_page_url
 
-        for page in self.confluence_client.paginated_page_retrieval(
-            cql_url=page_query_url,
+        for page in self.source_operations.search_pages_from_url(
+            url=page_query_url,
             limit=self.batch_size,
             next_page_callback=store_next_page_url,
         ):
@@ -940,9 +919,7 @@ class ConfluenceConnector(
         or paginated_page_retrieval methods.
         """
         page_query = self._construct_page_cql_query(start, end)
-        cql_url = self.confluence_client.build_cql_url(
-            page_query, expand=",".join(_PAGE_EXPANSION_FIELDS)
-        )
+        cql_url = build_cql_url(page_query, expand=",".join(_PAGE_EXPANSION_FIELDS))
         return update_param_in_path(cql_url, "limit", str(limit))
 
     @override
@@ -1005,7 +982,7 @@ class ConfluenceConnector(
 
         space_level_access: dict[str, ExternalAccess] = (
             get_all_space_permissions(
-                self.confluence_client, self.is_cloud, add_prefix=True
+                self._perm_sync_client, self.is_cloud, add_prefix=True
             )
             if include_permissions
             else {}
@@ -1022,7 +999,12 @@ class ConfluenceConnector(
         cql = "type=page and id IN (%s)" % quoted_ids
 
         seen_page_ids: set[str] = set()
-        for page in self.confluence_client.paginated_cql_retrieval(
+        for page in self.source_operations.search_pages(
+            variant=(
+                ConfluenceSearchVariant.WITH_RESTRICTIONS
+                if include_permissions
+                else ConfluenceSearchVariant.CONTENT
+            ),
             cql=cql,
             expand=",".join(expand_fields),
         ):
@@ -1055,7 +1037,7 @@ class ConfluenceConnector(
             if include_permissions:
                 space_key = page.get("space", {}).get("key") or ""
                 doc_or_failure.external_access = get_page_restrictions(
-                    self.confluence_client,
+                    self._perm_sync_client,
                     doc_or_failure.id,
                     page.get("restrictions") or {},
                     page.get("ancestors", []),
@@ -1136,6 +1118,7 @@ class ConfluenceConnector(
     def _retrieve_attachments_for_slim_page(
         self,
         page_id: str,
+        variant: ConfluenceSearchVariant,
         expand: str,
         start: SecondsSinceUnixEpoch | None,
         end: SecondsSinceUnixEpoch | None,
@@ -1153,10 +1136,12 @@ class ConfluenceConnector(
         while True:
             try:
                 return list(
-                    self.confluence_client.cql_paginate_all_expansions(
+                    self.source_operations.search_attachments(
+                        variant=variant,
                         cql=attachment_query,
                         expand=expand,
                         limit=_SLIM_DOC_BATCH_SIZE,
+                        follow_expansion_links=True,
                     )
                 )
             except HTTPError as e:
@@ -1187,6 +1172,11 @@ class ConfluenceConnector(
 
         # Pruning skips the restrictions expand (the CONFCLOUD-77618
         # trigger) but still needs space + ancestors for hierarchy.
+        search_variant = (
+            ConfluenceSearchVariant.WITH_RESTRICTIONS
+            if include_permissions
+            else ConfluenceSearchVariant.SLIM
+        )
         if not include_permissions:
             restrictions_expand = ",".join(_PRUNING_EXPANSION_FIELDS)
         elif expand_per_page:
@@ -1197,7 +1187,7 @@ class ConfluenceConnector(
         space_level_access_info: dict[str, ExternalAccess] = {}
         if include_permissions:
             space_level_access_info = get_all_space_permissions(
-                self.confluence_client, self.is_cloud
+                self._perm_sync_client, self.is_cloud
             )
 
         # Yield space hierarchy nodes first
@@ -1214,7 +1204,7 @@ class ConfluenceConnector(
         ) -> ExternalAccess | None:
             if expand_per_page:
                 resolved = get_page_restrictions_with_per_ancestor_fetch(
-                    self.confluence_client,
+                    self._perm_sync_client,
                     doc_id,
                     restrictions,
                     ancestors,
@@ -1222,7 +1212,7 @@ class ConfluenceConnector(
                 )
             else:
                 resolved = get_page_restrictions(
-                    self.confluence_client, doc_id, restrictions, ancestors
+                    self._perm_sync_client, doc_id, restrictions, ancestors
                 )
             return resolved or (
                 space_level_access_info.get(space_key) if space_key else None
@@ -1230,10 +1220,12 @@ class ConfluenceConnector(
 
         # Query pages (with optional time filtering for indexing_start)
         page_query = self._construct_page_cql_query(start, end)
-        for page in self.confluence_client.cql_paginate_all_expansions(
+        for page in self.source_operations.search_pages(
+            variant=search_variant,
             cql=page_query,
             expand=restrictions_expand,
             limit=_SLIM_DOC_BATCH_SIZE,
+            follow_expansion_links=True,
         ):
             # Yield ancestor hierarchy nodes for this page
             doc_metadata_list.extend(self._yield_ancestor_hierarchy_nodes(page))
@@ -1271,7 +1263,7 @@ class ConfluenceConnector(
             attachment_results: Iterable[dict[str, Any]] = ()
             if self.include_attachments:
                 attachment_results = self._retrieve_attachments_for_slim_page(
-                    _get_page_id(page), restrictions_expand, start, end
+                    _get_page_id(page), search_variant, restrictions_expand, start, end
                 )
             for attachment in attachment_results:
                 # admission must mirror the main indexing pass
@@ -1342,9 +1334,7 @@ class ConfluenceConnector(
 
     def validate_connector_settings(self) -> None:
         try:
-            spaces_iter = self.low_timeout_confluence_client.retrieve_confluence_spaces(
-                limit=1,
-            )
+            spaces_iter = self.source_operations.list_spaces(limit=1, fast=True)
             first_space = next(spaces_iter, None)
         except HTTPError as e:
             status_code = _http_status(e)
@@ -1372,8 +1362,8 @@ class ConfluenceConnector(
 
         if self.space:
             try:
-                self.low_timeout_confluence_client.get_space(self.space)
-            except ApiError as e:
+                self.source_operations.get_space(space_key=self.space, fast=True)
+            except ConfluenceSpaceNotFoundError as e:
                 raise ConnectorValidationError(
                     "Invalid Confluence space key provided"
                 ) from e
@@ -1396,7 +1386,7 @@ class ConfluenceConnector(
         permission model and is validated via its own failure modes
         during sync).
         """
-        client = self.low_timeout_confluence_client
+        client = self.source_operations._legacy_client(fast=True)
         if not client.supports_rest_space_permissions():
             return
 

@@ -14,8 +14,13 @@ from unittest import mock
 import pytest
 
 from onyx.connectors.confluence.connector import ConfluenceConnector
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence as OnyxConfluence,
+)
 from onyx.connectors.models import SlimDocument
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
+)
 
 _PAGE_CQL = "PAGE_CQL"
 _ATTACHMENT_CQL = "ATTACHMENT_CQL"
@@ -75,9 +80,9 @@ def _collect_slim_doc_ids(connector: ConfluenceConnector) -> list[str]:
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=fake_client,
+            return_value=gateway_with_client(fake_client),
         ),
         mock.patch.object(
             connector, "_yield_space_hierarchy_nodes", return_value=iter([])
