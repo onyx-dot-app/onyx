@@ -102,7 +102,7 @@ import {
 } from "@/lib/languageModels/options";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { DOCS_BASE_URL } from "@/lib/constants";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
 interface PAT {
@@ -1851,34 +1851,32 @@ function GatewayAccessSection({
 
             <Section gap={2} alignItems="start">
               {providerGroups.map((provider) => (
-                <SimpleCollapsible key={provider.id} defaultOpen={false}>
-                  <SimpleCollapsible.Header
-                    title={provider.name}
-                    description={t("gateway.provider.modelsAvailable", {
-                      count: provider.models.length,
-                    })}
-                    sizePreset="main-ui"
-                  />
-                  <SimpleCollapsible.Content>
-                    <Section gap={2} alignItems="start">
-                      {provider.models.map((model) => (
-                        <Section
-                          key={model.id}
-                          flexDirection="row"
-                          justifyContent="between"
-                          alignItems="center"
-                          height="fit"
-                          gap={2}
-                        >
-                          <Text font="main-ui-body" color="text-04">
-                            {model.name}
-                          </Text>
-                          <GatewayCopyValueButton value={model.id} />
-                        </Section>
-                      ))}
-                    </Section>
-                  </SimpleCollapsible.Content>
-                </SimpleCollapsible>
+                <Collapsible
+                  key={provider.id}
+                  defaultOpen={false}
+                  title={provider.name}
+                  description={t("gateway.provider.modelsAvailable", {
+                    count: provider.models.length,
+                  })}
+                >
+                  <Section gap={2} alignItems="start">
+                    {provider.models.map((model) => (
+                      <Section
+                        key={model.id}
+                        flexDirection="row"
+                        justifyContent="between"
+                        alignItems="center"
+                        height="fit"
+                        gap={2}
+                      >
+                        <Text font="main-ui-body" color="text-04">
+                          {model.name}
+                        </Text>
+                        <GatewayCopyValueButton value={model.id} />
+                      </Section>
+                    ))}
+                  </Section>
+                </Collapsible>
               ))}
             </Section>
           </Section>

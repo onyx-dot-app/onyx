@@ -13227,6 +13227,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "Ausklappen",
+      "expandSection": "{title} ausklappen",
+      "fold": "Einklappen",
+      "foldSection": "{title} einklappen"
+    },
     "comboBox": {
       "close": "Dropdown schließen",
       "create": "Erstellen",

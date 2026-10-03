@@ -13227,6 +13227,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "펼치기",
+      "expandSection": "{title} 펼치기",
+      "fold": "접기",
+      "foldSection": "{title} 접기"
+    },
     "comboBox": {
       "close": "드롭다운 닫기",
       "create": "만들기",

@@ -8,7 +8,7 @@ import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { LineItemButton } from "@opal/components";
 import { Card, Divider } from "@opal/components";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
@@ -314,156 +314,151 @@ function SharedGroupResources({
     selectedPairs.length > 0 || selectedDocSets.length > 0;
 
   return (
-    <SimpleCollapsible>
-      <SimpleCollapsible.Header
-        title={t("sharedResources.section.title")}
-        description={t("sharedResources.section.description")}
-      />
-      <SimpleCollapsible.Content>
-        <Card border="solid" rounding={4}>
-          <Section alignItems="start" height="fit">
+    <Collapsible
+      title={t("sharedResources.section.title")}
+      description={t("sharedResources.section.description")}
+    >
+      <Card border="solid" rounding={4}>
+        <Section alignItems="start" height="fit">
+          <Section
+            gap={4}
+            height="auto"
+            alignItems="stretch"
+            justifyContent="start"
+            width="full"
+          >
+            {/* Connectors & Document Sets */}
             <Section
-              gap={4}
+              gap={2}
               height="auto"
               alignItems="stretch"
               justifyContent="start"
-              width="full"
             >
-              {/* Connectors & Document Sets */}
               <Section
-                gap={2}
+                gap={1}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
               >
+                <Text mainUiAction text04>
+                  {t("sharedResources.connectors.label")}
+                </Text>
+                <ResourcePopover
+                  placeholder={t("sharedResources.connectors.placeholder")}
+                  searchValue={connectorSearch}
+                  onSearchChange={setConnectorSearch}
+                  sections={connectorDocSetSections}
+                />
+              </Section>
+              {hasSelectedResources ? (
                 <Section
+                  flexDirection="row"
+                  wrap
                   gap={1}
                   height="auto"
-                  alignItems="stretch"
+                  alignItems="start"
                   justifyContent="start"
                 >
-                  <Text mainUiAction text04>
-                    {t("sharedResources.connectors.label")}
-                  </Text>
-                  <ResourcePopover
-                    placeholder={t("sharedResources.connectors.placeholder")}
-                    searchValue={connectorSearch}
-                    onSearchChange={setConnectorSearch}
-                    sections={connectorDocSetSections}
-                  />
+                  {selectedPairs.map((pair) => (
+                    <ResourceContent
+                      key={`c-${pair.cc_pair_id}`}
+                      icon={getSourceMetadata(pair.connector.source).icon}
+                      title={
+                        pair.name ??
+                        t("sharedResources.connectorFallback.label", {
+                          id: pair.cc_pair_id,
+                        })
+                      }
+                      description={t("sharedResources.connector.description")}
+                      onRemove={() => removeConnector(pair.cc_pair_id)}
+                    />
+                  ))}
+                  {selectedDocSets.map((ds) => (
+                    <ResourceContent
+                      key={`d-${ds.id}`}
+                      icon={SvgFiles}
+                      title={ds.name}
+                      description={t("sharedResources.documentSet.description")}
+                      infoContent={
+                        <SourceIconStack sources={ds.cc_pair_summaries} />
+                      }
+                      onRemove={() => removeDocSet(ds.id)}
+                    />
+                  ))}
                 </Section>
-                {hasSelectedResources ? (
-                  <Section
-                    flexDirection="row"
-                    wrap
-                    gap={1}
-                    height="auto"
-                    alignItems="start"
-                    justifyContent="start"
-                  >
-                    {selectedPairs.map((pair) => (
-                      <ResourceContent
-                        key={`c-${pair.cc_pair_id}`}
-                        icon={getSourceMetadata(pair.connector.source).icon}
-                        title={
-                          pair.name ??
-                          t("sharedResources.connectorFallback.label", {
-                            id: pair.cc_pair_id,
-                          })
-                        }
-                        description={t("sharedResources.connector.description")}
-                        onRemove={() => removeConnector(pair.cc_pair_id)}
-                      />
-                    ))}
-                    {selectedDocSets.map((ds) => (
-                      <ResourceContent
-                        key={`d-${ds.id}`}
-                        icon={SvgFiles}
-                        title={ds.name}
-                        description={t(
-                          "sharedResources.documentSet.description"
-                        )}
-                        infoContent={
-                          <SourceIconStack sources={ds.cc_pair_summaries} />
-                        }
-                        onRemove={() => removeDocSet(ds.id)}
-                      />
-                    ))}
-                  </Section>
-                ) : (
-                  <Content
-                    icon={SvgEmpty}
-                    title={t("sharedResources.noConnectors.title")}
-                    description={t("sharedResources.noConnectors.description")}
-                    sizePreset="secondary"
-                    variant="section"
-                  />
-                )}
-              </Section>
+              ) : (
+                <Content
+                  icon={SvgEmpty}
+                  title={t("sharedResources.noConnectors.title")}
+                  description={t("sharedResources.noConnectors.description")}
+                  sizePreset="secondary"
+                  variant="section"
+                />
+              )}
+            </Section>
 
-              <Divider paddingParallel={0} paddingPerpendicular={0} />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-              {/* Agents */}
+            {/* Agents */}
+            <Section
+              gap={2}
+              height="auto"
+              alignItems="stretch"
+              justifyContent="start"
+            >
               <Section
-                gap={2}
+                gap={1}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
               >
+                <Text mainUiAction text04>
+                  {t("sharedResources.agents.label")}
+                </Text>
+                <ResourcePopover
+                  placeholder={t("sharedResources.agents.placeholder")}
+                  searchValue={agentSearch}
+                  onSearchChange={setAgentSearch}
+                  sections={agentSections}
+                />
+              </Section>
+              {selectedAgentObjects.length > 0 ? (
                 <Section
+                  flexDirection="row"
+                  wrap
                   gap={1}
                   height="auto"
-                  alignItems="stretch"
+                  alignItems="start"
                   justifyContent="start"
                 >
-                  <Text mainUiAction text04>
-                    {t("sharedResources.agents.label")}
-                  </Text>
-                  <ResourcePopover
-                    placeholder={t("sharedResources.agents.placeholder")}
-                    searchValue={agentSearch}
-                    onSearchChange={setAgentSearch}
-                    sections={agentSections}
-                  />
+                  {selectedAgentObjects.map((agent) => (
+                    <ResourceContent
+                      key={agent.id}
+                      leftContent={
+                        <div className="flex items-center justify-center shrink-0 size-5 p-0.5 rounded-04">
+                          <AgentAvatar agent={agent} size={16} />
+                        </div>
+                      }
+                      title={agent.name}
+                      description={t("sharedResources.agent.description")}
+                      onRemove={() => removeAgent(agent.id)}
+                    />
+                  ))}
                 </Section>
-                {selectedAgentObjects.length > 0 ? (
-                  <Section
-                    flexDirection="row"
-                    wrap
-                    gap={1}
-                    height="auto"
-                    alignItems="start"
-                    justifyContent="start"
-                  >
-                    {selectedAgentObjects.map((agent) => (
-                      <ResourceContent
-                        key={agent.id}
-                        leftContent={
-                          <div className="flex items-center justify-center shrink-0 size-5 p-0.5 rounded-04">
-                            <AgentAvatar agent={agent} size={16} />
-                          </div>
-                        }
-                        title={agent.name}
-                        description={t("sharedResources.agent.description")}
-                        onRemove={() => removeAgent(agent.id)}
-                      />
-                    ))}
-                  </Section>
-                ) : (
-                  <Content
-                    icon={SvgXOctagon}
-                    title={t("sharedResources.noAgents.title")}
-                    description={t("sharedResources.noAgents.description")}
-                    sizePreset="secondary"
-                    variant="section"
-                  />
-                )}
-              </Section>
+              ) : (
+                <Content
+                  icon={SvgXOctagon}
+                  title={t("sharedResources.noAgents.title")}
+                  description={t("sharedResources.noAgents.description")}
+                  sizePreset="secondary"
+                  variant="section"
+                />
+              )}
             </Section>
           </Section>
-        </Card>
-      </SimpleCollapsible.Content>
-    </SimpleCollapsible>
+        </Section>
+      </Card>
+    </Collapsible>
   );
 }
 

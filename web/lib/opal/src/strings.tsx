@@ -47,6 +47,10 @@ export type OpalStrings = {
   valueCannotBeRevealed: string;
   scrollTabsLeft: string;
   scrollTabsRight: string;
+  collapsibleFold: string;
+  collapsibleExpand: string;
+  collapsibleFoldSection: (title: string) => string;
+  collapsibleExpandSection: (title: string) => string;
   previousPage: string;
   nextPage: string;
   goToPage: string;
@@ -146,6 +150,10 @@ export const defaultOpalStrings: OpalStrings = {
   valueCannotBeRevealed: "Value cannot be revealed",
   scrollTabsLeft: "Scroll tabs left",
   scrollTabsRight: "Scroll tabs right",
+  collapsibleFold: "Fold",
+  collapsibleExpand: "Expand",
+  collapsibleFoldSection: (title) => `Fold ${title}`,
+  collapsibleExpandSection: (title) => `Expand ${title}`,
   previousPage: "Previous page",
   nextPage: "Next page",
   goToPage: "Go to page",
