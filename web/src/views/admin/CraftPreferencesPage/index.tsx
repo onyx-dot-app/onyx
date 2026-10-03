@@ -15,7 +15,7 @@ import { SvgArrowUpRight, SvgRefreshCw } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Section } from "@/layouts/general-layouts";
 import { InputTextArea } from "@opal/components";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -328,15 +328,13 @@ export default function CraftPreferencesPage() {
           </Section>
         </Card>
 
-        <SimpleCollapsible defaultOpen={false}>
-          <SimpleCollapsible.Header
-            title={t("baseInstructions.title")}
-            description={t("baseInstructions.description")}
-          />
-          <SimpleCollapsible.Content>
-            <BaseInstructionsPreview />
-          </SimpleCollapsible.Content>
-        </SimpleCollapsible>
+        <Collapsible
+          defaultOpen={false}
+          title={t("baseInstructions.title")}
+          description={t("baseInstructions.description")}
+        >
+          <BaseInstructionsPreview />
+        </Collapsible>
       </SettingsLayouts.Body>
 
       {resetConfirmOpen && (
