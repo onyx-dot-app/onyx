@@ -557,6 +557,9 @@ _ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
 # "off" is not a level they can be asked for.
 _ANTHROPIC_ALWAYS_THINKING_TIERS = ("fable", "mythos")
 
+# Opus joins them from 5.5: it answers thinking.type=disabled with the same 400.
+_ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION = (5, 5)
+
 
 def _normalize_anthropic_name(model_name: str) -> str | None:
     """A Claude name cut down to the part that carries tier and version.
@@ -641,11 +644,16 @@ def anthropic_identity_is_always_thinking(model_names: Sequence[str]) -> bool:
 
 
 def anthropic_thinking_is_always_on(model_name: str) -> bool:
-    """True for the tiers that reason no matter what. Adaptive thinking is
+    """True for the models that reason no matter what. Adaptive thinking is
     checked first so a tier word elsewhere ("fable-writer-v2") can't match."""
-    return (
-        anthropic_uses_adaptive_thinking(model_name)
-        and _anthropic_tier(model_name) in _ANTHROPIC_ALWAYS_THINKING_TIERS
+    if not anthropic_uses_adaptive_thinking(model_name):
+        return False
+    tier = _anthropic_tier(model_name)
+    return tier in _ANTHROPIC_ALWAYS_THINKING_TIERS or (
+        tier == "opus"
+        and _anthropic_meets_version(
+            model_name, _ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION
+        )
     )
 
 

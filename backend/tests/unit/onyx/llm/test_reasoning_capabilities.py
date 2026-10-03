@@ -276,6 +276,9 @@ def test_supported_reasoning_efforts(
         ("claude-fable-5-1", True),
         ("claude-5-mythos", True),
         ("claude-opus-5", False),
+        # Opus 5.5 rejects thinking.type=disabled, Opus 5 does not.
+        ("claude-opus-5-5", True),
+        ("us.anthropic.claude-opus-5-5", True),
         ("claude-sonnet-5", False),
         ("claude-opus-4-7", False),
         # Pre-adaptive Claude only thinks when the param asks for it.
@@ -308,7 +311,9 @@ def test_anthropic_identity_is_always_thinking(
     assert anthropic_identity_is_always_thinking(model_names) is always_on
 
 
-@pytest.mark.parametrize("model_name", ["claude-fable-5", "claude-mythos-5-1"])
+@pytest.mark.parametrize(
+    "model_name", ["claude-fable-5", "claude-mythos-5-1", "claude-opus-5-5"]
+)
 def test_always_thinking_models_offer_no_off(model_name: str) -> None:
     """Off would promise a saving these models never honor: they reject
     thinking.type=disabled, so the request builder cannot turn reasoning off."""
