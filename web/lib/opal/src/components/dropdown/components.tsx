@@ -655,10 +655,11 @@ function DropdownData(props: DropdownDataProps) {
       if (row.disabled) return;
       activatingRef.current = rowElementId(id, row);
       switch (row.kind) {
-        case "option":
-          onSelect?.(row, views);
-          if (closeOnSelect) setIsOpen(false);
+        case "option": {
+          const moved = runHandler(() => onSelect?.(row, views));
+          if (closeOnSelect && !moved) setIsOpen(false);
           break;
+        }
         case "action": {
           // A link action's row is an anchor: the click itself navigates.
           const moved = runHandler(() => row.onSelect?.(views));

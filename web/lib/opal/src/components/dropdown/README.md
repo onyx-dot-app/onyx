@@ -159,7 +159,7 @@ Every row takes `keywords?` (what a search matches beyond the title) and `disabl
 
 ## Views
 
-A view is a set of menu rows that replaces the rows on show, in place: the box glides to the new height and the rows slide in. Every row handler gets the stack as `views`, and `useDropdownViews()` returns the same object to a control rendered inside the list (a `Button` in a custom row). Any row pushes a view, under any logic it likes; the list stays open after a handler that pushed or popped.
+A view is a set of menu rows that replaces the rows on show, in place: the box glides to the new height and the rows slide in. An action's `onSelect`, a custom row's `onActivate` and `onSecondary`, and a picker's `onSelect` get the stack as `views`, and `useDropdownViews()` returns the same object to a control rendered inside the list (a `Button` in a custom row, or in a toggle row's neighbour; a toggle's `onCheckedChange` itself gets only `checked`). Any such row pushes a view, under any logic it likes; the list stays open after a handler that pushed or popped.
 
 ```tsx
 const skills: DropdownView = {
@@ -193,15 +193,15 @@ const items: DropdownMenuItem[] = [
 ];
 ```
 
-| Field                  | Description                                                                                                                                     |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DropdownView.key?`    | Identifies the view on the stack; its depth when left out                                                                                       |
-| `DropdownView.items`   | The view's rows and groups                                                                                                                      |
-| `DropdownView.search?` | A search field pinned above the view's rows. It filters this view only, and keeps its text while the view is on the stack                       |
-| `DropdownViews.push`   | Replace the rows with a view                                                                                                                    |
-| `DropdownViews.pop`    | Back one view; nothing at the root                                                                                                              |
-| `DropdownViews.close`  | Close the list                                                                                                                                  |
-| `opensView` (on a row) | The row leads to a view: a trailing chevron, ArrowRight activates it, and the list stays open after it. An affordance only; the handler decides |
+| Field                  | Description                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DropdownView.key?`    | Identifies the view on the stack; its depth when left out                                                                                                                                       |
+| `DropdownView.items`   | The view's rows and groups                                                                                                                                                                      |
+| `DropdownView.search?` | A search field pinned above the view's rows. It filters this view only, and keeps its text while the view is on the stack                                                                       |
+| `DropdownViews.push`   | Replace the rows with a view                                                                                                                                                                    |
+| `DropdownViews.pop`    | Back one view; nothing at the root                                                                                                                                                              |
+| `DropdownViews.close`  | Close the list                                                                                                                                                                                  |
+| `opensView` (on a row) | The row leads to a view: ArrowRight activates it and the list stays open after it. An action row gets a trailing chevron; a custom row renders its own. An affordance only; the handler decides |
 
 Nothing is laid out for a view: a way back is a row that calls `pop`. The root-only props (`query`, `create`, `otherOptionsTitle`, `exactText`) wait underneath a view. Escape leaves a view; at the root it closes. Closing the list empties the stack. Each search field reports `""` through its `onChange` as its rows leave.
 

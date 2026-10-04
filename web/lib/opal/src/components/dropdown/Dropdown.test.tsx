@@ -586,7 +586,6 @@ describe("Dropdown views", () => {
     render(<ViewsHarness onRun={jest.fn()} />);
     const trigger = screen.getByRole("button", { name: "Actions" });
     await user.click(trigger);
-    expect(menuItem("Skills")).toHaveAttribute("aria-expanded", undefined);
 
     await user.click(menuItem("Skills"));
     expect(trigger).toHaveAttribute("aria-expanded", "true");

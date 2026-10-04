@@ -174,17 +174,19 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       if (lastViewKeyRef.current === viewKey) return;
       lastViewKeyRef.current = viewKey;
       setEnter(viewDirection);
+      // Reduced motion swaps at once: no old card to animate away, and no
+      // exit animation whose end would clear it.
+      const reduceMotion =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const last = lastCardRef.current;
-      if (last && last.key !== viewKey) {
+      if (last && last.key !== viewKey && !reduceMotion) {
         setExiting({ ...last, direction: viewDirection });
       }
       const card = liveCard(listRef.current);
       const from = lastHeightRef.current;
       if (!card || from === null) return;
       const to = card.offsetHeight;
-      const reduceMotion =
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (from === to || reduceMotion) return;
       card.style.height = `${from}px`;
       card.setAttribute("data-view-transition", "");
@@ -202,9 +204,11 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       };
       card.addEventListener("transitionend", onEnd);
       const timer = window.setTimeout(done, 250);
+      // A view change cut short releases its height, so the next change
+      // measures the rows and not the height this one left behind.
       return () => {
         window.clearTimeout(timer);
-        card.removeEventListener("transitionend", onEnd);
+        done();
       };
     }, [isOpen, viewKey, viewDirection]);
 

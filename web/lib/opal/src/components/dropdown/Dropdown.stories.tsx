@@ -163,6 +163,7 @@ function MenuDemo() {
               icon={SvgSettings}
               size="sm"
               prominence="internal"
+              aria-label="Settings"
               onClick={(e) => {
                 e.stopPropagation();
                 note("settings: button");
@@ -192,7 +193,11 @@ function MenuDemo() {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <Dropdown>
         <Dropdown.Trigger asChild>
-          <Button icon={SvgMoreHorizontal} prominence="tertiary" />
+          <Button
+            icon={SvgMoreHorizontal}
+            prominence="tertiary"
+            aria-label="Actions"
+          />
         </Dropdown.Trigger>
         <Dropdown.Data
           label="Actions"
@@ -289,7 +294,11 @@ function ViewsDemo() {
     <div className="flex flex-col gap-3">
       <Dropdown>
         <Dropdown.Trigger asChild>
-          <Button icon={SvgMoreHorizontal} prominence="tertiary" />
+          <Button
+            icon={SvgMoreHorizontal}
+            prominence="tertiary"
+            aria-label="Actions"
+          />
         </Dropdown.Trigger>
         <Dropdown.Data label="Actions" items={items} />
       </Dropdown>
