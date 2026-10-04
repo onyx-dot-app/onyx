@@ -26,6 +26,7 @@ from onyx.connectors.jsm.connector import (
 )
 from onyx.connectors.jsm.connector_utils import process_jsm_issue
 from onyx.connectors.models import ConnectorMissingCredentialError, Document
+from onyx.utils.variable_functionality import global_version
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 _JSM_BASE = "https://jsm.example.com"
@@ -103,6 +104,9 @@ def _participants_payload() -> dict[str, Any]:
 def mock_jira_client() -> MagicMock:
     mock = MagicMock(spec=JIRA)
     mock.search_issues = MagicMock()
+    # rest_api_version "2" (data center) keeps the mocked search_issues path;
+    # the connector routes cloud clients through the enhanced search instead.
+    mock._options = {"rest_api_version": "2"}
     return mock
 
 
@@ -199,11 +203,14 @@ class TestJsmConnectorCheckpointing:
         ]
         page_two = [_issue_payload(issue_id="10100", key="HELP-100")]
 
+        search_issues_calls: list[dict[str, Any]] = []
+
         def search_issues_side_effect(
-            jql_str: str,  # noqa: ARG001
+            jql_str: str,
             startAt: int,
             maxResults: int,  # noqa: ARG001
         ) -> list[MagicMock]:
+            search_issues_calls.append({"jql_str": jql_str, "startAt": startAt})
             if startAt == 0:
                 raw_issues = page_one
             else:
@@ -217,7 +224,8 @@ class TestJsmConnectorCheckpointing:
 
         connector._jira_client.search_issues.side_effect = search_issues_side_effect
 
-        outputs = load_everything_from_checkpoint_connector(connector, 0, 10)
+        start, end = 1000, 2000
+        outputs = load_everything_from_checkpoint_connector(connector, start, end)
 
         # Two batches: the first fills the page, the second is the tail.
         assert len(outputs) == 2
@@ -228,12 +236,45 @@ class TestJsmConnectorCheckpointing:
         final_checkpoint = outputs[-1].next_checkpoint
         assert final_checkpoint.has_more is False
 
+        # every poll carries the start/end window it was handed (not an
+        # unscoped epoch..tomorrow query) and pages by offset
+        expected_time_jql = (
+            f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
+        )
+        assert len(search_issues_calls) == 2
+        for call in search_issues_calls:
+            assert call["jql_str"] == expected_time_jql
+        assert [call["startAt"] for call in search_issues_calls] == [0, 50]
+
+    def test_checkpoint_bounds_are_passed_to_jql(
+        self, connector: JiraServiceManagementConnector
+    ) -> None:
+        """start/end must reach the JQL verbatim; a connector that ignores
+        them would reindex the epoch..tomorrow window on every poll."""
+        _mock_search_issues(connector, [])
+
+        start, end = 1759000000.0, 1759100000.0
+        list(
+            connector.load_from_checkpoint(
+                start, end, JsmConnectorCheckpoint(has_more=True)
+            )
+        )
+
+        jql = connector._jira_client.search_issues.call_args.kwargs["jql_str"]
+        assert jql == (
+            f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
+        )
+
     def test_checkpoint_round_trips_through_json(
         self, connector: JiraServiceManagementConnector
     ) -> None:
         checkpoint = connector.build_dummy_checkpoint()
+        checkpoint.oversized_issue_keys = ["HELP-9"]
+        checkpoint.all_issue_ids = [["10001", "10002"]]
+        checkpoint.cursor = "token-1"
+        checkpoint.ids_done = False
         validated = connector.validate_checkpoint_json(checkpoint.model_dump_json())
-        assert validated == JsmConnectorCheckpoint(has_more=True)
+        assert validated == checkpoint
 
     def test_failure_yields_connector_failure_not_raise(
         self, connector: JiraServiceManagementConnector
@@ -336,7 +377,111 @@ class TestJsmConnectorSlim:
 
         plain = list(connector.retrieve_all_slim_docs())
         perm_sync = list(connector.retrieve_all_slim_docs_perm_sync())
-        assert plain == perm_sync
+        plain_ids = [doc.id for batch in plain for doc in batch]
+        perm_sync_ids = [doc.id for batch in perm_sync for doc in batch]
+        assert plain_ids == perm_sync_ids
+        # without EE, permission resolution is a no-op on both paths
+        assert all(
+            doc.external_access is None for batch in perm_sync for doc in batch
+        )
+
+    def test_slim_path_skips_oversized_issues(
+        self, connector: JiraServiceManagementConnector
+    ) -> None:
+        """Tickets the full path drops for size must not show up as slim
+        documents either, or permission sync treats them as indexed."""
+        oversized = _issue_payload(key="HELP-BIG", issue_id="10003")
+        oversized["fields"]["description"] = "x" * (200 * 1024)
+        _mock_search_issues(
+            connector,
+            [_issue_payload(), oversized],
+        )
+
+        batches = list(connector.retrieve_all_slim_docs())
+        slim_docs = [doc for batch in batches for doc in batch]
+
+        assert [doc.id for doc in slim_docs] == [f"{_JSM_BASE}/browse/{_ISSUE_KEY}"]
+
+
+class TestJsmConnectorServiceDeskScope:
+    def test_service_desk_narrows_jql_to_its_project(
+        self, connector: JiraServiceManagementConnector
+    ) -> None:
+        """Selecting a desk must scope every search to that desk's project,
+        not index every project the credential can access."""
+        connector._jsm_session = build_jsm_session({"jira_api_token": "token"})
+        connector._desk_project_key = "HELP"
+
+        _mock_search_issues(connector, [_issue_payload()])
+        list(
+            connector.load_from_checkpoint(0, 10, JsmConnectorCheckpoint(has_more=True))
+        )
+
+        jql = connector._jira_client.search_issues.call_args.kwargs["jql_str"]
+        assert jql.startswith("project = HELP AND updated >= ")
+
+    def test_service_desk_resolution_is_cached(
+        self, connector: JiraServiceManagementConnector
+    ) -> None:
+        connector._jsm_session = build_jsm_session({"jira_api_token": "token"})
+        connector._desk_project_key = "HELP"
+
+        _mock_search_issues(connector, [_issue_payload(), _issue_payload()])
+        list(
+            connector.load_from_checkpoint(0, 10, JsmConnectorCheckpoint(has_more=True))
+        )
+        list(
+            connector.load_from_checkpoint(0, 10, JsmConnectorCheckpoint(has_more=True))
+        )
+
+        # both polls ran; the desk->project lookup is cached on the instance
+        assert connector._jira_client.search_issues.call_count == 2
+        for call in connector._jira_client.search_issues.call_args_list:
+            assert call.kwargs["jql_str"].startswith("project = HELP AND ")
+
+
+class TestJsmConnectorPermSync:
+    def test_perm_sync_populates_external_access(
+        self,
+        connector: JiraServiceManagementConnector,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """load_from_checkpoint_with_perm_sync must attach the Jira project's
+        external_access to every document, like the Jira connector does."""
+        from onyx.access.models import ExternalAccess
+
+        was_ee = global_version.is_ee_version()
+        global_version.set_ee()
+        try:
+            monkeypatch.setattr(
+                "ee.onyx.external_permissions.jira.page_access."
+                "get_project_permissions",
+                lambda jira_client, jira_project, add_prefix=False: ExternalAccess(
+                    external_user_emails=set(),
+                    external_user_group_ids={"jira-administrators"},
+                    is_public=False,
+                ),
+            )
+            from onyx.utils.variable_functionality import fetch_versioned_implementation
+
+            fetch_versioned_implementation.cache_clear()
+
+            _mock_search_issues(connector, [_issue_payload()])
+            outputs = list(
+                connector.load_from_checkpoint_with_perm_sync(
+                    0, 10, JsmConnectorCheckpoint(has_more=True)
+                )
+            )
+
+            documents = [item for item in outputs if isinstance(item, Document)]
+            assert len(documents) == 1
+            external_access = documents[0].external_access
+            assert external_access is not None
+            assert external_access.external_user_group_ids == {"jira-administrators"}
+        finally:
+            if not was_ee:
+                global_version.unset_ee()
+            fetch_versioned_implementation.cache_clear()
 
 
 def test_checkpoint_output_wrapper_streaming() -> None:

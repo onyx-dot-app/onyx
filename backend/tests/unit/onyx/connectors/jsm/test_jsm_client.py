@@ -2,6 +2,7 @@
 error mapping, and pagination."""
 
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import requests
@@ -73,7 +74,7 @@ class TestFetchServiceDesks:
             [{"id": "50"}],
         ]
         with responses.RequestsMock() as rsps:
-            rsps.get(
+            first_page = rsps.get(
                 f"{_JSM_BASE}/rest/servicedeskapi/servicedesk",
                 json={
                     "values": pages[0],
@@ -81,12 +82,20 @@ class TestFetchServiceDesks:
                     "_links": {"next": "next"},
                 },
             )
-            rsps.get(
+            second_page = rsps.get(
                 f"{_JSM_BASE}/rest/servicedeskapi/servicedesk",
                 json={"values": pages[1], "isLastPage": True},
             )
             desks = fetch_service_desks(session, _JSM_BASE)
+
         assert [desk["id"] for desk in desks] == [str(i) for i in range(51)]
+        # the second request must actually be the start=50 continuation of the
+        # same endpoint, not a repeat of the first page
+        assert first_page.call_count == 1
+        assert second_page.call_count == 1
+        second_url = urlparse(second_page.calls[0].request.url)
+        assert second_url.path.endswith("/rest/servicedeskapi/servicedesk")
+        assert parse_qs(second_url.query).get("start") == ["50"]
 
 
 class TestErrorMapping:
