@@ -213,21 +213,6 @@ export async function getUserFileStatuses(
   return response.json();
 }
 
-export async function getSessionProjectTokenCount(
-  chatSessionId: string
-): Promise<number> {
-  const response = await fetch(
-    `/api/user/projects/session/${encodeURIComponent(
-      chatSessionId
-    )}/token-count`
-  );
-  if (!response.ok) {
-    return 0;
-  }
-  const data: { total_tokens: number } = await response.json();
-  return data.total_tokens ?? 0;
-}
-
 export async function getProjectFilesForSession(
   chatSessionId: string
 ): Promise<ProjectFile[]> {

@@ -43,7 +43,7 @@ unless you specifically need OCI.
 
 # Recent chart changes (0.5.0)
 
-If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart; chart 0.5.6 ships a guard that fails `helm upgrade` if the legacy `da-vespa` StatefulSet is still in the namespace so you don't lose the indexed data silently.
+If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart. Onyx no longer uses Vespa.
 
 Other 0.5.0 changes:
 
@@ -277,14 +277,10 @@ Other docker-compose-style values you should set deliberately:
 * helm install onyx . -n onyx --set postgresql.primary.persistence.enabled=false --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!'
   * the postgres flag is to keep the storage ephemeral for testing. You probably don't want to set that in prod.
   * the OpenSearch admin password must be set on first install unless you are supplying `auth.opensearch.existingSecret`.
-  * no flag for ephemeral vespa storage yet, might be good for testing
 * kubectl -n onyx port-forward service/onyx-nginx 8080:80
   * this will forward the local port 8080 to the installed chart for you to run tests, etc.
 * When you are finished
   * helm uninstall onyx -n onyx
-  * Vespa leaves behind a PVC. Delete it if you are completely done.
-    * k -n onyx get pvc
-    * k -n onyx delete pvc vespa-storage-da-vespa-0
   * If you didn't disable Postgres persistence earlier, you may want to delete that PVC too.
 
 ## Run as non-root user
@@ -294,14 +290,6 @@ By default, some onyx containers run as root. If you'd like to explicitly run th
     securityContext:
       runAsNonRoot: true
       runAsUser: 1001
-    ```
-  * `vespa`
-    ```yaml
-    podSecurityContext:
-      fsGroup: 1000
-    securityContext:
-      privileged: false
-      runAsUser: 1000
     ```
 
 ## Resourcing

@@ -1,51 +1,143 @@
-import React from "react";
 import { useTranslations } from "next-intl";
-import NumberInput from "./inputs/NumberInput";
-import { TextFormField } from "@/components/Field";
-import { Button } from "@opal/components";
-import { SvgTrash } from "@opal/icons";
+import {
+  Card,
+  Collapsible,
+  InputDatePicker,
+  InputNumber,
+} from "@opal/components";
+import { InputHorizontal, Section } from "@opal/layouts";
+import { FormikField } from "@/refresh-components/form/FormikField";
+import {
+  defaultRefreshFreqMinutes,
+  MAX_PRUNE_FREQ_HOURS,
+  MAX_REFRESH_FREQ_MINUTES,
+  MIN_PRUNE_FREQ_HOURS,
+  MIN_REFRESH_FREQ_MINUTES,
+} from "@/lib/connectors/connectors";
+
 interface AdvancedFormPageProps {
   defaultPruneFreqHours?: number;
+  disabled?: boolean;
 }
 
+// `indexingStart` is stored as a "YYYY-MM-DD" string. Read and write it in
+// local time so the picked day does not shift across time zones.
+function parseIndexingStart(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function formatIndexingStart(date: Date | null): string {
+  if (!date) return "";
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/** The connector's schedule: refresh and prune frequency, and the start date. */
 export default function AdvancedFormPage({
   defaultPruneFreqHours = 600,
+  disabled,
 }: AdvancedFormPageProps) {
-  const t = useTranslations("admin.connectorsList");
+  const t = useTranslations("admin.connectorsList.scheduled");
 
   return (
-    <div className="py-4 flex flex-col gap-y-6 rounded-lg max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-text-800">
-        {t("advanced.title")}
-      </h2>
+    <Collapsible
+      title={t("title")}
+      description={t("description")}
+      defaultOpen={false}
+      disabled={disabled}
+    >
+      <Card border="solid" rounding={4} padding={4} disabled={disabled}>
+        <Section alignItems="stretch" gap={4}>
+          <InputHorizontal
+            withLabel="refreshFreq"
+            disabled={disabled}
+            title={t("refreshFrequency.title")}
+            description={t("refreshFrequency.description")}
+            fillInput
+            center
+          >
+            <FormikField<number | undefined>
+              name="refreshFreq"
+              render={(field, helper) => (
+                <InputNumber
+                  id="refreshFreq"
+                  value={field.value ?? null}
+                  onChange={(value) => {
+                    // InputNumber has no blur callback, so touch on change to
+                    // show the field's validation error.
+                    helper.setTouched(true, false);
+                    helper.setValue(value ?? undefined);
+                  }}
+                  min={MIN_REFRESH_FREQ_MINUTES}
+                  max={MAX_REFRESH_FREQ_MINUTES}
+                  placeholder={String(defaultRefreshFreqMinutes)}
+                  suffix={t("units.minutes")}
+                  disabled={disabled}
+                />
+              )}
+            />
+          </InputHorizontal>
 
-      <NumberInput
-        description={t("advanced.pruneFrequency.description", {
-          hours: defaultPruneFreqHours,
-          days: Math.round(defaultPruneFreqHours / 24),
-        })}
-        label={t("advanced.pruneFrequency.label")}
-        name="pruneFreq"
-      />
+          <InputHorizontal
+            withLabel="pruneFreq"
+            disabled={disabled}
+            title={t("pruneFrequency.title")}
+            description={t("pruneFrequency.description")}
+            fillInput
+            center
+          >
+            <FormikField<number | undefined>
+              name="pruneFreq"
+              render={(field, helper) => (
+                <InputNumber
+                  id="pruneFreq"
+                  value={field.value ?? null}
+                  onChange={(value) => {
+                    helper.setTouched(true, false);
+                    helper.setValue(value ?? undefined);
+                  }}
+                  min={MIN_PRUNE_FREQ_HOURS}
+                  max={MAX_PRUNE_FREQ_HOURS}
+                  decimalPlaces={3}
+                  placeholder={String(defaultPruneFreqHours)}
+                  suffix={t("units.hours")}
+                  disabled={disabled}
+                />
+              )}
+            />
+          </InputHorizontal>
 
-      <NumberInput
-        description={t("advanced.refreshFrequency.description")}
-        label={t("advanced.refreshFrequency.label")}
-        name="refreshFreq"
-      />
-
-      <TextFormField
-        type="date"
-        subtext={t("advanced.indexingStart.subtext")}
-        optional
-        label={t("advanced.indexingStart.label")}
-        name="indexingStart"
-      />
-      <div className="mt-4 flex w-full mx-auto max-w-2xl justify-start">
-        <Button variant="danger" icon={SvgTrash} type="submit">
-          {t("advanced.resetButton.label")}
-        </Button>
-      </div>
-    </div>
+          <InputHorizontal
+            withLabel="indexingStart"
+            disabled={disabled}
+            title={t("indexingStart.title")}
+            description={t("indexingStart.description")}
+            suffix="optional"
+            fillInput
+            center
+          >
+            <FormikField<string | undefined>
+              name="indexingStart"
+              render={(field, helper) => (
+                <InputDatePicker
+                  id="indexingStart"
+                  value={parseIndexingStart(field.value)}
+                  onChange={(date) =>
+                    helper.setValue(formatIndexingStart(date))
+                  }
+                  placeholder={t("indexingStart.placeholder")}
+                  clearable
+                  disabled={disabled}
+                />
+              )}
+            />
+          </InputHorizontal>
+        </Section>
+      </Card>
+    </Collapsible>
   );
 }

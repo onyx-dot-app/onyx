@@ -51,7 +51,7 @@ import {
   CODING_AGENT_TOOL_ID,
 } from "@/lib/tools/constants";
 import Text from "@/refresh-components/texts/Text";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
@@ -98,7 +98,8 @@ import { Tier } from "@/lib/settings/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { ShareAgentModal, type ShareDraftState } from "@/lib/agents/components";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { Permission, ValidSources } from "@/lib/types";
+import { Permission } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
@@ -1098,8 +1099,13 @@ export default function AgentEditorPage({
             );
 
             const hasProcessingFiles = values.user_file_ids.some(
-              (fileId: string) =>
-                fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
+              (fileId: string) => {
+                const status = fileStatusMap.get(fileId);
+                return (
+                  status === UserFileStatus.PROCESSING ||
+                  status === UserFileStatus.INDEXING
+                );
+              }
             );
             // Saved agents report their status (group ownership counts as
             // shared); unsaved ones derive it from the draft form state.
@@ -1498,261 +1504,250 @@ export default function AgentEditorPage({
 
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                      <SimpleCollapsible>
-                        <SimpleCollapsible.Header
-                          title={t("editor.actions.title")}
-                          description={t("editor.actions.description")}
-                        />
-                        <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section gap={2} alignItems="stretch">
-                            <Disabled
-                              disabled={!isImageGenerationAvailable}
-                              tooltip={imageGenerationDisabledTooltip}
-                            >
-                              <Card border="solid" rounding={4}>
-                                <InputHorizontal
-                                  withLabel="image_generation"
-                                  title={t(
-                                    "editor.actions.imageGeneration.title"
-                                  )}
-                                  description={t(
-                                    "editor.actions.imageGeneration.description"
-                                  )}
+                      <Collapsible
+                        title={t("editor.actions.title")}
+                        description={t("editor.actions.description")}
+                      >
+                        <GeneralLayouts.Section gap={2} alignItems="stretch">
+                          <Disabled
+                            disabled={!isImageGenerationAvailable}
+                            tooltip={imageGenerationDisabledTooltip}
+                          >
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="image_generation"
+                                title={t(
+                                  "editor.actions.imageGeneration.title"
+                                )}
+                                description={t(
+                                  "editor.actions.imageGeneration.description"
+                                )}
+                                disabled={!isImageGenerationAvailable}
+                              >
+                                <SwitchField
+                                  name="image_generation"
                                   disabled={!isImageGenerationAvailable}
-                                >
-                                  <SwitchField
-                                    name="image_generation"
-                                    disabled={!isImageGenerationAvailable}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            <Disabled disabled={!webSearchTool}>
-                              <Card border="solid" rounding={4}>
-                                <InputHorizontal
-                                  withLabel="web_search"
-                                  title={t("editor.actions.webSearch.title")}
-                                  description={t(
-                                    "editor.actions.webSearch.description"
-                                  )}
-                                  disabled={!webSearchTool}
-                                >
-                                  <SwitchField
-                                    name="web_search"
-                                    disabled={!webSearchTool}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            <Disabled disabled={!openURLTool}>
-                              <Card border="solid" rounding={4}>
-                                <InputHorizontal
-                                  withLabel="open_url"
-                                  title={t("editor.actions.openUrl.title")}
-                                  description={t(
-                                    "editor.actions.openUrl.description"
-                                  )}
-                                  disabled={!openURLTool}
-                                >
-                                  <SwitchField
-                                    name="open_url"
-                                    disabled={!openURLTool}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            <Disabled disabled={!codeInterpreterTool}>
-                              <Card border="solid" rounding={4}>
-                                <InputHorizontal
-                                  withLabel="code_interpreter"
-                                  title={t(
-                                    "editor.actions.codeInterpreter.title"
-                                  )}
-                                  description={t(
-                                    "editor.actions.codeInterpreter.description"
-                                  )}
-                                  disabled={!codeInterpreterTool}
-                                >
-                                  <SwitchField
-                                    name="code_interpreter"
-                                    disabled={!codeInterpreterTool}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            <Disabled disabled={!codingAgentTool}>
-                              <Card border="solid" rounding={4}>
-                                <InputHorizontal
-                                  withLabel="coding_agent"
-                                  title={t("editor.actions.codingAgent.title")}
-                                  description={t(
-                                    "editor.actions.codingAgent.description"
-                                  )}
-                                  disabled={!codingAgentTool}
-                                >
-                                  <SwitchField
-                                    name="coding_agent"
-                                    disabled={!codingAgentTool}
-                                  />
-                                </InputHorizontal>
-                              </Card>
-                            </Disabled>
-
-                            {/* Tools */}
-                            <>
-                              {/* render the divider if there is at least one mcp-server with tools or open-api-tool */}
-                              {(mcpServersWithVisibleTools.length > 0 ||
-                                openApiTools.length > 0) && (
-                                <Divider
-                                  paddingPerpendicular={1}
-                                  paddingParallel={0}
                                 />
-                              )}
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
 
-                              {/* MCP tools */}
-                              {mcpServersWithVisibleTools.length > 0 && (
-                                <GeneralLayouts.Section
-                                  gap={2}
-                                  alignItems="stretch"
-                                >
-                                  {mcpServersWithVisibleTools.map(
-                                    ({ server, tools, isLoading }) => (
-                                      <MCPServerCard
-                                        key={server.id}
-                                        server={server}
-                                        tools={tools}
-                                        isLoading={isLoading}
-                                      />
-                                    )
-                                  )}
-                                </GeneralLayouts.Section>
-                              )}
+                          <Disabled disabled={!webSearchTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="web_search"
+                                title={t("editor.actions.webSearch.title")}
+                                description={t(
+                                  "editor.actions.webSearch.description"
+                                )}
+                                disabled={!webSearchTool}
+                              >
+                                <SwitchField
+                                  name="web_search"
+                                  disabled={!webSearchTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
 
-                              {/* OpenAPI tools */}
-                              {openApiTools.length > 0 && (
-                                <GeneralLayouts.Section gap={2}>
-                                  {openApiTools.map((tool) => (
-                                    <OpenApiToolCard
-                                      key={tool.id}
-                                      tool={tool}
+                          <Disabled disabled={!openURLTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="open_url"
+                                title={t("editor.actions.openUrl.title")}
+                                description={t(
+                                  "editor.actions.openUrl.description"
+                                )}
+                                disabled={!openURLTool}
+                              >
+                                <SwitchField
+                                  name="open_url"
+                                  disabled={!openURLTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
+
+                          <Disabled disabled={!codeInterpreterTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="code_interpreter"
+                                title={t(
+                                  "editor.actions.codeInterpreter.title"
+                                )}
+                                description={t(
+                                  "editor.actions.codeInterpreter.description"
+                                )}
+                                disabled={!codeInterpreterTool}
+                              >
+                                <SwitchField
+                                  name="code_interpreter"
+                                  disabled={!codeInterpreterTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
+
+                          <Disabled disabled={!codingAgentTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="coding_agent"
+                                title={t("editor.actions.codingAgent.title")}
+                                description={t(
+                                  "editor.actions.codingAgent.description"
+                                )}
+                                disabled={!codingAgentTool}
+                              >
+                                <SwitchField
+                                  name="coding_agent"
+                                  disabled={!codingAgentTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
+
+                          {/* Tools */}
+                          <>
+                            {/* render the divider if there is at least one mcp-server with tools or open-api-tool */}
+                            {(mcpServersWithVisibleTools.length > 0 ||
+                              openApiTools.length > 0) && (
+                              <Divider
+                                paddingPerpendicular={1}
+                                paddingParallel={0}
+                              />
+                            )}
+
+                            {/* MCP tools */}
+                            {mcpServersWithVisibleTools.length > 0 && (
+                              <GeneralLayouts.Section
+                                gap={2}
+                                alignItems="stretch"
+                              >
+                                {mcpServersWithVisibleTools.map(
+                                  ({ server, tools, isLoading }) => (
+                                    <MCPServerCard
+                                      key={server.id}
+                                      server={server}
+                                      tools={tools}
+                                      isLoading={isLoading}
                                     />
-                                  ))}
-                                </GeneralLayouts.Section>
-                              )}
-                            </>
-                          </GeneralLayouts.Section>
-                        </SimpleCollapsible.Content>
-                      </SimpleCollapsible>
+                                  )
+                                )}
+                              </GeneralLayouts.Section>
+                            )}
+
+                            {/* OpenAPI tools */}
+                            {openApiTools.length > 0 && (
+                              <GeneralLayouts.Section gap={2}>
+                                {openApiTools.map((tool) => (
+                                  <OpenApiToolCard key={tool.id} tool={tool} />
+                                ))}
+                              </GeneralLayouts.Section>
+                            )}
+                          </>
+                        </GeneralLayouts.Section>
+                      </Collapsible>
 
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                      <SimpleCollapsible>
-                        <SimpleCollapsible.Header
-                          title={t("editor.advanced.title")}
-                          description={t("editor.advanced.description")}
-                        />
-                        <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section>
-                            <Card border="solid" rounding={4}>
-                              <GeneralLayouts.Section>
-                                <InputHorizontal
-                                  withLabel="llm_model"
-                                  title={t("modals.viewer.defaultModel.title")}
-                                  description={t(
-                                    "modals.viewer.defaultModel.description",
-                                    { appName }
-                                  )}
-                                >
-                                  <SimpleModelSelector
-                                    nullable
-                                    globalDefault={{
-                                      description: findDefaultModelDisplayName(
-                                        globalLlmProviders,
-                                        defaultText
-                                      ),
-                                    }}
-                                    providers={filterModelConfigurations(
-                                      agentLlmProviders ?? [],
-                                      {
-                                        keep:
-                                          (values.default_model_configuration_id as
-                                            | number
-                                            | null) ?? null,
-                                      }
-                                    )}
-                                    value={
-                                      (values.default_model_configuration_id as
-                                        | number
-                                        | null) ?? null
-                                    }
-                                    grouped={!hideProviderGrouping}
-                                    onChange={(modelConfigurationId) =>
-                                      setFieldValue(
-                                        "default_model_configuration_id",
-                                        modelConfigurationId
-                                      )
-                                    }
-                                  />
-                                </InputHorizontal>
-                                <InputHorizontal
-                                  withLabel="knowledge_cutoff_date"
-                                  title={t(
-                                    "modals.viewer.knowledgeCutoff.title"
-                                  )}
-                                  suffix={t("editor.suffix.optional")}
-                                  description={t(
-                                    "modals.viewer.knowledgeCutoff.description"
-                                  )}
-                                >
-                                  <InputDatePickerField
-                                    name="knowledge_cutoff_date"
-                                    maxDate={new Date()}
-                                  />
-                                </InputHorizontal>
-                                <InputHorizontal
-                                  withLabel="replace_base_system_prompt"
-                                  title={t(
-                                    "editor.advanced.overwritePrompt.title"
-                                  )}
-                                  suffix={t(
-                                    "editor.advanced.overwritePrompt.suffix"
-                                  )}
-                                  description={t(
-                                    "modals.viewer.overwritePrompts.description"
-                                  )}
-                                >
-                                  <SwitchField name="replace_base_system_prompt" />
-                                </InputHorizontal>
-                              </GeneralLayouts.Section>
-                            </Card>
-
-                            <GeneralLayouts.Section gap={1}>
-                              <InputVertical
-                                withLabel="reminders"
-                                title={t("editor.advanced.reminders.title")}
-                                suffix={t("editor.suffix.optional")}
+                      <Collapsible
+                        title={t("editor.advanced.title")}
+                        description={t("editor.advanced.description")}
+                      >
+                        <GeneralLayouts.Section>
+                          <Card border="solid" rounding={4}>
+                            <GeneralLayouts.Section>
+                              <InputHorizontal
+                                withLabel="llm_model"
+                                title={t("modals.viewer.defaultModel.title")}
+                                description={t(
+                                  "modals.viewer.defaultModel.description",
+                                  { appName }
+                                )}
                               >
-                                <InputTextAreaField
-                                  name="reminders"
-                                  placeholder={t(
-                                    "editor.advanced.reminders.placeholder"
+                                <SimpleModelSelector
+                                  nullable
+                                  globalDefault={{
+                                    description: findDefaultModelDisplayName(
+                                      globalLlmProviders,
+                                      defaultText
+                                    ),
+                                  }}
+                                  providers={filterModelConfigurations(
+                                    agentLlmProviders ?? [],
+                                    {
+                                      keep:
+                                        (values.default_model_configuration_id as
+                                          | number
+                                          | null) ?? null,
+                                    }
                                   )}
-                                  rightSection={
-                                    <InsertUserVariableMenu fieldName="reminders" />
+                                  value={
+                                    (values.default_model_configuration_id as
+                                      | number
+                                      | null) ?? null
+                                  }
+                                  grouped={!hideProviderGrouping}
+                                  onChange={(modelConfigurationId) =>
+                                    setFieldValue(
+                                      "default_model_configuration_id",
+                                      modelConfigurationId
+                                    )
                                   }
                                 />
-                              </InputVertical>
-                              <Text text03 secondaryBody>
-                                {t("editor.advanced.reminders.description")}
-                              </Text>
+                              </InputHorizontal>
+                              <InputHorizontal
+                                withLabel="knowledge_cutoff_date"
+                                title={t("modals.viewer.knowledgeCutoff.title")}
+                                suffix={t("editor.suffix.optional")}
+                                description={t(
+                                  "modals.viewer.knowledgeCutoff.description"
+                                )}
+                              >
+                                <InputDatePickerField
+                                  name="knowledge_cutoff_date"
+                                  maxDate={new Date()}
+                                />
+                              </InputHorizontal>
+                              <InputHorizontal
+                                withLabel="replace_base_system_prompt"
+                                title={t(
+                                  "editor.advanced.overwritePrompt.title"
+                                )}
+                                suffix={t(
+                                  "editor.advanced.overwritePrompt.suffix"
+                                )}
+                                description={t(
+                                  "modals.viewer.overwritePrompts.description"
+                                )}
+                              >
+                                <SwitchField name="replace_base_system_prompt" />
+                              </InputHorizontal>
                             </GeneralLayouts.Section>
+                          </Card>
+
+                          <GeneralLayouts.Section gap={1}>
+                            <InputVertical
+                              withLabel="reminders"
+                              title={t("editor.advanced.reminders.title")}
+                              suffix={t("editor.suffix.optional")}
+                            >
+                              <InputTextAreaField
+                                name="reminders"
+                                placeholder={t(
+                                  "editor.advanced.reminders.placeholder"
+                                )}
+                                rightSection={
+                                  <InsertUserVariableMenu fieldName="reminders" />
+                                }
+                              />
+                            </InputVertical>
+                            <Text text03 secondaryBody>
+                              {t("editor.advanced.reminders.description")}
+                            </Text>
                           </GeneralLayouts.Section>
-                        </SimpleCollapsible.Content>
-                      </SimpleCollapsible>
+                        </GeneralLayouts.Section>
+                      </Collapsible>
 
                       {existingAgent && canDelete && (
                         <>

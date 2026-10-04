@@ -1,12 +1,13 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { Section } from "@/layouts/general-layouts";
 import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
 import mime from "mime";
@@ -234,7 +235,7 @@ export default function PreviewModal({
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full bg-background-tint-01">
           {isLoading ? (
             <Section>
-              <SvgSimpleLoader className="h-8 w-8" />
+              <IconLoader className="h-8 w-8" />
             </Section>
           ) : loadError ? (
             <Section padding={4}>

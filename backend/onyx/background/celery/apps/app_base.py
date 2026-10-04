@@ -34,15 +34,9 @@ from onyx.background.celery.tasks.vespa.document_sync import (
     DOCUMENT_SYNC_PREFIX,
     DOCUMENT_SYNC_TASKSET_KEY,
 )
-from onyx.configs.app_configs import (
-    DISABLE_VECTOR_DB,
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX,
-    ONYX_DISABLE_VESPA,
-)
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
@@ -451,8 +445,6 @@ def on_worker_ready(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
 
 
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
-    HttpxPool.close_all()
-
     hostname: str = cast(str, sender.hostname)
     path = make_probe_path("readiness", hostname)
     path.unlink(missing_ok=True)
@@ -668,35 +660,23 @@ def reset_tenant_id(
 
 def wait_for_document_index_or_shutdown() -> None:
     """
-    Waits for all configured document indices to become ready subject to a
-    timeout.
+    Waits for the document index to become ready subject to a timeout.
 
     Raises WorkerShutdown if the timeout is reached.
     """
     if DISABLE_VECTOR_DB:
-        logger.info(
-            "DISABLE_VECTOR_DB is set — skipping Vespa/OpenSearch readiness check."
-        )
+        logger.info("DISABLE_VECTOR_DB is set — skipping OpenSearch readiness check.")
         return
 
-    if not ONYX_DISABLE_VESPA:
-        if not wait_for_vespa_with_timeout():
-            msg = (
-                "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
-            )
-            logger.error(msg)
-            raise WorkerShutdown(msg)
+    # Imported here: opensearchpy costs ~18 MB and not every worker needs it.
+    from onyx.document_index.opensearch.client import (
+        wait_for_opensearch_with_timeout,
+    )
 
-    if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-        # Imported here: opensearchpy costs ~18 MB and not every worker needs it.
-        from onyx.document_index.opensearch.client import (
-            wait_for_opensearch_with_timeout,
-        )
-
-        if not wait_for_opensearch_with_timeout():
-            msg = "[OpenSearch] Readiness probe did not succeed within the timeout. Exiting..."
-            logger.error(msg)
-            raise WorkerShutdown(msg)
+    if not wait_for_opensearch_with_timeout():
+        msg = "[OpenSearch] Readiness probe did not succeed within the timeout. Exiting..."
+        logger.error(msg)
+        raise WorkerShutdown(msg)
 
 
 # File for validating worker liveness
@@ -730,7 +710,7 @@ def get_bootsteps() -> list[type]:
     return [LivenessProbe]
 
 
-# Task modules that require a vector DB (Vespa/OpenSearch).
+# Task modules that require a vector DB (OpenSearch).
 # When DISABLE_VECTOR_DB is True these are excluded from autodiscover lists.
 _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.connector_deletion",
@@ -738,7 +718,7 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.docfetching",
     "onyx.background.celery.tasks.pruning",
     "onyx.background.celery.tasks.vespa",
-    "onyx.background.celery.tasks.opensearch_migration",
+    "onyx.background.celery.tasks.cc_pair_ids_backfill",
     "onyx.background.celery.tasks.doc_permission_syncing",
     "onyx.background.celery.tasks.hierarchyfetching",
     # EE modules that are vector-DB-dependent

@@ -808,13 +808,7 @@
         "description": "Connectez {appName} à vos sources de données."
       },
       "search": {
-        "placeholder": "Rechercher des connecteurs..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>Connecteur fédéré déjà configuré.</strong> Cliquez pour modifier le connecteur existant.",
-          "slackCredentialsFound": "<strong>Identifiants Slack existants trouvés.</strong> Cliquez pour gérer votre connecteur Slack."
-        }
+        "placeholder": "Rechercher des connecteurs ou appuyer sur \"/\" pour accéder à la recherche..."
       },
       "sourceCard": {
         "connectButton": {
@@ -2607,6 +2601,12 @@
           "label": "Autoriser avec {source}",
           "pendingLabel": "Autorisation en cours..."
         },
+        "collapseButton": {
+          "ariaLabel": "Replier"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "Créer"
         },
@@ -2616,8 +2616,13 @@
         "credentialModal": {
           "title": "Créer un identifiant pour {source}"
         },
+        "credentialsLoadFailed": {
+          "description": "Les identifiants ne peuvent pas être configurés pour le moment. Rechargez la page ou réessayez plus tard.",
+          "title": "Impossible de charger vos identifiants"
+        },
         "credentialStep": {
-          "title": "Sélectionnez un identifiant"
+          "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",
+          "title": "Compte d'authentification"
         },
         "credentialSwapped": {
           "toast": "Identifiant remplacé avec succès !"
@@ -2625,16 +2630,26 @@
         "error": {
           "toast": "Erreur : {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "Déplier"
+        },
         "federated": {
           "tooltip": {
-            "description": "Une option de recherche fédérée est disponible pour ce connecteur. Elle entraîne une latence plus élevée et une qualité de recherche réduite.",
+            "description": "Elle entraîne une latence plus élevée et une qualité de recherche réduite.",
             "link": {
               "label": "Utiliser la version fédérée à la place →"
-            }
+            },
+            "title": "Une option de recherche fédérée est disponible pour ce connecteur."
           }
         },
         "fileUploadFailed": {
           "toast": "Erreur lors du téléversement des fichiers"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "Nouveau compte {source}"
         },
         "oauthRedirectFailed": {
           "message": "Nous n'avons pas pu vous rediriger pour vous connecter avec {source}. Veuillez réessayer."
@@ -2648,6 +2663,9 @@
         "retryButton": {
           "label": "Réessayer"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}"
+        },
         "timeout": {
           "toast": "L'opération a expiré après {seconds} secondes. Vérifiez si votre configuration contient des erreurs ?"
         },
@@ -2655,30 +2673,20 @@
           "toast": "Une erreur inconnue est survenue"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Date de début de l'indexation",
-          "subtext": "Les documents antérieurs à cette date ne seront pas récupérés"
-        },
-        "pruneFrequency": {
-          "description": "Vérifie tous les documents par rapport à la source pour supprimer ceux qui n'existent plus. Remarque : ce processus vérifie chaque document, soyez donc prudent lorsque vous augmentez la fréquence. La valeur par défaut est de {hours} heures ({days} jours). Les heures décimales sont prises en charge (ex. : 0.1 heure = 6 minutes). Saisissez 0 pour désactiver l'élagage pour ce connecteur.",
-          "label": "Fréquence d'élagage (heures)"
-        },
-        "refreshFrequency": {
-          "description": "Indique la fréquence à laquelle nous récupérons de nouveaux documents depuis la source (en minutes). Si vous saisissez 0, nous ne récupérerons jamais de nouveaux documents pour ce connecteur.",
-          "label": "Fréquence d'actualisation (minutes)"
-        },
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
-        "title": "Configuration avancée"
-      },
       "connectorName": {
         "label": "Nom du connecteur",
         "subtext": "Un nom descriptif pour le connecteur."
       },
       "credentialRequired": {
         "tooltip": "Sélectionnez d'abord un identifiant."
+      },
+      "bindingGate": {
+        "enterField": "Saisissez le champ « {field} ».",
+        "fixField": "Vérifiez le champ « {field} ».",
+        "awaitingCheck": "Quittez le champ pour le vérifier avec les identifiants.",
+        "checking": "Vérification des identifiants…",
+        "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
+        "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"
       },
       "credentialsLoadError": {
         "title": "Échec du chargement des identifiants."
@@ -2721,7 +2729,8 @@
         },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer le Drive.",
-          "title": "Option 1 : application OAuth"
+          "title": "Option 1 : application OAuth",
+          "sharedScopesNote": "Google demande l'accès à Google Drive et à Gmail en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Google Drive, décochez les autorisations Gmail sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
@@ -2779,7 +2788,8 @@
         },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer la messagerie Gmail.",
-          "title": "Option 1 : application OAuth"
+          "title": "Option 1 : application OAuth",
+          "sharedScopesNote": "Google demande l'accès à Gmail et à Google Drive en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Gmail, décochez les autorisations Google Drive sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
@@ -2814,7 +2824,7 @@
         "connectButton": {
           "label": "Connecter"
         },
-        "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}."
+        "description": "Connectez-vous à {source} et configurez le connecteur pour {appName}.{hasDocs, select, true { Voir la [documentation]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -2938,6 +2948,38 @@
       "tabs": {
         "empty": {
           "label": "Aucun onglet à afficher."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Options avancées",
+        "errors": {
+          "missing": "Saisissez une valeur.",
+          "invalid": "Cette valeur n’est pas valide : {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "Indiquez comment le connecteur effectuera l'indexation. L'opérateur pourra modifier cette section.",
+        "indexingStart": {
+          "description": "Les documents dont la date de dernière mise à jour est antérieure seront ignorés.",
+          "placeholder": "Toute la période",
+          "title": "Indexer les documents après"
+        },
+        "pruneFrequency": {
+          "description": "Vérifier la source et supprimer les documents qui n'existent plus.",
+          "title": "Nettoyer toutes les"
+        },
+        "refreshFrequency": {
+          "description": "Récupérer les nouveaux documents depuis la source.",
+          "title": "Actualiser toutes les"
+        },
+        "title": "Planification",
+        "units": {
+          "hours": "heures",
+          "minutes": "minutes"
         }
       }
     },
@@ -3201,15 +3243,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Utilisez l'adresse e-mail du compte propriétaire du jeton d'API."
+        },
+        "apiTokenField": {
+          "subDescription": "Collez votre jeton d'API pour accéder à {source}."
+        },
         "createButton": {
           "label": "Créer"
         },
         "created": {
           "toast": "Nouvel identifiant créé !"
         },
-        "name": {
-          "label": "Nom :",
-          "placeholder": "(Facultatif) nom de l'identifiant..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Administrateurs",
+            "description": "Tous les administrateurs peuvent réutiliser ce compte pour créer des connecteurs.",
+            "suffix": "(Par défaut)"
+          },
+          "adminsAndGroups": {
+            "description": "Les administrateurs et les groupes que vous désignez peuvent réutiliser ce compte.",
+            "label": "Administrateurs et groupes"
+          },
+          "onlyMe": {
+            "label": "Moi uniquement"
+          },
+          "description": "Autorisez les groupes à réutiliser ce compte pour créer des connecteurs.",
+          "title": "Partager ce compte"
         },
         "submitError": {
           "toast": "Erreur lors de l'envoi de l'identifiant"
@@ -3244,6 +3307,80 @@
           "toast": "Erreur lors de la mise à jour de l'identifiant"
         }
       },
+      "displayNames": {
+        "accessKeyId": "ID de clé d'accès {source}",
+        "secretAccessKey": "Clé d'accès secrète {source}",
+        "accountId": "ID de compte {source}",
+        "apiToken": "Jeton d'API",
+        "clientId": "ID client {source}",
+        "clientSecret": "Secret client {source}",
+        "clientToken": "Jeton client {source}",
+        "directoryId": "ID de répertoire {source}",
+        "certificatePassword": "Mot de passe du certificat {source}",
+        "privateKey": "Clé privée {source}",
+        "certificate": "Certificat {source}",
+        "baseUrl": "URL de base {source}",
+        "apiBaseUrl": "URL de base de l'API {source}",
+        "url": "URL {source}",
+        "enterpriseServerUrl": "URL du serveur {source} Enterprise",
+        "botToken": "Jeton du bot {source}",
+        "username": "Nom d'utilisateur {source}",
+        "apiUsername": "Nom d'utilisateur de l'API {source}",
+        "userEmail": "E-mail de l'utilisateur {source}",
+        "accountEmail": "E-mail du compte {source}",
+        "password": "Mot de passe {source}",
+        "subdomain": "Sous-domaine {source}",
+        "domain": "Domaine {source}",
+        "enterpriseId": "ID d'entreprise {source}",
+        "teamId": "ID d'équipe {source}",
+        "applicationId": "ID d'application {source}",
+        "apiTokenId": "ID du jeton d'API {source}",
+        "apiTokenSecret": "Secret du jeton d'API {source}",
+        "securityToken": "Jeton de sécurité {source}",
+        "integrationToken": "Jeton d'intégration {source}",
+        "accessKey": "Clé d'accès {source}",
+        "accessKeySecret": "Secret de la clé d'accès {source}",
+        "key": "Clé {source}",
+        "secret": "Secret {source}",
+        "roleArn": "ARN du rôle {source}",
+        "namespace": "Espace de noms {source}",
+        "region": "Région {source}",
+        "portalId": "ID de portail {source}",
+        "oauthTokens": "Jetons OAuth {source}",
+        "isSandbox": "Environnement sandbox",
+        "serviceUserEmail": "E-mail de l'utilisateur de service",
+        "zuliprcContent": "Contenu de zuliprc",
+        "authenticationMethod": "Méthode d'authentification"
+      },
+      "hints": {
+        "boxUserEmail": "Facultatif. L'utilisateur Box à usurper.",
+        "githubBaseUrl": "Facultatif. Indiquez l'hôte de votre serveur, par exemple https://github.example.com. Laissez vide pour github.com.",
+        "gongBaseUrl": "Facultatif. Pour les données hors des États-Unis, indiquez l'hôte de votre région, par exemple https://[region].api.gong.io.",
+        "jiraUserEmail": "Obligatoire pour Jira Cloud.",
+        "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
+        "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
+        "pfxFile": "Un fichier PFX.",
+        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Secret client",
+          "certificateAuthentication": "Authentification par certificat",
+          "certificate": "Certificat",
+          "accessKeyAndSecret": "Clé d'accès et secret",
+          "iamRole": "Rôle IAM",
+          "assumeRole": "Endosser un rôle"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "Dans ce mode, le connecteur SharePoint s'authentifie avec un secret client. Vous devez fournir l'ID client et le secret client.",
+          "sharepointCertificate": "Dans ce mode, le connecteur SharePoint s'authentifie avec un certificat. Vous devez fournir l'ID client, l'ID d'annuaire, le mot de passe du certificat et les données PFX.",
+          "teamsClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret. Messages et membres des canaux uniquement : SharePoint refuse un secret, l'option Inclure les pièces jointes nécessite donc le certificat.",
+          "teamsCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe. Obligatoire pour Inclure les pièces jointes, qui lit les fichiers des canaux et leurs lecteurs depuis SharePoint.",
+          "outlookClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret.",
+          "outlookCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe.",
+          "s3AssumeRole": "Dans ce mode, l'instance Amazon EC2 endosse son rôle existant pour accéder à S3. Aucun autre identifiant n'est nécessaire."
+        }
+      },
       "modal": {
         "createTitle": "Créer un identifiant {source}",
         "editTitle": "Modifier l'identifiant",
@@ -3272,6 +3409,10 @@
         },
         "retryButton": {
           "label": "Réessayer"
+        },
+        "signIn": {
+          "description": "{appName} nécessite des autorisations en lecture seule.",
+          "title": "Se connecter avec {source}"
         },
         "startError": {
           "message": "Impossible de démarrer OAuth"
@@ -3324,6 +3465,13 @@
         "success": {
           "toast": "Identifiant mis à jour"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Veuillez sélectionner une méthode d'authentification",
+        "empty": "Le champ {field} ne peut pas être vide",
+        "fileRequired": "Veuillez sélectionner un fichier pour {field}",
+        "invalidEmail": "Veuillez saisir une adresse e-mail valide dans {field}",
+        "required": "Veuillez renseigner le champ {field}"
       }
     },
     "customAnalytics": {
@@ -4822,6 +4970,12 @@
         "azureGptImage2": {
           "description": "Modèle de génération d'images GPT Image 2 hébergé sur Microsoft Azure."
         },
+        "azureGptImage25Flare": {
+          "description": "Modèle de génération d'images GPT Image 2.5 Flare hébergé sur Microsoft Azure."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Modèle de génération d'images GPT Image 2.5 Sunburst hébergé sur Microsoft Azure."
+        },
         "gemini25FlashImage": {
           "description": "Le modèle Gemini 2.5 Flash Image (Nano Banana) est conçu pour la rapidité et l'efficacité."
         },
@@ -4838,7 +4992,13 @@
           "description": "Ancien modèle phare de génération d'images d'OpenAI."
         },
         "openaiGptImage2": {
-          "description": "Dernier modèle de génération d'images d'OpenAI, avec la meilleure fidélité aux prompts."
+          "description": "Modèle de génération d'images de génération précédente d'OpenAI, avec une haute fidélité aux prompts."
+        },
+        "openaiGptImage25Flare": {
+          "description": "Dernier modèle de génération d'images d'OpenAI, alliant haute qualité et génération rapide."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "Modèle premium de génération d'images d'OpenAI, pour les retouches les plus précises."
         }
       },
       "setDefaultError": {
@@ -5006,6 +5166,9 @@
           "description": "Ce texte est ajouté devant les requêtes de recherche avant leur envoi au modèle, si votre modèle d'embedding l'exige. Un préfixe incorrect ou manquant dégrade la qualité des embeddings.",
           "placeholder": "ex. : 'query: '",
           "title": "Préfixe de requête"
+        },
+        "googleWorkloadIdentity": {
+          "description": "Utilisez les identifiants GKE du serveur API et des workers d’embedding. Aucune clé JSON requise."
         }
       },
       "forwardOnlyModal": {
@@ -5249,7 +5412,8 @@
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",
-        "urlInvalid": "Doit être une URL valide"
+        "urlInvalid": "Doit être une URL valide",
+        "googleProjectRequired": "L’ID du projet GCP est requis"
       },
       "vectorQuantization": {
         "description": "Stockez les vecteurs des documents avec moins de bits pour utiliser moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche.",
@@ -5853,6 +6017,9 @@
           "optionalSuffix": {
             "label": "facultatif"
           },
+          "slowSave": {
+            "text": "Cela prend plus de temps que d'habitude. Les grandes listes de modèles peuvent prendre une minute."
+          },
           "submitButton": {
             "invalidTooltip": "Veuillez remplir tous les champs obligatoires.",
             "pristineTooltip": "Aucune modification à enregistrer."
@@ -5899,10 +6066,12 @@
             "title": "Clé d'API"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Région où vos modèles Google Vertex AI sont hébergés. Consultez la liste complète des régions prises en charge sur Google Cloud.",
             "title": "Nom de la région Google Cloud"
           },
           "projectField": {
+            "placeholder": "mon-projet-vertex",
             "description": "Le projet GCP où Vertex AI est activé. Obligatoire, car ADC ne peut pas déduire de façon fiable le projet cible en cas d'usurpation d'identité de compte de service.",
             "title": "ID de projet GCP"
           },
@@ -5944,6 +6113,7 @@
       "toasts": {
         "providerDeleteFailed": "Échec de la suppression du fournisseur : {message}",
         "providerDeleted": "Fournisseur supprimé avec succès !",
+        "providerLoadFailed": "Impossible de charger le fournisseur : {message}",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"
@@ -6101,12 +6271,6 @@
         "imageSummarization": {
           "label": "Résumé des images"
         },
-        "kgDeepExtraction": {
-          "label": "Extraction du graphe de connaissances"
-        },
-        "kgDocumentClassification": {
-          "label": "Classification du graphe de connaissances"
-        },
         "other": {
           "label": "Autres"
         },
@@ -6123,8 +6287,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
-        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images, le traitement RAG contextuel et l’extraction du graphe de connaissances.",
+        "description": "{start} – {end} · L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images et le traitement RAG contextuel.",
+        "emptyDescription": "L’utilisation système correspond à l’activité LLM exécutée par {appName} en arrière-plan plutôt que pour un utilisateur spécifique. Cela inclut les résumés d’images et le traitement RAG contextuel.",
         "error": {
           "title": "Échec du chargement de l'utilisation système pour cette période."
         },
@@ -9193,6 +9357,7 @@
         "loginRequired": "Vous devez d'abord vous connecter avec votre fournisseur d'identité.",
         "oauthUserAlreadyExists": "Un compte avec cette adresse e-mail existe déjà avec une autre méthode de connexion. Connectez-vous comme la première fois, ou demandez à votre administrateur d'associer ce fournisseur.",
         "serverError": "Votre fournisseur d'identité a rencontré une erreur. Veuillez réessayer.",
+        "staleSignIn": "Ce lien de connexion a expiré ou n'est plus valide. Veuillez vous reconnecter.",
         "temporarilyUnavailable": "Votre fournisseur d'identité est temporairement indisponible. Veuillez réessayer plus tard."
       },
       "credentialsIssue": {
@@ -10823,6 +10988,9 @@
         },
         "loading": {
           "text": "Chargement des modèles..."
+        },
+        "loadingMore": {
+          "text": "Chargement d'autres modèles..."
         }
       },
       "modelSettingsButton": {
@@ -13082,6 +13250,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "Développer",
+      "expandSection": "Développer {title}",
+      "fold": "Réduire",
+      "foldSection": "Réduire {title}"
+    },
     "comboBox": {
       "close": "Fermer la liste déroulante",
       "create": "Créer",
@@ -13102,6 +13276,7 @@
       "loading": "Chargement",
       "loadingPage": "Chargement…",
       "openCalendar": "Ouvrir le calendrier",
+      "optional": "(Facultatif)",
       "progress": "Progression",
       "remove": "Retirer",
       "removeItem": "Retirer {title}",

@@ -11,7 +11,7 @@
 /* ── List ───────────────────────────────────────────────────────────────────── */
 
 .opal-tabs-list {
-  @apply w-full rounded-08;
+  @apply relative w-full rounded-08;
 }
 
 .opal-tabs-list[data-variant="contained"] {
@@ -27,61 +27,54 @@
 
 /* ── Trigger ────────────────────────────────────────────────────────────────── */
 
+/* Above the sliding surface, which paints the active state behind them. The
+   trigger is an interactive surface: each state sets the two interactive
+   foregrounds, which its label (a Content) reads, and which fade on change. */
 .opal-tabs-trigger {
-  @apply inline-flex items-center justify-center whitespace-nowrap rounded-08 cursor-pointer transition-all duration-200 ease-out;
+  @apply relative z-1 inline-flex items-center justify-center whitespace-nowrap rounded-08;
 }
 
+/* 36px tall, border included. */
 .opal-tabs-trigger[data-variant="contained"] {
-  @apply p-2 gap-2;
+  @apply h-9 px-2 gap-2 border border-transparent;
 }
 
 .opal-tabs-trigger[data-variant="pill"],
 .opal-tabs-trigger[data-variant="underline"] {
-  @apply p-1 font-secondary-action;
+  @apply p-1;
 }
 
-/* contained · active */
+/* contained (the surface paints the active background) */
 .opal-tabs-trigger[data-variant="contained"][data-state="active"] {
-  @apply bg-background-neutral-00 text-text-04 border border-border-01;
-  box-shadow:
-    0px 2px 12px 0px var(--shadow-02),
-    0px 0px 4px 1px var(--shadow-02);
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
 }
 
-/* contained · inactive */
 .opal-tabs-trigger[data-variant="contained"][data-state="inactive"] {
-  @apply text-text-03 border border-transparent;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
 }
 
-/* pill · active */
+/* pill (the surface paints the filled background) */
 .opal-tabs-trigger[data-variant="pill"][data-state="active"] {
-  @apply bg-background-tint-inverted-03 text-text-inverted-05;
+  --interactive-foreground: var(--text-inverted-05);
+  --interactive-foreground-icon: var(--text-inverted-05);
 }
 
-/* pill · inactive */
 .opal-tabs-trigger[data-variant="pill"][data-state="inactive"] {
-  @apply bg-background-tint-00 text-text-03;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
 }
 
-/* underline · active */
+/* underline */
 .opal-tabs-trigger[data-variant="underline"][data-state="active"] {
-  @apply text-text-05;
+  --interactive-foreground: var(--text-05);
+  --interactive-foreground-icon: var(--text-05);
 }
 
-/* underline · inactive */
 .opal-tabs-trigger[data-variant="underline"][data-state="inactive"] {
-  @apply text-text-03;
-}
-
-/* ── Trigger icon ───────────────────────────────────────────────────────────── */
-
-.opal-tabs-trigger[data-variant="contained"] .opal-tabs-trigger-icon {
-  @apply stroke-text-03;
-}
-
-.opal-tabs-trigger[data-variant="pill"] .opal-tabs-trigger-icon,
-.opal-tabs-trigger[data-variant="underline"] .opal-tabs-trigger-icon {
-  @apply stroke-current;
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
 }
 
 /* ── Pill / underline indicator ─────────────────────────────────────────────── */
@@ -90,7 +83,46 @@
   @apply absolute bottom-0 start-0 h-px bg-border-02 pointer-events-none;
 }
 
+/* left-0, not start-0: the hook measures offsets from the list's physical
+   left edge, in either direction. */
 .opal-tabs-pill-indicator {
-  @apply absolute bottom-0 z-10 pointer-events-none bg-background-tint-inverted-03 transition-all duration-200 ease-out;
+  @apply absolute bottom-0 left-0 z-10 pointer-events-none bg-background-tint-inverted-03;
   height: 2px;
+  will-change: transform, width;
+}
+
+/* ── Active surface ─────────────────────────────────────────────────────────── */
+
+/* Sits on the active tab and slides to the next one. Contained: the raised
+   white card. Pill: the filled background. */
+/* left-0, not start-0: offsets are measured from the physical left edge. */
+.opal-tabs-surface {
+  @apply absolute top-0 left-0 z-0 pointer-events-none rounded-08;
+  will-change: transform, width, height;
+}
+
+.opal-tabs-surface[data-variant="contained"] {
+  @apply bg-background-neutral-00 border border-border-01;
+  box-shadow: var(--shadow-box-00);
+}
+
+.opal-tabs-surface[data-variant="pill"] {
+  @apply bg-background-tint-inverted-03;
+}
+
+/* Slide once placed; hold still on the first placement and while scrolling. */
+.opal-tabs-surface[data-measured]:not([data-scrolling]),
+.opal-tabs-pill-indicator[data-measured]:not([data-scrolling]) {
+  transition:
+    transform 200ms ease-out,
+    width 200ms ease-out,
+    height 200ms ease-out,
+    opacity 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-tabs-surface,
+  .opal-tabs-pill-indicator {
+    transition: none !important;
+  }
 }

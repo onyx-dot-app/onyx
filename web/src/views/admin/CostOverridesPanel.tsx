@@ -3,7 +3,8 @@
 import { ChangeEvent, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { ContentAction, PageLoader, toast } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
@@ -59,7 +60,7 @@ interface OverrideFormProps {
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const t = useTranslations("admin.costOverrides");
   const { mutate } = useSWRConfig();
-  const { llmProviders } = useAdminLanguageModels();
+  const { llmProviders, modelPaging } = useAdminLanguageModels();
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
@@ -142,6 +143,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
               })}
               value={modelConfigId}
               grouped={!hideProviderGrouping}
+              modelPaging={modelPaging}
               onChange={(modelConfigurationId) => {
                 const opt = findLlmOptionById(
                   llmProviders,

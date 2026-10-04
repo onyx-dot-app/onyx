@@ -89,6 +89,7 @@ def _user(entra_user: EntraUser) -> OneDriveUser | None:
 class OneDriveSourceOperations(SourceOperations):
     source = DocumentSource.ONEDRIVE
     sdk_modules = ("msal", "requests")
+    config_keys = frozenset({CONFIG_AUTHORITY_HOST, CONFIG_GRAPH_API_HOST})
 
     _graph_gateway: MicrosoftGraphGateway | None = None
 

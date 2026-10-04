@@ -1,12 +1,13 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
 import { Button, Card, InputTypeIn, ShadowDiv } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { Card as CardLayout, InputHorizontal, Section } from "@opal/layouts";
-import { SvgExpand, SvgFold, SvgSimpleLoader, SvgSliders } from "@opal/icons";
+import { SvgExpand, SvgFold, SvgSliders } from "@opal/icons";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
@@ -54,7 +55,7 @@ export default function MCPServerCard({
   if (isLoading) {
     cardContent = (
       <Section padding={4}>
-        <SvgSimpleLoader />
+        <IconLoader />
       </Section>
     );
   } else if (hasTools) {

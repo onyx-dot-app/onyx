@@ -84,7 +84,7 @@ approximating production traffic shape:
 | Scenario | Metrics | Weight | What it exercises |
 |---|---|---|---|
 | **BasicChatUser** | `chat:*` | 70 | single-turn chat, plain answer |
-| **ChatWithSearchUser** | `search:*` | 20 | one `internal_search` tool call → query expansion, embedding model server, Vespa/OpenSearch retrieval (needs indexed docs) |
+| **ChatWithSearchUser** | `search:*` | 20 | one `internal_search` tool call → query expansion, embedding model server, OpenSearch retrieval (needs indexed docs) |
 | **MultiToolUser** | `multitool:*` | 8 | up to 3 retrieval tools in parallel in one turn (`mock-tools3`) |
 | **DeepResearchUser** | `dr:*` | 2 | full DR turn — plan, parallel agents, reports; ~8+ LLM calls on one held stream |
 

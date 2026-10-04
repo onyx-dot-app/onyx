@@ -11,6 +11,7 @@ from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.chunk import update_chunk_boost_components__no_commit
 from onyx.db.document import (
     fetch_chunk_counts_for_documents,
+    get_cc_pair_ids_for_documents,
     get_document_source_types,
     mark_document_as_indexed_for_cc_pair__no_commit,
     prepare_to_modify_documents,
@@ -47,7 +48,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
 
     Keeps orchestration logic in the pipeline and side-effects in the adapter.
     Each phase opens its own short-lived session so no connection is held idle
-    during the long embedding and Vespa-write phases.
+    during the long embedding and document-index-write phases.
     """
 
     def __init__(
@@ -150,6 +151,10 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
                 context.updatable_docs, tenant_id, db_session
             ),
             doc_id_to_source_types=get_document_source_types(
+                db_session=db_session,
+                document_ids=updatable_ids,
+            ),
+            doc_id_to_cc_pair_ids=get_cc_pair_ids_for_documents(
                 db_session=db_session,
                 document_ids=updatable_ids,
             ),
@@ -276,6 +281,7 @@ class DocumentChunkEnricher:
         doc_id_to_document_set: dict[str, list[str]],
         doc_id_to_ancestor_ids: dict[str, list[int]],
         doc_id_to_source_types: dict[str, tuple[DocumentSource, ...]],
+        doc_id_to_cc_pair_ids: dict[str, list[int]],
         id_to_boost_map: dict[str, int],
         doc_id_to_previous_chunk_cnt: dict[str, int],
         doc_id_to_new_chunk_cnt: dict[str, int],
@@ -286,6 +292,7 @@ class DocumentChunkEnricher:
         self._doc_id_to_document_set = doc_id_to_document_set
         self._doc_id_to_ancestor_ids = doc_id_to_ancestor_ids
         self._doc_id_to_source_types = doc_id_to_source_types
+        self._doc_id_to_cc_pair_ids = doc_id_to_cc_pair_ids
         self._id_to_boost_map = id_to_boost_map
         self._no_access = no_access
         self._tenant_id = tenant_id
@@ -319,4 +326,5 @@ class DocumentChunkEnricher:
                 chunk.source_document.id,
                 (chunk.source_document.source,),
             ),
+            cc_pair_ids=self._doc_id_to_cc_pair_ids.get(chunk.source_document.id),
         )

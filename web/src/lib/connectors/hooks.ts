@@ -1,37 +1,42 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import useSWR from "swr";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useSWR, { useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
-import { useFederatedConnectors, usePublicCredentials } from "@/lib/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import type {
-  Credential,
-  GmailCredentialJson,
-  GmailServiceAccountCredentialJson,
-  GoogleDriveCredentialJson,
-  GoogleDriveServiceAccountCredentialJson,
-  OAuthDetails,
-} from "@/lib/connectors/types";
+import { checkCredentialBinding } from "@/lib/connectors/svc";
+import {
+  bindingCheckInput,
+  decideBindingGate,
+  type BindingCheckState,
+  type BindingGate,
+  type BindingGateReason,
+  type BoundFieldState,
+  type CredentialBindingFieldError,
+} from "@/lib/connectors/bindingGate";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { FederatedConnectorDetail } from "@/lib/types";
+import type { CredentialSchemaResponse } from "@/lib/credentials/types";
 import type {
   ConfigurableSources,
-  CredentialSchemaResponse,
-  FederatedConnectorDetail,
   ValidSources,
-} from "@/lib/types";
+} from "@/lib/connectors/types/source";
 
-/** The OAuth capabilities of a source: whether it supports OAuth, manual credentials, and any extra fields. */
-export function useOAuthDetails(sourceType: ValidSources) {
-  return useSWR<OAuthDetails>(
-    SWR_KEYS.connectorOAuthDetails(sourceType),
-    errorHandlingFetcher,
-    {
-      shouldRetryOnError: false,
-    }
+/** The workspace's federated connectors. */
+export function useFederatedConnectors() {
+  const { mutate } = useSWRConfig();
+  const url = SWR_KEYS.federatedConnectors;
+  const swrResponse = useSWR<FederatedConnectorDetail[]>(
+    url,
+    errorHandlingFetcher
   );
+
+  return {
+    ...swrResponse,
+    refreshFederatedConnectors: () => mutate(url),
+  };
 }
 
 /**
@@ -94,68 +99,6 @@ export function useAvailableSources(): {
     error: ccPairsError ?? federatedError,
   };
 }
-
-export const useGmailCredentials = (connector: string) => {
-  const {
-    data: credentialsData,
-    isLoading: isCredentialsLoading,
-    error: credentialsError,
-    refreshCredentials,
-  } = usePublicCredentials();
-
-  const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
-    credentialsData?.find(
-      (credential) =>
-        credential.credential_json?.google_tokens &&
-        credential.admin_public &&
-        credential.source === connector
-    );
-
-  const gmailServiceAccountCredential:
-    | Credential<GmailServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGmailCredential =
-    gmailPublicCredential || gmailServiceAccountCredential;
-
-  return {
-    liveGmailCredential: liveGmailCredential,
-  };
-};
-
-export const useGoogleDriveCredentials = (connector: string) => {
-  const { data: credentialsData } = usePublicCredentials();
-
-  const googleDrivePublicCredential:
-    | Credential<GoogleDriveCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_tokens &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const googleDriveServiceAccountCredential:
-    | Credential<GoogleDriveServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGDriveCredential =
-    googleDrivePublicCredential || googleDriveServiceAccountCredential;
-
-  return {
-    liveGDriveCredential: liveGDriveCredential,
-  };
-};
 
 interface UseFederatedConnectorResult {
   sourceType: ConfigurableSources | null;
@@ -261,4 +204,199 @@ export function useConnectorGroupRestrictionsEnabled(): boolean {
     errorHandlingFetcher
   );
   return data?.enabled ?? false;
+}
+
+/**
+ * Wait this long after a bound field loses focus. Focus that moves between
+ * bound fields, or a click that changes a bound value, then sends one check.
+ */
+const BINDING_CHECK_BLUR_DELAY_MS = 300;
+/** Wait this long after the credential changes, for the values it sets. */
+const BINDING_CHECK_CREDENTIAL_DELAY_MS = 50;
+
+export interface UseBoundFieldsGateParams {
+  source: ValidSources;
+  /** `null` when no credential is selected. */
+  credentialId: number | null;
+  /** The credential's `time_updated`. An edit makes older results stale. */
+  credentialUpdatedAt: string | null;
+  /** A credential is selected, or the source needs none. */
+  credentialSelected: boolean;
+  /** Every credential-bound field of the source; the check sends their values. */
+  boundFieldNames: string[];
+  /** The visible bound fields, as the gate reads them. */
+  boundFields: BoundFieldState[];
+  values: Record<string, unknown>;
+  /** One more condition, applied after the binding passes. */
+  extra?: BindingGate;
+}
+
+export interface UseBoundFieldsGateResult extends BindingGate {
+  /** Bound field name to the backend's error for the current input. */
+  fieldErrors: Record<string, CredentialBindingFieldError>;
+  /** Checks the current input again, e.g. when a bound field loses focus. */
+  requestCheck: () => void;
+}
+
+interface BindingCheckResult {
+  key: string;
+  state: BindingCheckState;
+}
+
+/**
+ * Whether the create form's configuration is unlocked. It checks the
+ * credential and the credential-bound values with the backend when a bound
+ * field loses focus or the credential changes, not on each change of a value:
+ * each check reads the credential, which writes an audit event. A response
+ * for an older input is ignored.
+ */
+export function useBoundFieldsGate({
+  source,
+  credentialId,
+  credentialUpdatedAt,
+  credentialSelected,
+  boundFieldNames,
+  boundFields,
+  values,
+  extra,
+}: UseBoundFieldsGateParams): UseBoundFieldsGateResult {
+  const { key: inputKey, config } = bindingCheckInput(
+    credentialId,
+    boundFieldNames,
+    values
+  );
+  // A result for another source or an older version of the credential is
+  // stale too.
+  const key = JSON.stringify({ source, inputKey, credentialUpdatedAt });
+  const ready =
+    boundFields.length > 0 &&
+    credentialId !== null &&
+    boundFields.every((field) => !field.missing && !field.invalid);
+
+  const [result, setResult] = useState<BindingCheckResult | null>(null);
+  const resultRef = useRef(result);
+  const latestRef = useRef({ key, config, credentialId, ready });
+  useEffect(() => {
+    latestRef.current = { key, config, credentialId, ready };
+  });
+
+  // Bumped by every scheduled check and on unmount; an older response is
+  // ignored.
+  const generationRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const setResultFor = useCallback(
+    (resultKey: string, state: BindingCheckState) => {
+      const next = { key: resultKey, state };
+      resultRef.current = next;
+      setResult(next);
+    },
+    []
+  );
+
+  const send = useCallback(() => {
+    const latest = latestRef.current;
+    if (!latest.ready || latest.credentialId === null) return;
+    const generation = ++generationRef.current;
+    const update = (state: BindingCheckState) => {
+      if (generation === generationRef.current) {
+        setResultFor(latest.key, state);
+      }
+    };
+    update({ kind: "checking" });
+    checkCredentialBinding(latest.credentialId, {
+      source,
+      connector_specific_config: latest.config,
+    }).then(
+      (response) => update({ kind: "done", response }),
+      () => update({ kind: "unavailable" })
+    );
+  }, [source, setResultFor]);
+
+  // Every blur and credential change checks again: the source may have
+  // changed, and a failed request must not stick.
+  const schedule = useCallback(
+    (delayMs: number) => {
+      const latest = latestRef.current;
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      if (latest.ready) {
+        // Shown at once; a response for an older input is dropped.
+        generationRef.current += 1;
+        setResultFor(latest.key, { kind: "checking" });
+      }
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        send();
+      }, delayMs);
+    },
+    [send, setResultFor]
+  );
+
+  useEffect(() => {
+    if (credentialId === null) return;
+    schedule(BINDING_CHECK_CREDENTIAL_DELAY_MS);
+  }, [credentialId, credentialUpdatedAt, schedule]);
+
+  useEffect(
+    () => () => {
+      generationRef.current += 1;
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    },
+    []
+  );
+
+  const requestCheck = useCallback(
+    () => schedule(BINDING_CHECK_BLUR_DELAY_MS),
+    [schedule]
+  );
+
+  const binding: BindingCheckState =
+    credentialId === null
+      ? { kind: credentialSelected ? "unavailable" : "idle" }
+      : result !== null && result.key === key
+        ? result.state
+        : { kind: "idle" };
+  const gate = decideBindingGate({
+    hasBoundFields: boundFields.length > 0,
+    credentialSelected,
+    boundFields,
+    binding,
+    extra,
+  });
+  return {
+    ...gate,
+    fieldErrors: binding.kind === "done" ? binding.response.field_errors : {},
+    requestCheck,
+  };
+}
+
+/** The line the locked configuration shows, or `null` when it is unlocked. */
+export function useBindingGateMessage(
+  reason: BindingGateReason | null
+): string | null {
+  const t = useTranslations("admin.connectorsList");
+  if (reason === null) return null;
+  switch (reason.kind) {
+    case "enterField":
+      return t("bindingGate.enterField", { field: reason.label });
+    case "fixField":
+      return t("bindingGate.fixField", { field: reason.label });
+    case "selectCredential":
+      return t("credentialRequired.tooltip");
+    case "awaitingCheck":
+      return t("bindingGate.awaitingCheck");
+    case "checking":
+      return t("bindingGate.checking");
+    case "fieldRejected":
+      return reason.error.kind === "missing"
+        ? t("bindingGate.enterField", { field: reason.label })
+        : t("bindingGate.fieldInvalid", {
+            field: reason.label,
+            detail: reason.error.detail,
+          });
+    case "rejected":
+      return t("bindingGate.rejected", { detail: reason.rejection.detail });
+    case "custom":
+      return reason.message;
+  }
 }

@@ -1,10 +1,11 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { MessageCard, Tabs } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 import { DocPermissionSyncAttemptsTable } from "./DocPermissionSyncAttemptsTable";
@@ -258,7 +259,7 @@ function SyncAttemptsTabSpinner() {
       height="auto"
       className="min-h-128"
     >
-      <SvgSimpleLoader className="h-6 w-6" />
+      <IconLoader className="h-6 w-6" />
     </Section>
   );
 }

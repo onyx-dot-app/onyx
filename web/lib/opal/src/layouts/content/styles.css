@@ -395,8 +395,11 @@
   @apply w-full;
 }
 
+/* items-start: the icon container is exactly one title line tall (its icon
+   is lineHeight - 4px, plus 2px padding each side), so a one-line title reads
+   centred and a wrapped title keeps its icon on the first line. */
 .opal-content-md-header {
-  @apply flex flex-row items-center w-full;
+  @apply flex flex-row items-start w-full;
   gap: 0.125rem;
 }
 
@@ -425,8 +428,8 @@
   /* min-w-0: as a flex item next to the icon, the row's automatic minimum
      width would push a clamped title past the container edge, clipping the
      ellipsis out of view. */
-  @apply flex items-center w-full min-w-0;
-  gap: 0.25rem;
+  /* gap-0: each Text's own 2px inline padding spaces the row. */
+  @apply flex items-center w-full min-w-0 gap-0;
 }
 
 .opal-content-md-input-sizer {
@@ -497,8 +500,9 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-sm {
-  /* since `ContentSm` doesn't have a description, it's possible to center-align the icon and text */
-  @apply flex items-center;
+  /* items-start: as in ContentMd, the icon container is one title line tall,
+     so a wrapped title keeps its icon on the first line. */
+  @apply flex items-start;
   gap: 0.125rem;
 }
 

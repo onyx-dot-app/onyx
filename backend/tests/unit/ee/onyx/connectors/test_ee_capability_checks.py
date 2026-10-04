@@ -223,3 +223,19 @@ def test_fallback_check_calls_validate_perm_sync() -> None:
 
     # Postcondition.
     connector.validate_perm_sync.assert_called_once_with()
+
+
+def test_confluence_named_checks_shadow_the_fallback() -> None:
+    """
+    Verifies Confluence registers named checks for both sync capabilities, so
+    no ``validate_perm_sync`` fallback is synthesized.
+    """
+    # Under test.
+    checks = get_perm_sync_capability_checks(DocumentSource.CONFLUENCE)
+
+    # Postcondition.
+    assert {check.capability for check in checks} == {
+        CredentialCapability.DOC_PERMISSION_SYNC,
+        CredentialCapability.EXTERNAL_GROUP_SYNC,
+    }
+    assert not any(check.is_fallback for check in checks)

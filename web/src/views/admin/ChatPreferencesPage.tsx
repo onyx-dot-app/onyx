@@ -17,7 +17,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Collapsible } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import {
   InputSingleSelect,
@@ -745,6 +745,7 @@ export default function ChatPreferencesPage() {
   const {
     llmProviders,
     defaultChatNaming,
+    modelPaging,
     refetch: refetchLlmProviders,
   } = useAdminLanguageModels();
 
@@ -1143,6 +1144,7 @@ export default function ChatPreferencesPage() {
                     })}
                     value={chatNamingModelConfigId}
                     grouped={!settings.hide_provider_grouping}
+                    modelPaging={modelPaging}
                     onChange={(modelConfigurationId) => {
                       const opt = findLlmOptionById(
                         llmProviders,
@@ -1284,192 +1286,189 @@ export default function ChatPreferencesPage() {
                 </Section>
 
                 {/* Actions & Tools */}
-                <SimpleCollapsible>
-                  <SimpleCollapsible.Header
-                    title={t("tools.title")}
-                    description={t("tools.description")}
-                  />
-                  <SimpleCollapsible.Content>
-                    <Section gap={2} alignItems="stretch">
-                      {vectorDbEnabled && searchTool && (
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.internalSearch.title")}
-                            description={t("tools.internalSearch.description")}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={isToolEnabled(searchTool.id)}
-                              onCheckedChange={(checked) =>
-                                void toggleTool(searchTool.id, checked)
-                              }
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      )}
-
-                      <Disabled
-                        disabled={!imageGenTool}
-                        tooltip={t("tools.imageGeneration.disabledTooltip")}
-                      >
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.imageGeneration.title")}
-                            description={t("tools.imageGeneration.description")}
-                            disabled={!imageGenTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                imageGenTool
-                                  ? isToolEnabled(imageGenTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                imageGenTool &&
-                                void toggleTool(imageGenTool.id, checked)
-                              }
-                              disabled={!imageGenTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
-
-                      <Disabled disabled={!webSearchTool}>
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.webSearch.title")}
-                            description={t("tools.webSearch.description")}
-                            disabled={!webSearchTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                webSearchTool
-                                  ? isToolEnabled(webSearchTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                webSearchTool &&
-                                void toggleTool(webSearchTool.id, checked)
-                              }
-                              disabled={!webSearchTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
-
-                      <Disabled disabled={!openURLTool}>
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.openUrl.title")}
-                            description={t("tools.openUrl.description")}
-                            disabled={!openURLTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                openURLTool
-                                  ? isToolEnabled(openURLTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                openURLTool &&
-                                void toggleTool(openURLTool.id, checked)
-                              }
-                              disabled={!openURLTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
-
-                      <Disabled disabled={!codeInterpreterTool}>
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.codeInterpreter.title")}
-                            description={t("tools.codeInterpreter.description")}
-                            disabled={!codeInterpreterTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                codeInterpreterTool
-                                  ? isToolEnabled(codeInterpreterTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                codeInterpreterTool &&
-                                void toggleTool(codeInterpreterTool.id, checked)
-                              }
-                              disabled={!codeInterpreterTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
-
-                      <Disabled disabled={!codingAgentTool}>
-                        <Card border="solid" rounding={4}>
-                          <InputHorizontal
-                            title={t("tools.codingAgent.title")}
-                            description={t("tools.codingAgent.description")}
-                            disabled={!codingAgentTool}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={
-                                codingAgentTool
-                                  ? isToolEnabled(codingAgentTool.id)
-                                  : false
-                              }
-                              onCheckedChange={(checked) =>
-                                codingAgentTool &&
-                                void toggleTool(codingAgentTool.id, checked)
-                              }
-                              disabled={!codingAgentTool}
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      </Disabled>
-                    </Section>
-
-                    {/* Separator between built-in tools and MCP/OpenAPI tools */}
-                    {(mcpServersWithTools.length > 0 ||
-                      openApiTools.length > 0) && (
-                      <Divider paddingPerpendicular={2} paddingParallel={0} />
+                <Collapsible
+                  title={t("tools.title")}
+                  description={t("tools.description")}
+                >
+                  <Section gap={2} alignItems="stretch">
+                    {vectorDbEnabled && searchTool && (
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.internalSearch.title")}
+                          description={t("tools.internalSearch.description")}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={isToolEnabled(searchTool.id)}
+                            onCheckedChange={(checked) =>
+                              void toggleTool(searchTool.id, checked)
+                            }
+                          />
+                        </InputHorizontal>
+                      </Card>
                     )}
 
-                    {/* MCP Servers & OpenAPI Tools */}
-                    <Section gap={2}>
-                      {mcpServersWithTools.map(({ server, tools }) => (
-                        <MCPServerCard
-                          key={server.id}
-                          server={server}
-                          tools={tools}
-                          isToolEnabled={isToolEnabled}
-                          onToggleTool={toggleTool}
-                          onToggleTools={toggleTools}
-                        />
-                      ))}
-                      {openApiTools.map((tool) => (
-                        <Card key={tool.id} border="solid" rounding={4}>
-                          <InputHorizontal
-                            icon={SvgActions}
-                            title={tool.display_name || tool.name}
-                            description={tool.description}
-                            withLabel
-                          >
-                            <InputSwitch
-                              checked={isToolEnabled(tool.id)}
-                              onCheckedChange={(checked) =>
-                                toggleTool(tool.id, checked)
-                              }
-                            />
-                          </InputHorizontal>
-                        </Card>
-                      ))}
-                    </Section>
-                  </SimpleCollapsible.Content>
-                </SimpleCollapsible>
+                    <Disabled
+                      disabled={!imageGenTool}
+                      tooltip={t("tools.imageGeneration.disabledTooltip")}
+                    >
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.imageGeneration.title")}
+                          description={t("tools.imageGeneration.description")}
+                          disabled={!imageGenTool}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              imageGenTool
+                                ? isToolEnabled(imageGenTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              imageGenTool &&
+                              void toggleTool(imageGenTool.id, checked)
+                            }
+                            disabled={!imageGenTool}
+                          />
+                        </InputHorizontal>
+                      </Card>
+                    </Disabled>
+
+                    <Disabled disabled={!webSearchTool}>
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.webSearch.title")}
+                          description={t("tools.webSearch.description")}
+                          disabled={!webSearchTool}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              webSearchTool
+                                ? isToolEnabled(webSearchTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              webSearchTool &&
+                              void toggleTool(webSearchTool.id, checked)
+                            }
+                            disabled={!webSearchTool}
+                          />
+                        </InputHorizontal>
+                      </Card>
+                    </Disabled>
+
+                    <Disabled disabled={!openURLTool}>
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.openUrl.title")}
+                          description={t("tools.openUrl.description")}
+                          disabled={!openURLTool}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              openURLTool
+                                ? isToolEnabled(openURLTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              openURLTool &&
+                              void toggleTool(openURLTool.id, checked)
+                            }
+                            disabled={!openURLTool}
+                          />
+                        </InputHorizontal>
+                      </Card>
+                    </Disabled>
+
+                    <Disabled disabled={!codeInterpreterTool}>
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.codeInterpreter.title")}
+                          description={t("tools.codeInterpreter.description")}
+                          disabled={!codeInterpreterTool}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              codeInterpreterTool
+                                ? isToolEnabled(codeInterpreterTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              codeInterpreterTool &&
+                              void toggleTool(codeInterpreterTool.id, checked)
+                            }
+                            disabled={!codeInterpreterTool}
+                          />
+                        </InputHorizontal>
+                      </Card>
+                    </Disabled>
+
+                    <Disabled disabled={!codingAgentTool}>
+                      <Card border="solid" rounding={4}>
+                        <InputHorizontal
+                          title={t("tools.codingAgent.title")}
+                          description={t("tools.codingAgent.description")}
+                          disabled={!codingAgentTool}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={
+                              codingAgentTool
+                                ? isToolEnabled(codingAgentTool.id)
+                                : false
+                            }
+                            onCheckedChange={(checked) =>
+                              codingAgentTool &&
+                              void toggleTool(codingAgentTool.id, checked)
+                            }
+                            disabled={!codingAgentTool}
+                          />
+                        </InputHorizontal>
+                      </Card>
+                    </Disabled>
+                  </Section>
+
+                  {/* Separator between built-in tools and MCP/OpenAPI tools */}
+                  {(mcpServersWithTools.length > 0 ||
+                    openApiTools.length > 0) && (
+                    <Divider paddingPerpendicular={2} paddingParallel={0} />
+                  )}
+
+                  {/* MCP Servers & OpenAPI Tools */}
+                  <Section gap={2}>
+                    {mcpServersWithTools.map(({ server, tools }) => (
+                      <MCPServerCard
+                        key={server.id}
+                        server={server}
+                        tools={tools}
+                        isToolEnabled={isToolEnabled}
+                        onToggleTool={toggleTool}
+                        onToggleTools={toggleTools}
+                      />
+                    ))}
+                    {openApiTools.map((tool) => (
+                      <Card key={tool.id} border="solid" rounding={4}>
+                        <InputHorizontal
+                          icon={SvgActions}
+                          title={tool.display_name || tool.name}
+                          description={tool.description}
+                          withLabel
+                        >
+                          <InputSwitch
+                            checked={isToolEnabled(tool.id)}
+                            onCheckedChange={(checked) =>
+                              toggleTool(tool.id, checked)
+                            }
+                          />
+                        </InputHorizontal>
+                      </Card>
+                    ))}
+                  </Section>
+                </Collapsible>
               </Section>
             </div>
           </Disabled>
@@ -1477,155 +1476,150 @@ export default function ChatPreferencesPage() {
           <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           {/* Advanced Options */}
-          <SimpleCollapsible defaultOpen={false}>
-            <SimpleCollapsible.Header title={t("advanced.title")} />
-            <SimpleCollapsible.Content>
-              <Section gap={4}>
-                <Card border="solid" rounding={4}>
-                  <Section alignItems="stretch">
-                    <Disabled
-                      disabled={!enterpriseTier}
-                      tooltip={t("retention.tierTooltip")}
-                    >
-                      <InputHorizontal
-                        title={t("retention.title")}
-                        description={t("retention.description", {
-                          appName: settings.appName,
-                        })}
-                        tag={
-                          !enterpriseTier
-                            ? {
-                                title: t("retention.enterprisePlanTag.label"),
-                                color: "amber",
-                                icon: SvgOrganization,
-                              }
-                            : undefined
-                        }
-                        disabled={!enterpriseTier}
-                        withLabel
-                        fillInput
-                      >
-                        <RetentionField
-                          value={s.maximum_chat_retention_days ?? null}
-                          disabled={!enterpriseTier}
-                          onSave={(maximum_chat_retention_days) =>
-                            void saveSettings({ maximum_chat_retention_days })
-                          }
-                        />
-                      </InputHorizontal>
-                    </Disabled>
-
+          <Collapsible defaultOpen={false} title={t("advanced.title")}>
+            <Section gap={4}>
+              <Card border="solid" rounding={4}>
+                <Section alignItems="stretch">
+                  <Disabled
+                    disabled={!enterpriseTier}
+                    tooltip={t("retention.tierTooltip")}
+                  >
                     <InputHorizontal
-                      title={t("queryHistory.title")}
-                      description={t("queryHistory.description")}
+                      title={t("retention.title")}
+                      description={t("retention.description", {
+                        appName: settings.appName,
+                      })}
+                      tag={
+                        !enterpriseTier
+                          ? {
+                              title: t("retention.enterprisePlanTag.label"),
+                              color: "amber",
+                              icon: SvgOrganization,
+                            }
+                          : undefined
+                      }
+                      disabled={!enterpriseTier}
                       withLabel
                       fillInput
                     >
-                      <InputSingleSelect
-                        value={s.query_history_type ?? QueryHistoryType.NORMAL}
-                        onValueChange={(value) => {
-                          void saveSettings({
-                            query_history_type: value as QueryHistoryType,
-                          });
-                        }}
-                        defaultOption={QueryHistoryType.NORMAL}
-                        placeholder={tInputSelect("placeholder.fallback")}
-                        options={[
-                          {
-                            value: QueryHistoryType.NORMAL,
-                            title: t("queryHistory.normal.label"),
-                            description: t("queryHistory.normal.description"),
-                          },
-                          {
-                            value: QueryHistoryType.ANONYMIZED,
-                            title: t("queryHistory.anonymized.label"),
-                            description: t(
-                              "queryHistory.anonymized.description"
-                            ),
-                          },
-                          {
-                            value: QueryHistoryType.DISABLED,
-                            title: t("queryHistory.disabled.label"),
-                            description: t("queryHistory.disabled.description"),
-                          },
-                        ]}
+                      <RetentionField
+                        value={s.maximum_chat_retention_days ?? null}
+                        disabled={!enterpriseTier}
+                        onSave={(maximum_chat_retention_days) =>
+                          void saveSettings({ maximum_chat_retention_days })
+                        }
                       />
                     </InputHorizontal>
-                  </Section>
-                </Card>
+                  </Disabled>
 
-                <Card border="solid" rounding={4}>
-                  <InputVertical
-                    title={t("fileLimits.title")}
-                    description={t("fileLimits.description")}
+                  <InputHorizontal
+                    title={t("queryHistory.title")}
+                    description={t("queryHistory.description")}
+                    withLabel
+                    fillInput
+                  >
+                    <InputSingleSelect
+                      value={s.query_history_type ?? QueryHistoryType.NORMAL}
+                      onValueChange={(value) => {
+                        void saveSettings({
+                          query_history_type: value as QueryHistoryType,
+                        });
+                      }}
+                      defaultOption={QueryHistoryType.NORMAL}
+                      placeholder={tInputSelect("placeholder.fallback")}
+                      options={[
+                        {
+                          value: QueryHistoryType.NORMAL,
+                          title: t("queryHistory.normal.label"),
+                          description: t("queryHistory.normal.description"),
+                        },
+                        {
+                          value: QueryHistoryType.ANONYMIZED,
+                          title: t("queryHistory.anonymized.label"),
+                          description: t("queryHistory.anonymized.description"),
+                        },
+                        {
+                          value: QueryHistoryType.DISABLED,
+                          title: t("queryHistory.disabled.label"),
+                          description: t("queryHistory.disabled.description"),
+                        },
+                      ]}
+                    />
+                  </InputHorizontal>
+                </Section>
+              </Card>
+
+              <Card border="solid" rounding={4}>
+                <InputVertical
+                  title={t("fileLimits.title")}
+                  description={t("fileLimits.description")}
+                  withLabel
+                >
+                  <FileSizeLimitFields
+                    saveSettings={saveSettings}
+                    initialUploadSizeMb={
+                      (s.user_file_max_upload_size_mb ?? 0) <= 0
+                        ? (s.default_user_file_max_upload_size_mb?.toString() ??
+                          "100")
+                        : s.user_file_max_upload_size_mb!.toString()
+                    }
+                    defaultUploadSizeMb={
+                      s.default_user_file_max_upload_size_mb?.toString() ??
+                      "100"
+                    }
+                    initialTokenThresholdK={
+                      s.file_token_count_threshold_k == null
+                        ? (s.default_file_token_count_threshold_k?.toString() ??
+                          "200")
+                        : s.file_token_count_threshold_k === 0
+                          ? ""
+                          : s.file_token_count_threshold_k.toString()
+                    }
+                    defaultTokenThresholdK={
+                      s.default_file_token_count_threshold_k?.toString() ??
+                      "200"
+                    }
+                    maxAllowedUploadSizeMb={s.max_allowed_upload_size_mb}
+                  />
+                </InputVertical>
+              </Card>
+
+              <Card border="solid" rounding={4}>
+                <Section>
+                  <InputHorizontal
+                    title={t("anonymousUsers.title")}
+                    description={t("anonymousUsers.description")}
                     withLabel
                   >
-                    <FileSizeLimitFields
-                      saveSettings={saveSettings}
-                      initialUploadSizeMb={
-                        (s.user_file_max_upload_size_mb ?? 0) <= 0
-                          ? (s.default_user_file_max_upload_size_mb?.toString() ??
-                            "100")
-                          : s.user_file_max_upload_size_mb!.toString()
-                      }
-                      defaultUploadSizeMb={
-                        s.default_user_file_max_upload_size_mb?.toString() ??
-                        "100"
-                      }
-                      initialTokenThresholdK={
-                        s.file_token_count_threshold_k == null
-                          ? (s.default_file_token_count_threshold_k?.toString() ??
-                            "200")
-                          : s.file_token_count_threshold_k === 0
-                            ? ""
-                            : s.file_token_count_threshold_k.toString()
-                      }
-                      defaultTokenThresholdK={
-                        s.default_file_token_count_threshold_k?.toString() ??
-                        "200"
-                      }
-                      maxAllowedUploadSizeMb={s.max_allowed_upload_size_mb}
+                    <InputSwitch
+                      checked={s.anonymous_user_enabled ?? false}
+                      onCheckedChange={(checked) => {
+                        void saveSettings({
+                          anonymous_user_enabled: checked,
+                        });
+                      }}
                     />
-                  </InputVertical>
-                </Card>
+                  </InputHorizontal>
 
-                <Card border="solid" rounding={4}>
-                  <Section>
-                    <InputHorizontal
-                      title={t("anonymousUsers.title")}
-                      description={t("anonymousUsers.description")}
-                      withLabel
-                    >
-                      <InputSwitch
-                        checked={s.anonymous_user_enabled ?? false}
-                        onCheckedChange={(checked) => {
-                          void saveSettings({
-                            anonymous_user_enabled: checked,
-                          });
-                        }}
-                      />
-                    </InputHorizontal>
-
-                    <InputHorizontal
-                      title={t("disableDefaultChat.title")}
-                      description={t("disableDefaultChat.description")}
-                      withLabel
-                    >
-                      <InputSwitch
-                        id="disable_default_assistant"
-                        checked={s.disable_default_assistant ?? false}
-                        onCheckedChange={(checked) => {
-                          void saveSettings({
-                            disable_default_assistant: checked,
-                          });
-                        }}
-                      />
-                    </InputHorizontal>
-                  </Section>
-                </Card>
-              </Section>
-            </SimpleCollapsible.Content>
-          </SimpleCollapsible>
+                  <InputHorizontal
+                    title={t("disableDefaultChat.title")}
+                    description={t("disableDefaultChat.description")}
+                    withLabel
+                  >
+                    <InputSwitch
+                      id="disable_default_assistant"
+                      checked={s.disable_default_assistant ?? false}
+                      onCheckedChange={(checked) => {
+                        void saveSettings({
+                          disable_default_assistant: checked,
+                        });
+                      }}
+                    />
+                  </InputHorizontal>
+                </Section>
+              </Card>
+            </Section>
+          </Collapsible>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
 

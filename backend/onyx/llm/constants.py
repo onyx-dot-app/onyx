@@ -40,6 +40,11 @@ class LlmProviderNames(str, Enum):
         return self.value
 
 
+# Models per provider in the user-facing listing and per page of
+# /llm/provider/{id}/models. Bounds the response for providers that sync
+# tens of thousands of models.
+LLM_PROVIDER_MODEL_PAGE_SIZE = 50
+
 WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENAI,
     LlmProviderNames.ANTHROPIC,

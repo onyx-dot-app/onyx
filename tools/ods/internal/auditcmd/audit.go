@@ -14,14 +14,16 @@ import (
 
 // AuditOptions holds options for the audit command.
 type AuditOptions struct {
-	Format     string
-	FailOn     string
-	IgnoreURL  string
-	Web        bool
-	Python     bool
-	Dependabot bool
-	Actions    bool
-	Debug      bool
+	Format       string
+	FailOn       string
+	IgnoreURL    string
+	Web          bool
+	Python       bool
+	Dependabot   bool
+	Actions      bool
+	AllLockfiles bool
+	Strict       bool
+	Debug        bool
 }
 
 // NewRootCommand creates the root command of the `ods-audit` binary. `ods audit`
@@ -64,12 +66,16 @@ how it gates deploys.`,
 	cmd.Flags().BoolVar(&opts.Python, "python", false, "Audit Python dependencies (uv.lock)")
 	cmd.Flags().BoolVar(&opts.Dependabot, "dependabot", false, "Audit open Dependabot security alerts")
 	cmd.Flags().BoolVar(&opts.Actions, "actions", false, "Audit GitHub Actions in .github/workflows and .github/actions")
+	cmd.Flags().BoolVar(&opts.AllLockfiles, "all-lockfiles", false, "Scan every tracked bun.lock and uv.lock, not just the root and web ones")
+	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "Fail on any backend or per-action query failure instead of warning")
 	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format(s), comma-separated: text, json, sarif (e.g. sarif,text)")
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 
 	cmd.AddCommand(newAuditImageCommand())
+	cmd.AddCommand(newAuditGateCommand())
 	cmd.AddCommand(newAuditIgnoreCommand(terminalEditUI()))
+	cmd.AddCommand(newAuditAlertCommand())
 
 	return cmd
 }
@@ -119,15 +125,17 @@ func runAudit(opts *AuditOptions, stdout, stderr io.Writer) error {
 	}
 
 	result, err := audit.Run(audit.Options{
-		Web:        opts.Web,
-		Python:     opts.Python,
-		Dependabot: opts.Dependabot,
-		Actions:    opts.Actions,
-		Format:     opts.Format,
-		FailOn:     failOn,
-		IgnoreURL:  opts.IgnoreURL,
-		Stdout:     stdout,
-		Stderr:     stderr,
+		Web:          opts.Web,
+		Python:       opts.Python,
+		Dependabot:   opts.Dependabot,
+		Actions:      opts.Actions,
+		AllLockfiles: opts.AllLockfiles,
+		Strict:       opts.Strict,
+		Format:       opts.Format,
+		FailOn:       failOn,
+		IgnoreURL:    opts.IgnoreURL,
+		Stdout:       stdout,
+		Stderr:       stderr,
 	})
 	if err != nil {
 		return failf("Audit failed: %v", err)
