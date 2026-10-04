@@ -37,14 +37,6 @@ def validate_kg_settings(kg_config_settings: KGConfigSettings) -> None:
         raise ValueError("KG_VENDOR_DOMAINS is not set")
 
 
-def is_kg_config_settings_enabled_valid(kg_config_settings: KGConfigSettings) -> bool:
-    try:
-        validate_kg_settings(kg_config_settings)
-        return True
-    except Exception:
-        return False
-
-
 def enable_kg(enable_req: EnableKGConfigRequest) -> None:
     kg_config_settings = get_kg_config_settings()
     kg_config_settings.KG_ENABLED = True

@@ -32,10 +32,10 @@ scale from `Card`, where `lg` was 24px rather than 8px.
 ## Layout Structure
 
 ```
-[  Content (flex-1, padded)  ][  rightChildren (shrink-0, full height)  ]
+[  Content (flex-1, padded)  ] 1rem [  rightChildren (shrink-0, full height)  ]
 ```
 
-- The outer wrapper is `flex flex-row items-stretch w-full`.
+- The outer wrapper is `flex flex-row items-stretch w-full gap-4`: 1rem between `Content` and `rightChildren`.
 - `Content` sits inside a `flex-1 min-w-0` div with padding from `padding`.
 - `rightChildren` is wrapped in `flex items-stretch shrink-0` so it stretches vertically.
 - With `fillRight`, the `rightChildren` wrapper instead becomes `flex-1 min-w-0` with a
@@ -92,7 +92,7 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
 
 ```tsx
 import { ContentAction } from "@opal/layouts";
-import { InputSelect } from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 
 <ContentAction
   title="Query History Visibility"
@@ -100,7 +100,7 @@ import { InputSelect } from "@/refresh-components/inputs/InputSelect";
   sizePreset="main-ui"
   variant="section"
   fillRight
-  rightChildren={<InputSelect ... />}
+  rightChildren={<InputSingleSelect ... />}
 />
 ```
 

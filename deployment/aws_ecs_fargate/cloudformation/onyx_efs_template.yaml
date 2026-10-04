@@ -29,6 +29,9 @@ Resources:
         ReplicationOverwriteProtection: ENABLED
       ThroughputMode: elastic
 
+  # Legacy Vespa access points. Onyx no longer uses Vespa. They are kept so
+  # that stacks which still import them (an old vespaengine service stack) can
+  # update. Delete that service stack before you remove these.
   VespaEngineTmpEfsAccessPoint:
     Type: AWS::EFS::AccessPoint
     Properties:

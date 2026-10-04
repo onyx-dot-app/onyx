@@ -75,9 +75,13 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
-# Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
+# Disables vector DB (OpenSearch) entirely. When True, connectors and RAG search
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
+
+# Hides the "Powered by Onyx" tagline on Enterprise deployments. Do not set
+# without explicit permission from Onyx.
+HIDE_ONYX_BRANDING = os.environ.get("HIDE_ONYX_BRANDING", "").lower() == "true"
 
 # TEMPORARY (will be removed soon): operator-forced Search-UI scope (self-hosted only) —
 # comma-separated document set NAMES. When set, the Onyx Search UI is restricted to those sets
@@ -538,36 +542,11 @@ OPENSEARCH_EXPLAIN_ENABLED = (
 # existing indices need reindexing after a change.
 OPENSEARCH_TEXT_ANALYZER = os.environ.get("OPENSEARCH_TEXT_ANALYZER") or "english"
 
-# This is the "base" config for now, the idea is that at least for our dev
-# environments we always want to be dual indexing into both OpenSearch and Vespa
-# to stress test the new codepaths. Only enable this if there is some instance
-# of OpenSearch running for the relevant Onyx instance.
-# NOTE: Now enabled on by default, unless the env indicates otherwise.
-ENABLE_OPENSEARCH_INDEXING_FOR_ONYX = (
-    os.environ.get("ENABLE_OPENSEARCH_INDEXING_FOR_ONYX", "true").lower() == "true"
-)
-# NOTE: This effectively does nothing anymore, admins can now toggle whether
-# retrieval is through OpenSearch. This value is only used as a final fallback
-# in case that doesn't work for whatever reason.
-# Given that the "base" config above is true, this enables whether we want to
-# retrieve from OpenSearch or Vespa. We want to be able to quickly toggle this
-# in the event we see issues with OpenSearch retrieval in our dev environments.
-ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-    and os.environ.get("ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX", "").lower() == "true"
-)
-DISABLE_OPENSEARCH_MIGRATION_TASK = (
-    os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
-)
-ONYX_DISABLE_VESPA = os.environ.get("ONYX_DISABLE_VESPA", "true").lower() == "true"
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
     os.environ.get("VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT", "true").lower()
     == "true"
-)
-OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
-    os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
 )
 # Lifetime of a point-in-time used to scan an index consistently (reindex port).
 # Each search extends the lease; an idle PIT self-expires after this.
@@ -588,19 +567,11 @@ ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH = (
     == "true"
 )
 
-VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
-# NOTE: this is used if and only if the vespa config server is accessible via a
-# different host than the main vespa application
-VESPA_CONFIG_SERVER_HOST = os.environ.get("VESPA_CONFIG_SERVER_HOST") or VESPA_HOST
-VESPA_PORT = os.environ.get("VESPA_PORT") or "8081"
-VESPA_TENANT_PORT = os.environ.get("VESPA_TENANT_PORT") or "19071"
-# the number of times to try and connect to vespa on startup before giving up
-VESPA_NUM_ATTEMPTS_ON_STARTUP = int(os.environ.get("NUM_RETRIES_ON_STARTUP") or 10)
-
-VESPA_CLOUD_URL = os.environ.get("VESPA_CLOUD_URL", "")
-
-VESPA_CLOUD_CERT_PATH = os.environ.get("VESPA_CLOUD_CERT_PATH")
-VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
+# The number of times to try to connect to the document index on startup before
+# giving up.
+DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP = int(
+    os.environ.get("NUM_RETRIES_ON_STARTUP") or 10
+)
 
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
 INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
@@ -1105,6 +1076,17 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )
 
+# How many documents the pre-swap check samples per cc_pair and per user. 0 skips the
+# sample; the other swap conditions still apply.
+PORT_SWAP_VERIFY_DOCS_PER_UNIT = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_DOCS_PER_UNIT", 3
+)
+# Seconds to hold the swap after a failed pre-swap check before checking again.
+# 0 retries on the next 15-second tick.
+PORT_SWAP_VERIFY_RETRY_DELAY_S = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_RETRY_DELAY_S", 300
+)
+
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
 # Master switch: when False the reclaim beat task and every dispatched task no-op.
 # Set it to false to turn reclamation off; that takes effect once the workers restart.
@@ -1173,8 +1155,9 @@ CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
 )
 
-# The maximum number of tasks that can be queued up to sync to Vespa in a single pass
-VESPA_SYNC_MAX_TASKS = 8192
+# The maximum number of tasks that can be queued up to sync to the document index
+# in a single pass
+DOCUMENT_INDEX_SYNC_MAX_TASKS = 8192
 
 DB_YIELD_PER_DEFAULT = 64
 
@@ -1212,6 +1195,23 @@ WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 # the Chromium binary installed).
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
+)
+
+# Limits for the built-in open_url crawler. The body read stops at the larger
+# of the HTML and PDF caps (decoded bytes); each type is then checked on its own.
+OPEN_URL_MAX_HTML_SIZE_BYTES = int(
+    os.environ.get("OPEN_URL_MAX_HTML_SIZE_BYTES") or 20 * 1024 * 1024
+)
+OPEN_URL_MAX_PDF_SIZE_BYTES = int(
+    os.environ.get("OPEN_URL_MAX_PDF_SIZE_BYTES") or 50 * 1024 * 1024
+)
+# Wall-clock limit for reading one response body.
+OPEN_URL_BODY_DEADLINE_SECONDS = float(
+    os.environ.get("OPEN_URL_BODY_DEADLINE_SECONDS") or 120
+)
+# Max URLs in one /web-search/open-urls request (also the MCP open_urls tool).
+OPEN_URLS_MAX_URLS_PER_REQUEST = int(
+    os.environ.get("OPEN_URLS_MAX_URLS_PER_REQUEST") or 20
 )
 
 # NOTE: the three SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
@@ -1367,12 +1367,21 @@ OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
+# Largest file posted in a channel that the Teams connector downloads and extracts.
+TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
 # When True, group sync enumerates every Azure AD group in the tenant (expensive).
 # When False (default), only groups found in site role assignments are synced.
-# Can be overridden per-connector via the "exhaustive_ad_enumeration" key in
-# connector_specific_config.
+# This is the default; the SharePoint connector's "exhaustive_ad_enumeration"
+# config field overrides it per connector.
 SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION = (
     os.environ.get("SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION", "").lower() == "true"
+)
+
+AIRTABLE_ATTACHMENT_SIZE_THRESHOLD = int(
+    os.environ.get("AIRTABLE_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
 BLOB_STORAGE_SIZE_THRESHOLD = int(
@@ -1381,6 +1390,10 @@ BLOB_STORAGE_SIZE_THRESHOLD = int(
 
 BOX_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("BOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
+)
+
+DROPBOX_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("DROPBOX_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
@@ -1630,15 +1643,6 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
-# The intent was to have this be configurable per query, but I don't think any
-# codepath was actually configuring this, so for the migrated Vespa interface
-# we'll just use the default value, but also have it be configurable by env var.
-RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0)
-
-# Should match the rerank-count value set in
-# backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
-RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
-
 # Flat per-image cost (cents) when litellm has no price for an image model.
 # Clamped to >= 0 so a misconfigured negative can't credit usage.
 DEFAULT_IMAGE_COST_CENTS = max(
@@ -1717,11 +1721,6 @@ PROMPT_CACHE_CHAT_HISTORY = (
 # gateway. Off by default.
 ENABLE_AZURE_IMAGE_CAP = os.environ.get("ENABLE_AZURE_IMAGE_CAP", "").lower() == "true"
 
-# If set to `true` will enable additional logs about Vespa query performance
-# (time spent on finding the right docs + time spent fetching summaries from disk)
-LOG_VESPA_TIMING_INFORMATION = (
-    os.environ.get("LOG_VESPA_TIMING_INFORMATION", "").lower() == "true"
-)
 LOG_ENDPOINT_LATENCY = os.environ.get("LOG_ENDPOINT_LATENCY", "").lower() == "true"
 LOG_POSTGRES_LATENCY = os.environ.get("LOG_POSTGRES_LATENCY", "").lower() == "true"
 LOG_POSTGRES_CONN_COUNTS = (
@@ -1791,22 +1790,6 @@ CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
     os.environ.get("CUSTOM_ANSWER_VALIDITY_CONDITIONS", "[]")
 )
 
-VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
-# This is the timeout for the client side of the Vespa migration task. When
-# exceeded, an exception is raised in our code. This value should be higher than
-# VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT.
-VESPA_MIGRATION_REQUEST_TIMEOUT_S = int(
-    os.environ.get("VESPA_MIGRATION_REQUEST_TIMEOUT_S") or "120"
-)
-# This is the timeout Vespa uses on the server side to know when to wrap up its
-# traversal and try to report partial results. This differs from the client
-# timeout above which raises an exception in our code when exceeded. This
-# timeout allows Vespa to return gracefully. This value should be lower than
-# VESPA_MIGRATION_REQUEST_TIMEOUT_S. Formatted as <number of seconds>s.
-VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
-    "VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT", "110s"
-)
-
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
 
 # Size of the api-server anyio threadpool that runs sync endpoints, including the
@@ -1867,9 +1850,6 @@ AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
 IMAGE_MODEL_PROVIDER = os.environ.get("IMAGE_MODEL_PROVIDER", "openai")
-
-# Use managed Vespa (Vespa Cloud). If set, must also set VESPA_CLOUD_URL, VESPA_CLOUD_CERT_PATH and VESPA_CLOUD_KEY_PATH
-MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
 
@@ -1982,11 +1962,6 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
-# Set to true to mock LLM responses for testing purposes
-MOCK_LLM_RESPONSE = (
-    os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
-)
-
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 
@@ -2000,6 +1975,21 @@ TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
 # cannot cause real tenants to be skipped. Default off.
 ENABLE_TENANT_WORK_GATING = (
     os.environ.get("ENABLE_TENANT_WORK_GATING", "").lower() == "true"
+)
+
+# Master switch for query-time cc-pair access filtering. Controls the `enabled`
+# axis only: True puts the filter in shadow mode (search keeps the old ACL
+# filter and logs where the cc-pair filter disagrees). The `enforce` axis is
+# cache-only (Redis, or the Postgres cache) with a hard-coded default of False.
+ENABLE_CC_PAIR_ACCESS_FILTER = (
+    os.environ.get("ENABLE_CC_PAIR_ACCESS_FILTER", "").lower() == "true"
+)
+
+# Turns on behavior that needs the connector checks UI (today: the first index
+# attempt waits for required capability checks). Enable together with
+# NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED.
+CONNECTOR_CHECKS_ENABLED = (
+    os.environ.get("CONNECTOR_CHECKS_ENABLED", "").lower() == "true"
 )
 
 # Membership TTL for the `active_tenants` sorted set. Members older than this
@@ -2054,7 +2044,7 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 
-# Well-known MinIO default; deployments left on it expose all stored files.
+# Well-known default of the bundled object store. Deployments left on it expose all stored files.
 DEFAULT_OBJECT_STORAGE_CREDENTIAL = "minioadmin"
 
 
@@ -2063,7 +2053,7 @@ def _uses_default_object_storage_credentials(
     access_key: str | None,
     secret_key: str | None,
 ) -> bool:
-    # Only for self-hosted MinIO (has an endpoint URL); real AWS S3 has none.
+    # Only for a self-hosted object store, which has an endpoint URL. Real AWS S3 has none.
     if not s3_endpoint_url:
         return False
     return DEFAULT_OBJECT_STORAGE_CREDENTIAL in (access_key, secret_key)
@@ -2074,15 +2064,38 @@ if _uses_default_object_storage_credentials(
 ):
     logger.warning(
         "Object storage is using the well-known default 'minioadmin' credentials. "
-        "Anyone who can reach the MinIO/S3 endpoint can read or modify stored files "
+        "Anyone who can reach the S3 endpoint can read or modify stored files "
         "(uploaded documents, file-store objects). Set S3_AWS_ACCESS_KEY_ID / "
-        "S3_AWS_SECRET_ACCESS_KEY (and MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) to "
-        "strong, unique values before deploying to production."
+        "S3_AWS_SECRET_ACCESS_KEY to strong, unique values before deploying to "
+        "production."
     )
 
 # Should we force S3 local checksumming
 S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
+)
+
+# The MinIO store earlier releases wrote to. While set, writes and deletes reach
+# both stores and reads that miss fall back to it. The same endpoint as
+# S3_ENDPOINT_URL (an upgrade that kept its old settings) leaves nothing to fall back to.
+_legacy_endpoint_url = os.environ.get("S3_LEGACY_ENDPOINT_URL") or None
+S3_LEGACY_ENDPOINT_URL = (
+    _legacy_endpoint_url if _legacy_endpoint_url != S3_ENDPOINT_URL else None
+)
+S3_LEGACY_AWS_ACCESS_KEY_ID = (
+    os.environ.get("S3_LEGACY_AWS_ACCESS_KEY_ID") or S3_AWS_ACCESS_KEY_ID
+)
+S3_LEGACY_AWS_SECRET_ACCESS_KEY = (
+    os.environ.get("S3_LEGACY_AWS_SECRET_ACCESS_KEY") or S3_AWS_SECRET_ACCESS_KEY
+)
+# The legacy copy stops once a pass copies nothing and this long has passed,
+# so writes from app pods still on the old release are picked up too.
+LEGACY_COPY_SETTLE_SECONDS = int(os.environ.get("LEGACY_COPY_SETTLE_SECONDS") or 600)
+LEGACY_COPY_WORKERS = int(os.environ.get("LEGACY_COPY_WORKERS") or 16)
+# A multi-tenant dev checkout keeps its file records in tenant schemas, which
+# the copy does not read, so `ods object-store migrate` copies every object.
+LEGACY_COPY_ALL_OBJECTS = (
+    os.environ.get("LEGACY_COPY_ALL_OBJECTS", "").lower() == "true"
 )
 
 # GCS (Google Cloud Storage) Configuration
@@ -2113,10 +2126,6 @@ AZURE_STORAGE_CONNECTION_STRING = (
     os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or None
 )
 AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY") or None
-
-# Forcing Vespa Language
-# English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
-VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
 
 
 #####

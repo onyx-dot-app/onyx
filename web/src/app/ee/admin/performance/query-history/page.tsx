@@ -53,12 +53,13 @@ export default function QueryHistoryPage() {
         icon={route.icon}
         title={adminRouteTitle(route)}
         divider
-        rightChildren={
+        actions={[
           <InputDateRangePicker
+            key="primary"
             value={dateRange}
             onValueChange={onTimeRangeChange}
-          />
-        }
+          />,
+        ]}
       />
 
       <SettingsLayouts.Body>

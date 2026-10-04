@@ -935,6 +935,18 @@ def get_active_admin_count(db_session: Session) -> int:
     return db_session.execute(stmt).scalar_one()
 
 
+def release_personas_owned_by_user__no_commit(
+    db_session: Session, user_id: UUID
+) -> None:
+    """Clear the user's ownership so the personas become vacant (managed by
+    admins until transferred away or deleted). Nothing is soft-deleted, even a
+    private persona, so admins can still recover it. Ownership is not restored
+    on reactivation."""
+    db_session.query(Persona).filter(Persona.user_id == user_id).update(
+        {Persona.user_id: None}, synchronize_session="fetch"
+    )
+
+
 def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
@@ -957,25 +969,7 @@ def delete_user_from_db__no_commit(
     db_session.query(DocumentSet).filter(
         DocumentSet.user_id == user_to_delete.id
     ).update({DocumentSet.user_id: None})
-    # Personas: private ones die with their owner; shared/public ones are
-    # orphaned (ownerless ⇒ managed by admins until transferred away)
-    owned_personas = (
-        db_session.query(Persona)
-        .options(
-            selectinload(Persona.user_shares),
-            selectinload(Persona.group_shares),
-        )
-        .filter(Persona.user_id == user_to_delete.id)
-        .all()
-    )
-    for persona in owned_personas:
-        if (
-            not persona.is_public
-            and not persona.user_shares
-            and not persona.group_shares
-        ):
-            persona.deleted = True
-        persona.user_id = None
+    release_personas_owned_by_user__no_commit(db_session, user_to_delete.id)
 
     db_session.query(DocumentSet__User).filter(
         DocumentSet__User.user_id == user_to_delete.id
@@ -1068,7 +1062,7 @@ def batch_get_last_active(
 
     # Every requested id gets a key, so a user who has never chatted reads as
     # None rather than going missing from the mapping.
-    last_active_by_user = {user_id: last_active for user_id, last_active in rows}
+    last_active_by_user = {user_id: last_active for user_id, last_active in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
     return {uid: last_active_by_user.get(uid) for uid in user_ids}
 
 

@@ -240,7 +240,6 @@ describe("usePacketProcessor", () => {
       expect(result.current.toolTurnGroups.length).toBe(1);
       expect(result.current.toolTurnGroups[0]?.isParallel).toBe(true);
       expect(result.current.toolTurnGroups[0]?.steps.length).toBe(2);
-      expect(result.current.expectedBranchesPerTurn.get(0)).toBe(2);
     });
   });
 

@@ -64,8 +64,8 @@ def create_search_settings(
         index_name=search_settings.index_name,
         provider_type=search_settings.provider_type,
         multipass_indexing=search_settings.multipass_indexing,
-        embedding_precision=search_settings.embedding_precision,
         reduced_dimension=search_settings.reduced_dimension,
+        vector_quantization=search_settings.vector_quantization,
         enable_contextual_rag=search_settings.enable_contextual_rag,
         contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         switchover_type=search_settings.switchover_type,
@@ -92,7 +92,7 @@ def get_embedding_provider_from_provider_type(
         CloudEmbeddingProvider.provider_type == provider_type
     )
     provider = db_session.execute(query).scalars().first()
-    return provider if provider else None
+    return provider or None
 
 
 def get_current_db_embedding_provider(

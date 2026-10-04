@@ -29,7 +29,6 @@ from tests.integration.common_utils.test_models import (
     DATestUser,
     DATestUserGroup,
 )
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 @pytest.mark.skipif(
@@ -38,7 +37,6 @@ from tests.integration.common_utils.vespa import vespa_fixture
 )
 def test_user_group_deletion(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,  # noqa: ARG001
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

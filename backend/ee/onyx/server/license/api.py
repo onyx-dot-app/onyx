@@ -8,6 +8,12 @@ These endpoints allow self-hosted Onyx instances to:
 
 NOTE: Cloud (MULTI_TENANT) deployments do NOT use these endpoints.
 Cloud licensing is managed via the control plane and gated_tenants Redis key.
+
+Every handler here is sync `def`, not `async def`, so FastAPI runs it in the
+threadpool. All of the work is blocking: control-plane calls over `requests`
+with a 30s timeout, sync SQLAlchemy sessions, RSA signature verification that
+reads the public key off disk, and Redis. An `async def` handler runs on the
+event loop and would stall every other request in the worker for the duration.
 """
 
 import requests
@@ -51,7 +57,7 @@ router = APIRouter(prefix="/license")
 
 
 @router.get("")
-async def get_license_status(
+def get_license_status(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseStatusResponse:
@@ -77,7 +83,7 @@ async def get_license_status(
 
 
 @router.get("/seats")
-async def get_seat_usage(
+def get_seat_usage(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SeatUsageResponse:
@@ -99,7 +105,7 @@ async def get_seat_usage(
 
 
 @router.post("/claim")
-async def claim_license(
+def claim_license(
     session_id: str | None = None,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -179,7 +185,7 @@ async def claim_license(
 
 
 @router.post("/upload")
-async def upload_license(
+def upload_license(
     license_file: UploadFile = File(...),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -197,7 +203,7 @@ async def upload_license(
         )
 
     try:
-        content = await license_file.read()
+        content = license_file.file.read()
         license_data = normalize_license_file(content.decode("utf-8"))
     except UnicodeDecodeError:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid license file format")
@@ -216,7 +222,7 @@ async def upload_license(
 
 
 @router.post("/refresh")
-async def refresh_license_cache_endpoint(
+def refresh_license_cache_endpoint(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LicenseStatusResponse:
@@ -247,7 +253,7 @@ async def refresh_license_cache_endpoint(
 
 
 @router.delete("")
-async def delete_license(
+def delete_license(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, bool]:

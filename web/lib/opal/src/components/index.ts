@@ -79,13 +79,6 @@ export {
   type KeyValueInputProps,
 } from "@opal/components/inputs/input-key-value/components";
 
-/* InputComboBox */
-export {
-  default as InputComboBox,
-  type InputComboBoxProps,
-  type ComboBoxOption,
-} from "@opal/components/inputs/selections/input-combo-box/index";
-
 /* InputImage */
 export {
   default as InputImage,
@@ -167,6 +160,12 @@ export {
   type EmptyMessageCardProps,
 } from "@opal/components/cards/empty-message-card/components";
 
+/* Collapsible */
+export {
+  Collapsible,
+  type CollapsibleProps,
+} from "@opal/components/collapsible/components";
+
 /* MessageCard */
 export {
   MessageCard,
@@ -175,8 +174,6 @@ export {
 
 /* Loader */
 export {
-  IconLoader,
-  type IconLoaderProps,
   OnyxLoader,
   type OnyxLoaderProps,
   type LoaderColor,
@@ -210,6 +207,9 @@ export type { DataTableProps } from "@opal/components/table/components";
 export {
   ShadowDiv,
   type ShadowDivProps,
+  type ShadowDirection,
+  type ShadowDivVariant,
+  type ShadowDivVariants,
 } from "@opal/components/shadow-div/components";
 
 /* Popover */
@@ -243,7 +243,14 @@ export {
 export {
   default as InputTypeIn,
   type InputTypeInProps,
-} from "@opal/components/inputs/input-type-in/components";
+} from "@opal/components/inputs/texts/input-type-in/components";
+
+/* InputTypeInTag */
+export {
+  InputTypeInTag,
+  type InputTypeInTagProps,
+  type TagItem,
+} from "@opal/components/inputs/texts/input-type-in-tag/components";
 
 /* InputDatePicker */
 export {
@@ -251,33 +258,61 @@ export {
   type InputDatePickerProps,
 } from "@opal/components/inputs/chrono/input-date-picker/components";
 
-/* InputSingleSelect */
+/* Dropdown */
 export {
-  InputSingleSelect,
-  type InputSingleSelectRootProps,
-  type InputSingleSelectTriggerProps,
-  type InputSingleSelectItemProps,
-  type InputSingleSelectSearchProps,
-} from "@opal/components/inputs/selections/input-single-select/components";
+  Dropdown,
+  type DropdownProps,
+  type DropdownAnchorProps,
+  type DropdownTriggerProps,
+  type DropdownDataProps,
+  type DropdownTriggerBehavior,
+  type DropdownTabKey,
+  type DropdownVirtualAnchor,
+} from "@opal/components/dropdown/components";
+export {
+  type DropdownItem,
+  type DropdownMenuItem,
+  type DropdownRow,
+  type DropdownMenuRow,
+  type DropdownOption,
+  type DropdownAction,
+  type DropdownToggle,
+  type DropdownCustom,
+  type DropdownGroup,
+  type DropdownRowState,
+  type DropdownRowProps,
+  type DropdownSearch,
+  type DropdownView,
+  type DropdownViews,
+} from "@opal/components/dropdown/types";
+export { useDropdownViews } from "@opal/components/dropdown/context";
 
-/* InputMultiSelect */
+/* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
+export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";
+export { InputSingleComboBox } from "@opal/components/inputs/dropdowns/input-single-combo-box/components";
+export { InputMultiSelect } from "@opal/components/inputs/dropdowns/input-multi-select/components";
+export { InputMultiComboBox } from "@opal/components/inputs/dropdowns/input-multi-combo-box/components";
 export {
-  InputMultiSelect,
+  type InputSingleSelectProps,
+  type InputSingleComboBoxProps,
   type InputMultiSelectProps,
-  type TagItem,
-} from "@opal/components/inputs/selections/input-multi-select/components";
+  type InputMultiComboBoxProps,
+  type SelectOption,
+  type SelectDivider,
+  type SelectOptions,
+} from "@opal/components/inputs/dropdowns/types";
 
 /* InputPasswordTypeIn */
 export {
   InputPasswordTypeIn,
   type InputPasswordTypeInProps,
-} from "@opal/components/inputs/input-password-type-in/components";
+} from "@opal/components/inputs/texts/input-password-type-in/components";
 
 /* InputTextArea */
 export {
   InputTextArea,
   type InputTextAreaProps,
-} from "@opal/components/inputs/input-text-area/components";
+} from "@opal/components/inputs/texts/input-text-area/components";
 
 /* InputTime */
 export {

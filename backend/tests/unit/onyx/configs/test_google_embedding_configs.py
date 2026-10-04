@@ -14,6 +14,5 @@ def test_supported_embedding_models_include_gemini_embedding_2(
         model for model in SUPPORTED_EMBEDDING_MODELS if model.name == model_name
     ]
 
-    # One FLOAT-precision entry and one BFLOAT16-precision entry per registered model.
-    assert len(gemini_embedding_2_models) == 2
+    assert len(gemini_embedding_2_models) == 1
     assert {model.dim for model in gemini_embedding_2_models} == {3072}

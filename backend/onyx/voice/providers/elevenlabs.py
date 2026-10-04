@@ -737,9 +737,7 @@ class ElevenLabsVoiceProvider(VoiceProviderInterface):
             content_type=mime_type,
         )
         # For batch STT, use scribe_v1 (not the realtime model)
-        batch_model = (
-            self.stt_model if self.stt_model in ("scribe_v1",) else "scribe_v1"
-        )
+        batch_model = self.stt_model if self.stt_model == "scribe_v1" else "scribe_v1"
         form_data.add_field("model_id", batch_model)
 
         logger.info(

@@ -44,7 +44,12 @@ export const SWR_KEYS = {
   llmProviders: "/api/llm/provider",
   llmProvidersForAgent: (agentId: number) =>
     `/api/llm/persona/${agentId}/providers`,
+  llmProviderModels: (providerId: number) =>
+    `/api/llm/provider/${providerId}/models`,
   adminLlmProviders: "/api/admin/llm/provider",
+  adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
+  adminLlmProvider: (providerId: number) =>
+    `/api/admin/llm/provider/${providerId}`,
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
@@ -71,6 +76,7 @@ export const SWR_KEYS = {
   indexingStatus: "/api/manage/admin/connector/indexing-status",
   adminConnectorStatus: "/api/manage/admin/connector/status",
   federatedConnectors: "/api/federated",
+  connectorGroupRestrictions: "/api/manage/connector-group-restrictions",
 
   // ── Google Connectors ─────────────────────────────────────────────────────
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
@@ -238,6 +244,15 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+  connectorOAuthDetails: (source: string) =>
+    `/api/connector/oauth/details/${source}`,
+  // Credentials of one source the caller may attach.
+  similarCredentials: (source: string) =>
+    `/api/manage/admin/similar-credentials/${source}`,
+
+  // ── CC-Pairs ──────────────────────────────────────────────────────────────
+  ccPair: (ccPairId: string | number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}`,
 
   // ── Index Attempts ────────────────────────────────────────────────────────
   indexAttemptStageMetrics: (indexAttemptId: number) =>

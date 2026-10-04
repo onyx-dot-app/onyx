@@ -77,7 +77,8 @@ interface OAuthInitiateResponse {
 
 export async function initiateOAuthFlow(
   oauthConfigId: number,
-  returnPath: string = "/app"
+  returnPath: string,
+  invalidUrlMessage: string
 ): Promise<void> {
   const response = await fetch("/api/oauth-config/initiate", {
     method: "POST",
@@ -99,6 +100,9 @@ export async function initiateOAuthFlow(
   }
 
   const data: OAuthInitiateResponse = await response.json();
-  // Redirect to authorization URL
+  if (!/^https?:\/\//i.test(data.authorization_url)) {
+    throw new Error(invalidUrlMessage);
+  }
+
   window.location.href = data.authorization_url;
 }

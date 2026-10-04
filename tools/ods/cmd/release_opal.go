@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +36,9 @@ Example usage:
     $ ods release opal --version 0.2.0`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			opalRelease.run(opts)
+			if err := opalRelease.run(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 

@@ -14,7 +14,7 @@ Craft provisions a sandbox + snapshot/restore, with no manual kubectl/RBAC/node 
 **Clean seam: Terraform = AWS infrastructure; Helm = everything inside Kubernetes. Terraform's outputs are Helm's inputs.**
 
 **Terraform** (`deployment/terraform/…`) creates ONLY AWS resources:
-- VPC / subnets / NAT; EKS **cluster** + **node groups** (main, vespa, **sandbox** — labeled/tainted/IMDSv2) + the **OIDC provider**; EKS add-ons + gp3 storage class.
+- VPC / subnets / NAT; EKS **cluster** + **node groups** (main, vespa — the legacy name of the document-index group, **sandbox** — labeled/tainted/IMDSv2) + the **OIDC provider**; EKS add-ons + gp3 storage class.
 - Managed data stores: **RDS** (Postgres), **ElastiCache** (Redis), **OpenSearch** domain; the main Onyx **S3 file-store bucket**; **WAF**.
 - IAM/IRSA **roles**: the workload role for Onyx application pods.
 - **Outputs** (the only thing Helm consumes): cluster name, RDS/Redis/OpenSearch endpoints, the file-store bucket name, the workload IRSA **role ARN**, the OIDC provider ARN/URL.
@@ -208,7 +208,7 @@ sandboxProxy:
 ```
 
 - ElastiCache: `REDIS_HOST`, `REDIS_SSL=true`, `REDIS_SSL_CERT_REQS=none`, `auth.redis.enabled=false` (no auth token).
-- OpenSearch (v4.0 search backend): `ONYX_DISABLE_VESPA=true`, `ENABLE_OPENSEARCH_INDEXING/RETRIEVAL_FOR_ONYX=true`, `USING_AWS_MANAGED_OPENSEARCH=true`, `OPENSEARCH_REST_API_PORT=443`, `OPENSEARCH_USE_SSL=true`, `OPENSEARCH_ADMIN_USERNAME=admin`.
+- OpenSearch (v4.0 search backend): `USING_AWS_MANAGED_OPENSEARCH=true`, `OPENSEARCH_REST_API_PORT=443`, `OPENSEARCH_USE_SSL=true`, `OPENSEARCH_ADMIN_USERNAME=admin`.
 - S3: `S3_FILE_STORE_BUCKET_NAME`, `S3_ENDPOINT_URL=""`, `AWS_REGION_NAME`.
 - Craft: `ENABLE_CRAFT=true`, `ONYX_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080`, `auth.sandboxPushSecret.enabled=true`. (`SANDBOX_SERVICE_ACCOUNT_NAME`/`SANDBOX_CONTAINER_IMAGE` default correctly.)
 
@@ -424,7 +424,7 @@ The original lead infra TODO list is accounted for as:
 ## 7. Notes / gotchas (condensed)
 
 - us-west-1 has only 2 AZs (→ the slice fix). Shared account near the EIP quota → use `single_nat_gateway=true`.
-- The `vespa` node group is vestigial in v4.0 (OpenSearch replaced Vespa) — size it small or make it optional.
+- The `vespa` node group (legacy name) only matters for an in-cluster OpenSearch. With a managed OpenSearch domain, set `vespa_node_enabled = false`.
 - `cluster_endpoint_public_access_cidrs=[]` causes a perpetual no-op diff AWS rejects — set explicitly (e.g. `["0.0.0.0/0"]`).
 - Codified chart/terraform changes live in the **local** chart, not the published `onyx/onyx` — install from `.` until released.
 - LLM provider: configure via admin UI (encrypted in DB) — never `GEN_AI_API_KEY` in a ConfigMap.

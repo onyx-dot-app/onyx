@@ -1,4 +1,3 @@
-import sys
 import time
 from collections.abc import Generator
 from datetime import datetime
@@ -255,28 +254,8 @@ class ConnectorRunner(Generic[CT]):
                     yield None, None, None, finished_checkpoint
                 else:
                     raise ValueError(f"Invalid connector. type: {type(self.connector)}")
-        except Exception:
-            exc_type, _, exc_traceback = sys.exc_info()
-
-            # Traverse the traceback to find the last frame where the exception was raised
-            tb = exc_traceback
-            if tb is None:
-                logger.error("No traceback found for exception")
-                raise
-
-            while tb.tb_next:
-                tb = tb.tb_next  # Move to the next frame in the traceback
-
-            # Get the local variables from the frame where the exception occurred
-            local_vars = tb.tb_frame.f_locals
-            local_vars_str = "\n".join(
-                f"{key}: {value}" for key, value in local_vars.items()
-            )
-            logger.error(
-                "Error in connector. type: %s;\nlocal_vars below -> \n%s",
-                exc_type,
-                local_vars_str[:1024],
-            )
+        except Exception as e:
+            logger.error("Error in connector. type: %s", type(e).__name__)
             raise
 
     def _separate_batch(

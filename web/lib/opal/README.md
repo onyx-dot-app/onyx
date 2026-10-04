@@ -105,8 +105,8 @@ web/lib/opal/
 │   └── bundle-css.mjs    # Concatenates root.css + leaf component CSS into dist/styles.css
 ├── package.json
 ├── tsconfig.json         # Source typecheck config
-├── tsconfig.build.json   # Used by tsup to emit dist/
-├── tsup.config.ts
+├── tsconfig.build.json   # Used by tsdown to emit dist/
+├── tsdown.config.ts
 ├── tailwind-preset.cjs
 └── README.md
 ```
@@ -127,7 +127,7 @@ To produce the published artifact:
 
 ```sh
 cd web/lib/opal
-bun run build       # tsup -> dist/, then bundle-css.mjs -> dist/styles.css
+bun run build       # tsdown -> dist/, then bundle-css.mjs -> dist/styles.css
 ```
 
 ## Releasing to npm
@@ -150,7 +150,7 @@ Steps:
    git push origin opal/v0.1.1
    ```
 
-4. The workflow runs automatically on tag push. It builds (`tsup` + CSS barrel) and runs
+4. The workflow runs automatically on tag push. It builds (`tsdown` + CSS barrel) and runs
    `bun publish --provenance --access public`. Watch the run under the Actions tab; verify
    the new version on https://www.npmjs.com/package/@onyx-ai/opal.
 

@@ -15,18 +15,27 @@ from msal.exceptions import MsalServiceError
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
-from onyx.connectors.outlook.models import (
+from onyx.connectors.microsoft_utils.graph_errors import (
     INVALID_AUTH_METHOD_CODE,
     INVALID_AUTHORITY_CODE,
     INVALID_CERTIFICATE_CODE,
     MISSING_CREDENTIAL_CODE,
-    OutlookAuthError,
-    OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.outlook.models import (
+    OutlookRecipient,
 )
 from onyx.connectors.outlook.source_operations import (
     CHANGE_SELECT,
     EMPTY_PAGE_FOLLOW_LIMIT,
     EPOCH_TIMESTAMP,
+    EVENT_PREFERENCES,
+    EVENTS_PAGE_SIZE,
     MESSAGE_SELECT,
     MESSAGES_PAGE_SIZE,
     TEXT_BODY_PREFERENCE,
@@ -40,6 +49,7 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     MAILBOX_ID,
     attachment_json,
     change_json,
+    event_json,
     folder_json,
     http_error,
     message_json,
@@ -48,7 +58,8 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     user_json,
 )
 
-MODULE = "onyx.connectors.outlook.source_operations"
+MODULE = "onyx.connectors.microsoft_utils.graph_auth"
+SOURCE_MODULE = "onyx.connectors.outlook.source_operations"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
@@ -62,7 +73,7 @@ def _gateway(
         )
     )
     client = MagicMock()
-    gateway._graph_client = client
+    gateway._gateway()._client = client
     return gateway, client
 
 
@@ -643,10 +654,11 @@ def test_certificate_method_without_a_key_is_a_missing_credential() -> None:
 
     with (
         patch(f"{MODULE}.build_msal_app") as build,
-        pytest.raises(OutlookAuthError, match="outlook_private_key"),
+        pytest.raises(OutlookAuthError) as exc_info,
     ):
         gateway.check_token()
 
+    assert exc_info.value.code == MISSING_CREDENTIAL_CODE
     build.assert_not_called()
 
 
@@ -747,7 +759,9 @@ def test_attachment_download_streams_the_value_endpoint_with_a_cap() -> None:
             f"{MODULE}.acquire_graph_token",
             return_value={"access_token": "tok"},
         ),
-        patch(f"{MODULE}.download_graph_url_with_cap", return_value=b"pdf") as download,
+        patch(
+            f"{SOURCE_MODULE}.download_graph_url_with_cap", return_value=b"pdf"
+        ) as download,
     ):
         data = gateway.download_attachment(
             mailbox_id=MAILBOX_ID, message_id="msg-1", attachment_id="att-1", cap=10
@@ -769,7 +783,7 @@ def test_attachment_download_failure_is_a_graph_error() -> None:
         patch(f"{MODULE}.build_msal_app"),
         patch(f"{MODULE}.acquire_graph_token", return_value={"access_token": "tok"}),
         patch(
-            f"{MODULE}.download_graph_url_with_cap",
+            f"{SOURCE_MODULE}.download_graph_url_with_cap",
             side_effect=http_error(404, "ErrorItemNotFound"),
         ),
         pytest.raises(OutlookGraphError) as exc_info,
@@ -810,3 +824,207 @@ def test_check_token_reports_expiry() -> None:
         info = gateway.check_token()
 
     assert info.expires_in == 3599
+
+
+# ---------------------------------------------------------------------------
+# calendar
+# ---------------------------------------------------------------------------
+
+WINDOW_START = datetime(2026, 1, 1, tzinfo=timezone.utc)
+WINDOW_END = datetime(2026, 12, 31, tzinfo=timezone.utc)
+
+
+def test_calendar_delta_first_page_carries_the_window_and_preferences() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [
+            event_json(),
+            {"id": "evt-gone", "@removed": {"reason": "deleted"}},
+            event_json(
+                id="occ-1",
+                type="occurrence",
+                seriesMasterId="series-1",
+                body={"contentType": "html", "content": "<p>Weekly <b>sync</b></p>"},
+                isAllDay=True,
+                start={"dateTime": "2026-09-03T00:00:00.0000000", "timeZone": "UTC"},
+                end={"dateTime": "2026-09-04T00:00:00.0000000", "timeZone": "UTC"},
+                location={"displayName": ""},
+            ),
+        ],
+        next_link="https://graph/calendarView/delta?$skiptoken=abc",
+    )
+
+    result = gateway.fetch_calendar_delta_page(
+        mailbox_id=MAILBOX_ID,
+        window_start=WINDOW_START,
+        window_end=WINDOW_END,
+        page_size=5,
+    )
+
+    url, params, headers = client.get_json.call_args.args
+    assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/calendarView/delta"
+    assert params == {
+        "startDateTime": "2026-01-01T00:00:00Z",
+        "endDateTime": "2026-12-31T00:00:00Z",
+    }
+    assert headers == {"Prefer": f"odata.maxpagesize=5, {EVENT_PREFERENCES}"}
+    assert result.next_link == "https://graph/calendarView/delta?$skiptoken=abc"
+    # The removed row is dropped and the rest parse whole.
+    assert [e.id for e in result.events] == ["evt-1", "occ-1"]
+    first, occurrence = result.events
+    assert first.start_at == datetime(2026, 9, 2, 14, 0, tzinfo=timezone.utc)
+    assert first.end_at == datetime(2026, 9, 2, 15, 0, tzinfo=timezone.utc)
+    assert first.organizer == OutlookRecipient(address=MAILBOX_ADDRESS, name="Alice")
+    assert [a.address for a in first.attendees] == ["bob@contoso.com", MAILBOX_ADDRESS]
+    assert first.location == "Room 4"
+    assert first.last_modified_at == datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc)
+    assert first.time_zone == "UTC"
+    assert first.recurrence is None
+    assert occurrence.event_type == "occurrence"
+    assert occurrence.series_master_id == "series-1"
+    assert occurrence.body_text == "Weekly sync"
+    assert occurrence.is_all_day is True
+    assert occurrence.start_at == datetime(2026, 9, 3, tzinfo=timezone.utc)
+    assert occurrence.location is None
+
+
+def test_calendar_delta_next_page_resends_only_the_preferences() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([])
+
+    result = gateway.fetch_calendar_delta_page(
+        mailbox_id=MAILBOX_ID,
+        window_start=WINDOW_START,
+        window_end=WINDOW_END,
+        next_link="https://graph/calendarView/delta?$skiptoken=abc",
+    )
+
+    assert client.get_json.call_args.args == (
+        "https://graph/calendarView/delta?$skiptoken=abc",
+        None,
+        {"Prefer": f"odata.maxpagesize={EVENTS_PAGE_SIZE}, {EVENT_PREFERENCES}"},
+    )
+    # A delta link in place of a next link ends the round.
+    assert result.events == []
+    assert result.next_link is None
+
+
+def test_get_event_reads_the_series_master_with_its_recurrence_in_words() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = event_json(
+        id="series-1",
+        type="seriesMaster",
+        recurrence={
+            "pattern": {
+                "type": "weekly",
+                "interval": 2,
+                "daysOfWeek": ["monday", "thursday"],
+            },
+            "range": {
+                "type": "endDate",
+                "startDate": "2026-01-05",
+                "endDate": "2026-12-31",
+            },
+        },
+    )
+
+    result = gateway.get_event(mailbox_id=MAILBOX_ID, event_id="series-1")
+
+    assert client.get_json.call_args.args == (
+        f"{GRAPH_BASE}/users/{MAILBOX_ID}/events/series-1",
+        None,
+        {"Prefer": EVENT_PREFERENCES},
+    )
+    assert result.event_type == "seriesMaster"
+    assert result.recurrence == (
+        "every 2 weeks on monday, thursday from 2026-01-05 until 2026-12-31"
+    )
+
+
+def test_recurrence_summaries_cover_numbered_and_open_ended_ranges() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = [
+        event_json(
+            recurrence={
+                "pattern": {"type": "daily", "interval": 1},
+                "range": {
+                    "type": "numbered",
+                    "startDate": "2026-09-01",
+                    "numberOfOccurrences": 10,
+                },
+            }
+        ),
+        event_json(
+            recurrence={
+                "pattern": {"type": "absoluteMonthly", "interval": 1, "dayOfMonth": 3},
+                "range": {"type": "noEnd", "startDate": "2026-09-03"},
+            }
+        ),
+    ]
+
+    daily = gateway.get_event(mailbox_id=MAILBOX_ID, event_id="a")
+    monthly = gateway.get_event(mailbox_id=MAILBOX_ID, event_id="b")
+
+    assert daily.recurrence == "every day from 2026-09-01 for 10 occurrences"
+    assert monthly.recurrence == "every month on day 3 from 2026-09-03"
+
+
+def test_read_any_event_asks_for_one_body_and_reads_an_empty_calendar_as_none() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([event_json()])
+
+    result = gateway.read_any_event(mailbox_id=MAILBOX_ID)
+
+    assert client.get_json.call_args.args == (
+        f"{GRAPH_BASE}/users/{MAILBOX_ID}/events",
+        {"$select": "id,subject,body", "$top": "1"},
+        {"Prefer": EVENT_PREFERENCES},
+    )
+    assert result is not None and result.body_text == "Agenda: numbers"
+
+    client.get_json.return_value = page_json([])
+    assert gateway.read_any_event(mailbox_id=MAILBOX_ID) is None
+
+    # Calendars.ReadBasic.All leaves the body property out altogether.
+    bodyless = {k: v for k, v in event_json().items() if k != "body"}
+    client.get_json.return_value = page_json([bodyless])
+    withheld = gateway.read_any_event(mailbox_id=MAILBOX_ID)
+    assert withheld is not None and withheld.body_present is False
+    assert result.body_present is True
+
+
+def test_recurrence_summaries_keep_the_place_and_month_of_relative_patterns() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = [
+        event_json(
+            recurrence={
+                "pattern": {
+                    "type": "relativeYearly",
+                    "interval": 1,
+                    "daysOfWeek": ["monday"],
+                    "index": "first",
+                    "month": 3,
+                },
+                "range": {"type": "noEnd", "startDate": "2026-03-02"},
+            }
+        ),
+        event_json(
+            recurrence={
+                "pattern": {
+                    "type": "relativeMonthly",
+                    "interval": 1,
+                    "daysOfWeek": ["friday"],
+                    "index": "last",
+                },
+                "range": {"type": "noEnd", "startDate": "2026-01-30"},
+            }
+        ),
+    ]
+
+    yearly = gateway.get_event(mailbox_id=MAILBOX_ID, event_id="a")
+    monthly = gateway.get_event(mailbox_id=MAILBOX_ID, event_id="b")
+
+    assert (
+        yearly.recurrence == "every year on the first monday of March from 2026-03-02"
+    )
+    assert monthly.recurrence == "every month on the last friday from 2026-01-30"

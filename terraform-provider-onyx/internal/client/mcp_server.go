@@ -76,24 +76,24 @@ type MCPServerPatch struct {
 // Secrets are masked on the way out: an admin API token reads back as a run of
 // bullet characters, so no field here is safe to write back into an upsert.
 type MCPServer struct {
-	ID          int64   `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	ServerURL   string  `json:"server_url"`
+	Groups    []int64  `json:"groups"`
+	Users     []string `json:"users"`
+	Name      string   `json:"name"`
+	ServerURL string   `json:"server_url"`
 	// Owner is the identity that configured the server. For an API-key run
 	// that is the key's synthetic address, not a real mailbox.
 	Owner            string           `json:"owner"`
+	Status           string           `json:"status"`
+	ID               int64            `json:"id"`
+	Description      *string          `json:"description"`
 	Transport        *string          `json:"transport"`
 	AuthType         *string          `json:"auth_type"`
 	AuthPerformer    *string          `json:"auth_performer"`
-	Status           string           `json:"status"`
-	IsPublic         bool             `json:"is_public"`
-	Groups           []int64          `json:"groups"`
-	Users            []string         `json:"users"`
-	AvailableInCraft bool             `json:"available_in_craft"`
 	LastRefreshedAt  *string          `json:"last_refreshed_at"`
 	ToolCount        int64            `json:"tool_count"`
 	AuthTemplate     *MCPAuthTemplate `json:"auth_template"`
+	IsPublic         bool             `json:"is_public"`
+	AvailableInCraft bool             `json:"available_in_craft"`
 }
 
 type mcpServerCreateResponse struct {

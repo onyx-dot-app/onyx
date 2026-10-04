@@ -255,9 +255,7 @@ def resolve_mcp_credentials(
             )
         return ResolvedMCPCredentials(
             connection_config=user_connection_config,
-            user_oauth_token=(
-                user.oauth_accounts[0].access_token if user.oauth_accounts else None
-            ),
+            user_oauth_token=user.live_oauth_token,
             auth_type=mcp_server.auth_type,
             auth_template=auth_template,
             user_email=user.email,

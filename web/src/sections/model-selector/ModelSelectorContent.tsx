@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
@@ -26,8 +26,6 @@ import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
   buildLlmOptions,
   groupLlmOptions,
   llmOptionKey,
@@ -41,9 +39,10 @@ import {
   cappedReasoningStop,
   formatContextWindow,
   maxReasoningStop,
+  minReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -51,6 +50,18 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+  ModelPaging,
+} from "@/lib/languageModels/types";
+
+/** Scroll distance from the list bottom that pulls in the next model page. */
+const LOAD_MORE_THRESHOLD_PX = 48;
+/** Pause after the last keystroke before the unloaded models are searched. */
+const SERVER_SEARCH_DEBOUNCE_MS = 300;
+/** Windows loaded without a scroll event before the list is left short. */
+const AUTOFILL_CAP = 3;
 
 export interface TemperatureManager {
   temperature: number;
@@ -163,21 +174,26 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const reasoningManager = managers.reasoning;
   const temperatureEnabled = !option.supportsReasoning && !!temperatureManager;
   const capabilityStop = maxReasoningStop(option.supportedReasoningEfforts);
-  // The admin cap further limits which stops users may request.
-  const maxSupportedStop = cappedReasoningStop(
+  // Models that always reason omit "off", so the slider needs a floor as well
+  // as a ceiling.
+  const minSupportedStop = minReasoningStop(option.supportedReasoningEfforts);
+  // The admin cap further limits which stops users may request, but a stale cap
+  // below the floor still leaves the floor selectable.
+  const cappedStop = cappedReasoningStop(
     capabilityStop,
     option.reasoningEffortMax
   );
+  const maxSupportedStop =
+    capabilityStop >= 0 ? Math.max(minSupportedStop, cappedStop) : cappedStop;
   // A reasoning model with no supported levels takes no effort parameter at
   // all (e.g. o1-mini), so the row stays disabled.
   const reasoningEnabled =
     option.supportsReasoning && !!reasoningManager && maxSupportedStop >= 0;
 
   // The slider spans all stops for uniform geometry and clamps input to the
-  // max supported index. The lower bound keeps the disabled no-levels case on
-  // a valid stop.
+  // supported band, flooring even below an admin cap the model can't honor.
   const clampStop = (stop: number) =>
-    Math.max(0, Math.min(stop, maxSupportedStop));
+    Math.max(minSupportedStop, Math.min(stop, maxSupportedStop));
 
   // temperature is always concrete, so the override flag decides when the
   // admin default applies.
@@ -344,9 +360,12 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                   style={{ insetInlineStart: `${(index / lastStop) * 100}%` }}
                 >
                   <Disabled
-                    disabled={reasoningEnabled && index > maxSupportedStop}
+                    disabled={
+                      reasoningEnabled &&
+                      (index < minSupportedStop || index > maxSupportedStop)
+                    }
                     tooltip={
-                      index > capabilityStop
+                      index < minSupportedStop || index > capabilityStop
                         ? t("unsupportedSetting.tooltip")
                         : t("adminLimitedSetting.tooltip")
                     }
@@ -383,6 +402,9 @@ export interface ModelSelectorContentProps {
    * instead of "no models".
    */
   isLoading?: boolean;
+  /** Set by a host that fetches `providerOptions` itself, so a truncated
+   *  provider loads more on scroll and is searched on the server. */
+  modelPaging?: ModelPaging;
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
@@ -404,6 +426,7 @@ export default function ModelSelectorContent({
   currentModelName,
   providerOptions,
   isLoading: isLoadingProp = false,
+  modelPaging: modelPagingProp,
   includeHiddenModels = false,
   requiresImageInput,
   onSelect,
@@ -421,11 +444,14 @@ export default function ModelSelectorContent({
   const {
     llmProviders: currentAgentProviderOptions,
     isLoading: currentAgentProvidersLoading,
-  } = useCurrentAgentLLMProviders();
+    modelPaging: currentAgentModelPaging,
+  } = useLanguageModelsForCurrentAgent();
   const llmProviders = providerOptions ?? currentAgentProviderOptions;
   const isLoading =
     isLoadingProp ||
     (providerOptions === undefined && currentAgentProvidersLoading);
+  const modelPaging =
+    providerOptions === undefined ? currentAgentModelPaging : modelPagingProp;
   const [searchQuery, setSearchQuery] = useState("");
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
@@ -490,6 +516,96 @@ export default function ModelSelectorContent({
 
   // A lone group needs no header, and an admin can drop them workspace-wide.
   const showFlatList = hideProviderGrouping || groupedOptions.length === 1;
+  const isLoadingMore = !isLoading && (modelPaging?.isLoading ?? false);
+  // A search with no local hit may still be matching on the server.
+  const showEmpty = groupedOptions.length === 0 && !isLoadingMore;
+
+  // Providers whose remaining models scrolling may page in, in display order:
+  // every listed provider in a flat list, only the expanded groups otherwise.
+  // Providers sharing a display name share a group, so each group may hold
+  // several.
+  const pageableProviderIds = useMemo(
+    () => [
+      ...new Set(
+        groupedOptions
+          .filter((group) => showFlatList || expandedGroups.has(group.key))
+          .flatMap((group) =>
+            group.options.flatMap((option) => option.providerId ?? [])
+          )
+      ),
+    ],
+    [groupedOptions, showFlatList, expandedGroups]
+  );
+
+  // Server search only when nothing loaded matches. The query is remembered so
+  // a merged page, which changes `modelPaging`, does not re-run it. A skipped
+  // search stays unremembered and retries once the page load settles.
+  const lastServerSearchRef = useRef("");
+  const trimmedQuery = searchQuery.trim();
+  useEffect(() => {
+    if (!trimmedQuery || !modelPaging?.hasMore || filteredOptions.length > 0) {
+      return;
+    }
+    if (lastServerSearchRef.current === trimmedQuery) return;
+    const handle = setTimeout(() => {
+      modelPaging
+        .search(trimmedQuery)
+        .then((searched) => {
+          if (searched) lastServerSearchRef.current = trimmedQuery;
+        })
+        .catch(console.error);
+    }, SERVER_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [trimmedQuery, modelPaging, filteredOptions]);
+
+  // Scrolling to the bottom pages the expanded providers, or the current
+  // server search's remaining matches. The list container remounts when the
+  // detail pane closes, so the listener re-attaches on that change too.
+  const loadNextWindow = useCallback(() => {
+    if (!modelPaging || modelPaging.isLoading) return;
+    if (isSearching) {
+      if (
+        lastServerSearchRef.current === trimmedQuery &&
+        modelPaging.searchHasMore
+      ) {
+        modelPaging.loadMoreSearch().catch(console.error);
+      }
+      return;
+    }
+    if (modelPaging.hasMore) {
+      modelPaging.loadMore(pageableProviderIds).catch(console.error);
+    }
+  }, [modelPaging, isSearching, trimmedQuery, pageableProviderIds]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      const remaining =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (remaining <= LOAD_MORE_THRESHOLD_PX) loadNextWindow();
+    };
+    container.addEventListener("scroll", onScroll);
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [scrollContainerRef, loadNextWindow, detailOption]);
+
+  // A page whose visible rows fit the box never scrolls (hidden or filtered
+  // rows, a short tail), so it keeps loading until the list overflows, up to
+  // a few windows per expansion.
+  const autofillCountRef = useRef(0);
+  const pageableKey = pageableProviderIds.join(",");
+  useEffect(() => {
+    autofillCountRef.current = 0;
+  }, [pageableKey, trimmedQuery]);
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || isLoading || autofillCountRef.current >= AUTOFILL_CAP) {
+      return;
+    }
+    if (container.scrollHeight > container.clientHeight + 1) return;
+    autofillCountRef.current += 1;
+    loadNextWindow();
+  }, [scrollContainerRef, isLoading, loadNextWindow, groupedOptions]);
 
   const renderModelItem = (option: LLMOption) => {
     const selected = isSelected(option);
@@ -583,7 +699,7 @@ export default function ModelSelectorContent({
                   {t("list.loading.text")}
                 </Text>,
               ]
-            : groupedOptions.length === 0
+            : showEmpty
               ? [
                   <Text key="empty" font="secondary-body" color="text-03">
                     {t("list.empty.text")}
@@ -656,6 +772,13 @@ export default function ModelSelectorContent({
                     // null children render as PopoverMenu divider lines.
                     return groupIndex > 0 ? [null, collapsible] : [collapsible];
                   })),
+          ...(isLoadingMore
+            ? [
+                <Text key="loading-more" font="secondary-body" color="text-03">
+                  {t("list.loadingMore.text")}
+                </Text>,
+              ]
+            : []),
         ]}
       </PopoverMenu>
     </Section>

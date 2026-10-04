@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   Card,
   type DateRange,
-  InputSingleSelect,
+  InputSingleComboBox,
   MessageCard,
   Table,
   Text,
   createTableColumns,
 } from "@opal/components";
 import { SvgCpu, SvgX } from "@opal/icons";
-import { PageLoader, Section } from "@opal/layouts";
+import { Section } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { formatCalendarDay } from "@/lib/dateUtils";
 import { useSystemUsage } from "@/lib/usage/hooks";
 import type { SystemUsageCategory } from "@/lib/usage/systemUsage";
@@ -25,8 +27,6 @@ const OTHER_CATEGORY = "other";
 const IMAGE_SUMMARIZATION_FLOW = "image_summarization";
 const CONTEXTUAL_RAG_DOC_SUMMARY_FLOW = "contextual_rag_doc_summary";
 const CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW = "contextual_rag_chunk_context";
-const KG_DOCUMENT_CLASSIFICATION_FLOW = "kg_document_classification";
-const KG_DEEP_EXTRACTION_FLOW = "kg_deep_extraction";
 
 interface SystemUsageRow extends UsageExportTotals {
   category: string;
@@ -55,10 +55,6 @@ function categoryLabel(category: string, t: SystemUsageTranslate): string {
       return t("categories.contextualRagDocumentSummary.label");
     case CONTEXTUAL_RAG_CHUNK_CONTEXT_FLOW:
       return t("categories.contextualRagChunkContext.label");
-    case KG_DOCUMENT_CLASSIFICATION_FLOW:
-      return t("categories.kgDocumentClassification.label");
-    case KG_DEEP_EXTRACTION_FLOW:
-      return t("categories.kgDeepExtraction.label");
     case UNATTRIBUTED_CATEGORY:
       return t("categories.unattributed.label");
     case OTHER_CATEGORY:
@@ -162,6 +158,7 @@ interface SystemUsagePanelProps {
 export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
   const t = useTranslations("admin.systemUsage");
   const locale = useLocale();
+  const { appName } = useSettings();
   const { usage, isLoading, error } = useSystemUsage(timeRange);
   const [model, setModel] = useState(ALL_FILTER);
   const [provider, setProvider] = useState(ALL_FILTER);
@@ -212,8 +209,9 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
           ? t("panel.description", {
               start: formatCalendarDay(usage.start, locale, { withYear: true }),
               end: formatCalendarDay(usage.end, locale, { withYear: true }),
+              appName,
             })
-          : t("panel.emptyDescription")}
+          : t("panel.emptyDescription", { appName })}
       </Text>
     </Section>
   );
@@ -284,40 +282,34 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
       >
         {models.length > 0 && (
           <Section width={12} height="fit">
-            <InputSingleSelect value={model} onValueChange={setModel}>
-              <InputSingleSelect.Trigger
-                placeholder={t("filters.allModels.label")}
-              />
-              <InputSingleSelect.Content>
-                <InputSingleSelect.Item value={ALL_FILTER}>
-                  {t("filters.allModels.label")}
-                </InputSingleSelect.Item>
-                {models.map((option) => (
-                  <InputSingleSelect.Item key={option} value={option}>
-                    {option}
-                  </InputSingleSelect.Item>
-                ))}
-              </InputSingleSelect.Content>
-            </InputSingleSelect>
+            <InputSingleComboBox
+              value={model}
+              onValueChange={setModel}
+              placeholder={t("filters.allModels.label")}
+              options={[
+                { value: ALL_FILTER, title: t("filters.allModels.label") },
+                ...models.map((option) => ({
+                  value: option,
+                  title: option,
+                })),
+              ]}
+            />
           </Section>
         )}
         {providers.length > 0 && (
           <Section width={12} height="fit">
-            <InputSingleSelect value={provider} onValueChange={setProvider}>
-              <InputSingleSelect.Trigger
-                placeholder={t("filters.allProviders.label")}
-              />
-              <InputSingleSelect.Content>
-                <InputSingleSelect.Item value={ALL_FILTER}>
-                  {t("filters.allProviders.label")}
-                </InputSingleSelect.Item>
-                {providers.map((option) => (
-                  <InputSingleSelect.Item key={option} value={option}>
-                    {option}
-                  </InputSingleSelect.Item>
-                ))}
-              </InputSingleSelect.Content>
-            </InputSingleSelect>
+            <InputSingleComboBox
+              value={provider}
+              onValueChange={setProvider}
+              placeholder={t("filters.allProviders.label")}
+              options={[
+                { value: ALL_FILTER, title: t("filters.allProviders.label") },
+                ...providers.map((option) => ({
+                  value: option,
+                  title: option,
+                })),
+              ]}
+            />
           </Section>
         )}
       </Section>

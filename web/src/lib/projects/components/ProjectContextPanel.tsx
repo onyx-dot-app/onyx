@@ -1,12 +1,13 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useDropzone } from "react-dropzone";
 import { useProjectsContext } from "@/lib/projects/providers";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { UserFileStatus, type ProjectFile } from "@/lib/projects/types";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import { Content, ContentAction } from "@opal/layouts";
 import AddInstructionModal from "@/sections/modals/AddInstructionModal";
@@ -20,7 +21,6 @@ import {
   SvgFiles,
   SvgFolderOpen,
   SvgPlusCircle,
-  SvgSimpleLoader,
 } from "@opal/icons";
 
 export interface ProjectContextPanelProps {
@@ -215,7 +215,7 @@ export default function ProjectContextPanel({
           <input {...getInputProps()} />
 
           {isLoadingProjectDetails && !currentProjectDetails ? (
-            <SvgSimpleLoader />
+            <IconLoader />
           ) : allCurrentProjectFiles.length > 0 ? (
             <>
               {/* Mobile / small screens: just show a button to view files */}

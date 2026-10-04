@@ -5,9 +5,8 @@ import {
   BraintrustIcon,
   BoxIcon,
 } from "@/components/icons/icons";
-import { ValidSources } from "@/lib/types";
-import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
-import { Agent } from "@/lib/agents/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
@@ -45,6 +44,7 @@ import {
   SvgLumapps,
   SvgMediawiki,
   SvgNotion,
+  SvgOnedrive,
   SvgOracle,
   SvgOutline,
   SvgOutlook,
@@ -58,6 +58,7 @@ import {
   SvgWikipedia,
   SvgXenforo,
   SvgZendesk,
+  SvgZoom,
   SvgZulip,
 } from "@opal/logos";
 
@@ -73,11 +74,6 @@ interface PartialSourceMetadata {
   // federated connectors store the base source type if it's a source
   // that has both indexed connectors and federated connectors
   baseSourceType?: ValidSources;
-  // For connectors that are always available (don't need connection setup)
-  // e.g., User Library (CraftFile) where users just upload files
-  alwaysConnected?: boolean;
-  // Custom description to show instead of status (e.g., "Manage your uploaded files")
-  customDescription?: string;
 }
 
 type SourceMap = {
@@ -124,7 +120,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgCoda,
     displayName: "Coda",
     category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/coda",
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/coda`,
   },
   notion: {
     icon: SvgNotion,
@@ -213,6 +209,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview`,
     oauthSupported: true,
     isPopular: true,
+  },
+  onedrive: {
+    icon: SvgOnedrive,
+    displayName: "OneDrive",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/onedrive`,
   },
   box: {
     icon: BoxIcon,
@@ -328,6 +330,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Outlook",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/outlook`,
+  },
+  zoom: {
+    icon: SvgZoom,
+    displayName: "Zoom",
+    category: SourceCategory.Messaging,
   },
   gmail: {
     icon: SvgGmail,
@@ -450,7 +457,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   braintrust: {
     icon: BraintrustIcon,
     displayName: "Braintrust",
-    category: SourceCategory.Other,
+    category: SourceCategory.AiObservability,
   },
 
   // Other
@@ -465,9 +472,6 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgFileText,
     displayName: "Your Files",
     category: SourceCategory.Other,
-    isPopular: false, // Hidden from standard Add Connector page
-    alwaysConnected: true, // No setup required, just upload files
-    customDescription: "Manage your uploaded files",
   },
 
   // Placeholder (non-null default)
@@ -520,7 +524,11 @@ export function listSourceMetadata(): SourceMetadata[] {
         // use the "regular" slack connector when listing
         source !== "federated_slack" &&
         // user_file is for internal use (projects), not the Add Connector page
-        source !== "user_file"
+        source !== "user_file" &&
+        // craft_file backs the Craft user library, which has its own upload UI
+        source !== "craft_file" &&
+        // TODO: unhide once the rest of the Zoom connector stack has merged
+        source !== "zoom"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);

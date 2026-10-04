@@ -8,6 +8,7 @@ from ee.onyx.external_permissions.github.utils import (
     get_external_user_group,
 )
 from ee.onyx.external_permissions.utils import credential_json
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.github.connector import GithubConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -20,7 +21,9 @@ def github_group_sync(
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     github_connector: GithubConnector = GithubConnector(
-        **cc_pair.connector.connector_specific_config
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
     )
     github_connector.load_credentials(credential_json(cc_pair))
     if not github_connector.github_client:

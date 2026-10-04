@@ -9,6 +9,8 @@ from onyx.db.persona import get_default_behavior_persona
 from onyx.db.user_file import calculate_user_files_token_count
 from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import (
+    ANSWER_COMPLETENESS_REMINDER,
+    ANSWER_COVERAGE_GUIDANCE,
     CITATION_REMINDER,
     DEFAULT_SYSTEM_PROMPT,
     FILE_REMINDER,
@@ -96,7 +98,7 @@ def calculate_reserved_tokens(
         include_all_guidance=True,
     )
 
-    custom_agent_prompt = persona_system_prompt if persona_system_prompt else ""
+    custom_agent_prompt = persona_system_prompt or ""
 
     reserved_token_count = token_counter(
         # Annoying that the dict has no attributes now
@@ -138,10 +140,11 @@ def build_reminder_message(
         reminder += "\n\n" + LAST_CYCLE_CITATION_REMINDER
     if include_citation_reminder:
         reminder += "\n\n" + CITATION_REMINDER
+        reminder += "\n\n" + ANSWER_COMPLETENESS_REMINDER
     if include_file_reminder:
         reminder += "\n\n" + FILE_REMINDER
     reminder = reminder.strip()
-    return reminder if reminder else None
+    return reminder or None
 
 
 def process_prompt_template(
@@ -277,6 +280,7 @@ def build_system_prompt(
     # This maintains backward compatibility and ensures citations are always enforced when needed
     if should_append_citation_guidance:
         system_prompt += REQUIRE_CITATION_GUIDANCE
+        system_prompt += ANSWER_COVERAGE_GUIDANCE
 
     if include_all_guidance:
         tool_sections = [

@@ -54,7 +54,7 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import upsert_document_tags
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     IndexingMetadata,
@@ -91,10 +91,15 @@ from onyx.llm.factory import (
     get_contextual_rag_llm_for_search_settings,
     get_default_llm_with_vision,
 )
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    ReasoningEffort,
+    UserMessage,
+)
 from onyx.llm.multi_llm import LLMRateLimitError
-from onyx.llm.utils import MAX_CONTEXT_TOKENS, llm_response_to_string
+from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.utils import (
     BaseTokenizer,
     get_tokenizer,
@@ -109,7 +114,6 @@ from onyx.server.query_and_chat.token_limit import check_global_token_rate_limit
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
@@ -170,7 +174,7 @@ class IndexingPipelineResult(BaseModel):
     # NOTE: need total_docs, since the pipeline can skip some docs
     # (e.g. not even insert them into Postgres)
     total_docs: int
-    # number of chunks that were inserted into Vespa
+    # number of chunks that were inserted into the document index
     total_chunks: int
 
     failures: list[ConnectorFailure]
@@ -226,7 +230,11 @@ def _upsert_documents_in_db(
         )
         document_metadata_list.append(db_doc_metadata)
 
-    upsert_documents(db_session, document_metadata_list)
+    upsert_documents(
+        db_session,
+        document_metadata_list,
+        source=documents[0].source if documents else None,
+    )
 
     # Insert document content metadata
     for doc in documents:
@@ -364,6 +372,8 @@ def get_docs_to_update(
 
     Two-gate dedup:
 
+    Permission changes bypass both gates so ACL updates persist.
+
     Gate 1 — timestamp skip (fast path):
       If the connector supplies doc_updated_at and it hasn't advanced past what we
       already indexed, skip immediately. No hash computation needed.
@@ -394,6 +404,18 @@ def get_docs_to_update(
     updatable_docs: list[Document] = []
     doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
+        db_doc = id_to_db_doc_map.get(doc.id)
+        access_changed = bool(
+            db_doc
+            and doc.external_access is not None
+            and (
+                doc.external_access.external_user_emails
+                != set(db_doc.external_user_emails or [])
+                or doc.external_access.external_user_group_ids
+                != set(db_doc.external_user_group_ids or [])
+                or doc.external_access.is_public != db_doc.is_public
+            )
+        )
         timestamp_advanced = (
             doc.doc_updated_at is not None
             and doc.id in id_update_time_map
@@ -406,6 +428,7 @@ def get_docs_to_update(
             and doc.doc_updated_at
             and doc.id in id_update_time_map
             and not timestamp_advanced
+            and not access_changed
         ):
             continue
 
@@ -414,8 +437,7 @@ def get_docs_to_update(
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
         if not timestamp_advanced and not ignore_content_hash_gate:
-            db_doc = id_to_db_doc_map.get(doc.id)
-            if db_doc and db_doc.content_hash == content_hash:
+            if db_doc and db_doc.content_hash == content_hash and not access_changed:
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
@@ -429,7 +451,7 @@ def index_doc_batch_with_handler(
     *,
     chunker: Chunker,
     embedder: IndexingEmbedder,
-    document_indices: list[DocumentIndex],
+    document_index: DocumentIndex,
     document_batch: list[Document],
     request_id: str | None,
     tenant_id: str,
@@ -446,7 +468,7 @@ def index_doc_batch_with_handler(
         index_pipeline_result = index_doc_batch(
             chunker=chunker,
             embedder=embedder,
-            document_indices=document_indices,
+            document_index=document_index,
             document_batch=document_batch,
             request_id=request_id,
             tenant_id=tenant_id,
@@ -840,9 +862,9 @@ def _get_image_summarization_llm(
     llm = get_default_llm_with_vision()
     if llm is None:
         logger.warning(
-            "Image analysis is enabled but no vision-capable LLM is "
-            "available — images will not be summarized. Configure a "
-            "vision model in the admin LLM settings."
+            "Image analysis is enabled but no usable captioning model is "
+            "available — images will not be summarized. Check the captioning "
+            "model under Index Settings."
         )
     return llm
 
@@ -964,20 +986,21 @@ def add_document_summaries(
     summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
     prompt_msg = UserMessage(content=summary_prompt)
 
-    with llm_generation_span(
-        llm=llm,
-        flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
-        input_messages=[prompt_msg],
-        content_mode=TraceContentMode.METADATA_ONLY,
-    ) as span_generation:
-        response = llm.invoke(
-            prompt_msg,
-            max_tokens=MAX_CONTEXT_TOKENS,
-            reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-            total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-        )
-        record_llm_response(span_generation, response)
-    doc_summary = llm_response_to_string(response)
+    response = llm.invoke(
+        GenerationRequest(
+            messages=[prompt_msg],
+            options=GenerationOptions(
+                max_tokens=MAX_CONTEXT_TOKENS,
+                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+            ),
+        ),
+        context=GenerationContext(
+            flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+            content_mode=TraceContentMode.METADATA_ONLY,
+            total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+        ),
+    )
+    doc_summary = response.text
 
     for chunk in chunks_by_doc:
         chunk.doc_summary = doc_summary
@@ -1019,22 +1042,23 @@ def add_chunk_summaries(
         fallback_prompt = UserMessage(
             content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
         )
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
-            input_messages=[fallback_prompt],
-            content_mode=TraceContentMode.METADATA_ONLY,
-        ) as span_generation:
-            response = llm.invoke(
-                fallback_prompt,
-                max_tokens=MAX_CONTEXT_TOKENS,
-                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-            )
-            record_llm_response(span_generation, response)
-        doc_info = llm_response_to_string(response)
+        response = llm.invoke(
+            GenerationRequest(
+                messages=[fallback_prompt],
+                options=GenerationOptions(
+                    max_tokens=MAX_CONTEXT_TOKENS,
+                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                ),
+            ),
+            context=GenerationContext(
+                flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+                content_mode=TraceContentMode.METADATA_ONLY,
+                total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            ),
+        )
+        doc_info = response.text
 
-    from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+    from onyx.llm.prompt_cache.processor import cached_user_message
 
     context_prompt1 = CONTEXTUAL_RAG_PROMPT1.format(document=doc_info)
 
@@ -1042,28 +1066,25 @@ def add_chunk_summaries(
         context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
         try:
             # Apply prompt caching: cache the document context (prompt1), chunk content is the suffix
-            # For string inputs with continuation=True, the result will be a concatenated string
-            processed_prompt, _ = process_with_prompt_cache(
-                llm_config=llm.config,
-                cacheable_prefix=UserMessage(content=context_prompt1),
-                suffix=UserMessage(content=context_prompt2),
-                continuation=True,  # Append chunk to the document context
+            processed_prompt = cached_user_message(
+                llm.config, prefix=context_prompt1, suffix=context_prompt2
             )
 
-            with llm_generation_span(
-                llm=llm,
-                flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
-                input_messages=[processed_prompt],
-                content_mode=TraceContentMode.METADATA_ONLY,
-            ) as span_generation:
-                response = llm.invoke(
-                    processed_prompt,
-                    max_tokens=MAX_CONTEXT_TOKENS,
-                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                    total_timeout_override=CONTEXTUAL_RAG_LLM_TIMEOUT,
-                )
-                record_llm_response(span_generation, response)
-            chunk.chunk_context = llm_response_to_string(response)
+            response = llm.invoke(
+                GenerationRequest(
+                    messages=[processed_prompt],
+                    options=GenerationOptions(
+                        max_tokens=MAX_CONTEXT_TOKENS,
+                        reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                    ),
+                ),
+                context=GenerationContext(
+                    flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
+                    content_mode=TraceContentMode.METADATA_ONLY,
+                    total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+                ),
+            )
+            chunk.chunk_context = response.text
 
         except LLMRateLimitError as e:
             # Erroring during chunker is undesirable, so we log the error and continue
@@ -1360,7 +1381,7 @@ def index_doc_batch(
     document_batch: list[Document],
     chunker: Chunker,
     embedder: IndexingEmbedder,
-    document_indices: list[DocumentIndex],
+    document_index: DocumentIndex,
     request_id: str | None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
@@ -1510,7 +1531,8 @@ def index_doc_batch(
         )
 
         # Filter to only successfully embedded chunks so
-        # doc_id_to_new_chunk_cnt reflects what's actually written to Vespa.
+        # doc_id_to_new_chunk_cnt reflects what's actually written to the
+        # document index.
         embedded_chunks = [
             c for c in chunks if c.source_document.id not in embedding_failed_doc_ids
         ]
@@ -1539,51 +1561,28 @@ def index_doc_batch(
                 doc_id_to_chunk_cnt_diff=doc_id_to_chunk_cnt_diff,
             )
 
-            primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = (
-                None
+            def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
+                for chunk in chunk_store.stream():
+                    yield enricher.enrich_chunk(chunk, 1.0)
+
+            vector_db_write_start = time.monotonic()
+            insertion_records, write_failures = write_chunks_to_vector_db_with_backoff(
+                document_index=document_index,
+                make_chunks=_enriched_stream,
+                indexing_metadata=indexing_metadata,
+                tenant_id=tenant_id,
             )
-            primary_doc_idx_vector_db_write_failures: list[ConnectorFailure] | None = (
-                None
+            vector_db_write_ms = max(
+                0, int((time.monotonic() - vector_db_write_start) * 1000)
             )
 
-            # Sum vector-db write time across all configured indices and
-            # record once per batch. Most deployments have a single index
-            # (primary), but during a switchover both primary and secondary
-            # are written; we want a single combined number per batch rather
-            # than one event per index (avoids inflating event_count).
-            vector_db_write_ms = 0
-            for document_index in document_indices:
-
-                def _enriched_stream() -> Iterator[DocMetadataAwareIndexChunk]:
-                    for chunk in chunk_store.stream():
-                        yield enricher.enrich_chunk(chunk, 1.0)
-
-                vector_db_write_start = time.monotonic()
-                insertion_records, write_failures = (
-                    write_chunks_to_vector_db_with_backoff(
-                        document_index=document_index,
-                        make_chunks=_enriched_stream,
-                        indexing_metadata=indexing_metadata,
-                        tenant_id=tenant_id,
-                    )
-                )
-                vector_db_write_ms += max(
-                    0, int((time.monotonic() - vector_db_write_start) * 1000)
-                )
-
-                _verify_indexing_completeness(
-                    insertion_records=insertion_records,
-                    write_failures=write_failures,
-                    embedding_failed_doc_ids=embedding_failed_doc_ids,
-                    updatable_ids=updatable_ids,
-                    document_index_name=document_index.__class__.__name__,
-                )
-                # We treat the first document index we got as the primary one used
-                # for reporting the state of indexing.
-                if primary_doc_idx_insertion_records is None:
-                    primary_doc_idx_insertion_records = insertion_records
-                if primary_doc_idx_vector_db_write_failures is None:
-                    primary_doc_idx_vector_db_write_failures = write_failures
+            _verify_indexing_completeness(
+                insertion_records=insertion_records,
+                write_failures=write_failures,
+                embedding_failed_doc_ids=embedding_failed_doc_ids,
+                updatable_ids=updatable_ids,
+                document_index_name=document_index.__class__.__name__,
+            )
 
             safe_record_single_event_if_set(
                 IndexAttemptStage.VECTOR_DB_WRITE, attempt_id, vector_db_write_ms
@@ -1609,10 +1608,8 @@ def index_doc_batch(
             # on the next sync. Hashes were pre-computed in get_docs_to_update.
             # Skipped for FUTURE writes: stamping the PRESENT-only hash would make
             # the PRESENT poll skip the doc (cross-index suppression).
-            if primary_doc_idx_insertion_records is not None and not index_to_secondary:
-                successfully_indexed_ids = {
-                    r.document_id for r in primary_doc_idx_insertion_records
-                }
+            if not index_to_secondary:
+                successfully_indexed_ids = {r.document_id for r in insertion_records}
                 update_docs_content_hash__no_commit(
                     ids_to_new_hash={
                         doc_id: context.doc_id_to_content_hash[doc_id]
@@ -1622,23 +1619,18 @@ def index_doc_batch(
                     db_session=db_session,
                 )
 
-    assert primary_doc_idx_insertion_records is not None
-    assert primary_doc_idx_vector_db_write_failures is not None
-
     _maybe_push_documents(
         adapter=adapter,
         filtered_documents=filtered_documents,
-        insertion_records=primary_doc_idx_insertion_records,
+        insertion_records=insertion_records,
         from_beginning=from_beginning,
     )
 
     return IndexingPipelineResult(
-        new_docs=sum(
-            1 for r in primary_doc_idx_insertion_records if not r.already_existed
-        ),
+        new_docs=sum(1 for r in insertion_records if not r.already_existed),
         total_docs=len(filtered_documents),
         total_chunks=len(embedding_result.successful_chunk_ids),
-        failures=primary_doc_idx_vector_db_write_failures
+        failures=write_failures
         + embedding_result.connector_failures
         + enrichment_partition.failures
         + filter_failures,
@@ -1650,7 +1642,7 @@ def run_indexing_pipeline(
     document_batch: list[Document],
     request_id: str | None,
     embedder: IndexingEmbedder,
-    document_indices: list[DocumentIndex],
+    document_index: DocumentIndex,
     db_session: Session | None = None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
@@ -1716,7 +1708,7 @@ def run_indexing_pipeline(
         return index_doc_batch_with_handler(
             chunker=chunker,
             embedder=embedder,
-            document_indices=document_indices,
+            document_index=document_index,
             document_batch=document_batch,
             request_id=request_id,
             tenant_id=tenant_id,

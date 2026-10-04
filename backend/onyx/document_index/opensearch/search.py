@@ -9,20 +9,29 @@ from onyx.configs.app_configs import (
     OPENSEARCH_PROFILING_DISABLED,
 )
 from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
-from onyx.context.search.models import IndexFilters, Tag, TimeRange
-from onyx.document_index.interfaces_new import TenantState
+from onyx.context.search.models import (
+    CCPairAccessFilter,
+    CCPairAccessMode,
+    IndexFilters,
+    Tag,
+    TimeRange,
+)
+from onyx.db.enums import VectorQuantization
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     ASSUMED_DOCUMENT_AGE_DAYS,
     DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW,
     HYBRID_SEARCH_NORMALIZATION_PIPELINE,
     HYBRID_SEARCH_SUBQUERY_CONFIGURATION,
+    LUCENE_SCALAR_QUANTIZATION,
     HybridSearchNormalizationPipeline,
     HybridSearchSubqueryConfiguration,
 )
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
     ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME,
+    CC_PAIR_IDS_FIELD_NAME,
     CHUNK_INDEX_FIELD_NAME,
     CONTENT_FIELD_NAME,
     CONTENT_VECTOR_FIELD_NAME,
@@ -54,6 +63,15 @@ TermQuery: TypeAlias = dict[str, dict[str, dict[str, _T]]]
 
 
 # TODO(andrei): Turn all magic dictionaries to pydantic models.
+
+
+def _get_enforced_cc_pair_access(
+    index_filters: IndexFilters,
+) -> CCPairAccessFilter | None:
+    cc_pair_access = index_filters.cc_pair_access
+    if cc_pair_access is None or cc_pair_access.mode != CCPairAccessMode.ENFORCE:
+        return None
+    return cc_pair_access
 
 
 # Normalization pipelines combine document scores from multiple query clauses.
@@ -219,6 +237,8 @@ class DocumentQuery:
             tenant_state=tenant_state,
             include_hidden=include_hidden,
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -286,6 +306,7 @@ class DocumentQuery:
             # Delete hidden docs too.
             include_hidden=True,
             access_control_list=None,
+            cc_pair_access=None,
             source_types=[],
             tags=[],
             document_sets=[],
@@ -336,6 +357,102 @@ class DocumentQuery:
         return final_delete_query
 
     @staticmethod
+    def set_cc_pair_ids_query(
+        doc_id_to_cc_pair_ids: dict[str, list[int]],
+        tenant_state: TenantState,
+    ) -> dict[str, Any]:
+        """Update-by-query that sets cc_pair_ids on every chunk of the given
+        documents in this tenant, each document to its own list."""
+        filter_clauses: list[dict[str, Any]] = [
+            {"terms": {DOCUMENT_ID_FIELD_NAME: list(doc_id_to_cc_pair_ids)}},
+        ]
+        # Single-tenant indices have no tenant_id field. Mirror _get_search_filters.
+        if tenant_state.multitenant:
+            filter_clauses.append(
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            )
+        return {
+            "query": {"bool": {"filter": filter_clauses}},
+            "script": {
+                "lang": "painless",
+                "source": (
+                    f"ctx._source.{CC_PAIR_IDS_FIELD_NAME} = "
+                    f"params.ids_by_doc[ctx._source.{DOCUMENT_ID_FIELD_NAME}];"
+                ),
+                "params": {"ids_by_doc": doc_id_to_cc_pair_ids},
+            },
+        }
+
+    @staticmethod
+    def get_cc_pair_access_shadow_query(
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        cc_pair_access: CCPairAccessFilter,
+        visible_to_old_filter_only: bool,
+        num_hits: int,
+        timeout_s: int,
+        document_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Returns a chunk ID query for chunks where the old ACL filter and the
+        cc-pair access filter disagree, within the scope of the other filters.
+
+        Args:
+            visible_to_old_filter_only: If True, finds chunks the old filter
+                shows and the cc-pair filter hides. If False, the reverse.
+            num_hits: The maximum number of chunk IDs to return.
+            timeout_s: The OpenSearch query timeout.
+            document_ids: If given, limits the comparison to these documents.
+        """
+
+        def _filters(
+            filter_cc_pair_access: CCPairAccessFilter | None,
+        ) -> list[dict[str, Any]]:
+            return DocumentQuery._get_search_filters(
+                tenant_state=tenant_state,
+                include_hidden=False,
+                access_control_list=index_filters.access_control_list,
+                cc_pair_access=filter_cc_pair_access,
+                restricted_cc_pair_guard=cc_pair_access,
+                source_types=index_filters.source_type or [],
+                tags=index_filters.tags or [],
+                document_sets=index_filters.document_set or [],
+                project_id_filter=index_filters.project_id_filter,
+                persona_id_filter=index_filters.persona_id_filter,
+                created_at_range=index_filters.created_at_range,
+                updated_at_range=index_filters.updated_at_range,
+                min_chunk_index=None,
+                max_chunk_index=None,
+                attached_document_ids=index_filters.attached_document_ids,
+                hierarchy_node_ids=index_filters.hierarchy_node_ids,
+                forced_document_sets=index_filters.forced_document_set,
+            )
+
+        # The two filter lists differ only in the access clause.
+        old_filters = _filters(None)
+        new_filters = _filters(cc_pair_access)
+        included, excluded = (
+            (old_filters, new_filters)
+            if visible_to_old_filter_only
+            else (new_filters, old_filters)
+        )
+        if document_ids is not None:
+            included = [
+                *included,
+                {"terms": {DOCUMENT_ID_FIELD_NAME: document_ids}},
+            ]
+        return {
+            "query": {
+                "bool": {
+                    "filter": included,
+                    "must_not": [{"bool": {"filter": excluded}}],
+                }
+            },
+            "size": num_hits,
+            "_source": False,
+            "timeout": f"{timeout_s}s",
+        }
+
+    @staticmethod
     def get_hybrid_search_query(
         query_text: str,
         query_vector: list[float],
@@ -343,6 +460,7 @@ class DocumentQuery:
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
+        vector_quantization: VectorQuantization = VectorQuantization.NONE,
     ) -> dict[str, Any]:
         """Returns a final hybrid search query.
 
@@ -360,6 +478,8 @@ class DocumentQuery:
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the hybrid search query.
             include_hidden: Whether to include hidden documents.
+            vector_quantization: Quantization of the index vector fields. Sets
+                the rescoring of the vector subqueries.
 
         Returns:
             A dictionary representing the final hybrid search query.
@@ -378,7 +498,10 @@ class DocumentQuery:
         max_results_per_subquery = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
 
         hybrid_search_subqueries = DocumentQuery._get_hybrid_search_subqueries(
-            query_text, query_vector, vector_candidates=max_results_per_subquery
+            query_text,
+            query_vector,
+            vector_quantization,
+            vector_candidates=max_results_per_subquery,
         )
         hybrid_search_filters = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
@@ -387,6 +510,8 @@ class DocumentQuery:
             # now. This should not cause any issues but it can introduce
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -484,6 +609,8 @@ class DocumentQuery:
             # now. This should not cause any issues but it can introduce
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -537,6 +664,7 @@ class DocumentQuery:
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
+        vector_quantization: VectorQuantization = VectorQuantization.NONE,
     ) -> dict[str, Any]:
         """Returns a final semantic search query.
 
@@ -551,6 +679,8 @@ class DocumentQuery:
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the semantic search query.
             include_hidden: Whether to include hidden documents.
+            vector_quantization: Quantization of the index vector fields. Sets
+                the rescoring of the vector query.
 
         Returns:
             A dictionary representing the final semantic search query.
@@ -568,6 +698,8 @@ class DocumentQuery:
             # now. This should not cause any issues but it can introduce
             # redundant filters in queries that may affect performance.
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -585,6 +717,7 @@ class DocumentQuery:
         semantic_search_query = (
             DocumentQuery._get_content_vector_similarity_search_query(
                 query_embedding,
+                vector_quantization,
                 vector_candidates=num_hits,
                 search_filters=semantic_search_filters,
             )
@@ -631,6 +764,8 @@ class DocumentQuery:
             tenant_state=tenant_state,
             include_hidden=False,
             access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
             source_types=index_filters.source_type or [],
             tags=index_filters.tags or [],
             document_sets=index_filters.document_set or [],
@@ -678,6 +813,7 @@ class DocumentQuery:
     def _get_hybrid_search_subqueries(
         query_text: str,
         query_vector: list[float],
+        vector_quantization: VectorQuantization,
         # The default number of neighbors to consider for knn vector similarity
         # search. This is higher than the number of results because the scoring
         # is hybrid. For a detailed breakdown, see where the default value is
@@ -728,6 +864,7 @@ class DocumentQuery:
         Args:
             query_text: The text of the query to search for.
             query_vector: The vector embedding of the query to search for.
+            vector_quantization: Quantization of the index vector fields.
             num_candidates: The number of candidates to consider for vector
                 similarity search.
         """
@@ -739,10 +876,10 @@ class DocumentQuery:
         ):
             return [
                 DocumentQuery._get_title_vector_similarity_search_query(
-                    query_vector, vector_candidates
+                    query_vector, vector_quantization, vector_candidates
                 ),
                 DocumentQuery._get_content_vector_similarity_search_query(
-                    query_vector, vector_candidates
+                    query_vector, vector_quantization, vector_candidates
                 ),
                 DocumentQuery._get_title_content_combined_keyword_search_query(
                     query_text
@@ -754,7 +891,7 @@ class DocumentQuery:
         ):
             return [
                 DocumentQuery._get_content_vector_similarity_search_query(
-                    query_vector, vector_candidates
+                    query_vector, vector_quantization, vector_candidates
                 ),
                 DocumentQuery._get_title_content_combined_keyword_search_query(
                     query_text
@@ -766,40 +903,54 @@ class DocumentQuery:
             )
 
     @staticmethod
+    def _get_knn_field_query(
+        query_vector: list[float],
+        vector_quantization: VectorQuantization,
+        vector_candidates: int,
+    ) -> dict[str, Any]:
+        """Returns the body of a knn query for one vector field."""
+        knn_field_query: dict[str, Any] = {
+            "vector": query_vector,
+            "k": vector_candidates,
+        }
+        lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
+        if lucene_scalar_quantization is not None:
+            # Scores from quantized vectors are approximate. Rescore with the
+            # full-precision vectors so the ranking and the hybrid
+            # normalization use exact scores.
+            knn_field_query["rescore"] = {
+                "oversample_factor": lucene_scalar_quantization.rescore_oversample_factor
+            }
+        return knn_field_query
+
+    @staticmethod
     def _get_title_vector_similarity_search_query(
         query_vector: list[float],
+        vector_quantization: VectorQuantization,
         vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
     ) -> dict[str, Any]:
         return {
             "knn": {
-                TITLE_VECTOR_FIELD_NAME: {
-                    "vector": query_vector,
-                    "k": vector_candidates,
-                }
+                TITLE_VECTOR_FIELD_NAME: DocumentQuery._get_knn_field_query(
+                    query_vector, vector_quantization, vector_candidates
+                )
             }
         }
 
     @staticmethod
     def _get_content_vector_similarity_search_query(
         query_vector: list[float],
+        vector_quantization: VectorQuantization,
         vector_candidates: int = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES,
         search_filters: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        query = {
-            "knn": {
-                CONTENT_VECTOR_FIELD_NAME: {
-                    "vector": query_vector,
-                    "k": vector_candidates,
-                }
-            }
-        }
-
+        knn_field_query = DocumentQuery._get_knn_field_query(
+            query_vector, vector_quantization, vector_candidates
+        )
         if search_filters is not None:
-            query["knn"][CONTENT_VECTOR_FIELD_NAME]["filter"] = {
-                "bool": {"filter": search_filters}
-            }  # ty: ignore[invalid-assignment]
+            knn_field_query["filter"] = {"bool": {"filter": search_filters}}
 
-        return query
+        return {"knn": {CONTENT_VECTOR_FIELD_NAME: knn_field_query}}
 
     @staticmethod
     def _get_title_content_combined_keyword_search_query(
@@ -872,6 +1023,7 @@ class DocumentQuery:
         tenant_state: TenantState,
         include_hidden: bool,
         access_control_list: list[str] | None,
+        cc_pair_access: CCPairAccessFilter | None,
         source_types: list[DocumentSource],
         tags: list[Tag],
         document_sets: list[str],
@@ -888,6 +1040,7 @@ class DocumentQuery:
         hierarchy_node_ids: list[int] | None = None,
         # Operator-forced document-set scope (NAMES), applied as a standalone AND clause.
         forced_document_sets: list[str] | None = None,
+        restricted_cc_pair_guard: CCPairAccessFilter | None = None,
     ) -> list[dict[str, Any]]:
         """Returns filters to be passed into the "filter" key of a search query.
 
@@ -911,6 +1064,12 @@ class DocumentQuery:
                 can be retrieved. If not None, only public documents can be
                 retrieved, or non-public documents where at least one acl
                 provided here is present in the document's acl list.
+            cc_pair_access: If not None (and access_control_list is not None),
+                replaces the access control list filter above with the
+                cc-pair access filter.
+            restricted_cc_pair_guard: Read only when the access control list
+                filter is used. Its hidden SYNC_RESTRICTED pairs are removed
+                from that filter; see _get_restricted_cc_pair_guard.
             source_types: If supplied, only documents of one of these source
                 types will be retrieved.
             tags: If supplied, only documents with an entry in their metadata
@@ -998,6 +1157,120 @@ class DocumentQuery:
                     acl_subclause  # ty: ignore[invalid-argument-type]
                 )
             return acl_visibility_filter
+
+        def _get_cc_pair_access_visibility_filter(
+            cc_pair_access: CCPairAccessFilter,
+            access_control_list: list[str],
+        ) -> dict[str, Any]:
+            """Returns the cc-pair access filter, a logical OR of:
+            - the chunk is in an open cc-pair;
+            - the chunk is in an ACL cc-pair, and is public or matches the
+              user's ACL;
+            - the chunk has no cc-pair (user files), and matches the access
+              control list filter.
+
+            Raises:
+                ValueError: A term list is longer than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+            """
+            for name, terms in (
+                ("open cc-pair ids", cc_pair_access.open_cc_pair_ids),
+                ("ACL cc-pair ids", cc_pair_access.acl_cc_pair_ids),
+                ("user ACL entries", cc_pair_access.user_acl),
+            ):
+                if len(terms) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                    raise ValueError(
+                        f"Too many {name}: {len(terms)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                    )
+
+            # An empty terms list matches nothing, but leave empty clauses out.
+            visibility_clauses: list[dict[str, Any]] = [
+                {
+                    "bool": {
+                        "must_not": [{"exists": {"field": CC_PAIR_IDS_FIELD_NAME}}],
+                        "filter": [_get_acl_visibility_filter(access_control_list)],
+                    }
+                }
+            ]
+            if cc_pair_access.open_cc_pair_ids:
+                visibility_clauses.append(
+                    {"terms": {CC_PAIR_IDS_FIELD_NAME: cc_pair_access.open_cc_pair_ids}}
+                )
+            if cc_pair_access.acl_cc_pair_ids:
+                acl_match_clauses: list[dict[str, Any]] = [
+                    {"term": {PUBLIC_FIELD_NAME: {"value": True}}}
+                ]
+                if cc_pair_access.user_acl:
+                    acl_match_clauses.append(
+                        {
+                            "terms": {
+                                ACCESS_CONTROL_LIST_FIELD_NAME: cc_pair_access.user_acl
+                            }
+                        }
+                    )
+                visibility_clauses.append(
+                    {
+                        "bool": {
+                            "filter": [
+                                {
+                                    "terms": {
+                                        CC_PAIR_IDS_FIELD_NAME: cc_pair_access.acl_cc_pair_ids
+                                    }
+                                },
+                                {
+                                    "bool": {
+                                        "should": acl_match_clauses,
+                                        "minimum_should_match": 1,
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                )
+            return {"bool": {"should": visibility_clauses, "minimum_should_match": 1}}
+
+        def _get_restricted_cc_pair_guard(
+            guard: CCPairAccessFilter,
+        ) -> dict[str, Any]:
+            """The access control list filter cannot require a data-access
+            group, so it would show a SYNC_RESTRICTED pair's chunks to anyone
+            matching the source ACL. This clause hides chunks of the pairs
+            that grant the user nothing, unless an open or ACL pair of the
+            chunk grants access.
+
+            Raises:
+                ValueError: A term list is longer than
+                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+            """
+            granting_cc_pair_ids = sorted(
+                {*guard.open_cc_pair_ids, *guard.acl_cc_pair_ids}
+            )
+            for name, terms in (
+                ("hidden restricted cc-pair ids", guard.hidden_restricted_cc_pair_ids),
+                ("granting cc-pair ids", granting_cc_pair_ids),
+            ):
+                if len(terms) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+                    raise ValueError(
+                        f"Too many {name}: {len(terms)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+                    )
+            guard_clauses: list[dict[str, Any]] = [
+                {
+                    "bool": {
+                        "must_not": [
+                            {
+                                "terms": {
+                                    CC_PAIR_IDS_FIELD_NAME: guard.hidden_restricted_cc_pair_ids
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+            if granting_cc_pair_ids:
+                guard_clauses.append(
+                    {"terms": {CC_PAIR_IDS_FIELD_NAME: granting_cc_pair_ids}}
+                )
+            return {"bool": {"should": guard_clauses, "minimum_should_match": 1}}
 
         def _get_source_type_filter(
             source_types: list[DocumentSource],
@@ -1273,7 +1546,21 @@ class DocumentQuery:
             # one acl provided here is present in the document's acl list. If
             # there is explicitly no list provided, we make no restrictions on
             # the documents that can be retrieved.
-            filter_clauses.append(_get_acl_visibility_filter(access_control_list))
+            if cc_pair_access is not None:
+                filter_clauses.append(
+                    _get_cc_pair_access_visibility_filter(
+                        cc_pair_access, access_control_list
+                    )
+                )
+            else:
+                filter_clauses.append(_get_acl_visibility_filter(access_control_list))
+                if (
+                    restricted_cc_pair_guard is not None
+                    and restricted_cc_pair_guard.hidden_restricted_cc_pair_ids
+                ):
+                    filter_clauses.append(
+                        _get_restricted_cc_pair_guard(restricted_cc_pair_guard)
+                    )
 
         if forced_document_sets:
             # Its own top-level AND clause (not merged into the OR-based
@@ -1379,15 +1666,14 @@ class DocumentQuery:
                     # See https://docs.opensearch.org/latest/search-plugins/searching-data/highlight/#highlighter-types
                     "type": "unified",
                     # The length in chars of a match snippet. Somewhat
-                    # arbitrarily-chosen. The Vespa codepath limited total
-                    # highlights length to 400 chars. fragment_size *
-                    # number_of_fragments = 400 should be good enough.
+                    # arbitrarily-chosen. fragment_size * number_of_fragments
+                    # = 400 chars of highlights should be good enough.
                     "fragment_size": 100,
                     # The number of snippets to return per field per document
                     # hit.
                     "number_of_fragments": 4,
-                    # These tags wrap matched keywords and they match what Vespa
-                    # used to return. Use them to minimize changes to our code.
+                    # These tags wrap matched keywords. Downstream code expects
+                    # them.
                     "pre_tags": ["<hi>"],
                     "post_tags": ["</hi>"],
                 }

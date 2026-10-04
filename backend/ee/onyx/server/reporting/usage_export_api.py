@@ -13,6 +13,7 @@ from ee.onyx.db.usage_export import (
     get_usage_report_data,
     usage_report_id_in_use,
 )
+from ee.onyx.server.reporting.usage_export_models import USAGE_REPORT_MEDIA_TYPE
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryTask
@@ -88,7 +89,7 @@ def read_usage_report(
 
     return StreamingResponse(
         content=iterfile(),
-        media_type="application/zip",
+        media_type=USAGE_REPORT_MEDIA_TYPE,
         headers={"Content-Disposition": f"attachment; filename={report_name}"},
     )
 

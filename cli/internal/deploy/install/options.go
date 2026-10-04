@@ -19,22 +19,23 @@ import (
 // Options carries the flags shared across the deploy verbs. Flag names match
 // install.sh so bootstrap passthrough keeps working.
 type Options struct {
+	Tag string
+	Dir string
+	// Project overrides the docker compose project name (default: the one
+	// recorded in the manifest, else "onyx").
+	Project string
+
 	Lite         bool
 	IncludeCraft bool
 	Prod         bool
 	Dev          bool
-	Tag          string
 	Local        bool
 	Offline      bool
 	NoPrompt     bool
 	DryRun       bool
 	Verbose      bool
 	NoWait       bool
-	Dir          string
-	// Project overrides the docker compose project name (default: the one
-	// recorded in the manifest, else "onyx").
-	Project string
-	Force   bool
+	Force        bool
 	// AllowDowngrade proceeds when the target version is older than the
 	// installed one. Deliberately separate from Force: a scripted rollback
 	// must not also have to opt into overwriting hand-edited files.
@@ -73,23 +74,23 @@ type installer struct {
 	prompt  *prompt.Prompter
 	docker  *dockercmd.Docker
 	compose *dockercmd.Compose
-	paint   ui.Painter
 
 	// Resolved during the run.
-	root     paths.InstallRoot
-	lite     bool
-	craft    bool
-	prod     bool
-	dev      bool
-	project  string     // compose project name every docker/compose call uses
-	wiz      *ui.Wizard // live wizard when the fancy renderer drives the run
-	cancel   func()     // cancels in-flight work when the wizard is quit
-	rootless bool       // daemon runs rootless (limits what compose can grant)
-
+	root    paths.InstallRoot
+	project string     // compose project name every docker/compose call uses
+	wiz     *ui.Wizard // live wizard when the fancy renderer drives the run
+	cancel  func()     // cancels in-flight work when the wizard is quit
 	// observedPort is the host port the deployment published when the run
 	// started (0 if it wasn't running). It recovers the port of installs
 	// that predate recording HOST_PORT in .env.
 	observedPort int
+
+	paint    ui.Painter
+	lite     bool
+	craft    bool
+	prod     bool
+	dev      bool
+	rootless bool // daemon runs rootless (limits what compose can grant)
 	// wasLite records that the deployment was in lite mode when the run
 	// started, so a switch to standard can undo lite's .env adjustments.
 	wasLite bool

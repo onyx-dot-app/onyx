@@ -482,7 +482,7 @@ class TestYieldDocBatches:
         mock_convert.side_effect = mock_docs
 
         type_to_processed: dict[str, int] = {}
-        changed_ids_to_type = {pid: parent_type for pid in parent_ids}
+        changed_ids_to_type = dict.fromkeys(parent_ids, parent_type)
         parent_types = {parent_type}
 
         batches = list(

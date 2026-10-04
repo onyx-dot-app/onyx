@@ -34,6 +34,7 @@ from onyx.deep_research.dr_mock_tools import (
     get_clarification_tool_definitions,
     get_orchestrator_tools,
 )
+from onyx.deep_research.models import ResearchAgentCallFailure
 from onyx.deep_research.utils import (
     check_special_tool_calls,
     create_think_tool_token_processor,
@@ -64,7 +65,6 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     SectionEnd,
-    TopLevelBranching,
 )
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.interface import Tool
@@ -176,7 +176,7 @@ def generate_final_report(
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
             pre_answer_processing_time=pre_answer_processing_time,
-            timeout_override=DR_REPORT_LLM_TIMEOUT_S,
+            stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S,
         )
 
         # Save citation mapping to state_container so citations are persisted
@@ -192,7 +192,7 @@ def generate_final_report(
             # but we'd still want to capture the reasoning from the think_tool of theprevious turn.
             state_container.set_reasoning_tokens(saved_reasoning)
 
-        span.span_data.output = final_report if final_report else None
+        span.span_data.output = final_report or None
         return has_reasoned
 
 
@@ -228,7 +228,7 @@ def run_deep_research_llm_loop(
             user_id=user_identity.user_id if user_identity else None,
         ).model_dump(),
     ):
-        # Here for lazy load LiteLLM
+        # Here for lazy load LiteLLM. initialize_litellm runs once per process.
         from onyx.llm.litellm_singleton.config import initialize_litellm
 
         # An approximate limit. In extreme cases it may still fail but this should allow deep research
@@ -418,7 +418,7 @@ def run_deep_research_llm_loop(
             research_plan = llm_step_result.answer
             if research_plan is None:
                 raise RuntimeError("Deep Research failed to generate a research plan")
-            span.span_data.output = research_plan if research_plan else None
+            span.span_data.output = research_plan or None
 
         #########################################################
         # RESEARCH EXECUTION STEP
@@ -703,26 +703,9 @@ def run_deep_research_llm_loop(
                         )
                         break
 
-                    if len(research_agent_calls) > 1:
-                        emitter.emit(
-                            Packet(
-                                placement=Placement(
-                                    turn_index=research_agent_calls[
-                                        0
-                                    ].placement.turn_index
-                                ),
-                                obj=TopLevelBranching(
-                                    num_parallel_branches=len(research_agent_calls)
-                                ),
-                            )
-                        )
-
                     research_results = run_research_agent_calls(
                         # The tool calls here contain the placement information
                         research_agent_calls=research_agent_calls,
-                        parent_tool_call_ids=[
-                            tool_call.tool_call_id for tool_call in tool_calls
-                        ],
                         tools=allowed_tools,
                         emitter=emitter,
                         state_container=state_container,
@@ -773,7 +756,7 @@ def run_deep_research_llm_loop(
                     for tab_index, report in enumerate(
                         research_results.intermediate_reports
                     ):
-                        if report is None:
+                        if isinstance(report, ResearchAgentCallFailure):
                             # Every tool_use id in the preceding assistant message must have a
                             # matching TOOL_CALL_RESPONSE or strict providers (e.g. AWS Bedrock
                             # Converse) reject the next request with 400 "Expected toolResult
@@ -785,7 +768,7 @@ def run_deep_research_llm_loop(
                                 tab_index,
                             )
                             failed_tool_call = research_agent_calls[tab_index]
-                            failure_message = "Research agent call failed. Try a different approach or continue without this result."
+                            failure_message = report.message
                             simple_chat_history.append(
                                 ChatMessageSimple(
                                     message=failure_message,

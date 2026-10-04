@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -172,5 +174,57 @@ func TestS3SnapshotStore_requiresTransferFunctions(t *testing.T) {
 	}
 	if err := store.Publish(snapshotAt(testCommit)); err == nil {
 		t.Fatalf("expected a hard error without a put function")
+	}
+}
+
+// A downloaded object that does not parse means the bucket is wrong, so it is
+// a hard error rather than a missing snapshot.
+func TestS3SnapshotStore_unparseableObjectIsAHardError(t *testing.T) {
+	objects := newFakeObjects()
+	store := newFakeStore(objects)
+	objects.contents[store.ObjectURL(testCommit)] = []byte("not: [a snapshot\n")
+
+	_, err := store.Fetch(testCommit)
+
+	if err == nil || errors.Is(err, ErrSnapshotUnavailable) {
+		t.Fatalf("expected a hard error, got %v", err)
+	}
+}
+
+// The real store uploads with the aws CLI. A fake aws on PATH records the call.
+func TestNewS3SnapshotStore_publishesWithTheAWSCLI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake aws is a shell script")
+	}
+	bin := t.TempDir()
+	record := filepath.Join(t.TempDir(), "args")
+	uploaded := filepath.Join(t.TempDir(), "snapshot.yaml")
+	t.Setenv("ODS_TEST_AWS_ARGS", record)
+	t.Setenv("ODS_TEST_UPLOADED", uploaded)
+	script := "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$ODS_TEST_AWS_ARGS\"\ncp \"$3\" \"$ODS_TEST_UPLOADED\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "aws"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	store := NewS3SnapshotStore("test-bucket", "tools/ods")
+
+	if err := store.Publish(snapshotAt(testCommit)); err != nil {
+		t.Fatalf("failed to publish: %v", err)
+	}
+
+	args, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := strings.Split(strings.TrimSuffix(string(args), "\x00"), "\x00")
+	if len(fields) != 4 || fields[0] != "s3" || fields[1] != "cp" || fields[3] != store.ObjectURL(testCommit) {
+		t.Fatalf("expected s3 cp <file> %q, got %q", store.ObjectURL(testCommit), fields)
+	}
+	got, err := LoadSnapshotFile(uploaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Commit != testCommit {
+		t.Fatalf("expected the snapshot of %q, got %q", testCommit, got.Commit)
 	}
 }

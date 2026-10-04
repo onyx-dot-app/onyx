@@ -1,9 +1,7 @@
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
 from onyx.connectors.zoom.recordings.session_types import (
     MeetingSessionType,
@@ -12,6 +10,7 @@ from onyx.connectors.zoom.recordings.session_types import (
     is_portal_upload,
     session_type_for_recording,
 )
+from tests.unit.onyx.connectors.zoom.helpers import mock_zoom_client
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
     occurrence,
     past_meeting_details,
@@ -39,7 +38,7 @@ class TestGetSessionTypeHandler:
 
 class TestMeetingSessionType:
     def test_list_occurrences_delegates_to_meeting_endpoint(self) -> None:
-        mock_client = MagicMock(spec=ZoomClient)
+        mock_client = mock_zoom_client()
         mock_client.list_past_meeting_occurrences.return_value = [
             occurrence(uuid="uuid-1")
         ]
@@ -57,7 +56,7 @@ class TestMeetingSessionType:
         assert result == [occurrence(uuid="uuid-1")]
 
     def test_get_occurrence_details_delegates_to_meeting_endpoint(self) -> None:
-        mock_client = MagicMock(spec=ZoomClient)
+        mock_client = mock_zoom_client()
         mock_client.get_past_meeting_details.return_value = past_meeting_details(
             topic="Weekly Sync"
         )
@@ -70,7 +69,7 @@ class TestMeetingSessionType:
 
 class TestWebinarSessionType:
     def test_list_occurrences_delegates_to_the_webinar_endpoint(self) -> None:
-        mock_client = MagicMock(spec=ZoomClient)
+        mock_client = mock_zoom_client()
         mock_client.list_past_webinar_occurrences.return_value = [
             occurrence(uuid="uuid-1")
         ]
@@ -88,7 +87,7 @@ class TestWebinarSessionType:
         assert result == [occurrence(uuid="uuid-1")]
 
     def test_get_occurrence_details_delegates_to_the_webinar_endpoint(self) -> None:
-        mock_client = MagicMock(spec=ZoomClient)
+        mock_client = mock_zoom_client()
         mock_client.get_webinar_details.return_value = webinar_details(
             topic="Product Launch"
         )

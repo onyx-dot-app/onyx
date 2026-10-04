@@ -23,7 +23,6 @@ from onyx.chat.models import (
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     DEFAULT_PERSONA_ID,
-    TMP_DRALPHA_PERSONA_NAME,
     FileOrigin,
     MessageType,
 )
@@ -40,10 +39,6 @@ from onyx.db.enums import (
     record_mode_persists_content,
 )
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.kg_config import (
-    get_kg_config_settings,
-    is_kg_config_settings_enabled_valid,
-)
 from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.persona import user_can_access_persona
@@ -55,10 +50,6 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
-from onyx.kg.models import KGException
-from onyx.kg.setup.kg_default_entity_definitions import (
-    populate_missing_default_entity_types__commit,
-)
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
@@ -198,7 +189,7 @@ def create_chat_session_from_request(
 
     persona_id = chat_session_request.persona_id
     if persona_id != DEFAULT_PERSONA_ID:
-        if not user.is_anonymous and not user_can_access_persona(
+        if not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
             user=user,
@@ -433,26 +424,6 @@ def extract_headers(
             if lowercase_key in headers:
                 extracted_headers[lowercase_key] = headers[lowercase_key]
     return extracted_headers
-
-
-def process_kg_commands(
-    message: str,
-    persona_name: str,
-    tenant_id: str,  # noqa: ARG001
-    db_session: Session,
-) -> None:
-    # Temporarily, until we have a draft UI for the KG Operations/Management
-    # TODO: move to api endpoint once we get frontend
-    if not persona_name.startswith(TMP_DRALPHA_PERSONA_NAME):
-        return
-
-    kg_config_settings = get_kg_config_settings()
-    if not is_kg_config_settings_enabled_valid(kg_config_settings):
-        return
-
-    if message == "kg_setup":
-        populate_missing_default_entity_types__commit(db_session=db_session)
-        raise KGException("KG setup done")
 
 
 def _get_or_extract_plaintext(
@@ -829,7 +800,7 @@ def convert_chat_history(
                     message=chat_message.message,
                     token_count=chat_message.token_count + image_token_count,
                     message_type=MessageType.USER,
-                    image_files=image_files if image_files else None,
+                    image_files=image_files or None,
                     image_token_count=image_token_count,
                 )
             )
@@ -1019,18 +990,22 @@ def create_tool_call_failure_messages(
 
     messages: list[ChatMessageSimple] = [assistant_msg]
 
-    # Create a TOOL_CALL_RESPONSE failure message for each tool call
-    for tool_call in tool_calls:
-        failure_response_msg = ChatMessageSimple(
-            message=TOOL_CALL_FAILURE_PROMPT,
-            token_count=50,  # Tiny overestimate
-            message_type=MessageType.TOOL_CALL_RESPONSE,
-            tool_call_id=tool_call.tool_call_id,
-            image_files=None,
-        )
-        messages.append(failure_response_msg)
+    messages.extend(
+        create_tool_call_failure_response(tool_call.tool_call_id)
+        for tool_call in tool_calls
+    )
 
     return messages
+
+
+def create_tool_call_failure_response(tool_call_id: str) -> ChatMessageSimple:
+    return ChatMessageSimple(
+        message=TOOL_CALL_FAILURE_PROMPT,
+        token_count=50,  # Tiny overestimate
+        message_type=MessageType.TOOL_CALL_RESPONSE,
+        tool_call_id=tool_call_id,
+        image_files=None,
+    )
 
 
 def build_python_chat_files_from_search_docs(

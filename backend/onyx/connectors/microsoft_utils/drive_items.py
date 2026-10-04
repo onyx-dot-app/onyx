@@ -21,13 +21,19 @@ import requests
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.paths.resource_path import ResourcePath
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
     is_tabular_file,
+)
+from onyx.connectors.microsoft_utils.drive_delta import (
+    SHAREPOINT_IDS_PROPERTY,
+    DriveDeltaPage,
+    fetch_drive_delta_checkpoint_page,
+    parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
     TRANSIENT_TRANSPORT_EXCEPTIONS,
@@ -50,7 +56,6 @@ logger = setup_logger()
 
 _EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
-SHAREPOINT_IDS_PROPERTY = "sharepointIds"
 LIST_ITEM_ID_PROPERTY = "listItemId"
 DRIVE_ITEM_ID_PROPERTY = "id"
 DRIVE_ITEM_NAME_PROPERTY = "name"
@@ -106,7 +111,7 @@ def parse_graph_datetime(value: str | datetime | None) -> datetime | None:
     if not value:
         return None
     if isinstance(value, str):
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     elif isinstance(value, datetime):
         parsed = value
     else:
@@ -201,7 +206,7 @@ def extract_folder_path_from_parent_reference(
     # Path format: /drives/{drive_id}/root:/folder/path
     if "root:/" in parent_reference_path:
         folder_path = parent_reference_path.split("root:/")[1]
-        return folder_path if folder_path else None
+        return folder_path or None
 
     # Item is at drive root
     return None
@@ -234,7 +239,7 @@ class DriveItemData(BaseModel):
             "user", {}
         )
         parent_ref = item.get(DRIVE_ITEM_PARENT_REFERENCE_PROPERTY, {})
-        sharepoint_ids = item.get(SHAREPOINT_IDS_PROPERTY) or {}
+        sharepoint_ids = parse_graph_sharepoint_ids(item.get(SHAREPOINT_IDS_PROPERTY))
 
         return cls(
             id=item[DRIVE_ITEM_ID_PROPERTY],
@@ -256,7 +261,7 @@ class DriveItemData(BaseModel):
             ),
             parent_reference_path=parent_ref.get("path"),
             drive_id=parent_ref.get("driveId"),
-            list_item_id=sharepoint_ids.get(LIST_ITEM_ID_PROPERTY),
+            list_item_id=sharepoint_ids.list_item_id if sharepoint_ids else None,
         )
 
     def to_sdk_driveitem(self, graph_client: GraphClient) -> DriveItem:
@@ -275,6 +280,25 @@ class DriveItemData(BaseModel):
                 {LIST_ITEM_ID_PROPERTY: self.list_item_id},
             )
         return item
+
+
+class DriveFolderReference(BaseModel):
+    id: str
+    web_url: str = Field(
+        validation_alias=AliasChoices(DRIVE_ITEM_WEB_URL_PROPERTY, "web_url")
+    )
+
+
+def resolve_drive_folder(
+    client: GraphApiClient, drive_id: str, folder_path: str
+) -> DriveFolderReference:
+    return DriveFolderReference.model_validate(
+        client.get_json(
+            f"{client.graph_api_base}/drives/{drive_id}/root:/"
+            f"{quote(folder_path, safe='/')}",
+            {"$select": "id,webUrl"},
+        )
+    )
 
 
 class DriveItemContent(BaseModel):
@@ -630,15 +654,18 @@ def extract_drive_item_content(
     return DriveItemContent(sections=sections, staged_file_id=staged_file_id)
 
 
-def _delta_item_is_indexable(
-    item: dict[str, Any],
+def iter_delta_page_files(
+    page: DriveDeltaPage,
     start: datetime | None,
     end: datetime | None,
-) -> bool:
-    """Folders and tombstones carry no content, so only files in window index."""
-    if DRIVE_ITEM_FOLDER_PROPERTY in item or DRIVE_ITEM_DELETED_PROPERTY in item:
-        return False
-    return drive_item_in_time_window(item, start, end)
+) -> Generator[DriveItemData, None, None]:
+    for item in page.items:
+        if item.is_folder or item.is_tombstone:
+            continue
+        graph_json = item.to_graph_json()
+        if not drive_item_in_time_window(graph_json, start, end):
+            continue
+        yield DriveItemData.from_graph_json(graph_json)
 
 
 def iter_drive_items_paged(
@@ -648,14 +675,19 @@ def iter_drive_items_paged(
     start: datetime | None = None,
     end: datetime | None = None,
     page_size: int = 200,
+    folder_id: str | None = None,
 ) -> Generator[DriveItemData, None, None]:
     """Yield DriveItemData for every file in a drive via the Graph API.
 
     Performs BFS folder traversal manually, fetching one page of children
     at a time so that memory usage stays bounded regardless of drive size.
+    The walk starts at ``folder_id`` when given (a folder Graph handed out
+    without its path, such as a Teams channel's), else at ``folder_path``.
     """
     base = f"{client.graph_api_base}/drives/{drive_id}"
-    if folder_path:
+    if folder_id:
+        start_url = f"{base}/items/{folder_id}/children"
+    elif folder_path:
         encoded_path = quote(folder_path, safe="/")
         start_url = f"{base}/root:/{encoded_path}:/children"
     else:
@@ -745,102 +777,18 @@ def iter_delta_pages(
     }
 
     while page_url:
-        try:
-            data = client.get_json(page_url, params)
-        except requests.HTTPError as e:
-            # 410 means the delta token expired, so we need to fall back to full enumeration
-            if e.response is not None and e.response.status_code == 410:
-                if not allow_full_resync:
-                    raise
-                logger.warning(
-                    "Delta token expired (410 Gone) for drive '%s'. Falling back to full delta enumeration.",
-                    drive_id,
-                )
-                yield from iter_delta_pages(
-                    client,
-                    initial_url=f"{client.graph_api_base}/drives/{drive_id}/root/delta",
-                    drive_id=drive_id,
-                    start=start,
-                    end=end,
-                    page_size=page_size,
-                    allow_full_resync=False,
-                )
-                return
-            raise
-
-        params = None  # nextLink/deltaLink already embed query params
-
-        for item in data.get("value", []):
-            if not _delta_item_is_indexable(item, start, end):
-                continue
-            yield DriveItemData.from_graph_json(item)
-
-        page_url = data.get("@odata.nextLink")
-        if not page_url:
-            break
-
-
-def build_delta_start_url(
-    graph_api_base: str,
-    drive_id: str,
-    start: datetime | None = None,
-    page_size: int = 200,
-) -> str:
-    """Build the initial delta API URL with query parameters embedded.
-
-    Embeds ``$top``, ``$select``, and optionally ``token`` so the URL can be
-    stored in a checkpoint without a separate params dict.
-    """
-    base_url = f"{graph_api_base}/drives/{drive_id}/root/delta"
-    params = [
-        f"$top={page_size}",
-        f"$select={DRIVE_ITEM_SELECT_FIELDS}",
-    ]
-    if start is not None and start > _EPOCH:
-        token = quote(start.isoformat(timespec="seconds"))
-        params.append(f"token={token}")
-    return f"{base_url}?{'&'.join(params)}"
-
-
-def fetch_one_delta_page(
-    client: GraphApiClient,
-    page_url: str,
-    drive_id: str,
-    start: datetime | None = None,
-    end: datetime | None = None,
-    page_size: int = 200,
-) -> tuple[list[DriveItemData], str | None]:
-    """Fetch a single page of delta API results.
-
-    Returns ``(items, next_page_url)``.  *next_page_url* is ``None`` when
-    the delta enumeration is complete (deltaLink with no nextLink).
-
-    On 410 Gone (expired token) returns ``([], full_resync_url)`` so
-    the caller can store the resync URL in the checkpoint and retry on
-    the next cycle.
-    """
-    try:
-        data = client.get_json(page_url)
-    except requests.HTTPError as e:
-        if e.response is not None and e.response.status_code == 410:
-            logger.warning(
-                "Delta token expired (410 Gone) for drive '%s'. Will restart with full delta enumeration.",
-                drive_id,
-            )
-            full_url = (
-                f"{client.graph_api_base}/drives/{drive_id}/root/delta?"
-                f"$top={page_size}&$select={DRIVE_ITEM_SELECT_FIELDS}"
-            )
-            return [], full_url
-        raise
-
-    items: list[DriveItemData] = []
-    for item in data.get("value", []):
-        if not _delta_item_is_indexable(item, start, end):
-            continue
-        items.append(DriveItemData.from_graph_json(item))
-
-    next_url = data.get("@odata.nextLink")
-    if next_url:
-        return items, next_url
-    return items, None
+        result = fetch_drive_delta_checkpoint_page(
+            client,
+            page_url=page_url,
+            drive_id=drive_id,
+            query_params=params,
+            page_size=page_size,
+            select_fields=DRIVE_ITEM_SELECT_FIELDS,
+            allow_full_resync=allow_full_resync,
+        )
+        params = None  # Cursor URLs already embed query parameters.
+        if result.resync_after_410:
+            allow_full_resync = False
+        else:
+            yield from iter_delta_page_files(result.page, start, end)
+        page_url = result.next_checkpoint_url

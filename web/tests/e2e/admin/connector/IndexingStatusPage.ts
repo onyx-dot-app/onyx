@@ -1,5 +1,5 @@
 /**
- * Page Object Model for the connector status page (`/admin/indexing/status`).
+ * Page Object Model for the connector status page (`/admin/indexing-status`).
  *
  * Encapsulates the locators and interactions used by the visual-regression
  * spec so it stays declarative (see `web/tests/e2e/README.md` §1).
@@ -28,7 +28,7 @@ export class IndexingStatusPage {
   }
 
   async goto() {
-    await this.page.goto("/admin/indexing/status");
+    await this.page.goto("/admin/indexing-status");
     await expect(this.pageTitle).toBeVisible({ timeout: 10_000 });
   }
 
@@ -78,6 +78,28 @@ export class IndexingStatusPage {
       );
     }
     return Number(match[1]);
+  }
+
+  async expectRowOpens(connectorName: string, ccPairId: number) {
+    await expect(this.connectorRow(connectorName)).toHaveClass(
+      /cursor-pointer/
+    );
+    expect(await this.openConnector(connectorName)).toBe(ccPairId);
+  }
+
+  async expectRowInert(connectorName: string) {
+    const row = this.connectorRow(connectorName);
+    await expect(row).not.toHaveClass(/cursor-pointer/);
+
+    // Arm the watcher before the click. Asserting the URL afterwards cannot fail,
+    // because it matches the page we are already on and passes on the first poll.
+    const navigated = this.page
+      .waitForURL(/\/admin\/connector\/\d+/, { timeout: 3_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    await row.click();
+    expect(await navigated).toBe(false);
   }
 
   /**

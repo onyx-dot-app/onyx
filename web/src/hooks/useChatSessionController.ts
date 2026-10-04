@@ -23,19 +23,15 @@ import {
   shouldSubmitOnLoad,
 } from "@/app/app/services/searchParams";
 
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import type { ProjectFile } from "@/lib/projects/types";
-import {
-  getSessionProjectTokenCount,
-  getProjectFilesForSession,
-} from "@/lib/projects/svc";
+import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
-import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
@@ -89,9 +85,6 @@ export default function useChatSessionController({
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
-  const searchFilters = useSharedSearchFilters();
-  const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
-    useState<number>(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
     useState<SessionFetchError>(null);
@@ -145,12 +138,11 @@ export default function useChatSessionController({
       setCurrentMessageFiles([]);
     }
 
-    // Only reset filters/selections when switching between existing sessions
+    // Only reset selections when switching between existing sessions. The
+    // search filters need no reset: they live on the chat's tool
+    // configuration, so the next chat reads its own.
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
-      searchFilters.setSelectedDocumentSets([]);
-      searchFilters.setSelectedTags([]);
-      searchFilters.setTimeRange(null);
 
       // Remove uploaded files
       setCurrentMessageFiles([]);
@@ -387,20 +379,6 @@ export default function useChatSessionController({
         );
       }
 
-      // Fetch token count for this chat session's project (if any)
-      try {
-        if (chatSession.chat_session_id) {
-          const total = await getSessionProjectTokenCount(
-            chatSession.chat_session_id
-          );
-          setCurrentSessionFileTokenCount(total || 0);
-        } else {
-          setCurrentSessionFileTokenCount(0);
-        }
-      } catch (e) {
-        setCurrentSessionFileTokenCount(0);
-      }
-
       // Fetch project files for this chat session (if any)
       try {
         if (chatSession.chat_session_id) {
@@ -520,7 +498,6 @@ export default function useChatSessionController({
   );
 
   return {
-    currentSessionFileTokenCount,
     onMessageSelection,
     projectFiles,
     sessionFetchError,

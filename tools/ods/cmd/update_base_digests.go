@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -49,7 +50,11 @@ Examples:
   ods update-base-digests --write --family python \
       --cache-file digests.json                            # rewrite one family`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runUpdateBaseDigests(write, summaryFile, family, listStaleFamilies, cacheFile)
+			output, err := runUpdateBaseDigests(write, summaryFile, family, listStaleFamilies, cacheFile)
+			fmt.Print(output)
+			if err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -62,44 +67,48 @@ Examples:
 	return cmd
 }
 
-func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamilies bool, cacheFile string) {
+// runUpdateBaseDigests returns what Run prints, and an error whose text is the
+// message Run logs before exiting.
+func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamilies bool, cacheFile string) (string, error) {
+	var out strings.Builder
+
 	root, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Could not find the repository root: %v", err)
+		return out.String(), fatalErrorf("Could not find the repository root: %v", err)
 	}
 
 	files, err := basedigest.TrackedFiles(root)
 	if err != nil {
-		log.Fatalf("Could not list the tracked files: %v", err)
+		return out.String(), fatalErrorf("Could not list the tracked files: %v", err)
 	}
 
 	refs, err := basedigest.FindRefs(root, files)
 	if err != nil {
-		log.Fatalf("Could not read the tracked files: %v", err)
+		return out.String(), fatalErrorf("Could not read the tracked files: %v", err)
 	}
 	if len(refs) == 0 {
-		log.Fatal("No pinned image references found.")
+		return out.String(), fatalErrorf("No pinned image references found.")
 	}
 
 	resolved, err := resolveWithCache(refs, cacheFile)
 	if err != nil {
-		log.Fatalf("Could not resolve every tag:\n%v", err)
+		return out.String(), fatalErrorf("Could not resolve every tag:\n%v", err)
 	}
 
 	stale := basedigest.Stale(refs, resolved)
 
 	if listStaleFamilies {
 		for _, name := range basedigest.Families(stale) {
-			fmt.Println(name)
+			out.WriteString(name + "\n")
 		}
-		return
+		return out.String(), nil
 	}
 
 	if family != "" {
 		refs = basedigest.FilterFamily(refs, family)
 		stale = basedigest.FilterFamily(stale, family)
 		if len(refs) == 0 {
-			log.Fatalf("No references in family %q.", family)
+			return out.String(), fatalErrorf("No references in family %q.", family)
 		}
 	}
 
@@ -108,27 +117,28 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 		if ref.Digest != resolved[ref.Query()] {
 			state = "update"
 		}
-		fmt.Printf("%7s  %-45s %s:%d\n", state, ref.Display(), ref.Path, ref.Line)
+		fmt.Fprintf(&out, "%7s  %-45s %s:%d\n", state, ref.Display(), ref.Path, ref.Line)
 	}
 
 	summary := basedigest.SummaryTable(stale, resolved)
 
 	if len(stale) == 0 {
-		fmt.Println("\nAll pinned digests are current.")
+		out.WriteString("\nAll pinned digests are current.\n")
 	} else if write {
 		if err := basedigest.Rewrite(root, stale, resolved); err != nil {
-			log.Fatalf("Could not rewrite the digests: %v", err)
+			return out.String(), fatalErrorf("Could not rewrite the digests: %v", err)
 		}
-		fmt.Printf("\nUpdated %d reference(s).\n", len(stale))
+		fmt.Fprintf(&out, "\nUpdated %d reference(s).\n", len(stale))
 	} else {
-		fmt.Printf("\n%d reference(s) are stale. Re-run with --write to apply.\n", len(stale))
+		fmt.Fprintf(&out, "\n%d reference(s) are stale. Re-run with --write to apply.\n", len(stale))
 	}
 
 	if summaryFile != "" {
 		if err := os.WriteFile(summaryFile, []byte(summary), 0o644); err != nil {
-			log.Fatalf("Could not write the summary: %v", err)
+			return out.String(), fatalErrorf("Could not write the summary: %v", err)
 		}
 	}
+	return out.String(), nil
 }
 
 // resolveWithCache resolves every distinct tag, reusing cacheFile when it exists.

@@ -8,7 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS, WebConnector
+from onyx.connectors.web.config import WEB_CONNECTOR_VALID_SETTINGS
+from onyx.connectors.web.connector import WebConnector
 
 BASE_URL = "http://example.com"
 

@@ -1432,6 +1432,11 @@ def mark_persona_as_deleted(
     db_session: Session,
 ) -> None:
     persona = get_persona_by_id(persona_id=persona_id, user=user, db_session=db_session)
+    # Built-ins are ownerless and readable by everyone, so the ownership check above
+    # always admits them — guard the delete itself or any caller can tombstone the
+    # default assistant.
+    if persona.builtin_persona:
+        raise ValueError("Built-in agents cannot be deleted")
     persona.deleted = True
     affected_file_ids = [uf.id for uf in persona.user_files]
     if affected_file_ids:

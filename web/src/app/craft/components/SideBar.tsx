@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { memo, useCallback, useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
@@ -43,7 +44,6 @@ import {
   SvgEdit,
   SvgTrash,
   SvgPlug,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
@@ -84,7 +84,7 @@ export function CraftSessionDeleteModal({
           variant="danger"
           prominence="primary"
           onClick={onConfirm}
-          icon={isDeleting ? SvgSimpleLoader : undefined}
+          icon={isDeleting ? IconLoader : undefined}
         >
           {isDeleting ? t("deleteModal.deleting") : t("deleteModal.confirm")}
         </Button>
