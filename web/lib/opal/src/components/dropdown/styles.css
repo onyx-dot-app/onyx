@@ -126,6 +126,12 @@
   pointer-events: none;
 }
 
+/* A line between groups takes no inset across the rows: the scroller's own
+   gap already keeps it clear of them. The side inset stays. */
+.opal-dropdown-scroll .opal-divider {
+  padding-block: 0;
+}
+
 /* A foldable group wraps its title and its fold. The row gap lives inside
    the fold, so a closed group collapses to its title with no stray gap. */
 .opal-dropdown-group {
