@@ -37,7 +37,6 @@ import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
   Dropdown,
-  LineItemButton,
   OpenButton,
   Text,
   type DropdownMenuItem,
@@ -48,7 +47,6 @@ import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
   SvgChevronLeft,
-  SvgChevronRight,
   SvgDownload,
   SvgEyeOff,
   SvgFileText,
@@ -311,46 +309,18 @@ function Header() {
   };
   const menuItems: DropdownMenuItem[] = [
     {
-      kind: "custom",
+      kind: "action",
       id: "move",
-      keywords: [t("moveToProject.label")],
-      onActivate: (views) => views.push("move"),
-      onSecondary: (views) => views.push("move"),
-      render: ({ highlighted, props }) => (
-        <LineItemButton
-          presentational
-          selectVariant="select-heavy"
-          interaction={highlighted ? "hover" : "rest"}
-          rounding={2}
-          sizePreset="main-ui"
-          variant="body"
-          icon={SvgFolderIn}
-          title={t("moveToProject.label")}
-          rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
-          {...props}
-        />
-      ),
+      icon: SvgFolderIn,
+      title: t("moveToProject.label"),
+      onSelect: (views) => views.push("move"),
     },
     {
-      kind: "custom",
+      kind: "action",
       id: "export",
-      keywords: [t("exportAs.label")],
-      onActivate: (views) => views.push("export"),
-      onSecondary: (views) => views.push("export"),
-      render: ({ highlighted, props }) => (
-        <LineItemButton
-          presentational
-          selectVariant="select-heavy"
-          interaction={highlighted ? "hover" : "rest"}
-          rounding={2}
-          sizePreset="main-ui"
-          variant="body"
-          icon={SvgDownload}
-          title={t("exportAs.label")}
-          rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
-          {...props}
-        />
-      ),
+      icon: SvgDownload,
+      title: t("exportAs.label"),
+      onSelect: (views) => views.push("export"),
     },
     {
       kind: "group",

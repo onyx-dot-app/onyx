@@ -179,16 +179,10 @@ const skills: DropdownView = {
 };
 const items: DropdownMenuItem[] = [
   {
-    // A row that leads to a page is the caller's: it renders the chevron
-    // and pushes the view itself. ArrowRight reaches it through onSecondary.
-    kind: "custom",
+    kind: "action",
     id: "skills",
-    keywords: ["Skills"],
-    onActivate: (views) => views.push(skills),
-    onSecondary: (views) => views.push(skills),
-    render: ({ highlighted, props }) => (
-      <LineItemButton presentational interaction={highlighted ? "hover" : "rest"} title="Skills" rightChildren={<SvgChevronRight />} {...props} … />
-    ),
+    title: "Skills",
+    onSelect: (views) => views.push(skills),
   },
   {
     kind: "action",

@@ -22,7 +22,7 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { Button, LineItemButton, SidebarTab } from "@opal/components";
+import { Button, SidebarTab } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
@@ -34,7 +34,6 @@ import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { useAppPosition } from "@/lib/position/hooks";
 import {
   SvgChevronLeft,
-  SvgChevronRight,
   SvgEdit,
   SvgFolder,
   SvgFolderIn,
@@ -206,25 +205,11 @@ const ChatButton = memo(
         onSelect: () => setRenaming(true),
       },
       {
-        kind: "custom",
+        kind: "action",
         id: "move",
-        keywords: [t("chatButton.moveToProject.label")],
-        onActivate: (views) => views.push("move"),
-        onSecondary: (views) => views.push("move"),
-        render: ({ highlighted, props }) => (
-          <LineItemButton
-            presentational
-            selectVariant="select-heavy"
-            interaction={highlighted ? "hover" : "rest"}
-            rounding={2}
-            sizePreset="main-ui"
-            variant="body"
-            icon={SvgFolderIn}
-            title={t("chatButton.moveToProject.label")}
-            rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
-            {...props}
-          />
-        ),
+        icon: SvgFolderIn,
+        title: t("chatButton.moveToProject.label"),
+        onSelect: (views) => views.push("move"),
       },
       ...(project
         ? [
