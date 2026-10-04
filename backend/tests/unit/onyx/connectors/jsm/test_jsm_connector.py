@@ -11,7 +11,10 @@ from unittest.mock import MagicMock
 import pytest
 import responses
 from jira import JIRA
+from jira.exceptions import JIRAError
 
+import onyx.connectors.jsm.connector as jsm_connector_module
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.exceptions import (
@@ -127,6 +130,20 @@ def _mock_search_issues(
         issue.raw = raw
         issues.append(issue)
     connector._jira_client.search_issues.return_value = issues
+
+
+def _documents_from_perm_sync(
+    connector: JiraServiceManagementConnector,
+) -> list[Document]:
+    documents: list[Document] = []
+    for doc, _hierarchy, _failure, _checkpoint in CheckpointOutputWrapper[Any]()(
+        connector.load_from_checkpoint_with_perm_sync(
+            0, 10, connector.build_dummy_checkpoint()
+        )
+    ):
+        if isinstance(doc, Document):
+            documents.append(doc)
+    return documents
 
 
 class TestProcessJsmIssue:
@@ -367,3 +384,226 @@ def test_checkpoint_output_wrapper_streaming() -> None:
     assert document in consumed
     assert checkpoint in consumed
     assert json.dumps(checkpoint.model_dump(mode="json")) is not None
+
+
+class TestJsmConnectorFixes:
+    """Regression tests for the review fixes: desk scoping, poll bounds,
+    perm-sync access, ADF comments, slim skips and validation errors."""
+
+    @staticmethod
+    def _capture_jql(connector: JiraServiceManagementConnector) -> list[str]:
+        jqls: list[str] = []
+
+        def side_effect(  # noqa: ARG001
+            jql_str: str,
+            startAt: int,  # noqa: ARG001
+            maxResults: int,  # noqa: ARG001
+        ) -> list[MagicMock]:
+            jqls.append(jql_str)
+            return []
+
+        connector._jira_client.search_issues.side_effect = side_effect
+        return jqls
+
+    # ---- P1-3: desk scope ----
+
+    def test_checkpoint_jql_scopes_to_service_desk_project(
+        self,
+        connector: JiraServiceManagementConnector,
+    ) -> None:
+        connector._jsm_session = build_jsm_session({"jira_api_token": "token"})
+        jqls = self._capture_jql(connector)
+
+        with responses.RequestsMock() as rsps:
+            rsps.get(
+                f"{_JSM_BASE}/rest/servicedeskapi/servicedesk/10",
+                json={"id": "10", "projectId": "100", "projectName": "Help Desk"},
+            )
+            list(
+                connector.load_from_checkpoint(
+                    0, 10, connector.build_dummy_checkpoint()
+                )
+            )
+
+        assert jqls, "expected the checkpoint query to run"
+        assert 'project = "100"' in jqls[0]
+
+    def test_unresolvable_service_desk_polls_unscoped(
+        self,
+        connector: JiraServiceManagementConnector,
+    ) -> None:
+        connector.service_desk_id = "404"
+        connector._jsm_session = build_jsm_session({"jira_api_token": "token"})
+        jqls = self._capture_jql(connector)
+
+        with responses.RequestsMock() as rsps:
+            rsps.get(
+                f"{_JSM_BASE}/rest/servicedeskapi/servicedesk/404",
+                status=404,
+            )
+            list(
+                connector.load_from_checkpoint(
+                    0, 10, connector.build_dummy_checkpoint()
+                )
+            )
+
+        assert jqls and "project =" not in jqls[0]
+
+    # ---- P1-4: poll bounds ----
+
+    def test_checkpoint_jql_uses_poll_bounds(
+        self,
+        connector: JiraServiceManagementConnector,
+    ) -> None:
+        jqls = self._capture_jql(connector)
+        list(
+            connector.load_from_checkpoint(
+                1000.5, 2000.25, connector.build_dummy_checkpoint()
+            )
+        )
+        assert jqls
+        assert "updated >= 1000500" in jqls[0]
+        assert "updated <= 2000250" in jqls[0]
+
+    def test_slim_retrieval_respects_bounds(
+        self,
+        connector: JiraServiceManagementConnector,
+    ) -> None:
+        _mock_search_issues(connector, [_issue_payload()])
+        jqls = self._capture_jql(connector)
+
+        list(connector.retrieve_all_slim_docs(start=1000.5, end=2000.25))
+
+        assert jqls
+        assert "updated >= 1000500" in jqls[0]
+        assert "updated <= 2000250" in jqls[0]
+
+    # ---- P1-5: perm-sync external access ----
+
+    def test_perm_sync_full_path_attaches_external_access(
+        self,
+        connector: JiraServiceManagementConnector,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        external_access = ExternalAccess(
+            external_user_emails={"agent@example.com"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        monkeypatch.setattr(
+            jsm_connector_module,
+            "get_project_permissions",
+            lambda **_kwargs: external_access,
+        )
+        connector._desk_project_key_cache = "100"
+
+        _mock_search_issues(connector, [_issue_payload()])
+
+        perm_docs = _documents_from_perm_sync(connector)
+        assert perm_docs
+        assert all(doc.external_access is external_access for doc in perm_docs)
+
+        # The non-perm path must NOT stamp access.
+        _mock_search_issues(connector, [_issue_payload()])
+        plain_docs = [
+            item
+            for out in load_everything_from_checkpoint_connector(connector, 0, 10)
+            for item in out.items
+            if isinstance(item, Document)
+        ]
+        assert plain_docs
+        assert all(doc.external_access is None for doc in plain_docs)
+
+    def test_perm_sync_slim_path_attaches_external_access(
+        self,
+        connector: JiraServiceManagementConnector,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        external_access = ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids={"group-1"},
+            is_public=False,
+        )
+        monkeypatch.setattr(
+            jsm_connector_module,
+            "get_project_permissions",
+            lambda **_kwargs: external_access,
+        )
+        connector._desk_project_key_cache = "100"
+
+        _mock_search_issues(connector, [_issue_payload()])
+        perm_batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        perm_docs = [doc for batch in perm_batches for doc in batch]
+        assert perm_docs
+        assert all(doc.external_access is external_access for doc in perm_docs)
+
+        _mock_search_issues(connector, [_issue_payload()])
+        plain_batches = list(connector.retrieve_all_slim_docs())
+        plain_docs = [doc for batch in plain_batches for doc in batch]
+        assert plain_docs
+        assert all(doc.external_access is None for doc in plain_docs)
+
+    # ---- P2-1: ADF comment bodies ----
+
+    def test_adf_comment_bodies_are_extracted(self) -> None:
+        issue = _issue_payload()
+        issue["fields"]["comment"] = {
+            "comments": [
+                {
+                    "body": {
+                        "type": "doc",
+                        "version": 1,
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [
+                                    {"type": "text", "text": "Cloud ADF comment"}
+                                ],
+                            }
+                        ],
+                    }
+                },
+                {"body": "Plain DC comment"},
+            ]
+        }
+        document = process_jsm_issue(_JSM_BASE, issue, session=None)
+        assert document is not None
+        text = document.sections[0].text
+        assert "Comment: Cloud ADF comment" in text
+        assert "Comment: Plain DC comment" in text
+        assert "'type': 'text'" not in text  # no dict reprs
+
+    # ---- P2-2: slim size guard ----
+
+    def test_slim_retrieval_skips_oversized_issues(
+        self,
+        connector: JiraServiceManagementConnector,
+    ) -> None:
+        oversized = _issue_payload(key="HELP-BIG", issue_id="10002")
+        oversized["fields"]["description"] = "x" * (200 * 1024)
+        _mock_search_issues(connector, [_issue_payload(), oversized])
+
+        batches = list(connector.retrieve_all_slim_docs())
+        slim_docs = [doc for batch in batches for doc in batch]
+
+        assert [doc.id for doc in slim_docs] == [f"{_JSM_BASE}/browse/{_ISSUE_KEY}"]
+
+    # ---- P2-4: validation error type ----
+
+    def test_invalid_jql_validation_raises_connector_validation_error(
+        self,
+        connector: JiraServiceManagementConnector,
+    ) -> None:
+        connector._jsm_session = build_jsm_session({"jira_api_token": "token"})
+        connector._jira_client.search_issues.side_effect = JIRAError(
+            status_code=400,
+            text="Error in the JQL Query: The field 'bogus' does not exist",
+        )
+
+        with responses.RequestsMock() as rsps:
+            rsps.get(
+                f"{_JSM_BASE}/rest/servicedeskapi/servicedesk",
+                json=_SERVICE_DESKS_PAYLOAD,
+            )
+            with pytest.raises(ConnectorValidationError, match="JQL"):
+                connector.validate_connector_settings()
