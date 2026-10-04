@@ -77,8 +77,10 @@ def process_jsm_issue(
     fields = issue.get("fields", {})
 
     description = _extract_text_from_adf(fields.get(_FIELD_DESCRIPTION))
+    # Jira Cloud v3 returns comment bodies as ADF documents; Data Center
+    # may keep them as plain strings. Both go through the ADF extractor.
     comments = [
-        comment.get("body", "")
+        _extract_text_from_adf(comment.get("body"))
         for comment in fields.get("comment", {}).get("comments", [])
         if isinstance(comment, dict)
     ]
@@ -160,11 +162,33 @@ def process_jsm_issue_slim(
     jsm_base: str,
     issue: dict[str, Any],
     external_access: ExternalAccess | None = None,
-) -> SlimDocument:
-    """One JSM issue as a SlimDocument (id, timestamps, external access)."""
+) -> SlimDocument | None:
+    """One JSM issue as a SlimDocument (id, timestamps, external access).
+
+    Returns None for the same oversized issues the full pass skips, so the
+    slim/pruning view of the connector matches what full retrieval emits
+    instead of resurrecting documents too large to index.
+    """
     issue_key = issue.get(_FIELD_KEY, "")
     fields = issue.get("fields", {})
     created = fields.get(_FIELD_CREATED)
+
+    # Same size-eligibility computation as process_jsm_issue.
+    description = _extract_text_from_adf(fields.get(_FIELD_DESCRIPTION))
+    comment_text = "\n".join(
+        f"Comment: {_extract_text_from_adf(comment.get('body'))}"
+        for comment in fields.get("comment", {}).get("comments", [])
+        if isinstance(comment, dict) and comment.get("body")
+    )
+    ticket_content = f"{description}\n{comment_text}".strip()
+    if len(ticket_content.encode("utf-8")) > _MAX_TICKET_SIZE_BYTES:
+        logger.info(
+            "Skipping %s because it exceeds the maximum size of %s bytes.",
+            issue_key,
+            _MAX_TICKET_SIZE_BYTES,
+        )
+        return None
+
     return SlimDocument(
         id=build_jira_url(jsm_base, issue_key),
         doc_created_at=time_str_to_utc(created) if created else None,

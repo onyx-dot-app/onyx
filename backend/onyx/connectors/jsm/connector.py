@@ -336,19 +336,18 @@ class JiraServiceManagementConnector(
                 break
 
             for issue in issues:
-                slim_doc_batch.append(
-                    process_jsm_issue_slim(
-                        self.jsm_base,
-                        issue,
-                        # Permission sync path: don't prefix; the upsert path
-                        # handles prefixing.
-                        external_access=(
-                            self._get_project_permissions(project_key, add_prefix=False)
-                            if include_permissions and project_key is not None
-                            else None
-                        ),
-                    )
-                )
+                if slim_doc := process_jsm_issue_slim(
+                    self.jsm_base,
+                    issue,
+                    # Permission sync path: don't prefix; the upsert path
+                    # handles prefixing.
+                    external_access=(
+                        self._get_project_permissions(project_key, add_prefix=False)
+                        if include_permissions and project_key is not None
+                        else None
+                    ),
+                ):
+                    slim_doc_batch.append(slim_doc)
                 if len(slim_doc_batch) >= _JSM_PAGE_SIZE:
                     yield slim_doc_batch
                     slim_doc_batch = []
