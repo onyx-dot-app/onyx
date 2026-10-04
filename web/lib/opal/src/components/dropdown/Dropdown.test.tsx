@@ -206,6 +206,38 @@ describe("Dropdown picker", () => {
     expect(screen.queryByRole("option", { name: "Strawberry" })).toBeNull();
   });
 
+  test("a highlight follows its row when the query filters the list", async () => {
+    const user = setupUser();
+    const onSelect = jest.fn();
+    render(<Harness onSelect={onSelect} />);
+    const trigger = screen.getByRole("combobox", { name: "Fruit" });
+    await user.click(trigger);
+    // Apple, past disabled Banana to the Citrus title, unfold, Lemon, Lime.
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}{ArrowDown}{ArrowDown}");
+    expect(highlighted()).toEqual(["Lime"]);
+
+    // "li" keeps Lime and drops the rows before it; the highlight follows.
+    await user.type(trigger, "li");
+    expect(highlighted()).toEqual(["Lime"]);
+    await user.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ value: "lime" })
+    );
+  });
+
+  test("a highlight clears when its row filters out", async () => {
+    const user = setupUser();
+    render(<Harness />);
+    const trigger = screen.getByRole("combobox", { name: "Fruit" });
+    await user.click(trigger);
+    await user.keyboard("{ArrowDown}");
+    expect(highlighted()).toEqual(["Apple"]);
+
+    await user.type(trigger, "straw");
+    expect(highlighted()).toEqual([]);
+    expect(trigger).not.toHaveAttribute("aria-activedescendant");
+  });
+
   test("the create row is pinned first and Enter commits its text", async () => {
     const user = setupUser();
     const onCreate = jest.fn();

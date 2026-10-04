@@ -588,6 +588,23 @@ function DropdownData(props: DropdownDataProps) {
     );
   }, [id, navItems, highlightedIndex, setActiveId]);
 
+  // The stops changed under a highlight the caller did not move (a type-in
+  // filtered the rows): follow the highlighted stop to its new index, or
+  // clear the highlight when it filtered out. A highlight the caller moved
+  // in the same render (typing resets it to the first row) is theirs.
+  const lastNavRef = useRef<{ items: NavItem[]; index: number } | null>(null);
+  useLayoutEffect(() => {
+    const last = lastNavRef.current;
+    lastNavRef.current = { items: navItems, index: highlightedIndex };
+    if (!last || last.items === navItems) return;
+    if (last.index !== highlightedIndex || highlightedIndex < 0) return;
+    const wanted = navItemElementId(id, last.items[last.index]);
+    const index = navItems.findIndex(
+      (item) => navItemElementId(id, item) === wanted
+    );
+    if (index !== highlightedIndex) setHighlightedIndex(index);
+  }, [id, navItems, highlightedIndex, setHighlightedIndex]);
+
   // A type-in combobox highlights the option its text matches exactly; the
   // keyboard, once it drives, keeps its own stop.
   useEffect(() => {
