@@ -707,7 +707,7 @@ function DropdownData(props: DropdownDataProps) {
         case "action": {
           // A link action's row is an anchor: the click itself navigates.
           const moved = runHandler(() => row.onSelect?.(views));
-          if (!row.keepOpen && !row.opensView && !moved) setIsOpen(false);
+          if (!row.keepOpen && !moved) setIsOpen(false);
           break;
         }
         case "toggle":
@@ -715,7 +715,7 @@ function DropdownData(props: DropdownDataProps) {
           break;
         case "custom": {
           const moved = runHandler(() => row.onActivate?.(views));
-          if (!row.keepOpen && !row.opensView && !moved) setIsOpen(false);
+          if (!row.keepOpen && !moved) setIsOpen(false);
           break;
         }
       }
@@ -738,24 +738,17 @@ function DropdownData(props: DropdownDataProps) {
     },
     [id, activateRow, onCreate, toggleGroup]
   );
-  // ArrowRight: a custom row's secondary control, else a row that leads
-  // to a view is activated, as the chevron promises.
+  // ArrowRight: a custom row's secondary control.
   const secondary = useCallback(
     (item: NavItem) => {
       if (item.kind !== "row" || item.row.disabled) return false;
       const { row } = item;
-      if (row.kind === "custom" && row.onSecondary) {
-        activatingRef.current = rowElementId(id, row);
-        row.onSecondary(views);
-        return true;
-      }
-      if ((row.kind === "action" || row.kind === "custom") && row.opensView) {
-        activateRow(row);
-        return true;
-      }
-      return false;
+      if (row.kind !== "custom" || !row.onSecondary) return false;
+      activatingRef.current = rowElementId(id, row);
+      row.onSecondary(views);
+      return true;
     },
-    [id, views, activateRow]
+    [id, views]
   );
   // Escape is the keyboard, whatever typing in the search field left the
   // flag at: the highlight returns to the row that led in.

@@ -27,6 +27,7 @@ import { DEFAULT_AGENT_ID, UNNAMED_CHAT } from "@/lib/constants";
 import {
   SvgBubbleText,
   SvgChevronLeft,
+  SvgChevronRight,
   SvgFolder,
   SvgFolderIn,
   SvgMoreHorizontal,
@@ -156,12 +157,25 @@ function ProjectChatItem({
   };
   const menuItems: DropdownMenuItem[] = [
     {
-      kind: "action",
+      kind: "custom",
       id: "move",
-      icon: SvgFolderIn,
-      opensView: true,
-      title: tSidebar("chatButton.moveToProject.label"),
-      onSelect: (views) => views.push("move"),
+      keywords: [tSidebar("chatButton.moveToProject.label")],
+      onActivate: (views) => views.push("move"),
+      onSecondary: (views) => views.push("move"),
+      render: ({ highlighted, props }) => (
+        <LineItemButton
+          presentational
+          selectVariant="select-heavy"
+          interaction={highlighted ? "hover" : "rest"}
+          rounding={2}
+          sizePreset="main-ui"
+          variant="body"
+          icon={SvgFolderIn}
+          title={tSidebar("chatButton.moveToProject.label")}
+          rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
+          {...props}
+        />
+      ),
     },
     {
       kind: "action",

@@ -532,7 +532,6 @@ function ViewsHarness({
         kind: "action",
         id: "wrap",
         title: "Wrap up",
-        opensView: true,
         onSelect: (views) =>
           views.push({
             key: "wrap",
@@ -573,11 +572,18 @@ function ViewsHarness({
       onSelect: () => onRun("rename"),
     },
     {
-      kind: "action",
+      // A row that leads to a page is the caller's: it pushes on Enter and
+      // on ArrowRight, and renders its own chevron.
+      kind: "custom",
       id: "skills",
-      title: "Skills",
-      opensView: true,
-      onSelect: (views) => views.push(skills),
+      keywords: ["Skills"],
+      onActivate: (views) => views.push(skills),
+      onSecondary: (views) => views.push(skills),
+      render: ({ highlighted, props }) => (
+        <div data-interaction={highlighted ? "hover" : "rest"} {...props}>
+          Skills
+        </div>
+      ),
     },
     {
       kind: "action",
@@ -622,7 +628,7 @@ describe("Dropdown views", () => {
     expect(screen.queryByRole("menuitem", { name: "Write" })).toBeNull();
   });
 
-  test("ArrowRight opens an `opensView` row; Escape leaves the view, then closes", async () => {
+  test("ArrowRight opens a page through onSecondary; Escape leaves the view, then closes", async () => {
     const user = setupUser();
     render(<ViewsHarness onRun={jest.fn()} />);
     const trigger = screen.getByRole("button", { name: "Actions" });
@@ -661,7 +667,7 @@ describe("Dropdown views", () => {
     rerender(<ViewsHarness onRun={onRun} authed />);
     await user.click(trigger);
     await user.click(menuItem("Apps"));
-    // Pushing keeps the list open, with no `opensView` or `keepOpen` needed.
+    // Pushing keeps the list open, with no `keepOpen` needed.
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(menuItem("Slack")).toBeInTheDocument();
   });
@@ -736,7 +742,6 @@ function RegistryHarness() {
       kind: "action",
       id: "prefs",
       title: "Preferences",
-      opensView: true,
       onSelect: (views) => views.push("prefs"),
     },
   ];

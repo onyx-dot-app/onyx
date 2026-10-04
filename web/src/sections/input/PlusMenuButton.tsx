@@ -10,7 +10,7 @@ import {
   type DropdownMenuRow,
   type DropdownView,
 } from "@opal/components";
-import { SvgChevronLeft, SvgPlus } from "@opal/icons";
+import { SvgChevronLeft, SvgChevronRight, SvgPlus } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 
 export interface PlusMenuFlyoutItem {
@@ -101,13 +101,28 @@ export function PlusMenuButton({
           ...item.flyoutItems.map(flyoutRow),
         ],
       };
+      // The row that leads to the flyout's page: a chevron, and ArrowRight
+      // opens it too.
       group.push({
-        kind: "action",
+        kind: "custom",
         id: item.key,
-        icon: item.icon,
-        title: item.label,
-        opensView: true,
-        onSelect: (stack) => stack.push(item.key),
+        keywords: [item.label],
+        onActivate: (stack) => stack.push(item.key),
+        onSecondary: (stack) => stack.push(item.key),
+        render: ({ highlighted, props }) => (
+          <LineItemButton
+            presentational
+            selectVariant="select-heavy"
+            interaction={highlighted ? "hover" : "rest"}
+            rounding={2}
+            sizePreset="main-ui"
+            variant="section"
+            icon={item.icon}
+            title={item.label}
+            rightChildren={<SvgChevronRight className="h-4 w-4 text-text-03" />}
+            {...props}
+          />
+        ),
       });
       continue;
     }

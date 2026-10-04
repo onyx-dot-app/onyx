@@ -131,13 +131,13 @@ The element the list positions against and matches in width, when that is not th
 
 ## Items
 
-| Kind     | Fields                                                                                                                          | Enter                                                                                                                             |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `option` | `value`, `title`, `description?`, `suffix?`, `icon?`                                                                            | `onSelect(option)`; closes (single)                                                                                               |
-| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `keepOpen?`, `opensView?`, and `onSelect(views)` and/or `href` (+ `target?`) | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen`, `opensView` or the handler moved the stack |
-| `toggle` | `id`, `title`, `description?`, `icon?`, `checked`, `onCheckedChange`                                                            | flips `checked`; stays open                                                                                                       |
-| `custom` | `id`, `render(row)`, `onActivate?(views)`, `onSecondary?(views)`, `keepOpen?`, `opensView?`                                     | `onActivate`; closes unless `keepOpen`, `opensView` or the handler moved the stack                                                |
-| `group`  | `title?`, `foldable?` (titled only), `items`                                                                                    | a foldable title folds and unfolds                                                                                                |
+| Kind     | Fields                                                                                                            | Enter                                                                                                                |
+| -------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `option` | `value`, `title`, `description?`, `suffix?`, `icon?`                                                              | `onSelect(option)`; closes (single)                                                                                  |
+| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `keepOpen?`, and `onSelect(views)` and/or `href` (+ `target?`) | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen` or the handler moved the stack |
+| `toggle` | `id`, `title`, `description?`, `icon?`, `checked`, `onCheckedChange`                                              | flips `checked`; stays open                                                                                          |
+| `custom` | `id`, `render(row)`, `onActivate?(views)`, `onSecondary?(views)`, `keepOpen?`                                     | `onActivate`; closes unless `keepOpen` or the handler moved the stack                                                |
+| `group`  | `title?`, `foldable?` (titled only), `items`                                                                      | a foldable title folds and unfolds                                                                                   |
 
 Every row takes `keywords?` (what a search matches beyond the title), `pinned?` (stays on show while a search is on: a way back, a create row) and `disabled?` (shown, but no stop and no clicks). A group whose rows all filter out disappears with its line.
 
@@ -179,11 +179,16 @@ const skills: DropdownView = {
 };
 const items: DropdownMenuItem[] = [
   {
-    kind: "action",
+    // A row that leads to a page is the caller's: it renders the chevron
+    // and pushes the view itself. ArrowRight reaches it through onSecondary.
+    kind: "custom",
     id: "skills",
-    title: "Skills",
-    opensView: true,
-    onSelect: (views) => views.push(skills),
+    keywords: ["Skills"],
+    onActivate: (views) => views.push(skills),
+    onSecondary: (views) => views.push(skills),
+    render: ({ highlighted, props }) => (
+      <LineItemButton presentational interaction={highlighted ? "hover" : "rest"} title="Skills" rightChildren={<SvgChevronRight />} {...props} … />
+    ),
   },
   {
     kind: "action",
@@ -194,21 +199,20 @@ const items: DropdownMenuItem[] = [
 ];
 ```
 
-| Field                  | Description                                                                                                                                                                                     |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DropdownView.key?`    | Identifies the view on the stack; its depth when left out                                                                                                                                       |
-| `DropdownView.items`   | The view's rows and groups                                                                                                                                                                      |
-| `DropdownView.search?` | A search field pinned above the view's rows. It filters this view only, and keeps its text while the view is on the stack                                                                       |
-| `DropdownViews.push`   | Replace the rows with a view: a key from `views`, or an object (refreshed from `views` when its `key` is there)                                                                                 |
-| `DropdownViews.pop`    | Back one view; nothing at the root                                                                                                                                                              |
-| `DropdownViews.close`  | Close the list                                                                                                                                                                                  |
-| `opensView` (on a row) | The row leads to a view: ArrowRight activates it and the list stays open after it. An action row gets a trailing chevron; a custom row renders its own. An affordance only; the handler decides |
+| Field                  | Description                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `DropdownView.key?`    | Identifies the view on the stack; its depth when left out                                                                 |
+| `DropdownView.items`   | The view's rows and groups                                                                                                |
+| `DropdownView.search?` | A search field pinned above the view's rows. It filters this view only, and keeps its text while the view is on the stack |
+| `DropdownViews.push`   | Replace the rows with a view: a key from `views`, or an object (refreshed from `views` when its `key` is there)           |
+| `DropdownViews.pop`    | Back one view; nothing at the root                                                                                        |
+| `DropdownViews.close`  | Close the list                                                                                                            |
 
 Build views that hold state (a toggle, search results) in render and pass them through `views`, so the stack always shows the latest rows; a pushed object is a snapshot otherwise. Views are menu rows: push them from a menu. A view pushed from a picker renders under the picker's listbox roles. Nothing is laid out for a view: a way back is a row that calls `pop`. The root-only props (`query`, `create`, `otherOptionsTitle`, `exactText`) wait underneath a view. Escape leaves a view; at the root it closes. Closing the list empties the stack. Each search field reports `""` through its `onChange` as its rows leave.
 
 ## Keyboard
 
-Focus stays on the trigger (or the search field); the dropdown moves a highlight and `aria-activedescendant` follows it. Enter or ArrowDown opens a closed list. Open, the arrows walk the stops and wrap, Enter activates the highlighted stop, ArrowRight reaches a custom row's secondary control or activates a row that `opensView`, and Escape leaves a view or closes. A trigger's own `onKeyDown` runs first; a key it cancels is left alone. A view opened from the keyboard highlights its first row; leaving it from the keyboard returns the highlight to the row that led in.
+Focus stays on the trigger (or the search field); the dropdown moves a highlight and `aria-activedescendant` follows it. Enter or ArrowDown opens a closed list. Open, the arrows walk the stops and wrap, Enter activates the highlighted stop, ArrowRight reaches a custom row's secondary control, and Escape leaves a view or closes. A trigger's own `onKeyDown` runs first; a key it cancels is left alone. A view opened from the keyboard highlights its first row; leaving it from the keyboard returns the highlight to the row that led in.
 
 **Tab** depends on the trigger: from a type-in it walks the rows like the arrows, since the field must keep focus; from any other trigger it closes the list and lets focus move on, as a native menu does. `tabKey` on `Dropdown` fixes it one way for every trigger.
 

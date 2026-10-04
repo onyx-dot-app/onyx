@@ -279,14 +279,12 @@ function ViewsDemo() {
       kind: "action",
       id: "skills",
       title: "Skills",
-      opensView: true,
       onSelect: (views) => views.push(skills),
     },
     {
       kind: "action",
       id: "apps",
       title: "Apps",
-      opensView: true,
       onSelect: (views) => views.push(apps),
     },
   ];

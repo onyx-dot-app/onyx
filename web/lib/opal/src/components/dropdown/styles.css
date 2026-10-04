@@ -147,8 +147,7 @@
   @apply ms-2 flex shrink-0 items-center;
 }
 
-.opal-dropdown-create-icon,
-.opal-dropdown-chevron {
+.opal-dropdown-create-icon {
   @apply ms-2 h-4 w-4 shrink-0 text-text-03;
 }
 

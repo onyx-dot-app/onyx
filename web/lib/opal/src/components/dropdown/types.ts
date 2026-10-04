@@ -38,12 +38,6 @@ export type DropdownAction = DropdownRowBase & {
   /** A destructive command: the row reads in the danger colour. */
   danger?: boolean;
   keepOpen?: boolean;
-  /**
-   * The row leads to a view: it shows a trailing chevron, ArrowRight
-   * activates it too, and the list stays open after it. An affordance only;
-   * `onSelect` decides whether to push.
-   */
-  opensView?: boolean;
 } & (
     | {
         href: string;
@@ -100,8 +94,6 @@ export interface DropdownCustom extends DropdownRowBase {
   onSecondary?: (views: DropdownViews) => void;
   /** Stay open after `onActivate`. */
   keepOpen?: boolean;
-  /** As on an action: a trailing-chevron row that ArrowRight activates. The caller renders the chevron. */
-  opensView?: boolean;
   render: (row: DropdownRowState) => React.ReactNode;
 }
 
