@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Button } from "@opal/components/buttons/button/components";
 import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { InputSwitch } from "@opal/components/inputs/booleans/input-switch/components";
 import { SvgChevronRight } from "@opal/icons";
@@ -122,10 +123,14 @@ export const Row = React.memo(function Row({
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,
-    // A row that leads to a view says so with a chevron.
+    // A row that leads to a view says so with a chevron button. It only
+    // shows the way: the row is the control, so the button takes no
+    // pointer or focus of its own.
     rightChildren:
       row.kind === "action" && row.opensView ? (
-        <SvgChevronRight className="opal-dropdown-chevron" />
+        <div inert className="opal-dropdown-chevron">
+          <Button icon={SvgChevronRight} size="sm" prominence="internal" />
+        </div>
       ) : undefined,
     sizePreset: "main-ui",
     // `body` resolves to `ContentSm`, which has no description or suffix

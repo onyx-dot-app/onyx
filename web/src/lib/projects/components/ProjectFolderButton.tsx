@@ -234,54 +234,52 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       {/* Project Folder */}
       <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
         <Dropdown onOpenChange={setMenuOpen}>
-          <Dropdown.Anchor>
-            <SidebarTab
-              icon={FolderIcon}
-              // Folded, the project's chats are hidden — and a project chat
-              // appears nowhere else in the sidebar (Recents excludes them), so
-              // the folder itself has to carry the "you are here" mark.
-              selected={isActiveProject && (activeSidebar.isProject() || !open)}
-              /* While renaming, drop the click target so the input stays usable. */
-              onClick={isEditing ? undefined : noProp(handleTextClick)}
-              rightChildren={
-                <>
-                  <Dropdown.Trigger asChild>
-                    {/* The click stays here: the tab underneath opens the project. */}
-                    <div
-                      role="presentation"
-                      onClick={noProp()}
-                      className={cn(
-                        !menuOpen && "hidden",
-                        !isEditing && "group-hover/SidebarTab:flex"
-                      )}
-                    >
-                      <Button
-                        icon={SvgMoreHorizontal}
-                        prominence="internal"
-                        size="sm"
-                        interaction={menuOpen ? "hover" : "rest"}
-                        aria-label={t("projects.folder.options.label")}
-                      />
-                    </div>
-                  </Dropdown.Trigger>
-                  <Dropdown.Data
-                    label={t("projects.folder.options.label")}
-                    items={menuItems}
-                  />
-                </>
-              }
-            >
-              {isEditing ? (
-                <ButtonRenaming
-                  initialName={project.name}
-                  onRename={handleRename}
-                  onClose={() => setIsEditing(false)}
+          <SidebarTab
+            icon={FolderIcon}
+            // Folded, the project's chats are hidden — and a project chat
+            // appears nowhere else in the sidebar (Recents excludes them), so
+            // the folder itself has to carry the "you are here" mark.
+            selected={isActiveProject && (activeSidebar.isProject() || !open)}
+            /* While renaming, drop the click target so the input stays usable. */
+            onClick={isEditing ? undefined : noProp(handleTextClick)}
+            rightChildren={
+              <>
+                <Dropdown.Trigger asChild>
+                  {/* The click stays here: the tab underneath opens the project. */}
+                  <div
+                    role="presentation"
+                    onClick={noProp()}
+                    className={cn(
+                      !menuOpen && "hidden",
+                      !isEditing && "group-hover/SidebarTab:flex"
+                    )}
+                  >
+                    <Button
+                      icon={SvgMoreHorizontal}
+                      prominence="internal"
+                      size="sm"
+                      interaction={menuOpen ? "hover" : "rest"}
+                      aria-label={t("projects.folder.options.label")}
+                    />
+                  </div>
+                </Dropdown.Trigger>
+                <Dropdown.Data
+                  label={t("projects.folder.options.label")}
+                  items={menuItems}
                 />
-              ) : (
-                project.name
-              )}
-            </SidebarTab>
-          </Dropdown.Anchor>
+              </>
+            }
+          >
+            {isEditing ? (
+              <ButtonRenaming
+                initialName={project.name}
+                onRename={handleRename}
+                onClose={() => setIsEditing(false)}
+              />
+            ) : (
+              project.name
+            )}
+          </SidebarTab>
         </Dropdown>
       </FolderIconProvider>
 

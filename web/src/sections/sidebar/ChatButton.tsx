@@ -377,36 +377,34 @@ const ChatButton = memo(
 
     const popover = (
       <Dropdown onOpenChange={setMenuOpen}>
-        <Dropdown.Anchor>
-          <Hoverable.Root
-            group="ChatButton"
-            data-testid="ChatButton"
-            interaction={menuOpen ? "hover" : "rest"}
+        <Hoverable.Root
+          group="ChatButton"
+          data-testid="ChatButton"
+          interaction={menuOpen ? "hover" : "rest"}
+        >
+          <SidebarTab
+            /* While renaming, drop the click target so the input stays usable. */
+            href={
+              isDragging || renaming
+                ? undefined
+                : `/app?chatId=${chatSession.id}`
+            }
+            onClick={renaming ? undefined : handleClick}
+            selected={active}
+            rightChildren={rightMenu}
+            nested={!!project}
           >
-            <SidebarTab
-              /* While renaming, drop the click target so the input stays usable. */
-              href={
-                isDragging || renaming
-                  ? undefined
-                  : `/app?chatId=${chatSession.id}`
-              }
-              onClick={renaming ? undefined : handleClick}
-              selected={active}
-              rightChildren={rightMenu}
-              nested={!!project}
-            >
-              {renaming ? (
-                <ButtonRenaming
-                  initialName={chatSession.name}
-                  onRename={handleRename}
-                  onClose={() => setRenaming(false)}
-                />
-              ) : (
-                displayName
-              )}
-            </SidebarTab>
-          </Hoverable.Root>
-        </Dropdown.Anchor>
+            {renaming ? (
+              <ButtonRenaming
+                initialName={chatSession.name}
+                onRename={handleRename}
+                onClose={() => setRenaming(false)}
+              />
+            ) : (
+              displayName
+            )}
+          </SidebarTab>
+        </Hoverable.Root>
       </Dropdown>
     );
 
