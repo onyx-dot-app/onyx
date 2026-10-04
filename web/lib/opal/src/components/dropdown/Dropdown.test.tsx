@@ -250,6 +250,62 @@ describe("Dropdown picker", () => {
   });
 });
 
+/** A button trigger over the grouped picker items, so the arrows reach the groups. */
+function ButtonPickerHarness() {
+  const [picked, setPicked] = useState("");
+  return (
+    <Dropdown>
+      <Dropdown.Trigger asChild>
+        <button type="button">Fruit</button>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        items={ITEMS}
+        label="Fruit"
+        value={picked}
+        onSelect={(option) => setPicked(option.value)}
+      />
+    </Dropdown>
+  );
+}
+
+describe("Dropdown groups", () => {
+  test("ArrowRight unfolds a title and enters it; ArrowLeft leaves and folds", async () => {
+    const user = setupUser();
+    render(<ButtonPickerHarness />);
+    await user.click(screen.getByRole("button", { name: "Fruit" }));
+    // Apple, then (Banana is disabled) the folded Citrus title.
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    const title = screen.getByRole("option", { name: /Citrus/ });
+    expect(title).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("option", { name: "Lemon" })).toBeNull();
+
+    await user.keyboard("{ArrowRight}");
+    expect(title).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("option", { name: "Lemon" })).toBeInTheDocument();
+
+    await user.keyboard("{ArrowRight}");
+    expect(highlighted()).toEqual(["Lemon"]);
+
+    await user.keyboard("{ArrowLeft}");
+    expect(highlighted()).toEqual([]);
+    expect(title).toHaveAttribute("aria-expanded", "true");
+
+    await user.keyboard("{ArrowLeft}");
+    expect(title).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("option", { name: "Lemon" })).toBeNull();
+  });
+
+  test("a type-in keeps the arrows for its caret", async () => {
+    const user = setupUser();
+    render(<Harness />);
+    const trigger = screen.getByRole("combobox", { name: "Fruit" });
+    await user.type(trigger, "l");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowLeft}");
+    expect(highlighted()).toEqual(["Lemon"]);
+  });
+});
+
 describe("Dropdown menu", () => {
   test("a button trigger toggles a menu, with menu semantics", async () => {
     const user = setupUser();

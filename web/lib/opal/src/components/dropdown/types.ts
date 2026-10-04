@@ -159,6 +159,6 @@ export interface RowGroup {
  * addresses the same stop in both.
  */
 export type NavItem =
-  | { kind: "row"; row: DropdownRow }
+  | { kind: "row"; row: DropdownRow; group: RowGroup }
   | { kind: "group"; group: RowGroup }
   | { kind: "create"; text: string };

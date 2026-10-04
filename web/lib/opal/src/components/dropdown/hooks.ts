@@ -130,6 +130,11 @@ export interface DropdownKeyOptions {
   typeIn: boolean;
   /** Letters jump the highlight to the row they start. */
   typeAhead: boolean;
+  /**
+   * A text field has focus (the type-in, or the search field): the left
+   * and right arrows move its caret, so the list leaves them alone.
+   */
+  textField: boolean;
 }
 
 interface UseDropdownKeyboardProps {
@@ -155,8 +160,9 @@ const TYPE_AHEAD_RESET_MS = 500;
  * Keyboard navigation for the list, the same for every trigger: Enter or
  * ArrowDown opens a closed list; open, the arrows and Tab walk the stops
  * and wrap around from the last row to the first, Enter activates the
- * highlighted stop, ArrowRight reaches a row's secondary control, and
- * Escape closes. A closed list leaves Tab alone, so it moves on as normal.
+ * highlighted stop, ArrowRight reaches a row's secondary control, the left
+ * and right arrows fold, unfold, leave and enter a group as in a file
+ * explorer, and Escape closes. A closed list leaves Tab alone, so it moves on as normal.
  * Physical focus stays on the trigger or the search field; the highlight
  * moves and `aria-activedescendant` follows it. A handler that ran before
  * this one and cancelled the event keeps the key.
@@ -250,12 +256,50 @@ export function useDropdownKeyboard({
           setIsKeyboardNav(true);
           if (isOpen) setHighlightedIndex(previous);
           break;
+        case "ArrowLeft": {
+          // As in a file explorer: from a row inside an open group, back to
+          // the group's title; from the title, fold it. Never from a text
+          // field, where the key moves the caret.
+          if (!isOpen || options.textField) break;
+          const { items } = listRef.current;
+          const item = items[highlightedIndex];
+          if (!item) break;
+          if (item.kind === "row" && item.group.foldable) {
+            const header = items.findIndex(
+              (stop) => stop.kind === "group" && stop.group === item.group
+            );
+            if (header < 0) break;
+            e.preventDefault();
+            setIsKeyboardNav(true);
+            setHighlightedIndex(header);
+          } else if (item.kind === "group" && !item.group.folded) {
+            e.preventDefault();
+            listRef.current.activate(item);
+          }
+          break;
+        }
         case "ArrowRight": {
-          // Only a row with a secondary control takes the key; a type-in
-          // keeps it for its caret otherwise.
           if (!isOpen) break;
-          const item = listRef.current.items[highlightedIndex];
-          if (item && listRef.current.secondary(item)) e.preventDefault();
+          const { items } = listRef.current;
+          const item = items[highlightedIndex];
+          if (!item) break;
+          // On a group's title: unfold it, or step into its first row.
+          if (item.kind === "group" && !options.textField) {
+            e.preventDefault();
+            if (item.group.folded) {
+              listRef.current.activate(item);
+            } else {
+              const first = items[highlightedIndex + 1];
+              if (first?.kind === "row" && first.group === item.group) {
+                setIsKeyboardNav(true);
+                setHighlightedIndex(highlightedIndex + 1);
+              }
+            }
+            break;
+          }
+          // Otherwise only a row with a secondary control takes the key; a
+          // text field keeps it for its caret.
+          if (listRef.current.secondary(item)) e.preventDefault();
           break;
         }
         case "Tab":

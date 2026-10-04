@@ -142,7 +142,7 @@ function Dropdown({
       "aria-autocomplete": typeIn ? "list" : undefined,
       // A type-in's letters are its filter; any other trigger types ahead.
       onKeyDown: (event) =>
-        handleKeyDown(event, { typeIn, typeAhead: !typeIn }),
+        handleKeyDown(event, { typeIn, typeAhead: !typeIn, textField: typeIn }),
     }),
     [mode, isOpen, activeId, id, handleKeyDown]
   );
@@ -670,7 +670,11 @@ function DropdownData(props: DropdownDataProps) {
               onKeyDown: (event) => {
                 // The field's letters are the filter, so no type-ahead; Tab
                 // follows the dropdown's setting, else leaves.
-                handleKeyDown(event, { typeIn: false, typeAhead: false });
+                handleKeyDown(event, {
+                  typeIn: false,
+                  typeAhead: false,
+                  textField: true,
+                });
                 // Escape closes the list; focus goes back to the trigger so
                 // the field is not left orphaned.
                 if (event.key === "Escape") focusTrigger();

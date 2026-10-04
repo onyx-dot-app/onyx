@@ -59,7 +59,7 @@ export function buildNavItems(
       items.push({ kind: "group", group });
     }
     if (group.folded) continue;
-    for (const row of group.rows) items.push({ kind: "row", row });
+    for (const row of group.rows) items.push({ kind: "row", row, group });
   }
   return items;
 }
