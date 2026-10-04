@@ -896,6 +896,46 @@ export const connectorConfigs: Record<
   },
   salesforce: {
     description: "Configure Salesforce connector",
+  jsm: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Index the customer requests of your Jira Service Management projects.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira Service Management base URL:",
+        label: "Base URL",
+        name: "jsm_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira Service Management instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the service desk ID (optional):",
+        label: "Service Desk ID",
+        name: "service_desk_id",
+        optional: true,
+        description:
+          "The numeric ID of a specific service desk to index, found in the URL " +
+          "of the service desk project (e.g. https://your-domain.atlassian.net/jira/servicedesk/projects/HELPDESK). " +
+          "Leave blank to index every service desk the credential can access.",
+      },
+      {
+        type: "text",
+        query: "Enter a JQL query (optional):",
+        label: "JQL Query",
+        name: "jql_query",
+        optional: true,
+        description:
+          "A custom JQL query to filter which requests are indexed." +
+          "\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
+          "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
+      },
+    ],
+    advanced_values: [],
+  },
+  salesforce: {
+    description: "Configure Salesforce connector",
     values: [
       {
         type: "tab",

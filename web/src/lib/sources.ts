@@ -39,6 +39,7 @@ import {
   SvgHighspot,
   SvgHubspot,
   SvgJira,
+  SvgJira as SvgJsm,
   SvgLinear,
   SvgLoopio,
   SvgLumapps,
@@ -266,6 +267,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
     isPopular: true,
+  },
+  jsm: {
+    icon: SvgJsm,
+    displayName: "Jira Service Management",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
   },
   zendesk: {
     icon: SvgZendesk,
