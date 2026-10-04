@@ -87,7 +87,8 @@ def _issue_payload(
 
 
 def _request_type_payload() -> dict[str, Any]:
-    return {"values": [{"name": "Request a laptop"}], "isLastPage": True}
+    # GET request/{id}/requesttype returns a single object with a top-level name.
+    return {"id": "25", "name": "Request a laptop", "description": ""}
 
 
 def _participants_payload() -> dict[str, Any]:

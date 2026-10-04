@@ -132,12 +132,12 @@ class TestErrorMapping:
 
 
 class TestBestEffortEnrichment:
-    def test_request_type_missing_values_returns_none(self) -> None:
+    def test_request_type_missing_name_returns_none(self) -> None:
         session = build_jsm_session({"jira_api_token": "token"})
         with responses.RequestsMock() as rsps:
             rsps.get(
                 f"{_JSM_BASE}/rest/servicedeskapi/request/10001/requesttype",
-                json={"values": [], "isLastPage": True},
+                json={"id": "25", "name": ""},
             )
             assert fetch_request_type_for_issue(session, _JSM_BASE, "10001") is None
 

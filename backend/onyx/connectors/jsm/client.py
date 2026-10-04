@@ -128,10 +128,9 @@ def fetch_request_type_for_issue(
             "Failed to fetch request type for customer request %s", issue_id
         )
         return None
-    values = payload.get("values", [])
-    if not values:
-        return None
-    return values[0].get("name")
+    # GET request/{id}/requesttype returns the request type as ONE object
+    # with a top-level name (not a paged {values: [...]} envelope).
+    return payload.get("name") or None
 
 
 def fetch_participants(
