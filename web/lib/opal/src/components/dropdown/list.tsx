@@ -86,11 +86,11 @@ interface DropdownListProps {
 const SCROLL_END_THRESHOLD_PX = 48;
 
 /**
- * The list in a portal: the box, the search field, and the scrolling
- * listbox or menu with its groups, dividers, create row and rows. The role
- * sits on the scroller, so the search field stays outside the composite
- * while pinned above it. Scrolls the keyboard stop into view and opens
- * around the selection.
+ * The list in a portal: the positioned root and, inside it, the card with
+ * the search field and the scrolling listbox or menu. The role sits on the
+ * scroller, so the search field stays outside the composite while pinned
+ * above it. Scrolls the keyboard stop into view, opens around the
+ * selection, and swaps the whole card when the view changes.
  */
 export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
   (
@@ -138,52 +138,47 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
 
     const listRef = useRef<HTMLDivElement | null>(null);
 
-    // A view change swaps the rows in place: the box glides from its old
-    // height to the new, the new rows slide in, and the old rows, kept one
-    // animation longer, slide out the other way over them. The old height
-    // is the one recorded at the previous commit; the old rows are the
-    // element rendered then.
+    // A view change swaps the whole card. The old card, re-rendered from
+    // the props of the previous commit (inert, under its own ids), is kept
+    // one animation longer and slides out; the new card slides in from the
+    // other side and glides from the old card's height to its own.
     const [exiting, setExiting] = useState<{
       key: string;
-      node: React.ReactNode;
+      props: CardProps;
       direction: "forward" | "back";
     } | null>(null);
-    const lastPaneRef = useRef<{ key: string; node: React.ReactNode } | null>(
-      null
-    );
+    const lastCardRef = useRef<{ key: string; props: CardProps } | null>(null);
     const lastHeightRef = useRef<number | null>(null);
     const lastViewKeyRef = useRef(viewKey);
     useLayoutEffect(() => {
       if (lastViewKeyRef.current === viewKey) return;
       lastViewKeyRef.current = viewKey;
-      const root = listRef.current;
-      if (!root) return;
-      const scroller = root.querySelector<HTMLElement>(".opal-dropdown-scroll");
-      if (scroller) scroller.scrollTop = 0;
-      const lastPane = lastPaneRef.current;
-      if (lastPane && lastPane.key !== viewKey) {
-        setExiting({ ...lastPane, direction: viewDirection });
+      const last = lastCardRef.current;
+      if (last && last.key !== viewKey) {
+        setExiting({ ...last, direction: viewDirection });
       }
+      const card = liveCard(listRef.current);
       const from = lastHeightRef.current;
-      const to = root.offsetHeight;
+      if (!card || from === null) return;
+      const to = card.offsetHeight;
       const reduceMotion =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (from === null || from === to || reduceMotion) return;
-      root.style.height = `${from}px`;
-      root.setAttribute("data-view-transition", "");
+      if (from === to || reduceMotion) return;
+      card.style.height = `${from}px`;
+      card.setAttribute("data-view-transition", "");
       // Flush the start height before the end height, so the change animates.
-      root.getBoundingClientRect();
-      root.style.height = `${to}px`;
+      card.getBoundingClientRect();
+      card.style.height = `${to}px`;
       const done = () => {
-        root.style.height = "";
-        root.removeAttribute("data-view-transition");
+        card.style.height = "";
+        card.removeAttribute("data-view-transition");
       };
-      root.addEventListener("transitionend", done, { once: true });
+      card.addEventListener("transitionend", done, { once: true });
       const timer = window.setTimeout(done, 250);
       return () => {
         window.clearTimeout(timer);
-        root.removeEventListener("transitionend", done);
+        card.removeEventListener("transitionend", done);
       };
     }, [viewKey, viewDirection]);
 
@@ -191,7 +186,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // highlights never scroll: the list must not move under the mouse.
     useEffect(() => {
       if (!isOpen || !keyboardNav || highlightedIndex < 0) return;
-      listRef.current
+      liveCard(listRef.current)
         ?.querySelector(`[data-index="${highlightedIndex}"]`)
         ?.scrollIntoView({ block: "nearest", behavior: "instant" });
     }, [highlightedIndex, isOpen, keyboardNav]);
@@ -203,49 +198,32 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // selection lands below the fold once the descriptions wrap.
     useEffect(() => {
       if (!isOpen || !isPositioned) return;
-      const selected = listRef.current?.querySelector(
+      const selected = liveCard(listRef.current)?.querySelector(
         '[role="option"][aria-selected="true"]'
       );
       selected?.scrollIntoView({ block: "center", behavior: "instant" });
     }, [isOpen, isPositioned]);
 
-    const totalRows = groups.reduce(
-      (count, group) => count + group.rows.length,
-      0
-    );
-
-    const rowsNode =
-      totalRows === 0 && !create ? (
-        // An empty SET gets the icon'd empty state; a filter that matched
-        // nothing keeps the lightweight text row.
-        emptySet ? (
-          <div className="opal-dropdown-empty-set">
-            <Text as="p" color="text-03" font="secondary-body">
-              {strings.selectEmptySet}
-            </Text>
-          </div>
-        ) : (
-          <div className="opal-dropdown-no-match">
-            {strings.comboBoxNoOptions}
-          </div>
-        )
-      ) : (
-        <Rows
-          listId={listId}
-          mode={mode}
-          groups={groups}
-          isSelected={isSelected}
-          exactValue={exactValue}
-          highlightedIndex={highlightedIndex}
-          onActivate={onActivate}
-          onToggleGroup={onToggleGroup}
-          create={create}
-        />
-      );
+    const cardProps: CardProps = {
+      listId,
+      mode,
+      label,
+      groups,
+      emptySet,
+      isSelected,
+      exactValue,
+      highlightedIndex,
+      onActivate,
+      onToggleGroup,
+      create,
+      maxHeight,
+      onReachEnd,
+      searchField,
+    };
     // What this commit shows, for the next view change to animate away.
     useLayoutEffect(() => {
-      lastPaneRef.current = { key: viewKey, node: rowsNode };
-      lastHeightRef.current = listRef.current?.offsetHeight ?? null;
+      lastCardRef.current = { key: viewKey, props: cardProps };
+      lastHeightRef.current = liveCard(listRef.current)?.offsetHeight ?? null;
     });
 
     if (!presence.mounted || disabled || typeof document === "undefined") {
@@ -260,9 +238,9 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
           if (typeof ref === "function") ref(node);
           else if (ref) ref.current = node;
         }}
-        // The box: positioned, animated and dismissed as one. The listbox
-        // or menu role is on the scroller inside, so the search field is
-        // not a child of the composite.
+        // The root: positioned, animated and dismissed as one. The listbox
+        // or menu role is on the scroller inside the card, so the search
+        // field is not a child of the composite.
         role="presentation"
         // Closed while exiting: invisible to AT and to the pointer.
         aria-hidden={presence.state === "closed" || undefined}
@@ -289,85 +267,31 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
           e.stopPropagation();
         }}
       >
-        {searchField && (
-          <div
-            role="presentation"
-            className="opal-dropdown-search"
-            // The list root cancels mousedown to keep focus on the trigger;
-            // a click into the search field must focus it. The click is held
-            // too: React bubbles through the portal, and a trigger root's
-            // click would pull focus straight back.
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <InputTypeIn
-              ref={searchRef}
-              searchIcon
-              variant="internal"
-              placeholder={searchField.placeholder}
-              aria-label={searchField.placeholder}
-              value={searchField.value}
-              onChange={(e) => searchField.onChange(e.target.value)}
-              onKeyDown={searchField.onKeyDown}
-            />
-          </div>
-        )}
-        <ShadowDiv
-          shadowHeight={3}
-          // Rows fade out at the edges: a painted shadow sat on top of them
-          // and read as a smudge on the light surface. With a search field
-          // the top is different: the field casts a shadow on rows scrolled
-          // under it.
-          variant={hasSearch ? { top: "shadow", bottom: "mask" } : "mask"}
-          // The rise-and-settle runs on this non-scrolling wrapper: a
-          // transform on the scroller itself makes Chromium repaint it at
-          // scroll offset 0 for a frame when compositing switches.
-          containerClassName="opal-dropdown-content"
-          className={cn("opal-dropdown-scroll", !maxHeight && "max-h-60")}
-          // The composite: what the trigger controls and the rows belong to.
-          id={`${listId}-listbox`}
-          role={mode === "picker" ? "listbox" : "menu"}
-          aria-label={label}
-          tabIndex={-1}
-          // The search field brings its own 4px below; the rows start right
-          // under that, with no inset of their own.
-          data-under-search={hasSearch || undefined}
-          style={{
-            // Scroll independently of whatever sits behind the portal.
-            overscrollBehavior: "contain",
-            maxHeight: maxHeight || undefined,
-          }}
-          onScroll={(e) => {
-            const el = e.currentTarget;
-            const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
-            if (remaining <= SCROLL_END_THRESHOLD_PX) onReachEnd?.();
-          }}
-        >
-          {/* Keyed by view, so a change remounts the pane and restarts its
-              slide. The first rows of a session do not slide: the box's own
-              entrance covers them. */}
-          <div
+        <div className="opal-dropdown-stage">
+          {/* Keyed by view, so a change mounts a new card and plays its
+              entrance. The first card of a session does not slide: the
+              root's own entrance covers it. */}
+          <Card
             key={viewKey}
-            className="opal-dropdown-pane"
+            live
+            searchRef={searchRef}
             data-enter={exiting ? viewDirection : undefined}
-          >
-            {rowsNode}
-          </div>
+            {...cardProps}
+          />
           {exiting && (
-            // The rows that just left, inert and hidden from AT, rendered
-            // after the live rows so an id lookup finds the live ones first.
-            <div
+            // The card that just left, rendered after the live one so an
+            // id lookup or a query finds the live card first.
+            <Card
               key={`exit-${exiting.key}`}
-              className="opal-dropdown-pane"
+              live={false}
               data-exit={exiting.direction}
-              inert
-              aria-hidden
-              onAnimationEnd={() => setExiting(null)}
-            >
-              {exiting.node}
-            </div>
+              onExit={() => setExiting(null)}
+              {...exiting.props}
+              listId={`${listId}-exit`}
+              onReachEnd={undefined}
+            />
           )}
-        </ShadowDiv>
+        </div>
       </div>,
       container ?? document.body
     );
@@ -375,6 +299,177 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
 );
 
 DropdownList.displayName = "DropdownList";
+
+// ---------------------------------------------------------------------------
+// Card
+// ---------------------------------------------------------------------------
+
+/** The first card in the root: the one on show, before any that is leaving. */
+function liveCard(root: HTMLElement | null): HTMLElement | null {
+  return root?.querySelector<HTMLElement>(".opal-dropdown-card") ?? null;
+}
+
+/** What a card renders: the search field and the rows of one view. */
+interface CardProps {
+  listId: string;
+  mode: DropdownMode;
+  label: string;
+  groups: RowGroup[];
+  emptySet: boolean;
+  isSelected: (row: DropdownRow) => boolean;
+  exactValue: string | undefined;
+  highlightedIndex: number;
+  onActivate: (row: DropdownRow) => void;
+  onToggleGroup: (group: RowGroup) => void;
+  create?: { text: string; onCreate: (text: string) => void };
+  maxHeight?: string;
+  onReachEnd?: () => void;
+  searchField?: DropdownListProps["searchField"];
+}
+
+interface CardElementProps extends CardProps {
+  /**
+   * The card on show. A card that is leaving is inert and hidden from AT,
+   * and renders under its own ids so nothing on it collides with the live
+   * card.
+   */
+  live: boolean;
+  searchRef?: React.RefObject<HTMLInputElement | null>;
+  "data-enter"?: "forward" | "back";
+  "data-exit"?: "forward" | "back";
+  /** The leaving card's own exit animation ended. */
+  onExit?: () => void;
+}
+
+/**
+ * The bordered box: a pinned search field, then the scrolling listbox or
+ * menu with its groups, dividers, create row and rows.
+ */
+function Card({
+  live,
+  searchRef,
+  "data-enter": enter,
+  "data-exit": exit,
+  onExit,
+  listId,
+  mode,
+  label,
+  groups,
+  emptySet,
+  isSelected,
+  exactValue,
+  highlightedIndex,
+  onActivate,
+  onToggleGroup,
+  create,
+  maxHeight,
+  onReachEnd,
+  searchField,
+}: CardElementProps) {
+  const strings = useOpalStrings();
+  const hasSearch = searchField !== undefined;
+  const totalRows = groups.reduce(
+    (count, group) => count + group.rows.length,
+    0
+  );
+
+  return (
+    <div
+      className="opal-dropdown-card"
+      data-enter={enter}
+      data-exit={exit}
+      inert={!live || undefined}
+      aria-hidden={!live || undefined}
+      onAnimationEnd={(e) => {
+        // The card's own exit, not a child's animation bubbling up.
+        if (e.target === e.currentTarget) onExit?.();
+      }}
+    >
+      {searchField && (
+        <div
+          role="presentation"
+          className="opal-dropdown-search"
+          // The list root cancels mousedown to keep focus on the trigger;
+          // a click into the search field must focus it. The click is held
+          // too: React bubbles through the portal, and a trigger root's
+          // click would pull focus straight back.
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <InputTypeIn
+            ref={searchRef}
+            searchIcon
+            variant="internal"
+            placeholder={searchField.placeholder}
+            aria-label={searchField.placeholder}
+            value={searchField.value}
+            onChange={(e) => searchField.onChange(e.target.value)}
+            onKeyDown={searchField.onKeyDown}
+          />
+        </div>
+      )}
+      <ShadowDiv
+        shadowHeight={3}
+        // Rows fade out at the edges: a painted shadow sat on top of them
+        // and read as a smudge on the light surface. With a search field
+        // the top is different: the field casts a shadow on rows scrolled
+        // under it.
+        variant={hasSearch ? { top: "shadow", bottom: "mask" } : "mask"}
+        // The rise-and-settle runs on this non-scrolling wrapper: a
+        // transform on the scroller itself makes Chromium repaint it at
+        // scroll offset 0 for a frame when compositing switches.
+        containerClassName="opal-dropdown-content"
+        className={cn("opal-dropdown-scroll", !maxHeight && "max-h-60")}
+        // The composite: what the trigger controls and the rows belong to.
+        id={`${listId}-listbox`}
+        role={mode === "picker" ? "listbox" : "menu"}
+        aria-label={label}
+        tabIndex={-1}
+        // The search field brings its own 4px below; the rows start right
+        // under that, with no inset of their own.
+        data-under-search={hasSearch || undefined}
+        style={{
+          // Scroll independently of whatever sits behind the portal.
+          overscrollBehavior: "contain",
+          maxHeight: maxHeight || undefined,
+        }}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+          if (remaining <= SCROLL_END_THRESHOLD_PX) onReachEnd?.();
+        }}
+      >
+        {totalRows === 0 && !create ? (
+          // An empty SET gets the icon'd empty state; a filter that
+          // matched nothing keeps the lightweight text row.
+          emptySet ? (
+            <div className="opal-dropdown-empty-set">
+              <Text as="p" color="text-03" font="secondary-body">
+                {strings.selectEmptySet}
+              </Text>
+            </div>
+          ) : (
+            <div className="opal-dropdown-no-match">
+              {strings.comboBoxNoOptions}
+            </div>
+          )
+        ) : (
+          <Rows
+            listId={listId}
+            mode={mode}
+            groups={groups}
+            isSelected={isSelected}
+            exactValue={exactValue}
+            highlightedIndex={highlightedIndex}
+            onActivate={onActivate}
+            onToggleGroup={onToggleGroup}
+            create={create}
+          />
+        )}
+      </ShadowDiv>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Rows

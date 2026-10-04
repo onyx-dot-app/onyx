@@ -10,9 +10,20 @@
    ============================================================================ */
 
 .opal-dropdown {
-  @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
+  @apply z-10000 pointer-events-auto touch-auto;
   /* A list matched to a narrow anchor still needs room for its rows. */
   min-width: var(--block-width-dropdown-min);
+}
+
+/* The stage holds the card, and two cards while a view changes. Nothing
+   clips: a card slides out over the page and fades. */
+.opal-dropdown-stage {
+  @apply relative;
+}
+
+/* The card: the bordered box with the search field and the rows. */
+.opal-dropdown-card {
+  @apply relative overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
 }
 
 /* The search field pinned above the rows: a borderless input on its own
@@ -144,62 +155,65 @@
    Views
    --------------------------------------------------------------------------- */
 
-/* A view replaces the rows in place. The box's height glides between the
-   outgoing and incoming rows (set inline for the transition, then released),
-   the incoming rows slide in from the side they come from, and the outgoing
-   rows, kept one animation longer, slide out the other way over the top. */
-.opal-dropdown[data-view-transition] {
+/* A view change swaps the whole card. The old card, kept one animation
+   longer, slides out and fades; the new card slides in from the other side
+   and fades in, and glides from the old card's height to its own (set
+   inline for the transition, then released). Forward goes leftwards; back,
+   the reverse. Both cards ride the same curve, one card width and a gap
+   apart, so they travel as a pair and never overlap. */
+.opal-dropdown-card[data-view-transition] {
   transition: height 200ms ease-in-out;
 }
-.opal-dropdown-scroll {
-  position: relative;
+.opal-dropdown-card[data-exit] {
+  @apply absolute inset-x-0 top-0 pointer-events-none;
 }
-.opal-dropdown-pane {
-  @apply flex flex-col gap-1;
+.opal-dropdown-card[data-enter="forward"] {
+  animation: opal-dropdown-card-in-forward 200ms ease-in-out;
 }
-.opal-dropdown-pane[data-enter="forward"] {
-  animation: opal-dropdown-pane-in-forward 200ms ease-out;
+.opal-dropdown-card[data-enter="back"] {
+  animation: opal-dropdown-card-in-back 200ms ease-in-out;
 }
-.opal-dropdown-pane[data-enter="back"] {
-  animation: opal-dropdown-pane-in-back 200ms ease-out;
+.opal-dropdown-card[data-exit="forward"] {
+  animation: opal-dropdown-card-out-forward 200ms ease-in-out forwards;
 }
-.opal-dropdown-pane[data-exit] {
-  @apply absolute inset-x-0 top-0 p-1 pointer-events-none;
-  animation: opal-dropdown-pane-out-forward 200ms ease-in forwards;
+.opal-dropdown-card[data-exit="back"] {
+  animation: opal-dropdown-card-out-back 200ms ease-in-out forwards;
 }
-.opal-dropdown-pane[data-exit="back"] {
-  animation: opal-dropdown-pane-out-back 200ms ease-in forwards;
+/* A card arriving or leaving does not replay the box's own entrance. */
+.opal-dropdown-card[data-enter] .opal-dropdown-content,
+.opal-dropdown-card[data-exit] .opal-dropdown-content {
+  animation: none;
 }
-@keyframes opal-dropdown-pane-in-forward {
+@keyframes opal-dropdown-card-in-forward {
   from {
     opacity: 0;
-    transform: translateX(1.5rem);
+    transform: translateX(calc(100% + 1rem));
   }
 }
-@keyframes opal-dropdown-pane-in-back {
+@keyframes opal-dropdown-card-in-back {
   from {
     opacity: 0;
-    transform: translateX(-1.5rem);
+    transform: translateX(calc(-100% - 1rem));
   }
 }
-@keyframes opal-dropdown-pane-out-forward {
+@keyframes opal-dropdown-card-out-forward {
   to {
     opacity: 0;
-    transform: translateX(-1.5rem);
+    transform: translateX(calc(-100% - 1rem));
   }
 }
-@keyframes opal-dropdown-pane-out-back {
+@keyframes opal-dropdown-card-out-back {
   to {
     opacity: 0;
-    transform: translateX(1.5rem);
+    transform: translateX(calc(100% + 1rem));
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .opal-dropdown[data-view-transition] {
+  .opal-dropdown-card[data-view-transition] {
     transition: none;
   }
-  .opal-dropdown-pane[data-enter],
-  .opal-dropdown-pane[data-exit] {
+  .opal-dropdown-card[data-enter],
+  .opal-dropdown-card[data-exit] {
     animation: none;
   }
 }
