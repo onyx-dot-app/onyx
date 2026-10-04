@@ -3,7 +3,7 @@
 import React from "react";
 import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { InputSwitch } from "@opal/components/inputs/booleans/input-switch/components";
-import { rowElementId, rowKey } from "@opal/components/dropdown/model";
+import { rowElementId } from "@opal/components/dropdown/model";
 import type {
   DropdownMode,
   DropdownRow,
@@ -51,7 +51,7 @@ export const Row = React.memo(function Row({
   isSelected,
   onActivate,
 }: RowProps) {
-  const id = rowElementId(listId, rowKey(row));
+  const id = rowElementId(listId, row);
   const interaction = isHighlighted ? "hover" : "rest";
   const onClick = (event: React.MouseEvent) => {
     event.stopPropagation();

@@ -567,7 +567,7 @@ function DropdownData(props: DropdownDataProps) {
         if (row.kind === "action" && row.href !== undefined) {
           // Enter clicks the anchor, so the browser navigates as it would
           // for a pointer click; the click handler then runs activateRow.
-          document.getElementById(rowElementId(id, row.id))?.click();
+          document.getElementById(rowElementId(id, row))?.click();
           return;
         }
         activateRow(row);

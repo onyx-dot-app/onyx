@@ -17,10 +17,19 @@ export function normalizeItems(
 ): RowGroup[] {
   const groups: RowGroup[] = [];
   let looseRun: RowGroup | null = null;
+  // A titled group is keyed by its title and its rank among same-titled
+  // groups, so its fold state survives groups arriving or leaving elsewhere
+  // in the list. Only titled groups fold; a loose run's key is its position.
+  const titleCounts = new Map<string, number>();
   for (const entry of items) {
     if (entry.kind === "group") {
+      const rank = titleCounts.get(entry.title ?? "") ?? 0;
+      titleCounts.set(entry.title ?? "", rank + 1);
       groups.push({
-        key: String(groups.length),
+        key:
+          entry.title !== undefined
+            ? `${entry.title}#${rank}`
+            : String(groups.length),
         title: entry.title,
         rows: entry.items,
         foldable: entry.foldable,
@@ -141,8 +150,9 @@ export function sanitizeId(value: string): string {
   return encodeURIComponent(value);
 }
 
-export function rowElementId(listId: string, key: string): string {
-  return `${listId}-option-${sanitizeId(key)}`;
+/** A row's element id, namespaced by kind: an option's value and an action's id never collide. */
+export function rowElementId(listId: string, row: DropdownRow): string {
+  return `${listId}-${row.kind}-${sanitizeId(rowKey(row))}`;
 }
 
 export function groupElementId(listId: string, key: string): string {
@@ -160,7 +170,7 @@ export function navItemElementId(
   item: NavItem | undefined
 ): string | undefined {
   if (!item) return undefined;
-  if (item.kind === "row") return rowElementId(listId, rowKey(item.row));
+  if (item.kind === "row") return rowElementId(listId, item.row);
   if (item.kind === "create") return createElementId(listId);
   return item.group.title === undefined
     ? undefined
