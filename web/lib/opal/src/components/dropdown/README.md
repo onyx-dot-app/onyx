@@ -160,7 +160,7 @@ Every row takes `keywords?` (what a search matches beyond the title) and `disabl
 
 ## Views
 
-A view is a set of menu rows that replaces the rows on show, in place: the box glides to the new height and the rows slide in. An action's `onSelect`, a custom row's `onActivate` and `onSecondary`, and a picker's `onSelect` get the stack as `views`, and `useDropdownViews()` returns the same object to a control rendered inside the list (a `Button` in a custom row, or in a toggle row's neighbour; a toggle's `onCheckedChange` itself gets only `checked`). Any such row pushes a view, under any logic it likes; the list stays open after a handler that pushed or popped.
+A view is a set of menu rows that replaces the rows on show, in place: the old card slides out and the new one slides in, each at its own height. An action's `onSelect`, a custom row's `onActivate` and `onSecondary`, and a picker's `onSelect` get the stack as `views`, and `useDropdownViews()` returns the same object to a control rendered inside the list (a `Button` in a custom row, or in a toggle row's neighbour; a toggle's `onCheckedChange` itself gets only `checked`). Any such row pushes a view, under any logic it likes; the list stays open after a handler that pushed or popped.
 
 ```tsx
 const skills: DropdownView = {

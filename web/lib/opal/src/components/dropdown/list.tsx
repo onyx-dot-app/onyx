@@ -141,7 +141,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // A view change swaps the whole card. The old card, re-rendered from
     // the props of the previous commit (inert, under its own ids), is kept
     // one animation longer and slides out; the new card slides in from the
-    // other side and glides from the old card's height to its own.
+    // other side. Each card keeps its own height throughout.
     const [exiting, setExiting] = useState<{
       key: string;
       props: CardProps;
@@ -158,7 +158,6 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       props: CardProps;
     } | null>(null);
     const lastCardRef = useRef<{ key: string; props: CardProps } | null>(null);
-    const lastHeightRef = useRef<number | null>(null);
     const lastViewKeyRef = useRef(viewKey);
     useLayoutEffect(() => {
       if (!isOpen) {
@@ -183,33 +182,6 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       if (last && last.key !== viewKey && !reduceMotion) {
         setExiting({ ...last, direction: viewDirection });
       }
-      const card = liveCard(listRef.current);
-      const from = lastHeightRef.current;
-      if (!card || from === null) return;
-      const to = card.offsetHeight;
-      if (from === to || reduceMotion) return;
-      card.style.height = `${from}px`;
-      card.setAttribute("data-view-transition", "");
-      // Flush the start height before the end height, so the change animates.
-      card.getBoundingClientRect();
-      card.style.height = `${to}px`;
-      const done = () => {
-        card.style.height = "";
-        card.removeAttribute("data-view-transition");
-        card.removeEventListener("transitionend", onEnd);
-      };
-      // Only the card's own height: a child's transition bubbles up too.
-      const onEnd = (event: TransitionEvent) => {
-        if (event.target === card && event.propertyName === "height") done();
-      };
-      card.addEventListener("transitionend", onEnd);
-      const timer = window.setTimeout(done, 250);
-      // A view change cut short releases its height, so the next change
-      // measures the rows and not the height this one left behind.
-      return () => {
-        window.clearTimeout(timer);
-        done();
-      };
     }, [isOpen, viewKey, viewDirection]);
 
     // Keyboard navigation keeps the highlighted row in view. Pointer
@@ -254,7 +226,6 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     useLayoutEffect(() => {
       if (!isOpen) return;
       lastCardRef.current = { key: viewKey, props: cardProps };
-      lastHeightRef.current = liveCard(listRef.current)?.offsetHeight ?? null;
     });
 
     if (!presence.mounted || disabled || typeof document === "undefined") {

@@ -158,13 +158,9 @@
 
 /* A view change swaps the whole card. The old card, kept one animation
    longer, slides out and fades; the new card slides in from the other side
-   and fades in, and glides from the old card's height to its own (set
-   inline for the transition, then released). Forward goes leftwards; back,
-   the reverse. Both cards ride the same curve, one card width and a gap
-   apart, so they travel as a pair and never overlap. */
-.opal-dropdown-card[data-view-transition] {
-  transition: height 200ms ease-in-out;
-}
+   and fades in. Each card keeps its own height. Forward goes leftwards;
+   back, the reverse. Both cards ride the same curve, one card width and a
+   gap apart, so they travel as a pair and never overlap. */
 .opal-dropdown-card[data-exit] {
   @apply absolute inset-x-0 top-0 pointer-events-none;
 }
@@ -210,9 +206,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .opal-dropdown-card[data-view-transition] {
-    transition: none;
-  }
   .opal-dropdown-card[data-enter],
   .opal-dropdown-card[data-exit] {
     animation: none;
