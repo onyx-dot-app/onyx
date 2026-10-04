@@ -14,6 +14,7 @@ import { Slot } from "@radix-ui/react-slot";
 import { useOpalStrings } from "@opal/strings";
 import {
   DropdownContext,
+  DropdownViewsContext,
   useDropdownContext,
   type DropdownContextValue,
   type DropdownTriggerProps,
@@ -36,6 +37,7 @@ import {
   optionMatchesExactly,
   rowElementId,
   rowKey,
+  viewKey,
 } from "@opal/components/dropdown/model";
 import { DropdownList } from "@opal/components/dropdown/list";
 import type {
@@ -44,6 +46,9 @@ import type {
   DropdownMode,
   DropdownOption,
   DropdownRow,
+  DropdownSearch,
+  DropdownView,
+  DropdownViews,
   NavItem,
   RowGroup,
 } from "@opal/components/dropdown/types";
@@ -83,6 +88,7 @@ const EMPTY_LIST: ListModel = {
   items: [],
   activate: () => {},
   secondary: () => false,
+  back: () => false,
 };
 
 /**
@@ -347,7 +353,7 @@ interface DropdownDataBaseProps {
    * type. It takes focus when the list opens; Escape hands focus back to
    * the trigger. `onChange` reports the text, and `""` when the list closes.
    */
-  search?: { placeholder: string; onChange?: (query: string) => void };
+  search?: DropdownSearch;
   /**
    * Text whose exact match (an option's value or title) also reads as
    * selected, for a type-in whose text is the pick before it is committed.
@@ -383,7 +389,7 @@ type DropdownPickerProps = DropdownDataBaseProps & {
   /** The rows: options, other rows and groups, in order. */
   items: DropdownItem[];
   /** A click or Enter on an option. What a pick means is the caller's. */
-  onSelect: (option: DropdownOption) => void;
+  onSelect: (option: DropdownOption, views: DropdownViews) => void;
   /**
    * Close after a pick.
    * @default true for a single `value`, false for `values`
@@ -419,22 +425,39 @@ type DropdownDataProps =
   | DropdownMultiPickerProps
   | DropdownMenuProps;
 
+/** A view on the stack, with what it needs to be left again. */
+interface ViewEntry {
+  view: DropdownView;
+  /** The stop whose handler pushed it: the highlight returns there. */
+  returnTo: string | undefined;
+  /** The view's own search text, kept while it is on the stack. */
+  searchText: string;
+}
+
+/** Where the highlight goes once the stops reflect a view change. */
+type PendingHighlight =
+  | { kind: "none" }
+  | { kind: "first" }
+  | { kind: "id"; id: string | undefined };
+
 /**
  * The rows, as data, and the list that renders them in a portal. Filters by
  * the trigger's text or its own search field, folds groups, keeps the
  * keyboard order in step with what is on show, and marks the selection.
  * With a `value` or `values` it is a picker (a listbox); without, a menu.
+ * Holds the view stack: a row handler may push a view whose rows replace
+ * these in place.
  */
 function DropdownData(props: DropdownDataProps) {
   const {
-    items,
+    items: rootItems,
     label,
     query,
-    search,
-    exactText,
-    highlightExactQuery = false,
-    create,
-    otherOptionsTitle,
+    search: rootSearch,
+    exactText: rootExactText,
+    highlightExactQuery: rootHighlightExactQuery = false,
+    create: rootCreate,
+    otherOptionsTitle: rootOtherOptionsTitle,
     maxHeight,
     onReachEnd,
     value,
@@ -471,16 +494,106 @@ function DropdownData(props: DropdownDataProps) {
     setMode(isPicker ? "picker" : "menu");
   }, [isPicker, setMode]);
 
-  // The search field's text is transient: it clears with the list.
-  const [searchText, setSearchText] = useState("");
-  const searchOnChange = search?.onChange;
+  // The view stack. The top view's rows and search replace the root's; the
+  // root-only features (the trigger's query, create, other options, exact
+  // text) wait underneath. The stack empties with the list.
+  const [stack, setStack] = useState<ViewEntry[]>([]);
+  const [viewDirection, setViewDirection] = useState<"forward" | "back">(
+    "forward"
+  );
+  const stackRef = useRef(stack);
+  useLayoutEffect(() => {
+    stackRef.current = stack;
+  });
+  const top = stack[stack.length - 1];
+  const currentViewKey = top ? viewKey(top.view, stack.length) : "root";
+  const items = top ? top.view.items : rootItems;
+  const search = top ? top.view.search : rootSearch;
+  const create = top ? undefined : rootCreate;
+  const otherOptionsTitle = top ? undefined : rootOtherOptionsTitle;
+  const exactText = top ? undefined : rootExactText;
+  const highlightExactQuery = top ? false : rootHighlightExactQuery;
+
+  // Search text is transient and per view: the root's clears with the list,
+  // a view's leaves with the view. Each reports `""` as it goes.
+  const [rootSearchText, setRootSearchText] = useState("");
+  const rootSearchOnChange = rootSearch?.onChange;
   useEffect(() => {
     if (isOpen) return;
-    setSearchText("");
-    searchOnChange?.("");
-  }, [isOpen, searchOnChange]);
-  const filterText = query ?? (search ? searchText : "");
+    setRootSearchText("");
+    rootSearchOnChange?.("");
+    for (const entry of stackRef.current) entry.view.search?.onChange?.("");
+    setStack((prev) => (prev.length === 0 ? prev : []));
+  }, [isOpen, rootSearchOnChange]);
+  const searchText = top ? top.searchText : rootSearchText;
+  const setSearchText = useCallback((next: string) => {
+    if (stackRef.current.length === 0) {
+      setRootSearchText(next);
+      return;
+    }
+    setStack((prev) =>
+      prev.map((entry, index) =>
+        index === prev.length - 1 ? { ...entry, searchText: next } : entry
+      )
+    );
+  }, []);
+  const filterText = top
+    ? top.searchText
+    : (query ?? (rootSearch ? rootSearchText : ""));
   const searching = filterText.trim() !== "";
+
+  // The view stack as the rows see it. A handler that pushes or pops keeps
+  // the list open; the highlight follows the keyboard into the new view,
+  // or back to the row that pushed it.
+  const activatingRef = useRef<string | undefined>(undefined);
+  const movedRef = useRef(false);
+  const pendingHighlightRef = useRef<PendingHighlight | null>(null);
+  const views = useMemo<DropdownViews>(
+    () => ({
+      push: (view) => {
+        movedRef.current = true;
+        setStack((prev) => [
+          ...prev,
+          { view, returnTo: activatingRef.current, searchText: "" },
+        ]);
+        setViewDirection("forward");
+        pendingHighlightRef.current = isKeyboardNav
+          ? { kind: "first" }
+          : { kind: "none" };
+      },
+      pop: () => {
+        const leaving = stackRef.current[stackRef.current.length - 1];
+        if (!leaving) return;
+        movedRef.current = true;
+        leaving.view.search?.onChange?.("");
+        setStack((prev) => prev.slice(0, -1));
+        setViewDirection("back");
+        pendingHighlightRef.current = isKeyboardNav
+          ? { kind: "id", id: leaving.returnTo }
+          : { kind: "none" };
+      },
+      close: () => setIsOpen(false),
+    }),
+    [isKeyboardNav, setIsOpen]
+  );
+  // Runs a row's handler and reports whether it moved the stack.
+  const runHandler = useCallback((handler: () => void) => {
+    movedRef.current = false;
+    handler();
+    const moved = movedRef.current;
+    movedRef.current = false;
+    return moved;
+  }, []);
+
+  // A view without a search field hands focus back to the trigger, so the
+  // field that just left does not drop focus on the body.
+  const hasSearch = search !== undefined;
+  const lastViewKeyRef = useRef(currentViewKey);
+  useEffect(() => {
+    if (lastViewKeyRef.current === currentViewKey) return;
+    lastViewKeyRef.current = currentViewKey;
+    if (!hasSearch) focusTrigger();
+  }, [currentViewKey, hasSearch, focusTrigger]);
 
   const groups = useMemo(() => normalizeItems(items), [items]);
   const allRows = useMemo(() => flattenGroups(groups), [groups]);
@@ -517,6 +630,7 @@ function DropdownData(props: DropdownDataProps) {
     groups: visibleGroups,
     isSelected,
     searching,
+    viewKey: currentViewKey,
   });
   const shownOptions = useMemo(
     () =>
@@ -533,32 +647,35 @@ function DropdownData(props: DropdownDataProps) {
   );
 
   // What Enter, or a click, does to a stop. An action or a custom row
-  // closes the list unless it asked to stay; a toggle and a multi pick keep
-  // it open for the next one.
+  // closes the list unless it asked to stay, leads to a view or moved the
+  // stack; a toggle and a multi pick keep it open for the next one.
   const onCreate = create?.onCreate;
   const activateRow = useCallback(
     (row: DropdownRow) => {
       if (row.disabled) return;
+      activatingRef.current = rowElementId(id, row);
       switch (row.kind) {
         case "option":
-          onSelect?.(row);
+          onSelect?.(row, views);
           if (closeOnSelect) setIsOpen(false);
           break;
-        case "action":
+        case "action": {
           // A link action's row is an anchor: the click itself navigates.
-          row.onSelect?.();
-          if (!row.keepOpen) setIsOpen(false);
+          const moved = runHandler(() => row.onSelect?.(views));
+          if (!row.keepOpen && !row.opensView && !moved) setIsOpen(false);
           break;
+        }
         case "toggle":
           row.onCheckedChange(!row.checked);
           break;
-        case "custom":
-          row.onActivate?.();
-          if (!row.keepOpen) setIsOpen(false);
+        case "custom": {
+          const moved = runHandler(() => row.onActivate?.(views));
+          if (!row.keepOpen && !row.opensView && !moved) setIsOpen(false);
           break;
+        }
       }
     },
-    [onSelect, closeOnSelect, setIsOpen]
+    [id, onSelect, views, runHandler, closeOnSelect, setIsOpen]
   );
   const activate = useCallback(
     (item: NavItem) => {
@@ -576,17 +693,35 @@ function DropdownData(props: DropdownDataProps) {
     },
     [id, activateRow, onCreate, toggleGroup]
   );
-  const secondary = useCallback((item: NavItem) => {
-    if (item.kind !== "row" || item.row.kind !== "custom") return false;
-    if (!item.row.onSecondary || item.row.disabled) return false;
-    item.row.onSecondary();
+  // ArrowRight: a custom row's secondary control, else a row that leads
+  // to a view is activated, as the chevron promises.
+  const secondary = useCallback(
+    (item: NavItem) => {
+      if (item.kind !== "row" || item.row.disabled) return false;
+      const { row } = item;
+      if (row.kind === "custom" && row.onSecondary) {
+        activatingRef.current = rowElementId(id, row);
+        row.onSecondary(views);
+        return true;
+      }
+      if ((row.kind === "action" || row.kind === "custom") && row.opensView) {
+        activateRow(row);
+        return true;
+      }
+      return false;
+    },
+    [id, views, activateRow]
+  );
+  const back = useCallback(() => {
+    if (stackRef.current.length === 0) return false;
+    views.pop();
     return true;
-  }, []);
+  }, [views]);
 
   // The keyboard reads the stops through the ref at event time; the
   // trigger reads the highlighted stop's id for aria-activedescendant.
   useLayoutEffect(() => {
-    listRef.current = { items: navItems, activate, secondary };
+    listRef.current = { items: navItems, activate, secondary, back };
   });
   useLayoutEffect(() => {
     setActiveId(
@@ -605,6 +740,8 @@ function DropdownData(props: DropdownDataProps) {
     const last = lastNavRef.current;
     lastNavRef.current = { items: navItems, index: highlightedIndex };
     if (!last || last.items === navItems) return;
+    // A view change places the highlight itself, below.
+    if (pendingHighlightRef.current) return;
     if (last.index !== highlightedIndex || highlightedIndex < 0) return;
     const wanted = navItemElementId(id, last.items[last.index]);
     const index = navItems.findIndex(
@@ -612,6 +749,25 @@ function DropdownData(props: DropdownDataProps) {
     );
     if (index !== highlightedIndex) setHighlightedIndex(index);
   }, [id, navItems, highlightedIndex, setHighlightedIndex]);
+
+  // The stops now reflect a view change: the keyboard lands on the view's
+  // first row, or back on the row that pushed it; the pointer on nothing.
+  useLayoutEffect(() => {
+    const pending = pendingHighlightRef.current;
+    if (!pending) return;
+    pendingHighlightRef.current = null;
+    if (pending.kind === "none") {
+      setHighlightedIndex(-1);
+    } else if (pending.kind === "first") {
+      setHighlightedIndex(
+        navItems.findIndex((item) => item.kind !== "row" || !item.row.disabled)
+      );
+    } else {
+      setHighlightedIndex(
+        navItems.findIndex((item) => navItemElementId(id, item) === pending.id)
+      );
+    }
+  }, [id, navItems, currentViewKey, setHighlightedIndex]);
 
   // A type-in combobox highlights the option its text matches exactly; the
   // keyboard, once it drives, keeps its own stop.
@@ -648,66 +804,78 @@ function DropdownData(props: DropdownDataProps) {
     [toggleGroup]
   );
 
+  // Escape in the search field: inside a view it pops, and focus moves to
+  // the field below or the trigger; at the root it closes and the trigger
+  // takes focus back, so the field is not left orphaned.
+  const belowHasSearch =
+    stack.length > 1
+      ? stack[stack.length - 2]?.view.search !== undefined
+      : rootSearch !== undefined;
+
   return (
-    <DropdownList
-      ref={floatingRef}
-      listId={id}
-      mode={mode}
-      container={container}
-      isOpen={isOpen}
-      disabled={disabled}
-      label={label ?? ""}
-      floatingStyles={floatingStyles}
-      isPositioned={isPositioned}
-      setFloatingRef={setFloatingRef}
-      groups={foldedGroups}
-      emptySet={allRows.length === 0}
-      isSelected={isSelected}
-      exactValue={exactValue}
-      highlightedIndex={highlightedIndex}
-      keyboardNav={isKeyboardNav}
-      onActivate={activateRow}
-      onToggleGroup={handleGroupToggle}
-      create={create}
-      maxHeight={maxHeight}
-      onReachEnd={onReachEnd && (() => onReachEnd(shownOptions))}
-      // The pointer took over: the keyboard highlight yields to the row's
-      // own hover on whatever the pointer is on.
-      onMouseMove={() => {
-        if (isKeyboardNav) {
-          setIsKeyboardNav(false);
-          setHighlightedIndex(-1);
+    <DropdownViewsContext.Provider value={views}>
+      <DropdownList
+        ref={floatingRef}
+        listId={id}
+        mode={mode}
+        container={container}
+        isOpen={isOpen}
+        disabled={disabled}
+        label={label ?? ""}
+        floatingStyles={floatingStyles}
+        isPositioned={isPositioned}
+        setFloatingRef={setFloatingRef}
+        viewKey={currentViewKey}
+        viewDirection={viewDirection}
+        groups={foldedGroups}
+        emptySet={allRows.length === 0}
+        isSelected={isSelected}
+        exactValue={exactValue}
+        highlightedIndex={highlightedIndex}
+        keyboardNav={isKeyboardNav}
+        onActivate={activateRow}
+        onToggleGroup={handleGroupToggle}
+        create={create}
+        maxHeight={maxHeight}
+        onReachEnd={onReachEnd && (() => onReachEnd(shownOptions))}
+        // The pointer took over: the keyboard highlight yields to the row's
+        // own hover on whatever the pointer is on.
+        onMouseMove={() => {
+          if (isKeyboardNav) {
+            setIsKeyboardNav(false);
+            setHighlightedIndex(-1);
+          }
+        }}
+        searchField={
+          search
+            ? {
+                value: searchText,
+                placeholder:
+                  search.placeholder || strings.selectSearchPlaceholder,
+                onChange: (next) => {
+                  setSearchText(next);
+                  search.onChange?.(next);
+                  // Typing never highlights; only walking the list does.
+                  setHighlightedIndex(-1);
+                  setIsKeyboardNav(false);
+                },
+                onKeyDown: (event) => {
+                  // The field's letters are the filter, so no type-ahead; Tab
+                  // follows the dropdown's setting, else leaves.
+                  handleKeyDown(event, {
+                    typeIn: false,
+                    typeAhead: false,
+                    textField: true,
+                  });
+                  if (event.key === "Escape") {
+                    if (stack.length === 0 || !belowHasSearch) focusTrigger();
+                  }
+                },
+              }
+            : undefined
         }
-      }}
-      searchField={
-        search
-          ? {
-              value: searchText,
-              placeholder:
-                search.placeholder || strings.selectSearchPlaceholder,
-              onChange: (next) => {
-                setSearchText(next);
-                search.onChange?.(next);
-                // Typing never highlights; only walking the list does.
-                setHighlightedIndex(-1);
-                setIsKeyboardNav(false);
-              },
-              onKeyDown: (event) => {
-                // The field's letters are the filter, so no type-ahead; Tab
-                // follows the dropdown's setting, else leaves.
-                handleKeyDown(event, {
-                  typeIn: false,
-                  typeAhead: false,
-                  textField: true,
-                });
-                // Escape closes the list; focus goes back to the trigger so
-                // the field is not left orphaned.
-                if (event.key === "Escape") focusTrigger();
-              },
-            }
-          : undefined
-      }
-    />
+      />
+    </DropdownViewsContext.Provider>
   );
 }
 

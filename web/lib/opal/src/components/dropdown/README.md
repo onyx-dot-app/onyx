@@ -23,16 +23,36 @@ import { Dropdown, Button } from "@opal/components";
     label="Actions"
     search={{ placeholder: "Search" }}
     items={[
-      { kind: "action", id: "rename", title: "Rename", icon: SvgEdit, onSelect: rename },
-      { kind: "toggle", id: "pin", title: "Pinned", checked: pinned, onCheckedChange: setPinned },
+      {
+        kind: "action",
+        id: "rename",
+        title: "Rename",
+        icon: SvgEdit,
+        onSelect: rename,
+      },
+      {
+        kind: "toggle",
+        id: "pin",
+        title: "Pinned",
+        checked: pinned,
+        onCheckedChange: setPinned,
+      },
       {
         kind: "group",
         title: "Danger zone",
-        items: [{ kind: "action", id: "delete", title: "Delete", danger: true, onSelect: remove }],
+        items: [
+          {
+            kind: "action",
+            id: "delete",
+            title: "Delete",
+            danger: true,
+            onSelect: remove,
+          },
+        ],
       },
     ]}
   />
-</Dropdown>
+</Dropdown>;
 ```
 
 A picker on a type-in:
@@ -65,25 +85,25 @@ A picker on a type-in:
 
 The list is always its anchor's width, 6px wider on each side so the rows line up under the anchor's content, and never narrower than `--block-width-dropdown-min` (17.5rem), so a narrow button trigger still gets a usable list.
 
-| Prop            | Type                                       | Default    | Description                                                                 |
-| --------------- | ------------------------------------------ | ---------- | --------------------------------------------------------------------------- |
-| `open`          | `boolean`                                  | —          | Controlled open state. Uncontrolled when left out.                          |
-| `onOpenChange`  | `(open: boolean) => void`                  | —          | Called with the next state                                                  |
-| `disabled`      | `boolean`                                  | `false`    | Never opens and renders no list                                             |
-| `id`            | `string`                                   | auto       | Prefix for the list's and the rows' element ids, so a field can tie into it |
-| `virtualAnchor` | `{ getBoundingClientRect, contextElement? }` | —        | A rectangle to position against instead of an element, like a text caret   |
-| `container`     | `HTMLElement \| null`                      | body       | Where the list portals to, for a dropdown inside a modal                    |
-| `tabKey`        | `"walk" \| "leave"`                        | by trigger | What Tab does while open: walk the rows, or close and move on. Default: walk for a type-in, leave otherwise |
+| Prop            | Type                                         | Default    | Description                                                                                                 |
+| --------------- | -------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------- |
+| `open`          | `boolean`                                    | —          | Controlled open state. Uncontrolled when left out.                                                          |
+| `onOpenChange`  | `(open: boolean) => void`                    | —          | Called with the next state                                                                                  |
+| `disabled`      | `boolean`                                    | `false`    | Never opens and renders no list                                                                             |
+| `id`            | `string`                                     | auto       | Prefix for the list's and the rows' element ids, so a field can tie into it                                 |
+| `virtualAnchor` | `{ getBoundingClientRect, contextElement? }` | —          | A rectangle to position against instead of an element, like a text caret                                    |
+| `container`     | `HTMLElement \| null`                        | body       | Where the list portals to, for a dropdown inside a modal                                                    |
+| `tabKey`        | `"walk" \| "leave"`                          | by trigger | What Tab does while open: walk the rows, or close and move on. Default: walk for a type-in, leave otherwise |
 
 ### `Dropdown.Trigger`
 
 The element that holds focus and takes the keyboard. It carries `aria-expanded`, `aria-controls` and `aria-activedescendant`, `aria-haspopup` for the mode, and for a picker `role="combobox"`. A dropdown may have several triggers; the one that opened the list anchors it and takes focus back. A trigger that is the control inside an Opal field (an `InputTypeIn`'s `<input>`) anchors the list to the field's chrome.
 
-| Prop       | Type                              | Default                   | Description                                                                   |
-| ---------- | --------------------------------- | ------------------------- | ----------------------------------------------------------------------------- |
-| `asChild`  | `boolean`                         | `false`                   | Merge onto the child element. Without it, a `<button>` wraps the children     |
-| `typeIn`   | `boolean`                         | `false`                   | A text input whose text filters the list (pass it as `Data`'s `query`)        |
-| `behavior` | `"toggle" \| "open" \| "none"`    | `"open"` type-in, else `"toggle"` | What a click does; `"none"` leaves clicks to the child                 |
+| Prop       | Type                           | Default                           | Description                                                               |
+| ---------- | ------------------------------ | --------------------------------- | ------------------------------------------------------------------------- |
+| `asChild`  | `boolean`                      | `false`                           | Merge onto the child element. Without it, a `<button>` wraps the children |
+| `typeIn`   | `boolean`                      | `false`                           | A text input whose text filters the list (pass it as `Data`'s `query`)    |
+| `behavior` | `"toggle" \| "open" \| "none"` | `"open"` type-in, else `"toggle"` | What a click does; `"none"` leaves clicks to the child                    |
 
 ### `Dropdown.Anchor`
 
@@ -91,32 +111,32 @@ The element the list positions against and matches in width, when that is not th
 
 ### `Dropdown.Data`
 
-| Prop                  | Type                                                | Default     | Description                                                                             |
-| --------------------- | --------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------- |
-| `items`               | `DropdownItem[]` (picker) / `DropdownMenuItem[]`    | —           | The rows and groups, in order                                                           |
-| `value`               | `string`                                            | —           | Picker: the selected value                                                              |
-| `values`              | `ReadonlySet<string>`                               | —           | Picker: the selected values; the list stays open for more                               |
-| `onSelect`            | `(option: DropdownOption) => void`                  | —           | Picker: a click or Enter on an option                                                   |
-| `closeOnSelect`       | `boolean`                                           | single only | Picker: close after a pick                                                              |
-| `label`               | `string`                                            | —           | The list's accessible name                                                              |
-| `query`               | `string`                                            | —           | A type-in trigger's text; filters by title, value and `keywords`                        |
-| `search`              | `{ placeholder; onChange? }`                        | —           | A search field pinned above the rows, for a trigger with nothing to type                |
-| `exactText`           | `string`                                            | —           | Text whose exact match also reads as selected (a type-in's uncommitted pick)            |
-| `highlightExactQuery` | `boolean`                                           | `false`     | Move the highlight to the option the query matches exactly, unless the keyboard drives  |
-| `create`              | `{ text; onCreate }`                                | —           | A create row pinned first; shown only while given                                       |
-| `otherOptionsTitle`   | `string`                                            | —           | Rows the query filtered out stay, under a group with this title                         |
-| `maxHeight`           | `string`                                            | `15rem`     | Max height of the list                                                                  |
-| `onReachEnd`          | `(shown: DropdownOption[]) => void`                 | —           | The rows scrolled near their end, with the options on show                              |
+| Prop                  | Type                                                     | Default     | Description                                                                            |
+| --------------------- | -------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------- |
+| `items`               | `DropdownItem[]` (picker) / `DropdownMenuItem[]`         | —           | The rows and groups, in order                                                          |
+| `value`               | `string`                                                 | —           | Picker: the selected value                                                             |
+| `values`              | `ReadonlySet<string>`                                    | —           | Picker: the selected values; the list stays open for more                              |
+| `onSelect`            | `(option: DropdownOption, views: DropdownViews) => void` | —           | Picker: a click or Enter on an option                                                  |
+| `closeOnSelect`       | `boolean`                                                | single only | Picker: close after a pick                                                             |
+| `label`               | `string`                                                 | —           | The list's accessible name                                                             |
+| `query`               | `string`                                                 | —           | A type-in trigger's text; filters by title, value and `keywords`                       |
+| `search`              | `{ placeholder; onChange? }`                             | —           | A search field pinned above the rows, for a trigger with nothing to type               |
+| `exactText`           | `string`                                                 | —           | Text whose exact match also reads as selected (a type-in's uncommitted pick)           |
+| `highlightExactQuery` | `boolean`                                                | `false`     | Move the highlight to the option the query matches exactly, unless the keyboard drives |
+| `create`              | `{ text; onCreate }`                                     | —           | A create row pinned first; shown only while given                                      |
+| `otherOptionsTitle`   | `string`                                                 | —           | Rows the query filtered out stay, under a group with this title                        |
+| `maxHeight`           | `string`                                                 | `15rem`     | Max height of the list                                                                 |
+| `onReachEnd`          | `(shown: DropdownOption[]) => void`                      | —           | The rows scrolled near their end, with the options on show                             |
 
 ## Items
 
-| Kind     | Fields                                                                       | Enter                                    |
-| -------- | ---------------------------------------------------------------------------- | ---------------------------------------- |
-| `option` | `value`, `title`, `description?`, `suffix?`, `icon?`                          | `onSelect(option)`; closes (single)      |
-| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `keepOpen?`, and `onSelect` and/or `href` (+ `target?`) | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen` |
-| `toggle` | `id`, `title`, `description?`, `icon?`, `checked`, `onCheckedChange`          | flips `checked`; stays open              |
-| `custom` | `id`, `render(row)`, `onActivate?`, `onSecondary?`, `keepOpen?`               | `onActivate`; closes unless `keepOpen`   |
-| `group`  | `title?`, `foldable?` (titled only), `items`                                  | a foldable title folds and unfolds       |
+| Kind     | Fields                                                                                                                          | Enter                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `option` | `value`, `title`, `description?`, `suffix?`, `icon?`                                                                            | `onSelect(option)`; closes (single)                                                                                               |
+| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `keepOpen?`, `opensView?`, and `onSelect(views)` and/or `href` (+ `target?`) | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen`, `opensView` or the handler moved the stack |
+| `toggle` | `id`, `title`, `description?`, `icon?`, `checked`, `onCheckedChange`                                                            | flips `checked`; stays open                                                                                                       |
+| `custom` | `id`, `render(row)`, `onActivate?(views)`, `onSecondary?(views)`, `keepOpen?`, `opensView?`                                     | `onActivate`; closes unless `keepOpen`, `opensView` or the handler moved the stack                                                |
+| `group`  | `title?`, `foldable?` (titled only), `items`                                                                                    | a foldable title folds and unfolds                                                                                                |
 
 Every row takes `keywords?` (what a search matches beyond the title) and `disabled?` (shown, but no stop and no clicks). A group whose rows all filter out disappears with its line.
 
@@ -137,9 +157,57 @@ Every row takes `keywords?` (what a search matches beyond the title) and `disabl
 }
 ```
 
+## Views
+
+A view is a set of menu rows that replaces the rows on show, in place: the box glides to the new height and the rows slide in. Every row handler gets the stack as `views`, and `useDropdownViews()` returns the same object to a control rendered inside the list (a `Button` in a custom row). Any row pushes a view, under any logic it likes; the list stays open after a handler that pushed or popped.
+
+```tsx
+const skills: DropdownView = {
+  key: "skills",
+  search: { placeholder: "Search skills" },
+  items: [
+    {
+      kind: "action",
+      id: "back",
+      title: "Back",
+      icon: SvgChevronLeft,
+      onSelect: (views) => views.pop(),
+    },
+    ...skillRows,
+  ],
+};
+const items: DropdownMenuItem[] = [
+  {
+    kind: "action",
+    id: "skills",
+    title: "Skills",
+    opensView: true,
+    onSelect: (views) => views.push(skills),
+  },
+  {
+    kind: "action",
+    id: "apps",
+    title: "Apps",
+    onSelect: (views) => (authed ? views.push(apps) : startAuth()),
+  },
+];
+```
+
+| Field                  | Description                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DropdownView.key?`    | Identifies the view on the stack; its depth when left out                                                                                       |
+| `DropdownView.items`   | The view's rows and groups                                                                                                                      |
+| `DropdownView.search?` | A search field pinned above the view's rows. It filters this view only, and keeps its text while the view is on the stack                       |
+| `DropdownViews.push`   | Replace the rows with a view                                                                                                                    |
+| `DropdownViews.pop`    | Back one view; nothing at the root                                                                                                              |
+| `DropdownViews.close`  | Close the list                                                                                                                                  |
+| `opensView` (on a row) | The row leads to a view: a trailing chevron, ArrowRight activates it, and the list stays open after it. An affordance only; the handler decides |
+
+Nothing is laid out for a view: a way back is a row that calls `pop`. The root-only props (`query`, `create`, `otherOptionsTitle`, `exactText`) wait underneath a view. Escape leaves a view; at the root it closes. Closing the list empties the stack. Each search field reports `""` through its `onChange` as its rows leave.
+
 ## Keyboard
 
-Focus stays on the trigger (or the search field); the dropdown moves a highlight and `aria-activedescendant` follows it. Enter or ArrowDown opens a closed list. Open, the arrows walk the stops and wrap, Enter activates the highlighted stop, ArrowRight reaches a custom row's secondary control, and Escape closes. A trigger's own `onKeyDown` runs first; a key it cancels is left alone.
+Focus stays on the trigger (or the search field); the dropdown moves a highlight and `aria-activedescendant` follows it. Enter or ArrowDown opens a closed list. Open, the arrows walk the stops and wrap, Enter activates the highlighted stop, ArrowRight reaches a custom row's secondary control or activates a row that `opensView`, and Escape leaves a view or closes. A trigger's own `onKeyDown` runs first; a key it cancels is left alone. A view opened from the keyboard highlights its first row; leaving it from the keyboard returns the highlight to the row that led in.
 
 **Tab** depends on the trigger: from a type-in it walks the rows like the arrows, since the field must keep focus; from any other trigger it closes the list and lets focus move on, as a native menu does. `tabKey` on `Dropdown` fixes it one way for every trigger.
 
@@ -149,4 +217,4 @@ Focus stays on the trigger (or the search field); the dropdown moves a highlight
 
 ## Still to come
 
-Flyout submenus (phase 3) and the migration of the app's menus (phase 4); see `plans/opal-dropdown.md`.
+The migration of the app's menus (phase 4); see `plans/opal-dropdown.md`.

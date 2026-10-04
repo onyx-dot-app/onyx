@@ -135,6 +135,71 @@
   @apply ms-2 flex shrink-0 items-center;
 }
 
-.opal-dropdown-create-icon {
+.opal-dropdown-create-icon,
+.opal-dropdown-chevron {
   @apply ms-2 h-4 w-4 shrink-0 text-text-03;
+}
+
+/* ---------------------------------------------------------------------------
+   Views
+   --------------------------------------------------------------------------- */
+
+/* A view replaces the rows in place. The box's height glides between the
+   outgoing and incoming rows (set inline for the transition, then released),
+   the incoming rows slide in from the side they come from, and the outgoing
+   rows, kept one animation longer, slide out the other way over the top. */
+.opal-dropdown[data-view-transition] {
+  transition: height 200ms ease-in-out;
+}
+.opal-dropdown-scroll {
+  position: relative;
+}
+.opal-dropdown-pane {
+  @apply flex flex-col gap-1;
+}
+.opal-dropdown-pane[data-enter="forward"] {
+  animation: opal-dropdown-pane-in-forward 200ms ease-out;
+}
+.opal-dropdown-pane[data-enter="back"] {
+  animation: opal-dropdown-pane-in-back 200ms ease-out;
+}
+.opal-dropdown-pane[data-exit] {
+  @apply absolute inset-x-0 top-0 p-1 pointer-events-none;
+  animation: opal-dropdown-pane-out-forward 200ms ease-in forwards;
+}
+.opal-dropdown-pane[data-exit="back"] {
+  animation: opal-dropdown-pane-out-back 200ms ease-in forwards;
+}
+@keyframes opal-dropdown-pane-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+}
+@keyframes opal-dropdown-pane-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-1.5rem);
+  }
+}
+@keyframes opal-dropdown-pane-out-forward {
+  to {
+    opacity: 0;
+    transform: translateX(-1.5rem);
+  }
+}
+@keyframes opal-dropdown-pane-out-back {
+  to {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .opal-dropdown[data-view-transition] {
+    transition: none;
+  }
+  .opal-dropdown-pane[data-enter],
+  .opal-dropdown-pane[data-exit] {
+    animation: none;
+  }
 }

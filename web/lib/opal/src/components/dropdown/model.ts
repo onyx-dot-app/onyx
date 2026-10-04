@@ -2,6 +2,7 @@ import type {
   DropdownItem,
   DropdownOption,
   DropdownRow,
+  DropdownView,
   NavItem,
   RowGroup,
 } from "@opal/components/dropdown/types";
@@ -157,6 +158,11 @@ export function rowElementId(listId: string, row: DropdownRow): string {
 
 export function groupElementId(listId: string, key: string): string {
   return `${listId}-group-${sanitizeId(key)}`;
+}
+
+/** A view's key on the stack: its own, or its depth. */
+export function viewKey(view: DropdownView, depth: number): string {
+  return view.key ?? String(depth);
 }
 
 /** The create row's id: its own namespace, so it never collides with an option. */

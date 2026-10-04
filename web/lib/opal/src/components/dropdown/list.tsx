@@ -1,6 +1,12 @@
 "use client";
 
-import React, { forwardRef, useEffect, useRef } from "react";
+import React, {
+  forwardRef,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
@@ -38,6 +44,10 @@ interface DropdownListProps {
    */
   isPositioned: boolean;
   setFloatingRef: (node: HTMLDivElement | null) => void;
+  /** The view on show; a change swaps the rows in place, animated. */
+  viewKey: string;
+  /** Which way the last view change went: the slide follows it. */
+  viewDirection: "forward" | "back";
   /** Post-filter, post-fold groups in render order. */
   groups: RowGroup[];
   /** The supplied set itself is empty, not merely filtered out. */
@@ -94,6 +104,8 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       floatingStyles,
       isPositioned,
       setFloatingRef,
+      viewKey,
+      viewDirection,
       groups,
       emptySet,
       isSelected,
@@ -122,9 +134,58 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     const hasSearch = searchField !== undefined;
     useEffect(() => {
       if (isOpen && hasSearch) searchRef.current?.focus();
-    }, [isOpen, hasSearch]);
+    }, [isOpen, hasSearch, viewKey]);
 
     const listRef = useRef<HTMLDivElement | null>(null);
+
+    // A view change swaps the rows in place: the box glides from its old
+    // height to the new, the new rows slide in, and the old rows, kept one
+    // animation longer, slide out the other way over them. The old height
+    // is the one recorded at the previous commit; the old rows are the
+    // element rendered then.
+    const [exiting, setExiting] = useState<{
+      key: string;
+      node: React.ReactNode;
+      direction: "forward" | "back";
+    } | null>(null);
+    const lastPaneRef = useRef<{ key: string; node: React.ReactNode } | null>(
+      null
+    );
+    const lastHeightRef = useRef<number | null>(null);
+    const lastViewKeyRef = useRef(viewKey);
+    useLayoutEffect(() => {
+      if (lastViewKeyRef.current === viewKey) return;
+      lastViewKeyRef.current = viewKey;
+      const root = listRef.current;
+      if (!root) return;
+      const scroller = root.querySelector<HTMLElement>(".opal-dropdown-scroll");
+      if (scroller) scroller.scrollTop = 0;
+      const lastPane = lastPaneRef.current;
+      if (lastPane && lastPane.key !== viewKey) {
+        setExiting({ ...lastPane, direction: viewDirection });
+      }
+      const from = lastHeightRef.current;
+      const to = root.offsetHeight;
+      const reduceMotion =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (from === null || from === to || reduceMotion) return;
+      root.style.height = `${from}px`;
+      root.setAttribute("data-view-transition", "");
+      // Flush the start height before the end height, so the change animates.
+      root.getBoundingClientRect();
+      root.style.height = `${to}px`;
+      const done = () => {
+        root.style.height = "";
+        root.removeAttribute("data-view-transition");
+      };
+      root.addEventListener("transitionend", done, { once: true });
+      const timer = window.setTimeout(done, 250);
+      return () => {
+        window.clearTimeout(timer);
+        root.removeEventListener("transitionend", done);
+      };
+    }, [viewKey, viewDirection]);
 
     // Keyboard navigation keeps the highlighted row in view. Pointer
     // highlights never scroll: the list must not move under the mouse.
@@ -148,14 +209,48 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       selected?.scrollIntoView({ block: "center", behavior: "instant" });
     }, [isOpen, isPositioned]);
 
-    if (!presence.mounted || disabled || typeof document === "undefined") {
-      return null;
-    }
-
     const totalRows = groups.reduce(
       (count, group) => count + group.rows.length,
       0
     );
+
+    const rowsNode =
+      totalRows === 0 && !create ? (
+        // An empty SET gets the icon'd empty state; a filter that matched
+        // nothing keeps the lightweight text row.
+        emptySet ? (
+          <div className="opal-dropdown-empty-set">
+            <Text as="p" color="text-03" font="secondary-body">
+              {strings.selectEmptySet}
+            </Text>
+          </div>
+        ) : (
+          <div className="opal-dropdown-no-match">
+            {strings.comboBoxNoOptions}
+          </div>
+        )
+      ) : (
+        <Rows
+          listId={listId}
+          mode={mode}
+          groups={groups}
+          isSelected={isSelected}
+          exactValue={exactValue}
+          highlightedIndex={highlightedIndex}
+          onActivate={onActivate}
+          onToggleGroup={onToggleGroup}
+          create={create}
+        />
+      );
+    // What this commit shows, for the next view change to animate away.
+    useLayoutEffect(() => {
+      lastPaneRef.current = { key: viewKey, node: rowsNode };
+      lastHeightRef.current = listRef.current?.offsetHeight ?? null;
+    });
+
+    if (!presence.mounted || disabled || typeof document === "undefined") {
+      return null;
+    }
 
     return createPortal(
       <div
@@ -248,32 +343,29 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
             if (remaining <= SCROLL_END_THRESHOLD_PX) onReachEnd?.();
           }}
         >
-          {totalRows === 0 && !create ? (
-            // An empty SET gets the icon'd empty state; a filter that
-            // matched nothing keeps the lightweight text row.
-            emptySet ? (
-              <div className="opal-dropdown-empty-set">
-                <Text as="p" color="text-03" font="secondary-body">
-                  {strings.selectEmptySet}
-                </Text>
-              </div>
-            ) : (
-              <div className="opal-dropdown-no-match">
-                {strings.comboBoxNoOptions}
-              </div>
-            )
-          ) : (
-            <Rows
-              listId={listId}
-              mode={mode}
-              groups={groups}
-              isSelected={isSelected}
-              exactValue={exactValue}
-              highlightedIndex={highlightedIndex}
-              onActivate={onActivate}
-              onToggleGroup={onToggleGroup}
-              create={create}
-            />
+          {/* Keyed by view, so a change remounts the pane and restarts its
+              slide. The first rows of a session do not slide: the box's own
+              entrance covers them. */}
+          <div
+            key={viewKey}
+            className="opal-dropdown-pane"
+            data-enter={exiting ? viewDirection : undefined}
+          >
+            {rowsNode}
+          </div>
+          {exiting && (
+            // The rows that just left, inert and hidden from AT, rendered
+            // after the live rows so an id lookup finds the live ones first.
+            <div
+              key={`exit-${exiting.key}`}
+              className="opal-dropdown-pane"
+              data-exit={exiting.direction}
+              inert
+              aria-hidden
+              onAnimationEnd={() => setExiting(null)}
+            >
+              {exiting.node}
+            </div>
           )}
         </ShadowDiv>
       </div>,

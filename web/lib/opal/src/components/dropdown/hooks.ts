@@ -32,6 +32,8 @@ interface UseFoldedGroupsProps {
   isSelected: (row: DropdownRow) => boolean;
   /** A search is on: groups open to show their matches, until folded. */
   searching: boolean;
+  /** The view on show. A new view starts its groups afresh. */
+  viewKey: string;
 }
 
 /**
@@ -50,6 +52,7 @@ export function useFoldedGroups({
   groups,
   isSelected,
   searching,
+  viewKey,
 }: UseFoldedGroupsProps) {
   // The selection as the session found it. Held as state, not derived, so
   // the live selection cannot re-fold groups afterwards.
@@ -66,7 +69,7 @@ export function useFoldedGroups({
     if (!isOpen) return;
     setSessionIsSelected(() => latestIsSelected.current);
     setToggled(new Map());
-  }, [isOpen, searching]);
+  }, [isOpen, searching, viewKey]);
 
   const isGroupOpen = useCallback(
     (group: RowGroup) => {
@@ -114,6 +117,8 @@ export interface ListModel {
   activate: (item: NavItem) => void;
   /** ArrowRight: the row's secondary control. Returns whether it took the key. */
   secondary: (item: NavItem) => boolean;
+  /** Escape: back one view. Returns whether there was one to leave. */
+  back: () => boolean;
 }
 
 /**
@@ -160,8 +165,8 @@ const TYPE_AHEAD_RESET_MS = 500;
  * ArrowDown opens a closed list; open, the arrows and Tab walk the stops
  * and wrap around from the last row to the first, Enter activates the
  * highlighted stop, ArrowRight reaches a row's secondary control or
- * unfolds and enters a group, and Escape closes. A closed list leaves Tab
- * alone, so it moves on as normal.
+ * unfolds and enters a group, and Escape leaves a view or closes. A closed
+ * list leaves Tab alone, so it moves on as normal.
  * Physical focus stays on the trigger or the search field; the highlight
  * moves and `aria-activedescendant` follows it. A handler that ran before
  * this one and cancelled the event keeps the key.
@@ -318,6 +323,8 @@ export function useDropdownKeyboard({
         }
         case "Escape":
           e.preventDefault();
+          // Inside a view, Escape leaves it; at the root it closes.
+          if (isOpen && listRef.current.back()) break;
           setIsOpen(false);
           setIsKeyboardNav(false);
           break;

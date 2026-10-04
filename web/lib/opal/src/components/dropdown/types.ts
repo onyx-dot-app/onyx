@@ -25,7 +25,7 @@ export interface DropdownOption extends DropdownRowBase {
 /**
  * A row that runs a command: `onSelect`, or `href` to follow (a real link,
  * so middle-click and copy-link work), or both. The dropdown closes after
- * it unless `keepOpen` is set.
+ * it unless `keepOpen` is set or the handler pushed a view.
  */
 export type DropdownAction = DropdownRowBase & {
   kind: "action";
@@ -36,14 +36,20 @@ export type DropdownAction = DropdownRowBase & {
   /** A destructive command: the row reads in the danger colour. */
   danger?: boolean;
   keepOpen?: boolean;
+  /**
+   * The row leads to a view: it shows a trailing chevron, ArrowRight
+   * activates it too, and the list stays open after it. An affordance only;
+   * `onSelect` decides whether to push.
+   */
+  opensView?: boolean;
 } & (
     | {
         href: string;
         /** Link target, with `href`. */
         target?: string;
-        onSelect?: () => void;
+        onSelect?: (views: DropdownViews) => void;
       }
-    | { href?: never; target?: never; onSelect: () => void }
+    | { href?: never; target?: never; onSelect: (views: DropdownViews) => void }
   );
 
 /** A row with a switch. Activating it flips `checked`; the dropdown stays open. */
@@ -88,10 +94,12 @@ export interface DropdownRowProps {
 export interface DropdownCustom extends DropdownRowBase {
   kind: "custom";
   id: string;
-  onActivate?: () => void;
-  onSecondary?: () => void;
+  onActivate?: (views: DropdownViews) => void;
+  onSecondary?: (views: DropdownViews) => void;
   /** Stay open after `onActivate`. */
   keepOpen?: boolean;
+  /** As on an action: a trailing-chevron row that ArrowRight activates. The caller renders the chevron. */
+  opensView?: boolean;
   render: (row: DropdownRowState) => React.ReactNode;
 }
 
@@ -128,6 +136,41 @@ export type DropdownMenuItem = DropdownMenuRow | DropdownGroup<DropdownMenuRow>;
 
 /** Picker (`listbox`, something is selected) or menu (`menu`, commands). */
 export type DropdownMode = "picker" | "menu";
+
+// ---------------------------------------------------------------------------
+// Views
+// ---------------------------------------------------------------------------
+
+/** A search field pinned above the rows. `onChange` reports the text, and `""` when the rows leave. */
+export interface DropdownSearch {
+  placeholder: string;
+  onChange?: (query: string) => void;
+}
+
+/**
+ * A secondary view: rows that replace the list's rows in place. Nothing is
+ * laid out for it: a way back is a row that calls `pop`. Its search is its
+ * own and never reaches the rows above or below it on the stack.
+ */
+export interface DropdownView {
+  /** Identifies the view on the stack; its depth when left out. */
+  key?: string;
+  items: DropdownMenuItem[];
+  search?: DropdownSearch;
+}
+
+/**
+ * The view stack, handed to every row handler and to `useDropdownViews()`
+ * inside the list. Any row or nested control pushes a view, under any
+ * logic it likes.
+ */
+export interface DropdownViews {
+  /** Replace the rows with `view`, in place. The list stays open. */
+  push: (view: DropdownView) => void;
+  /** Back one view. Nothing happens at the root. */
+  pop: () => void;
+  close: () => void;
+}
 
 // ---------------------------------------------------------------------------
 // Internal list model
