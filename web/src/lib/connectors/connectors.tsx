@@ -894,8 +894,6 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
-  salesforce: {
-    description: "Configure Salesforce connector",
   jsm: {
     description: "Configure Jira Service Management connector",
     subtext: `Index the customer requests of your Jira Service Management projects.`,
