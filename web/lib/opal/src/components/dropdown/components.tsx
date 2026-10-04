@@ -435,6 +435,8 @@ type DropdownDataProps =
 /** A view on the stack, with what it needs to be left again. */
 interface ViewEntry {
   view: DropdownView;
+  /** The registry key it was pushed by, or the view's own. */
+  key: string | undefined;
   /** The stop whose handler pushed it: the highlight returns there. */
   returnTo: string | undefined;
   /** The view's own search text, kept while it is on the stack. */
@@ -519,13 +521,15 @@ function DropdownData(props: DropdownDataProps) {
   // shows the caller's latest rows; else as it was pushed.
   const resolveView = useCallback(
     (entry: ViewEntry, registry = viewRegistry): DropdownView =>
-      (entry.view.key !== undefined && registry?.[entry.view.key]) ||
-      entry.view,
+      (entry.key !== undefined && registry?.[entry.key]) || entry.view,
     [viewRegistry]
   );
   const top = stack[stack.length - 1];
   const topView = top ? resolveView(top) : undefined;
-  const currentViewKey = topView ? viewKey(topView, stack.length) : "root";
+  const currentViewKey =
+    top && topView
+      ? viewKey({ ...topView, key: top.key }, stack.length)
+      : "root";
   const items = topView ? topView.items : rootItems;
   const search = topView ? topView.search : rootSearch;
   const create = top ? undefined : rootCreate;
@@ -578,9 +582,10 @@ function DropdownData(props: DropdownDataProps) {
             : viewOrKey;
         if (!view) return;
         movedRef.current = true;
+        const key = typeof viewOrKey === "string" ? viewOrKey : view.key;
         setStack((prev) => [
           ...prev,
-          { view, returnTo: activatingRef.current, searchText: "" },
+          { view, key, returnTo: activatingRef.current, searchText: "" },
         ]);
         setViewDirection("forward");
         pendingHighlightRef.current = isKeyboardNav
