@@ -15,7 +15,6 @@ import {
   useFloating,
   type ReferenceType,
 } from "@floating-ui/react-dom";
-import { useClickOutside } from "@opal/hooks/useClickOutside";
 import type {
   DropdownRow,
   NavItem,
@@ -429,6 +428,9 @@ export function useDropdownOverlay({
   // there is one, otherwise the trigger that opened it.
   const anchorRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Every mounted trigger: a click on any of them is inside, so it toggles
+  // rather than dismissing the list and then reopening it.
+  const triggersRef = useRef(new Set<HTMLElement>());
   const referenceRef = useRef<HTMLElement | null>(null);
   // A wrapping <label> is part of the reference's hit area: the browser
   // forwards its clicks to the input, so it must not count as outside.
@@ -505,6 +507,12 @@ export function useDropdownOverlay({
     },
     [setTriggerRef]
   );
+  const registerTrigger = useCallback((node: HTMLElement) => {
+    triggersRef.current.add(node);
+  }, []);
+  const unregisterTrigger = useCallback((node: HTMLElement) => {
+    triggersRef.current.delete(node);
+  }, []);
   const setFloatingRef = useCallback(
     (node: HTMLDivElement | null) => {
       floatingRef.current = node;
@@ -516,16 +524,27 @@ export function useDropdownOverlay({
     triggerRef.current?.focus();
   }, []);
 
-  // Otherwise a label click dismisses the list and the forwarded click
-  // reopens it, so a second click on the label never closes it.
-  useClickOutside<HTMLElement>(
-    [referenceRef, labelRef, floatingRef],
-    useCallback(() => {
+  // A mousedown anywhere else dismisses the list. Inside: the reference,
+  // its wrapping label (otherwise a label click dismisses the list and the
+  // forwarded click reopens it), the list, and every trigger.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      const inside = [
+        referenceRef.current,
+        labelRef.current,
+        floatingRef.current,
+        ...triggersRef.current,
+      ].some((el) => el?.contains(target));
+      if (inside) return;
       setIsOpen(false);
       setIsKeyboardNav(false);
-    }, [setIsOpen]),
-    isOpen
-  );
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [isOpen, setIsOpen]);
 
   return {
     isOpen,
@@ -537,6 +556,8 @@ export function useDropdownOverlay({
     setAnchorRef,
     setTriggerRef,
     releaseTriggerRef,
+    registerTrigger,
+    unregisterTrigger,
     focusTrigger,
     floatingRef,
     setFloatingRef,

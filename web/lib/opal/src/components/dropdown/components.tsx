@@ -161,6 +161,8 @@ function Dropdown({
       setAnchorRef: overlay.setAnchorRef,
       setTriggerRef: overlay.setTriggerRef,
       releaseTriggerRef: overlay.releaseTriggerRef,
+      registerTrigger: overlay.registerTrigger,
+      unregisterTrigger: overlay.unregisterTrigger,
       focusTrigger: overlay.focusTrigger,
       floatingRef: overlay.floatingRef,
       setFloatingRef: overlay.setFloatingRef,
@@ -187,6 +189,8 @@ function Dropdown({
       overlay.setAnchorRef,
       overlay.setTriggerRef,
       overlay.releaseTriggerRef,
+      overlay.registerTrigger,
+      overlay.unregisterTrigger,
       overlay.focusTrigger,
       overlay.floatingRef,
       overlay.setFloatingRef,
@@ -271,6 +275,8 @@ function DropdownTrigger({
     setHighlightedIndex,
     setTriggerRef,
     releaseTriggerRef,
+    registerTrigger,
+    unregisterTrigger,
     getTriggerProps,
   } = useDropdownContext();
   const nodeRef = useRef<HTMLElement | null>(null);
@@ -278,13 +284,15 @@ function DropdownTrigger({
     (node: HTMLElement | null) => {
       if (node) {
         nodeRef.current = node;
+        registerTrigger(node);
         setTriggerRef(node);
       } else {
+        if (nodeRef.current) unregisterTrigger(nodeRef.current);
         releaseTriggerRef(nodeRef.current);
         nodeRef.current = null;
       }
     },
-    [setTriggerRef, releaseTriggerRef]
+    [setTriggerRef, releaseTriggerRef, registerTrigger, unregisterTrigger]
   );
   // This trigger is the one in use: it anchors the list and takes focus back.
   const claim = () => setTriggerRef(nodeRef.current);

@@ -300,6 +300,46 @@ function ButtonPickerHarness() {
   );
 }
 
+/** One list, two button triggers. */
+function TwoTriggersHarness() {
+  const [picked, setPicked] = useState("");
+  return (
+    <Dropdown>
+      <Dropdown.Trigger asChild>
+        <button type="button">Left</button>
+      </Dropdown.Trigger>
+      <Dropdown.Trigger asChild>
+        <button type="button">Right</button>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        items={ITEMS}
+        label="Fruit"
+        value={picked}
+        onSelect={(option) => setPicked(option.value)}
+      />
+    </Dropdown>
+  );
+}
+
+describe("Dropdown triggers", () => {
+  test("a click on another trigger toggles the list rather than reopening it", async () => {
+    const user = setupUser();
+    render(<TwoTriggersHarness />);
+    const left = screen.getByRole("button", { name: "Left" });
+    const right = screen.getByRole("button", { name: "Right" });
+    await user.click(left);
+    expect(left).toHaveAttribute("aria-expanded", "true");
+
+    // Inside, not outside: the second trigger closes the open list.
+    await user.click(right);
+    expect(right).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    await user.click(right);
+    expect(right).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
 describe("Dropdown groups", () => {
   test("ArrowRight unfolds a title and enters it; ArrowLeft leaves and folds", async () => {
     const user = setupUser();

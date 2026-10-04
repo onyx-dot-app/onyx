@@ -31,6 +31,9 @@ export interface DropdownContextValue {
   setTriggerRef: (node: HTMLElement | null) => void;
   /** Forget a trigger on unmount, if it is the current one. */
   releaseTriggerRef: (node: HTMLElement | null) => void;
+  /** Every mounted trigger counts as inside for outside-click dismissal. */
+  registerTrigger: (node: HTMLElement) => void;
+  unregisterTrigger: (node: HTMLElement) => void;
   focusTrigger: () => void;
   floatingRef: React.RefObject<HTMLDivElement | null>;
   setFloatingRef: (node: HTMLDivElement | null) => void;
