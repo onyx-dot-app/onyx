@@ -5,7 +5,10 @@ import type {
   DropdownKeyOptions,
   ListModel,
 } from "@opal/components/dropdown/hooks";
-import type { DropdownMode } from "@opal/components/dropdown/types";
+import type {
+  DropdownMode,
+  DropdownViews,
+} from "@opal/components/dropdown/types";
 
 /**
  * What `Dropdown` shares with its parts. Opal-internal: the input family's
@@ -78,4 +81,21 @@ export function useDropdownContext(): DropdownContextValue {
     throw new Error("Dropdown parts must be rendered inside <Dropdown>.");
   }
   return context;
+}
+
+export const DropdownViewsContext = createContext<DropdownViews | null>(null);
+
+/**
+ * The view stack, for a control rendered inside the list (a button in a
+ * custom row): push a view, go back one, or close. Row handlers get the
+ * same object as an argument.
+ */
+export function useDropdownViews(): DropdownViews {
+  const views = useContext(DropdownViewsContext);
+  if (!views) {
+    throw new Error(
+      "useDropdownViews must be called inside a Dropdown.Data row."
+    );
+  }
+  return views;
 }

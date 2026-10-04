@@ -7,6 +7,7 @@ import type {
   DropdownItem,
   DropdownMenuItem,
   DropdownOption,
+  DropdownView,
 } from "@opal/components";
 
 // Mock createPortal for dropdown rendering
@@ -482,5 +483,285 @@ describe("Dropdown menu", () => {
       { kind: "option", value: "apple", title: "Apple" },
     ];
     expect(items).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Views
+// ---------------------------------------------------------------------------
+
+interface ViewsHarnessProps {
+  onRun: (id: string) => void;
+  /** The Apps row pushes only when this is set, else it runs `auth`. */
+  authed?: boolean;
+  rootSearch?: boolean;
+}
+
+/**
+ * A menu whose Skills row leads to a view with its own search and a Back
+ * row, and whose Apps row decides at runtime whether to push a view.
+ */
+function ViewsHarness({
+  onRun,
+  authed = false,
+  rootSearch,
+}: ViewsHarnessProps) {
+  const skills: DropdownView = {
+    key: "skills",
+    search: { placeholder: "Search skills" },
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        title: "Back",
+        onSelect: (views) => views.pop(),
+      },
+      {
+        kind: "action",
+        id: "write",
+        title: "Write",
+        onSelect: () => onRun("write"),
+      },
+      {
+        kind: "action",
+        id: "review",
+        title: "Review",
+        onSelect: () => onRun("review"),
+      },
+      {
+        kind: "action",
+        id: "wrap",
+        title: "Wrap up",
+        opensView: true,
+        onSelect: (views) =>
+          views.push({
+            key: "wrap",
+            items: [
+              {
+                kind: "action",
+                id: "back",
+                title: "Back",
+                onSelect: (nested) => nested.pop(),
+              },
+              {
+                kind: "action",
+                id: "extra",
+                title: "Extra",
+                onSelect: () => onRun("extra"),
+              },
+            ],
+          }),
+      },
+    ],
+  };
+  const apps: DropdownView = {
+    key: "apps",
+    items: [
+      {
+        kind: "action",
+        id: "slack",
+        title: "Slack",
+        onSelect: () => onRun("slack"),
+      },
+    ],
+  };
+  const items: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "rename",
+      title: "Rename",
+      onSelect: () => onRun("rename"),
+    },
+    {
+      kind: "action",
+      id: "skills",
+      title: "Skills",
+      opensView: true,
+      onSelect: (views) => views.push(skills),
+    },
+    {
+      kind: "action",
+      id: "apps",
+      title: "Apps",
+      onSelect: (views) => (authed ? views.push(apps) : onRun("auth")),
+    },
+  ];
+  return (
+    <Dropdown>
+      <Dropdown.Trigger asChild>
+        <button type="button">Actions</button>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label="Actions"
+        items={items}
+        search={rootSearch ? { placeholder: "Search actions" } : undefined}
+      />
+    </Dropdown>
+  );
+}
+
+function menuItem(name: string) {
+  return screen.getByRole("menuitem", { name });
+}
+
+describe("Dropdown views", () => {
+  test("a row pushes a view over the rows and a row in it pops back", async () => {
+    const user = setupUser();
+    render(<ViewsHarness onRun={jest.fn()} />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+
+    await user.click(menuItem("Skills"));
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(menuItem("Write")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+
+    await user.click(menuItem("Back"));
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(menuItem("Rename")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Write" })).toBeNull();
+  });
+
+  test("ArrowRight opens an `opensView` row; Escape leaves the view, then closes", async () => {
+    const user = setupUser();
+    render(<ViewsHarness onRun={jest.fn()} />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    // Rename, then Skills.
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(menuItem("Skills")).toHaveAttribute("data-interaction", "hover");
+
+    await user.keyboard("{ArrowRight}");
+    // The keyboard lands on the view's first row; its search field has focus.
+    expect(menuItem("Back")).toHaveAttribute("data-interaction", "hover");
+    expect(
+      screen.getByRole("textbox", { name: "Search skills" })
+    ).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    // Back at the root, on the row that led in, with focus on the trigger.
+    expect(menuItem("Skills")).toHaveAttribute("data-interaction", "hover");
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("a handler decides whether to push; a row that does not push closes as usual", async () => {
+    const user = setupUser();
+    const onRun = jest.fn();
+    const { rerender } = render(<ViewsHarness onRun={onRun} />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    await user.click(menuItem("Apps"));
+    expect(onRun).toHaveBeenCalledWith("auth");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    rerender(<ViewsHarness onRun={onRun} authed />);
+    await user.click(trigger);
+    await user.click(menuItem("Apps"));
+    // Pushing keeps the list open, with no `opensView` or `keepOpen` needed.
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(menuItem("Slack")).toBeInTheDocument();
+  });
+
+  test("each view's search is its own and keeps its text while on the stack", async () => {
+    const user = setupUser();
+    render(<ViewsHarness onRun={jest.fn()} rootSearch />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Search actions" }),
+      "sk"
+    );
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+
+    await user.click(menuItem("Skills"));
+    const skillsSearch = screen.getByRole("textbox", { name: "Search skills" });
+    expect(skillsSearch).toHaveValue("");
+    expect(skillsSearch).toHaveFocus();
+    await user.type(skillsSearch, "wr");
+    expect(menuItem("Write")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Review" })).toBeNull();
+
+    // A view underneath another keeps its text until it is back on top.
+    await user.click(menuItem("Wrap up"));
+    expect(menuItem("Extra")).toBeInTheDocument();
+    await user.click(menuItem("Back"));
+    expect(screen.getByRole("textbox", { name: "Search skills" })).toHaveValue(
+      "wr"
+    );
+    expect(menuItem("Write")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    // The root's text survived the view, and its field has focus again.
+    const rootSearch = screen.getByRole("textbox", { name: "Search actions" });
+    expect(rootSearch).toHaveValue("sk");
+    expect(rootSearch).toHaveFocus();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+  });
+
+  test("closing the list resets it to the root", async () => {
+    const user = setupUser();
+    render(<ViewsHarness onRun={jest.fn()} />);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    await user.click(menuItem("Skills"));
+    expect(menuItem("Write")).toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(trigger);
+    expect(menuItem("Rename")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Write" })).toBeNull();
+  });
+});
+
+/** A view in the registry, rebuilt every render around a toggle's state. */
+function RegistryHarness() {
+  const [pinned, setPinned] = useState(false);
+  const prefs: DropdownView = {
+    items: [
+      {
+        kind: "toggle",
+        id: "pin",
+        title: "Pinned",
+        checked: pinned,
+        onCheckedChange: setPinned,
+      },
+    ],
+  };
+  const items: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "prefs",
+      title: "Preferences",
+      opensView: true,
+      onSelect: (views) => views.push("prefs"),
+    },
+  ];
+  return (
+    <Dropdown>
+      <Dropdown.Trigger asChild>
+        <button type="button">Actions</button>
+      </Dropdown.Trigger>
+      <Dropdown.Data label="Actions" items={items} views={{ prefs }} />
+    </Dropdown>
+  );
+}
+
+describe("Dropdown view registry", () => {
+  test("a view pushed by key shows its latest rows", async () => {
+    const user = setupUser();
+    render(<RegistryHarness />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(menuItem("Preferences"));
+    const pin = screen.getByRole("menuitemcheckbox", { name: "Pinned" });
+    expect(pin).toHaveAttribute("aria-checked", "false");
+
+    await user.click(pin);
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Pinned" })
+    ).toHaveAttribute("aria-checked", "true");
   });
 });

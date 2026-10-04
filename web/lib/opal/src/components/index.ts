@@ -281,7 +281,11 @@ export {
   type DropdownGroup,
   type DropdownRowState,
   type DropdownRowProps,
+  type DropdownSearch,
+  type DropdownView,
+  type DropdownViews,
 } from "@opal/components/dropdown/types";
+export { useDropdownViews } from "@opal/components/dropdown/context";
 
 /* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
 export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";

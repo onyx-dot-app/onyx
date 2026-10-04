@@ -8,9 +8,11 @@ import {
   type DropdownItem,
   type DropdownMenuItem,
   type DropdownOption,
+  type DropdownView,
 } from "@opal/components";
 import {
   SvgChevronDown,
+  SvgChevronLeft,
   SvgEdit,
   SvgMoreHorizontal,
   SvgSettings,
@@ -161,6 +163,7 @@ function MenuDemo() {
               icon={SvgSettings}
               size="sm"
               prominence="internal"
+              aria-label="Settings"
               onClick={(e) => {
                 e.stopPropagation();
                 note("settings: button");
@@ -190,7 +193,11 @@ function MenuDemo() {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <Dropdown>
         <Dropdown.Trigger asChild>
-          <Button icon={SvgMoreHorizontal} prominence="tertiary" />
+          <Button
+            icon={SvgMoreHorizontal}
+            prominence="tertiary"
+            aria-label="Actions"
+          />
         </Dropdown.Trigger>
         <Dropdown.Data
           label="Actions"
@@ -205,3 +212,99 @@ function MenuDemo() {
 
 /** A menu: actions, a toggle, a custom row and a danger group. */
 export const Menu: Story = { render: () => <MenuDemo /> };
+
+/** A menu whose rows lead to views that replace it in place. */
+function ViewsDemo() {
+  const [log, setLog] = useState<string[]>([]);
+  const note = (text: string) => setLog((prev) => [...prev, text]);
+  const back = (title: string): DropdownMenuItem => ({
+    kind: "action",
+    id: "back",
+    title,
+    icon: SvgChevronLeft,
+    onSelect: (views) => views.pop(),
+  });
+  const skills: DropdownView = {
+    key: "skills",
+    search: { placeholder: "Search skills" },
+    items: [
+      back("Skills"),
+      {
+        kind: "action",
+        id: "write",
+        title: "Write",
+        onSelect: () => note("write"),
+      },
+      {
+        kind: "action",
+        id: "review",
+        title: "Review",
+        onSelect: () => note("review"),
+      },
+      {
+        kind: "action",
+        id: "plan",
+        title: "Plan",
+        onSelect: () => note("plan"),
+      },
+    ],
+  };
+  const apps: DropdownView = {
+    key: "apps",
+    items: [
+      back("Apps"),
+      {
+        kind: "action",
+        id: "slack",
+        title: "Slack",
+        onSelect: () => note("slack"),
+      },
+      {
+        kind: "action",
+        id: "drive",
+        title: "Drive",
+        onSelect: () => note("drive"),
+      },
+    ],
+  };
+  const items: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "rename",
+      title: "Rename",
+      icon: SvgEdit,
+      onSelect: () => note("rename"),
+    },
+    {
+      kind: "action",
+      id: "skills",
+      title: "Skills",
+      opensView: true,
+      onSelect: (views) => views.push(skills),
+    },
+    {
+      kind: "action",
+      id: "apps",
+      title: "Apps",
+      opensView: true,
+      onSelect: (views) => views.push(apps),
+    },
+  ];
+  return (
+    <div className="flex flex-col gap-3">
+      <Dropdown>
+        <Dropdown.Trigger asChild>
+          <Button
+            icon={SvgMoreHorizontal}
+            prominence="tertiary"
+            aria-label="Actions"
+          />
+        </Dropdown.Trigger>
+        <Dropdown.Data label="Actions" items={items} />
+      </Dropdown>
+      <pre className="text-xs">{log.join("\n")}</pre>
+    </div>
+  );
+}
+
+export const Views: Story = { render: () => <ViewsDemo /> };

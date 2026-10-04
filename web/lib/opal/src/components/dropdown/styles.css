@@ -10,9 +10,21 @@
    ============================================================================ */
 
 .opal-dropdown {
-  @apply z-10000 overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01 pointer-events-auto touch-auto;
+  @apply pointer-events-auto touch-auto;
+  z-index: var(--z-popover);
   /* A list matched to a narrow anchor still needs room for its rows. */
   min-width: var(--block-width-dropdown-min);
+}
+
+/* The stage holds the card, and two cards while a view changes. Nothing
+   clips: a card slides out over the page and fades. */
+.opal-dropdown-stage {
+  @apply relative;
+}
+
+/* The card: the bordered box with the search field and the rows. */
+.opal-dropdown-card {
+  @apply relative overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
 }
 
 /* The search field pinned above the rows: a borderless input on its own
@@ -135,6 +147,67 @@
   @apply ms-2 flex shrink-0 items-center;
 }
 
-.opal-dropdown-create-icon {
+.opal-dropdown-create-icon,
+.opal-dropdown-chevron {
   @apply ms-2 h-4 w-4 shrink-0 text-text-03;
+}
+
+/* ---------------------------------------------------------------------------
+   Views
+   --------------------------------------------------------------------------- */
+
+/* A view change swaps the whole card. The old card, kept one animation
+   longer, slides out and fades; the new card slides in from the other side
+   and fades in. Each card keeps its own height. Forward goes leftwards;
+   back, the reverse. Both cards ride the same curve, one card width and a
+   gap apart, so they travel as a pair and never overlap. */
+.opal-dropdown-card[data-exit] {
+  @apply absolute inset-x-0 top-0 pointer-events-none;
+}
+.opal-dropdown-card[data-enter="forward"] {
+  animation: opal-dropdown-card-in-forward 200ms ease-in-out;
+}
+.opal-dropdown-card[data-enter="back"] {
+  animation: opal-dropdown-card-in-back 200ms ease-in-out;
+}
+.opal-dropdown-card[data-exit="forward"] {
+  animation: opal-dropdown-card-out-forward 200ms ease-in-out forwards;
+}
+.opal-dropdown-card[data-exit="back"] {
+  animation: opal-dropdown-card-out-back 200ms ease-in-out forwards;
+}
+/* A card arriving or leaving does not replay the box's own entrance. */
+.opal-dropdown-card[data-enter] .opal-dropdown-content,
+.opal-dropdown-card[data-exit] .opal-dropdown-content {
+  animation: none;
+}
+@keyframes opal-dropdown-card-in-forward {
+  from {
+    opacity: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+}
+@keyframes opal-dropdown-card-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-100% - 1rem));
+  }
+}
+@keyframes opal-dropdown-card-out-forward {
+  to {
+    opacity: 0;
+    transform: translateX(calc(-100% - 1rem));
+  }
+}
+@keyframes opal-dropdown-card-out-back {
+  to {
+    opacity: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .opal-dropdown-card[data-enter],
+  .opal-dropdown-card[data-exit] {
+    animation: none;
+  }
 }
