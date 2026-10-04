@@ -147,12 +147,25 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       props: CardProps;
       direction: "forward" | "back";
     } | null>(null);
+    // The live card arrived by a view change, from this side. Kept for the
+    // card's whole life: it also holds off the box's own entrance on the
+    // rows, which would otherwise replay the moment the attribute left.
+    const [enter, setEnter] = useState<"forward" | "back" | null>(null);
     const lastCardRef = useRef<{ key: string; props: CardProps } | null>(null);
     const lastHeightRef = useRef<number | null>(null);
     const lastViewKeyRef = useRef(viewKey);
     useLayoutEffect(() => {
+      if (!isOpen) {
+        // Closing resets the view underneath the exit: no swap to show,
+        // and the next session's first card arrives with the box.
+        lastViewKeyRef.current = viewKey;
+        setExiting(null);
+        setEnter(null);
+        return;
+      }
       if (lastViewKeyRef.current === viewKey) return;
       lastViewKeyRef.current = viewKey;
+      setEnter(viewDirection);
       const last = lastCardRef.current;
       if (last && last.key !== viewKey) {
         setExiting({ ...last, direction: viewDirection });
@@ -173,14 +186,19 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       const done = () => {
         card.style.height = "";
         card.removeAttribute("data-view-transition");
+        card.removeEventListener("transitionend", onEnd);
       };
-      card.addEventListener("transitionend", done, { once: true });
+      // Only the card's own height: a child's transition bubbles up too.
+      const onEnd = (event: TransitionEvent) => {
+        if (event.target === card && event.propertyName === "height") done();
+      };
+      card.addEventListener("transitionend", onEnd);
       const timer = window.setTimeout(done, 250);
       return () => {
         window.clearTimeout(timer);
-        card.removeEventListener("transitionend", done);
+        card.removeEventListener("transitionend", onEnd);
       };
-    }, [viewKey, viewDirection]);
+    }, [isOpen, viewKey, viewDirection]);
 
     // Keyboard navigation keeps the highlighted row in view. Pointer
     // highlights never scroll: the list must not move under the mouse.
@@ -275,7 +293,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
             key={viewKey}
             live
             searchRef={searchRef}
-            data-enter={exiting ? viewDirection : undefined}
+            data-enter={enter ?? undefined}
             {...cardProps}
           />
           {exiting && (
