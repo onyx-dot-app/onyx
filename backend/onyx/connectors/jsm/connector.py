@@ -16,6 +16,7 @@ from jira import JIRA
 from jira.exceptions import JIRAError
 from typing_extensions import override
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -31,6 +32,7 @@ from onyx.connectors.interfaces import (
     SlimConnector,
     SlimConnectorWithPermSync,
 )
+from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.utils import build_jira_client
 from onyx.connectors.jsm.client import (
     build_jsm_session,
@@ -82,6 +84,7 @@ class JiraServiceManagementConnector(
         self._jira_client: JIRA | None = None
         self._jsm_session: Any = None
         self._desk_project_key_cache: str | None = None
+        self._project_permissions_cache: dict[str, ExternalAccess | None] = {}
 
     @property
     def jira_client(self) -> JIRA:
@@ -151,6 +154,22 @@ class JiraServiceManagementConnector(
         if project_id:
             self._desk_project_key_cache = str(project_id)
         return self._desk_project_key_cache
+
+    def _get_project_permissions(self, project_key: str, add_prefix: bool) -> Any:
+        """External access for the Jira project backing a service desk.
+
+        JSM permissions are the Jira project permissions; reuses the Jira
+        connector's EE resolution (returns None outside EE, in which case the
+        document keeps its default visibility). Cached per project/prefix.
+        """
+        cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
+        if cache_key not in self._project_permissions_cache:
+            self._project_permissions_cache[cache_key] = get_project_permissions(
+                jira_client=self.jira_client,
+                jira_project=project_key,
+                add_prefix=add_prefix,
+            )
+        return self._project_permissions_cache[cache_key]
 
     def _search_issues(
         self, jql: str, start: int, max_results: int
@@ -223,7 +242,7 @@ class JiraServiceManagementConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: JsmConnectorCheckpoint,
-        include_permissions: bool,  # noqa: ARG002
+        include_permissions: bool,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
         new_checkpoint = copy.deepcopy(checkpoint)
         starting_offset = checkpoint.offset or 0
@@ -235,6 +254,8 @@ class JiraServiceManagementConnector(
             _JSM_PAGE_SIZE,
         )
 
+        project_key = self._service_desk_project_key() if include_permissions else None
+
         for issue in issues:
             issue_key = issue.get("key", "")
             try:
@@ -243,6 +264,11 @@ class JiraServiceManagementConnector(
                     issue=issue,
                     session=self._jsm_session,
                 ):
+                    if include_permissions and project_key is not None:
+                        # Indexing path: prefix group ids with the source type
+                        document.external_access = self._get_project_permissions(
+                            project_key, add_prefix=True
+                        )
                     yield document
             except Exception as e:
                 yield ConnectorFailure(
@@ -266,7 +292,11 @@ class JiraServiceManagementConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        yield from self._retrieve_all_slim_docs(start=start, end=end)
+        # ID-only path (e.g. pruning): pruning diffs document IDs and never
+        # consumes permission data, so skip per-project permission resolution.
+        yield from self._retrieve_all_slim_docs(
+            start=start, end=end, include_permissions=False
+        )
 
     @override
     def retrieve_all_slim_docs_perm_sync(
@@ -275,12 +305,16 @@ class JiraServiceManagementConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        yield from self._retrieve_all_slim_docs(start=start, end=end)
+        yield from self._retrieve_all_slim_docs(
+            start=start, end=end, include_permissions=True
+        )
 
     def _retrieve_all_slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        *,
+        include_permissions: bool,
     ) -> GenerateSlimDocumentOutput:
         # Mirror the Jira connector: default the window to [0, now + 1 day]
         # when the caller supplies no bounds.
@@ -288,6 +322,7 @@ class JiraServiceManagementConnector(
         start = start if start is not None else 0
         end = end if end is not None else datetime.now().timestamp() + one_day
 
+        project_key = self._service_desk_project_key() if include_permissions else None
         offset = 0
         slim_doc_batch: list[SlimDocument] = []
 
@@ -301,7 +336,19 @@ class JiraServiceManagementConnector(
                 break
 
             for issue in issues:
-                slim_doc_batch.append(process_jsm_issue_slim(self.jsm_base, issue))
+                slim_doc_batch.append(
+                    process_jsm_issue_slim(
+                        self.jsm_base,
+                        issue,
+                        # Permission sync path: don't prefix; the upsert path
+                        # handles prefixing.
+                        external_access=(
+                            self._get_project_permissions(project_key, add_prefix=False)
+                            if include_permissions and project_key is not None
+                            else None
+                        ),
+                    )
+                )
                 if len(slim_doc_batch) >= _JSM_PAGE_SIZE:
                     yield slim_doc_batch
                     slim_doc_batch = []

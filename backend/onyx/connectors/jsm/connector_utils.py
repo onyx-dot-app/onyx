@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.jira.utils import build_jira_url
@@ -158,12 +159,14 @@ def process_jsm_issue(
 def process_jsm_issue_slim(
     jsm_base: str,
     issue: dict[str, Any],
+    external_access: ExternalAccess | None = None,
 ) -> SlimDocument:
-    """One JSM issue as a SlimDocument (id and timestamps only)."""
+    """One JSM issue as a SlimDocument (id, timestamps, external access)."""
     issue_key = issue.get(_FIELD_KEY, "")
     fields = issue.get("fields", {})
     created = fields.get(_FIELD_CREATED)
     return SlimDocument(
         id=build_jira_url(jsm_base, issue_key),
         doc_created_at=time_str_to_utc(created) if created else None,
+        external_access=external_access,
     )
