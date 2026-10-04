@@ -143,7 +143,7 @@ Focus stays on the trigger (or the search field); the dropdown moves a highlight
 
 **Tab** depends on the trigger: from a type-in it walks the rows like the arrows, since the field must keep focus; from any other trigger it closes the list and lets focus move on, as a native menu does. `tabKey` on `Dropdown` fixes it one way for every trigger.
 
-**Groups, from a trigger with nothing to type into:** ArrowLeft on a row inside an open foldable group moves the highlight to the group's title; ArrowLeft on the title folds it. ArrowRight on a folded title unfolds it; on an open title it moves to the first row inside. As in a file explorer. A text field (a type-in, or the search field) keeps both keys for its caret.
+**Groups, from a trigger with nothing to type into:** ArrowRight on a folded title unfolds it; on an open title it moves to the first row inside. A text field (a type-in, or the search field) keeps the key for its caret.
 
 **Type-ahead:** on a trigger with nothing to type into, letters jump the highlight to the next row whose title starts with them; the letters clear after half a second. A custom row matches on its first keyword. A type-in's letters are its filter instead, and a search field's go to the field.
 

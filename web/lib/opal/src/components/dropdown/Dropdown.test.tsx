@@ -354,7 +354,7 @@ describe("Dropdown triggers", () => {
 });
 
 describe("Dropdown groups", () => {
-  test("ArrowRight unfolds a title and enters it; ArrowLeft leaves and folds", async () => {
+  test("ArrowRight unfolds a title and enters it", async () => {
     const user = setupUser();
     render(<ButtonPickerHarness />);
     await user.click(screen.getByRole("combobox", { name: "Fruit" }));
@@ -370,27 +370,20 @@ describe("Dropdown groups", () => {
 
     await user.keyboard("{ArrowRight}");
     expect(highlighted()).toEqual(["Lemon"]);
-
-    await user.keyboard("{ArrowLeft}");
-    expect(highlighted()).toEqual([]);
-    expect(title).toHaveAttribute("data-interaction", "hover");
-    expect(title).toHaveAttribute("aria-expanded", "true");
-
-    await user.keyboard("{ArrowLeft}");
-    expect(title).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("option", { name: "Lemon" })).toBeNull();
   });
 
-  test("a type-in keeps the arrows for its caret", async () => {
+  test("a type-in keeps ArrowRight for its caret", async () => {
     const user = setupUser();
     render(<Harness />);
     const trigger = screen.getByRole("combobox", { name: "Fruit" });
     await user.type(trigger, "lem");
-    // The Citrus title (open while searching), then Lemon.
-    await user.keyboard("{ArrowDown}{ArrowDown}");
-    expect(highlighted()).toEqual(["Lemon"]);
-    await user.keyboard("{ArrowLeft}");
-    expect(highlighted()).toEqual(["Lemon"]);
+    // The Citrus title (open while searching) stays a plain stop.
+    await user.keyboard("{ArrowDown}");
+    const title = screen.getByRole("button", { name: /Citrus/ });
+    expect(title).toHaveAttribute("data-interaction", "hover");
+    await user.keyboard("{ArrowRight}");
+    expect(title).toHaveAttribute("data-interaction", "hover");
+    expect(highlighted()).toEqual([]);
   });
 });
 
