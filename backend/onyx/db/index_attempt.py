@@ -1,8 +1,19 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import TypeVarTuple
 
-from sqlalchemy import Select, and_, delete, desc, func, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    delete,
+    desc,
+    exists,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.orm import Session, joinedload
 
 from onyx.connectors.models import ConnectorFailure
@@ -226,6 +237,31 @@ def get_in_progress_index_attempts(
 
     incomplete_attempts = db_session.scalars(stmt)
     return list(incomplete_attempts.all())
+
+
+def any_running_index_attempt_for_cc_pairs(
+    db_session: Session,
+    search_settings_id: int,
+    cc_pair_ids: Collection[int],
+) -> bool:
+    """Returns True if any cc_pair has an IN_PROGRESS index attempt on these settings.
+
+    Queued NOT_STARTED attempts do not count. They still run after the swap against
+    the same settings, and the queue rarely empties during a port-flow reindex.
+    """
+    if not cc_pair_ids:
+        return False
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    IndexAttempt.search_settings_id == search_settings_id,
+                    IndexAttempt.connector_credential_pair_id.in_(cc_pair_ids),
+                    IndexAttempt.status == IndexingStatus.IN_PROGRESS,
+                )
+            )
+        )
+    )
 
 
 def get_all_index_attempts_by_status(
@@ -1211,3 +1247,104 @@ def get_index_attempt_errors_across_connectors(
     total = db_session.scalar(count_stmt) or 0
     errors = list(db_session.scalars(stmt).all())
     return errors, total
+
+
+def _is_waiting_attempt() -> ColumnElement[bool]:
+    """An attempt that is created but whose docfetching task is not sent: a
+    first attempt that waits for the pair's capability checks."""
+    return and_(
+        IndexAttempt.status == IndexingStatus.NOT_STARTED,
+        IndexAttempt.celery_task_id.is_(None),
+        IndexAttempt.targeted_reindex_job_id.is_(None),
+    )
+
+
+def _is_never_dispatched_attempt() -> ColumnElement[bool]:
+    """A waiting attempt, or one that a bulk cancel (e.g. an index swap) ended
+    while it waited. ``mark_attempt_failed`` and ``mark_attempt_canceled`` set
+    ``time_started``, so an attempt they end counts as dispatched."""
+    return or_(
+        _is_waiting_attempt(),
+        and_(
+            IndexAttempt.status.in_([IndexingStatus.FAILED, IndexingStatus.CANCELED]),
+            IndexAttempt.celery_task_id.is_(None),
+            IndexAttempt.time_started.is_(None),
+            IndexAttempt.targeted_reindex_job_id.is_(None),
+        ),
+    )
+
+
+def cc_pair_has_dispatched_index_attempts(db_session: Session, cc_pair_id: int) -> bool:
+    """True when the pair has an index attempt, for any search settings, whose
+    docfetching task was sent."""
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                    ~_is_never_dispatched_attempt(),
+                )
+            )
+        )
+    )
+
+
+def get_waiting_index_attempt(
+    db_session: Session, cc_pair_id: int, search_settings_id: int
+) -> IndexAttempt | None:
+    """The pair's attempt for these search settings whose docfetching task is
+    not sent yet."""
+    return db_session.scalars(
+        select(IndexAttempt).where(
+            IndexAttempt.connector_credential_pair_id == cc_pair_id,
+            IndexAttempt.search_settings_id == search_settings_id,
+            _is_waiting_attempt(),
+        )
+    ).first()
+
+
+def claim_waiting_index_attempt(
+    db_session: Session, index_attempt_id: int, celery_task_id: str
+) -> bool:
+    """Stamps the docfetching task id on a waiting attempt and commits. False
+    when the attempt is no longer waiting, so only one caller sends its task."""
+    result = db_session.execute(
+        update(IndexAttempt)
+        .where(
+            IndexAttempt.id == index_attempt_id,
+            _is_waiting_attempt(),
+        )
+        .values(celery_task_id=celery_task_id)
+    )
+    db_session.commit()
+    return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
+
+
+def cancel_waiting_index_attempt__no_commit(
+    db_session: Session, index_attempt_id: int, reason: str
+) -> bool:
+    """Ends a waiting attempt as CANCELED. Leaves ``time_started`` unset
+    (unlike ``mark_attempt_canceled``), so the attempt still counts as never
+    dispatched and the pair's next attempt still waits for the checks. False
+    when the attempt is no longer waiting. The caller commits."""
+    result = db_session.execute(
+        update(IndexAttempt)
+        .where(IndexAttempt.id == index_attempt_id, _is_waiting_attempt())
+        .values(status=IndexingStatus.CANCELED, error_msg=reason)
+    )
+    return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
+
+
+def get_active_index_attempts_without_task(db_session: Session) -> list[IndexAttempt]:
+    """Active full-run attempts with no Celery task id."""
+    return list(
+        db_session.scalars(
+            select(IndexAttempt).where(
+                IndexAttempt.status.in_(
+                    [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                ),
+                IndexAttempt.celery_task_id.is_(None),
+                IndexAttempt.targeted_reindex_job_id.is_(None),
+            )
+        ).all()
+    )

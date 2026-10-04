@@ -12,6 +12,7 @@ from ee.onyx.external_permissions.slack.utils import (
 from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import build_db_credentials_provider
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slack.connector import (
@@ -246,7 +247,11 @@ def slack_doc_sync(
     provider = build_db_credentials_provider(
         DocumentSource.SLACK, cc_pair.credential.id
     )
-    slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
+    slack_connector = SlackConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
     slack_connector.set_credentials_provider(provider)
     slack_client = slack_connector.slack_client
     assert slack_client is not None, "set_credentials_provider builds the gateway."

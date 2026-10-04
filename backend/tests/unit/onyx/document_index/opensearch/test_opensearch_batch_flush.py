@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document, TextSection
-from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
+from onyx.document_index.interfaces import IndexingMetadata, TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
@@ -216,3 +216,24 @@ def test_delete_called_once_per_document() -> None:
         index.index(chunks, metadata)
 
     mock_delete.assert_called_once_with(doc_id, None)
+
+
+def test_index_writes_all_enriched_source_types() -> None:
+    index, mock_bulk = _make_index()
+    chunk = _make_chunk("doc_1", 0).model_copy(
+        update={
+            "source_types": (
+                DocumentSource.WEB,
+                DocumentSource.GOOGLE_DRIVE,
+            )
+        }
+    )
+
+    with patch.object(index, "delete", return_value=0):
+        index.index([chunk], _make_metadata("doc_1", 1))
+
+    indexed_chunk = mock_bulk.call_args.kwargs["documents"][0]
+    assert indexed_chunk.model_dump()["source_type"] == [
+        DocumentSource.GOOGLE_DRIVE.value,
+        DocumentSource.WEB.value,
+    ]

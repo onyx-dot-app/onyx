@@ -1,5 +1,5 @@
 import { SourceIcon } from "@/components/SourceIcon";
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SvgTag } from "@opal/icons";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
@@ -7,7 +7,7 @@ import { MetadataBadge } from "@/components/MetadataBadge";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction, useMemo } from "react";
 import { openDocument } from "@/lib/search/utils";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { cn } from "@opal/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";

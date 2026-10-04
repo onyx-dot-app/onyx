@@ -27,18 +27,24 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.graph_errors import (
+    INVALID_AUTHORITY_CODE,
+    MISSING_CREDENTIAL_CODE,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
 from onyx.connectors.outlook.capability_checks import (
     build_outlook_doc_permission_sync_checks,
     build_outlook_indexing_checks,
 )
 from onyx.connectors.outlook.models import (
-    INVALID_AUTHORITY_CODE,
-    MISSING_CREDENTIAL_CODE,
-    OutlookAuthError,
     OutlookDeltaPage,
     OutlookEventPage,
     OutlookFolderPage,
-    OutlookGraphError,
     OutlookMailboxPage,
     OutlookTokenInfo,
 )
@@ -104,7 +110,7 @@ def test_token_check_reports_a_blank_credential_field() -> None:
         MISSING_CREDENTIAL_CODE, "missing outlook_client_secret"
     )
 
-    with pytest.raises(CredentialInvalidError, match="outlook_client_secret"):
+    with pytest.raises(CredentialInvalidError, match="credentials are incomplete"):
         _run("outlook_token_auth", _context(gateway))
 
 
@@ -193,6 +199,26 @@ def test_mail_read_check_probes_the_first_configured_mailbox() -> None:
         mailbox_id=MAILBOX_ID, folder_id=INBOX_ID, page_size=1
     )
     gateway.read_any_message.assert_called_once_with(mailbox_id=MAILBOX_ID)
+
+
+def test_mail_read_check_fails_on_an_invalid_mailboxes_setting() -> None:
+    gateway = _gateway()
+
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(gateway, {"mailboxes": 42})
+    )
+
+    assert result.status is CapabilityCheckStatus.FAILED
+    assert "mailboxes" in result.message
+    gateway.read_any_message.assert_not_called()
+
+
+def test_mail_read_check_runs_on_a_config_less_run() -> None:
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(_gateway())
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
 
 
 def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:

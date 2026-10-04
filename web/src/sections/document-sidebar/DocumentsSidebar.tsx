@@ -1,6 +1,6 @@
 "use client";
 
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import ChatDocumentDisplay from "@/sections/document-sidebar/ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
 import { Dispatch, SetStateAction, useMemo, memo } from "react";

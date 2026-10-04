@@ -35,6 +35,12 @@ ENTITLEMENT_HINTS: dict[ZoomEntitlement, str] = {
 }
 
 
+def normalize_session_id(identifier: str) -> str:
+    """Zoom shows meeting and webinar numbers as `857 9609 3688`, and admins
+    paste them that way."""
+    return "".join(identifier.split())
+
+
 def encode_identifier(identifier: str) -> str:
     """Zoom requires a UUID to be encoded twice when it starts with "/" or
     contains "//". User and group ids never contain a slash, so this is safe
@@ -66,11 +72,29 @@ class ZoomEndpoint(BaseModel):
         return self.describes.format(identifier=identifier)
 
 
-MEETING_TRANSCRIPT = ZoomEndpoint(
-    path="/meetings/{identifier}/transcript",
+# Not /meetings/{id}/transcript. Against a live account that answered 404 for a
+# session whose VTT was sitting in recording_files.
+MEETING_RECORDINGS = ZoomEndpoint(
+    path="/meetings/{identifier}/recordings",
+    tier=ZoomRateLimitTier.LIGHT,
+    describes="the recording files for {identifier}",
+    operation="recordingGet",
+)
+
+# Zoom really names this GET recordingSettingUpdate. recordingSettingsUpdate is
+# the PATCH on the same path.
+RECORDING_SETTINGS = ZoomEndpoint(
+    path="/meetings/{identifier}/recordings/settings",
+    tier=ZoomRateLimitTier.LIGHT,
+    describes="the share settings of the recording of {identifier}",
+    operation="recordingSettingUpdate",
+)
+
+RECORDING_REGISTRANTS = ZoomEndpoint(
+    path="/meetings/{identifier}/recordings/registrants",
     tier=ZoomRateLimitTier.MEDIUM,
-    describes="the transcript for {identifier}",
-    operation="GetMeetingTranscript",
+    describes="the viewers registered for the recording of {identifier}",
+    operation="meetingRecordingRegistrants",
 )
 
 PAST_MEETING_DETAILS = ZoomEndpoint(
@@ -160,6 +184,13 @@ USERS = ZoomEndpoint(
     tier=ZoomRateLimitTier.MEDIUM,
     describes="the account's users",
     operation="users",
+)
+
+USER_SETTINGS = ZoomEndpoint(
+    path="/users/{identifier}/settings",
+    tier=ZoomRateLimitTier.MEDIUM,
+    describes="the settings of user {identifier}",
+    operation="userSettings",
 )
 
 USER_RECORDINGS = ZoomEndpoint(

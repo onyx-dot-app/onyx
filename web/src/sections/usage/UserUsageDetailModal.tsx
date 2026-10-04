@@ -6,7 +6,7 @@ import { Button, Modal, ProgressBar, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { IconFunctionComponent } from "@opal/types";
 import { formatCalendarDay } from "@/lib/dateUtils";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import type { UsageExportUser } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
 

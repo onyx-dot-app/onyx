@@ -1,9 +1,10 @@
-import type { Tag, ValidSources } from "@/lib/types";
+import type { Tag } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { ChatSearchFilters } from "@/lib/tools/types";
 import { isAssistant } from "@/lib/agents/utils";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import type { SourceMetadata } from "@/lib/search/interfaces";
+import type { SourceMetadata } from "@/lib/search/types";
 import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 
 /**

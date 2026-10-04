@@ -21,7 +21,7 @@ like a missing grant, so the remediation text names both causes.
 
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -33,27 +33,31 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import raise_for_auth_error
+from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     USER_LISTING_DENIED,
-    raise_for_auth_error,
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
-    MAILBOX_UNAVAILABLE_STATUSES,
     configured_addresses,
     describe_unavailable_mailboxes,
     raise_if_unavailable,
     resolve_mailbox_for_validation,
 )
 from onyx.connectors.outlook.models import (
-    OutlookAuthError,
     OutlookEvent,
     OutlookEventPage,
     OutlookFolder,
-    OutlookGraphError,
     OutlookMailbox,
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
@@ -151,7 +155,7 @@ def _first_mailbox_that(
             try:
                 opened = opens(mailbox)
             except OutlookGraphError as e:
-                if e.status not in MAILBOX_UNAVAILABLE_STATUSES:
+                if not e.is_permanent_refusal:
                     raise_for_graph_error(e, denied_one(mailbox), remediation)
                 if e.status == 403:
                     denied = e
@@ -178,7 +182,7 @@ def _open_first_readable_mailbox(
 
 
 def _open_sample_mailbox(
-    gateway: OutlookSourceOperations, config: dict[str, Any] | None
+    gateway: OutlookSourceOperations, config: OutlookConnectorConfig
 ) -> tuple[OutlookMailbox, OutlookFolder]:
     """The first configured mailbox, or the first readable one when the
     connector indexes every mailbox."""
@@ -240,10 +244,12 @@ class _MailboxListingCheck(CapabilityCheck):
             raise_for_graph_error(e, USER_LISTING_DENIED)
 
 
-class _MailReadCheck(CapabilityCheck):
+class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Reads folders, one delta page, one message body and, when that message
     has any, its attachment records. Proves ``Mail.Read`` and that the mailbox
-    is inside the app's Exchange scope."""
+    is inside the app's Exchange scope. A config-less run reads any mailbox."""
+
+    config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -257,9 +263,7 @@ class _MailReadCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway = _gateway(context)
-        mailbox, inbox = _open_sample_mailbox(
-            gateway, context.connector_specific_config
-        )
+        mailbox, inbox = _open_sample_mailbox(gateway, self.config(context))
         try:
             gateway.get_well_known_folder(
                 mailbox_id=mailbox.id, name=_PROBE_WELL_KNOWN_FOLDER
@@ -297,8 +301,6 @@ class _MailReadCheck(CapabilityCheck):
             raise_for_graph_error(e, _denied(mailbox))
 
 
-_CONFIG_INCLUDE_CALENDAR = "include_calendar"
-
 # Calendars.ReadBasic.All lists events but withholds their bodies, so the
 # calendar probe must read one body to tell the two grants apart.
 _EVENT_BODY_DENIED = (
@@ -324,13 +326,15 @@ def _event_with_body(
     return sample
 
 
-class _CalendarReadCheck(CapabilityCheck):
+class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Reads one page of one mailbox's calendar view, the call indexing makes,
     then one event with its body, which ``Calendars.ReadBasic.All`` withholds.
     Together they prove ``Calendars.Read``. An empty calendar proves the
     listing only, so in every-mailbox mode the walk moves on to one with
     events. A connector that does not index calendars needs no such grant, so
     the check passes without a call for it."""
+
+    config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -344,7 +348,8 @@ class _CalendarReadCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        if not (context.connector_specific_config or {}).get(_CONFIG_INCLUDE_CALENDAR):
+        config = self.config(context)
+        if not config.include_calendar:
             return
         gateway = _gateway(context)
         now = datetime.now(timezone.utc)
@@ -361,7 +366,7 @@ class _CalendarReadCheck(CapabilityCheck):
             view(mailbox)
             return _event_with_body(gateway, mailbox)
 
-        addresses = configured_addresses(context.connector_specific_config)
+        addresses = configured_addresses(config)
         if addresses:
             mailbox, _ = _open_configured_mailbox(gateway, addresses[0])
             try:
@@ -390,12 +395,14 @@ class _CalendarReadCheck(CapabilityCheck):
         )
 
 
-class _ConfiguredMailboxesCheck(CapabilityCheck):
+class _ConfiguredMailboxesCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Resolves and probes every explicitly configured mailbox.
 
     With no configured list the check passes without a call: every-mailbox
     mode logs and skips denied mailboxes at index time instead.
     """
+
+    config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -409,7 +416,7 @@ class _ConfiguredMailboxesCheck(CapabilityCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        addresses = configured_addresses(context.connector_specific_config)
+        addresses = configured_addresses(self.config(context))
         if not addresses:
             return
         raise_if_unavailable(

@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
@@ -16,13 +17,7 @@ import {
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import {
-  SvgClock,
-  SvgPlus,
-  SvgRefreshCw,
-  SvgTrash,
-  SvgSimpleLoader,
-} from "@opal/icons";
+import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
 import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,
@@ -197,6 +192,7 @@ export default function ScheduledTasksListPage() {
   const headerActions = useMemo(
     () => (
       <Button
+        key="new"
         variant="default"
         prominence="primary"
         icon={SvgPlus}
@@ -215,12 +211,12 @@ export default function ScheduledTasksListPage() {
         icon={SvgClock}
         title={t("header.title")}
         description={t("header.description")}
-        rightChildren={headerActions}
+        actions={[headerActions]}
       />
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SvgSimpleLoader className="h-6 w-6" />
+            <IconLoader className="h-6 w-6" />
           </div>
         ) : error ? (
           <Section gap={2}>

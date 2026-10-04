@@ -194,7 +194,7 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
     LICENSE_ENFORCEMENT_ENABLED=False, treat the tenant as ENTERPRISE so
     legacy EE deployments without a license aren't broken.
     """
-    if access_type != AccessType.SYNC:
+    if not access_type.is_perm_synced():
         return
     if not LICENSE_ENFORCEMENT_ENABLED:
         return
@@ -202,6 +202,21 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,
             "Auto-sync access requires the Business or Enterprise plan.",
+        )
+
+
+def require_business_tier_for_connector_group_restrictions() -> None:
+    """Gate turning on data-access group restrictions for perm-synced
+    connectors. Groups and perm sync are Business+, so the setting would be
+    inert below that. LICENSE_ENFORCEMENT_ENABLED=False passes, matching the
+    sync-access guard."""
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        return
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Group restrictions on permission-synced connectors require the "
+            "Business or Enterprise plan.",
         )
 
 

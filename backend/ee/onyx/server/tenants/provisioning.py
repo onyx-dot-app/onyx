@@ -21,6 +21,7 @@ from ee.onyx.server.tenants.models import (
     TenantDeletionPayload,
 )
 from ee.onyx.server.tenants.schema_management import (
+    build_tenant_schema,
     create_schema_if_not_exists,
     drop_schema,
     run_alembic_migrations,
@@ -443,9 +444,7 @@ def configure_default_api_keys(db_session: Session) -> None:
                 "No default model found for %s in recommendations",
                 ANTHROPIC_PROVIDER_NAME,
             )
-        default_model_name = (
-            default_model.name if default_model else "claude-sonnet-4-5"
-        )
+        default_model_name = default_model.name if default_model else "claude-sonnet-5"
 
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",
@@ -737,11 +736,9 @@ async def setup_tenant(tenant_id: str) -> None:
     try:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Run Alembic migrations in a way that isolates it from the current event loop
-        # Create a new event loop for this synchronous operation
+        # Both paths block on Postgres, so they run off the event loop.
         loop = asyncio.get_event_loop()
-        # Use run_in_executor which properly isolates the thread execution
-        await loop.run_in_executor(None, lambda: run_alembic_migrations(tenant_id))
+        await loop.run_in_executor(None, lambda: build_tenant_schema(tenant_id))
 
         # Configure the tenant with default settings
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:

@@ -23,7 +23,7 @@ import { tierAtLeast } from "@/lib/tiers";
 import { setSSOProviderEnabled } from "@/lib/sso/svc";
 import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { useCreateModal } from "@opal/components";
 import { SSOProviderModal } from "@/sections/modals/sso/SSOProviderModal";
 
@@ -46,16 +46,17 @@ function Shell({ children, onAddProvider, addGated }: ShellProps) {
         title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
-        rightChildren={
+        actions={[
           <Button
+            key="primary"
             icon={SvgPlus}
             onClick={onAddProvider}
             disabled={addGated}
             tooltip={addGated ? t("addProvider.gatedTooltip") : undefined}
           >
             {t("addProvider.button.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
     </SettingsLayouts.Root>

@@ -4,7 +4,7 @@ import React, { RefObject, useState, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
 import { FeedbackType, Message } from "@/app/app/interfaces";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
   useChatSessionStore,
@@ -35,7 +35,7 @@ import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
@@ -349,6 +349,7 @@ export default function MessageToolbar({
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
                     providerOptions={llmManager.llmProviders}
+                    modelPaging={llmManager.modelPaging}
                     value={
                       // The response's model may live under a different
                       // provider than the global selection, so resolve it

@@ -118,7 +118,7 @@ def _get_fence_validation_block_expiration() -> int:
 def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external group sync is due."""
 
-    if cc_pair.access_type != AccessType.SYNC:
+    if not cc_pair.access_type.is_perm_synced():
         task_logger.error(
             f"Received non-sync CC Pair {cc_pair.id} for external group sync. Actual access type: {cc_pair.access_type}"
         )
@@ -195,7 +195,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
                 cc_pairs_to_dedupe = get_cc_pairs_by_source(
                     db_session,
                     source,
-                    access_type=AccessType.SYNC,
+                    access_types=AccessType.perm_synced_types(),
                     status=ConnectorCredentialPairStatus.ACTIVE,
                 )
                 # dedupe cc_pairs to only keep the first one

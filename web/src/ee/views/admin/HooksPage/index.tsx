@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -15,7 +16,7 @@ import useFilter from "@/hooks/useFilter";
 import { useCreateModal, useModalClose } from "@opal/components";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { Content, IllustrationContent } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import {
@@ -29,7 +30,6 @@ import {
   SvgSettings,
   SvgTrash,
   SvgUnplug,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
@@ -81,6 +81,7 @@ function DisconnectConfirmModal({
   onDisconnectAndDelete,
 }: DisconnectConfirmModalProps) {
   const t = useTranslations("admin.hooks");
+  const { appName } = useSettings();
   const onClose = useModalClose();
 
   return (
@@ -98,7 +99,10 @@ function DisconnectConfirmModal({
           <div className="flex flex-col gap-2">
             <Text font="main-ui-body" color="text-03">
               {markdown(
-                t("disconnectModal.body.description", { name: hook.name })
+                t("disconnectModal.body.description", {
+                  name: escapeMarkdown(hook.name),
+                  appName: escapeMarkdown(appName),
+                })
               )}
             </Text>
             <Text font="main-ui-body" color="text-03">
@@ -537,7 +541,7 @@ export default function HooksPage() {
   }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router, t]);
 
   if (settings.isLoading || !enterpriseTier || !settings.hooks_enabled) {
-    return <SvgSimpleLoader />;
+    return <IconLoader />;
   }
 
   const isLoading = specsLoading || hooksLoading;
@@ -598,12 +602,12 @@ export default function HooksPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
-          description={t("page.description")}
+          description={t("page.description", { appName: settings.appName })}
           divider
         />
         <SettingsLayouts.Body>
           {isLoading ? (
-            <SvgSimpleLoader />
+            <IconLoader />
           ) : specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError

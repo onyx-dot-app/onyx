@@ -38,14 +38,11 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
+import FileInput from "@/views/admin/connectors/AddConnectorPage/form/inputs/FileInput";
 import { RichTextSubtext } from "./RichTextSubtext";
-import {
-  TypedFile,
-  createTypedFile,
-  getFileTypeDefinitionForField,
-  FILE_TYPE_DEFINITIONS,
-} from "@/lib/connectors/fileTypes";
+import { TypedFile, FILE_TYPE_DEFINITIONS } from "@/lib/connectors/fileTypes";
+import { createTypedFile } from "@/lib/connectors/utils";
+import { getCredentialFileType } from "@/lib/credentials/utils";
 import Text from "@/refresh-components/texts/Text";
 
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
@@ -452,7 +449,7 @@ export function TypedFileUploadFormField({
   const [description, setDescription] = useState<string>("");
 
   useEffect(() => {
-    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    const typeDefinitionKey = getCredentialFileType(name);
     if (typeDefinitionKey) {
       setDescription(
         FILE_TYPE_DEFINITIONS[typeDefinitionKey].description || ""
@@ -507,7 +504,7 @@ export function TypedFileUploadFormField({
       return;
     }
 
-    const typeDefinitionKey = getFileTypeDefinitionForField(name);
+    const typeDefinitionKey = getCredentialFileType(name);
 
     if (!typeDefinitionKey) {
       setCustomError(t("fileValidation.noTypeDefinition", { name }));

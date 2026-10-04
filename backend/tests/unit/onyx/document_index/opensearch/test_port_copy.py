@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel
 
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
 

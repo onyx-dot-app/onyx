@@ -13,6 +13,7 @@ import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import { isFilePending } from "@/lib/projects/utils";
 import { Hoverable } from "@opal/core";
 import { toast } from "@opal/layouts";
 import { useProjectsContext } from "@/lib/projects/providers";
@@ -49,9 +50,8 @@ function FileLineItem({
   const t = useTranslations("common.filePicker");
   const showLoader = useMemo(
     () =>
-      String(projectFile.status) === UserFileStatus.PROCESSING ||
-      String(projectFile.status) === UserFileStatus.UPLOADING ||
-      String(projectFile.status) === UserFileStatus.DELETING,
+      isFilePending(projectFile.status) ||
+      projectFile.status === UserFileStatus.DELETING,
     [projectFile.status]
   );
 
