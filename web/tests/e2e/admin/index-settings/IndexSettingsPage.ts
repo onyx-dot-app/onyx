@@ -210,8 +210,9 @@ export class IndexSettingsPage {
 
   /**
    * Open the model picker in the labelled row, search, and choose the row.
-   * The list is portalled and carries its own search box, scoped here so
-   * the page's search field is not matched; a search unfolds every
+   * The list is portalled and carries its own search box, pinned above the
+   * listbox rather than inside it; it takes focus as the list opens, which
+   * tells it apart from the page's search field. A search unfolds every
    * provider group.
    */
   private async pickModelInField(
@@ -224,7 +225,11 @@ export class IndexSettingsPage {
       .getByRole("combobox", { name: "Select model" })
       .click();
     const listbox = this.page.getByRole("listbox", { name: "Select model" });
-    await listbox.getByRole("textbox", { name: "Search" }).fill(displayName);
+    await expect(listbox).toBeVisible();
+    await this.page
+      .getByRole("textbox", { name: "Search" })
+      .and(this.page.locator(":focus"))
+      .fill(displayName);
     await listbox.getByRole("option", { name: displayName }).click();
   }
 

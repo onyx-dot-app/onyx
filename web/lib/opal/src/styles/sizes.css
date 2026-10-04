@@ -78,6 +78,7 @@
   --block-width-form-label-column-max: 30rem;
   --block-width-form-input-column-max: 15rem;
   --block-width-form-input-min: 10rem;
+  --block-width-dropdown-min: 17.5rem;
   --block-width-form-value-min: 5rem;
 
   --block-width-tag-label-max: 10rem;

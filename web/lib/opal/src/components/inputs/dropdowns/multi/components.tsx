@@ -1,48 +1,54 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { useOpalStrings } from "@opal/strings";
 import {
   TagField,
   type TagItem,
 } from "@opal/components/inputs/texts/input-type-in-tag/TagField";
+import { Dropdown } from "@opal/components/dropdown/components";
+import { useDropdownContext } from "@opal/components/dropdown/context";
+import type {
+  DropdownItem,
+  DropdownOption,
+} from "@opal/components/dropdown/types";
+import { SelectChevron } from "@opal/components/inputs/dropdowns/SelectChevron";
 import {
-  buildNavItems,
-  filterSections,
-  flattenSections,
-  normalizeSections,
-  useSelectKeyboard,
-  useSelectOverlay,
-  useFoldedGroups,
-} from "../shared";
-import { SelectDropdown } from "../dropdown/SelectDropdown";
-import { SelectChevron } from "../dropdown/SelectChevron";
-import { buildAriaAttributes } from "../dropdown/aria";
-import type { MultiDropdownProps, SelectOption } from "../types";
+  flattenOptions,
+  toDropdownItems,
+} from "@opal/components/inputs/dropdowns/utils";
+import type { MultiSelectFieldProps } from "../types";
 
 // ---------------------------------------------------------------------------
-// MultiDropdown
+// MultiSelectField
 // ---------------------------------------------------------------------------
 
 /**
- * MultiDropdown — the multi-arity implementation behind the family's two
+ * MultiSelectField — the multi-arity implementation behind the family's two
  * public components. Internal to Opal; app code uses `InputMultiSelect`
  * (button trigger) or `InputMultiComboBox` (type-in trigger).
  *
- * `InputTypeInTag`'s chips-in-input chrome over the family's unified
- * dropdown. Chosen options render as Tags. With a `"type-in"` trigger typing
- * filters the option set; with a `"button"` trigger there is no text input
- * and the chips are the whole field. Free tagging with no set to pick from
- * is `InputTypeInTag` itself.
+ * `InputTypeInTag`'s chips-in-input chrome on `@opal/Dropdown`. Chosen
+ * options render as Tags. With a `"type-in"` trigger typing filters the
+ * option set; with a `"button"` trigger there is no text input and the
+ * chips are the whole field. Free tagging with no set to pick from is
+ * `InputTypeInTag` itself.
+ *
+ * The `TagField` renders its own input, out of `Dropdown.Trigger`'s reach,
+ * so this engine wires the trigger through the dropdown's context.
  */
-function MultiDropdown(props: MultiDropdownProps) {
+function MultiSelectField(props: MultiSelectFieldProps) {
+  const autoId = useId();
+  const fieldId = `multi-select-${autoId}`;
+  return (
+    // Tab walks the rows from either trigger: the field keeps focus.
+    <Dropdown id={fieldId} disabled={props.disabled ?? false} tabKey="walk">
+      <MultiSelectFieldInner {...props} />
+    </Dropdown>
+  );
+}
+
+function MultiSelectFieldInner(props: MultiSelectFieldProps) {
   const {
     tags,
     onRemoveTag,
@@ -70,26 +76,23 @@ function MultiDropdown(props: MultiDropdownProps) {
   const {
     isOpen,
     setIsOpen,
-    highlightedIndex,
     setHighlightedIndex,
-    isKeyboardNav,
     setIsKeyboardNav,
-    setRootRef,
-    inputRef,
-    dropdownRef,
-    setFloatingRef,
-    floatingStyles,
-    isPositioned,
-  } = useSelectOverlay();
+    setAnchorRef,
+    setTriggerRef,
+    focusTrigger,
+    getTriggerProps,
+  } = useDropdownContext();
 
-  // A button trigger has no input: its combobox element takes the focus.
+  // A button trigger has no input: its combobox element takes the focus
+  // and the keyboard.
+  const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const focusField = useCallback(() => {
-    (typeIn ? inputRef.current : triggerRef.current)?.focus();
-  }, [typeIn, inputRef]);
+  useEffect(() => {
+    setTriggerRef(typeIn ? inputRef.current : triggerRef.current);
+  }, [typeIn, setTriggerRef]);
 
-  const sections = useMemo(() => normalizeSections(optionsProp), [optionsProp]);
-  const flatOptions = useMemo(() => flattenSections(sections), [sections]);
+  const flatOptions = useMemo(() => flattenOptions(optionsProp), [optionsProp]);
   const freeEntry = typeIn && mode === "open";
 
   const selectedValues = useMemo(
@@ -109,15 +112,23 @@ function MultiDropdown(props: MultiDropdownProps) {
   }, [tags, flatOptions]);
 
   // Free-form tags (open mode, outside the set) appear in the dropdown as
-  // real, selected rows — the single's `customSelected` — so re-picking one
-  // routes through the toggle-off instead of the create row.
-  const customSelected = useMemo<SelectOption[]>(() => {
-    if (!freeEntry) return [];
+  // real, selected rows — the single's custom row — so re-picking one
+  // routes through the toggle-off instead of the create row. They form
+  // their own group, so a line separates them from the set.
+  const items = useMemo<DropdownItem[]>(() => {
+    const set = toDropdownItems(optionsProp);
+    if (!freeEntry) return set;
     const optionValues = new Set(flatOptions.map((option) => option.value));
-    return tags
+    const custom = tags
       .filter((tag) => !optionValues.has(tag.id))
-      .map((tag) => ({ value: tag.id, title: tag.label }));
-  }, [freeEntry, flatOptions, tags]);
+      .map<DropdownOption>((tag) => ({
+        kind: "option",
+        value: tag.id,
+        title: tag.label,
+      }));
+    if (custom.length === 0) return set;
+    return [{ kind: "group", items: custom }, ...set];
+  }, [optionsProp, freeEntry, flatOptions, tags]);
 
   // Closed-set doctrine, committed values only: a tag outside the supplied
   // set (stale seed, options shrank) flags the input chrome's error variant.
@@ -139,21 +150,8 @@ function MultiDropdown(props: MultiDropdownProps) {
     wasOpenRef.current = isOpen;
   }, [typeIn, isOpen, value, onChange]);
 
-  // A Select with a search field filters through it instead of
-  // the typed text; it is transient and clears with the list.
-  const [searchText, setSearchText] = useState("");
-  useEffect(() => {
-    if (!isOpen) setSearchText("");
-  }, [isOpen]);
-  const filterText = typeIn ? value : search ? searchText : "";
+  const filterText = typeIn ? value : "";
   const hasSearchTerm = filterText.trim() !== "";
-  const visibleSections = useMemo(
-    () => [
-      ...filterSections([{ options: customSelected }], filterText),
-      ...filterSections(sections, filterText),
-    ],
-    [customSelected, sections, filterText]
-  );
   const trimmedValue = value.trim().toLowerCase();
   // An exact match means Enter should pick the option — or nothing, when
   // the text already exists as a chip — never fork a duplicate.
@@ -170,29 +168,8 @@ function MultiDropdown(props: MultiDropdownProps) {
     );
   const showCreateOption = freeEntry && hasSearchTerm && !exactOptionMatch;
 
-  const isSelectedOption = useCallback(
-    (option: SelectOption) => selectedValues.has(option.value),
-    [selectedValues]
-  );
-  const { foldedSections, toggleGroup } = useFoldedGroups({
-    isOpen,
-    sections: visibleSections,
-    isSelected: isSelectedOption,
-    searching: hasSearchTerm,
-  });
-  // The keyboard's stops in render order: the create row when shown, then
-  // each group's title (when foldable) and its rows. Trimmed, like the
-  // create row's own element id, so aria-activedescendant resolves.
-  const navItems = useMemo(() => {
-    const trimmed = value.trim();
-    return buildNavItems(
-      foldedSections,
-      showCreateOption ? { value: trimmed, title: trimmed } : undefined
-    );
-  }, [foldedSections, showCreateOption, value]);
-
   const handleOptionSelect = useCallback(
-    (option: SelectOption) => {
+    (option: DropdownOption) => {
       if (option.disabled) return;
       const real = flatOptions.find((o) => o.value === option.value);
       if (real) {
@@ -204,54 +181,35 @@ function MultiDropdown(props: MultiDropdownProps) {
       } else if (selectedValues.has(option.value)) {
         // A free-form tag's own row: toggle it off.
         onRemoveTag(option.value);
-      } else {
-        // The create row: commit the raw text as a free-form tag.
-        const trimmed = option.value.trim();
-        if (trimmed) onAdd?.(trimmed);
       }
       // Stay open for further picks; reset the filter.
       onChange?.("");
-      focusField();
+      focusTrigger();
     },
     [
       flatOptions,
       selectedValues,
       onRemoveTag,
       onSelectOption,
-      onAdd,
       onChange,
-      focusField,
+      focusTrigger,
     ]
+  );
+
+  // The create row: commit the raw text as a free-form tag.
+  const handleCreate = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (trimmed) onAdd?.(trimmed);
+      onChange?.("");
+      focusTrigger();
+    },
+    [onAdd, onChange, focusTrigger]
   );
 
   // Enter belongs to the dropdown: the create row covers free-form commits,
   // so the field's own Enter never fires here.
-  const { handleKeyDown: handleDropdownKeyDown } = useSelectKeyboard({
-    isOpen,
-    setIsOpen,
-    highlightedIndex,
-    setHighlightedIndex,
-    setIsKeyboardNav,
-    items: navItems,
-    onSelect: handleOptionSelect,
-    onToggleGroup: toggleGroup,
-  });
-
-  const autoId = useId();
-  const fieldId = `multi-select-${autoId}`;
-  const ariaProps = {
-    ...buildAriaAttributes({
-      isOpen,
-      isValid: !hasInvalidTag,
-      highlightedIndex,
-      fieldId,
-      items: navItems,
-      placeholder: placeholder ?? "",
-      typeIn,
-    }),
-    // The multi has no error message element to describe, unlike the single.
-    "aria-describedby": undefined,
-  };
+  const { onKeyDown, ...triggerAria } = getTriggerProps({ typeIn });
 
   return (
     <TagField
@@ -276,76 +234,47 @@ function MultiDropdown(props: MultiDropdownProps) {
       minRows={minRows}
       maxRows={maxRows}
       focusOnMount={focusOnMount}
-      rootRef={setRootRef}
+      rootRef={setAnchorRef}
       inputRef={inputRef}
-      onInputKeyDown={handleDropdownKeyDown}
+      onInputKeyDown={onKeyDown}
       // A click opens either trigger; a second click closes a button
       // trigger, and a type-in also opens on typing. Focus alone never
       // opens the list, so tabbing through a form passes by.
       onInputClick={() => setIsOpen((prev) => (typeIn ? true : !prev))}
-      inputAriaProps={ariaProps}
+      inputAriaProps={{
+        ...triggerAria,
+        "aria-label": placeholder ?? "",
+        "aria-invalid": hasInvalidTag,
+      }}
     >
       <SelectChevron
         isOpen={isOpen}
         disabled={disabled}
         onToggle={() => {
           setIsOpen((prev) => !prev);
-          focusField();
+          focusTrigger();
         }}
       />
 
-      <SelectDropdown
-        ref={dropdownRef}
-        isOpen={isOpen}
-        disabled={disabled}
-        floatingStyles={floatingStyles}
-        isPositioned={isPositioned}
-        setFloatingRef={setFloatingRef}
-        fieldId={fieldId}
-        placeholder={placeholder ?? ""}
-        sections={foldedSections}
-        emptySet={flatOptions.length === 0}
-        value=""
-        selectedValues={selectedValues}
-        highlightedIndex={highlightedIndex}
+      <Dropdown.Data
+        items={items}
+        label={placeholder ?? ""}
+        query={typeIn ? value : undefined}
+        search={
+          search ? { placeholder: strings.selectSearchPlaceholder } : undefined
+        }
+        values={selectedValues}
+        closeOnSelect={false}
         onSelect={handleOptionSelect}
-        // The pointer took over: the keyboard highlight yields to Interactive's
-        // own hover on whatever the pointer is on.
-        onMouseMove={() => {
-          if (isKeyboardNav) {
-            setIsKeyboardNav(false);
-            setHighlightedIndex(-1);
-          }
-        }}
-        isExactMatch={(option) => selectedValues.has(option.value)}
-        markAllMatches
-        inputValue={filterText}
-        allowCreate={freeEntry}
-        showCreateOption={showCreateOption}
-        dropdownMaxHeight={dropdownMaxHeight}
-        keyboardNav={isKeyboardNav}
-        onToggleGroup={toggleGroup}
-        searchField={
-          search
-            ? {
-                value: searchText,
-                onChange: (next) => {
-                  setSearchText(next);
-                  // Typing never highlights; only walking the list does.
-                  setHighlightedIndex(-1);
-                  setIsKeyboardNav(false);
-                },
-                onKeyDown: (event) => {
-                  handleDropdownKeyDown(event);
-                  if (event.key === "Escape") focusField();
-                },
-                placeholder: strings.selectSearchPlaceholder,
-              }
+        create={
+          showCreateOption
+            ? { text: value.trim(), onCreate: handleCreate }
             : undefined
         }
+        maxHeight={dropdownMaxHeight}
       />
     </TagField>
   );
 }
 
-export { MultiDropdown, type TagItem };
+export { MultiSelectField, type TagItem };

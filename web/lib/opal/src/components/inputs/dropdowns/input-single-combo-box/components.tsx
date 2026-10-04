@@ -1,6 +1,6 @@
 "use client";
 
-import { SingleDropdown } from "@opal/components/inputs/dropdowns/single/components";
+import { SingleSelectField } from "@opal/components/inputs/dropdowns/single/components";
 import type { InputSingleComboBoxProps } from "@opal/components/inputs/dropdowns/types";
 
 /**
@@ -9,7 +9,7 @@ import type { InputSingleComboBoxProps } from "@opal/components/inputs/dropdowns
  * opens the list. The family's pick-only sibling is `InputSingleSelect`.
  */
 function InputSingleComboBox(props: InputSingleComboBoxProps) {
-  return <SingleDropdown {...props} trigger="type-in" />;
+  return <SingleSelectField {...props} trigger="type-in" />;
 }
 
 export { InputSingleComboBox };
