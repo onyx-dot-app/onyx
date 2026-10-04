@@ -26,6 +26,7 @@ interface DividerSharedProps {
   onOpenChange?: never;
   children?: never;
   interaction?: never;
+  headerProps?: never;
 }
 
 /**
@@ -71,6 +72,7 @@ type DividerFoldableProps = Omit<
   | "onOpenChange"
   | "children"
   | "interaction"
+  | "headerProps"
 > & {
   /** Title is required when foldable. */
   title: string | RichStr;
@@ -91,6 +93,12 @@ type DividerFoldableProps = Omit<
    * title the keyboard stopped on). Unset, an open header reads as hover.
    */
   interaction?: InteractiveStatelessInteraction;
+  /**
+   * Attributes for the header element, for an owner that addresses it
+   * (a dropdown gives it an id, a role and `aria-expanded`, so the
+   * keyboard stop on the title reads as a control).
+   */
+  headerProps?: Omit<React.HTMLAttributes<HTMLDivElement>, "onClick">;
 };
 
 type DividerProps =
@@ -188,6 +196,7 @@ function FoldableDivider({
   onOpenChange,
   children,
   interaction,
+  headerProps,
 }: DividerFoldableProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const isControlled = controlledOpen !== undefined;
@@ -207,7 +216,12 @@ function FoldableDivider({
         interaction={interaction ?? (isOpen ? "hover" : "rest")}
         onClick={toggle}
       >
-        <Interactive.Container rounding={2} size="fit" width="full">
+        <Interactive.Container
+          rounding={2}
+          size="fit"
+          width="full"
+          {...headerProps}
+        >
           <div className="opal-divider">
             <div className="opal-divider-row">
               <div className="opal-divider-title">

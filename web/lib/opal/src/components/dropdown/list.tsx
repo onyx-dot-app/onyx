@@ -130,16 +130,9 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // highlights never scroll: the list must not move under the mouse.
     useEffect(() => {
       if (!isOpen || !keyboardNav || highlightedIndex < 0) return;
-      const stop = listRef.current?.querySelector(
-        `[data-index="${highlightedIndex}"]`
-      );
-      // A foldable group's stop is its wrapper, title and rows together;
-      // "nearest" is satisfied while any of that tall block shows, so
-      // scroll the title itself.
-      const highlighted = stop?.classList.contains("opal-dropdown-group")
-        ? stop.firstElementChild
-        : stop;
-      highlighted?.scrollIntoView({ block: "nearest", behavior: "instant" });
+      listRef.current
+        ?.querySelector(`[data-index="${highlightedIndex}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "instant" });
     }, [highlightedIndex, isOpen, keyboardNav]);
 
     // Opening shows the selection: the (first) selected row is centred in
@@ -386,18 +379,16 @@ function Rows({
           );
         });
         // A foldable group's title is its fold control and a keyboard stop
-        // of its own; its rows are its children, withheld while folded.
+        // of its own; its rows are its children, withheld while folded. The
+        // group names itself by the title; the header is the stop, with the
+        // id aria-activedescendant points at and its folded state.
         if (isFoldable && group.title !== undefined) {
           return (
             <div
               key={group.key}
-              // Plumbing only: the id for aria-activedescendant and the
-              // index for scroll-into-view. Hover and press styling are the
-              // Divider's own Interactive.
-              id={groupElementId(listId, group.key)}
-              role="presentation"
+              role="group"
+              aria-label={group.title}
               className="opal-dropdown-group"
-              data-index={headerIndex}
             >
               <Divider
                 title={group.title}
@@ -409,6 +400,14 @@ function Rows({
                 interaction={
                   headerIndex === highlightedIndex ? "hover" : "rest"
                 }
+                headerProps={{
+                  id: groupElementId(listId, group.key),
+                  "data-index": headerIndex,
+                  role: mode === "picker" ? "option" : "menuitem",
+                  "aria-expanded": !group.folded,
+                  ...(mode === "picker" && { "aria-selected": false }),
+                  tabIndex: -1,
+                }}
               >
                 <div className="opal-dropdown-group-rows">{rows}</div>
               </Divider>
