@@ -109,6 +109,8 @@ def fetch_service_desk(
     raise so credential problems are not mistaken for a missing desk."""
     try:
         return jsm_get(session, jsm_base, f"servicedesk/{desk_id}")
+    except (CredentialExpiredError, InsufficientPermissionsError):
+        raise
     except ConnectorValidationError:
         return None
 

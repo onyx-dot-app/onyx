@@ -16,6 +16,7 @@ from onyx.connectors.jsm.client import (
     build_jsm_session,
     fetch_participants,
     fetch_request_type_for_issue,
+    fetch_service_desk,
     fetch_service_desks,
     jsm_get,
 )
@@ -129,6 +130,47 @@ class TestErrorMapping:
             )
             with pytest.raises(requests.ConnectionError):
                 jsm_get(session, _JSM_BASE, "servicedesk")
+
+
+class TestFetchServiceDesk:
+    def test_404_returns_none(self) -> None:
+        session = build_jsm_session({"jira_api_token": "token"})
+        with responses.RequestsMock() as rsps:
+            rsps.get(
+                f"{_JSM_BASE}/rest/servicedeskapi/servicedesk/42",
+                status=404,
+            )
+            assert fetch_service_desk(session, _JSM_BASE, "42") is None
+
+    def test_401_reraises_credential_expired(self) -> None:
+        session = build_jsm_session({"jira_api_token": "token"})
+        with responses.RequestsMock() as rsps:
+            rsps.get(
+                f"{_JSM_BASE}/rest/servicedeskapi/servicedesk/42",
+                status=401,
+            )
+            with pytest.raises(CredentialExpiredError):
+                fetch_service_desk(session, _JSM_BASE, "42")
+
+    def test_403_reraises_insufficient_permissions(self) -> None:
+        session = build_jsm_session({"jira_api_token": "token"})
+        with responses.RequestsMock() as rsps:
+            rsps.get(
+                f"{_JSM_BASE}/rest/servicedeskapi/servicedesk/42",
+                status=403,
+            )
+            with pytest.raises(InsufficientPermissionsError):
+                fetch_service_desk(session, _JSM_BASE, "42")
+
+    def test_found_returns_payload(self) -> None:
+        session = build_jsm_session({"jira_api_token": "token"})
+        with responses.RequestsMock() as rsps:
+            rsps.get(
+                f"{_JSM_BASE}/rest/servicedeskapi/servicedesk/42",
+                json={"id": "42", "projectName": "Support"},
+            )
+            desk = fetch_service_desk(session, _JSM_BASE, "42")
+        assert desk == {"id": "42", "projectName": "Support"}
 
 
 class TestBestEffortEnrichment:
