@@ -151,6 +151,12 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // card's whole life: it also holds off the box's own entrance on the
     // rows, which would otherwise replay the moment the attribute left.
     const [enter, setEnter] = useState<"forward" | "back" | null>(null);
+    // The card as the list closed. The view resets underneath the exit, so
+    // the list keeps showing this snapshot until it unmounts.
+    const [frozen, setFrozen] = useState<{
+      key: string;
+      props: CardProps;
+    } | null>(null);
     const lastCardRef = useRef<{ key: string; props: CardProps } | null>(null);
     const lastHeightRef = useRef<number | null>(null);
     const lastViewKeyRef = useRef(viewKey);
@@ -161,8 +167,10 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
         lastViewKeyRef.current = viewKey;
         setExiting(null);
         setEnter(null);
+        setFrozen(lastCardRef.current);
         return;
       }
+      setFrozen(null);
       if (lastViewKeyRef.current === viewKey) return;
       lastViewKeyRef.current = viewKey;
       setEnter(viewDirection);
@@ -240,6 +248,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     };
     // What this commit shows, for the next view change to animate away.
     useLayoutEffect(() => {
+      if (!isOpen) return;
       lastCardRef.current = { key: viewKey, props: cardProps };
       lastHeightRef.current = liveCard(listRef.current)?.offsetHeight ?? null;
     });
@@ -290,11 +299,11 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
               entrance. The first card of a session does not slide: the
               root's own entrance covers it. */}
           <Card
-            key={viewKey}
+            key={frozen?.key ?? viewKey}
             live
             searchRef={searchRef}
             data-enter={enter ?? undefined}
-            {...cardProps}
+            {...(frozen?.props ?? cardProps)}
           />
           {exiting && (
             // The card that just left, rendered after the live one so an
