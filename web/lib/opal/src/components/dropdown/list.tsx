@@ -400,12 +400,13 @@ function Rows({
                 interaction={
                   headerIndex === highlightedIndex ? "hover" : "rest"
                 }
+                // In a picker the title is a button, not an option: it is
+                // never picked, and the rows stay the only options.
                 headerProps={{
                   id: groupElementId(listId, group.key),
                   "data-index": headerIndex,
-                  role: mode === "picker" ? "option" : "menuitem",
+                  role: mode === "picker" ? "button" : "menuitem",
                   "aria-expanded": !group.folded,
-                  ...(mode === "picker" && { "aria-selected": false }),
                   tabIndex: -1,
                 }}
               >

@@ -163,9 +163,14 @@ describe("Dropdown picker", () => {
     await user.keyboard("{ArrowDown}");
     expect(highlighted()).toEqual(["Apple"]);
 
-    // Banana is disabled: the next stop is the folded Citrus title.
+    // Banana is disabled: the next stop is the folded Citrus title, which
+    // is a button, not an option.
     await user.keyboard("{ArrowDown}");
-    expect(highlighted()).toEqual(["Citrus"]);
+    expect(highlighted()).toEqual([]);
+    expect(screen.getByRole("button", { name: /Citrus/ })).toHaveAttribute(
+      "data-interaction",
+      "hover"
+    );
     expect(screen.queryByRole("option", { name: "Lemon" })).toBeNull();
 
     // Enter on the title unfolds it; its rows join the walk.
@@ -325,8 +330,9 @@ describe("Dropdown triggers", () => {
   test("a click on another trigger toggles the list rather than reopening it", async () => {
     const user = setupUser();
     render(<TwoTriggersHarness />);
-    const left = screen.getByRole("button", { name: "Left" });
-    const right = screen.getByRole("button", { name: "Right" });
+    // A button that triggers a picker is a combobox.
+    const left = screen.getByRole("combobox", { name: "Left" });
+    const right = screen.getByRole("combobox", { name: "Right" });
     await user.click(left);
     expect(left).toHaveAttribute("aria-expanded", "true");
 
@@ -344,10 +350,10 @@ describe("Dropdown groups", () => {
   test("ArrowRight unfolds a title and enters it; ArrowLeft leaves and folds", async () => {
     const user = setupUser();
     render(<ButtonPickerHarness />);
-    await user.click(screen.getByRole("button", { name: "Fruit" }));
+    await user.click(screen.getByRole("combobox", { name: "Fruit" }));
     // Apple, then (Banana is disabled) the folded Citrus title.
     await user.keyboard("{ArrowDown}{ArrowDown}");
-    const title = screen.getByRole("option", { name: /Citrus/ });
+    const title = screen.getByRole("button", { name: /Citrus/ });
     expect(title).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("option", { name: "Lemon" })).toBeNull();
 
@@ -359,7 +365,8 @@ describe("Dropdown groups", () => {
     expect(highlighted()).toEqual(["Lemon"]);
 
     await user.keyboard("{ArrowLeft}");
-    expect(highlighted()).toEqual(["Citrus"]);
+    expect(highlighted()).toEqual([]);
+    expect(title).toHaveAttribute("data-interaction", "hover");
     expect(title).toHaveAttribute("aria-expanded", "true");
 
     await user.keyboard("{ArrowLeft}");
