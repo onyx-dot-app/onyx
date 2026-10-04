@@ -21,6 +21,8 @@ from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryTask,
 )
+from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
+from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
@@ -30,6 +32,7 @@ from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     get_cc_pair_groups_for_ids,
     get_cc_pair_ids_for_connector,
+    get_connector_credential_pair,
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
     remove_credential_from_connector,
@@ -48,6 +51,7 @@ from onyx.db.enums import (
     PermissionSyncStatus,
 )
 from onyx.db.index_attempt import (
+    cancel_waiting_index_attempt__no_commit,
     count_index_attempt_errors_for_cc_pair,
     count_index_attempts_for_cc_pair,
     get_error_counts_for_index_attempts,
@@ -56,6 +60,7 @@ from onyx.db.index_attempt import (
     get_latest_index_attempt_for_cc_pair_id,
     get_latest_successful_index_attempt_for_cc_pair_id,
     get_paginated_index_attempts_for_cc_pair_id,
+    get_waiting_index_attempt,
 )
 from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.indexing_coordination import IndexingCoordination
@@ -65,6 +70,7 @@ from onyx.db.permission_sync_attempt import (
     get_recent_doc_permission_sync_attempts_for_cc_pair,
     get_relevant_external_group_sync_attempts_for_cc_pair,
 )
+from onyx.db.search_settings import get_current_search_settings
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
@@ -349,6 +355,26 @@ def get_cc_pair_external_group_sync_attempts(
     )
 
 
+def _get_indexing_hold(
+    db_session: Session, cc_pair: ConnectorCredentialPair, *, can_operate: bool
+) -> IndexingHold | None:
+    """The hold on the pair's first index attempt, with the attempt that waits
+    when it is created. The failed checks are report internals, which are
+    management data, so a viewer who cannot operate the pair gets only the
+    reason."""
+    hold = get_first_indexing_hold(db_session, cc_pair)
+    if hold is None:
+        return None
+    waiting = get_waiting_index_attempt(
+        db_session, cc_pair.id, get_current_search_settings(db_session).id
+    )
+    return IndexingHold(
+        reason=hold.reason,
+        failed_checks=hold.failed_checks if can_operate else [],
+        index_attempt_id=waiting.id if waiting is not None else None,
+    )
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}", tags=PUBLIC_API_TAGS)
 def get_cc_pair_full_info(
     cc_pair_id: int,
@@ -446,6 +472,7 @@ def get_cc_pair_full_info(
         ),
         num_docs_indexed=documents_indexed,
         is_editable_for_current_user=can_operate,
+        indexing_hold=_get_indexing_hold(db_session, cc_pair, can_operate=can_operate),
         indexing=bool(
             latest_attempt and latest_attempt.status == IndexingStatus.IN_PROGRESS
         ),
@@ -545,6 +572,17 @@ def update_cc_pair_status(
 
         for attempt in active_attempts:
             try:
+                # A first attempt that waits for the capability checks has no
+                # task to see a cancel request, so end it now. It stays
+                # undispatched, so the next attempt still waits for the checks.
+                # The status commit below also commits this cancel.
+                if (
+                    attempt.celery_task_id is None
+                    and cancel_waiting_index_attempt__no_commit(
+                        db_session, attempt.id, reason="Connector paused."
+                    )
+                ):
+                    continue
                 IndexingCoordination.request_cancellation(db_session, attempt.id)
                 # Revoke the task to prevent it from running
                 if attempt.celery_task_id:
@@ -812,6 +850,15 @@ def get_cc_pair_indexing_errors(
     )
 
 
+def _assert_sync_restricted_allowed() -> None:
+    if not get_security_settings().allow_connector_group_restrictions:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Group restrictions on permission-synced connectors are turned off "
+            "for this workspace.",
+        )
+
+
 @router.put(
     "/connector/{connector_id}/credential/{credential_id}", tags=PUBLIC_API_TAGS
 )
@@ -832,27 +879,19 @@ def associate_credential_to_connector(
     """
 
     if metadata.access_type == AccessType.SYNC_RESTRICTED:
-        # Becomes creatable in the same change that enforces its data-access
-        # groups at query time, so no restricted pair exists without them.
-        # TODO(evan, ENG-4342): remove this rejection in the enforcement change,
-        # together with:
-        # - the allowed-connector query filter and the /chat/file check
-        # - the creation path: restriction_group_ids, validation, persistence
-        #   (branch jtahara/connector-group-restrictions-creation-path)
-        # - SYNC-only checks in connector_credential_pair.py: listing
-        #   visibility, tier/source validation, get_all_auto_sync_cc_pairs,
-        #   get_cc_pairs_by_source
-        # - creating the pair and its data-access rows in one transaction
-        raise OnyxError(
-            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
-            "Restricted perm-synced connectors are not available yet.",
-        )
-
-    if metadata.data_access:
-        if metadata.access_type != AccessType.PRIVATE:
+        _assert_sync_restricted_allowed()
+        if not metadata.data_access:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
-                "Data-access groups can only be set on private connectors.",
+                "A restricted connector needs at least one data-access group.",
+            )
+
+    if metadata.data_access:
+        if metadata.access_type not in AccessType.data_access_types():
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Data-access groups can only be set on private or restricted "
+                "connectors.",
             )
         visible_group_ids = get_visible_user_group_ids(user, db_session)
         if visible_group_ids is not None and not visible_group_ids.issuperset(
@@ -900,6 +939,19 @@ def associate_credential_to_connector(
         raise OnyxError(
             OnyxErrorCode.CREDENTIAL_NOT_FOUND,
             f"Credential {credential_id} does not exist or does not belong to user",
+        )
+
+    # Validation claims the pairing's report row, so a duplicate request must
+    # stop before it: it would replace the live pair's report and fence out its
+    # run. The add below still answers a concurrent duplicate.
+    if (
+        get_connector_credential_pair(db_session, connector_id, credential_id)
+        is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Connector {connector_id} is already associated with credential "
+            f"{credential_id}.",
         )
 
     try:

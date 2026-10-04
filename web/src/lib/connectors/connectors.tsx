@@ -686,8 +686,17 @@ export const connectorConfigs: Record<
         name: "is_cloud",
         optional: false,
         default: true,
+        tabLabels: {
+          true: "confluenceCloud",
+          false: "confluenceDataCenter",
+        },
         description:
-          "Check if this is a Confluence Cloud instance, uncheck for Confluence Server/Data Center",
+          "Choose Confluence Cloud for a site on atlassian.net, or Confluence Data Center for a self-hosted Confluence Server or Data Center site.",
+        // An OAuth credential is for Confluence Cloud only.
+        initial: (currentCredential) =>
+          currentCredential?.credential_json?.confluence_refresh_token
+            ? true
+            : undefined,
         disabled: (currentCredential) => {
           if (currentCredential?.credential_json?.confluence_refresh_token) {
             return true;
@@ -698,7 +707,7 @@ export const connectorConfigs: Record<
       {
         type: "text",
         query: "Enter the wiki base URL:",
-        label: "Wiki Base URL",
+        label: "Site URL",
         name: "wiki_base",
         optional: false,
         initial: (currentCredential) => {
@@ -789,7 +798,7 @@ export const connectorConfigs: Record<
                 name: "cql_query",
                 default: "",
                 description:
-                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details.",
+                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. Do not use ORDER BY, because the connector sets its own sort order. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details.",
               },
             ],
           },
@@ -2258,3 +2267,14 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
   },
 };
 export const defaultRefreshFreqMinutes = 30; // 30 minutes
+// Match the backend minimums in Connector.validate_refresh_freq / validate_prune_freq.
+const MIN_REFRESH_FREQ_SECONDS = 60;
+const MIN_PRUNE_FREQ_SECONDS = 300;
+export const MIN_REFRESH_FREQ_MINUTES = MIN_REFRESH_FREQ_SECONDS / 60;
+// Rounded up to the prune input's 3 decimals, so it converts to at least 300s.
+export const MIN_PRUNE_FREQ_HOURS =
+  Math.ceil((MIN_PRUNE_FREQ_SECONDS / 3600) * 1000) / 1000;
+// The columns are 32-bit integers of seconds; larger values fail on save.
+const MAX_FREQ_SECONDS = 2_147_483_647;
+export const MAX_REFRESH_FREQ_MINUTES = Math.floor(MAX_FREQ_SECONDS / 60);
+export const MAX_PRUNE_FREQ_HOURS = Math.floor(MAX_FREQ_SECONDS / 3600);

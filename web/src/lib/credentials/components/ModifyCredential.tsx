@@ -7,10 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Badge } from "@/components/ui/badge";
 import { AccessType } from "@/lib/types";
 import { SvgEdit } from "@opal/icons";
-import type {
-  ConfluenceCredentialJson,
-  Credential,
-} from "@/lib/credentials/types";
+import type { AnyCredential, Credential } from "@/lib/credentials/types";
 import type { Connector } from "@/lib/connectors/types";
 import {
   SvgArrowExchange,
@@ -22,7 +19,8 @@ import { Button } from "@opal/components";
 import { canEditCredentialWithForm } from "@/lib/credentials/utils";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
-  onSelectCredential: (credential: Credential<any> | null) => void;
+  onSelectCredential: (credential: Credential<any>) => void;
+  /** The selected row. The caller owns the selection. */
   currentCredentialId?: number;
   onDeleteCredential: (credential: Credential<any>) => void;
   onEditCredential?: (credential: Credential<any>) => void;
@@ -37,19 +35,6 @@ function CredentialSelectionTable({
 }: CredentialSelectionTableProps) {
   const t = useTranslations("admin");
   const locale = useLocale();
-  const [selectedCredentialId, setSelectedCredentialId] = useState<
-    number | null
-  >(null);
-
-  const handleSelectCredential = (credentialId: number) => {
-    const newSelectedId =
-      selectedCredentialId === credentialId ? null : credentialId;
-    setSelectedCredentialId(newSelectedId);
-
-    const selectedCredential =
-      credentials.find((cred) => cred.id === newSelectedId) || null;
-    onSelectCredential(selectedCredential);
-  };
 
   return (
     <div className="w-full max-h-[50vh] overflow-auto">
@@ -84,9 +69,7 @@ function CredentialSelectionTable({
         {credentials.length > 0 && (
           <tbody className="w-full">
             {credentials.map((credential, ind) => {
-              const selected = currentCredentialId
-                ? credential.id == (selectedCredentialId || currentCredentialId)
-                : false;
+              const selected = credential.id === currentCredentialId;
               // Everything the server returns is the caller's to change:
               // `similar-credentials` already filters by permission.
               const formEditable = canEditCredentialWithForm(credential);
@@ -100,7 +83,7 @@ function CredentialSelectionTable({
                       <input
                         type="radio"
                         name="credentialSelection"
-                        onChange={() => handleSelectCredential(credential.id)}
+                        onChange={() => onSelectCredential(credential)}
                         className="form-radio ms-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
                       />
                     ) : (
@@ -164,7 +147,7 @@ export interface ModifyCredentialProps {
     accessType: AccessType
   ) => void;
   onSwitch?: (newCredential: Credential<any>) => void;
-  onEditCredential?: (credential: Credential<ConfluenceCredentialJson>) => void;
+  onEditCredential?: (credential: AnyCredential) => void;
   onDeleteCredential: (credential: Credential<any | null>) => void;
   onCreateNew?: () => void;
 }
@@ -234,16 +217,15 @@ export default function ModifyCredential({
           }}
           onEditCredential={
             onEditCredential
-              ? (credential: Credential<ConfluenceCredentialJson>) =>
-                  onEditCredential(credential)
+              ? (credential: AnyCredential) => onEditCredential(credential)
               : undefined
           }
-          currentCredentialId={
-            defaultedCredential ? defaultedCredential.id : undefined
-          }
+          // With `onSwitch`, the caller owns the selection and a pick
+          // switches at once; without it, a pick waits for the select button.
+          currentCredentialId={(selectedCredential ?? defaultedCredential)?.id}
           credentials={credentials}
-          onSelectCredential={(credential: Credential<any> | null) => {
-            if (credential && onSwitch) {
+          onSelectCredential={(credential: Credential<any>) => {
+            if (onSwitch) {
               onSwitch(credential);
             } else {
               setSelectedCredential(credential);

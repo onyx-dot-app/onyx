@@ -217,11 +217,6 @@ export class OneDriveConnectorSetupPage {
   }
 
   private async fillCredentialIdentity() {
-    // Scoped to the credential form: the connector's own name field is on
-    // the same page.
-    await this.credentialForm
-      .getByTestId("name")
-      .fill("OneDrive test credential");
     await this.page.getByTestId("onedrive_client_id").fill("client-id");
     await this.page.getByTestId("onedrive_directory_id").fill("directory-id");
   }

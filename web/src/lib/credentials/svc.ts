@@ -39,7 +39,9 @@ export async function createCredentialWithPrivateKey(
       formData.append("groups", String(group));
     });
   }
-  formData.append(CREDENTIAL_NAME, credential.name || "");
+  if (credential.name) {
+    formData.append(CREDENTIAL_NAME, credential.name);
+  }
   formData.append(CREDENTIAL_SOURCE, credential.source);
   if (credential.private_key) {
     formData.append(CREDENTIAL_UPLOADED_FILE, credential.private_key.file);
@@ -92,7 +94,8 @@ export function linkCredential(
   accessType?: AccessType,
   groups?: number[],
   autoSyncOptions?: Record<string, any>,
-  processingMode?: ProcessingMode
+  processingMode?: ProcessingMode,
+  dataAccess?: number[]
 ) {
   return fetch(
     `/api/manage/connector/${connectorId}/credential/${credentialId}`,
@@ -107,6 +110,8 @@ export function linkCredential(
         groups: groups || null,
         auto_sync_options: autoSyncOptions || null,
         processing_mode: processingMode || "REGULAR",
+        // Left out, a private connector gives data access to its groups.
+        ...(dataAccess !== undefined && { data_access: dataAccess }),
       }),
     }
   );

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import factory
+from onyx.connectors.capability_checks import creation
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import (
     validate_ccpair_for_user,
@@ -31,6 +32,11 @@ def instantiate_connector(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     mock = MagicMock(return_value=MagicMock(spec=BaseConnector))
     monkeypatch.setattr(factory, "instantiate_connector", mock)
     monkeypatch.setattr(factory, "INTEGRATION_TESTS_MODE", False)
+    # Confluence has named checks, so validation runs them after the binding
+    # gate. These tests cover only the gate; the checks would reach the site.
+    monkeypatch.setattr(
+        creation, "validate_pairing_with_named_checks", MagicMock(return_value=True)
+    )
     return mock
 
 

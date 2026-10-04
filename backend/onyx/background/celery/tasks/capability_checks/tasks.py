@@ -1,13 +1,16 @@
 """Celery tasks for the granular capability check runs.
 
-The run task is enqueued by the capability-check trigger endpoint after it marks
-the scope's row RUNNING, and writes through the unconditional upsert: a granular
-run is the freshest truth and replaces whatever is stored (see the accessors'
+The run task is enqueued by ``send_capability_check_run_task`` after the
+caller marks the scope's row RUNNING: from ``start_capability_check_run`` (the
+manual trigger endpoint and credential creation), and from cc-pair creation and
+credential swap for the checks that did not finish in the blocking budget. It
+writes through the unconditional upsert: a granular run is the freshest truth and replaces whatever is stored (see the accessors'
 writer model). A run that fails gracefully records FAILED_TO_RUN itself; only
 hard kills and expired tasks leave their row RUNNING for the beat sweep to
 retire once the mark outlives its source's run ceiling.
 """
 
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
@@ -15,13 +18,31 @@ from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.connectors.capability_checks.models import compute_connector_config_hash
+from onyx.connectors.capability_checks.draft_runs import (
+    DRAFT_CHECK_TIMEOUT_SECONDS,
+    DraftCheckStateKind,
+    DraftRunStatus,
+    apply_check_result,
+    cache_draft_result,
+    is_superseded,
+    load_draft_run,
+    save_draft_run,
+)
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckResult,
+    compute_connector_config_hash,
+)
+from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
+    CAPABILITY_CHECK_TIMEOUT_SECONDS,
     capability_check_run_stale_after,
+    effective_check_timeout_seconds,
     generate_capability_report,
+    merge_capability_results,
 )
 from onyx.connectors.models import InputType
 from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.credential_capability import (
     get_sources_with_running_capability_runs,
     mark_capability_run_failed,
@@ -30,7 +51,7 @@ from onyx.db.credential_capability import (
 )
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import CapabilityCheckTrigger
+from onyx.db.enums import AccessType, CapabilityCheckTrigger
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -47,14 +68,24 @@ def run_capability_checks_task(
     # Serialized UUID; None only for tasks enqueued before the fence deployed,
     # whose terminal writes then match only their own pre-migration NULL marks.
     run_id: str | None = None,
+    # What started the run. Defaults to MANUAL for tasks enqueued before this
+    # argument existed.
+    trigger: str = CapabilityCheckTrigger.MANUAL.value,
+    # The pair's access type, for a run started before the pair exists.
+    access_type: str | None = None,
+    # Limits the run to these checks; ``prior_results`` hold the results of
+    # the others, which the stored report includes.
+    check_ids: list[str] | None = None,
+    prior_results: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Runs every capability check for the scope and stores the report.
+    """Runs the capability checks for the scope and stores the report.
 
     Terminal writes are fenced on ``run_id``: if this attempt was retired and
     the scope re-triggered, both the completion and the failure write no-op
     instead of mislabeling the successor's row.
     """
     parsed_run_id = UUID(run_id) if run_id is not None else None
+    parsed_trigger = CapabilityCheckTrigger(trigger)
     try:
         # Setup reads use a short-lived session: the probes below can run for
         # hours, and an open transaction would hold its connection and read
@@ -70,6 +101,9 @@ def run_capability_checks_task(
                 )
                 return
             input_type: InputType | None = None
+            parsed_access_type = (
+                AccessType(access_type) if access_type is not None else None
+            )
             config = connector_specific_config
             # A family credential can serve connectors of other sources, so a
             # connector-scoped run checks the connector's source.
@@ -88,21 +122,38 @@ def run_capability_checks_task(
                 source = connector.source
                 if config is None:
                     config = connector.connector_specific_config
+                # Checks outside the pair's access type are skipped as not
+                # applicable. A run before the pair exists runs them all.
+                cc_pair = get_connector_credential_pair(
+                    db_session, connector_id, credential_id
+                )
+                if cc_pair is not None and parsed_access_type is None:
+                    parsed_access_type = cc_pair.access_type
         report = generate_capability_report(
             credential,
             source=source,
             connector_specific_config=config,
             connector_id=connector_id,
             input_type=input_type,
-            trigger=CapabilityCheckTrigger.MANUAL,
+            trigger=parsed_trigger,
+            access_type=parsed_access_type,
+            check_ids=frozenset(check_ids) if check_ids is not None else None,
         )
+        if prior_results:
+            report = merge_capability_results(
+                report,
+                [
+                    CapabilityCheckResult.model_validate(result)
+                    for result in prior_results
+                ],
+            )
         with get_session_with_current_tenant() as db_session:
             completed_row = upsert_completed_capability_report(
                 db_session,
                 credential_id=credential_id,
                 connector_id=connector_id,
                 source=source,
-                trigger=CapabilityCheckTrigger.MANUAL,
+                trigger=parsed_trigger,
                 report=report,
                 connector_config_hash=(
                     compute_connector_config_hash(config)
@@ -131,6 +182,108 @@ def run_capability_checks_task(
                 run_id=parsed_run_id,
             )
             db_session.commit()
+        raise
+
+
+class _DraftRunSupersededError(Exception):
+    """A newer run for the same draft key started; this run stops."""
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.RUN_DRAFT_CAPABILITY_CHECKS,
+    bind=True,
+)
+def run_draft_capability_checks_task(
+    self: Task,  # noqa: ARG001
+    *,
+    run_id: str,
+    connector_specific_config: dict[str, Any] | None,
+    tenant_id: str | None,
+) -> None:
+    """Runs a draft run's PENDING checks and writes each result into the stored
+    run as it lands. The task is the only writer of the run after its start.
+    Before each next check it stops if a newer run for the same draft key
+    started."""
+    run = load_draft_run(UUID(run_id))
+    if run is None:
+        task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
+        return
+    snapshot = run.snapshot
+    pending = [
+        check for check in snapshot.checks if check.state == DraftCheckStateKind.PENDING
+    ]
+    timeout_by_check_id = {
+        check.check_id: min(
+            effective_check_timeout_seconds(check), DRAFT_CHECK_TIMEOUT_SECONDS
+        )
+        for check in get_capability_checks(snapshot.source)
+    }
+
+    def mark_next_running() -> None:
+        if (
+            next_check := next(
+                (c for c in pending if c.state == DraftCheckStateKind.PENDING), None
+            )
+        ) is not None:
+            next_check.state = DraftCheckStateKind.RUNNING
+            # The check's hang guard, plus the guard of a connector
+            # instantiation that can run before it.
+            run.renew_lease(
+                timeout_by_check_id[next_check.check_id]
+                + min(CAPABILITY_CHECK_TIMEOUT_SECONDS, DRAFT_CHECK_TIMEOUT_SECONDS)
+            )
+
+    def on_result(results: Sequence[CapabilityCheckResult]) -> None:
+        result = results[-1]
+        check_state = next(
+            check
+            for check in pending
+            if check.check_id == result.check_id
+            and check.capability == result.capability
+        )
+        apply_check_result(check_state, result)
+        cache_draft_result(run.result_cache_keys[result.check_id], result)
+        if is_superseded(run):
+            raise _DraftRunSupersededError()
+        mark_next_running()
+        save_draft_run(run)
+
+    try:
+        if is_superseded(run):
+            raise _DraftRunSupersededError()
+        with get_session_with_current_tenant() as db_session:
+            credential = fetch_credential_by_id(snapshot.credential_id, db_session)
+        if credential is None:
+            task_logger.info(
+                f"Draft capability run {run_id} stopped: credential "
+                f"{snapshot.credential_id} was deleted (tenant {tenant_id})."
+            )
+            snapshot.status = DraftRunStatus.FAILED_TO_RUN
+            save_draft_run(run)
+            return
+        mark_next_running()
+        save_draft_run(run)
+        generate_capability_report(
+            credential,
+            source=snapshot.source,
+            connector_specific_config=connector_specific_config,
+            access_type=snapshot.access_type,
+            on_result=on_result,
+            check_ids=frozenset(check.check_id for check in pending),
+            timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
+        )
+        snapshot.status = DraftRunStatus.COMPLETED
+        save_draft_run(run)
+    except _DraftRunSupersededError:
+        task_logger.info(
+            f"Draft capability run {run_id} stopped: a newer run for its draft "
+            f"key started (tenant {tenant_id})."
+        )
+        snapshot.status = DraftRunStatus.SUPERSEDED
+        save_draft_run(run)
+    except Exception:
+        snapshot.status = DraftRunStatus.FAILED_TO_RUN
+        save_draft_run(run)
         raise
 
 

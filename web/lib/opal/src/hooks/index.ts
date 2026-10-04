@@ -25,6 +25,7 @@ export {
   type UseHotkeyOptions,
 } from "@opal/hooks/useHotkey";
 export { default as useOnMount } from "@opal/hooks/useOnMount";
+export { default as useOverflow } from "@opal/hooks/useOverflow";
 export {
   default as useScreenSize,
   type ScreenSize,

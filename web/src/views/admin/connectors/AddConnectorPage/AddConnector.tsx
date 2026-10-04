@@ -8,7 +8,7 @@ import {
   getSourceDocLink,
   getSourceMetadata,
 } from "@/lib/sources";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/lib/app/components";
 import { linkCredential } from "@/lib/credentials/svc";
 import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsConfigurer";
@@ -16,11 +16,17 @@ import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
 import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
+import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
+import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
+import {
+  useBindingGateMessage,
+  type UseBoundFieldsGateResult,
+} from "@/lib/connectors/hooks";
 import {
   ConfigurableSources,
   ValidSources,
 } from "@/lib/connectors/types/source";
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import type { Credential } from "@/lib/credentials/types";
 import {
   defaultRefreshFreqMinutes,
@@ -30,6 +36,7 @@ import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
   isLoadState,
+  splitCredentialBoundFields,
 } from "@/lib/connectors/utils";
 import type {
   ConnectionConfiguration,
@@ -37,7 +44,7 @@ import type {
   ConnectorBase,
 } from "@/lib/connectors/types";
 import { useSettings } from "@/lib/settings/hooks";
-import { Card, MessageCard } from "@opal/components";
+import { Card, Divider, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import {
   useGmailCredentials,
@@ -61,7 +68,10 @@ import { escapeMarkdown, markdown } from "@opal/utils";
 import { deleteConnector } from "@/lib/connector";
 import { SvgArrowExchange } from "@opal/icons";
 import { useTranslations } from "next-intl";
-import { toWireAccess } from "@/lib/connectors/accessType";
+import {
+  SYNC_RESTRICTED_ACCESS_TYPE,
+  toWireAccess,
+} from "@/lib/connectors/accessType";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -151,10 +161,16 @@ export default function AddConnector({
     Permission.MANAGE_CONNECTORS
   );
 
-  // Get credential template and configuration
-  const credentialTemplate = CREDENTIAL_TEMPLATES[connector];
+  // Get credential spec and configuration
+  const credentialSpec = getCredentialSpec(connector);
   const configuration: ConnectionConfiguration =
     useConnectorConfiguration(connector);
+  // Fields bound to the credential sit above the credential section. The
+  // submit below still reads the full configuration.
+  const credentialBoundFields = splitCredentialBoundFields(
+    connector,
+    configuration
+  );
   const formControlFieldNames = new Set(
     [...configuration.values, ...configuration.advanced_values]
       .filter((field) => field.type === "tab")
@@ -186,8 +202,8 @@ export default function AddConnector({
     (connector === "gmail" && liveGmailCredential) ||
     currentCredential;
 
-  // Sources without a credential template skip the credential section.
-  const noCredentials = credentialTemplate == null;
+  // Sources without a credential spec skip the credential section.
+  const noCredentials = credentialSpec == null;
   const canCreate = noCredentials || credentialActivated != null;
 
   // The page body waits for the source's saved credentials: no connector
@@ -196,6 +212,16 @@ export default function AddConnector({
   // shares the requests.
   const { isLoading: credentialsLoading, error: credentialLoadError } =
     useCredentialLoad(connector, { enabled: !noCredentials });
+
+  // The configuration unlocks once the credential and the credential-bound
+  // fields are a valid combination. `BoundFieldsGate` reports it.
+  const [gate, setGate] = useState<UseBoundFieldsGateResult | null>(null);
+  const onGateChange = useCallback(
+    (next: UseBoundFieldsGateResult) => setGate(next),
+    []
+  );
+  const configUnlocked = gate?.status === "unlocked";
+  const gateMessage = useBindingGateMessage(gate?.reason ?? null);
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
@@ -290,9 +316,12 @@ export default function AddConnector({
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
-          pruneFreq: (pruneFreq ?? defaultPruneFreqHours) * 3600,
+          // The backend stores whole seconds.
+          pruneFreq: Math.round((pruneFreq ?? defaultPruneFreqHours) * 3600),
           indexingStart: convertStringToDateTime(indexingStart),
-          refreshFreq: (refreshFreq ?? defaultRefreshFreqMinutes) * 60,
+          refreshFreq: Math.round(
+            (refreshFreq ?? defaultRefreshFreqMinutes) * 60
+          ),
         };
 
         // File-specific handling
@@ -391,15 +420,17 @@ export default function AddConnector({
                 currentCredential ||
                 liveGDriveCredential ||
                 liveGmailCredential;
-              // TODO(evan, ENG-4342): send wireAccess.restriction_group_ids
-              // once the backend accepts them; this call creates the cc-pair.
               const linkCredentialResponse = await linkCredential(
                 response.id,
                 credential!.id,
                 name,
                 access_type,
                 groups,
-                auto_sync_options
+                auto_sync_options,
+                undefined,
+                access_type === SYNC_RESTRICTED_ACCESS_TYPE
+                  ? wireAccess.restriction_group_ids
+                  : undefined
               );
               if (linkCredentialResponse.ok) {
                 onSuccess();
@@ -449,6 +480,24 @@ export default function AddConnector({
     >
       {(formikProps) => {
         const busy = uploading || creatingConnector;
+        const formCredential =
+          currentCredential ||
+          liveGDriveCredential ||
+          liveGmailCredential ||
+          null;
+        const showAdvancedBoundFields =
+          !configuration.advancedValuesVisibleCondition ||
+          configuration.advancedValuesVisibleCondition(
+            formikProps.values,
+            formCredential
+          );
+        const visibleBoundFields = [
+          ...credentialBoundFields.values,
+          ...(showAdvancedBoundFields
+            ? credentialBoundFields.advancedValues
+            : []),
+        ].filter((field) => !field.hidden);
+        const hasVisibleBoundFields = visibleBoundFields.length > 0;
         return (
           <SettingsLayouts.Root width="sm">
             <SettingsLayouts.Header
@@ -486,7 +535,7 @@ export default function AddConnector({
                     credentialsLoading ||
                     credentialsFailed ||
                     !formikProps.isValid ||
-                    !canCreate ||
+                    !configUnlocked ||
                     busy
                   }
                   icon={busy ? IconLoader : undefined}
@@ -531,78 +580,121 @@ export default function AddConnector({
                   />
                 </PageCenter>
               ) : (
-                <Section gap={4} alignItems="stretch" width="full">
-                  {!noCredentials && (
-                    <CredentialsConfigurer
-                      connector={connector}
-                      accessType={formikProps.values.access_type}
-                      currentCredential={currentCredential}
-                      onCredentialChange={setCurrentCredential}
-                    />
-                  )}
-
-                  {/* The wizard could not reach these sections without a
-                    credential; on one page they stay disabled until one is
-                    selected instead. */}
-                  <Disabled
-                    disabled={!canCreate}
-                    tooltip={t("credentialRequired.tooltip")}
-                  >
-                    <Card
-                      border="solid"
-                      rounding={4}
-                      padding={6}
-                      disabled={!canCreate}
-                    >
-                      {/* A disabled fieldset also takes the controls out of the
-                        tab order; the wrapper above only blocks the pointer. */}
-                      <fieldset
-                        disabled={!canCreate}
-                        className="contents"
-                        data-testid="connector-form"
-                      >
-                        <Section gap={4} alignItems="start" width="full">
-                          <Content
-                            title={t("sections.configuration.title")}
-                            sizePreset="main-content"
-                            variant="section"
+                <>
+                  <BoundFieldsGate
+                    source={connector}
+                    credentialId={
+                      noCredentials ? null : (formCredential?.id ?? null)
+                    }
+                    credentialSelected={canCreate}
+                    currentCredential={formCredential}
+                    allBoundFields={[
+                      ...credentialBoundFields.values,
+                      ...credentialBoundFields.advancedValues,
+                    ]}
+                    visibleBoundFields={visibleBoundFields}
+                    onChange={onGateChange}
+                  />
+                  <Section gap={6} alignItems="stretch" width="full">
+                    {hasVisibleBoundFields && (
+                      <>
+                        <CredentialBoundFields
+                          fields={credentialBoundFields.values}
+                          advancedFields={credentialBoundFields.advancedValues}
+                          showAdvancedFields={showAdvancedBoundFields}
+                          values={formikProps.values}
+                          connector={connector}
+                          currentCredential={formCredential}
+                          fieldErrors={gate?.fieldErrors}
+                          onFieldBlur={gate?.requestCheck}
+                        />
+                        {!noCredentials && (
+                          <Divider
+                            paddingParallel={0}
+                            paddingPerpendicular={2}
                           />
-                          <DynamicConnectionForm
-                            values={formikProps.values}
-                            config={configuration}
-                            connector={connector}
-                            currentCredential={
-                              currentCredential ||
-                              liveGDriveCredential ||
-                              liveGmailCredential ||
-                              null
-                            }
-                          />
-                        </Section>
-                      </fieldset>
-                    </Card>
-                  </Disabled>
+                        )}
+                      </>
+                    )}
 
-                  {connector !== "file" && (
+                    {!noCredentials && (
+                      <CredentialsConfigurer
+                        connector={connector}
+                        accessType={formikProps.values.access_type}
+                        currentCredential={currentCredential}
+                        onCredentialChange={setCurrentCredential}
+                      />
+                    )}
+
+                    {/* The wizard could not reach these sections without a
+                      valid credential; on one page they stay disabled until
+                      the credential and the bound fields are valid instead. */}
                     <Disabled
-                      disabled={!canCreate}
-                      tooltip={t("credentialRequired.tooltip")}
+                      disabled={!configUnlocked}
+                      tooltip={gateMessage ?? undefined}
                     >
                       <Card
                         border="solid"
                         rounding={4}
                         padding={6}
-                        disabled={!canCreate}
+                        disabled={!configUnlocked}
                       >
-                        <fieldset disabled={!canCreate} className="contents">
-                          <AdvancedFormPage
-                            defaultPruneFreqHours={defaultPruneFreqHours}
-                          />
+                        {/* A disabled fieldset also takes the controls out of
+                          the tab order; the wrapper above only blocks the
+                          pointer. */}
+                        <fieldset
+                          disabled={!configUnlocked}
+                          className="contents"
+                          data-testid="connector-form"
+                        >
+                          <Section gap={4} alignItems="start" width="full">
+                            {/* Announces why the configuration is locked
+                              when the reason changes. */}
+                            <Section
+                              alignItems="start"
+                              width="full"
+                              height="fit"
+                              aria-live="polite"
+                            >
+                              <Content
+                                title={t("sections.configuration.title")}
+                                description={gateMessage ?? undefined}
+                                sizePreset="main-content"
+                                variant="section"
+                              />
+                            </Section>
+                            <DynamicConnectionForm
+                              values={formikProps.values}
+                              config={credentialBoundFields.rest}
+                              connector={connector}
+                              currentCredential={formCredential}
+                            />
+                          </Section>
                         </fieldset>
                       </Card>
                     </Disabled>
-                  )}
-                </Section>
+
+                    {connector !== "file" && (
+                      <>
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
+                        <Disabled
+                          disabled={!configUnlocked}
+                          tooltip={gateMessage ?? undefined}
+                        >
+                          <fieldset
+                            disabled={!configUnlocked}
+                            className="contents"
+                          >
+                            <AdvancedFormPage
+                              defaultPruneFreqHours={defaultPruneFreqHours}
+                              disabled={!configUnlocked}
+                            />
+                          </fieldset>
+                        </Disabled>
+                      </>
+                    )}
+                  </Section>
+                </>
               )}
             </SettingsLayouts.Body>
           </SettingsLayouts.Root>

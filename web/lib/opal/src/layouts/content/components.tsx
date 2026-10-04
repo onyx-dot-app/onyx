@@ -141,7 +141,7 @@ type LgContentProps = ContentBaseProps & {
 type MdContentProps = ContentBaseProps & {
   sizePreset: "main-content" | "main-ui" | "secondary";
   variant?: "section";
-  /** Muted suffix rendered beside the title. Use `"optional"` for "(Optional)". */
+  /** Muted suffix rendered beside the title. Use `"optional"` for the translated "(Optional)" (`OpalStrings.contentOptional`). */
   suffix?: "optional" | (string & {});
   /** Auxiliary status icon rendered beside the title. */
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";

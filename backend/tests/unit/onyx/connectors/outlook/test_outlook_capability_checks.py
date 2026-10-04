@@ -201,6 +201,26 @@ def test_mail_read_check_probes_the_first_configured_mailbox() -> None:
     gateway.read_any_message.assert_called_once_with(mailbox_id=MAILBOX_ID)
 
 
+def test_mail_read_check_fails_on_an_invalid_mailboxes_setting() -> None:
+    gateway = _gateway()
+
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(gateway, {"mailboxes": 42})
+    )
+
+    assert result.status is CapabilityCheckStatus.FAILED
+    assert "mailboxes" in result.message
+    gateway.read_any_message.assert_not_called()
+
+
+def test_mail_read_check_runs_on_a_config_less_run() -> None:
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(_gateway())
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+
+
 def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:
     gateway = _gateway()
 

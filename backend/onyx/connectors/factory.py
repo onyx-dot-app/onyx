@@ -1,7 +1,9 @@
 import importlib
+from enum import Enum
 from typing import Any, Type
 
 import pydantic
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
@@ -225,7 +227,7 @@ def parse_credential_binding(
         return None
 
 
-def _validate_credential_binding(
+def validate_credential_binding(
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
     credential: Credential,
@@ -260,6 +262,60 @@ def _validate_credential_binding(
     )
 
 
+class CredentialBindingFieldErrorKind(str, Enum):
+    MISSING = "missing"
+    INVALID = "invalid"
+
+
+class CredentialBindingFieldError(BaseModel):
+    kind: CredentialBindingFieldErrorKind
+    # English text from the binding model's validation. Clients show their
+    # own message for ``kind`` and may add this as detail.
+    detail: str
+
+
+_MISSING_FIELD_DETAIL = "This field is required."
+
+
+def credential_binding_field_errors(
+    source: DocumentSource, connector_specific_config: dict[str, Any]
+) -> dict[str, CredentialBindingFieldError]:
+    """Field name to error for the config's credential-bound fields. A required
+    bound field that is absent or blank is ``MISSING``. Empty when the source
+    has no binding model. Details never echo the input value."""
+    binding_class = _credential_binding_class(source)
+    if binding_class is None:
+        return {}
+    errors: dict[str, CredentialBindingFieldError] = {}
+    for name, field in binding_class.model_fields.items():
+        value = connector_specific_config.get(name)
+        if field.is_required() and (
+            value is None or (isinstance(value, str) and not value.strip())
+        ):
+            errors[name] = CredentialBindingFieldError(
+                kind=CredentialBindingFieldErrorKind.MISSING,
+                detail=_MISSING_FIELD_DETAIL,
+            )
+    try:
+        binding_class.model_validate(
+            {
+                name: value
+                for name, value in connector_specific_config.items()
+                if name in binding_class.model_fields and name not in errors
+            }
+        )
+    except pydantic.ValidationError as e:
+        for detail in e.errors():
+            loc = detail["loc"]
+            name = str(loc[0]) if loc else ""
+            if name in binding_class.model_fields and name not in errors:
+                errors[name] = CredentialBindingFieldError(
+                    kind=CredentialBindingFieldErrorKind.INVALID,
+                    detail=str(detail["msg"]),
+                )
+    return errors
+
+
 def validate_connector_credential_bindings(
     connector_id: int,
     source: DocumentSource,
@@ -273,7 +329,7 @@ def validate_connector_credential_bindings(
     if connector is None:
         return
     for cc_pair in connector.credentials:
-        _validate_credential_binding(
+        validate_credential_binding(
             source, connector_specific_config, cc_pair.credential
         )
 
@@ -327,8 +383,26 @@ def validate_ccpair_for_user(
             connector_specific_config=connector_specific_config,
         )
 
+    # Inline imports: the creation module imports the runner, which imports
+    # this module, and the registry eagerly imports every migrated connector's
+    # check module.
+    from onyx.connectors.capability_checks.creation import (
+        validate_pairing_with_named_checks,
+    )
+    from onyx.connectors.capability_checks.registry import (
+        has_named_capability_checks,
+    )
+
+    # Creation and credential swap run the named checks; indexing and perm-sync
+    # attempts keep the legacy validation.
+    use_named_checks = (
+        trigger == CapabilityCheckTrigger.CC_PAIR_VALIDATION
+        and has_named_capability_checks(source)
+    )
     try:
-        _validate_credential_binding(source, connector_specific_config, credential)
+        validate_credential_binding(source, connector_specific_config, credential)
+        # Construction validates parts of the config (for example the Microsoft
+        # hosts), so it gates both paths.
         runnable_connector = instantiate_connector(
             db_session=db_session,
             source=connector.source,
@@ -336,9 +410,10 @@ def validate_ccpair_for_user(
             connector_specific_config=connector.connector_specific_config,
             credential=credential,
         )
-        runnable_connector.validate_connector_settings()
-        if access_type.is_perm_synced():
-            runnable_connector.validate_perm_sync()
+        if not use_named_checks:
+            runnable_connector.validate_connector_settings()
+            if access_type.is_perm_synced():
+                runnable_connector.validate_perm_sync()
     except ValidationError as e:
         _record_outcome(e, perm_sync_validated=False)
         raise
@@ -349,6 +424,17 @@ def validate_ccpair_for_user(
         if enforce_creation:
             raise ConnectorValidationError(str(e))
         return False
+
+    if use_named_checks:
+        return validate_pairing_with_named_checks(
+            connector_id=connector_id,
+            source=source,
+            input_type=connector.input_type,
+            connector_specific_config=connector_specific_config,
+            credential=credential,
+            access_type=access_type,
+            enforce_creation=enforce_creation,
+        )
 
     _record_outcome(None, perm_sync_validated=access_type.is_perm_synced())
     return True

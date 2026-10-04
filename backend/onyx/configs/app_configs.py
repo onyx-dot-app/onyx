@@ -1985,6 +1985,13 @@ ENABLE_CC_PAIR_ACCESS_FILTER = (
     os.environ.get("ENABLE_CC_PAIR_ACCESS_FILTER", "").lower() == "true"
 )
 
+# Turns on behavior that needs the connector checks UI (today: the first index
+# attempt waits for required capability checks). Enable together with
+# NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED.
+CONNECTOR_CHECKS_ENABLED = (
+    os.environ.get("CONNECTOR_CHECKS_ENABLED", "").lower() == "true"
+)
+
 # Membership TTL for the `active_tenants` sorted set. Members older than this
 # are treated as inactive by the gate read path. Must be > the full-fanout
 # interval so self-healing re-adds a genuinely-working tenant before their

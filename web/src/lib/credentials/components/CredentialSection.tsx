@@ -17,15 +17,11 @@ import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { Button, Card, Modal, Text } from "@opal/components";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { getSourceDisplayName } from "@/lib/sources";
-import type {
-  ConfluenceCredentialJson,
-  Credential,
-} from "@/lib/credentials/types";
+import type { Credential } from "@/lib/credentials/types";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { useCredentialSetup } from "@/lib/credentials/hooks";
 import { Spinner } from "@/components/Spinner";
 import { TypedFile } from "@/lib/connectors/fileTypes";
-import { isTypedFileField } from "@/lib/connectors/utils";
 import { SvgEdit, SvgKey } from "@opal/icons";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
@@ -33,6 +29,7 @@ import type { CredentialFieldValues } from "@/lib/credentials/types";
 import {
   getCredentialCreationActionLabel,
   getCredentialCreationMethods,
+  getCredentialFileType,
   shouldRedirectToOAuth,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
@@ -137,7 +134,7 @@ export default function CredentialSection({
   ) => {
     let privateKey: TypedFile | null = null;
     Object.entries(details).forEach(([key, value]) => {
-      if (isTypedFileField(key)) {
+      if (getCredentialFileType(key) !== null) {
         privateKey = value as TypedFile;
         delete details[key];
       }

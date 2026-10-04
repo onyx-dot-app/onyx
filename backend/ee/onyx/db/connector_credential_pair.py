@@ -65,11 +65,11 @@ def _delete_connector_credential_pair_user_groups_relationship__no_commit(
 def get_cc_pairs_by_source(
     db_session: Session,
     source_type: DocumentSource,
-    access_type: AccessType | None = None,
+    access_types: list[AccessType] | None = None,
     status: ConnectorCredentialPairStatus | None = None,
 ) -> list[ConnectorCredentialPair]:
     """
-    Get all cc_pairs for a given source type with optional filtering by access_type and status
+    Get all cc_pairs for a given source type with optional filtering by access_types and status
     result is sorted by cc_pair id
     """
     query = (
@@ -79,8 +79,8 @@ def get_cc_pairs_by_source(
         .order_by(ConnectorCredentialPair.id)
     )
 
-    if access_type is not None:
-        query = query.filter(ConnectorCredentialPair.access_type == access_type)
+    if access_types is not None:
+        query = query.filter(ConnectorCredentialPair.access_type.in_(access_types))
 
     if status is not None:
         query = query.filter(ConnectorCredentialPair.status == status)
@@ -95,7 +95,7 @@ def get_all_auto_sync_cc_pairs(
     return (
         db_session.query(ConnectorCredentialPair)
         .where(
-            ConnectorCredentialPair.access_type == AccessType.SYNC,
+            ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
         )
         .all()
     )

@@ -60,7 +60,7 @@ interface OverrideFormProps {
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const t = useTranslations("admin.costOverrides");
   const { mutate } = useSWRConfig();
-  const { llmProviders } = useAdminLanguageModels();
+  const { llmProviders, modelPaging } = useAdminLanguageModels();
   const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
@@ -143,6 +143,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
               })}
               value={modelConfigId}
               grouped={!hideProviderGrouping}
+              modelPaging={modelPaging}
               onChange={(modelConfigurationId) => {
                 const opt = findLlmOptionById(
                   llmProviders,

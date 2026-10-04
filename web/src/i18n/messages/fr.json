@@ -2670,30 +2670,20 @@
           "toast": "Une erreur inconnue est survenue"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Date de début de l'indexation",
-          "subtext": "Les documents antérieurs à cette date ne seront pas récupérés"
-        },
-        "pruneFrequency": {
-          "description": "Vérifie tous les documents par rapport à la source pour supprimer ceux qui n'existent plus. Remarque : ce processus vérifie chaque document, soyez donc prudent lorsque vous augmentez la fréquence. La valeur par défaut est de {hours} heures ({days} jours). Les heures décimales sont prises en charge (ex. : 0.1 heure = 6 minutes). Saisissez 0 pour désactiver l'élagage pour ce connecteur.",
-          "label": "Fréquence d'élagage (heures)"
-        },
-        "refreshFrequency": {
-          "description": "Indique la fréquence à laquelle nous récupérons de nouveaux documents depuis la source (en minutes). Si vous saisissez 0, nous ne récupérerons jamais de nouveaux documents pour ce connecteur.",
-          "label": "Fréquence d'actualisation (minutes)"
-        },
-        "resetButton": {
-          "label": "Réinitialiser"
-        },
-        "title": "Configuration avancée"
-      },
       "connectorName": {
         "label": "Nom du connecteur",
         "subtext": "Un nom descriptif pour le connecteur."
       },
       "credentialRequired": {
         "tooltip": "Sélectionnez d'abord un identifiant."
+      },
+      "bindingGate": {
+        "enterField": "Saisissez le champ « {field} ».",
+        "fixField": "Vérifiez le champ « {field} ».",
+        "awaitingCheck": "Quittez le champ pour le vérifier avec les identifiants.",
+        "checking": "Vérification des identifiants…",
+        "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
+        "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"
       },
       "credentialsLoadError": {
         "title": "Échec du chargement des identifiants."
@@ -2955,6 +2945,38 @@
       "tabs": {
         "empty": {
           "label": "Aucun onglet à afficher."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Options avancées",
+        "errors": {
+          "missing": "Saisissez une valeur.",
+          "invalid": "Cette valeur n’est pas valide : {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "Indiquez comment le connecteur effectuera l'indexation. L'opérateur pourra modifier cette section.",
+        "indexingStart": {
+          "description": "Les documents dont la date de dernière mise à jour est antérieure seront ignorés.",
+          "placeholder": "Toute la période",
+          "title": "Indexer les documents après"
+        },
+        "pruneFrequency": {
+          "description": "Vérifier la source et supprimer les documents qui n'existent plus.",
+          "title": "Nettoyer toutes les"
+        },
+        "refreshFrequency": {
+          "description": "Récupérer les nouveaux documents depuis la source.",
+          "title": "Actualiser toutes les"
+        },
+        "title": "Planification",
+        "units": {
+          "hours": "heures",
+          "minutes": "minutes"
         }
       }
     },
@@ -3218,15 +3240,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Utilisez l'adresse e-mail du compte propriétaire du jeton d'API."
+        },
+        "apiTokenField": {
+          "subDescription": "Collez votre jeton d'API pour accéder à {source}."
+        },
         "createButton": {
           "label": "Créer"
         },
         "created": {
           "toast": "Nouvel identifiant créé !"
         },
-        "name": {
-          "label": "Nom :",
-          "placeholder": "(Facultatif) nom de l'identifiant..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Administrateurs",
+            "description": "Tous les administrateurs peuvent réutiliser ce compte pour créer des connecteurs.",
+            "suffix": "(Par défaut)"
+          },
+          "adminsAndGroups": {
+            "description": "Les administrateurs et les groupes que vous désignez peuvent réutiliser ce compte.",
+            "label": "Administrateurs et groupes"
+          },
+          "onlyMe": {
+            "label": "Moi uniquement"
+          },
+          "description": "Autorisez les groupes à réutiliser ce compte pour créer des connecteurs.",
+          "title": "Partager ce compte"
         },
         "submitError": {
           "toast": "Erreur lors de l'envoi de l'identifiant"
@@ -3261,6 +3304,80 @@
           "toast": "Erreur lors de la mise à jour de l'identifiant"
         }
       },
+      "displayNames": {
+        "accessKeyId": "ID de clé d'accès {source}",
+        "secretAccessKey": "Clé d'accès secrète {source}",
+        "accountId": "ID de compte {source}",
+        "apiToken": "Jeton d'API",
+        "clientId": "ID client {source}",
+        "clientSecret": "Secret client {source}",
+        "clientToken": "Jeton client {source}",
+        "directoryId": "ID de répertoire {source}",
+        "certificatePassword": "Mot de passe du certificat {source}",
+        "privateKey": "Clé privée {source}",
+        "certificate": "Certificat {source}",
+        "baseUrl": "URL de base {source}",
+        "apiBaseUrl": "URL de base de l'API {source}",
+        "url": "URL {source}",
+        "enterpriseServerUrl": "URL du serveur {source} Enterprise",
+        "botToken": "Jeton du bot {source}",
+        "username": "Nom d'utilisateur {source}",
+        "apiUsername": "Nom d'utilisateur de l'API {source}",
+        "userEmail": "E-mail de l'utilisateur {source}",
+        "accountEmail": "E-mail du compte {source}",
+        "password": "Mot de passe {source}",
+        "subdomain": "Sous-domaine {source}",
+        "domain": "Domaine {source}",
+        "enterpriseId": "ID d'entreprise {source}",
+        "teamId": "ID d'équipe {source}",
+        "applicationId": "ID d'application {source}",
+        "apiTokenId": "ID du jeton d'API {source}",
+        "apiTokenSecret": "Secret du jeton d'API {source}",
+        "securityToken": "Jeton de sécurité {source}",
+        "integrationToken": "Jeton d'intégration {source}",
+        "accessKey": "Clé d'accès {source}",
+        "accessKeySecret": "Secret de la clé d'accès {source}",
+        "key": "Clé {source}",
+        "secret": "Secret {source}",
+        "roleArn": "ARN du rôle {source}",
+        "namespace": "Espace de noms {source}",
+        "region": "Région {source}",
+        "portalId": "ID de portail {source}",
+        "oauthTokens": "Jetons OAuth {source}",
+        "isSandbox": "Environnement sandbox",
+        "serviceUserEmail": "E-mail de l'utilisateur de service",
+        "zuliprcContent": "Contenu de zuliprc",
+        "authenticationMethod": "Méthode d'authentification"
+      },
+      "hints": {
+        "boxUserEmail": "Facultatif. L'utilisateur Box à usurper.",
+        "githubBaseUrl": "Facultatif. Indiquez l'hôte de votre serveur, par exemple https://github.example.com. Laissez vide pour github.com.",
+        "gongBaseUrl": "Facultatif. Pour les données hors des États-Unis, indiquez l'hôte de votre région, par exemple https://[region].api.gong.io.",
+        "jiraUserEmail": "Obligatoire pour Jira Cloud.",
+        "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
+        "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
+        "pfxFile": "Un fichier PFX.",
+        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Secret client",
+          "certificateAuthentication": "Authentification par certificat",
+          "certificate": "Certificat",
+          "accessKeyAndSecret": "Clé d'accès et secret",
+          "iamRole": "Rôle IAM",
+          "assumeRole": "Endosser un rôle"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "Dans ce mode, le connecteur SharePoint s'authentifie avec un secret client. Vous devez fournir l'ID client et le secret client.",
+          "sharepointCertificate": "Dans ce mode, le connecteur SharePoint s'authentifie avec un certificat. Vous devez fournir l'ID client, l'ID d'annuaire, le mot de passe du certificat et les données PFX.",
+          "teamsClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret. Messages et membres des canaux uniquement : SharePoint refuse un secret, l'option Inclure les pièces jointes nécessite donc le certificat.",
+          "teamsCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe. Obligatoire pour Inclure les pièces jointes, qui lit les fichiers des canaux et leurs lecteurs depuis SharePoint.",
+          "outlookClientSecret": "Le connecteur se connecte avec un secret client de l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire et le secret.",
+          "outlookCertificate": "Le connecteur se connecte avec un certificat téléversé dans l'inscription d'application. Fournissez l'ID client, l'ID d'annuaire, le paquet PFX et son mot de passe.",
+          "s3AssumeRole": "Dans ce mode, l'instance Amazon EC2 endosse son rôle existant pour accéder à S3. Aucun autre identifiant n'est nécessaire."
+        }
+      },
       "modal": {
         "createTitle": "Créer un identifiant {source}",
         "editTitle": "Modifier l'identifiant",
@@ -3289,6 +3406,10 @@
         },
         "retryButton": {
           "label": "Réessayer"
+        },
+        "signIn": {
+          "description": "{appName} nécessite des autorisations en lecture seule.",
+          "title": "Se connecter avec {source}"
         },
         "startError": {
           "message": "Impossible de démarrer OAuth"
@@ -3341,6 +3462,13 @@
         "success": {
           "toast": "Identifiant mis à jour"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Veuillez sélectionner une méthode d'authentification",
+        "empty": "Le champ {field} ne peut pas être vide",
+        "fileRequired": "Veuillez sélectionner un fichier pour {field}",
+        "invalidEmail": "Veuillez saisir une adresse e-mail valide dans {field}",
+        "required": "Veuillez renseigner le champ {field}"
       }
     },
     "customAnalytics": {
@@ -5886,6 +6014,9 @@
           "optionalSuffix": {
             "label": "facultatif"
           },
+          "slowSave": {
+            "text": "Cela prend plus de temps que d'habitude. Les grandes listes de modèles peuvent prendre une minute."
+          },
           "submitButton": {
             "invalidTooltip": "Veuillez remplir tous les champs obligatoires.",
             "pristineTooltip": "Aucune modification à enregistrer."
@@ -5979,6 +6110,7 @@
       "toasts": {
         "providerDeleteFailed": "Échec de la suppression du fournisseur : {message}",
         "providerDeleted": "Fournisseur supprimé avec succès !",
+        "providerLoadFailed": "Impossible de charger le fournisseur : {message}",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"
@@ -13115,6 +13247,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "Développer",
+      "expandSection": "Développer {title}",
+      "fold": "Réduire",
+      "foldSection": "Réduire {title}"
+    },
     "comboBox": {
       "close": "Fermer la liste déroulante",
       "create": "Créer",
@@ -13135,6 +13273,7 @@
       "loading": "Chargement",
       "loadingPage": "Chargement…",
       "openCalendar": "Ouvrir le calendrier",
+      "optional": "(Facultatif)",
       "progress": "Progression",
       "remove": "Retirer",
       "removeItem": "Retirer {title}",

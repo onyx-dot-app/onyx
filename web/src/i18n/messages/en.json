@@ -2670,30 +2670,20 @@
           "toast": "An unknown error occurred"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "Indexing Start Date",
-          "subtext": "Documents prior to this date will not be pulled in"
-        },
-        "pruneFrequency": {
-          "description": "Checks all documents against the source to delete those that no longer exist. Note: This process checks every document, so be cautious when increasing frequency. Default is {hours} hours ({days} days). Decimal hours are supported (e.g., 0.1 hours = 6 minutes). Enter 0 to disable pruning for this connector.",
-          "label": "Prune Frequency (hours)"
-        },
-        "refreshFrequency": {
-          "description": "This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector.",
-          "label": "Refresh Frequency (minutes)"
-        },
-        "resetButton": {
-          "label": "Reset"
-        },
-        "title": "Advanced Configuration"
-      },
       "connectorName": {
         "label": "Connector Name",
         "subtext": "A descriptive name for the connector."
       },
       "credentialRequired": {
         "tooltip": "Select a credential first."
+      },
+      "bindingGate": {
+        "enterField": "Enter the {field}.",
+        "fixField": "Check the {field}.",
+        "awaitingCheck": "Leave the field to check it with the credential.",
+        "checking": "Checking the credential…",
+        "fieldInvalid": "Check the {field}: {detail}",
+        "rejected": "This credential cannot be used with these settings. {detail}"
       },
       "credentialsLoadError": {
         "title": "Failed to load credentials."
@@ -2955,6 +2945,38 @@
       "tabs": {
         "empty": {
           "label": "No tabs to display."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "Advanced Options",
+        "errors": {
+          "missing": "Enter a value.",
+          "invalid": "This value is not valid: {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "Specify how the connector will operate indexing. Operator will be able to edit this section.",
+        "indexingStart": {
+          "description": "Documents with a last-updated date prior to this will be ignored.",
+          "placeholder": "All time",
+          "title": "Index Documents After"
+        },
+        "pruneFrequency": {
+          "description": "Check the source and delete documents that no longer exist.",
+          "title": "Prune Every"
+        },
+        "refreshFrequency": {
+          "description": "Pull new documents from the source.",
+          "title": "Refresh Every"
+        },
+        "title": "Schedule",
+        "units": {
+          "hours": "hours",
+          "minutes": "minutes"
         }
       }
     },
@@ -3218,15 +3240,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "Use the account email that owns the API token."
+        },
+        "apiTokenField": {
+          "subDescription": "Paste your API token to access {source}."
+        },
         "createButton": {
           "label": "Create"
         },
         "created": {
           "toast": "Created new credential!"
         },
-        "name": {
-          "label": "Name:",
-          "placeholder": "(Optional) credential name.."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "Admins",
+            "description": "All admins can reuse this account to create connectors.",
+            "suffix": "(Default)"
+          },
+          "adminsAndGroups": {
+            "description": "Admins and groups named by you can reuse this account.",
+            "label": "Admins & Groups"
+          },
+          "onlyMe": {
+            "label": "Only Me"
+          },
+          "description": "Allow groups to reuse this account to create connectors.",
+          "title": "Share This Account"
         },
         "submitError": {
           "toast": "Error submitting credential"
@@ -3261,6 +3304,80 @@
           "toast": "Error updating credential"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} Access Key ID",
+        "secretAccessKey": "{source} Secret Access Key",
+        "accountId": "{source} Account ID",
+        "apiToken": "API Token",
+        "clientId": "{source} Client ID",
+        "clientSecret": "{source} Client Secret",
+        "clientToken": "{source} Client Token",
+        "directoryId": "{source} Directory ID",
+        "certificatePassword": "{source} Certificate Password",
+        "privateKey": "{source} Private Key",
+        "certificate": "{source} Certificate",
+        "baseUrl": "{source} Base URL",
+        "apiBaseUrl": "{source} API Base URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} Bot Token",
+        "username": "{source} Username",
+        "apiUsername": "{source} API Username",
+        "userEmail": "{source} User Email",
+        "accountEmail": "{source} Account Email",
+        "password": "{source} Password",
+        "subdomain": "{source} Subdomain",
+        "domain": "{source} Domain",
+        "enterpriseId": "{source} Enterprise ID",
+        "teamId": "{source} Team ID",
+        "applicationId": "{source} Application ID",
+        "apiTokenId": "{source} API Token ID",
+        "apiTokenSecret": "{source} API Token Secret",
+        "securityToken": "{source} Security Token",
+        "integrationToken": "{source} Integration Token",
+        "accessKey": "{source} Access Key",
+        "accessKeySecret": "{source} Access Key Secret",
+        "key": "{source} Key",
+        "secret": "{source} Secret",
+        "roleArn": "{source} Role ARN",
+        "namespace": "{source} Namespace",
+        "region": "{source} Region",
+        "portalId": "{source} Portal ID",
+        "oauthTokens": "{source} Oauth Tokens",
+        "isSandbox": "Is Sandbox Environment",
+        "serviceUserEmail": "Service User Email",
+        "zuliprcContent": "Zuliprc Content",
+        "authenticationMethod": "Authentication Method"
+      },
+      "hints": {
+        "boxUserEmail": "Optional. The Box user to impersonate.",
+        "githubBaseUrl": "Optional. Set your server host, like https://github.example.com. Leave blank for github.com.",
+        "gongBaseUrl": "Optional. For data outside the US, set your region's host, like https://[region].api.gong.io.",
+        "jiraUserEmail": "Required for Jira Cloud.",
+        "lumappsServiceUser": "The user to index on behalf of.",
+        "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
+        "pfxFile": "A PFX file.",
+        "testrailBaseUrl": "For example https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "Client Secret",
+          "certificateAuthentication": "Certificate Authentication",
+          "certificate": "Certificate",
+          "accessKeyAndSecret": "Access Key and Secret",
+          "iamRole": "IAM Role",
+          "assumeRole": "Assume Role"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
+          "sharepointCertificate": "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
+          "teamsClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Channel messages and members only: SharePoint refuses a secret, so Include Attachments needs the certificate option.",
+          "teamsCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
+          "outlookClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
+          "outlookCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+          "s3AssumeRole": "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required."
+        }
+      },
       "modal": {
         "createTitle": "Create {source} Credential",
         "editTitle": "Edit Credential",
@@ -3289,6 +3406,10 @@
         },
         "retryButton": {
           "label": "Retry"
+        },
+        "signIn": {
+          "description": "{appName} requires read-only scopes.",
+          "title": "Sign in with {source}"
         },
         "startError": {
           "message": "Unable to start OAuth"
@@ -3341,6 +3462,13 @@
         "success": {
           "toast": "Updated credential"
         }
+      },
+      "validation": {
+        "authMethodRequired": "Please select an authentication method",
+        "empty": "{field} cannot be empty",
+        "fileRequired": "Please select a {field} file",
+        "invalidEmail": "Please enter a valid {field}",
+        "required": "Please enter your {field}"
       }
     },
     "customAnalytics": {
@@ -5886,6 +6014,9 @@
           "optionalSuffix": {
             "label": "optional"
           },
+          "slowSave": {
+            "text": "This is taking longer than usual. Large model lists can take a minute."
+          },
           "submitButton": {
             "invalidTooltip": "Please fill in all required fields.",
             "pristineTooltip": "No changes to save."
@@ -5979,6 +6110,7 @@
       "toasts": {
         "providerDeleteFailed": "Failed to delete provider: {message}",
         "providerDeleted": "Provider deleted successfully!",
+        "providerLoadFailed": "Could not load the provider: {message}",
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
@@ -13115,6 +13247,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "Expand",
+      "expandSection": "Expand {title}",
+      "fold": "Fold",
+      "foldSection": "Fold {title}"
+    },
     "comboBox": {
       "close": "Close dropdown",
       "create": "Create",
@@ -13135,6 +13273,7 @@
       "loading": "Loading",
       "loadingPage": "Loading …",
       "openCalendar": "Open calendar",
+      "optional": "(Optional)",
       "progress": "Progress",
       "remove": "Remove",
       "removeItem": "Remove {title}",

@@ -92,7 +92,7 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.16.1",
+    "pypdf==6.19.0",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
@@ -380,7 +380,7 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 "backend/onyx/chat/process_message.py" = ["C901"] # 47
 "backend/onyx/connectors/blob/connector.py" = ["C901"] # 24
 "backend/onyx/connectors/confluence/connector.py" = ["C901"] # 22
-"backend/onyx/connectors/confluence/onyx_confluence.py" = ["C901"] # 22
+"backend/onyx/connectors/confluence/source_operations.py" = ["C901"] # 22
 "backend/onyx/connectors/connector_runner.py" = ["C901"] # 26
 "backend/onyx/connectors/drupal_wiki/connector.py" = ["C901"] # 21
 "backend/onyx/connectors/github/connector.py" = ["C901"] # 28

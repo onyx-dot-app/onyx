@@ -108,7 +108,7 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     if request.client is None:
         raise ValueError("Invalid request for SAML")
 
-    # Derive http_host and server_port from WEB_DOMAIN (a trusted env var)
+    # Derive http_host, server_port and https from WEB_DOMAIN (a trusted env var)
     # instead of X-Forwarded-* headers, which can be spoofed by an attacker
     # to poison SAML redirect URLs (host header poisoning).
     parsed_domain = urlparse(WEB_DOMAIN)
@@ -119,6 +119,9 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
         "http_host": http_host,
         "server_port": server_port,
         "script_name": request.url.path,
+        # OneLogin assumes HTTPS only on port 443, so without this an HTTPS
+        # WEB_DOMAIN on another port fails the Destination check.
+        "https": "on" if parsed_domain.scheme == "https" else "off",
         "post_data": {},
         "get_data": {},
     }

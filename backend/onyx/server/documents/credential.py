@@ -29,6 +29,9 @@ from onyx.db.enums import Permission
 from onyx.db.models import DocumentSource, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.documents.capability_check_runs import (
+    start_capability_checks_for_new_credential,
+)
 from onyx.server.documents.models import (
     CredentialBase,
     CredentialDataUpdateRequest,
@@ -240,6 +243,7 @@ def create_credential_from_model(
         resource_id=credential.id,
         extra={"source": credential_info.source.value},
     )
+    start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
         credential=CredentialSnapshot.from_credential_db_model(
@@ -304,6 +308,7 @@ def create_credential_with_private_key(
         resource_id=credential.id,
         extra={"source": credential_info.source.value},
     )
+    start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
         credential=CredentialSnapshot.from_credential_db_model(

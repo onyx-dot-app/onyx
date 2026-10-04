@@ -5,7 +5,12 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { connectorConfigs } from "@/lib/connectors/connectors";
+import {
+  connectorConfigs,
+  MIN_PRUNE_FREQ_HOURS,
+  MIN_REFRESH_FREQ_MINUTES,
+} from "@/lib/connectors/connectors";
+import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
   PIPELINE_ORDER,
@@ -37,6 +42,50 @@ export function isLoadState(connector_name: string): boolean {
 }
 
 type ConnectorField = ConnectionConfiguration["values"][number];
+
+/** A connector form's fields, split by whether they are bound to the credential. */
+export interface CredentialBoundFieldSplit {
+  /** The bound fields of `values`, in their order. */
+  values: ConnectorField[];
+  /** The bound fields of `advanced_values`, in their order. */
+  advancedValues: ConnectorField[];
+  /** The configuration without the bound fields. */
+  rest: ConnectionConfiguration;
+}
+
+/**
+ * Source to the names of its credential-bound fields: the fields of the
+ * backend `CredentialBinding` model, whose valid values depend on the account
+ * behind the credential. `backend/scripts/generate_credential_bound_fields.py`
+ * writes the file, and a backend test keeps it equal to the models.
+ */
+const CREDENTIAL_BOUND_FIELDS: Partial<Record<ValidSources, string[]>> =
+  credentialBoundFields;
+
+/**
+ * Takes the credential-bound fields out of a configuration, so the create form
+ * can show them above the credential section. Only top-level fields move. A
+ * bound field inside a tab is not supported: it stays with its tab, and no
+ * source has one now.
+ */
+export function splitCredentialBoundFields(
+  source: ValidSources,
+  configuration: ConnectionConfiguration
+): CredentialBoundFieldSplit {
+  const boundNames = new Set(CREDENTIAL_BOUND_FIELDS[source] ?? []);
+  const isBound = (field: ConnectorField) => boundNames.has(field.name);
+  return {
+    values: configuration.values.filter(isBound),
+    advancedValues: configuration.advanced_values.filter(isBound),
+    rest: {
+      ...configuration,
+      values: configuration.values.filter((field) => !isBound(field)),
+      advanced_values: configuration.advanced_values.filter(
+        (field) => !isBound(field)
+      ),
+    },
+  };
+}
 
 interface ConnectorValidationMessages {
   oneDriveUsersRequired?: string;
@@ -142,11 +191,11 @@ export function createConnectorValidationSchema(
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
     pruneFreq: Yup.number().min(
-      0.083,
+      MIN_PRUNE_FREQ_HOURS,
       "Prune frequency must be at least 0.083 hours (5 minutes)"
     ),
     refreshFreq: Yup.number().min(
-      1,
+      MIN_REFRESH_FREQ_MINUTES,
       "Refresh frequency must be at least 1 minute"
     ),
   });
@@ -169,32 +218,6 @@ export function createTypedFile(
   }
 
   return new TypedFile(file, typeDefinition, fieldKey);
-}
-
-export function isTypedFileField(fieldKey: string): boolean {
-  // Define which fields should be typed files
-  const typedFileFields = new Set([
-    "sp_private_key",
-    "onedrive_private_key",
-    "outlook_private_key",
-    "teams_private_key",
-  ]);
-  return typedFileFields.has(fieldKey);
-}
-
-// Get the appropriate file type definition for a field
-export function getFileTypeDefinitionForField(
-  fieldKey: string
-): FileTypeCategory | null {
-  const fieldToTypeMap: Record<string, FileTypeCategory> = {
-    sp_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-    onedrive_private_key: FileTypeCategory.ONEDRIVE_PFX_FILE,
-    // The same PFX bundle rules apply to every Microsoft app registration.
-    outlook_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-    teams_private_key: FileTypeCategory.SHAREPOINT_PFX_FILE,
-  };
-
-  return fieldToTypeMap[fieldKey] || null;
 }
 
 // ---------------------------------------------------------------------------

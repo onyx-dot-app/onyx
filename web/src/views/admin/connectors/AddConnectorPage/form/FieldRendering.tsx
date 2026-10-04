@@ -1,6 +1,6 @@
 import React, { FC, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import type { TabOption } from "@/lib/connectors/types";
+import type { BooleanOption, TabOption } from "@/lib/connectors/types";
 import SelectInput from "./inputs/SelectInput";
 import NumberInput from "./inputs/NumberInput";
 import { TextFormField, MultiSelectField } from "@/components/Field";
@@ -10,8 +10,8 @@ import FileInput from "./inputs/FileInput";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { Credential } from "@/lib/credentials/types";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
-import { Tabs } from "@opal/components";
-import { useFormikContext } from "formik";
+import { Tabs, Text as OpalText } from "@opal/components";
+import { useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Content, InputVertical } from "@opal/layouts";
 import CheckboxField from "@/refresh-components/form/LabeledCheckboxField";
@@ -125,6 +125,58 @@ const TabsField: FC<TabsFieldProps> = ({
   );
 };
 
+interface CheckboxTabsFieldProps {
+  option: BooleanOption & Required<Pick<BooleanOption, "tabLabels">>;
+  label: string;
+  description: string | undefined;
+  disabled: boolean;
+}
+
+/** A checkbox option shown as two tabs, with its label and description. */
+function CheckboxTabsField({
+  option,
+  label,
+  description,
+  disabled,
+}: CheckboxTabsFieldProps) {
+  const t = useTranslations("admin.connectorsList.checkboxTabs");
+  const [{ value }, { error, touched }, { setValue, setTouched }] = useField<
+    boolean | undefined
+  >(option.name);
+  // The tab strip carries strings; the form value stays a boolean.
+  return (
+    <GeneralLayouts.Section gap={1} alignItems="start">
+      <Content
+        title={label}
+        description={description}
+        sizePreset="main-content"
+        variant="section"
+      />
+      <Tabs
+        value={String(value ?? option.default ?? false)}
+        onValueChange={(next) => {
+          setTouched(true, false);
+          setValue(next === "true");
+        }}
+      >
+        <Tabs.List aria-label={label}>
+          <Tabs.Trigger value="true" disabled={disabled}>
+            {t(option.tabLabels.true)}
+          </Tabs.Trigger>
+          <Tabs.Trigger value="false" disabled={disabled}>
+            {t(option.tabLabels.false)}
+          </Tabs.Trigger>
+        </Tabs.List>
+      </Tabs>
+      {touched && error && (
+        <OpalText font="secondary-body" color="status-error-05" role="alert">
+          {error}
+        </OpalText>
+      )}
+    </GeneralLayouts.Section>
+  );
+}
+
 interface RenderFieldProps {
   field: any;
   values: any;
@@ -158,13 +210,18 @@ export const RenderField: FC<RenderFieldProps> = ({
       ? field.initial(currentCredential)
       : (field.initial ?? "");
 
-  // if initialValue exists, prepopulate the field with it
+  // Prepopulate the field with initialValue. A field that the credential
+  // disables takes the credential's value, also over a value entered before
+  // the credential was selected.
   useEffect(() => {
     const field_value = values[field.name];
-    if (initialValue && field_value === undefined) {
+    if (
+      initialValue &&
+      (field_value === undefined || (disabled && field_value !== initialValue))
+    ) {
       setFieldValue(field.name, initialValue);
     }
-  }, [field.name, initialValue, setFieldValue, values]);
+  }, [field.name, initialValue, disabled, setFieldValue, values]);
 
   if (field.type === "tab") {
     return (
@@ -229,6 +286,13 @@ export const RenderField: FC<RenderFieldProps> = ({
           optional={field.optional}
           description={description}
           name={field.name}
+        />
+      ) : field.type === "checkbox" && field.tabLabels ? (
+        <CheckboxTabsField
+          option={field}
+          label={label}
+          description={description}
+          disabled={disabled}
         />
       ) : field.type === "checkbox" ? (
         <GeneralLayouts.Section

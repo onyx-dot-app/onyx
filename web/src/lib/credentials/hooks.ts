@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { CREDENTIAL_TEMPLATES } from "@/lib/credentials/constants";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { adminDeleteCredential, deleteCredential } from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
   getCredentialCreationMethods,
+  getCredentialSpec,
   shouldRedirectToOAuth,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
@@ -26,7 +27,6 @@ import {
 import type {
   AnyCredential,
   Credential,
-  CredentialFieldValues,
   CredentialSetup,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
@@ -37,6 +37,44 @@ import type {
 } from "@/lib/credentials/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { toTitleCase } from "@opal/utils";
+
+/** A credential field's title, and its hint when it has one. */
+export interface CredentialFieldCopy {
+  title: string;
+  description?: string;
+}
+
+/**
+ * Looks up a credential field's title and hint from the source's spec. A key
+ * the spec does not list (a stored key of an older credential) falls back to
+ * a title read from the key itself, so no field renders blank.
+ */
+export function useCredentialFieldCopy(
+  source: ValidSources
+): (key: string) => CredentialFieldCopy {
+  const t = useTranslations("admin.credentials");
+  const spec = getCredentialSpec(source);
+  return (key) => {
+    const field = spec?.fields[key];
+    if (!spec || !field) {
+      return {
+        title:
+          key === "authentication_method"
+            ? t("displayNames.authenticationMethod")
+            : toTitleCase(key),
+      };
+    }
+    return {
+      title: t(`displayNames.${field.displayName}`, {
+        source: spec.brandName,
+      }),
+      description: field.hint
+        ? t(`hints.${field.hint.key}`, field.hint.values)
+        : undefined,
+    };
+  };
+}
 
 /**
  * Every credential the admin can see, across all sources. Pass
@@ -156,9 +194,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
 
   const displayName = getSourceDisplayName(sourceType) || sourceType;
   const methods = getCredentialCreationMethods(oauthDetails);
-  const template = CREDENTIAL_TEMPLATES[sourceType] as
-    | CredentialFieldValues
-    | undefined;
+  const spec = getCredentialSpec(sourceType);
 
   // Two gates used to be kept apart and could disagree: the source list and
   // the source's own metadata flag. A source has to pass both.
@@ -263,7 +299,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     isLoading,
     methods,
     namesMethods: methods.length > 1,
-    template,
+    spec,
     canAuthorize,
     openMethod,
     open,

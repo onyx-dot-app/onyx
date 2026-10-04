@@ -1,6 +1,7 @@
 """The user-facing provider listing holds at most one page of models per
 provider and says where the rest starts. GET /llm/provider/{id}/models serves
-the rest by offset or by name search, under the same access rules."""
+the rest by offset or by name search, under the same access rules. The admin
+listing does the same only when asked with page_models."""
 
 from onyx.llm.constants import LLM_PROVIDER_MODEL_PAGE_SIZE
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -128,3 +129,47 @@ def test_model_page_denied_without_provider_access(
         headers=basic_user.headers,
     )
     assert response.status_code == 403
+
+
+def test_admin_listing_pages_models_only_when_asked(
+    new_admin_user: DATestUser,
+) -> None:
+    # Enough named models for one full page plus EXTRA_MODEL_COUNT past it,
+    # with the default sorting after all of them.
+    model_names = [
+        f"admin-model-{i:05d}"
+        for i in range(LLM_PROVIDER_MODEL_PAGE_SIZE + EXTRA_MODEL_COUNT)
+    ]
+    provider = LLMProviderManager.create(
+        user_performing_action=new_admin_user,
+        default_model_name="zzz-admin-default",
+        model_names=model_names,
+        set_as_default=True,
+    )
+    total_models = len(model_names) + 1
+
+    def admin_listing(query: str) -> dict:
+        response = client.get(
+            f"{API_SERVER_URL}/admin/llm/provider{query}",
+            headers=new_admin_user.headers,
+        )
+        response.raise_for_status()
+        return next(p for p in response.json()["providers"] if p["id"] == provider.id)
+
+    full = admin_listing("")
+    assert len(full["model_configurations"]) == total_models
+    assert full["next_model_configuration_offset"] is None
+
+    paged = admin_listing("?page_models=true")
+    names = [mc["name"] for mc in paged["model_configurations"]]
+    # The first page plus the pinned workspace default, which sorts last.
+    assert len(names) == LLM_PROVIDER_MODEL_PAGE_SIZE + 1
+    assert "zzz-admin-default" in names
+    assert paged["next_model_configuration_offset"] == LLM_PROVIDER_MODEL_PAGE_SIZE
+
+    by_id = client.get(
+        f"{API_SERVER_URL}/admin/llm/provider/{provider.id}",
+        headers=new_admin_user.headers,
+    )
+    by_id.raise_for_status()
+    assert len(by_id.json()["model_configurations"]) == total_models

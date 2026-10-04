@@ -1,7 +1,7 @@
 import type { AccessType } from "@/lib/types";
 
-// Perm sync plus a data-access group restriction (ENG-4342). The wire name is
-// provisional until the connector editing initiative confirms it.
+// Perm sync, narrowed to members of the connector's data-access groups. The
+// groups are sent as the create request's `data_access`.
 export const SYNC_RESTRICTED_ACCESS_TYPE =
   "sync_restricted" satisfies AccessType;
 

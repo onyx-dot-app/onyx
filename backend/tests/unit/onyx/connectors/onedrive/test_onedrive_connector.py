@@ -11,7 +11,11 @@ from ee.onyx.external_permissions.onedrive.permission_mapper import (
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.models import CapabilityCheckContext
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckContext,
+    CapabilityCheckStatus,
+)
+from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialInvalidError,
@@ -1075,8 +1079,12 @@ def test_onedrive_capability_config_rejects_wrong_field_types() -> None:
         if check.check_id == "onedrive_configured_users"
     )
 
-    with pytest.raises(ConnectorValidationError, match="configuration"):
-        check.run(context)
+    (result,) = run_capability_checks([check], context)
+
+    # The runner fails a config-reading check before it runs.
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert "users" in result.message
+    gateway.get_user.assert_not_called()
 
 
 def test_onedrive_drive_check_skips_unavailable_discovered_users() -> None:

@@ -8,6 +8,10 @@ import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import type { FileConfig, GoogleSitesConfig } from "@/lib/connectors/types";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
+import type {
+  CredentialBindingCheckRequest,
+  CredentialBindingCheckResponse,
+} from "@/lib/connectors/bindingGate";
 
 // ---------------------------------------------------------------------------
 // Indexing
@@ -47,7 +51,7 @@ export async function triggerIndexing(
 export const submitFiles = async (
   selectedFiles: File[],
   name: string,
-  access_type: string,
+  access_type: AccessType,
   groups?: number[]
 ) => {
   const formData = new FormData();
@@ -114,7 +118,7 @@ export const submitFiles = async (
     connector.id,
     credentialId,
     name,
-    access_type as AccessType,
+    access_type,
     groups
   );
   if (!credentialResponse.ok) {
@@ -269,4 +273,30 @@ export async function getConnectorOauthRedirectUrl(
     console.error(`${OAUTH_REDIRECT_LOG_ERROR} for ${connector}:`, error);
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Credential binding
+// ---------------------------------------------------------------------------
+
+const BINDING_CHECK_ERROR = "Unable to check the credential";
+
+/** Checks the credential-bound fields of an unsaved form against a credential. */
+export async function checkCredentialBinding(
+  credentialId: number,
+  request: CredentialBindingCheckRequest
+): Promise<CredentialBindingCheckResponse> {
+  const response = await fetch(
+    `/api/manage/admin/credential/${credentialId}/binding-check`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await parseErrorDetail(response, BINDING_CHECK_ERROR));
+  }
+  const body: CredentialBindingCheckResponse = await response.json();
+  return body;
 }
