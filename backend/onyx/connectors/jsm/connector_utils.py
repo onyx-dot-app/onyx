@@ -65,6 +65,36 @@ def _user_to_expert_info(user: dict[str, Any] | None) -> BasicExpertInfo | None:
     return BasicExpertInfo(display_name=display_name, email=email)
 
 
+def _jsm_ticket_content(issue: dict[str, Any]) -> str:
+    """The combined description + comment text of one issue, before any size
+    check (shared by the size check and the document builder)."""
+    fields = issue.get("fields") or {}
+
+    description = _extract_text_from_adf(fields.get(_FIELD_DESCRIPTION))
+    comments = [
+        comment.get("body", "")
+        for comment in fields.get("comment", {}).get("comments", [])
+        if isinstance(comment, dict)
+    ]
+    comment_text = "\n".join(f"Comment: {comment}" for comment in comments if comment)
+    return f"{description}\n{comment_text}".strip()
+
+
+def is_oversized_jsm_issue(issue: dict[str, Any]) -> bool:
+    """Whether the issue body exceeds the maximum ticket size and will be
+    dropped by the full indexing path."""
+    issue_key = issue.get(_FIELD_KEY, "")
+    ticket_content = _jsm_ticket_content(issue)
+    if len(ticket_content.encode("utf-8")) > _MAX_TICKET_SIZE_BYTES:
+        logger.info(
+            "Skipping %s because it exceeds the maximum size of %s bytes.",
+            issue_key,
+            _MAX_TICKET_SIZE_BYTES,
+        )
+        return True
+    return False
+
+
 def process_jsm_issue(
     jsm_base: str,
     issue: dict[str, Any],
@@ -75,14 +105,7 @@ def process_jsm_issue(
     issue_key = issue.get(_FIELD_KEY, "")
     fields = issue.get("fields", {})
 
-    description = _extract_text_from_adf(fields.get(_FIELD_DESCRIPTION))
-    comments = [
-        comment.get("body", "")
-        for comment in fields.get("comment", {}).get("comments", [])
-        if isinstance(comment, dict)
-    ]
-    comment_text = "\n".join(f"Comment: {comment}" for comment in comments if comment)
-    ticket_content = f"{description}\n{comment_text}".strip()
+    ticket_content = _jsm_ticket_content(issue)
 
     if len(ticket_content.encode("utf-8")) > _MAX_TICKET_SIZE_BYTES:
         logger.info(
