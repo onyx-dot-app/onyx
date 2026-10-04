@@ -98,7 +98,8 @@ type DividerFoldableProps = Omit<
    * (a dropdown gives it an id, a role and `aria-expanded`, so the
    * keyboard stop on the title reads as a control).
    */
-  headerProps?: Omit<React.HTMLAttributes<HTMLDivElement>, "onClick">;
+  headerProps?: Omit<React.HTMLAttributes<HTMLDivElement>, "onClick"> &
+    Record<`data-${string}`, string | number | undefined>;
 };
 
 type DividerProps =
