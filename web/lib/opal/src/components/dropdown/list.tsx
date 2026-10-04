@@ -76,9 +76,11 @@ interface DropdownListProps {
 const SCROLL_END_THRESHOLD_PX = 48;
 
 /**
- * The list in a portal: the box, the search field, the groups with their
- * dividers, the create row and the rows. Scrolls the keyboard stop into
- * view and opens around the selection.
+ * The list in a portal: the box, the search field, and the scrolling
+ * listbox or menu with its groups, dividers, create row and rows. The role
+ * sits on the scroller, so the search field stays outside the composite
+ * while pinned above it. Scrolls the keyboard stop into view and opens
+ * around the selection.
  */
 export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
   (
@@ -163,7 +165,6 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     );
 
     return createPortal(
-      // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- the role is always listbox or menu; the rule cannot read a ternary
       <div
         ref={(node) => {
           listRef.current = node;
@@ -171,10 +172,10 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
           if (typeof ref === "function") ref(node);
           else if (ref) ref.current = node;
         }}
-        id={`${listId}-listbox`}
-        role={mode === "picker" ? "listbox" : "menu"}
-        tabIndex={-1}
-        aria-label={label}
+        // The box: positioned, animated and dismissed as one. The listbox
+        // or menu role is on the scroller inside, so the search field is
+        // not a child of the composite.
+        role="presentation"
         // Closed while exiting: invisible to AT and to the pointer.
         aria-hidden={presence.state === "closed" || undefined}
         data-state={presence.state}
@@ -235,6 +236,11 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
           // scroll offset 0 for a frame when compositing switches.
           containerClassName="opal-dropdown-content"
           className={cn("opal-dropdown-scroll", !maxHeight && "max-h-60")}
+          // The composite: what the trigger controls and the rows belong to.
+          id={`${listId}-listbox`}
+          role={mode === "picker" ? "listbox" : "menu"}
+          aria-label={label}
+          tabIndex={-1}
           // The search field brings its own 4px below; the rows start right
           // under that, with no inset of their own.
           data-under-search={hasSearch || undefined}
