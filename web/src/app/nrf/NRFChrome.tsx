@@ -5,7 +5,7 @@ import { ensureHrefProtocol, noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import { Button, LineItemButton, OpenButton, Popover } from "@opal/components";
+import { Button, Dropdown, OpenButton } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
@@ -120,47 +120,43 @@ export default function NRFChrome() {
             />
           )}
           {showModeToggle && (
-            <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
-              <Popover.Trigger asChild>
+            <Dropdown open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
+              <Dropdown.Trigger asChild>
                 <OpenButton
                   icon={
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                   }
+                  interaction={modePopoverOpen ? "hover" : "rest"}
                 >
                   {effectiveMode === "search"
                     ? t("appChrome.mode.search.label")
                     : t("appChrome.mode.chat.label")}
                 </OpenButton>
-              </Popover.Trigger>
-              <Popover.Content align="start" width="lg">
-                <Popover.Menu>
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgSearchMenu}
-                    state={effectiveMode === "search" ? "selected" : "empty"}
-                    description={t("appChrome.mode.search.description")}
-                    onClick={noProp(() => {
-                      setAppMode("search");
-                      setModePopoverOpen(false);
-                    })}
-                    title={t("appChrome.mode.search.label")}
-                  />
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgBubbleText}
-                    state={effectiveMode === "chat" ? "selected" : "empty"}
-                    description={t("appChrome.mode.chat.description")}
-                    onClick={noProp(() => {
-                      setAppMode("chat");
-                      setModePopoverOpen(false);
-                    })}
-                    title={t("appChrome.mode.chat.label")}
-                  />
-                </Popover.Menu>
-              </Popover.Content>
-            </Popover>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("appChrome.mode.search.label")}
+                value={effectiveMode}
+                onSelect={(option) =>
+                  setAppMode(option.value === "search" ? "search" : "chat")
+                }
+                items={[
+                  {
+                    kind: "option",
+                    value: "search",
+                    icon: SvgSearchMenu,
+                    title: t("appChrome.mode.search.label"),
+                    description: t("appChrome.mode.search.description"),
+                  },
+                  {
+                    kind: "option",
+                    value: "chat",
+                    icon: SvgBubbleText,
+                    title: t("appChrome.mode.chat.label"),
+                    description: t("appChrome.mode.chat.description"),
+                  },
+                ]}
+              />
+            </Dropdown>
           )}
         </div>
       )}

@@ -27,15 +27,15 @@ packages:
   src/app/mcp: 99.5
   src/app/nrf: 99.2
   src/app/oauth-config: 100
-  src/components: 97.7
-  src/components/admin: 96.2
+  src/components: 97.6
+  src/components/admin: 96.7
   src/components/auth: 89.3
   src/components/chat: 97.2
   src/components/context: 100
   src/components/dateRangeSelectors: 100
   src/components/dev: 98.8
   src/components/errorPages: 100
-  src/components/filters: 95.4
+  src/components/filters: 99.5
   src/components/header: 100
   src/components/icons: 100
   src/components/oauth: 89.5
@@ -68,12 +68,12 @@ packages:
   src/lib/chat: 98.6
   src/lib/connectors: 98.8
   src/lib/constants: 100
-  src/lib/credentials: 97.7
+  src/lib/credentials: 98.4
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/hierarchy: 100
   src/lib/hooks: 95.8
-  src/lib/languageModels: 98.9
+  src/lib/languageModels: 99
   src/lib/mcp: 97.9
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
@@ -127,5 +127,5 @@ packages:
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
-  src/views/admin: 98.3
+  src/views/admin: 98.4
   types: 100

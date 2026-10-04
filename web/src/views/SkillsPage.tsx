@@ -7,9 +7,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Button,
   InputTypeIn,
-  LineItemButton,
   MessageCard,
-  Popover,
+  Dropdown,
   Text,
 } from "@opal/components";
 import {
@@ -292,56 +291,48 @@ export default function SkillsPage() {
         title={t("page.header.title")}
         description={t("page.header.description")}
         actions={[
-          <Popover
+          <Dropdown
             key="primary"
             open={createMenuOpen}
             onOpenChange={setCreateMenuOpen}
           >
-            <Popover.Trigger asChild>
+            <Dropdown.Trigger asChild>
               <Button icon={SvgPlus}>
                 {t("page.createMenu.trigger.label")}
               </Button>
-            </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="xl">
-              <Popover.Menu>
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgEdit}
-                  description={t("page.createMenu.scratch.description", {
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("page.createMenu.trigger.label")}
+              items={[
+                {
+                  kind: "action",
+                  id: "scratch",
+                  icon: SvgEdit,
+                  title: t("page.createMenu.scratch.title"),
+                  description: t("page.createMenu.scratch.description", {
                     appName,
-                  })}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    router.push("/craft/v1/skills/new");
-                  }}
-                  title={t("page.createMenu.scratch.title")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgUploadCloud}
-                  description={t("page.createMenu.upload.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setCreateOpen(true);
-                  }}
-                  title={t("page.createMenu.upload.title")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgGithub}
-                  description={t("page.createMenu.github.description")}
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setGitHubImportOpen(true);
-                  }}
-                  title={t("page.createMenu.github.title")}
-                />
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>,
+                  }),
+                  onSelect: () => router.push("/craft/v1/skills/new"),
+                },
+                {
+                  kind: "action",
+                  id: "upload",
+                  icon: SvgUploadCloud,
+                  title: t("page.createMenu.upload.title"),
+                  description: t("page.createMenu.upload.description"),
+                  onSelect: () => setCreateOpen(true),
+                },
+                {
+                  kind: "action",
+                  id: "github",
+                  icon: SvgGithub,
+                  title: t("page.createMenu.github.title"),
+                  description: t("page.createMenu.github.description"),
+                  onSelect: () => setGitHubImportOpen(true),
+                },
+              ]}
+            />
+          </Dropdown>,
         ]}
       >
         <InputTypeIn

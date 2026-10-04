@@ -8444,6 +8444,9 @@
         "makeAdmin": {
           "label": "Nommer administrateur"
         },
+        "menuButton": {
+          "ariaLabel": "Actions utilisateur"
+        },
         "removeAdmin": {
           "label": "Retirer l'accès administrateur"
         },
@@ -11234,6 +11237,9 @@
         "expand": {
           "ariaLabel": "Développer le projet"
         },
+        "options": {
+          "label": "Options du projet"
+        },
         "rename": {
           "label": "Renommer le projet"
         }
@@ -12584,6 +12590,9 @@
       },
       "newSession": {
         "label": "Commencer à créer"
+      },
+      "options": {
+        "label": "Options de la session"
       },
       "rename": {
         "label": "Renommer"
@@ -14041,6 +14050,9 @@
       },
       "moveToProject": {
         "label": "Déplacer vers un projet"
+      },
+      "options": {
+        "label": "Options de la conversation"
       },
       "projectSearchInput": {
         "placeholder": "Rechercher des projets"

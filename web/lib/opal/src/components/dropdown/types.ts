@@ -7,6 +7,8 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 interface DropdownRowBase {
   /** Further text a search matches, such as an identifier the title prettifies. */
   keywords?: string[];
+  /** Stays on show while a search is on, whatever the text: a way back, a create row. */
+  pinned?: boolean;
   /** A disabled row shows but is not a keyboard stop and ignores clicks. */
   disabled?: boolean;
 }

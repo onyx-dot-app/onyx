@@ -1,7 +1,8 @@
 import { JSX } from "react";
 import { useTranslations } from "next-intl";
 import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
-import { CustomDropdown } from "../../Dropdown";
+import { Dropdown, type DropdownMenuItem } from "@opal/components";
+import { cn } from "@opal/utils";
 
 interface Option {
   key: string;
@@ -9,6 +10,11 @@ interface Option {
   displayName?: string;
   icon?: JSX.Element;
 }
+
+/**
+ * A multi-select filter over options the caller renders. The rows are
+ * custom, since an option's display is a node; the list filters by `key`.
+ */
 export function FilterDropdown({
   options,
   selected,
@@ -16,11 +22,8 @@ export function FilterDropdown({
   icon,
   defaultDisplay,
   width = "w-64",
-  dropdownWidth,
-  optionClassName,
   resetValues,
   backgroundColor,
-  dropdownColor,
 }: {
   options: Option[];
   selected: string[];
@@ -28,77 +31,41 @@ export function FilterDropdown({
   icon: JSX.Element;
   defaultDisplay: string | JSX.Element;
   width?: string;
-  dropdownWidth?: string;
-  optionClassName?: string;
   resetValues?: () => void;
   backgroundColor?: string;
-  dropdownColor?: string;
 }) {
   const t = useTranslations("common.filters");
+  const items: DropdownMenuItem[] = options.map((option) => {
+    const isSelected = selected.includes(option.key);
+    return {
+      kind: "custom",
+      id: option.key,
+      keywords: [option.displayName ?? option.key],
+      keepOpen: true,
+      onActivate: () => handleSelect(option),
+      render: ({ highlighted, props }) => (
+        <div
+          {...props}
+          className={cn(
+            "flex w-full cursor-pointer select-none items-center gap-x-1 rounded-08 px-3 py-2.5 text-sm text-text-darker",
+            highlighted && "bg-accent-background-hovered"
+          )}
+        >
+          {option.icon}
+          {option.display}
+          {isSelected && (
+            <div className="ms-auto my-auto me-1">
+              <FiCheck />
+            </div>
+          )}
+        </div>
+      ),
+    };
+  });
+
   return (
-    <div>
-      <CustomDropdown
-        dropdown={
-          <div
-            className={`
-              border 
-              border-border 
-              rounded-lg 
-              ${backgroundColor || "bg-background"}
-              flex 
-              flex-col 
-              ${dropdownWidth || width}
-              max-h-96 
-              overflow-y-scroll
-              overscroll-contain
-              `}
-          >
-            {options.map((option, ind) => {
-              const isSelected = selected.includes(option.key);
-              return (
-                <button
-                  type="button"
-                  key={`${option.key}-1`}
-                  className={`
-                      ${optionClassName}
-                      flex
-                      px-3
-                      text-sm
-                      py-2.5
-                      select-none
-                      cursor-pointer
-                      flex-none
-                      w-full
-                      text-text-darker
-                      items-center
-                      gap-x-1
-                      ${dropdownColor || "bg-background"}
-                      hover:bg-accent-background-hovered
-                      ${
-                        ind === options.length - 1
-                          ? ""
-                          : "border-b border-border"
-                      } 
-                    `}
-                  onClick={(event) => {
-                    handleSelect(option);
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                >
-                  {option.icon}
-                  {option.display}
-                  {isSelected && (
-                    <div className="ms-auto my-auto me-1">
-                      <FiCheck />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        }
-      >
+    <Dropdown>
+      <Dropdown.Trigger asChild>
         <div
           className={`
             flex
@@ -136,7 +103,11 @@ export function FilterDropdown({
             <FiChevronDown className="my-auto ms-auto" />
           )}
         </div>
-      </CustomDropdown>
-    </div>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={typeof defaultDisplay === "string" ? defaultDisplay : ""}
+        items={items}
+      />
+    </Dropdown>
   );
 }

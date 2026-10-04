@@ -575,7 +575,6 @@ export function ShareAgentModal({
               ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
               // Stays visible so the current scope still reads; only changing it is gated.
               disabled={!canEditShares || !canPublish}
-              menuWidth="2xl"
               showTriggerIcon={false}
               onChange={(scope) => {
                 setDraftState((currentDraftState) => ({

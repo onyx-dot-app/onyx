@@ -16,15 +16,17 @@ import useChatSessions from "@/hooks/useChatSessions";
 import {
   Button,
   Card,
+  Dropdown,
   LineItemButton,
-  Popover,
-  PopoverMenu,
   Text,
+  type DropdownMenuItem,
+  type DropdownView,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { DEFAULT_AGENT_ID, UNNAMED_CHAT } from "@/lib/constants";
 import {
   SvgBubbleText,
+  SvgChevronLeft,
   SvgFolder,
   SvgFolderIn,
   SvgMoreHorizontal,
@@ -35,7 +37,6 @@ import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
@@ -55,15 +56,13 @@ function ProjectChatItem({
   const t = useTranslations("chat");
   const tSidebar = useTranslations("sidebar");
   const locale = useLocale();
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
-  const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
 
   const lastUpdateTime = useMemo(
     () => timeAgo(chat.time_updated, locale),
@@ -75,10 +74,6 @@ function ProjectChatItem({
 
   const isChatUsingDefaultAgent = chat.persona_id === DEFAULT_AGENT_ID;
 
-  const filteredProjects = projects.filter((project) =>
-    project.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
@@ -87,7 +82,7 @@ function ProjectChatItem({
       await refreshChatSessions();
       await fetchProjects();
       setIsDeleteModalOpen(false);
-      setPopoverOpen(false);
+      setMenuOpen(false);
       afterRefresh();
     },
     [chat, refreshChatSessions, removeSession, fetchProjects, afterRefresh]
@@ -98,7 +93,7 @@ function ProjectChatItem({
       await moveChatSessionService(targetProjectId, chat.id);
       await fetchProjects();
       await refreshChatSessions();
-      setPopoverOpen(false);
+      setMenuOpen(false);
       afterRefresh();
     },
     [chat.id, fetchProjects, refreshChatSessions, afterRefresh]
@@ -127,75 +122,72 @@ function ProjectChatItem({
     await fetchProjects();
     await refreshChatSessions();
     afterRefresh();
-    setPopoverOpen(false);
+    setMenuOpen(false);
   }, [chat.id, fetchProjects, refreshChatSessions, afterRefresh]);
 
-  const popoverItems = useMemo(() => {
-    if (!showMoveOptions) {
-      return [
-        <LineItemButton
-          key="move"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgFolderIn}
-          title={tSidebar("chatButton.moveToProject.label")}
-          onClick={noProp(() => setShowMoveOptions(true))}
-        />,
-        <LineItemButton
-          key="remove"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgFolder}
-          title={tSidebar("chatButton.removeFromProject.label", {
-            projectName:
-              projects.find((p) => p.id === projectId)?.name ??
-              t("projects.chatItem.projectFallback.label"),
-          })}
-          onClick={noProp(handleRemoveFromProject)}
-        />,
-        null,
-        <LineItemButton
-          key="delete"
-          sizePreset="main-ui"
-          rounding={2}
-          color="danger"
-          icon={SvgTrash}
-          title={tSidebar("chatButton.delete.label")}
-          onClick={noProp(() => setIsDeleteModalOpen(true))}
-        />,
-      ];
-    }
-    return [
-      <PopoverSearchInput
-        key="search"
-        setShowMoveOptions={setShowMoveOptions}
-        onSearch={setSearchTerm}
-      />,
-      ...filteredProjects
+  // The move page: the view's own search filters the projects, and the way
+  // back stays pinned above the filter.
+  const moveView: DropdownView = {
+    search: {
+      placeholder: tSidebar("chatButton.projectSearchInput.placeholder"),
+    },
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        pinned: true,
+        icon: SvgChevronLeft,
+        title: tSidebar("chatButton.moveToProject.label"),
+        onSelect: (views) => views.pop(),
+      },
+      ...projects
         .filter((candidate) => candidate.id !== projectId)
-        .map((target) => (
-          <LineItemButton
-            key={target.id}
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFolder}
-            title={target.name}
-            onClick={noProp(() =>
-              handleMoveChatSession({ id: target.id, label: target.name })
-            )}
-          />
-        )),
-    ];
-  }, [
-    showMoveOptions,
-    projects,
-    projectId,
-    filteredProjects,
-    handleMoveChatSession,
-    handleRemoveFromProject,
-    t,
-    tSidebar,
-  ]);
+        .map(
+          (target): DropdownMenuItem => ({
+            kind: "action",
+            id: `project-${target.id}`,
+            icon: SvgFolder,
+            title: target.name,
+            onSelect: () =>
+              handleMoveChatSession({ id: target.id, label: target.name }),
+          })
+        ),
+    ],
+  };
+  const menuItems: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "move",
+      icon: SvgFolderIn,
+      opensView: true,
+      title: tSidebar("chatButton.moveToProject.label"),
+      onSelect: (views) => views.push("move"),
+    },
+    {
+      kind: "action",
+      id: "remove",
+      icon: SvgFolder,
+      title: tSidebar("chatButton.removeFromProject.label", {
+        projectName:
+          projects.find((p) => p.id === projectId)?.name ??
+          t("projects.chatItem.projectFallback.label"),
+      }),
+      onSelect: handleRemoveFromProject,
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "action",
+          id: "delete",
+          icon: SvgTrash,
+          danger: true,
+          title: tSidebar("chatButton.delete.label"),
+          onSelect: () => setIsDeleteModalOpen(true),
+        },
+      ],
+    },
+  ];
 
   return (
     <>
@@ -249,33 +241,35 @@ function ProjectChatItem({
               : undefined
           }
           sizePreset="main-ui"
-          interaction={popoverOpen ? "active" : undefined}
+          interaction={menuOpen ? "active" : undefined}
           rightChildren={
             <Hoverable.Item group={chat.id} variant="appear-on-hover">
-              <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                <Popover.Trigger
-                  asChild
+              <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
+                {/* The row is a link: the click toggles the menu and goes no
+                    further, so the row does not navigate. The trigger's own
+                    handler runs first, on the button itself. */}
+                <div
+                  role="presentation"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setPopoverOpen(!popoverOpen);
                   }}
                 >
-                  <Button
-                    icon={SvgMoreHorizontal}
-                    size="sm"
-                    prominence="tertiary"
-                  />
-                </Popover.Trigger>
-                <Popover.Content
-                  align="end"
-                  side="right"
-                  avoidCollisions
-                  sideOffset={8}
-                >
-                  <PopoverMenu>{popoverItems}</PopoverMenu>
-                </Popover.Content>
-              </Popover>
+                  <Dropdown.Trigger asChild>
+                    <Button
+                      icon={SvgMoreHorizontal}
+                      size="sm"
+                      prominence="tertiary"
+                      aria-label={tSidebar("chatButton.options.label")}
+                    />
+                  </Dropdown.Trigger>
+                </div>
+                <Dropdown.Data
+                  label={tSidebar("chatButton.options.label")}
+                  items={menuItems}
+                  views={{ move: moveView }}
+                />
+              </Dropdown>
             </Hoverable.Item>
           }
         />

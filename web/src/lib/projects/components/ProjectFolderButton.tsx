@@ -11,10 +11,9 @@ import { useTranslations } from "next-intl";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Button,
-  LineItemButton,
-  Popover,
-  PopoverMenu,
+  Dropdown,
   SidebarTab,
+  type DropdownMenuItem,
 } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { cn } from "@opal/utils";
@@ -152,7 +151,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
     useState(false);
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Unfold whichever project the user moves into, so its chats are visible on
   // arrival. Only ever opens — folding it again while still inside the project
@@ -179,25 +178,27 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
     await renameProject(project.id, newName);
   }
 
-  const popoverItems = [
-    <LineItemButton
-      key="rename-project"
-      sizePreset="main-ui"
-      rounding={2}
-      icon={SvgEdit}
-      title={t("projects.folder.rename.label")}
-      onClick={noProp(() => setIsEditing(true))}
-    />,
-    null,
-    <LineItemButton
-      key="delete-project"
-      sizePreset="main-ui"
-      rounding={2}
-      color="danger"
-      icon={SvgTrash}
-      title={t("projects.folder.delete.label")}
-      onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-    />,
+  const menuItems: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "rename-project",
+      icon: SvgEdit,
+      title: t("projects.folder.rename.label"),
+      onSelect: () => setIsEditing(true),
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "action",
+          id: "delete-project",
+          icon: SvgTrash,
+          danger: true,
+          title: t("projects.folder.delete.label"),
+          onSelect: () => setDeleteConfirmationModalOpen(true),
+        },
+      ],
+    },
   ];
 
   return (
@@ -232,8 +233,8 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
 
       {/* Project Folder */}
       <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
-        <Popover onOpenChange={setPopoverOpen}>
-          <Popover.Anchor>
+        <Dropdown onOpenChange={setMenuOpen}>
+          <Dropdown.Anchor>
             <SidebarTab
               icon={FolderIcon}
               // Folded, the project's chats are hidden — and a project chat
@@ -244,10 +245,13 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
               onClick={isEditing ? undefined : noProp(handleTextClick)}
               rightChildren={
                 <>
-                  <Popover.Trigger asChild onClick={noProp()}>
+                  <Dropdown.Trigger asChild>
+                    {/* The click stays here: the tab underneath opens the project. */}
                     <div
+                      role="presentation"
+                      onClick={noProp()}
                       className={cn(
-                        !popoverOpen && "hidden",
+                        !menuOpen && "hidden",
                         !isEditing && "group-hover/SidebarTab:flex"
                       )}
                     >
@@ -255,14 +259,15 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
                         icon={SvgMoreHorizontal}
                         prominence="internal"
                         size="sm"
-                        interaction={popoverOpen ? "hover" : "rest"}
+                        interaction={menuOpen ? "hover" : "rest"}
+                        aria-label={t("projects.folder.options.label")}
                       />
                     </div>
-                  </Popover.Trigger>
-
-                  <Popover.Content side="right" align="end" width="md">
-                    <PopoverMenu>{popoverItems}</PopoverMenu>
-                  </Popover.Content>
+                  </Dropdown.Trigger>
+                  <Dropdown.Data
+                    label={t("projects.folder.options.label")}
+                    items={menuItems}
+                  />
                 </>
               }
             >
@@ -276,8 +281,8 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
                 project.name
               )}
             </SidebarTab>
-          </Popover.Anchor>
-        </Popover>
+          </Dropdown.Anchor>
+        </Dropdown>
       </FolderIconProvider>
 
       {/* Project Chat-Sessions */}

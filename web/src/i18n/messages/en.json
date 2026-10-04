@@ -8444,6 +8444,9 @@
         "makeAdmin": {
           "label": "Make Admin"
         },
+        "menuButton": {
+          "ariaLabel": "User actions"
+        },
         "removeAdmin": {
           "label": "Remove Admin Access"
         },
@@ -11234,6 +11237,9 @@
         "expand": {
           "ariaLabel": "Expand project"
         },
+        "options": {
+          "label": "Project options"
+        },
         "rename": {
           "label": "Rename Project"
         }
@@ -12584,6 +12590,9 @@
       },
       "newSession": {
         "label": "Start Crafting"
+      },
+      "options": {
+        "label": "Session options"
       },
       "rename": {
         "label": "Rename"
@@ -14041,6 +14050,9 @@
       },
       "moveToProject": {
         "label": "Move to Project"
+      },
+      "options": {
+        "label": "Chat options"
       },
       "projectSearchInput": {
         "placeholder": "Search Projects"

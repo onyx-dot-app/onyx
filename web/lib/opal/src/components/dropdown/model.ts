@@ -105,6 +105,7 @@ export function rowMatchesSearch(
   row: DropdownRow,
   searchTerm: string
 ): boolean {
+  if (row.pinned) return true;
   if (row.kind === "option") return optionMatchesSearch(row, searchTerm);
   if (row.kind === "custom") return keywordsMatch(row.keywords, searchTerm);
   return (

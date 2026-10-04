@@ -52,14 +52,11 @@ export class UsersAdminPage {
   // ---------------------------------------------------------------------------
 
   /**
-   * Returns a locator for the currently open popover / filter dropdown.
-   * Radix Popover renders its content with `role="dialog"`. Using
-   * `getByRole("dialog").first()` targets the oldest open dialog, which is
-   * always the popover during row-action or filter flows (confirmation
-   * modals open later and would be `.last()`).
+   * The open filter list or row-action menu. A filter is a listbox and a
+   * row's actions a menu; only one is open at a time during these flows.
    */
   get popover(): Locator {
-    return this.page.getByRole("dialog").first();
+    return this.page.getByRole("listbox").or(this.page.getByRole("menu"));
   }
 
   // ---------------------------------------------------------------------------
@@ -130,7 +127,7 @@ export class UsersAdminPage {
 
   async closePopover() {
     await this.page.keyboard.press("Escape");
-    await expect(this.page.getByRole("dialog")).not.toBeVisible();
+    await expect(this.popover).not.toBeVisible();
   }
 
   // ---------------------------------------------------------------------------

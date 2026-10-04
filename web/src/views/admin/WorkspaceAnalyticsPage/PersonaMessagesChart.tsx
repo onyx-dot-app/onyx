@@ -1,13 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  InputTypeIn,
-  LineItemButton,
-  Popover,
-  PopoverMenu,
-  SelectButton,
-  Text,
-} from "@opal/components";
+import { Dropdown, SelectButton } from "@opal/components";
 import { SvgOnyxOctagon } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { usePersonaMessages, usePersonaUniqueUsers } from "@/lib/usage/hooks";
@@ -33,23 +26,10 @@ function PersonaPicker({
 }: PersonaPickerProps) {
   const t = useTranslations("admin.analytics");
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-
-  const matches = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (query === "") return agents;
-    return agents.filter((agent) => agent.name.toLowerCase().includes(query));
-  }, [agents, search]);
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (!nextOpen) setSearch("");
-      }}
-    >
-      <Popover.Trigger asChild>
+    <Dropdown open={open} onOpenChange={setOpen}>
+      <Dropdown.Trigger asChild>
         <SelectButton
           icon={SvgOnyxOctagon}
           state="empty"
@@ -57,52 +37,23 @@ function PersonaPicker({
         >
           {selectedAgent?.name ?? t("agentPicker.placeholder")}
         </SelectButton>
-      </Popover.Trigger>
-      <Popover.Content align="start">
-        <PopoverMenu>
-          {[
-            <InputTypeIn
-              key="agent-search"
-              placeholder={t("agentPicker.search.placeholder")}
-              variant="internal"
-              searchIcon
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />,
-            ...matches.map((agent) => (
-              <Popover.Close asChild key={agent.id}>
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  selectVariant="select-heavy"
-                  icon={SvgOnyxOctagon}
-                  title={agent.name}
-                  state={selectedAgent?.id === agent.id ? "selected" : "empty"}
-                  onClick={() => onSelect(agent.id)}
-                />
-              </Popover.Close>
-            )),
-            ...(matches.length === 0
-              ? [
-                  <Section
-                    key="no-matches"
-                    flexDirection="row"
-                    justifyContent="center"
-                    alignItems="center"
-                    padding={0.5}
-                    width="full"
-                    height="fit"
-                  >
-                    <Text font="secondary-body" color="text-03">
-                      {t("agentPicker.empty.label")}
-                    </Text>
-                  </Section>,
-                ]
-              : []),
-          ]}
-        </PopoverMenu>
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={t("agentPicker.placeholder")}
+        search={{ placeholder: t("agentPicker.search.placeholder") }}
+        value={selectedAgent ? String(selectedAgent.id) : ""}
+        onSelect={(option) => {
+          const agent = agents.find((a) => String(a.id) === option.value);
+          if (agent) onSelect(agent.id);
+        }}
+        items={agents.map((agent) => ({
+          kind: "option",
+          value: String(agent.id),
+          icon: SvgOnyxOctagon,
+          title: agent.name,
+        }))}
+      />
+    </Dropdown>
   );
 }
 

@@ -374,7 +374,6 @@ export default function ShareSkillModal({
             <SharePermissionMenu
               ariaLabel={t("share.scopeMenu.ariaLabel")}
               disabled={!canEditOrgVisibility}
-              menuWidth="2xl"
               onChange={(scope) => {
                 setDraftState((currentDraftState) =>
                   currentDraftState

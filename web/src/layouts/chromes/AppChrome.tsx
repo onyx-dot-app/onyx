@@ -36,14 +36,12 @@ import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
-  LineItemButton,
+  Dropdown,
   OpenButton,
-  Popover,
-  PopoverMenu,
   Text,
+  type DropdownMenuItem,
+  type DropdownView,
 } from "@opal/components";
-import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
-import SimplePopover from "@/refresh-components/SimplePopover";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
@@ -79,6 +77,7 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 
 function Header() {
   const t = useTranslations("chat.appChrome");
+  const tSidebar = useTranslations("sidebar");
   const appPosition = useAppPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
@@ -101,11 +100,7 @@ function Header() {
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [showExportOptions, setShowExportOptions] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
   const {
     projects,
@@ -136,17 +131,7 @@ function Header() {
     return projects.filter((project) => project.id !== currentProjectId);
   }, [projects, currentProjectId]);
 
-  const filteredProjects = useMemo(() => {
-    if (!searchTerm) return availableProjects;
-    const term = searchTerm.toLowerCase();
-    return availableProjects.filter((project) =>
-      project.name.toLowerCase().includes(term)
-    );
-  }, [availableProjects, searchTerm]);
-
   const resetMoveState = useCallback(() => {
-    setShowMoveOptions(false);
-    setSearchTerm("");
     setPendingMoveProjectId(null);
     setShowMoveCustomAgentModal(false);
   }, []);
@@ -164,7 +149,7 @@ function Header() {
           currentProjectId,
         });
         resetMoveState();
-        setPopoverOpen(false);
+        setMenuOpen(false);
       } catch (error) {
         console.error("Failed to move chat session:", error);
       }
@@ -218,7 +203,7 @@ function Header() {
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
     setDeleteModalOpen(open);
     if (open) {
-      setPopoverOpen(false);
+      setMenuOpen(false);
     }
   }, []);
 
@@ -272,96 +257,87 @@ function Header() {
     [currentChatSession, t]
   );
 
-  useEffect(() => {
-    let items: ReactNode[];
-    if (showMoveOptions) {
-      items = [
-        <PopoverSearchInput
-          key="search"
-          setShowMoveOptions={setShowMoveOptions}
-          onSearch={setSearchTerm}
-        />,
-        ...filteredProjects.map((project) => (
-          <LineItemButton
-            key={project.id}
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFolderIn}
-            title={project.name}
-            onClick={noProp(() => handleMoveClick(project.id))}
-          />
-        )),
-      ];
-    } else if (showExportOptions) {
-      items = [
-        <LineItemButton
-          key="export-back"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgChevronLeft}
-          title={t("exportAs.label")}
-          onClick={noProp(() => setShowExportOptions(false))}
-        />,
-        <Popover.Close asChild key="export-plaintext">
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFileText}
-            title={t("exportPlaintext.label")}
-            onClick={noProp(() => handleExport("text"))}
-          />
-        </Popover.Close>,
-        <Popover.Close asChild key="export-markdown">
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgHash}
-            title={t("exportMarkdown.label")}
-            onClick={noProp(() => handleExport("markdown"))}
-          />
-        </Popover.Close>,
-      ];
-    } else {
-      items = [
-        <LineItemButton
-          key="move"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgFolderIn}
-          title={t("moveToProject.label")}
-          onClick={noProp(() => setShowMoveOptions(true))}
-        />,
-        <LineItemButton
-          key="export"
-          sizePreset="main-ui"
-          rounding={2}
-          icon={SvgDownload}
-          title={t("exportAs.label")}
-          onClick={noProp(() => setShowExportOptions(true))}
-        />,
-        null,
-        <LineItemButton
-          key="delete"
-          sizePreset="main-ui"
-          rounding={2}
-          color="danger"
-          icon={SvgTrash}
-          title={t("delete.label")}
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-        />,
-      ];
-    }
-
-    setPopoverItems(items);
-  }, [
-    showMoveOptions,
-    showExportOptions,
-    filteredProjects,
-    currentChatSession,
-    setDeleteConfirmationModalOpen,
-    handleMoveClick,
-    handleExport,
-  ]);
+  // The chat options menu: move and export are pages of their own.
+  const moveView: DropdownView = {
+    search: {
+      placeholder: tSidebar("chatButton.projectSearchInput.placeholder"),
+    },
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        pinned: true,
+        icon: SvgChevronLeft,
+        title: t("moveToProject.label"),
+        onSelect: (views) => views.pop(),
+      },
+      ...availableProjects.map(
+        (project): DropdownMenuItem => ({
+          kind: "action",
+          id: `project-${project.id}`,
+          icon: SvgFolderIn,
+          title: project.name,
+          onSelect: () => handleMoveClick(project.id),
+        })
+      ),
+    ],
+  };
+  const exportView: DropdownView = {
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        icon: SvgChevronLeft,
+        title: t("exportAs.label"),
+        onSelect: (views) => views.pop(),
+      },
+      {
+        kind: "action",
+        id: "export-plaintext",
+        icon: SvgFileText,
+        title: t("exportPlaintext.label"),
+        onSelect: () => handleExport("text"),
+      },
+      {
+        kind: "action",
+        id: "export-markdown",
+        icon: SvgHash,
+        title: t("exportMarkdown.label"),
+        onSelect: () => handleExport("markdown"),
+      },
+    ],
+  };
+  const menuItems: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "move",
+      icon: SvgFolderIn,
+      opensView: true,
+      title: t("moveToProject.label"),
+      onSelect: (views) => views.push("move"),
+    },
+    {
+      kind: "action",
+      id: "export",
+      icon: SvgDownload,
+      opensView: true,
+      title: t("exportAs.label"),
+      onSelect: (views) => views.push("export"),
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "action",
+          id: "delete",
+          icon: SvgTrash,
+          danger: true,
+          title: t("delete.label"),
+          onSelect: () => setDeleteConfirmationModalOpen(true),
+        },
+      ],
+    },
+  ];
 
   return (
     <>
@@ -442,11 +418,11 @@ function Header() {
                   !incognitoEnabled &&
                   appPosition.isNewSession() &&
                   state.phase === "idle" && (
-                    <Popover
+                    <Dropdown
                       open={modePopoverOpen}
                       onOpenChange={setModePopoverOpen}
                     >
-                      <Popover.Trigger asChild>
+                      <Dropdown.Trigger asChild>
                         <OpenButton
                           aria-label={t("modeButton.ariaLabel")}
                           icon={
@@ -454,45 +430,39 @@ function Header() {
                               ? SvgSearchMenu
                               : SvgBubbleText
                           }
+                          interaction={modePopoverOpen ? "hover" : "rest"}
                         >
                           {effectiveMode === "search"
                             ? t("mode.search.label")
                             : t("mode.chat.label")}
                         </OpenButton>
-                      </Popover.Trigger>
-                      <Popover.Content align="start" width="lg">
-                        <Popover.Menu>
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding={2}
-                            icon={SvgSearchMenu}
-                            state={
-                              effectiveMode === "search" ? "selected" : "empty"
-                            }
-                            title={t("mode.search.label")}
-                            description={t("mode.search.description")}
-                            onClick={noProp(() => {
-                              setAppMode("search");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding={2}
-                            icon={SvgBubbleText}
-                            state={
-                              effectiveMode === "chat" ? "selected" : "empty"
-                            }
-                            title={t("mode.chat.label")}
-                            description={t("mode.chat.description")}
-                            onClick={noProp(() => {
-                              setAppMode("chat");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                        </Popover.Menu>
-                      </Popover.Content>
-                    </Popover>
+                      </Dropdown.Trigger>
+                      <Dropdown.Data
+                        label={t("modeButton.ariaLabel")}
+                        value={effectiveMode}
+                        onSelect={(option) =>
+                          setAppMode(
+                            option.value === "search" ? "search" : "chat"
+                          )
+                        }
+                        items={[
+                          {
+                            kind: "option",
+                            value: "search",
+                            icon: SvgSearchMenu,
+                            title: t("mode.search.label"),
+                            description: t("mode.search.description"),
+                          },
+                          {
+                            kind: "option",
+                            value: "chat",
+                            icon: SvgBubbleText,
+                            title: t("mode.chat.label"),
+                            description: t("mode.chat.description"),
+                          },
+                        ]}
+                      />
+                    </Dropdown>
                   )}
               </div>
 
@@ -579,27 +549,21 @@ function Header() {
                       >
                         {t("share.label")}
                       </Button>
-                      <SimplePopover
-                        trigger={
+                      <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
+                        <Dropdown.Trigger asChild>
                           <Button
                             icon={SvgMoreHorizontal}
                             prominence="tertiary"
-                            interaction={popoverOpen ? "hover" : "rest"}
+                            interaction={menuOpen ? "hover" : "rest"}
+                            aria-label={tSidebar("chatButton.options.label")}
                           />
-                        }
-                        onOpenChange={(state) => {
-                          setPopoverOpen(state);
-                          if (!state) {
-                            setShowMoveOptions(false);
-                            setShowExportOptions(false);
-                            setSearchTerm("");
-                          }
-                        }}
-                        side="bottom"
-                        align="end"
-                      >
-                        <PopoverMenu>{popoverItems}</PopoverMenu>
-                      </SimplePopover>
+                        </Dropdown.Trigger>
+                        <Dropdown.Data
+                          label={tSidebar("chatButton.options.label")}
+                          items={menuItems}
+                          views={{ move: moveView, export: exportView }}
+                        />
+                      </Dropdown>
                     </FrostedDiv>
                   )}
               </div>

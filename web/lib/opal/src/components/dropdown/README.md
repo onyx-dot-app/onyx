@@ -139,7 +139,7 @@ The element the list positions against and matches in width, when that is not th
 | `custom` | `id`, `render(row)`, `onActivate?(views)`, `onSecondary?(views)`, `keepOpen?`, `opensView?`                                     | `onActivate`; closes unless `keepOpen`, `opensView` or the handler moved the stack                                                |
 | `group`  | `title?`, `foldable?` (titled only), `items`                                                                                    | a foldable title folds and unfolds                                                                                                |
 
-Every row takes `keywords?` (what a search matches beyond the title) and `disabled?` (shown, but no stop and no clicks). A group whose rows all filter out disappears with its line.
+Every row takes `keywords?` (what a search matches beyond the title), `pinned?` (stays on show while a search is on: a way back, a create row) and `disabled?` (shown, but no stop and no clicks). A group whose rows all filter out disappears with its line.
 
 ### Custom rows
 

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
+  Dropdown,
   InputTypeIn,
   LineItemButton,
   Popover,
@@ -214,45 +215,41 @@ export default function AssociatedSkillsEditor({
               </div>
             </Popover.Content>
           </Popover>
-          <Popover modal open={createOpen} onOpenChange={setCreateOpen}>
-            <Popover.Trigger asChild>
+          <Dropdown open={createOpen} onOpenChange={setCreateOpen}>
+            <Dropdown.Trigger asChild>
               <Button icon={SvgPlus}>{t("createSkillButton")}</Button>
-            </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="lg">
-              <Popover.Menu>
-                <LineItemButton
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgEdit}
-                  title={t("create.scratch.label")}
-                  onClick={() => {
-                    setCreateOpen(false);
-                    onCreateSkill();
-                  }}
-                  description={t("create.scratch.description")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgUploadCloud}
-                  title={t("create.upload.label")}
-                  onClick={() => {
-                    setCreateOpen(false);
-                    onUploadSkill();
-                  }}
-                  description={t("create.upload.description")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgGithub}
-                  title={t("create.github.label")}
-                  disabled
-                  description={t("create.github.description")}
-                />
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("createSkillButton")}
+              items={[
+                {
+                  kind: "action",
+                  id: "scratch",
+                  icon: SvgEdit,
+                  title: t("create.scratch.label"),
+                  description: t("create.scratch.description"),
+                  onSelect: onCreateSkill,
+                },
+                {
+                  kind: "action",
+                  id: "upload",
+                  icon: SvgUploadCloud,
+                  title: t("create.upload.label"),
+                  description: t("create.upload.description"),
+                  onSelect: onUploadSkill,
+                },
+                {
+                  kind: "action",
+                  id: "github",
+                  icon: SvgGithub,
+                  title: t("create.github.label"),
+                  description: t("create.github.description"),
+                  disabled: true,
+                  onSelect: () => {},
+                },
+              ]}
+            />
+          </Dropdown>
         </div>
       </div>
 

@@ -13,14 +13,7 @@ import {
   SessionHistoryItem,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
-import {
-  Button,
-  LineItemButton,
-  Popover,
-  PopoverMenu,
-  SidebarTab,
-  Text,
-} from "@opal/components";
+import { Button, Dropdown, SidebarTab, Text } from "@opal/components";
 import {
   ConfirmationModalLayout,
   SidebarLayouts,
@@ -114,7 +107,7 @@ function BuildSessionButton({
 }: BuildSessionButtonProps) {
   const t = useTranslations("craft.sideBar");
   const [renaming, setRenaming] = useState(false);
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -137,7 +130,7 @@ function BuildSessionButton({
 
   const closeModal = useCallback(() => {
     setIsDeleteModalOpen(false);
-    setPopoverOpen(false);
+    setMenuOpen(false);
   }, []);
 
   const handleConfirmDelete = useCallback(
@@ -172,60 +165,59 @@ function BuildSessionButton({
 
   const rightMenu = (
     <>
-      <Popover.Trigger asChild onClick={noProp()}>
-        <div>
+      <Dropdown.Trigger asChild>
+        {/* The click stays here: the row underneath loads the session. */}
+        <div role="presentation" onClick={noProp()}>
           {/* While renaming the row is an input, so the menu stays away unless
-              its own popover is already open. */}
-          {(!renaming || popoverOpen) && (
+              its own list is already open. */}
+          {(!renaming || menuOpen) && (
             <Hoverable.Item group="CraftSessionTab">
               <Button
                 icon={SvgMoreHorizontal}
                 prominence="internal"
                 size="sm"
-                interaction={popoverOpen ? "hover" : "rest"}
+                interaction={menuOpen ? "hover" : "rest"}
+                aria-label={t("options.label")}
               />
             </Hoverable.Item>
           )}
         </div>
-      </Popover.Trigger>
-      <Popover.Content side="right" align="start">
-        <PopoverMenu>
-          {[
-            <LineItemButton
-              sizePreset="main-ui"
-              rounding={2}
-              key="rename"
-              icon={SvgEdit}
-              onClick={noProp(() => setRenaming(true))}
-              title={t("rename.label")}
-            />,
-            null,
-            <LineItemButton
-              sizePreset="main-ui"
-              rounding={2}
-              key="delete"
-              icon={SvgTrash}
-              onClick={noProp(() => setIsDeleteModalOpen(true))}
-              color="danger"
-              title={t("delete.label")}
-            />,
-          ]}
-        </PopoverMenu>
-      </Popover.Content>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={t("options.label")}
+        items={[
+          {
+            kind: "action",
+            id: "rename",
+            icon: SvgEdit,
+            title: t("rename.label"),
+            onSelect: () => setRenaming(true),
+          },
+          {
+            kind: "group",
+            items: [
+              {
+                kind: "action",
+                id: "delete",
+                icon: SvgTrash,
+                danger: true,
+                title: t("delete.label"),
+                onSelect: () => setIsDeleteModalOpen(true),
+              },
+            ],
+          },
+        ]}
+      />
     </>
   );
 
   return (
     <>
-      <Popover
-        onOpenChange={(state) => {
-          setPopoverOpen(state);
-        }}
-      >
-        <Popover.Anchor>
+      <Dropdown onOpenChange={setMenuOpen}>
+        <Dropdown.Anchor>
           <Hoverable.Root
             group="CraftSessionTab"
-            interaction={popoverOpen ? "hover" : "rest"}
+            interaction={menuOpen ? "hover" : "rest"}
           >
             <SidebarTab
               /* While renaming, drop the click target so the input stays usable. */
@@ -259,8 +251,8 @@ function BuildSessionButton({
               )}
             </SidebarTab>
           </Hoverable.Root>
-        </Popover.Anchor>
-      </Popover>
+        </Dropdown.Anchor>
+      </Dropdown>
       {isDeleteModalOpen && (
         <CraftSessionDeleteModal
           sessionTitle={historyItem.title}

@@ -13,11 +13,9 @@ import {
   BasicModalFooter,
   Button,
   Code,
-  LineItemButton,
+  Dropdown,
   MessageCard,
   Modal,
-  Popover,
-  PopoverMenu,
   Table,
   Tag,
   Text,
@@ -199,44 +197,46 @@ export default function ServiceAccountsPage() {
               tooltip={t("table.regenerateButton.tooltip")}
               onClick={() => setRegenerateTarget(row)}
             />
-            <Popover>
-              <Popover.Trigger asChild>
+            <Dropdown>
+              <Dropdown.Trigger asChild>
                 <Button
                   icon={SvgMoreHorizontal}
                   prominence="tertiary"
                   tooltip={t("table.moreButton.tooltip")}
+                  aria-label={t("table.moreButton.tooltip")}
                 />
-              </Popover.Trigger>
-              <Popover.Content side="bottom" align="end" width="md">
-                <PopoverMenu>
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgUsers}
-                    onClick={() => setGroupsRolesTarget(row)}
-                    title={t("table.actions.groups.label")}
-                  />
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgUserEdit}
-                    onClick={() => {
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("table.moreButton.tooltip")}
+                items={[
+                  {
+                    kind: "action",
+                    id: "groups",
+                    icon: SvgUsers,
+                    title: t("table.actions.groups.label"),
+                    onSelect: () => setGroupsRolesTarget(row),
+                  },
+                  {
+                    kind: "action",
+                    id: "edit",
+                    icon: SvgUserEdit,
+                    title: t("table.actions.edit.label"),
+                    onSelect: () => {
                       setSelectedApiKey(row);
                       setShowCreateUpdateForm(true);
-                    }}
-                    title={t("table.actions.edit.label")}
-                  />
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgTrash}
-                    color="danger"
-                    onClick={() => setDeleteTarget(row)}
-                    title={t("table.actions.delete.label")}
-                  />
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+                    },
+                  },
+                  {
+                    kind: "action",
+                    id: "delete",
+                    icon: SvgTrash,
+                    danger: true,
+                    title: t("table.actions.delete.label"),
+                    onSelect: () => setDeleteTarget(row),
+                  },
+                ]}
+              />
+            </Dropdown>
           </div>
         ),
       }),

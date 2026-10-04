@@ -1,4 +1,4 @@
-import { DefaultDropdown } from "@/components/Dropdown";
+import { InputSingleSelect } from "@opal/components";
 import { AccessType } from "@/lib/types";
 import {
   ValidAutoSyncSource,
@@ -70,7 +70,7 @@ export function AccessTypeForm({
   const options = useMemo(() => {
     const built: {
       name: string;
-      value: string;
+      value: AccessType;
       description: string;
       disabled: boolean;
       disabledReason: string;
@@ -126,7 +126,7 @@ export function AccessTypeForm({
       options.find(
         (option) => option.value === defaultAccess && !option.disabled
       ) ?? options.find((option) => !option.disabled);
-    if (fallback) access_type_helpers.setValue(fallback.value as AccessType);
+    if (fallback) access_type_helpers.setValue(fallback.value);
   }, [
     businessTier,
     options,
@@ -143,13 +143,26 @@ export function AccessTypeForm({
         <p className="text-text-950 font-medium">{t("heading.title")}</p>
         <p className="text-sm text-text-500">{t("heading.description")}</p>
       </div>
-      <DefaultDropdown
-        options={options}
-        selected={access_type.value}
-        onSelect={(selected) =>
-          access_type_helpers.setValue(selected as AccessType)
-        }
-        includeDefault={false}
+      <InputSingleSelect
+        value={access_type.value}
+        onValueChange={(selected) => {
+          const option = options.find((o) => o.value === selected);
+          if (option) access_type_helpers.setValue(option.value);
+        }}
+        placeholder={t("heading.title")}
+        options={[
+          {
+            options: options.map((option) => ({
+              value: option.value,
+              title: option.name,
+              // The reason an option is disabled reads as its description.
+              description: option.disabled
+                ? option.disabledReason
+                : option.description,
+              disabled: option.disabled,
+            })),
+          },
+        ]}
       />
       {access_type.value === "sync" &&
         showAutoSync &&

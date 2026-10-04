@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
-import { Button, LineItemButton, Popover, PopoverMenu } from "@opal/components";
+import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
 import { SvgBracketCurly } from "@opal/icons";
 import {
   USER_DIRECTORY_PLACEHOLDERS,
@@ -51,44 +51,39 @@ export default function InsertUserVariableMenu({
       const current = String(values[fieldName] ?? "");
       setFieldValue(fieldName, current + token);
     }
-
-    setOpen(false);
   }
 
-  function renderItem(placeholder: UserPlaceholder) {
-    return (
-      <LineItemButton
-        sizePreset="main-ui"
-        rounding={2}
-        key={placeholder.key}
-        icon={SvgBracketCurly}
-        description={userPlaceholderToken(placeholder.key)}
-        onClick={() => insertToken(placeholder.key)}
-        title={placeholder.label}
-      />
-    );
+  function toItem(placeholder: UserPlaceholder): DropdownMenuItem {
+    return {
+      kind: "action",
+      id: placeholder.key,
+      icon: SvgBracketCurly,
+      title: placeholder.label,
+      description: userPlaceholderToken(placeholder.key),
+      onSelect: () => insertToken(placeholder.key),
+    };
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
+    <Dropdown open={open} onOpenChange={setOpen}>
+      <Dropdown.Trigger asChild>
         <div>
           <Button
             prominence="internal"
             size="xs"
             icon={SvgBracketCurly}
             tooltip={t("userVariables.insert.tooltip")}
+            aria-label={t("userVariables.insert.tooltip")}
           />
         </div>
-      </Popover.Trigger>
-      <Popover.Content>
-        <PopoverMenu>
-          {[
-            ...USER_DIRECTORY_PLACEHOLDERS.map(renderItem),
-            ...USER_IDENTITY_PLACEHOLDERS.map(renderItem),
-          ]}
-        </PopoverMenu>
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={t("userVariables.insert.tooltip")}
+        items={[
+          ...USER_DIRECTORY_PLACEHOLDERS.map(toItem),
+          ...USER_IDENTITY_PLACEHOLDERS.map(toItem),
+        ]}
+      />
+    </Dropdown>
   );
 }

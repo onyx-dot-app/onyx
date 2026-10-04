@@ -8444,6 +8444,9 @@
         "makeAdmin": {
           "label": "Zum Administrator machen"
         },
+        "menuButton": {
+          "ariaLabel": "Benutzeraktionen"
+        },
         "removeAdmin": {
           "label": "Administratorzugriff entfernen"
         },
@@ -11234,6 +11237,9 @@
         "expand": {
           "ariaLabel": "Projekt ausklappen"
         },
+        "options": {
+          "label": "Projektoptionen"
+        },
         "rename": {
           "label": "Projekt umbenennen"
         }
@@ -12584,6 +12590,9 @@
       },
       "newSession": {
         "label": "Loslegen"
+      },
+      "options": {
+        "label": "Sitzungsoptionen"
       },
       "rename": {
         "label": "Umbenennen"
@@ -14041,6 +14050,9 @@
       },
       "moveToProject": {
         "label": "In ein Projekt verschieben"
+      },
+      "options": {
+        "label": "Chat-Optionen"
       },
       "projectSearchInput": {
         "placeholder": "Projekte durchsuchen"

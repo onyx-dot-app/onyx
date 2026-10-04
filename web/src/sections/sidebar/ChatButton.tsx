@@ -8,7 +8,11 @@ import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
 import { ChatSession } from "@/app/app/interfaces";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
-import { Popover, PopoverMenu } from "@opal/components";
+import {
+  Dropdown,
+  type DropdownMenuItem,
+  type DropdownView,
+} from "@opal/components";
 import type { Project } from "@/lib/projects/types";
 import {
   removeChatSessionFromProject,
@@ -18,10 +22,8 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { Button, LineItemButton, SidebarTab } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
+import { Button, SidebarTab } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { useFocusOnMount } from "@opal/hooks";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
   shouldShowMoveModal,
@@ -42,58 +44,6 @@ import {
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 import { usePinChatAgent } from "@/lib/agents/hooks";
-
-export interface PopoverSearchInputProps {
-  setShowMoveOptions: (show: boolean) => void;
-  onSearch: (term: string) => void;
-}
-
-export function PopoverSearchInput({
-  setShowMoveOptions,
-  onSearch,
-}: PopoverSearchInputProps) {
-  const t = useTranslations("sidebar");
-  const [searchTerm, setSearchTerm] = useState("");
-  const focusOnMount = useFocusOnMount<HTMLInputElement>();
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    onSearch(value);
-  };
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Escape") {
-      setShowMoveOptions(false);
-    }
-  };
-
-  const handleClickBackButton = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    setShowMoveOptions(false);
-    setSearchTerm("");
-  };
-
-  return (
-    <div className="flex flex-row items-center">
-      <Button
-        icon={SvgChevronLeft}
-        onClick={handleClickBackButton}
-        prominence="tertiary"
-        size="sm"
-      />
-      <InputTypeIn
-        type="text"
-        value={searchTerm}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        placeholder={t("chatButton.projectSearchInput.placeholder")}
-        onClick={noProp()}
-        variant="internal"
-        ref={focusOnMount}
-      />
-    </div>
-  );
-}
 
 export interface ChatButtonProps {
   chatSession: ChatSession;
@@ -118,10 +68,8 @@ const ChatButton = memo(
     const [renaming, setRenaming] = useState(false);
     const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
       useState(false);
-    const [showMoveOptions, setShowMoveOptions] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
-    const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
     const { refreshChatSessions, removeSession } = useChatSessions();
     const {
       refreshCurrentProjectDetails,
@@ -131,7 +79,7 @@ const ChatButton = memo(
       createProject,
     } = useProjectsContext();
     const pinChatAgent = usePinChatAgent();
-    const [popoverOpen, setPopoverOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
     >(null);
@@ -188,112 +136,109 @@ const ChatButton = memo(
       );
     }, [projects, searchTerm]);
 
-    useEffect(() => {
-      if (!showMoveOptions) {
-        const popoverItems = [
-          <LineItemButton
-            key="share"
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgShare}
-            title={t("chatButton.share.label")}
-            onClick={noProp(() => setShowShareModal(true))}
-          />,
-          <LineItemButton
-            key="rename"
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgEdit}
-            title={t("chatButton.rename.label")}
-            onClick={noProp(() => setRenaming(true))}
-          />,
-          <LineItemButton
-            key="move"
-            sizePreset="main-ui"
-            rounding={2}
-            icon={SvgFolderIn}
-            title={t("chatButton.moveToProject.label")}
-            onClick={noProp(() => setShowMoveOptions(true))}
-          />,
-          project && (
-            <LineItemButton
-              key="remove"
-              sizePreset="main-ui"
-              rounding={2}
-              icon={SvgFolder}
-              title={t("chatButton.removeFromProject.label", {
-                projectName: project.name,
-              })}
-              onClick={noProp(() => handleRemoveFromProject())}
-            />
+    const availableProjects = filteredProjects.filter(
+      (candidateProject) => candidateProject.id !== project?.id
+    );
+    // The move page: the view's own search filters the projects; the way
+    // back and the create row stay pinned above the filter.
+    const moveView: DropdownView = {
+      search: {
+        placeholder: t("chatButton.projectSearchInput.placeholder"),
+        onChange: setSearchTerm,
+      },
+      items: [
+        {
+          kind: "action",
+          id: "back",
+          pinned: true,
+          icon: SvgChevronLeft,
+          title: t("chatButton.moveToProject.label"),
+          onSelect: (views) => views.pop(),
+        },
+        ...projects
+          .filter((candidateProject) => candidateProject.id !== project?.id)
+          .map(
+            (targetProject): DropdownMenuItem => ({
+              kind: "action",
+              id: `project-${targetProject.id}`,
+              icon: SvgFolder,
+              title: targetProject.name,
+              onSelect: () => handleChatMove(targetProject),
+            })
           ),
-          null,
-          <LineItemButton
-            key="delete"
-            sizePreset="main-ui"
-            rounding={2}
-            color="danger"
-            icon={SvgTrash}
-            title={t("chatButton.delete.label")}
-            onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-          />,
-        ];
-        setPopoverItems(popoverItems);
-      } else {
-        const availableProjects = filteredProjects.filter(
-          (candidateProject) => candidateProject.id !== project?.id
-        );
-
-        const popoverItems = [
-          <PopoverSearchInput
-            key="search"
-            setShowMoveOptions={setShowMoveOptions}
-            onSearch={setSearchTerm}
-          />,
-          ...availableProjects.map((targetProject) => (
-            <LineItemButton
-              key={targetProject.id}
-              sizePreset="main-ui"
-              rounding={2}
-              icon={SvgFolder}
-              title={targetProject.name}
-              onClick={noProp(() => handleChatMove(targetProject))}
-            />
-          )),
-          // Show "Create New Project" option when no projects match the search
-          ...(availableProjects.length === 0 && searchTerm.trim() !== ""
-            ? [
-                null,
-                <LineItemButton
-                  key="create-new"
-                  sizePreset="main-ui"
-                  rounding={2}
-                  icon={SvgFolderPlus}
-                  title={t("chatButton.createProject.label", {
-                    projectName: searchTerm.trim(),
-                  })}
-                  onClick={noProp(() =>
-                    handleCreateProjectAndMove(searchTerm.trim())
-                  )}
-                />,
-              ]
-            : []),
-        ];
-        setPopoverItems(popoverItems);
-      }
-    }, [
-      showMoveOptions,
-      filteredProjects,
-      refreshChatSessions,
-      fetchProjects,
-      currentProjectId,
-      refreshCurrentProjectDetails,
-      project,
-      chatSession.id,
-      searchTerm,
-      createProject,
-      t,
-    ]);
+        // A create row when no project matches the search.
+        ...(availableProjects.length === 0 && searchTerm.trim() !== ""
+          ? [
+              {
+                kind: "group" as const,
+                items: [
+                  {
+                    kind: "action" as const,
+                    id: "create-new",
+                    pinned: true,
+                    icon: SvgFolderPlus,
+                    title: t("chatButton.createProject.label", {
+                      projectName: searchTerm.trim(),
+                    }),
+                    onSelect: () =>
+                      handleCreateProjectAndMove(searchTerm.trim()),
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+    };
+    const menuItems: DropdownMenuItem[] = [
+      {
+        kind: "action",
+        id: "share",
+        icon: SvgShare,
+        title: t("chatButton.share.label"),
+        onSelect: () => setShowShareModal(true),
+      },
+      {
+        kind: "action",
+        id: "rename",
+        icon: SvgEdit,
+        title: t("chatButton.rename.label"),
+        onSelect: () => setRenaming(true),
+      },
+      {
+        kind: "action",
+        id: "move",
+        icon: SvgFolderIn,
+        opensView: true,
+        title: t("chatButton.moveToProject.label"),
+        onSelect: (views) => views.push("move"),
+      },
+      ...(project
+        ? [
+            {
+              kind: "action" as const,
+              id: "remove",
+              icon: SvgFolder,
+              title: t("chatButton.removeFromProject.label", {
+                projectName: project.name,
+              }),
+              onSelect: () => handleRemoveFromProject(),
+            },
+          ]
+        : []),
+      {
+        kind: "group",
+        items: [
+          {
+            kind: "action",
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("chatButton.delete.label"),
+            onSelect: () => setDeleteConfirmationModalOpen(true),
+          },
+        ],
+      },
+    ];
 
     // Pin the chat's agent when clicking on the conversation
     async function handleClick() {
@@ -337,7 +282,6 @@ const ChatButton = memo(
           fetchProjects,
           currentProjectId,
         });
-        setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
         // handleMoveOperation already handles error notification
@@ -361,7 +305,6 @@ const ChatButton = memo(
           ? refreshCurrentProjectDetails()
           : fetchProjects();
         await Promise.all([refreshChatSessions(), projectRefreshPromise]);
-        setShowMoveOptions(false);
         setSearchTerm("");
       } catch (error) {
         console.error("Failed to remove chat from project:", error);
@@ -383,7 +326,6 @@ const ChatButton = memo(
         if (shouldShowMoveModal(chatSession)) {
           setPendingMoveProjectId(newProject.id);
           setShowMoveCustomAgentModal(true);
-          setShowMoveOptions(false);
           setSearchTerm("");
           return;
         }
@@ -403,48 +345,43 @@ const ChatButton = memo(
 
     const rightMenu = (
       <>
-        <Popover.Trigger asChild onClick={noProp()}>
-          <div data-testid="ChatButton/options">
+        <Dropdown.Trigger asChild>
+          {/* The click stays here: the row underneath opens the chat. */}
+          <div
+            role="presentation"
+            data-testid="ChatButton/options"
+            onClick={noProp()}
+          >
             {/* While renaming the row is an input, so the menu stays away unless
-                its own popover is already open. */}
-            {(!renaming || popoverOpen) && (
+                its own list is already open. */}
+            {(!renaming || menuOpen) && (
               <Hoverable.Item group="ChatButton">
                 <Button
                   icon={SvgMoreHorizontal}
                   prominence="internal"
                   size="sm"
-                  interaction={popoverOpen ? "hover" : "rest"}
+                  interaction={menuOpen ? "hover" : "rest"}
+                  aria-label={t("chatButton.options.label")}
                 />
               </Hoverable.Item>
             )}
           </div>
-        </Popover.Trigger>
-        <Popover.Content
-          data-testid="ChatButton/popover"
-          side="right"
-          align="start"
-          width="md"
-        >
-          <PopoverMenu>{popoverItems}</PopoverMenu>
-        </Popover.Content>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("chatButton.options.label")}
+          items={menuItems}
+          views={{ move: moveView }}
+        />
       </>
     );
 
     const popover = (
-      <Popover
-        onOpenChange={(state) => {
-          setPopoverOpen(state);
-          if (!state) {
-            setShowMoveOptions(false);
-            setSearchTerm("");
-          }
-        }}
-      >
-        <Popover.Anchor>
+      <Dropdown onOpenChange={setMenuOpen}>
+        <Dropdown.Anchor>
           <Hoverable.Root
             group="ChatButton"
             data-testid="ChatButton"
-            interaction={popoverOpen ? "hover" : "rest"}
+            interaction={menuOpen ? "hover" : "rest"}
           >
             <SidebarTab
               /* While renaming, drop the click target so the input stays usable. */
@@ -469,8 +406,8 @@ const ChatButton = memo(
               )}
             </SidebarTab>
           </Hoverable.Root>
-        </Popover.Anchor>
-      </Popover>
+        </Dropdown.Anchor>
+      </Dropdown>
     );
 
     return (

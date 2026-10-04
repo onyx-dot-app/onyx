@@ -8444,6 +8444,9 @@
         "makeAdmin": {
           "label": "관리자로 지정"
         },
+        "menuButton": {
+          "ariaLabel": "사용자 작업"
+        },
         "removeAdmin": {
           "label": "관리자 권한 해제"
         },
@@ -11234,6 +11237,9 @@
         "expand": {
           "ariaLabel": "프로젝트 펼치기"
         },
+        "options": {
+          "label": "프로젝트 옵션"
+        },
         "rename": {
           "label": "프로젝트 이름 바꾸기"
         }
@@ -12584,6 +12590,9 @@
       },
       "newSession": {
         "label": "크래프트 시작"
+      },
+      "options": {
+        "label": "세션 옵션"
       },
       "rename": {
         "label": "이름 바꾸기"
@@ -14041,6 +14050,9 @@
       },
       "moveToProject": {
         "label": "프로젝트로 이동"
+      },
+      "options": {
+        "label": "채팅 옵션"
       },
       "projectSearchInput": {
         "placeholder": "프로젝트 검색"
