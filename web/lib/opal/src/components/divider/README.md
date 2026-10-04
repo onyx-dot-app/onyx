@@ -41,7 +41,7 @@ A plain line with no title or description.
 | `defaultOpen`  | `boolean`                 | `false`        | Uncontrolled initial open state |
 | `onOpenChange` | `(open: boolean) => void` | —              | Callback when toggled           |
 | `children`     | `ReactNode`               | —              | Content revealed when open; stays mounted while closed, inert and hidden from assistive tech, so the fold animates both ways |
-| `headerProps`  | `HTMLAttributes<HTMLDivElement>` (no `onClick`) | — | Attributes for the header element, for an owner that addresses it: an id, a role, `aria-expanded` |
+| `headerProps`  | `Omit<HTMLAttributes<HTMLDivElement>, "onClick"> & Record<`data-${string}`, string \| number \| undefined>` | — | Attributes for the header element, for an owner that addresses it: an id, a role, `aria-expanded`, `data-*` |
 
 ## Usage Examples
 

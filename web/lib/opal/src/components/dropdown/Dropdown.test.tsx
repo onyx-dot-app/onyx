@@ -165,7 +165,7 @@ describe("Dropdown picker", () => {
 
     // Banana is disabled: the next stop is the folded Citrus title.
     await user.keyboard("{ArrowDown}");
-    expect(highlighted()).toEqual([]);
+    expect(highlighted()).toEqual(["Citrus"]);
     expect(screen.queryByRole("option", { name: "Lemon" })).toBeNull();
 
     // Enter on the title unfolds it; its rows join the walk.
@@ -359,7 +359,7 @@ describe("Dropdown groups", () => {
     expect(highlighted()).toEqual(["Lemon"]);
 
     await user.keyboard("{ArrowLeft}");
-    expect(highlighted()).toEqual([]);
+    expect(highlighted()).toEqual(["Citrus"]);
     expect(title).toHaveAttribute("aria-expanded", "true");
 
     await user.keyboard("{ArrowLeft}");
@@ -372,7 +372,9 @@ describe("Dropdown groups", () => {
     render(<Harness />);
     const trigger = screen.getByRole("combobox", { name: "Fruit" });
     await user.type(trigger, "l");
-    await user.keyboard("{ArrowDown}");
+    // The Citrus title (open while searching), then Lemon.
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    expect(highlighted()).toEqual(["Lemon"]);
     await user.keyboard("{ArrowLeft}");
     expect(highlighted()).toEqual(["Lemon"]);
   });

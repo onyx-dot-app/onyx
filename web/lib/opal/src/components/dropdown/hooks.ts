@@ -288,16 +288,25 @@ export function useDropdownKeyboard({
             if (item.group.folded) {
               listRef.current.activate(item);
             } else {
-              const first = items[highlightedIndex + 1];
-              if (first?.kind === "row" && first.group === item.group) {
+              // The first enabled row of this group, if it has one.
+              for (
+                let index = highlightedIndex + 1;
+                index < items.length;
+                index++
+              ) {
+                const stop = items[index];
+                if (stop?.kind !== "row" || stop.group !== item.group) break;
+                if (stop.row.disabled) continue;
                 setIsKeyboardNav(true);
-                setHighlightedIndex(highlightedIndex + 1);
+                setHighlightedIndex(index);
+                break;
               }
             }
             break;
           }
           // Otherwise only a row with a secondary control takes the key; a
           // text field keeps it for its caret.
+          if (options.textField) break;
           if (listRef.current.secondary(item)) e.preventDefault();
           break;
         }
