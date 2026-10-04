@@ -325,7 +325,9 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       // — a blank modal, no error, no network call.
       await page.goto("/admin/connectors/google-drive");
       await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Create New" }).click();
+      await page
+        .getByRole("button", { name: "New Google Drive Account" })
+        .click();
       await expect(
         page.getByText("Authenticate with Google Drive")
       ).toBeVisible({ timeout: 10000 });

@@ -109,6 +109,7 @@ class OpenSearchSearchType(str, Enum):
     SEMANTIC = "semantic"
     RANDOM = "random"
     DOC_ID_RETRIEVAL = "doc_id_retrieval"
+    CC_PAIR_ACCESS_SHADOW = "cc_pair_access_shadow"
     UNKNOWN = "unknown"
 
 

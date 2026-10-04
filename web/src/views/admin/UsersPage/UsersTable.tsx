@@ -1,11 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Table, createTableColumns } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
+import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import { AccountType, UserStatus } from "@/lib/types";
@@ -231,7 +232,7 @@ export default function UsersTable({
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }

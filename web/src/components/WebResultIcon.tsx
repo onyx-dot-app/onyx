@@ -1,6 +1,6 @@
 "use client";
 
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SourceIcon } from "./SourceIcon";
 import { useState } from "react";
 import { SvgOnyxLogo, SvgGithub } from "@opal/logos";

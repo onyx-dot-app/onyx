@@ -3,7 +3,8 @@
 The blocking paths (cc-pair validation, indexing-run start) already probe the
 source; this module records what they found as a fallback-shaped capability
 report, so reports accumulate before any check-running infrastructure exists. It
-runs no checks of its own.
+runs no checks of its own. Pairing validation for a source with named checks
+stores the full named report instead (``creation.py``).
 
 Deliberately import-light: the hook sites live in ``factory.py`` and the
 docfetching hot path, so this module must not pull in the check registry (which

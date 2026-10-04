@@ -13,11 +13,9 @@ import { CRAFT_OAUTH_COOKIE_NAME } from "@/app/craft/v1/constants";
 import Cookies from "js-cookie";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import {
-  parseOauthAppCredentialJson,
-  refreshAllGoogleData,
-} from "@/lib/googleConnector";
-import { ValidSources } from "@/lib/types";
+import { refreshAllGoogleData } from "@/lib/googleConnector";
+import { parseOauthAppCredentialJson } from "@/lib/credentials/utils";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { markdown } from "@opal/utils";
 
 interface GmailCredentialSectionProps {
@@ -78,6 +76,13 @@ export const GmailAuthSection = ({
           {markdown(
             t("gmail.oauthOption.description", {
               docsUrl: `${DOCS_ADMINS_PATH}/connectors/official/gmail/overview`,
+            })
+          )}
+        </Text>
+        <Text as="p" font="secondary-body" color="text-03">
+          {markdown(
+            t("gmail.oauthOption.sharedScopesNote", {
+              docsUrl: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/oauth#using-one-credential-for-gmail-and-google-drive`,
             })
           )}
         </Text>

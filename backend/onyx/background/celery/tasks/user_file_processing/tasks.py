@@ -14,19 +14,12 @@ from onyx.background.celery.celery_redis import (
     celery_get_broker_client,
     celery_get_queue_length,
 )
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.background.task_utils import send_user_file_delete_task
 from onyx.chat.incognito import (
     sweep_incognito_generated_files,
     sweep_stale_incognito_user_files,
 )
-from onyx.configs.app_configs import (
-    DISABLE_VECTOR_DB,
-    MANAGED_VESPA,
-    VESPA_CLOUD_CERT_PATH,
-    VESPA_CLOUD_KEY_PATH,
-)
+from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_USER_FILE_DELETE_TASK_EXPIRES,
@@ -59,8 +52,9 @@ from onyx.db.user_file import (
     fetch_user_files_with_access_relationships,
     mark_user_file_reconcile_pending,
 )
-from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import (
+    DocumentIndex,
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
 )
@@ -73,7 +67,6 @@ from onyx.file_store.utils import (
     store_user_file_plaintext,
     user_file_id_to_plaintext_file_name,
 )
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.user_file_indexing_adapter import (
     UserFileDeletingSkip,
     UserFileIndexingAdapter,
@@ -393,14 +386,6 @@ def _process_user_file_with_indexing(
     Opens its own DB session for the indexing pipeline.  The caller should
     not hold an open session when calling this function.
     """
-    # 20 is the documented default for httpx max_keepalive_connections
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-        )
-    else:
-        httpx_init_vespa_pool(20)
-
     with get_session_with_current_tenant() as db_session:
         user_file = db_session.get(UserFile, _as_uuid(user_file_id))
         if user_file is None or user_file.status == UserFileStatus.DELETING:
@@ -421,11 +406,7 @@ def _process_user_file_with_indexing(
         embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
             search_settings=current_search_settings,
         )
-        document_indices = get_all_document_indices(
-            current_search_settings,
-            None,
-            httpx_client=HttpxPool.get("vespa"),
-        )
+        document_index = get_default_document_index(current_search_settings, None)
         adapter = UserFileIndexingAdapter(
             tenant_id=tenant_id,
             db_session=db_session,
@@ -433,7 +414,7 @@ def _process_user_file_with_indexing(
         try:
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
-                document_indices=document_indices,
+                document_index=document_index,
                 ignore_time_skip=True,
                 db_session=db_session,
                 tenant_id=tenant_id,
@@ -505,11 +486,7 @@ def _index_user_file_to_secondary(
         embedder = DefaultIndexingEmbedder.from_db_search_settings(
             search_settings=bound_secondary,
         )
-        document_indices = get_all_document_indices(
-            bound_secondary,
-            None,
-            httpx_client=HttpxPool.get("vespa"),
-        )
+        document_index = get_default_document_index(bound_secondary, None)
         adapter = UserFileIndexingAdapter(
             tenant_id=tenant_id,
             db_session=db_session,
@@ -517,7 +494,7 @@ def _index_user_file_to_secondary(
         try:
             result = run_indexing_pipeline(
                 embedder=embedder,
-                document_indices=document_indices,
+                document_index=document_index,
                 ignore_time_skip=True,
                 # skip the content_hash gate, else the PRESENT run's hash no-ops this write
                 index_to_secondary=True,
@@ -606,26 +583,22 @@ def _supply_user_file_to_secondary(user_file_id: str, tenant_id: str) -> bool:
 
 
 def _sync_metadata_and_reconcile_secondary(
-    retry_indices: list[RetryDocumentIndex],
+    document_index: DocumentIndex,
     update_request: MetadataUpdateRequest,
     user_file_id: str,
     tenant_id: str,
 ) -> bool:
-    """Apply the metadata update to every index; if the secondary is still porting and lacks
+    """Apply the metadata update to the index; if the secondary is still porting and lacks
     the doc, supply its content instead. Returns whether the secondary now matches PRESENT."""
-    secondary_missing = False
-    for retry_index in retry_indices:
-        try:
-            retry_index.update([update_request])
-        except SecondaryIndexDocumentMissingError:
-            task_logger.debug(
-                f"user_file={user_file_id} missing from a still-porting index; "
-                "supplying content."
-            )
-            secondary_missing = True
-    if not secondary_missing:
-        return True
-    return _supply_user_file_to_secondary(user_file_id, tenant_id)
+    try:
+        document_index.update([update_request])
+    except SecondaryIndexDocumentMissingError:
+        task_logger.debug(
+            f"user_file={user_file_id} missing from a still-porting index; "
+            "supplying content."
+        )
+        return _supply_user_file_to_secondary(user_file_id, tenant_id)
+    return True
 
 
 def process_user_file_impl(
@@ -883,18 +856,9 @@ def delete_user_file_impl(
             return
 
     try:
-        skip_vespa = DISABLE_VECTOR_DB
-        retry_document_indices: list[RetryDocumentIndex] = []
+        document_index: DocumentIndex | None = None
         chunk_count_from_db: int | None = None
         file_id: str = ""
-
-        if not skip_vespa:
-            if MANAGED_VESPA:
-                httpx_init_vespa_pool(
-                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-                )
-            else:
-                httpx_init_vespa_pool(20)
 
         # Phase 1: short read session — extract everything needed for slow I/O
         with get_session_with_current_tenant() as db_session:
@@ -908,17 +872,12 @@ def delete_user_file_impl(
             file_id = user_file.file_id
             chunk_count_from_db = user_file.chunk_count
 
-            if not skip_vespa:
+            if not DISABLE_VECTOR_DB:
                 active_search_settings = get_active_search_settings(db_session)
-                document_indices = get_all_document_indices(
+                document_index = get_default_document_index(
                     search_settings=active_search_settings.primary,
                     secondary_search_settings=active_search_settings.secondary,
-                    httpx_client=HttpxPool.get("vespa"),
                 )
-                retry_document_indices = [
-                    RetryDocumentIndex(document_index)
-                    for document_index in document_indices
-                ]
 
                 # Record the deletion before the index delete (below) so a racing port's
                 # sweep removes any chunk its create-only copy resurrects. No-op when no
@@ -935,20 +894,18 @@ def delete_user_file_impl(
                         db_session.commit()
 
         # Phase 2: vector DB deletes + file store deletes (no DB session held).
-        # Pass the DB chunk count when known; otherwise None, which each document
-        # index resolves itself (Vespa fans out to find chunks, OpenSearch deletes
-        # by document id). This keeps the path backend-agnostic.
-        if not skip_vespa:
+        # Pass the DB chunk count when known; otherwise None, which the document
+        # index resolves itself.
+        if document_index is not None:
             chunk_count: int | None = (
                 chunk_count_from_db
                 if chunk_count_from_db is not None and chunk_count_from_db > 0
                 else None
             )
-            for retry_document_index in retry_document_indices:
-                retry_document_index.delete(
-                    user_file_id,
-                    chunk_count=chunk_count,
-                )
+            document_index.delete(
+                user_file_id,
+                chunk_count=chunk_count,
+            )
 
         file_store = get_default_file_store()
         blob_deleted = True
@@ -1099,23 +1056,14 @@ def project_sync_user_file_impl(
             return
 
     try:
-        # Phase 1: short read session — extract all data needed for Vespa, then
-        # release the connection before the network-bound update calls.
-        retry_document_indices: list[RetryDocumentIndex] = []
+        # Phase 1: short read session — extract all data needed for the document
+        # index, then release the connection before the network-bound update calls.
+        document_index: DocumentIndex | None = None
         project_ids: list[int] = []
         persona_ids: list[int] = []
         file_id_str: str = ""
         chunk_count: int | None = None
         access: DocumentAccess | None = None
-        skip_vespa = DISABLE_VECTOR_DB
-
-        if not skip_vespa:
-            if MANAGED_VESPA:
-                httpx_init_vespa_pool(
-                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-                )
-            else:
-                httpx_init_vespa_pool(20)
 
         with get_session_with_current_tenant() as db_session:
             user_files = fetch_user_files_with_access_relationships(
@@ -1130,7 +1078,7 @@ def project_sync_user_file_impl(
                 )
                 return
 
-            if not skip_vespa:
+            if not DISABLE_VECTOR_DB:
                 active_search_settings = get_active_search_settings(db_session)
                 # INSTANT-promoted primary still backfilling: defer updates to
                 # not-yet-ported files, else the create-only port reinstalls a stale ACL.
@@ -1140,16 +1088,11 @@ def project_sync_user_file_impl(
                         db_session, active_search_settings.primary.id
                     )
                 )
-                document_indices = get_all_document_indices(
+                document_index = get_default_document_index(
                     search_settings=active_search_settings.primary,
                     secondary_search_settings=active_search_settings.secondary,
-                    httpx_client=HttpxPool.get("vespa"),
                     primary_backfill_in_progress=primary_backfill_in_progress,
                 )
-                retry_document_indices = [
-                    RetryDocumentIndex(document_index)
-                    for document_index in document_indices
-                ]
 
                 project_ids = [project.id for project in user_file.projects]
                 persona_ids = [p.id for p in user_file.assistants if not p.deleted]
@@ -1161,7 +1104,7 @@ def project_sync_user_file_impl(
 
         # Phase 2: index update calls (no DB session held)
         secondary_consistent = True
-        if not skip_vespa:
+        if document_index is not None:
             update_request = MetadataUpdateRequest(
                 document_ids=[file_id_str],
                 doc_id_to_chunk_cnt={
@@ -1172,7 +1115,7 @@ def project_sync_user_file_impl(
                 persona_ids=set(persona_ids),
             )
             secondary_consistent = _sync_metadata_and_reconcile_secondary(
-                retry_document_indices, update_request, user_file_id, tenant_id
+                document_index, update_request, user_file_id, tenant_id
             )
 
         task_logger.info(f"project_sync_user_file_impl - User file id={user_file_id}")

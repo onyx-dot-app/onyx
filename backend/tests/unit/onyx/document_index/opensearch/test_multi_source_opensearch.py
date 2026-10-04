@@ -5,7 +5,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters, SearchDoc
-from onyx.document_index.interfaces_new import MetadataUpdateRequest, TenantState
+from onyx.document_index.interfaces import MetadataUpdateRequest, TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
     convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned,

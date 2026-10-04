@@ -279,19 +279,19 @@ variable "vespa_node_enabled" {
 
 variable "vespa_node_instance_types" {
   type        = list(string)
-  description = "Instance types for the Vespa EKS node group Null uses the t-shirt size default."
+  description = "Instance types for the dedicated document-index EKS node group. Null uses the t-shirt size default."
   default     = null
 }
 
 variable "vespa_node_disk_size_gb" {
   type        = number
-  description = "Root EBS volume (GiB) for the Vespa/document-index node. Null keeps the node-group default (100 GiB). Null uses the t-shirt size default."
+  description = "Root EBS volume (GiB) for the dedicated document-index node. Null keeps the node-group default (100 GiB). Null uses the t-shirt size default."
   default     = null
 }
 
 variable "vespa_node_subnet_ids" {
   type        = list(string)
-  description = "Subnet IDs for the Vespa node group (must be in same AZ as Vespa PV)"
+  description = "Subnet IDs for the dedicated document-index node group (must be in same AZ as the index PV)"
   default     = []
 }
 

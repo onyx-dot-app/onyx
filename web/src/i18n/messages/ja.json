@@ -808,13 +808,7 @@
         "description": "{appName} をデータソースに接続します。"
       },
       "search": {
-        "placeholder": "コネクターを検索..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>フェデレーテッドコネクターは設定済みです。</strong> クリックすると、既存のコネクターを編集できます。",
-          "slackCredentialsFound": "<strong>既存の Slack 資格情報が見つかりました。</strong> クリックすると、Slack コネクターを管理できます。"
-        }
+        "placeholder": "コネクターを検索、または \"/\" を押してフォーカス..."
       },
       "sourceCard": {
         "connectButton": {
@@ -2604,6 +2598,12 @@
           "label": "{source} で認可",
           "pendingLabel": "認可しています..."
         },
+        "collapseButton": {
+          "ariaLabel": "折りたたむ"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "新規作成"
         },
@@ -2613,8 +2613,13 @@
         "credentialModal": {
           "title": "{source} の認証情報を作成"
         },
+        "credentialsLoadFailed": {
+          "description": "現在、認証情報を設定できません。ページを再読み込みするか、後でもう一度お試しください。",
+          "title": "認証情報を読み込めませんでした"
+        },
         "credentialStep": {
-          "title": "認証情報を選択"
+          "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
+          "title": "認証アカウント"
         },
         "credentialSwapped": {
           "toast": "認証情報を切り替えました！"
@@ -2622,16 +2627,26 @@
         "error": {
           "toast": "エラー: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "展開"
+        },
         "federated": {
           "tooltip": {
-            "description": "このコネクターではフェデレーテッド検索を利用できます。ただし、レイテンシーが大きくなり、検索品質は下がります。",
+            "description": "ただし、レイテンシーが大きくなり、検索品質は下がります。",
             "link": {
               "label": "代わりにフェデレーテッド版を使用 →"
-            }
+            },
+            "title": "このコネクターではフェデレーテッド検索を利用できます。"
           }
         },
         "fileUploadFailed": {
           "toast": "ファイルのアップロード中にエラーが発生しました"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "新しい {source} アカウント"
         },
         "oauthRedirectFailed": {
           "message": "{source} でのサインイン画面にリダイレクトできませんでした。もう一度お試しください。"
@@ -2645,6 +2660,9 @@
         "retryButton": {
           "label": "再試行"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
+        },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
         },
@@ -2652,30 +2670,20 @@
           "toast": "不明なエラーが発生しました"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "インデックス作成の開始日",
-          "subtext": "この日付より前のドキュメントは取り込まれません"
-        },
-        "pruneFrequency": {
-          "description": "すべてのドキュメントをソースと照合し、すでに存在しないものを削除します。注意: この処理はすべてのドキュメントを確認するため、頻度を上げるときは注意してください。既定値は {hours} 時間（{days} 日）です。小数の時間も指定できます（例: 0.1 時間 = 6 分）。このコネクターのプルーニングを無効にするには 0 を入力してください。",
-          "label": "プルーニング頻度（時間）"
-        },
-        "refreshFrequency": {
-          "description": "ソースから新しいドキュメントを取得する間隔です（分単位）。0 を入力すると、このコネクターで新しいドキュメントを取得しません。",
-          "label": "更新頻度（分）"
-        },
-        "resetButton": {
-          "label": "リセット"
-        },
-        "title": "詳細設定"
-      },
       "connectorName": {
         "label": "コネクター名",
         "subtext": "コネクターの内容がわかる名前です。"
       },
       "credentialRequired": {
         "tooltip": "最初に認証情報を選択してください。"
+      },
+      "bindingGate": {
+        "enterField": "「{field}」を入力してください。",
+        "fixField": "「{field}」を確認してください。",
+        "awaitingCheck": "フィールドから移動すると、認証情報で確認します。",
+        "checking": "認証情報を確認しています…",
+        "fieldInvalid": "「{field}」を確認してください: {detail}",
+        "rejected": "この認証情報はこの設定では使用できません。{detail}"
       },
       "credentialsLoadError": {
         "title": "認証情報の読み込みに失敗しました。"
@@ -2718,7 +2726,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Drive を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ"
+          "title": "オプション 1: OAuth アプリ",
+          "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Google Drive と Gmail へのアクセスをまとめて求めます。このアカウントを Google Drive だけに使う場合は、同意画面で Gmail のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
@@ -2776,7 +2785,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Gmail を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ"
+          "title": "オプション 1: OAuth アプリ",
+          "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Gmail と Google Drive へのアクセスをまとめて求めます。このアカウントを Gmail だけに使う場合は、同意画面で Google Drive のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
@@ -2811,7 +2821,7 @@
         "connectButton": {
           "label": "接続"
         },
-        "description": "{source} に接続し、{appName} 用のコネクタを設定します。"
+        "description": "{source} に接続し、{appName} 用のコネクタを設定します。{hasDocs, select, true {[ドキュメント]({url})を見る} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -2935,6 +2945,38 @@
       "tabs": {
         "empty": {
           "label": "表示するタブはありません。"
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "詳細オプション",
+        "errors": {
+          "missing": "値を入力してください。",
+          "invalid": "この値は無効です: {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "コネクタがインデックス作成をどのように実行するかを指定します。オペレーターはこのセクションを編集できます。",
+        "indexingStart": {
+          "description": "最終更新日がこの日付より前のドキュメントは無視されます。",
+          "placeholder": "すべての期間",
+          "title": "インデックス対象の開始日"
+        },
+        "pruneFrequency": {
+          "description": "ソースを確認し、存在しなくなったドキュメントを削除します。",
+          "title": "削除チェック間隔"
+        },
+        "refreshFrequency": {
+          "description": "ソースから新しいドキュメントを取得します。",
+          "title": "更新間隔"
+        },
+        "title": "スケジュール",
+        "units": {
+          "hours": "時間",
+          "minutes": "分"
         }
       }
     },
@@ -3198,15 +3240,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "API トークンを所有するアカウントのメールアドレスを使用してください。"
+        },
+        "apiTokenField": {
+          "subDescription": "{source} にアクセスするための API トークンを貼り付けてください。"
+        },
         "createButton": {
           "label": "作成"
         },
         "created": {
           "toast": "新しい認証情報を作成しました!"
         },
-        "name": {
-          "label": "名前:",
-          "placeholder": "(任意) 認証情報の名前..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "管理者",
+            "description": "すべての管理者がこのアカウントを再利用してコネクタを作成できます。",
+            "suffix": "（デフォルト）"
+          },
+          "adminsAndGroups": {
+            "description": "管理者と、あなたが指定したグループがこのアカウントを再利用できます。",
+            "label": "管理者とグループ"
+          },
+          "onlyMe": {
+            "label": "自分のみ"
+          },
+          "description": "グループがこのアカウントを再利用してコネクターを作成できるようにします。",
+          "title": "このアカウントを共有"
         },
         "submitError": {
           "toast": "認証情報の送信中にエラーが発生しました"
@@ -3241,6 +3304,80 @@
           "toast": "認証情報の更新中にエラーが発生しました"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} アクセスキー ID",
+        "secretAccessKey": "{source} シークレットアクセスキー",
+        "accountId": "{source} アカウント ID",
+        "apiToken": "API トークン",
+        "clientId": "{source} クライアント ID",
+        "clientSecret": "{source} クライアントシークレット",
+        "clientToken": "{source} クライアントトークン",
+        "directoryId": "{source} ディレクトリ ID",
+        "certificatePassword": "{source} 証明書のパスワード",
+        "privateKey": "{source} 秘密鍵",
+        "certificate": "{source} 証明書",
+        "baseUrl": "{source} ベース URL",
+        "apiBaseUrl": "{source} API ベース URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} ボットトークン",
+        "username": "{source} ユーザー名",
+        "apiUsername": "{source} API ユーザー名",
+        "userEmail": "{source} ユーザーのメールアドレス",
+        "accountEmail": "{source} アカウントのメールアドレス",
+        "password": "{source} パスワード",
+        "subdomain": "{source} サブドメイン",
+        "domain": "{source} ドメイン",
+        "enterpriseId": "{source} エンタープライズ ID",
+        "teamId": "{source} チーム ID",
+        "applicationId": "{source} アプリケーション ID",
+        "apiTokenId": "{source} API トークン ID",
+        "apiTokenSecret": "{source} API トークンシークレット",
+        "securityToken": "{source} セキュリティトークン",
+        "integrationToken": "{source} インテグレーショントークン",
+        "accessKey": "{source} アクセスキー",
+        "accessKeySecret": "{source} アクセスキーシークレット",
+        "key": "{source} キー",
+        "secret": "{source} シークレット",
+        "roleArn": "{source} ロール ARN",
+        "namespace": "{source} ネームスペース",
+        "region": "{source} リージョン",
+        "portalId": "{source} ポータル ID",
+        "oauthTokens": "{source} OAuth トークン",
+        "isSandbox": "サンドボックス環境かどうか",
+        "serviceUserEmail": "サービスユーザーのメールアドレス",
+        "zuliprcContent": "Zuliprc の内容",
+        "authenticationMethod": "認証方法"
+      },
+      "hints": {
+        "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
+        "githubBaseUrl": "任意。https://github.example.com のようにサーバーのホストを指定します。github.com を使う場合は空欄のままにします。",
+        "gongBaseUrl": "任意。米国外のデータを使う場合は、https://[region].api.gong.io のようにリージョンのホストを指定します。",
+        "jiraUserEmail": "Jira Cloud では必須です。",
+        "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
+        "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
+        "pfxFile": "PFX ファイルです。",
+        "testrailBaseUrl": "例: https://yourcompany.testrail.io。"
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "クライアントシークレット",
+          "certificateAuthentication": "証明書認証",
+          "certificate": "証明書",
+          "accessKeyAndSecret": "アクセスキーとシークレット",
+          "iamRole": "IAM ロール",
+          "assumeRole": "ロールの引き受け"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "このモードでは、SharePoint コネクタはクライアントシークレットで認証します。クライアント ID とクライアントシークレットを入力してください。",
+          "sharepointCertificate": "このモードでは、SharePoint コネクタは証明書で認証します。クライアント ID、ディレクトリ ID、証明書のパスワード、PFX データを入力してください。",
+          "teamsClientSecret": "コネクタはアプリ登録のクライアントシークレットでサインインします。クライアント ID、ディレクトリ ID、シークレットを入力してください。チャネルのメッセージとメンバーのみ対象です。SharePoint はシークレットを受け付けないため、「添付ファイルを含める」には証明書オプションが必要です。",
+          "teamsCertificate": "コネクタはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。「添付ファイルを含める」に必要です。この機能は SharePoint からチャネルのファイルとその閲覧者を読み取ります。",
+          "outlookClientSecret": "コネクタはアプリ登録のクライアントシークレットでサインインします。クライアント ID、ディレクトリ ID、シークレットを入力してください。",
+          "outlookCertificate": "コネクタはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。",
+          "s3AssumeRole": "このモードでは、Amazon EC2 インスタンスが既存のロールを引き受けて S3 にアクセスします。追加の認証情報は不要です。"
+        }
+      },
       "modal": {
         "createTitle": "{source} の認証情報を作成",
         "editTitle": "認証情報を編集",
@@ -3269,6 +3406,10 @@
         },
         "retryButton": {
           "label": "再試行"
+        },
+        "signIn": {
+          "description": "{appName} には読み取り専用のスコープが必要です。",
+          "title": "{source} でサインイン"
         },
         "startError": {
           "message": "OAuth を開始できません"
@@ -3321,6 +3462,13 @@
         "success": {
           "toast": "認証情報を更新しました"
         }
+      },
+      "validation": {
+        "authMethodRequired": "認証方式を選択してください",
+        "empty": "{field}は空にできません",
+        "fileRequired": "{field}のファイルを選択してください",
+        "invalidEmail": "{field}に有効なメールアドレスを入力してください",
+        "required": "{field}を入力してください"
       }
     },
     "customAnalytics": {
@@ -4819,6 +4967,12 @@
         "azureGptImage2": {
           "description": "Microsoft Azure でホストされる GPT Image 2 画像生成モデルです。"
         },
+        "azureGptImage25Flare": {
+          "description": "Microsoft Azure でホストされる GPT Image 2.5 Flare 画像生成モデルです。"
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Microsoft Azure でホストされる GPT Image 2.5 Sunburst 画像生成モデルです。"
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) は速度と効率を重視して設計されたモデルです。"
         },
@@ -4835,7 +4989,13 @@
           "description": "OpenAI の従来のフラッグシップ画像生成モデルです。"
         },
         "openaiGptImage2": {
-          "description": "プロンプト忠実度が最も高い、OpenAI の最新の画像生成モデルです。"
+          "description": "プロンプト忠実度が高い、OpenAI の前世代の画像生成モデルです。"
+        },
+        "openaiGptImage25Flare": {
+          "description": "高品質かつ高速な、OpenAI の最新の画像生成モデルです。"
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "最も精密な編集に対応する、OpenAI のプレミアム画像生成モデルです。"
         }
       },
       "setDefaultError": {
@@ -5003,6 +5163,9 @@
           "description": "embedding モデルが必要とする場合、検索クエリをモデルに渡す前に、この文字列を先頭に追加します。プレフィックスが正しくない、または不足していると embedding の品質が低下します。",
           "placeholder": "例: 'query: '",
           "title": "クエリプレフィックス"
+        },
+        "googleWorkloadIdentity": {
+          "description": "API サーバーと埋め込みワーカーの GKE 認証情報を使用します。JSON キーは不要です。"
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5409,8 @@
         "serviceAccountJsonInvalid": "有効な Google サービスアカウントの JSON ファイルを指定してください",
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",
-        "urlInvalid": "有効な URL を入力してください"
+        "urlInvalid": "有効な URL を入力してください",
+        "googleProjectRequired": "GCP プロジェクト ID が必要です"
       },
       "vectorQuantization": {
         "description": "ドキュメントのベクトルを少ないビット数で保存し、メモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。",
@@ -5850,6 +6014,9 @@
           "optionalSuffix": {
             "label": "任意"
           },
+          "slowSave": {
+            "text": "通常より時間がかかっています。モデル一覧が大きい場合は1分ほどかかることがあります。"
+          },
           "submitButton": {
             "invalidTooltip": "必須項目をすべて入力してください。",
             "pristineTooltip": "保存する変更はありません。"
@@ -5896,10 +6063,12 @@
             "title": "API キー"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Google Vertex AI のモデルがホストされているリージョンです。対応リージョンの全一覧は Google Cloud で確認できます。",
             "title": "Google Cloud リージョン名"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "Vertex AI が有効になっている GCP プロジェクトです。サービスアカウントの権限借用では ADC が対象プロジェクトを確実に推定できないため、指定が必要です。",
             "title": "GCP プロジェクト ID"
           },
@@ -5941,6 +6110,7 @@
       "toasts": {
         "providerDeleteFailed": "プロバイダーを削除できませんでした：{message}",
         "providerDeleted": "プロバイダーを削除しました。",
+        "providerLoadFailed": "プロバイダーを読み込めませんでした: {message}",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
@@ -6098,12 +6268,6 @@
         "imageSummarization": {
           "label": "画像要約"
         },
-        "kgDeepExtraction": {
-          "label": "ナレッジグラフ抽出"
-        },
-        "kgDocumentClassification": {
-          "label": "ナレッジグラフ分類"
-        },
         "other": {
           "label": "その他"
         },
@@ -6120,8 +6284,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
-        "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約、コンテキスト RAG 処理、ナレッジグラフ抽出があります。",
+        "description": "{start} – {end} · システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約やコンテキスト RAG 処理があります。",
+        "emptyDescription": "システム使用状況とは、特定のユーザー向けではなく、{appName} がバックグラウンドで実行する LLM 処理です。例として、画像要約やコンテキスト RAG 処理があります。",
         "error": {
           "title": "この期間のシステム使用状況を読み込めませんでした。"
         },
@@ -9190,6 +9354,7 @@
         "loginRequired": "先に ID プロバイダーでログインする必要があります。",
         "oauthUserAlreadyExists": "このメールアドレスのアカウントは、別のサインイン方法で既に存在します。最初に使用した方法でサインインするか、管理者にこのプロバイダーの連携を依頼してください。",
         "serverError": "ID プロバイダーでエラーが発生しました。もう一度お試しください。",
+        "staleSignIn": "このログインリンクは期限切れか、無効になっています。もう一度ログインしてください。",
         "temporarilyUnavailable": "ID プロバイダーは一時的に利用できません。しばらくしてからもう一度お試しください。"
       },
       "credentialsIssue": {
@@ -10820,6 +10985,9 @@
         },
         "loading": {
           "text": "モデルを読み込み中..."
+        },
+        "loadingMore": {
+          "text": "さらにモデルを読み込み中..."
         }
       },
       "modelSettingsButton": {
@@ -13079,6 +13247,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "展開",
+      "expandSection": "{title}を展開",
+      "fold": "折りたたむ",
+      "foldSection": "{title}を折りたたむ"
+    },
     "comboBox": {
       "close": "ドロップダウンを閉じる",
       "create": "作成",
@@ -13099,6 +13273,7 @@
       "loading": "読み込み中",
       "loadingPage": "読み込み中…",
       "openCalendar": "カレンダーを開く",
+      "optional": "（任意）",
       "progress": "進行状況",
       "remove": "削除",
       "removeItem": "{title} を削除",

@@ -613,7 +613,7 @@ def _resolve_port_target_settings(db_session: Session) -> SearchSettings | None:
         if port_backfill_has_pending_work(db_session, present.id):
             return present
         # Backfill drained: unpin the source so we stop re-checking a done job, the
-        # source index can be reclaimed, and the reindex/vespa guards read "not
+        # source index can be reclaimed, and the reindex/document-index-sync guards read "not
         # backfilling". Orphans were already swept per-attempt inside run_port_attempt.
         present.port_backfill_source_id = None
         db_session.commit()

@@ -78,29 +78,22 @@ export async function sendMessageAndCaptureStreamPackets(
   page: Page,
   message: string,
   options?: {
-    mockLlmResponse?: string;
     payloadOverrides?: Record<string, unknown>;
     waitForAiMessage?: boolean;
   }
 ): Promise<ChatStreamPacket[]> {
   const requestUrlPattern = "**/api/chat/send-chat-message";
-  const mockLlmResponse = options?.mockLlmResponse;
   const payloadOverrides = options?.payloadOverrides;
   const waitForAiMessage = options?.waitForAiMessage ?? true;
   const routeHandler = async (route: Route) => {
-    if (!mockLlmResponse && !payloadOverrides) {
+    if (!payloadOverrides) {
       await route.continue();
       return;
     }
 
     const request = route.request();
     const payload = request.postDataJSON() as Record<string, unknown>;
-    if (payloadOverrides) {
-      Object.assign(payload, payloadOverrides);
-    }
-    if (mockLlmResponse) {
-      payload.mock_llm_response = mockLlmResponse;
-    }
+    Object.assign(payload, payloadOverrides);
 
     await route.continue({
       postData: JSON.stringify(payload),

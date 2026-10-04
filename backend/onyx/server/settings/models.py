@@ -107,8 +107,9 @@ class Settings(BaseModel):
     seat_count: int | None = None
     used_seats: int | None = None
 
-    # OpenSearch migration
-    opensearch_indexing_enabled: bool = False
+    # Deprecated: OpenSearch is the only document index, so this is always True.
+    # Kept for API clients that still read it (e.g. the Terraform provider).
+    opensearch_indexing_enabled: bool = True
 
 
 class UserSettings(Settings):
@@ -124,7 +125,7 @@ class UserSettings(Settings):
     # user's sandbox pod's opencode-serve logs. Gated by the
     # ENABLE_OPENCODE_DEBUGGING env var; never set in prod.
     opencode_debugging_enabled: bool = False
-    # True when a vector database (Vespa/OpenSearch) is available.
+    # True when a vector database (OpenSearch) is available.
     # False when DISABLE_VECTOR_DB is set — connectors, RAG search, and
     # document sets are unavailable.
     vector_db_enabled: bool = True

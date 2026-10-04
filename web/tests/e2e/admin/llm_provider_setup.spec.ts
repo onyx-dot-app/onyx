@@ -408,15 +408,16 @@ test.describe("LLM Provider Setup @exclusive", () => {
       await listbox.waitFor({ state: "visible", timeout: 10000 });
 
       // Search for the target model by its display name to filter the list
-      // to just its entry. The list carries its own search box; the page
-      // has one too.
+      // to just its entry. The list's search box sits above the listbox and
+      // takes focus as it opens; the page has a search field too.
       const secondModelDisplayName = await getModelDisplayName(
         page,
         secondProviderId,
         secondModelName
       );
-      await listbox
+      await page
         .getByRole("textbox", { name: "Search" })
+        .and(page.locator(":focus"))
         .fill(secondModelDisplayName);
 
       const defaultResponsePromise = page.waitForResponse(

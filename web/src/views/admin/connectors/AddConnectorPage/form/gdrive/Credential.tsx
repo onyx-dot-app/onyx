@@ -11,11 +11,9 @@ import { Button, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
 import { InputFile } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import {
-  parseOauthAppCredentialJson,
-  refreshAllGoogleData,
-} from "@/lib/googleConnector";
-import { ValidSources } from "@/lib/types";
+import { refreshAllGoogleData } from "@/lib/googleConnector";
+import { parseOauthAppCredentialJson } from "@/lib/credentials/utils";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { markdown } from "@opal/utils";
 
 interface DriveCredentialSectionProps {
@@ -72,6 +70,13 @@ export const DriveAuthSection = ({
           {markdown(
             t("gdrive.oauthOption.description", {
               docsUrl: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview`,
+            })
+          )}
+        </Text>
+        <Text as="p" font="secondary-body" color="text-03">
+          {markdown(
+            t("gdrive.oauthOption.sharedScopesNote", {
+              docsUrl: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/oauth#using-one-credential-for-gmail-and-google-drive`,
             })
           )}
         </Text>

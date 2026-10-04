@@ -17,9 +17,9 @@
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "lucide-react": "^1.45.0",
-    "next": "16.2.9",
+    "next": "16.3.8",
     "next-themes": "^0.4.6",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.28",
     "radix-ui": "^1.4.3",
     "react": "19.2.7",
     "react-day-picker": "^10.0.1",
@@ -42,9 +42,9 @@
     "typescript": "^6"
   },
   "overrides": {
-    "hono": "^4.12.25",
+    "hono": "^4.13.7",
     "path-to-regexp": "^8.4.2",
-    "postcss": "^8.5.10",
-    "qs": "^6.15.2"
+    "postcss": "^8.5.28",
+    "qs": "^6.16.0"
   }
 }

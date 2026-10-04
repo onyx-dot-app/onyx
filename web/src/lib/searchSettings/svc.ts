@@ -8,6 +8,7 @@ import {
   SavedSearchSettings,
   SwitchoverType,
   VectorQuantization,
+  type VertexEmbeddingConfig,
 } from "@/lib/searchSettings/types";
 import { isCloudBased } from "@/lib/searchSettings";
 
@@ -18,6 +19,7 @@ interface TestEmbeddingArgs {
   apiUrl: string | null;
   apiVersion: string | null;
   deploymentName: string | null;
+  vertexConfig?: VertexEmbeddingConfig | null;
 }
 
 export async function testEmbedding({
@@ -27,6 +29,7 @@ export async function testEmbedding({
   apiUrl,
   apiVersion,
   deploymentName,
+  vertexConfig,
 }: TestEmbeddingArgs) {
   const testModelName =
     provider_type === "openai" ? "text-embedding-3-small" : modelName;
@@ -41,6 +44,7 @@ export async function testEmbedding({
       model_name: testModelName,
       api_version: apiVersion,
       deployment_name: deploymentName,
+      vertex_config: vertexConfig,
     }),
   });
 }
@@ -61,6 +65,7 @@ export async function connectEmbeddingProvider({
   modelName = "",
   apiVersion,
   deploymentName,
+  vertexConfig,
 }: {
   providerType: string;
   apiKey: string | null;
@@ -68,8 +73,10 @@ export async function connectEmbeddingProvider({
   modelName?: string;
   apiVersion: string | null;
   deploymentName: string | null;
+  vertexConfig?: VertexEmbeddingConfig | null;
 }): Promise<void> {
-  if (apiKey !== null) {
+  const useWorkloadIdentity = vertexConfig?.auth_method === "workload_identity";
+  if (apiKey !== null || vertexConfig != null) {
     const testResponse = await testEmbedding({
       provider_type: providerType,
       modelName,
@@ -77,6 +84,7 @@ export async function connectEmbeddingProvider({
       apiUrl,
       apiVersion,
       deploymentName,
+      vertexConfig,
     });
 
     if (!testResponse.ok) {
@@ -85,18 +93,21 @@ export async function connectEmbeddingProvider({
     }
   }
 
-  const body: Record<string, unknown> = {
+  // A null input preserves the stored key, except when switching to Workload
+  // Identity, which explicitly clears the credential.
+  const body = {
     provider_type: providerType,
     api_url: apiUrl,
     api_version: apiVersion,
     deployment_name: deploymentName,
     is_default_provider: false,
     is_configured: true,
+    vertex_config: vertexConfig,
+    api_key_changed: apiKey !== null || useWorkloadIdentity,
+    ...((apiKey !== null || useWorkloadIdentity) && {
+      api_key: useWorkloadIdentity ? null : apiKey,
+    }),
   };
-  // Explicit, so the backend never has to infer intent from the masked value:
-  // null means the admin left the stored key alone.
-  body.api_key_changed = apiKey !== null;
-  if (apiKey !== null) body.api_key = apiKey;
 
   const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {
     method: "PUT",

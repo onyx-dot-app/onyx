@@ -222,6 +222,51 @@ test.describe("Index Settings Page @exclusive", () => {
     await expect(modal).not.toBeVisible({ timeout: 15000 });
   });
 
+  test("Google connection tests the selected model with Workload Identity", async ({
+    page,
+  }) => {
+    const vertexConfig = {
+      auth_method: "workload_identity",
+      project_id: "vertex-project",
+      location: "global",
+    };
+    let providerSaved = false;
+    await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+      if (route.request().method() === "PUT") {
+        expect(route.request().postDataJSON()).toMatchObject({
+          provider_type: "google",
+          api_key: null,
+          api_key_changed: true,
+          vertex_config: vertexConfig,
+        });
+        providerSaved = true;
+        await route.fulfill({ status: 200, body: JSON.stringify({}) });
+      } else {
+        await route.fulfill({ status: 200, body: JSON.stringify([]) });
+      }
+    });
+    await page.route(TEST_EMBEDDING_API, async (route) => {
+      const body = route.request().postDataJSON();
+      expect(body).toMatchObject({
+        provider_type: "google",
+        model_name: "gemini-embedding-2",
+        api_key: null,
+        vertex_config: vertexConfig,
+      });
+      await route.fulfill({ status: 200, body: JSON.stringify({}) });
+    });
+
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expandModelPicker();
+    await indexSettings.switchToCloudTab();
+    await indexSettings.openGoogleModelSetup("gemini-embedding-2");
+    await indexSettings.fillGoogleWorkloadIdentity("vertex-project", "global");
+    await indexSettings.submitProviderSetup();
+    expect(providerSaved).toBe(true);
+    await indexSettings.expectModelStaged();
+  });
+
   test("edit modal pre-fills existing provider fields", async ({ page }) => {
     // Seed a connected provider via the API
     await page.route(TEST_EMBEDDING_API, async (route) => {

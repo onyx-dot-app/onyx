@@ -12,12 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { CCPairStatus } from "@/components/Status";
 import { timeAgo } from "@opal/time";
 import {
-  ValidSources,
   ConnectorIndexingStatusLiteResponse,
   SourceSummary,
   ConnectorIndexingStatusLite,
   FederatedConnectorStatus,
 } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { useRouter } from "next/navigation";
 import Truncated from "@/refresh-components/texts/Truncated";
 import {
@@ -389,7 +389,7 @@ export function CCPairIndexingStatusTable({
                           <ConnectorRow
                             key={status.cc_pair_id}
                             ccPairsIndexingStatus={status}
-                            isEditable={can(status, "edit")}
+                            isEditable={can(status, "operate")}
                           />
                         );
                       }

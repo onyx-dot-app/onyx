@@ -1,4 +1,4 @@
-import { ConfigurableSources } from "@/lib/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import ConnectorWrapper from "@/views/admin/connectors/AddConnectorPage/ConnectorWrapper";
 
 export interface PageProps {

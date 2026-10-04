@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -11,7 +12,7 @@ import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
-import { SvgSidebar, SvgSimpleLoader } from "@opal/icons";
+import { SvgSidebar } from "@opal/icons";
 import { RootLayout, useSidebarState } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { isVectorDbRequiredRoute, matchAdminRoute } from "@/lib/admin-routes";
@@ -71,7 +72,7 @@ export default function AdminChrome({
     if (isLoading) {
       content = (
         <Section padding={8}>
-          <SvgSimpleLoader className="h-6 w-6" />
+          <IconLoader className="h-6 w-6" />
         </Section>
       );
     } else if (!vectorDbEnabled) {

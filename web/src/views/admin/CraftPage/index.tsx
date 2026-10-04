@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { mutate } from "swr";
@@ -18,7 +19,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -166,7 +167,7 @@ export default function CraftPage() {
             </Text>
           ) : (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           )}
         </SettingsLayouts.Body>
@@ -232,7 +233,7 @@ export default function CraftPage() {
 
           {isLoading && (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           )}
           {error ? (

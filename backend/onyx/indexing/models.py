@@ -118,6 +118,9 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     # Stored as an integer array in OpenSearch for hierarchy-based filtering.
     # Empty list means no hierarchy info (document excluded from hierarchy searches).
     ancestor_hierarchy_node_ids: list[int]
+    # IDs of the cc-pairs the source document belongs to. Empty for chunks with
+    # no cc-pair (user files).
+    cc_pair_ids: list[int] = []
 
     @classmethod
     def from_index_chunk(
@@ -132,6 +135,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         tenant_id: str,
         ancestor_hierarchy_node_ids: list[int] | None = None,
         source_types: tuple[DocumentSource, ...] | None = None,
+        cc_pair_ids: list[int] | None = None,
     ) -> "DocMetadataAwareIndexChunk":
         return cls.model_construct(
             **shallow_model_dump(index_chunk),
@@ -144,6 +148,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             tenant_id=tenant_id,
             ancestor_hierarchy_node_ids=ancestor_hierarchy_node_ids or [],
             source_types=source_types or (index_chunk.source_document.source,),
+            cc_pair_ids=cc_pair_ids or [],
         )
 
 

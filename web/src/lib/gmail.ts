@@ -1,4 +1,4 @@
-import type { Credential } from "@/lib/connectors/types";
+import type { Credential } from "@/lib/credentials/types";
 
 export const setupGmailOAuth = async ({
   isAdmin,

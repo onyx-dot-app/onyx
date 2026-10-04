@@ -22,6 +22,10 @@
 
    Interaction override: `data-interaction="hover"` and `data-interaction="active"`
    allow JS-controlled visual state overrides.
+
+   Pointer mode: inside a `[data-opal-nav-mode="pointer"]` container (set by
+   `useGridNavigation` while the pointer drives), focus does not paint, so the
+   focused item does not highlight beside the hovered one.
 ============================================================================ */
 
 /* ===========================================================================
@@ -151,7 +155,8 @@
   [data-disabled]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"]:focus-visible:not(
-  [data-disabled]
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="empty"][data-interaction="hover"]:not(
   [data-disabled]
@@ -187,7 +192,8 @@
   [data-disabled]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"]:focus-visible:not(
-  [data-disabled]
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="filled"][data-interaction="hover"]:not(
   [data-disabled]
@@ -223,7 +229,8 @@
   [data-disabled]
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"]:focus-visible:not(
-  [data-disabled]
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-card"][data-interactive-state="selected"][data-interaction="hover"]:not(
   [data-disabled]

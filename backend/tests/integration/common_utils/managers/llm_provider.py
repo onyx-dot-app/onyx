@@ -27,7 +27,9 @@ class LLMProviderManager:
         personas: list[int] | None = None,
         is_public: bool | None = None,
         set_as_default: bool = True,
+        model_names: list[str] | None = None,
     ) -> DATestLLMProvider:
+        """`model_names` adds visible models beside the default one."""
         print(f"Seeding LLM Providers for {user_performing_action.email}...")
 
         llm_provider = LLMProviderUpsertRequest(
@@ -42,12 +44,16 @@ class LLMProviderManager:
             personas=personas or [],
             model_configurations=[
                 ModelConfigurationUpsertRequest(
-                    name=default_model_name or "gpt-4o-mini",
+                    name=model_name,
                     is_visible=True,
                     max_input_tokens=None,
-                    display_name=default_model_name or "gpt-4o-mini",
+                    display_name=model_name,
                     supports_image_input=True,
                 )
+                for model_name in [
+                    default_model_name or "gpt-4o-mini",
+                    *(model_names or []),
+                ]
             ],
             api_key_changed=True,
         )

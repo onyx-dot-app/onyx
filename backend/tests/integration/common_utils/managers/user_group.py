@@ -4,6 +4,7 @@ from uuid import uuid4
 import httpx
 
 from ee.onyx.server.user_group.models import UserGroup
+from onyx.db.enums import ConnectorManageRole
 from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
@@ -49,6 +50,25 @@ class UserGroupManager:
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
+
+    @staticmethod
+    def set_managed_cc_pairs(
+        user_group: DATestUserGroup,
+        cc_pairs: dict[int, ConnectorManageRole],
+        user_performing_action: DATestUser,
+    ) -> None:
+        response = client.put(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/managed-cc-pairs",
+            json={
+                "cc_pairs": [
+                    {"cc_pair_id": cc_pair_id, "role": role.value}
+                    for cc_pair_id, role in cc_pairs.items()
+                ]
+            },
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        user_group.cc_pair_ids = [entry["cc_pair_id"] for entry in response.json()]
 
     @staticmethod
     def delete(
@@ -148,6 +168,18 @@ class UserGroupManager:
         """(De)assign a group manager. The target must already be a member."""
         return UserGroupManager.set_manager_by_id(
             user_group.id, user.id, is_manager, user_performing_action
+        )
+
+    @staticmethod
+    def set_data_access_cc_pairs(
+        user_group: DATestUserGroup,
+        cc_pair_ids: list[int],
+        user_performing_action: DATestUser,
+    ) -> httpx.Response:
+        return client.put(
+            f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/data-access-cc-pairs",
+            json={"cc_pair_ids": cc_pair_ids},
+            headers=user_performing_action.headers,
         )
 
     @staticmethod

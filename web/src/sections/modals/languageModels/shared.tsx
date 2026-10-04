@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, useFormikContext } from "formik";
@@ -24,6 +25,9 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import { InputSwitch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
+// The file's unqualified `Text` is the legacy component, kept for its
+// existing call sites.
+import { Text as OpalText } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -55,7 +59,6 @@ import {
   SvgUserManage,
   SvgUsers,
   SvgX,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import { Card, EmptyMessageCard } from "@opal/components";
@@ -66,6 +69,9 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
 import { Modal } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
+
+/** How long a save may run before the footer says it is taking a while. */
+const SLOW_SAVE_NOTICE_MS = 10_000;
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -452,7 +458,7 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
   return (
     <Button
       prominence="tertiary"
-      icon={isFetching ? SvgSimpleLoader : SvgRefreshCw}
+      icon={isFetching ? IconLoader : SvgRefreshCw}
       onClick={async () => {
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -1071,6 +1077,18 @@ function ModalWrapperInner({
   const isTesting = status?.isTesting === true;
   const busy = isTesting || isSubmitting;
 
+  // A provider with thousands of models saves in seconds, not instantly, so
+  // a long-running submit says so instead of looking stuck.
+  const [saveIsSlow, setSaveIsSlow] = useState(false);
+  useEffect(() => {
+    if (!isSubmitting) {
+      setSaveIsSlow(false);
+      return;
+    }
+    const handle = setTimeout(() => setSaveIsSlow(true), SLOW_SAVE_NOTICE_MS);
+    return () => clearTimeout(handle);
+  }, [isSubmitting]);
+
   const disabledTooltip = busy
     ? undefined
     : !isValid
@@ -1115,13 +1133,18 @@ function ModalWrapperInner({
             {children}
           </Modal.Body>
           <Modal.Footer>
+            {saveIsSlow && (
+              <OpalText font="secondary-body" color="text-03">
+                {t("setup.slowSave.text")}
+              </OpalText>
+            )}
             <Button prominence="secondary" onClick={onClose} type="button">
               {t("setup.cancelButton.label")}
             </Button>
             <Button
               disabled={!isValid || !dirty || busy}
               type="submit"
-              icon={busy ? SvgSimpleLoader : undefined}
+              icon={busy ? IconLoader : undefined}
               tooltip={disabledTooltip}
             >
               {llmProvider

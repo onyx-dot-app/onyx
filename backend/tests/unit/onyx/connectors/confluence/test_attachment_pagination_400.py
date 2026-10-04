@@ -20,8 +20,13 @@ from onyx.connectors.confluence.connector import (
     ConfluenceConnector,
     _extract_page_id_from_url,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence,
+)
 from onyx.connectors.models import ConnectorFailure, Document, DocumentFailure
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
+)
 
 _PAGE = {
     "id": "111",
@@ -62,7 +67,7 @@ def _fetch_with_pagination_error(
         is_cloud=False,
         include_attachments=True,
     )
-    fake_client = mock.Mock(spec=OnyxConfluence)
+    fake_client = mock.Mock(spec=_OnyxConfluence)
 
     def failing_pagination(**_kwargs: Any) -> Iterator[dict[str, Any]]:
         yield _PDF_ATTACHMENT
@@ -73,9 +78,9 @@ def _fetch_with_pagination_error(
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=fake_client,
+            return_value=gateway_with_client(fake_client),
         ),
         mock.patch.object(
             connector, "_maybe_yield_page_hierarchy_node", return_value=None
@@ -136,7 +141,7 @@ def _run_reindex(attachment_error_code: int | None) -> list[Any]:
         is_cloud=False,
         include_attachments=True,
     )
-    fake_client = mock.Mock(spec=OnyxConfluence)
+    fake_client = mock.Mock(spec=_OnyxConfluence)
 
     def paginate(**kwargs: Any) -> Iterator[dict[str, Any]]:
         if str(kwargs.get("cql", "")).startswith("type=page"):
@@ -155,9 +160,9 @@ def _run_reindex(attachment_error_code: int | None) -> list[Any]:
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=fake_client,
+            return_value=gateway_with_client(fake_client),
         ),
         mock.patch.object(
             connector, "_yield_space_hierarchy_nodes", return_value=iter([])
@@ -204,17 +209,17 @@ def _slim_attachments_with(side_effects: list[Any]) -> tuple[list[Any], mock.Moc
         is_cloud=False,
         include_attachments=True,
     )
-    fake_client = mock.Mock(spec=OnyxConfluence)
+    fake_client = mock.Mock(spec=_OnyxConfluence)
     fake_client.cql_paginate_all_expansions.side_effect = side_effects
 
     with mock.patch.object(
         ConfluenceConnector,
-        "confluence_client",
+        "source_operations",
         new_callable=mock.PropertyMock,
-        return_value=fake_client,
+        return_value=gateway_with_client(fake_client),
     ):
         results = connector._retrieve_attachments_for_slim_page(
-            "111", "space", None, None
+            "111", False, "space", None, None
         )
     return results, fake_client
 

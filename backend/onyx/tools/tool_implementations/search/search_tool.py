@@ -54,6 +54,7 @@ from onyx.context.search.models import (
     InferenceSection,
     PersonaSearchInfo,
     SearchDocsResponse,
+    UserAccessFilters,
 )
 from onyx.context.search.pipeline import merge_individual_chunks, search_pipeline
 from onyx.context.search.preprocessing.access_filters import (
@@ -77,7 +78,7 @@ from onyx.db.federated import (
 from onyx.db.models import SearchSettings, User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.federated_retrieval import (
@@ -284,7 +285,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_index: DocumentIndex,
         # Respecting user selections
         user_selected_filters: BaseFilters | None,
-        # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+        # Document index metadata filters for overflowing user files.  NOT the raw IDs
         # of the current project/persona — only set when user files couldn't
         # fit in the LLM context and need to be searched via vector DB.
         project_id_filter: int | None,
@@ -476,7 +477,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         query: str,
         hybrid_alpha: float | None,
         num_hits: int,
-        acl_filters: list[str],
+        acl_filters: UserAccessFilters,
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
         effective_filters: BaseFilters | None,
@@ -712,7 +713,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # parallel search workers need zero DB connections.
         with get_session_with_current_tenant() as db_session:
             # ACL filters
-            acl_filters: list[str] = build_access_filters_for_user(
+            acl_filters: UserAccessFilters = build_access_filters_for_user(
                 self.user, db_session
             )
 
@@ -1030,8 +1031,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
             search_weights.append(weight)
 
-        # Add Slack federated search (runs once in parallel with all Vespa queries)
-        # This avoids the query multiplication problem where each Vespa query
+        # Add Slack federated search (runs once in parallel with all index queries)
+        # This avoids the query multiplication problem where each index query
         # would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
         if slack_access_token and override_kwargs.original_query:
@@ -1050,7 +1051,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Use same weight as original query for Slack results
             search_weights.append(ORIGINAL_QUERY_WEIGHT)
 
-        # Run all searches in parallel (Vespa queries + Slack)
+        # Run all searches in parallel (index queries + Slack)
         all_search_results = run_functions_tuples_in_parallel(search_functions)
         if not all_search_results:
             all_search_results = []
@@ -1083,7 +1084,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
-        # stored in Vespa).
+        # stored in the document index).
         with get_session_with_current_tenant() as enrichment_session:
             populate_file_ids_on_sections(top_sections, enrichment_session)
 

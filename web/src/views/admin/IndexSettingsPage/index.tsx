@@ -7,7 +7,7 @@ import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
@@ -363,6 +363,7 @@ function ProviderGroup({
           <connectModal.Provider>
             <ProviderCredentialsModal
               provider={provider}
+              existingModel={pendingConnectModel ?? undefined}
               onSubmit={async (customModel) => {
                 await mutate(SWR_KEYS.embeddingProviders);
                 if (pendingConnectModel) {
@@ -378,7 +379,10 @@ function ProviderGroup({
             <ProviderCredentialsModal
               provider={provider}
               existingCredentials={existingCredentials}
-              existingModel={existingModel}
+              existingModel={
+                models.find((model) => model.modelName === selectedModelName) ??
+                existingModel
+              }
               onSubmit={async () => {
                 await mutate(SWR_KEYS.embeddingProviders);
                 editCredentialsModal.toggle(false);
@@ -1716,7 +1720,7 @@ export default function IndexSettingsPage() {
                               <Card
                                 expandable
                                 expanded={viewAllModelsOpen}
-                                expandableContentHeight="fit"
+                                expandableContentHeight="full"
                                 border="solid"
                                 borderColor={embeddingCardBorder}
                                 rounding={4}

@@ -474,7 +474,7 @@ def _validate_channels_exist(
             )
 
 
-def _validate_channel_regexes(patterns: list[str] | None, label: str) -> None:
+def validate_channel_regexes(patterns: list[str] | None, label: str) -> None:
     for pattern in patterns or []:
         try:
             re.compile(pattern)
@@ -1399,15 +1399,13 @@ class SlackConnector(
         Channel existence (for non-regex includes) is validated during indexing
         via filter_channels, not here.
         """
-        # Config-shape validation, load-bearing at creation time: unlike the
-        # credential probes below (mirrored as named capability checks in
-        # ``slack/capability_checks.py``), regex compilation is
-        # credential-invariant and has NO capability-check counterpart. This is
-        # the only thing that blocks a malformed regex from being created.
+        # Config-shape validation. Pairing creation runs the named capability
+        # checks instead (``slack/capability_checks.py``), where
+        # ``_ChannelPatternsCheck`` mirrors this.
         if self.channel_regex_enabled:
-            _validate_channel_regexes(self.channels, "channel")
+            validate_channel_regexes(self.channels, "channel")
         if self.exclude_channel_regex_enabled:
-            _validate_channel_regexes(self.exclude_channels, "excluded channel")
+            validate_channel_regexes(self.exclude_channels, "excluded channel")
 
         if self.slack_client is None:
             raise ConnectorMissingCredentialError("Slack credentials not loaded.")

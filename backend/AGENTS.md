@@ -13,9 +13,10 @@ tests. Additive to the root `AGENTS.md`.
   PostgreSQL implementation of `CacheBackend`, so its queries belong there.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
   function.
-- OpenSearch is the current document index backend for search and indexing. Some legacy modules,
-  Celery task names, and migration helpers still mention Vespa; treat those as compatibility or
-  migration artifacts unless the active `DocumentIndex` factory/config path explicitly uses them.
+- OpenSearch is the only document index backend for search and indexing. Onyx no longer uses
+  Vespa. Some live Celery names still say "vespa" (the `vespa_metadata_sync` queue, the
+  `check_for_vespa_sync_task` task, the `onyx.background.celery.tasks.vespa` module); they sync
+  the document index and keep their names so running deployments are not disrupted.
 - Do not use `getattr`: it hides attribute access from the type checker. Use
   plain attribute access when the name is statically known. A genuinely dynamic
   lookup needs an `# ods: ignore[getattr]` comment with a brief justification
@@ -93,6 +94,13 @@ uv run alembic -n schema_private revision -m "description"
 ```
 
 Write the migration manually and place it in the file that alembic creates when running the above command.
+
+Rows a revision in `alembic/versions` inserts must be identical on every schema: fixed ids and
+literal values, no `uuid4()`, `now()`, randomness or env reads. The template snapshot is cloned
+into new tenants and compared with a fresh build on deploy, so a run-dependent value breaks the
+comparison. Schema defaults and updates to existing rows are fine.
+`scripts/check_migration_determinism.py` enforces this on commit for revisions newer than the
+rule, and `# migration-determinism: allow` marks a deliberate exception.
 
 ## Testing Strategy
 

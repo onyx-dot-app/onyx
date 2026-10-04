@@ -808,13 +808,7 @@
         "description": "{appName}을(를) 데이터 소스에 연결하세요."
       },
       "search": {
-        "placeholder": "커넥터 검색..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>페더레이션 커넥터가 이미 구성되어 있습니다.</strong> 클릭하여 기존 커넥터를 편집하세요.",
-          "slackCredentialsFound": "<strong>기존 Slack 자격 증명을 찾았습니다.</strong> 클릭하여 Slack 커넥터를 관리하세요."
-        }
+        "placeholder": "커넥터를 검색하거나 \"/\"를 눌러 포커스..."
       },
       "sourceCard": {
         "connectButton": {
@@ -2604,6 +2598,12 @@
           "label": "{source}(으)로 인증",
           "pendingLabel": "인증하는 중..."
         },
+        "collapseButton": {
+          "ariaLabel": "접기"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "새로 만들기"
         },
@@ -2613,8 +2613,13 @@
         "credentialModal": {
           "title": "{source} 자격 증명 만들기"
         },
+        "credentialsLoadFailed": {
+          "description": "지금은 자격 증명을 설정할 수 없습니다. 페이지를 새로고침하거나 나중에 다시 시도하세요.",
+          "title": "자격 증명을 불러오지 못했습니다"
+        },
         "credentialStep": {
-          "title": "자격 증명 선택"
+          "description": "공유 서비스 계정을 사용합니다. {appName}이(가) 이 계정으로 콘텐츠를 인덱싱합니다.",
+          "title": "인증 계정"
         },
         "credentialSwapped": {
           "toast": "자격 증명을 교체했습니다!"
@@ -2622,16 +2627,26 @@
         "error": {
           "toast": "오류: {detail}"
         },
+        "expandButton": {
+          "ariaLabel": "펼치기"
+        },
         "federated": {
           "tooltip": {
-            "description": "이 커넥터에는 페더레이션 검색 옵션이 있습니다. 지연 시간이 늘어나고 검색 품질이 낮아집니다.",
+            "description": "지연 시간이 늘어나고 검색 품질이 낮아집니다.",
             "link": {
               "label": "대신 페더레이션 버전 사용 →"
-            }
+            },
+            "title": "이 커넥터에는 페더레이션 검색 옵션이 있습니다."
           }
         },
         "fileUploadFailed": {
           "toast": "파일 업로드 중 오류가 발생했습니다"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "새 {source} 계정"
         },
         "oauthRedirectFailed": {
           "message": "{source} 로그인 페이지로 이동하지 못했습니다. 다시 시도하세요."
@@ -2645,6 +2660,9 @@
         "retryButton": {
           "label": "다시 시도"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}"
+        },
         "timeout": {
           "toast": "{seconds}초 후 작업 시간이 초과되었습니다. 설정에 오류가 있는지 확인하세요."
         },
@@ -2652,30 +2670,20 @@
           "toast": "알 수 없는 오류가 발생했습니다"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "인덱싱 시작 날짜",
-          "subtext": "이 날짜 이전의 문서는 가져오지 않습니다"
-        },
-        "pruneFrequency": {
-          "description": "모든 문서를 소스와 대조하여 더 이상 존재하지 않는 문서를 삭제합니다. 참고: 이 과정은 모든 문서를 확인하므로 실행 빈도를 높일 때는 주의하세요. 기본값은 {hours}시간({days}일)입니다. 소수점 시간도 지원합니다(예: 0.1시간 = 6분). 이 커넥터의 정리를 사용하지 않으려면 0을 입력하세요.",
-          "label": "정리 주기(시간)"
-        },
-        "refreshFrequency": {
-          "description": "소스에서 새 문서를 가져오는 주기입니다(분 단위). 0을 입력하면 이 커넥터의 새 문서를 가져오지 않습니다.",
-          "label": "새로 고침 주기(분)"
-        },
-        "resetButton": {
-          "label": "초기화"
-        },
-        "title": "고급 설정"
-      },
       "connectorName": {
         "label": "커넥터 이름",
         "subtext": "커넥터를 설명하는 이름입니다."
       },
       "credentialRequired": {
         "tooltip": "먼저 자격 증명을 선택하세요."
+      },
+      "bindingGate": {
+        "enterField": "‘{field}’을(를) 입력하세요.",
+        "fixField": "‘{field}’을(를) 확인하세요.",
+        "awaitingCheck": "필드를 벗어나면 자격 증명으로 확인합니다.",
+        "checking": "자격 증명을 확인하는 중…",
+        "fieldInvalid": "‘{field}’을(를) 확인하세요: {detail}",
+        "rejected": "이 자격 증명은 이 설정으로 사용할 수 없습니다. {detail}"
       },
       "credentialsLoadError": {
         "title": "자격 증명을 불러오지 못했습니다."
@@ -2718,7 +2726,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console에서 OAuth 앱 JSON을 업로드한 다음([설정 방법]({docsUrl})), 인덱싱할 Drive의 Google 계정으로 인증하세요.",
-          "title": "옵션 1: OAuth 앱"
+          "title": "옵션 1: OAuth 앱",
+          "sharedScopesNote": "하나의 계정으로 두 커넥터를 모두 사용할 수 있도록 Google은 Google Drive와 Gmail 액세스를 함께 요청합니다. 이 계정을 Google Drive에만 사용하려면 동의 화면에서 Gmail 범위의 선택을 해제하세요([요청하는 이유]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "OAuth 앱 JSON을 업로드하거나 붙여 넣으세요"
@@ -2776,7 +2785,8 @@
         },
         "oauthOption": {
           "description": "Google Cloud Console에서 OAuth 앱 JSON을 업로드한 다음([설정 방법]({docsUrl})), 인덱싱할 Gmail의 Google 계정으로 인증하세요.",
-          "title": "옵션 1: OAuth 앱"
+          "title": "옵션 1: OAuth 앱",
+          "sharedScopesNote": "하나의 계정으로 두 커넥터를 모두 사용할 수 있도록 Google은 Gmail과 Google Drive 액세스를 함께 요청합니다. 이 계정을 Gmail에만 사용하려면 동의 화면에서 Google Drive 범위의 선택을 해제하세요([요청하는 이유]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "OAuth 앱 JSON을 업로드하거나 붙여 넣으세요"
@@ -2811,7 +2821,7 @@
         "connectButton": {
           "label": "연결"
         },
-        "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다."
+        "description": "{source}에 연결하고 {appName}용 커넥터를 설정합니다.{hasDocs, select, true { [문서]({url}) 보기} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -2935,6 +2945,38 @@
       "tabs": {
         "empty": {
           "label": "표시할 탭이 없습니다."
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "고급 옵션",
+        "errors": {
+          "missing": "값을 입력하세요.",
+          "invalid": "이 값은 올바르지 않습니다: {detail}"
+        }
+      },
+      "scheduled": {
+        "description": "커넥터가 인덱싱을 수행하는 방식을 지정합니다. 운영자가 이 섹션을 편집할 수 있습니다.",
+        "indexingStart": {
+          "description": "마지막 업데이트 날짜가 이보다 이전인 문서는 무시됩니다.",
+          "placeholder": "전체 기간",
+          "title": "다음 날짜 이후 문서 색인"
+        },
+        "pruneFrequency": {
+          "description": "소스를 확인하고 더 이상 존재하지 않는 문서를 삭제합니다.",
+          "title": "정리 주기"
+        },
+        "refreshFrequency": {
+          "description": "소스에서 새 문서를 가져옵니다.",
+          "title": "새로 고침 주기"
+        },
+        "title": "일정",
+        "units": {
+          "hours": "시간",
+          "minutes": "분"
         }
       }
     },
@@ -3198,15 +3240,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "API 토큰을 소유한 계정의 이메일을 사용하세요."
+        },
+        "apiTokenField": {
+          "subDescription": "{source}에 액세스하려면 API 토큰을 붙여 넣으세요."
+        },
         "createButton": {
           "label": "생성"
         },
         "created": {
           "toast": "새 자격 증명을 생성했습니다!"
         },
-        "name": {
-          "label": "이름:",
-          "placeholder": "(선택 사항) 자격 증명 이름..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "관리자",
+            "description": "모든 관리자가 이 계정을 재사용하여 커넥터를 만들 수 있습니다.",
+            "suffix": "(기본값)"
+          },
+          "adminsAndGroups": {
+            "description": "관리자와 지정한 그룹이 이 계정을 재사용할 수 있습니다.",
+            "label": "관리자 및 그룹"
+          },
+          "onlyMe": {
+            "label": "나만"
+          },
+          "description": "그룹이 이 계정을 재사용하여 커넥터를 만들 수 있도록 허용합니다.",
+          "title": "이 계정 공유"
         },
         "submitError": {
           "toast": "자격 증명 제출 중 오류가 발생했습니다"
@@ -3241,6 +3304,80 @@
           "toast": "자격 증명 업데이트 중 오류가 발생했습니다"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} 액세스 키 ID",
+        "secretAccessKey": "{source} 시크릿 액세스 키",
+        "accountId": "{source} 계정 ID",
+        "apiToken": "API 토큰",
+        "clientId": "{source} 클라이언트 ID",
+        "clientSecret": "{source} 클라이언트 시크릿",
+        "clientToken": "{source} 클라이언트 토큰",
+        "directoryId": "{source} 디렉터리 ID",
+        "certificatePassword": "{source} 인증서 비밀번호",
+        "privateKey": "{source} 프라이빗 키",
+        "certificate": "{source} 인증서",
+        "baseUrl": "{source} 기본 URL",
+        "apiBaseUrl": "{source} API 기본 URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} 봇 토큰",
+        "username": "{source} 사용자 이름",
+        "apiUsername": "{source} API 사용자 이름",
+        "userEmail": "{source} 사용자 이메일",
+        "accountEmail": "{source} 계정 이메일",
+        "password": "{source} 비밀번호",
+        "subdomain": "{source} 서브도메인",
+        "domain": "{source} 도메인",
+        "enterpriseId": "{source} 엔터프라이즈 ID",
+        "teamId": "{source} 팀 ID",
+        "applicationId": "{source} 애플리케이션 ID",
+        "apiTokenId": "{source} API 토큰 ID",
+        "apiTokenSecret": "{source} API 토큰 시크릿",
+        "securityToken": "{source} 보안 토큰",
+        "integrationToken": "{source} 통합 토큰",
+        "accessKey": "{source} 액세스 키",
+        "accessKeySecret": "{source} 액세스 키 시크릿",
+        "key": "{source} 키",
+        "secret": "{source} 시크릿",
+        "roleArn": "{source} 역할 ARN",
+        "namespace": "{source} 네임스페이스",
+        "region": "{source} 리전",
+        "portalId": "{source} 포털 ID",
+        "oauthTokens": "{source} OAuth 토큰",
+        "isSandbox": "샌드박스 환경 여부",
+        "serviceUserEmail": "서비스 사용자 이메일",
+        "zuliprcContent": "Zuliprc 내용",
+        "authenticationMethod": "인증 방법"
+      },
+      "hints": {
+        "boxUserEmail": "선택 사항입니다. 대신 접근할 Box 사용자입니다.",
+        "githubBaseUrl": "선택 사항입니다. 서버 호스트를 입력하세요(예: https://github.example.com). github.com을 사용하려면 비워 두세요.",
+        "gongBaseUrl": "선택 사항입니다. 미국 외 지역의 데이터는 해당 리전의 호스트를 입력하세요(예: https://[region].api.gong.io).",
+        "jiraUserEmail": "Jira Cloud에 필요합니다.",
+        "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
+        "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
+        "pfxFile": "PFX 파일입니다.",
+        "testrailBaseUrl": "예: https://yourcompany.testrail.io."
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "클라이언트 시크릿",
+          "certificateAuthentication": "인증서 인증",
+          "certificate": "인증서",
+          "accessKeyAndSecret": "액세스 키 및 시크릿",
+          "iamRole": "IAM 역할",
+          "assumeRole": "역할 수임"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "이 모드를 선택하면 SharePoint 커넥터가 클라이언트 시크릿으로 인증합니다. 클라이언트 ID와 클라이언트 시크릿을 입력해야 합니다.",
+          "sharepointCertificate": "이 모드를 선택하면 SharePoint 커넥터가 인증서로 인증합니다. 클라이언트 ID, 디렉터리 ID, 인증서 비밀번호, PFX 데이터를 입력해야 합니다.",
+          "teamsClientSecret": "커넥터가 앱 등록의 클라이언트 시크릿으로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 시크릿을 입력하세요. 채널 메시지와 멤버만 해당됩니다. SharePoint는 시크릿을 거부하므로 첨부 파일 포함에는 인증서 옵션이 필요합니다.",
+          "teamsCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요. 첨부 파일 포함에 필요하며, 이 기능은 SharePoint에서 채널 파일과 해당 열람자를 읽습니다.",
+          "outlookClientSecret": "커넥터가 앱 등록의 클라이언트 시크릿으로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 시크릿을 입력하세요.",
+          "outlookCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요.",
+          "s3AssumeRole": "이 모드를 선택하면 Amazon EC2 인스턴스가 기존 역할을 수임하여 S3에 액세스합니다. 추가 자격 증명은 필요하지 않습니다."
+        }
+      },
       "modal": {
         "createTitle": "{source} 자격 증명 생성",
         "editTitle": "자격 증명 편집",
@@ -3269,6 +3406,10 @@
         },
         "retryButton": {
           "label": "다시 시도"
+        },
+        "signIn": {
+          "description": "{appName}에는 읽기 전용 범위가 필요합니다.",
+          "title": "{source}(으)로 로그인"
         },
         "startError": {
           "message": "OAuth를 시작할 수 없습니다"
@@ -3321,6 +3462,13 @@
         "success": {
           "toast": "자격 증명을 업데이트했습니다"
         }
+      },
+      "validation": {
+        "authMethodRequired": "인증 방식을 선택하세요",
+        "empty": "{field}은(는) 비워 둘 수 없습니다",
+        "fileRequired": "{field} 파일을 선택하세요",
+        "invalidEmail": "{field}에 올바른 이메일 주소를 입력하세요",
+        "required": "{field}을(를) 입력하세요"
       }
     },
     "customAnalytics": {
@@ -4819,6 +4967,12 @@
         "azureGptImage2": {
           "description": "Microsoft Azure에서 호스팅되는 GPT Image 2 이미지 생성 모델입니다."
         },
+        "azureGptImage25Flare": {
+          "description": "Microsoft Azure에서 호스팅되는 GPT Image 2.5 Flare 이미지 생성 모델입니다."
+        },
+        "azureGptImage25Sunburst": {
+          "description": "Microsoft Azure에서 호스팅되는 GPT Image 2.5 Sunburst 이미지 생성 모델입니다."
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) 모델은 속도와 효율성에 중점을 둡니다."
         },
@@ -4835,7 +4989,13 @@
           "description": "OpenAI의 이전 대표 이미지 생성 모델입니다."
         },
         "openaiGptImage2": {
-          "description": "프롬프트 재현도가 가장 높은 OpenAI의 최신 이미지 생성 모델입니다."
+          "description": "프롬프트 재현도가 높은 OpenAI의 이전 세대 이미지 생성 모델입니다."
+        },
+        "openaiGptImage25Flare": {
+          "description": "높은 품질과 빠른 생성 속도를 갖춘 OpenAI의 최신 이미지 생성 모델입니다."
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "가장 정밀한 편집을 위한 OpenAI의 프리미엄 이미지 생성 모델입니다."
         }
       },
       "setDefaultError": {
@@ -5003,6 +5163,9 @@
           "description": "embedding 모델에서 필요로 하는 경우, 검색 쿼리를 모델에 전달하기 전에 앞에 붙이는 문자열입니다. 접두사가 잘못되었거나 없으면 embedding 품질이 떨어집니다.",
           "placeholder": "예: 'query: '",
           "title": "쿼리 접두사"
+        },
+        "googleWorkloadIdentity": {
+          "description": "API 서버와 임베딩 작업자의 GKE 인증 정보를 사용합니다. JSON 키가 필요하지 않습니다."
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5409,8 @@
         "serviceAccountJsonInvalid": "유효한 Google 서비스 계정 JSON 파일이어야 합니다",
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",
-        "urlInvalid": "유효한 URL이어야 합니다"
+        "urlInvalid": "유효한 URL이어야 합니다",
+        "googleProjectRequired": "GCP 프로젝트 ID가 필요합니다"
       },
       "vectorQuantization": {
         "description": "문서 벡터를 더 적은 비트로 저장하여 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다.",
@@ -5850,6 +6014,9 @@
           "optionalSuffix": {
             "label": "선택 사항"
           },
+          "slowSave": {
+            "text": "평소보다 오래 걸리고 있습니다. 모델 목록이 크면 1분 정도 걸릴 수 있습니다."
+          },
           "submitButton": {
             "invalidTooltip": "필수 항목을 모두 입력하세요.",
             "pristineTooltip": "저장할 변경 사항이 없습니다."
@@ -5896,10 +6063,12 @@
             "title": "API 키"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "Google Vertex AI 모델이 호스팅되는 리전입니다. 지원되는 리전 전체 목록은 Google Cloud에서 확인하세요.",
             "title": "Google Cloud 리전 이름"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "Vertex AI가 활성화된 GCP 프로젝트입니다. 서비스 계정 가장 환경에서는 ADC가 대상 프로젝트를 정확히 추론할 수 없으므로 필수입니다.",
             "title": "GCP 프로젝트 ID"
           },
@@ -5941,6 +6110,7 @@
       "toasts": {
         "providerDeleteFailed": "제공자를 삭제하지 못했습니다: {message}",
         "providerDeleted": "제공자를 삭제했습니다!",
+        "providerLoadFailed": "제공자를 불러올 수 없습니다: {message}",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "settingsUpdated": "설정을 업데이트했습니다",
         "unknownError": "알 수 없는 오류"
@@ -6098,12 +6268,6 @@
         "imageSummarization": {
           "label": "이미지 요약"
         },
-        "kgDeepExtraction": {
-          "label": "지식 그래프 추출"
-        },
-        "kgDocumentClassification": {
-          "label": "지식 그래프 분류"
-        },
         "other": {
           "label": "기타"
         },
@@ -6120,8 +6284,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · 시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리, 지식 그래프 추출 등이 포함됩니다.",
-        "emptyDescription": "시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리, 지식 그래프 추출 등이 포함됩니다.",
+        "description": "{start} – {end} · 시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리 등이 포함됩니다.",
+        "emptyDescription": "시스템 사용량은 {appName}가 특정 사용자를 위해서가 아니라 백그라운드에서 실행하는 LLM 작업입니다. 이미지 요약, 컨텍스트 RAG 처리 등이 포함됩니다.",
         "error": {
           "title": "이 기간의 시스템 사용량을 불러오지 못했습니다."
         },
@@ -9190,6 +9354,7 @@
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
         "serverError": "ID 공급자에서 오류가 발생했습니다. 다시 시도하세요.",
+        "staleSignIn": "이 로그인 링크가 만료되었거나 더 이상 유효하지 않습니다. 다시 로그인하세요.",
         "temporarilyUnavailable": "ID 공급자를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하세요."
       },
       "credentialsIssue": {
@@ -10820,6 +10985,9 @@
         },
         "loading": {
           "text": "모델 불러오는 중..."
+        },
+        "loadingMore": {
+          "text": "모델 더 불러오는 중..."
         }
       },
       "modelSettingsButton": {
@@ -13079,6 +13247,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "펼치기",
+      "expandSection": "{title} 펼치기",
+      "fold": "접기",
+      "foldSection": "{title} 접기"
+    },
     "comboBox": {
       "close": "드롭다운 닫기",
       "create": "만들기",
@@ -13099,6 +13273,7 @@
       "loading": "로딩 중",
       "loadingPage": "로딩 중…",
       "openCalendar": "캘린더 열기",
+      "optional": "(선택 사항)",
       "progress": "진행률",
       "remove": "제거",
       "removeItem": "{title} 제거",

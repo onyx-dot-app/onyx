@@ -808,13 +808,7 @@
         "description": "将 {appName} 连接到您的数据源。"
       },
       "search": {
-        "placeholder": "搜索连接器..."
-      },
-      "sourceTile": {
-        "tooltip": {
-          "federatedConfigured": "<strong>联合连接器已配置。</strong>点击可编辑现有连接器。",
-          "slackCredentialsFound": "<strong>已找到现有的 Slack 凭据。</strong>点击可管理您的 Slack 连接器。"
-        }
+        "placeholder": "搜索连接器，或按 \"/\" 聚焦..."
       },
       "sourceCard": {
         "connectButton": {
@@ -2604,6 +2598,12 @@
           "label": "使用 {source} 授权",
           "pendingLabel": "正在授权…"
         },
+        "collapseButton": {
+          "ariaLabel": "折叠"
+        },
+        "connectWithTab": {
+          "label": "OAuth"
+        },
         "createCredentialButton": {
           "label": "新建"
         },
@@ -2613,8 +2613,13 @@
         "credentialModal": {
           "title": "创建 {source} 凭据"
         },
+        "credentialsLoadFailed": {
+          "description": "当前无法设置凭据。请刷新页面或稍后重试。",
+          "title": "无法加载你的凭据"
+        },
         "credentialStep": {
-          "title": "选择凭据"
+          "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
+          "title": "身份验证账户"
         },
         "credentialSwapped": {
           "toast": "已成功更换凭据！"
@@ -2622,16 +2627,26 @@
         "error": {
           "toast": "错误：{detail}"
         },
+        "expandButton": {
+          "ariaLabel": "展开"
+        },
         "federated": {
           "tooltip": {
-            "description": "此连接器支持联合搜索选项。它会带来更高的延迟和更低的搜索质量。",
+            "description": "它会带来更高的延迟和更低的搜索质量。",
             "link": {
               "label": "改用联合搜索版本 →"
-            }
+            },
+            "title": "此连接器支持联合搜索选项。"
           }
         },
         "fileUploadFailed": {
           "toast": "上传文件出错"
+        },
+        "manualTab": {
+          "label": "API Token"
+        },
+        "newAccountButton": {
+          "label": "新建 {source} 账户"
         },
         "oauthRedirectFailed": {
           "message": "无法将您重定向到 {source} 登录页面。请重试。"
@@ -2645,6 +2660,9 @@
         "retryButton": {
           "label": "重试"
         },
+        "savedAccountsButton": {
+          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}"
+        },
         "timeout": {
           "toast": "操作在 {seconds} 秒后超时。请检查配置是否有误。"
         },
@@ -2652,30 +2670,20 @@
           "toast": "发生未知错误"
         }
       },
-      "advanced": {
-        "indexingStart": {
-          "label": "索引起始日期",
-          "subtext": "早于此日期的文档不会被拉取"
-        },
-        "pruneFrequency": {
-          "description": "对照数据源检查所有文档，删除已不存在的文档。注意：此过程会检查每一个文档，因此提高频率时请谨慎。默认为 {hours} 小时（{days} 天）。支持小数小时（例如 0.1 小时 = 6 分钟）。输入 0 可为此连接器禁用清理。",
-          "label": "清理频率（小时）"
-        },
-        "refreshFrequency": {
-          "description": "这是我们从数据源拉取新文档的频率（以分钟计）。如果输入 0，我们将不再为此连接器拉取新文档。",
-          "label": "刷新频率（分钟）"
-        },
-        "resetButton": {
-          "label": "重置"
-        },
-        "title": "高级配置"
-      },
       "connectorName": {
         "label": "连接器名称",
         "subtext": "用于描述该连接器的名称。"
       },
       "credentialRequired": {
         "tooltip": "请先选择一个凭据。"
+      },
+      "bindingGate": {
+        "enterField": "请输入“{field}”。",
+        "fixField": "请检查“{field}”。",
+        "awaitingCheck": "离开该字段后将使用凭据进行检查。",
+        "checking": "正在检查凭据…",
+        "fieldInvalid": "请检查“{field}”：{detail}",
+        "rejected": "此凭据无法与这些设置一起使用。{detail}"
       },
       "credentialsLoadError": {
         "title": "加载凭据失败。"
@@ -2718,7 +2726,8 @@
         },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Drive 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用"
+          "title": "选项 1：OAuth 应用",
+          "sharedScopesNote": "Google 会同时请求 Google Drive 和 Gmail 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Google Drive，请在同意屏幕上取消勾选 Gmail 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
@@ -2776,7 +2785,8 @@
         },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Gmail 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用"
+          "title": "选项 1：OAuth 应用",
+          "sharedScopesNote": "Google 会同时请求 Gmail 和 Google Drive 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Gmail，请在同意屏幕上取消勾选 Google Drive 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
@@ -2811,7 +2821,7 @@
         "connectButton": {
           "label": "连接"
         },
-        "description": "连接到 {source} 并为 {appName} 设置连接器。"
+        "description": "连接到 {source} 并为 {appName} 设置连接器。{hasDocs, select, true {查看[文档]({url})} other {}}"
       },
       "invalidConnector": {
         "homeButton": {
@@ -2935,6 +2945,38 @@
       "tabs": {
         "empty": {
           "label": "没有可显示的标签页。"
+        }
+      },
+      "checkboxTabs": {
+        "confluenceCloud": "Confluence Cloud",
+        "confluenceDataCenter": "Confluence Data Center"
+      },
+      "boundFields": {
+        "advancedOptions": "高级选项",
+        "errors": {
+          "missing": "请输入一个值。",
+          "invalid": "此值无效：{detail}"
+        }
+      },
+      "scheduled": {
+        "description": "指定连接器如何执行索引。操作员可以编辑此部分。",
+        "indexingStart": {
+          "description": "最后更新日期早于此日期的文档将被忽略。",
+          "placeholder": "全部时间",
+          "title": "索引此日期之后的文档"
+        },
+        "pruneFrequency": {
+          "description": "检查来源并删除已不存在的文档。",
+          "title": "清理间隔"
+        },
+        "refreshFrequency": {
+          "description": "从来源拉取新文档。",
+          "title": "刷新间隔"
+        },
+        "title": "计划",
+        "units": {
+          "hours": "小时",
+          "minutes": "分钟"
         }
       }
     },
@@ -3198,15 +3240,36 @@
         }
       },
       "create": {
+        "accountEmailField": {
+          "subDescription": "请使用拥有该 API 令牌的账户邮箱。"
+        },
+        "apiTokenField": {
+          "subDescription": "粘贴你的 API 令牌以访问 {source}。"
+        },
         "createButton": {
           "label": "创建"
         },
         "created": {
           "toast": "已创建新凭据!"
         },
-        "name": {
-          "label": "名称:",
-          "placeholder": "(可选) 凭据名称..."
+        "emailField": {
+          "placeholder": "email@company.com"
+        },
+        "share": {
+          "admins": {
+            "label": "管理员",
+            "description": "所有管理员都可以重复使用此账户来创建连接器。",
+            "suffix": "（默认）"
+          },
+          "adminsAndGroups": {
+            "description": "管理员和你指定的群组可以重复使用此账户。",
+            "label": "管理员和群组"
+          },
+          "onlyMe": {
+            "label": "仅限我"
+          },
+          "description": "允许群组复用此账号来创建连接器。",
+          "title": "共享此账号"
         },
         "submitError": {
           "toast": "提交凭据时出错"
@@ -3241,6 +3304,80 @@
           "toast": "更新凭据时出错"
         }
       },
+      "displayNames": {
+        "accessKeyId": "{source} 访问密钥 ID",
+        "secretAccessKey": "{source} 秘密访问密钥",
+        "accountId": "{source} 账户 ID",
+        "apiToken": "API 令牌",
+        "clientId": "{source} 客户端 ID",
+        "clientSecret": "{source} 客户端密钥",
+        "clientToken": "{source} 客户端令牌",
+        "directoryId": "{source} 目录 ID",
+        "certificatePassword": "{source} 证书密码",
+        "privateKey": "{source} 私钥",
+        "certificate": "{source} 证书",
+        "baseUrl": "{source} 基础 URL",
+        "apiBaseUrl": "{source} API 基础 URL",
+        "url": "{source} URL",
+        "enterpriseServerUrl": "{source} Enterprise Server URL",
+        "botToken": "{source} 机器人令牌",
+        "username": "{source} 用户名",
+        "apiUsername": "{source} API 用户名",
+        "userEmail": "{source} 用户邮箱",
+        "accountEmail": "{source} 账号邮箱",
+        "password": "{source} 密码",
+        "subdomain": "{source} 子域名",
+        "domain": "{source} 域名",
+        "enterpriseId": "{source} 企业 ID",
+        "teamId": "{source} 团队 ID",
+        "applicationId": "{source} 应用 ID",
+        "apiTokenId": "{source} API 令牌 ID",
+        "apiTokenSecret": "{source} API 令牌密钥",
+        "securityToken": "{source} 安全令牌",
+        "integrationToken": "{source} 集成令牌",
+        "accessKey": "{source} 访问密钥",
+        "accessKeySecret": "{source} 访问密钥 Secret",
+        "key": "{source} 密钥",
+        "secret": "{source} Secret",
+        "roleArn": "{source} 角色 ARN",
+        "namespace": "{source} 命名空间",
+        "region": "{source} 区域",
+        "portalId": "{source} 门户 ID",
+        "oauthTokens": "{source} OAuth 令牌",
+        "isSandbox": "是否为沙盒环境",
+        "serviceUserEmail": "服务用户邮箱",
+        "zuliprcContent": "Zuliprc 内容",
+        "authenticationMethod": "身份验证方式"
+      },
+      "hints": {
+        "boxUserEmail": "可选。要模拟的 Box 用户。",
+        "githubBaseUrl": "可选。设置你的服务器主机，例如 https://github.example.com。使用 github.com 时请留空。",
+        "gongBaseUrl": "可选。美国以外的数据请设置你所在区域的主机，例如 https://[region].api.gong.io。",
+        "jiraUserEmail": "Jira Cloud 必填。",
+        "lumappsServiceUser": "要代表其建立索引的用户。",
+        "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
+        "pfxFile": "PFX 文件。",
+        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。"
+      },
+      "methods": {
+        "labels": {
+          "clientSecret": "客户端密钥",
+          "certificateAuthentication": "证书身份验证",
+          "certificate": "证书",
+          "accessKeyAndSecret": "访问密钥和 Secret",
+          "iamRole": "IAM 角色",
+          "assumeRole": "代入角色"
+        },
+        "descriptions": {
+          "sharepointClientSecret": "选择此模式后，SharePoint 连接器将使用客户端密钥进行身份验证。你需要提供客户端 ID 和客户端密钥。",
+          "sharepointCertificate": "选择此模式后，SharePoint 连接器将使用证书进行身份验证。你需要提供客户端 ID、目录 ID、证书密码和 PFX 数据。",
+          "teamsClientSecret": "连接器使用应用注册的客户端密钥登录。请提供客户端 ID、目录 ID 和密钥。仅限频道消息和成员：SharePoint 不接受密钥，因此“包含附件”需要使用证书选项。",
+          "teamsCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件包及其密码。“包含附件”需要此选项，该功能会从 SharePoint 读取频道文件及其读者。",
+          "outlookClientSecret": "连接器使用应用注册的客户端密钥登录。请提供客户端 ID、目录 ID 和密钥。",
+          "outlookCertificate": "连接器使用上传到应用注册的证书登录。请提供客户端 ID、目录 ID、PFX 文件包及其密码。",
+          "s3AssumeRole": "选择此模式后，Amazon EC2 实例将代入其现有角色来访问 S3。无需其他凭据。"
+        }
+      },
       "modal": {
         "createTitle": "创建 {source} 凭据",
         "editTitle": "编辑凭据",
@@ -3269,6 +3406,10 @@
         },
         "retryButton": {
           "label": "重试"
+        },
+        "signIn": {
+          "description": "{appName} 需要只读权限范围。",
+          "title": "使用 {source} 登录"
         },
         "startError": {
           "message": "无法启动 OAuth"
@@ -3321,6 +3462,13 @@
         "success": {
           "toast": "已更新凭据"
         }
+      },
+      "validation": {
+        "authMethodRequired": "请选择身份验证方式",
+        "empty": "{field}不能为空",
+        "fileRequired": "请选择{field}文件",
+        "invalidEmail": "请在{field}中输入有效的邮箱地址",
+        "required": "请输入{field}"
       }
     },
     "customAnalytics": {
@@ -4819,6 +4967,12 @@
         "azureGptImage2": {
           "description": "托管在 Microsoft Azure 上的 GPT Image 2 图像生成模型。"
         },
+        "azureGptImage25Flare": {
+          "description": "托管在 Microsoft Azure 上的 GPT Image 2.5 Flare 图像生成模型。"
+        },
+        "azureGptImage25Sunburst": {
+          "description": "托管在 Microsoft Azure 上的 GPT Image 2.5 Sunburst 图像生成模型。"
+        },
         "gemini25FlashImage": {
           "description": "Gemini 2.5 Flash Image (Nano Banana) 模型专为速度和效率而设计。"
         },
@@ -4835,7 +4989,13 @@
           "description": "OpenAI 上一代旗舰图像生成模型。"
         },
         "openaiGptImage2": {
-          "description": "OpenAI 最新的图像生成模型，提示词还原度最高。"
+          "description": "OpenAI 上一代图像生成模型，提示词还原度高。"
+        },
+        "openaiGptImage25Flare": {
+          "description": "OpenAI 最新的图像生成模型，兼顾高质量与快速生成。"
+        },
+        "openaiGptImage25Sunburst": {
+          "description": "OpenAI 的高级图像生成模型，适用于最精确的编辑。"
         }
       },
       "setDefaultError": {
@@ -5003,6 +5163,9 @@
           "description": "如果您的 embedding 模型需要，此前缀会在传给模型之前添加到搜索查询前面。前缀错误或缺失会降低 embedding 质量。",
           "placeholder": "例如 'query: '",
           "title": "查询前缀"
+        },
+        "googleWorkloadIdentity": {
+          "description": "使用 API 服务器和嵌入工作进程的 GKE 凭据。无需 JSON 密钥。"
         }
       },
       "forwardOnlyModal": {
@@ -5246,7 +5409,8 @@
         "serviceAccountJsonInvalid": "必须是有效的 Google 服务账号 JSON 文件",
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",
-        "urlInvalid": "必须是有效的 URL"
+        "urlInvalid": "必须是有效的 URL",
+        "googleProjectRequired": "必须填写 GCP 项目 ID"
       },
       "vectorQuantization": {
         "description": "使用更少的位存储文档向量，以减少内存占用。位数越少，搜索质量可能越低。",
@@ -5850,6 +6014,9 @@
           "optionalSuffix": {
             "label": "可选"
           },
+          "slowSave": {
+            "text": "耗时比平时更长。模型列表较大时可能需要一分钟。"
+          },
           "submitButton": {
             "invalidTooltip": "请填写所有必填字段。",
             "pristineTooltip": "没有需要保存的更改。"
@@ -5896,10 +6063,12 @@
             "title": "API 密钥"
           },
           "locationField": {
+            "placeholder": "global",
             "description": "托管您的 Google Vertex AI 模型的区域。支持的区域完整列表请参见 Google Cloud。",
             "title": "Google Cloud 区域名称"
           },
           "projectField": {
+            "placeholder": "my-vertex-project",
             "description": "已启用 Vertex AI 的 GCP 项目。此项必填，因为在服务账号模拟下，ADC 无法可靠地推断目标项目。",
             "title": "GCP 项目 ID"
           },
@@ -5941,6 +6110,7 @@
       "toasts": {
         "providerDeleteFailed": "删除提供商失败：{message}",
         "providerDeleted": "提供商已成功删除！",
+        "providerLoadFailed": "无法加载提供商：{message}",
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
@@ -6098,12 +6268,6 @@
         "imageSummarization": {
           "label": "图像摘要"
         },
-        "kgDeepExtraction": {
-          "label": "知识图谱提取"
-        },
-        "kgDocumentClassification": {
-          "label": "知识图谱分类"
-        },
         "other": {
           "label": "其他"
         },
@@ -6120,8 +6284,8 @@
         }
       },
       "panel": {
-        "description": "{start} – {end} · 系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
-        "emptyDescription": "系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要、上下文 RAG 处理和知识图谱提取。",
+        "description": "{start} – {end} · 系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要和上下文 RAG 处理。",
+        "emptyDescription": "系统用量是 {appName} 在后台运行而非为特定用户运行的 LLM 活动。例如图像摘要和上下文 RAG 处理。",
         "error": {
           "title": "无法加载此期间的系统用量。"
         },
@@ -9190,6 +9354,7 @@
         "loginRequired": "您需要先通过身份提供方登录。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
         "serverError": "您的身份提供方遇到错误。请重试。",
+        "staleSignIn": "此登录链接已过期或已失效。请重新登录。",
         "temporarilyUnavailable": "您的身份提供方暂时不可用。请稍后重试。"
       },
       "credentialsIssue": {
@@ -10820,6 +10985,9 @@
         },
         "loading": {
           "text": "正在加载模型..."
+        },
+        "loadingMore": {
+          "text": "正在加载更多模型..."
         }
       },
       "modelSettingsButton": {
@@ -13079,6 +13247,12 @@
     }
   },
   "opal": {
+    "collapsible": {
+      "expand": "展开",
+      "expandSection": "展开{title}",
+      "fold": "折叠",
+      "foldSection": "折叠{title}"
+    },
     "comboBox": {
       "close": "关闭下拉菜单",
       "create": "创建",
@@ -13099,6 +13273,7 @@
       "loading": "加载中",
       "loadingPage": "加载中…",
       "openCalendar": "打开日历",
+      "optional": "（可选）",
       "progress": "进度",
       "remove": "移除",
       "removeItem": "移除 {title}",

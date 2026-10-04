@@ -110,8 +110,8 @@ export {
   type ConfirmationModalProps,
 } from "@opal/layouts/modal/components";
 
-/* PageLoader */
+/* PageCenter */
 export {
-  PageLoader,
-  type PageLoaderProps,
-} from "@opal/layouts/page-loader/components";
+  PageCenter,
+  type PageCenterProps,
+} from "@opal/layouts/page-center/components";
