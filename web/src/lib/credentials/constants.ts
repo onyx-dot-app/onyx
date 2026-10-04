@@ -252,6 +252,20 @@ export const CREDENTIAL_SPECS = {
     brandName: "Productboard",
     fields: { productboard_access_token: secret("apiToken") },
   }),
+  jsm: defineCredentialSpec({
+    brandName: "Jira Service Management",
+    fields: {
+      jira_user_email: email("accountEmail", {
+        optional: true,
+        hint: { key: "jiraUserEmail" },
+      }),
+      jira_api_token: secret("apiToken"),
+    },
+  }),
+  productboard: defineCredentialSpec({
+    brandName: "Productboard",
+    fields: { productboard_access_token: secret("apiToken") },
+  }),
   slab: defineCredentialSpec({
     brandName: "Slab",
     fields: { slab_bot_token: secret("botToken") },
