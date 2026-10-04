@@ -293,7 +293,10 @@ function ButtonPickerHarness() {
   return (
     <Dropdown>
       <Dropdown.Trigger asChild>
-        <button type="button">Fruit</button>
+        {/* A combobox takes no name from its content. */}
+        <button type="button" aria-label="Fruit">
+          Fruit
+        </button>
       </Dropdown.Trigger>
       <Dropdown.Data
         items={ITEMS}
@@ -311,10 +314,14 @@ function TwoTriggersHarness() {
   return (
     <Dropdown>
       <Dropdown.Trigger asChild>
-        <button type="button">Left</button>
+        <button type="button" aria-label="Left">
+          Left
+        </button>
       </Dropdown.Trigger>
       <Dropdown.Trigger asChild>
-        <button type="button">Right</button>
+        <button type="button" aria-label="Right">
+          Right
+        </button>
       </Dropdown.Trigger>
       <Dropdown.Data
         items={ITEMS}
@@ -378,7 +385,7 @@ describe("Dropdown groups", () => {
     const user = setupUser();
     render(<Harness />);
     const trigger = screen.getByRole("combobox", { name: "Fruit" });
-    await user.type(trigger, "l");
+    await user.type(trigger, "lem");
     // The Citrus title (open while searching), then Lemon.
     await user.keyboard("{ArrowDown}{ArrowDown}");
     expect(highlighted()).toEqual(["Lemon"]);
