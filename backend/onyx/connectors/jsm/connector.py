@@ -18,6 +18,9 @@ from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    is_atlassian_date_error,
+)
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -408,6 +411,20 @@ class JiraServiceManagementConnector(
             raise e
         if isinstance(e, InsufficientPermissionsError):
             raise e
+        # A 400 mapped by client.jsm_get / _handle_jsm_search_error is a JQL
+        # problem: keep the specific connector validation error instead of
+        # downgrading it to the generic unexpected-validation error below.
+        if isinstance(e, ConnectorValidationError):
+            raise e
+        # Jira answers invalid JQL on the search probe with HTTP 400.
+        if (
+            isinstance(e, JIRAError)
+            and e.status_code == 400
+            and not is_atlassian_date_error(e)
+        ):
+            raise ConnectorValidationError(
+                f"Invalid JQL query or service desk. JQL error: {e.text}"
+            )
 
         status_code = getattr(e, "status_code", None)  # ods: ignore[getattr]
         if status_code is None:
