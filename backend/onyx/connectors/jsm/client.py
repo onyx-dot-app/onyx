@@ -101,6 +101,18 @@ def fetch_service_desks(
     return desks
 
 
+def fetch_service_desk(
+    session: requests.Session, jsm_base: str, desk_id: str
+) -> dict[str, Any] | None:
+    """One service desk by id, or None when it does not exist / is not
+    visible to the credential (404). Auth and permission failures still
+    raise so credential problems are not mistaken for a missing desk."""
+    try:
+        return jsm_get(session, jsm_base, f"servicedesk/{desk_id}")
+    except ConnectorValidationError:
+        return None
+
+
 def fetch_request_type_for_issue(
     session: requests.Session, jsm_base: str, issue_id: str
 ) -> str | None:

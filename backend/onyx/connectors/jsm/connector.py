@@ -32,7 +32,11 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.jira.utils import build_jira_client
-from onyx.connectors.jsm.client import build_jsm_session, fetch_service_desks
+from onyx.connectors.jsm.client import (
+    build_jsm_session,
+    fetch_service_desk,
+    fetch_service_desks,
+)
 from onyx.connectors.jsm.connector_utils import (
     process_jsm_issue,
     process_jsm_issue_slim,
@@ -77,6 +81,7 @@ class JiraServiceManagementConnector(
         self.batch_size = batch_size
         self._jira_client: JIRA | None = None
         self._jsm_session: Any = None
+        self._desk_project_key_cache: str | None = None
 
     @property
     def jira_client(self) -> JIRA:
@@ -100,17 +105,52 @@ class JiraServiceManagementConnector(
         timezone (same convention as the Jira connector)."""
         time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
 
+        scopes: list[str] = []
+
         if self.jql_query:
-            return f"({self.jql_query}) AND {time_jql}"
+            scopes.append(f"({self.jql_query})")
 
         if self.service_desk_id:
-            # JSM issues carry their service desk as a custom field; a request
-            # type search would need per-desk request type ids, so desks are
-            # validated in validate_connector_settings and the poll stays on
-            # the updated window (optionally narrowed by the user's JQL).
+            # The JSM service desk id is not a JQL-searchable field, but each
+            # desk is backed by a Jira project, so the desk scope is applied
+            # as a project clause (project matches key, name, or id).
+            project_key = self._service_desk_project_key()
+            if project_key is None:
+                logger.warning(
+                    "Could not resolve service desk %s to a Jira project; "
+                    "polling the unscoped time window.",
+                    self.service_desk_id,
+                )
+            else:
+                scopes.append(f'project = "{project_key}"')
+
+        if not scopes:
             return time_jql
 
-        return time_jql
+        return f"{' AND '.join(scopes)} AND {time_jql}"
+
+    def _service_desk_project_key(self) -> str | None:
+        """The Jira project id backing the configured service desk, resolved
+        once per connector instance. Best effort: without the mapping the
+        poll stays on the unscoped window rather than failing the sync."""
+        if self._desk_project_key_cache is not None:
+            return self._desk_project_key_cache
+        if not (self._jsm_session and self.service_desk_id):
+            return None
+        try:
+            desk = fetch_service_desk(
+                self._jsm_session, self.jsm_base, self.service_desk_id
+            )
+        except Exception:
+            logger.exception(
+                "Failed to fetch service desk %s; polling without the desk scope.",
+                self.service_desk_id,
+            )
+            return None
+        project_id = desk.get("projectId") if desk else None
+        if project_id:
+            self._desk_project_key_cache = str(project_id)
+        return self._desk_project_key_cache
 
     def _search_issues(
         self, jql: str, start: int, max_results: int
@@ -144,11 +184,14 @@ class JiraServiceManagementConnector(
                 f"Invalid JQL query or service desk. JQL error: {e.text}"
             )
 
-    def _fetch_issues_page(self, start: int, page_size: int) -> list[dict[str, Any]]:
-        jql = self._get_jql_query(
-            0, datetime.now().timestamp() + timedelta(days=1).total_seconds()
-        )
-        return self._search_issues(jql, start, page_size)
+    def _fetch_issues_page(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        page_size: int,
+    ) -> list[dict[str, Any]]:
+        jql = self._get_jql_query(start, end)
+        return self._search_issues(jql, int(start), page_size)
 
     @override
     def load_from_checkpoint(
@@ -157,7 +200,9 @@ class JiraServiceManagementConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: JsmConnectorCheckpoint,
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
-        return self._load_from_checkpoint(checkpoint, include_permissions=False)
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
 
     @override
     def load_from_checkpoint_with_perm_sync(
@@ -169,10 +214,14 @@ class JiraServiceManagementConnector(
         # JSM project permissions are the same Jira project permissions; the
         # EE layer reads them from the Jira client via the jira source, so the
         # perm-sync path reuses the non-perm documents here.
-        return self._load_from_checkpoint(checkpoint, include_permissions=True)
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
 
     def _load_from_checkpoint(
         self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
         checkpoint: JsmConnectorCheckpoint,
         include_permissions: bool,  # noqa: ARG002
     ) -> CheckpointOutput[JsmConnectorCheckpoint]:
@@ -181,9 +230,7 @@ class JiraServiceManagementConnector(
         current_offset = starting_offset
 
         issues = self._search_issues(
-            self._get_jql_query(
-                0, datetime.now().timestamp() + timedelta(days=1).total_seconds()
-            ),
+            self._get_jql_query(start, end),
             starting_offset,
             _JSM_PAGE_SIZE,
         )
@@ -219,7 +266,7 @@ class JiraServiceManagementConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        yield from self._retrieve_all_slim_docs()
+        yield from self._retrieve_all_slim_docs(start=start, end=end)
 
     @override
     def retrieve_all_slim_docs_perm_sync(
@@ -228,17 +275,25 @@ class JiraServiceManagementConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        yield from self._retrieve_all_slim_docs()
+        yield from self._retrieve_all_slim_docs(start=start, end=end)
 
-    def _retrieve_all_slim_docs(self) -> GenerateSlimDocumentOutput:
+    def _retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        # Mirror the Jira connector: default the window to [0, now + 1 day]
+        # when the caller supplies no bounds.
+        one_day = timedelta(hours=24).total_seconds()
+        start = start if start is not None else 0
+        end = end if end is not None else datetime.now().timestamp() + one_day
+
         offset = 0
         slim_doc_batch: list[SlimDocument] = []
 
         while True:
             issues = self._search_issues(
-                self._get_jql_query(
-                    0, datetime.now().timestamp() + timedelta(days=1).total_seconds()
-                ),
+                self._get_jql_query(start, end),
                 offset,
                 _JSM_PAGE_SIZE,
             )
