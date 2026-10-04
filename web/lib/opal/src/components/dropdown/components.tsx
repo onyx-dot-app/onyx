@@ -443,6 +443,17 @@ interface ViewEntry {
   searchText: string;
 }
 
+/**
+ * A stacked view as it stands: from the registry when its key is there, so
+ * it shows the caller's latest rows; else as it was pushed.
+ */
+function resolveView(
+  entry: ViewEntry,
+  registry: Record<string, DropdownView> | undefined
+): DropdownView {
+  return (entry.key !== undefined && registry?.[entry.key]) || entry.view;
+}
+
 /** Where the highlight goes once the stops reflect a view change. */
 type PendingHighlight =
   | { kind: "none" }
@@ -517,15 +528,8 @@ function DropdownData(props: DropdownDataProps) {
     stackRef.current = stack;
     registryRef.current = viewRegistry;
   });
-  // A stacked view is read from the registry when its key is there, so it
-  // shows the caller's latest rows; else as it was pushed.
-  const resolveView = useCallback(
-    (entry: ViewEntry, registry = viewRegistry): DropdownView =>
-      (entry.key !== undefined && registry?.[entry.key]) || entry.view,
-    [viewRegistry]
-  );
   const top = stack[stack.length - 1];
-  const topView = top ? resolveView(top) : undefined;
+  const topView = top ? resolveView(top, viewRegistry) : undefined;
   const currentViewKey =
     top && topView
       ? viewKey({ ...topView, key: top.key }, stack.length)
@@ -549,7 +553,7 @@ function DropdownData(props: DropdownDataProps) {
       resolveView(entry, registryRef.current).search?.onChange?.("");
     }
     setStack((prev) => (prev.length === 0 ? prev : []));
-  }, [isOpen, rootSearchOnChange, resolveView]);
+  }, [isOpen, rootSearchOnChange]);
   const searchText = top ? top.searchText : rootSearchText;
   const setSearchText = useCallback((next: string) => {
     if (stackRef.current.length === 0) {
@@ -573,6 +577,11 @@ function DropdownData(props: DropdownDataProps) {
   const activatingRef = useRef<string | undefined>(undefined);
   const movedRef = useRef(false);
   const pendingHighlightRef = useRef<PendingHighlight | null>(null);
+  // Read at event time, so Escape can count as the keyboard before a pop.
+  const isKeyboardNavRef = useRef(isKeyboardNav);
+  useLayoutEffect(() => {
+    isKeyboardNavRef.current = isKeyboardNav;
+  });
   const views = useMemo<DropdownViews>(
     () => ({
       push: (viewOrKey) => {
@@ -580,7 +589,11 @@ function DropdownData(props: DropdownDataProps) {
           typeof viewOrKey === "string"
             ? registryRef.current?.[viewOrKey]
             : viewOrKey;
-        if (!view) return;
+        if (!view) {
+          throw new Error(
+            `Dropdown.Data has no view "${String(viewOrKey)}" in \`views\`.`
+          );
+        }
         movedRef.current = true;
         const key = typeof viewOrKey === "string" ? viewOrKey : view.key;
         setStack((prev) => [
@@ -588,7 +601,7 @@ function DropdownData(props: DropdownDataProps) {
           { view, key, returnTo: activatingRef.current, searchText: "" },
         ]);
         setViewDirection("forward");
-        pendingHighlightRef.current = isKeyboardNav
+        pendingHighlightRef.current = isKeyboardNavRef.current
           ? { kind: "first" }
           : { kind: "none" };
       },
@@ -599,13 +612,13 @@ function DropdownData(props: DropdownDataProps) {
         resolveView(leaving, registryRef.current).search?.onChange?.("");
         setStack((prev) => prev.slice(0, -1));
         setViewDirection("back");
-        pendingHighlightRef.current = isKeyboardNav
+        pendingHighlightRef.current = isKeyboardNavRef.current
           ? { kind: "id", id: leaving.returnTo }
           : { kind: "none" };
       },
       close: () => setIsOpen(false),
     }),
-    [isKeyboardNav, setIsOpen, resolveView]
+    [setIsOpen]
   );
   // Runs a row's handler and reports whether it moved the stack.
   const runHandler = useCallback((handler: () => void) => {
@@ -744,11 +757,15 @@ function DropdownData(props: DropdownDataProps) {
     },
     [id, views, activateRow]
   );
+  // Escape is the keyboard, whatever typing in the search field left the
+  // flag at: the highlight returns to the row that led in.
   const back = useCallback(() => {
     if (stackRef.current.length === 0) return false;
+    isKeyboardNavRef.current = true;
+    setIsKeyboardNav(true);
     views.pop();
     return true;
-  }, [views]);
+  }, [views, setIsKeyboardNav]);
 
   // The keyboard reads the stops through the ref at event time; the
   // trigger reads the highlighted stop's id for aria-activedescendant.
@@ -842,7 +859,8 @@ function DropdownData(props: DropdownDataProps) {
   const below = stack.length > 1 ? stack[stack.length - 2] : undefined;
   const belowHasSearch =
     stack.length > 1
-      ? below !== undefined && resolveView(below).search !== undefined
+      ? below !== undefined &&
+        resolveView(below, viewRegistry).search !== undefined
       : rootSearch !== undefined;
 
   return (
