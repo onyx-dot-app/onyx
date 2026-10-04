@@ -147,13 +147,9 @@
   @apply ms-2 flex shrink-0 items-center;
 }
 
-.opal-dropdown-create-icon {
-  @apply ms-2 h-4 w-4 shrink-0 text-text-03;
-}
-
-/* A view row's chevron is a button in look only; the row is the control. */
+.opal-dropdown-create-icon,
 .opal-dropdown-chevron {
-  @apply ms-2 flex shrink-0 items-center;
+  @apply ms-2 h-4 w-4 shrink-0 text-text-03;
 }
 
 /* ---------------------------------------------------------------------------
