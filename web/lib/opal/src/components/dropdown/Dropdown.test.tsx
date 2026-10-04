@@ -528,6 +528,30 @@ function ViewsHarness({
         title: "Review",
         onSelect: () => onRun("review"),
       },
+      {
+        kind: "action",
+        id: "wrap",
+        title: "Wrap up",
+        opensView: true,
+        onSelect: (views) =>
+          views.push({
+            key: "wrap",
+            items: [
+              {
+                kind: "action",
+                id: "back",
+                title: "Back",
+                onSelect: (nested) => nested.pop(),
+              },
+              {
+                kind: "action",
+                id: "extra",
+                title: "Extra",
+                onSelect: () => onRun("extra"),
+              },
+            ],
+          }),
+      },
     ],
   };
   const apps: DropdownView = {
@@ -660,6 +684,15 @@ describe("Dropdown views", () => {
     expect(menuItem("Write")).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Review" })).toBeNull();
 
+    // A view underneath another keeps its text until it is back on top.
+    await user.click(menuItem("Wrap up"));
+    expect(menuItem("Extra")).toBeInTheDocument();
+    await user.click(menuItem("Back"));
+    expect(screen.getByRole("textbox", { name: "Search skills" })).toHaveValue(
+      "wr"
+    );
+    expect(menuItem("Write")).toBeInTheDocument();
+
     await user.keyboard("{Escape}");
     // The root's text survived the view, and its field has focus again.
     const rootSearch = screen.getByRole("textbox", { name: "Search actions" });
@@ -681,5 +714,54 @@ describe("Dropdown views", () => {
     await user.click(trigger);
     expect(menuItem("Rename")).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Write" })).toBeNull();
+  });
+});
+
+/** A view in the registry, rebuilt every render around a toggle's state. */
+function RegistryHarness() {
+  const [pinned, setPinned] = useState(false);
+  const prefs: DropdownView = {
+    items: [
+      {
+        kind: "toggle",
+        id: "pin",
+        title: "Pinned",
+        checked: pinned,
+        onCheckedChange: setPinned,
+      },
+    ],
+  };
+  const items: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "prefs",
+      title: "Preferences",
+      opensView: true,
+      onSelect: (views) => views.push("prefs"),
+    },
+  ];
+  return (
+    <Dropdown>
+      <Dropdown.Trigger asChild>
+        <button type="button">Actions</button>
+      </Dropdown.Trigger>
+      <Dropdown.Data label="Actions" items={items} views={{ prefs }} />
+    </Dropdown>
+  );
+}
+
+describe("Dropdown view registry", () => {
+  test("a view pushed by key shows its latest rows", async () => {
+    const user = setupUser();
+    render(<RegistryHarness />);
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(menuItem("Preferences"));
+    const pin = screen.getByRole("menuitemcheckbox", { name: "Pinned" });
+    expect(pin).toHaveAttribute("aria-checked", "false");
+
+    await user.click(pin);
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Pinned" })
+    ).toHaveAttribute("aria-checked", "true");
   });
 });

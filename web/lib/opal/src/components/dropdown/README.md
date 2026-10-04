@@ -111,22 +111,23 @@ The element the list positions against and matches in width, when that is not th
 
 ### `Dropdown.Data`
 
-| Prop                  | Type                                                     | Default     | Description                                                                            |
-| --------------------- | -------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------- |
-| `items`               | `DropdownItem[]` (picker) / `DropdownMenuItem[]`         | —           | The rows and groups, in order                                                          |
-| `value`               | `string`                                                 | —           | Picker: the selected value                                                             |
-| `values`              | `ReadonlySet<string>`                                    | —           | Picker: the selected values; the list stays open for more                              |
-| `onSelect`            | `(option: DropdownOption, views: DropdownViews) => void` | —           | Picker: a click or Enter on an option                                                  |
-| `closeOnSelect`       | `boolean`                                                | single only | Picker: close after a pick                                                             |
-| `label`               | `string`                                                 | —           | The list's accessible name                                                             |
-| `query`               | `string`                                                 | —           | A type-in trigger's text; filters by title, value and `keywords`                       |
-| `search`              | `{ placeholder; onChange? }`                             | —           | A search field pinned above the rows, for a trigger with nothing to type               |
-| `exactText`           | `string`                                                 | —           | Text whose exact match also reads as selected (a type-in's uncommitted pick)           |
-| `highlightExactQuery` | `boolean`                                                | `false`     | Move the highlight to the option the query matches exactly, unless the keyboard drives |
-| `create`              | `{ text; onCreate }`                                     | —           | A create row pinned first; shown only while given                                      |
-| `otherOptionsTitle`   | `string`                                                 | —           | Rows the query filtered out stay, under a group with this title                        |
-| `maxHeight`           | `string`                                                 | `15rem`     | Max height of the list                                                                 |
-| `onReachEnd`          | `(shown: DropdownOption[]) => void`                      | —           | The rows scrolled near their end, with the options on show                             |
+| Prop                  | Type                                                     | Default     | Description                                                                                |
+| --------------------- | -------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------ |
+| `items`               | `DropdownItem[]` (picker) / `DropdownMenuItem[]`         | —           | The rows and groups, in order                                                              |
+| `value`               | `string`                                                 | —           | Picker: the selected value                                                                 |
+| `values`              | `ReadonlySet<string>`                                    | —           | Picker: the selected values; the list stays open for more                                  |
+| `onSelect`            | `(option: DropdownOption, views: DropdownViews) => void` | —           | Picker: a click or Enter on an option                                                      |
+| `closeOnSelect`       | `boolean`                                                | single only | Picker: close after a pick                                                                 |
+| `label`               | `string`                                                 | —           | The list's accessible name                                                                 |
+| `query`               | `string`                                                 | —           | A type-in trigger's text; filters by title, value and `keywords`                           |
+| `search`              | `{ placeholder; onChange? }`                             | —           | A search field pinned above the rows, for a trigger with nothing to type                   |
+| `exactText`           | `string`                                                 | —           | Text whose exact match also reads as selected (a type-in's uncommitted pick)               |
+| `highlightExactQuery` | `boolean`                                                | `false`     | Move the highlight to the option the query matches exactly, unless the keyboard drives     |
+| `create`              | `{ text; onCreate }`                                     | —           | A create row pinned first; shown only while given                                          |
+| `otherOptionsTitle`   | `string`                                                 | —           | Rows the query filtered out stay, under a group with this title                            |
+| `maxHeight`           | `string`                                                 | `15rem`     | Max height of the list                                                                     |
+| `onReachEnd`          | `(shown: DropdownOption[]) => void`                      | —           | The rows scrolled near their end, with the options on show                                 |
+| `views`               | `Record<string, DropdownView>`                           | —           | Secondary views by key, rebuilt every render, so a view on the stack shows its latest rows |
 
 ## Items
 
@@ -198,12 +199,12 @@ const items: DropdownMenuItem[] = [
 | `DropdownView.key?`    | Identifies the view on the stack; its depth when left out                                                                                                                                       |
 | `DropdownView.items`   | The view's rows and groups                                                                                                                                                                      |
 | `DropdownView.search?` | A search field pinned above the view's rows. It filters this view only, and keeps its text while the view is on the stack                                                                       |
-| `DropdownViews.push`   | Replace the rows with a view                                                                                                                                                                    |
+| `DropdownViews.push`   | Replace the rows with a view: a key from `views`, or an object (refreshed from `views` when its `key` is there)                                                                                 |
 | `DropdownViews.pop`    | Back one view; nothing at the root                                                                                                                                                              |
 | `DropdownViews.close`  | Close the list                                                                                                                                                                                  |
 | `opensView` (on a row) | The row leads to a view: ArrowRight activates it and the list stays open after it. An action row gets a trailing chevron; a custom row renders its own. An affordance only; the handler decides |
 
-Nothing is laid out for a view: a way back is a row that calls `pop`. The root-only props (`query`, `create`, `otherOptionsTitle`, `exactText`) wait underneath a view. Escape leaves a view; at the root it closes. Closing the list empties the stack. Each search field reports `""` through its `onChange` as its rows leave.
+Build views that hold state (a toggle, search results) in render and pass them through `views`, so the stack always shows the latest rows; a pushed object is a snapshot otherwise. Views are menu rows: push them from a menu. A view pushed from a picker renders under the picker's listbox roles. Nothing is laid out for a view: a way back is a row that calls `pop`. The root-only props (`query`, `create`, `otherOptionsTitle`, `exactText`) wait underneath a view. Escape leaves a view; at the root it closes. Closing the list empties the stack. Each search field reports `""` through its `onChange` as its rows leave.
 
 ## Keyboard
 

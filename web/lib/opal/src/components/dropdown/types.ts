@@ -165,8 +165,12 @@ export interface DropdownView {
  * logic it likes.
  */
 export interface DropdownViews {
-  /** Replace the rows with `view`, in place. The list stays open. */
-  push: (view: DropdownView) => void;
+  /**
+   * Replace the rows with a view, in place. The list stays open. A key
+   * names a view in `Dropdown.Data`'s `views`; an object is used as given,
+   * and refreshed from `views` on every render when its `key` is there.
+   */
+  push: (view: DropdownView | string) => void;
   /** Back one view. Nothing happens at the root. */
   pop: () => void;
   close: () => void;

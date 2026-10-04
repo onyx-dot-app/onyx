@@ -510,9 +510,14 @@ export function useDropdownOverlay({
     },
     [setReference]
   );
+  // The active trigger unmounting hands over to another that is still
+  // mounted, so a pick can still return focus and the list keeps an anchor.
   const releaseTriggerRef = useCallback(
     (node: HTMLElement | null) => {
-      if (triggerRef.current === node) setTriggerRef(null);
+      if (triggerRef.current !== node) return;
+      const next =
+        [...triggersRef.current].find((trigger) => trigger !== node) ?? null;
+      setTriggerRef(next);
     },
     [setTriggerRef]
   );

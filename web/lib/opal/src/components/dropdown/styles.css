@@ -10,7 +10,8 @@
    ============================================================================ */
 
 .opal-dropdown {
-  @apply z-10000 pointer-events-auto touch-auto;
+  @apply pointer-events-auto touch-auto;
+  z-index: var(--z-popover);
   /* A list matched to a narrow anchor still needs room for its rows. */
   min-width: var(--block-width-dropdown-min);
 }

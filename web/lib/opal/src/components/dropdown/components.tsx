@@ -383,6 +383,13 @@ interface DropdownDataBaseProps {
    * read.
    */
   onReachEnd?: (shown: DropdownOption[]) => void;
+  /**
+   * Secondary views by key, rebuilt every render like `items`, so a view
+   * on the stack shows its latest rows (a toggle's `checked`, fresh search
+   * results). `views.push("key")` opens one; a pushed object with a `key`
+   * found here is refreshed from it too.
+   */
+  views?: Record<string, DropdownView>;
 }
 
 type DropdownPickerProps = DropdownDataBaseProps & {
@@ -460,6 +467,7 @@ function DropdownData(props: DropdownDataProps) {
     otherOptionsTitle: rootOtherOptionsTitle,
     maxHeight,
     onReachEnd,
+    views: viewRegistry,
     value,
     values,
     onSelect,
@@ -502,13 +510,24 @@ function DropdownData(props: DropdownDataProps) {
     "forward"
   );
   const stackRef = useRef(stack);
+  const registryRef = useRef(viewRegistry);
   useLayoutEffect(() => {
     stackRef.current = stack;
+    registryRef.current = viewRegistry;
   });
+  // A stacked view is read from the registry when its key is there, so it
+  // shows the caller's latest rows; else as it was pushed.
+  const resolveView = useCallback(
+    (entry: ViewEntry, registry = viewRegistry): DropdownView =>
+      (entry.view.key !== undefined && registry?.[entry.view.key]) ||
+      entry.view,
+    [viewRegistry]
+  );
   const top = stack[stack.length - 1];
-  const currentViewKey = top ? viewKey(top.view, stack.length) : "root";
-  const items = top ? top.view.items : rootItems;
-  const search = top ? top.view.search : rootSearch;
+  const topView = top ? resolveView(top) : undefined;
+  const currentViewKey = topView ? viewKey(topView, stack.length) : "root";
+  const items = topView ? topView.items : rootItems;
+  const search = topView ? topView.search : rootSearch;
   const create = top ? undefined : rootCreate;
   const otherOptionsTitle = top ? undefined : rootOtherOptionsTitle;
   const exactText = top ? undefined : rootExactText;
@@ -522,9 +541,11 @@ function DropdownData(props: DropdownDataProps) {
     if (isOpen) return;
     setRootSearchText("");
     rootSearchOnChange?.("");
-    for (const entry of stackRef.current) entry.view.search?.onChange?.("");
+    for (const entry of stackRef.current) {
+      resolveView(entry, registryRef.current).search?.onChange?.("");
+    }
     setStack((prev) => (prev.length === 0 ? prev : []));
-  }, [isOpen, rootSearchOnChange]);
+  }, [isOpen, rootSearchOnChange, resolveView]);
   const searchText = top ? top.searchText : rootSearchText;
   const setSearchText = useCallback((next: string) => {
     if (stackRef.current.length === 0) {
@@ -550,7 +571,12 @@ function DropdownData(props: DropdownDataProps) {
   const pendingHighlightRef = useRef<PendingHighlight | null>(null);
   const views = useMemo<DropdownViews>(
     () => ({
-      push: (view) => {
+      push: (viewOrKey) => {
+        const view =
+          typeof viewOrKey === "string"
+            ? registryRef.current?.[viewOrKey]
+            : viewOrKey;
+        if (!view) return;
         movedRef.current = true;
         setStack((prev) => [
           ...prev,
@@ -565,7 +591,7 @@ function DropdownData(props: DropdownDataProps) {
         const leaving = stackRef.current[stackRef.current.length - 1];
         if (!leaving) return;
         movedRef.current = true;
-        leaving.view.search?.onChange?.("");
+        resolveView(leaving, registryRef.current).search?.onChange?.("");
         setStack((prev) => prev.slice(0, -1));
         setViewDirection("back");
         pendingHighlightRef.current = isKeyboardNav
@@ -574,7 +600,7 @@ function DropdownData(props: DropdownDataProps) {
       },
       close: () => setIsOpen(false),
     }),
-    [isKeyboardNav, setIsOpen]
+    [isKeyboardNav, setIsOpen, resolveView]
   );
   // Runs a row's handler and reports whether it moved the stack.
   const runHandler = useCallback((handler: () => void) => {
@@ -808,9 +834,10 @@ function DropdownData(props: DropdownDataProps) {
   // Escape in the search field: inside a view it pops, and focus moves to
   // the field below or the trigger; at the root it closes and the trigger
   // takes focus back, so the field is not left orphaned.
+  const below = stack.length > 1 ? stack[stack.length - 2] : undefined;
   const belowHasSearch =
     stack.length > 1
-      ? stack[stack.length - 2]?.view.search !== undefined
+      ? below !== undefined && resolveView(below).search !== undefined
       : rootSearch !== undefined;
 
   return (
