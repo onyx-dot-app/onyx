@@ -8,7 +8,11 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-from onyx.sandbox_proxy.ca import CABootstrap, CAStore, CAStoreConflictError
+from onyx.sandbox_proxy.certificate_authority.bootstrap import (
+    CABootstrap,
+    CAStore,
+    CAStoreConflictError,
+)
 
 
 class _InMemoryStore(CAStore):

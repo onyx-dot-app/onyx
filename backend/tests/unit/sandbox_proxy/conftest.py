@@ -28,7 +28,7 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialResolver, InjectionContext
-from onyx.sandbox_proxy.identity import (
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
     ResolvedSandbox,
     SandboxIdentity,
     SandboxIPLookup,

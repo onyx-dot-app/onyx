@@ -18,7 +18,10 @@ from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.backend import build_ca_store, build_ip_lookup
-from onyx.sandbox_proxy.ca import CABootstrap, MaterializedCA
+from onyx.sandbox_proxy.certificate_authority.bootstrap import (
+    CABootstrap,
+    MaterializedCA,
+)
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
     CredentialResolver,
@@ -27,7 +30,6 @@ from onyx.sandbox_proxy.destination_policy import (
     UpstreamEventLoop,
     parse_destination_policy,
 )
-from onyx.sandbox_proxy.identity import IdentityResolver, SandboxIPLookup
 from onyx.sandbox_proxy.models import DestinationPolicyConfig
 from onyx.sandbox_proxy.request_evaluator import (
     CompositeRequestEvaluator,
@@ -37,6 +39,10 @@ from onyx.sandbox_proxy.request_evaluator import (
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    IdentityResolver,
+    SandboxIPLookup,
+)
 from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
     SANDBOX_NAMESPACE,

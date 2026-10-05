@@ -7,7 +7,7 @@ from http.server import HTTPServer
 import pytest
 
 from onyx.sandbox_proxy import server as proxy_server
-from onyx.sandbox_proxy.identity import SandboxIPLookup
+from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIPLookup
 from onyx.sandbox_proxy.server import _build_healthz_handler, _Readiness
 
 

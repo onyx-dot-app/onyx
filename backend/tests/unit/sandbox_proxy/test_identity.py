@@ -5,8 +5,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from onyx.sandbox_proxy import identity as identity_mod
-from onyx.sandbox_proxy.identity import (
+from onyx.sandbox_proxy.sandbox_identity import resolution as identity_mod
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
     IdentityResolver,
     ResolvedSandbox,
     SandboxIdentity,

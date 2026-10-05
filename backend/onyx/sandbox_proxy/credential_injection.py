@@ -18,7 +18,7 @@ from mitmproxy import http
 from pydantic import BaseModel, ConfigDict
 
 from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.identity import ResolvedSandbox
+from onyx.sandbox_proxy.sandbox_identity.resolution import ResolvedSandbox
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -21,7 +21,10 @@ from docker.models.containers import Container
 from docker.types.daemon import CancellableStream
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from onyx.sandbox_proxy.identity import SandboxIdentity, SandboxIPLookup
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    SandboxIdentity,
+    SandboxIPLookup,
+)
 from onyx.server.features.build.configs import (
     SANDBOX_DOCKER_NETWORK,
     SANDBOX_DOCKER_SOCKET,

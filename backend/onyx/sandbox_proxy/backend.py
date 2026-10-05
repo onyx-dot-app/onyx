@@ -11,18 +11,18 @@ the wrong-backend SDK opening config files on import would be wasted work at
 best and crash-on-missing-config at worst.
 """
 
-from onyx.sandbox_proxy.ca import CAStore
-from onyx.sandbox_proxy.identity import SandboxIPLookup
+from onyx.sandbox_proxy.certificate_authority.bootstrap import CAStore
+from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIPLookup
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 
 
 def build_ca_store() -> CAStore:
     if SANDBOX_BACKEND is SandboxBackend.KUBERNETES:
-        from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
+        from onyx.sandbox_proxy.certificate_authority.kubernetes import K8sSecretCAStore
 
         return K8sSecretCAStore()
     if SANDBOX_BACKEND is SandboxBackend.DOCKER:
-        from onyx.sandbox_proxy.ca_docker import FileCAStore
+        from onyx.sandbox_proxy.certificate_authority.docker import FileCAStore
 
         return FileCAStore()
     raise RuntimeError(f"Unsupported SANDBOX_BACKEND={SANDBOX_BACKEND!r}.")
@@ -30,11 +30,11 @@ def build_ca_store() -> CAStore:
 
 def build_ip_lookup() -> SandboxIPLookup:
     if SANDBOX_BACKEND is SandboxBackend.KUBERNETES:
-        from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
+        from onyx.sandbox_proxy.sandbox_identity.kubernetes import K8sInformerLookup
 
         return K8sInformerLookup()
     if SANDBOX_BACKEND is SandboxBackend.DOCKER:
-        from onyx.sandbox_proxy.identity_docker import DockerEventsLookup
+        from onyx.sandbox_proxy.sandbox_identity.docker import DockerEventsLookup
 
         return DockerEventsLookup()
     raise RuntimeError(f"Unsupported SANDBOX_BACKEND={SANDBOX_BACKEND!r}.")

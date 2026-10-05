@@ -44,7 +44,6 @@ from onyx.sandbox_proxy.destination_policy import (
     resolve_destination,
 )
 from onyx.sandbox_proxy.errors import SandboxProxyError, http_403
-from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.logging_utils import (
     APPROVAL_DECIDED_FIELDS,
     EGRESS_APPROVAL_MATCHED_FIELDS,
@@ -63,6 +62,10 @@ from onyx.sandbox_proxy.logging_utils import (
 )
 from onyx.sandbox_proxy.models import DestinationPolicyConfig
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    ResolvedSandbox,
+    SessionContext,
+)
 from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,

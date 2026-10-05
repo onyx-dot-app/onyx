@@ -12,7 +12,10 @@ from kubernetes import client, watch
 from kubernetes.client.rest import ApiException
 from urllib3.exceptions import ProtocolError, ReadTimeoutError
 
-from onyx.sandbox_proxy.identity import SandboxIdentity, SandboxIPLookup
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    SandboxIdentity,
+    SandboxIPLookup,
+)
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import build_core_v1_api
 from onyx.server.features.build.sandbox.labels import (

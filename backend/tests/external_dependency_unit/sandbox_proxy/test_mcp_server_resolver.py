@@ -46,8 +46,8 @@ from onyx.sandbox_proxy.credential_injection import (
     CredentialUnavailableError,
     InjectionContext,
 )
-from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.sandbox_proxy.sandbox_identity.resolution import ResolvedSandbox
 from onyx.server.features.mcp.credentials import extract_connection_data
 from onyx.server.features.mcp.models import MCPConnectionData, MCPOAuthKeys
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA

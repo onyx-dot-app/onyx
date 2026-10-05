@@ -32,7 +32,10 @@ orphaned cert). Operator recovery is: delete ``ca.crt``, restart proxy.
 import os
 from pathlib import Path
 
-from onyx.sandbox_proxy.ca import CAStore, CAStoreConflictError
+from onyx.sandbox_proxy.certificate_authority.bootstrap import (
+    CAStore,
+    CAStoreConflictError,
+)
 from onyx.server.features.build.configs import SANDBOX_PROXY_CA_VOLUME_PATH
 from onyx.utils.logger import setup_logger
 

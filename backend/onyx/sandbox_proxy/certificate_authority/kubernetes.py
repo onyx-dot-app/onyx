@@ -13,7 +13,10 @@ import time
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 
-from onyx.sandbox_proxy.ca import CAStore, CAStoreConflictError
+from onyx.sandbox_proxy.certificate_authority.bootstrap import (
+    CAStore,
+    CAStoreConflictError,
+)
 from onyx.server.features.build.configs import (
     SANDBOX_NAMESPACE,
     SANDBOX_PROXY_CA_CONFIGMAP,

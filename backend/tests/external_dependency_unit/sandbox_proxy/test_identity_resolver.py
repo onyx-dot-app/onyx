@@ -14,7 +14,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import BuildSession, Sandbox
-from onyx.sandbox_proxy.identity import IdentityResolver, SandboxIdentity
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    IdentityResolver,
+    SandboxIdentity,
+)
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.unit.sandbox_proxy.conftest import StaticLookup
