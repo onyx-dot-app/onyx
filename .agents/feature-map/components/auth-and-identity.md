@@ -151,7 +151,7 @@ ScimToken   ── hashed bearer token for IdP-driven provisioning
 
 | Column | Meaning |
 |---|---|
-| `role` | **Legacy tombstone.** Type is `UserRole` (`auth/schemas.py`), column comment: "Legacy tombstone column: no longer read or written by application code. Kept nullable so a pure-code rollback keeps working." See §9. |
+| `role` | **Not mapped.** The DB column is nullable and legacy. There is no role enum and no ORM attribute. A later release drops the column. See §9. |
 | `account_type` | `AccountType`: `STANDARD`, `SERVICE_ACCOUNT`, `BOT`, `EXT_PERM_USER`, `ANONYMOUS` (`db/enums.py:7`). `is_web_login()` excludes `BOT`/`EXT_PERM_USER`. Classifies *what kind of identity this is*, independent of `Permission`. |
 | `effective_permissions` | JSONB list of granted `Permission` values, recomputed by `db/permissions.py:recompute_user_permissions__no_commit` whenever group membership or grants change. Expanded with implied permissions only at read time (`auth/permissions.py:get_effective_permissions`), never persisted expanded. |
 | `is_group_manager` | Cached bool: does this user manage at least one non-default group. Refreshed in the same write as `effective_permissions`. The live equivalent of "curator." |
@@ -367,13 +367,10 @@ This area is security-critical. Claims here are stated at the confidence the
 code supports; anything not independently re-verified against a live system
 is marked as such.
 
-1. **`User.role` is dead and must never become live again.** It is read by
-   nothing and written by nothing outside its own column definition and the
-   `UserRole` enum. `grep -rn "UserRole" backend/onyx backend/ee` outside
-   tests returns only the enum definition (`auth/schemas.py`), its import,
-   and the `role` column (`db/models.py:338`). Any PR that starts reading or
-   writing `user.role`, or that branches on `UserRole.ADMIN`/`CURATOR`, is
-   reintroducing a mechanism the rest of the system has moved off of; it
+1. **There is no role enum, and none may return.** `User.role` is an unmapped
+   legacy DB column. No application code reads or writes it. Authorization is
+   `Permission` plus `AccountType`. A PR that adds a role enum or branches on
+   a role value reintroduces a mechanism the rest of the system has left. It
    will not compose with `Permission`/`effective_permissions`.
 2. **Every non-public endpoint must declare a real auth dependency.**
    `server/auth_check.py:check_router_auth` walks every registered FastAPI
@@ -562,16 +559,11 @@ secrets/env.
 
 ## 9. Footguns
 
-- **`User.role` looks like the authorization mechanism and is not.** It is a
-  populated, typed, seemingly-normal enum column with realistic-looking
-  values (`ADMIN`, `CURATOR`, `BASIC`...). Nothing about looking at the
-  schema alone tells you it is dead. If you find yourself writing
-  `if user.role == UserRole.ADMIN`, stop: use `has_global_permission(user,
+- **A legacy `role` column may still exist in the DB. Do not use it.** The ORM
+  does not map it. For an admin check, use `has_global_permission(user,
   Permission.FULL_ADMIN_PANEL_ACCESS)` (`auth/permissions.py:is_user_admin`
-  is the existing helper) or `has_permission` for anything scoped.
-- **"Curator" is not a role anymore either.** The old `UserRole.CURATOR`/
-  `GLOBAL_CURATOR` values still exist in the tombstone enum (so old rows
-  still parse) but grant nothing. The live equivalent is `is_group_manager`
+  is the existing helper). Use `has_permission` for anything scoped.
+- **"Curator" is not a role.** The live equivalent is `is_group_manager`
   plus `SCOPED_MANAGER_PERMISSIONS`, and it is *scoped to specific groups*,
   not a blanket capability.
 - **A group manager's own document access is unrelated to what they

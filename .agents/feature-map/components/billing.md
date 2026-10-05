@@ -354,18 +354,13 @@ not.
 
 ## 9. Footguns
 
-- **`web/src/app/ee/admin/billing/` is not the live billing page.** The
-  route `/admin/billing` (`ADMIN_ROUTES.BILLING`,
-  `web/src/lib/admin-routes.ts:391`) is not in `web/src/proxy.ts:EE_ROUTES`,
-  so it is never rewritten to `/ee/admin/billing`. The real page is
-  `web/src/app/admin/billing/page.tsx`, importing `PlansView.tsx`,
-  `CheckoutView.tsx`, `BillingDetailsView.tsx`, and
-  `LicenseActivationCard.tsx` from that same directory (`web/src/app/admin/billing/`).
-  `web/src/app/ee/admin/billing/BillingInformationPage.tsx` and its siblings
-  are orphaned: they compile and are reachable only by navigating directly to
-  the literal URL `/ee/admin/billing`, which nothing in the app links to.
-  Contrast with theme, where the `/ee/admin/theme` tree genuinely is the live
-  page (see [[whitelabelling-and-theme]] §9).
+- **A directory under `web/src/app/ee/admin/` is reachable only if its path is in
+  `web/src/proxy.ts:EE_ROUTES`.** The billing route `/admin/billing`
+  (`ADMIN_ROUTES.BILLING`, `web/src/lib/admin-routes.ts`) is not in `EE_ROUTES`.
+  The page lives in `web/src/app/admin/billing/`: `page.tsx`, `PlansView.tsx`,
+  `CheckoutView.tsx`, `BillingDetailsView.tsx` and `LicenseActivationCard.tsx`.
+  Theme is the opposite case: `/admin/theme` is in `EE_ROUTES`, so the
+  `/ee/admin/theme` tree is the live page (see [[whitelabelling-and-theme]] §9).
 - **`GatedContentWrapper` exempts `/admin/billing` and `/admin/users` from
   the gated-access lockout by pathname string match**
   (`web/src/components/GatedContentWrapper.tsx:ALLOWED_GATED_PATHS`), so a

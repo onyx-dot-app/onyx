@@ -228,7 +228,7 @@ directly via `add_trace_processor`, independent of Braintrust/Langfuse.
 Both build a `model_config` dict tagging `flow` (an `LLMFlow` value,
 `tracing/flows.py`) and `model_provider`; `flows.py:LLMFlow` enumerates every
 tagged operation, grouped by area (chat/agent, secondary LLM flows, Craft,
-`LLM_GATEWAY`, indexing, knowledge graph, image, voice, embeddings/rerank).
+`LLM_GATEWAY`, indexing, image, voice, embeddings/rerank).
 `[[llm-providers]]` covers the LLM-provider-side detail of resolution and
 retries; this file covers what happens to a span once it is opened.
 

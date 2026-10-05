@@ -81,7 +81,7 @@ protects.
 | GET | `/build/sessions/{id}/sandbox-status` | `get_sandbox_status` (`session/api.py:213`) | DB-only, for the FE sleep poll. |
 | POST | `/build/sessions/{id}/restore` | `restore_session` (`session/api.py:357`) | Wakes a sleeping sandbox and rebuilds the workspace; 409s under concurrent restore. |
 | POST | `/build/sessions/{id}/snapshot` | `create_session_snapshot` (`session/api.py:436`) | Per-session workspace snapshot. |
-| POST | `/build/sessions/{id}/opencode-history-snapshot` | `create_session_opencode_history_snapshot` (`session/api.py:471`) | Sandbox-global opencode history capture; see §4.5. **Nothing calls this today** (see §9). |
+| POST | `/build/sessions/{id}/opencode-history-snapshot` | `create_session_opencode_history_snapshot` (`session/api.py:471`) | Sandbox-global opencode history capture; see §4.5. Manual capture hook for tests and operators; no frontend caller (see §9). |
 | GET | `/build/sessions/{id}/artifacts` | `list_artifacts` (`session/api.py:504`) | |
 | GET | `/build/sessions/{id}/artifacts/{path}` | `download_artifact` (`session/api.py:559`) | |
 | GET | `/build/sessions/{id}/export-docx/{path}` | `export_docx` (`session/api.py:610`) | Uses `session/md_to_docx.py`. |
@@ -392,8 +392,9 @@ preserve-opencode-sessions.md` and confirmed against
 opencode history is at most `idle_timeout / SNAPSHOT_INTERVAL_DIVISOR` stale
 for an active sandbox, not stale back to the last idle-reap or recovery. The
 manual endpoint `POST /sessions/{id}/opencode-history-snapshot`
-(`session/api.py:471`) has **no caller anywhere in this codebase** (grepped
-both `backend/onyx` and `web/src`); it exists but nothing invokes it today.
+(`session/api.py:471`) forces a capture. Tests and operators use it
+(`backend/tests/integration/common_utils/managers/build_session.py`); no frontend
+code calls it.
 A sandbox that crashes hard within that bound, or is forcibly killed outside
 the reaper's control, can still lose opencode history for turns since the
 last successful capture. `BuildMessage` rows in Postgres are unaffected;
@@ -622,7 +623,7 @@ auto-named by a different one.
 | changes session state (`BuildSession` columns, `session_ready.py`) | `session_runtime_intact`'s fast-path check; `reconcile_session_llm_config`'s short-circuit comparison; any snapshot/restore path in `[[craft-sandboxes]]` that reads these columns |
 | changes artifact upsert or hashing | the FE artifact list/version display; `export_docx`/`download_artifact`, which read the live workspace, not the DB row's cached bytes |
 | changes user library sync | both trigger sets (upload/delete/toggle synchronous sync via `sync_user_library_to_active_sandboxes`, and session-provisioning sync via `build_managed_content_payload`/`push_managed_content`); the shared `Document`/cc-pair machinery other ingestion consumers also read |
-| changes opencode history capture points | `[[craft-sandboxes]]`'s reaper, background-sweep, and recovery paths that are the three callers; the unused `/opencode-history-snapshot` endpoint, if you're wiring up a per-turn caller for the first time |
+| changes opencode history capture points | `[[craft-sandboxes]]`'s reaper, background-sweep, and recovery paths that are the three callers; the manual `/opencode-history-snapshot` endpoint, if you wire up a per-turn caller for the first time |
 
 ---
 
@@ -706,11 +707,11 @@ general Craft work.
   multi-step reasoning happens inside `opencode serve`, and the backend's
   loop (`MAX_TIMEOUT_CONTINUATIONS`) exists only to recover from a silent
   step, not to drive the agent's reasoning.
-- **`/build/sessions/{id}/opencode-history-snapshot` exists but nothing
-  calls it.** It is a manual-capture endpoint with no wired caller anywhere
-  in the codebase today. Do not assume a per-turn or per-send history
-  capture happens; the automatic capture points are idle-reap sleep, the
-  periodic background sweep, and best-effort pre-recovery (§4.5).
+- **`/build/sessions/{id}/opencode-history-snapshot` is a manual capture
+  hook.** Tests and operators call it. No frontend code calls it. Do not
+  assume a per-turn or per-send history capture happens. The automatic
+  capture points are idle-reap sleep, the periodic background sweep, and
+  best-effort pre-recovery (§4.5).
 - **Subagent messages skip the interactive-turn queue entirely.**
   `send_subagent_message` (`session/messages.py:221`) streams synchronously
   through `SessionManager.send_subagent_message` →

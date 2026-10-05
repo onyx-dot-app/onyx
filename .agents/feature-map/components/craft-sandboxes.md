@@ -63,9 +63,8 @@ visible seams:
 - `POST /api/build/sessions/{session_id}/snapshot` and
   `POST /api/build/sessions/{session_id}/opencode-history-snapshot`
   (`backend/onyx/server/features/build/session/api.py:440,470`): manual snapshot
-  triggers for the owned session. Nothing in the frontend calls the history one
-  today (grep of `web/src` found no caller); it exists as an operable capture
-  point, not a wired one.
+  triggers for the owned session. The history one is a manual capture hook used
+  by tests and operators (`backend/tests/integration/common_utils/managers/build_session.py:BuildSessionManager.create_opencode_history_snapshot`). No frontend code calls it.
 - The sandbox's own preview/dev-server surface is owned by `[[craft-webapp-proxy]]`.
 
 ### Environment configuration (`backend/onyx/server/features/build/configs.py` unless noted)
@@ -368,8 +367,8 @@ symlink into it rather than copying (`session_workspace.py`).
    `sandbox_lifecycle.py:151`): best-effort opencode-history capture right
    before an unhealthy `RUNNING` sandbox is terminated for re-provisioning.
 4. **Manual API** (`POST /{session_id}/snapshot`,
-   `POST /{session_id}/opencode-history-snapshot`, §2): exist, but nothing in
-   the frontend calls the history endpoint today.
+   `POST /{session_id}/opencode-history-snapshot`, §2): the history endpoint
+   is a manual capture hook for tests and operators. No frontend code calls it.
 
 **What a session snapshot contains:** `sessions/$id/outputs/` and
 `sessions/$id/attachments/` only (`base.py:create_snapshot` docstring); `venv`,

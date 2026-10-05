@@ -147,14 +147,13 @@ runtime lookup `tool_constructor.py` uses for every persona-attached built-in to
 | Bash | `BashTool` : `tool_implementations/bash/bash_tool.py` | `bash` | Run a shell command in an isolated code-interpreter session. | `True` if `CODE_INTERPRETER_BASE_URL` is set, the server is enabled, its health check passes, and it `supports(...)` the session/bash routes (`bash_tool.py:is_available`). Not persona-attachable (see §5). |
 
 `KnowledgeGraphTool` (`tool_implementations/knowledge_graph/knowledge_graph_tool.py`)
-is present in `BUILT_IN_TOOL_MAP` (`built_in_tools.py`), so `get_built_in_tool_by_id`
-resolves it and `is_available` would be checked for it. But its dispatch branch in
-`tool_constructor.py:_construct_tools_impl` is commented out with
-`# TODO: disabling for now because it's broken in the refactor`, and the
-if/elif chain has no trailing `else`. A persona row with
-`in_code_tool_id="KnowledgeGraphTool"` therefore passes the availability check but
-is never added to `tool_dict`: it silently falls through the loop and can never
-actually run. Verified by grep; see the Verification section.
+belongs to the knowledge graph, an incomplete feature (see INDEX.md, Incomplete
+features). It is present in `BUILT_IN_TOOL_MAP` (`built_in_tools.py`), so
+`get_built_in_tool_by_id` resolves it and `is_available` is checked for it. Its
+`run` raises `NotImplementedError`, and its dispatch branch in
+`tool_constructor.py:_construct_tools_impl` is commented out. The if/elif chain has
+no trailing `else`, so a persona row with `in_code_tool_id="KnowledgeGraphTool"`
+passes the availability check but is never added to `tool_dict`.
 
 ### 4.4 Per-turn assembly: `tool_constructor.py`
 
@@ -383,10 +382,11 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 
 - **`MemoryTool` bypasses `allowed_tool_ids`.** A user who toggles off every tool
   for a message will still get memory writes if `user.enable_memory_tool` is set.
-- **`KnowledgeGraphTool` is dead code despite being registered.** It is present in
-  `BUILT_IN_TOOL_MAP`, but its `tool_constructor.py` dispatch branch is commented
-  out and there is no fallback branch, so it is silently never added to a turn's
-  tool set. Do not assume it runs because the class is in the map.
+- **`KnowledgeGraphTool` is registered but cannot run yet.** The knowledge graph is
+  an incomplete feature. The class is in `BUILT_IN_TOOL_MAP`, but its
+  `tool_constructor.py` dispatch branch is commented out and there is no fallback
+  branch, so it is never added to a turn's tool set. Do not assume it runs because
+  the class is in the map, and do not delete it as dead code.
 - **`BashTool` is never persisted and uses a sentinel id.** The coding agent
   constructs it directly with `BASH_TOOL_SENTINEL_ID = 0`
   (`fake_tools/coding_agent.py`), not through `tool_constructor.py`, and it cannot

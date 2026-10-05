@@ -124,16 +124,16 @@ own those.
         called from TWO sites:           │
                                           │
  (A) SearchTool.run(), search_tool.py:838 │  (B) search_chunks, search_runner.py:111
-     always slack_context=None            │      only when NOT pre-fetched by (A)
+     takes no slack_context               │      only when NOT pre-fetched by (A)
      prefetches once per run(), passes    │      (only the EE Search UI path,
      result into every non-Slack lane     │      ee/onyx/search/process_search_query.py,
      via prefetched_federated_retrieval_  │      calls search_pipeline with no
      infos (search_tool.py:587)           │      prefetched_federated_retrieval_infos)
-                                          │      also always slack_context=None
+                                          │      also takes no slack_context
                                           ▼
                    Inside get_federated_retrieval_functions:
-                   - slack_context branch: UNREACHABLE. No call site in the
-                     repo ever passes slack_context (grep confirms it).
+                   - the function takes no slack_context. Slack-bot
+                     federated search does not go through it.
                    - user_id branch: explicitly SKIPS any oauth_token whose
                      source == FEDERATED_SLACK ("Slack is handled separately
                      inside SearchTool", federated_retrieval.py).
@@ -158,27 +158,24 @@ own those.
 
 **This answers the central question.** The two mechanisms cannot both fetch
 Slack in one search, but not because of a deliberate cross-check gate between
-them: it is because `get_federated_retrieval_functions` hard-codes a skip for
-`FEDERATED_SLACK` in its non-bot branch (`federated_retrieval.py:
-"Skipping Slack federated connector in user OAuth path - handled by SearchTool"`),
-and its bot-context branch (the one place it *would* return a Slack retrieval
-function) is dead code: no call site anywhere in `backend/` passes
-`slack_context`, verified by `grep -rn "get_federated_retrieval_functions(" backend/onyx`
-showing only the two call sites above, neither with that argument. So today, for
-the only source that exists, the registry path always contributes `[]` and
-`_run_slack_search` is the sole Slack lane. This is closer to "no gate needed
-because one branch is unreachable" than "a gate that actively prevents
-duplication". If a future change starts passing `slack_context` into (A) or (B),
-or a second federated source is added whose oauth token is not explicitly
-skipped, the two mechanisms would both fire with no cross-check between them,
-and [[internal-search]]'s `combine_retrieval_results`
+them: it is because `get_federated_retrieval_functions` takes no `slack_context`
+and hard-codes a skip for `FEDERATED_SLACK` in its user-OAuth branch
+(`federated_retrieval.py:
+"Skipping Slack federated connector in user OAuth path - handled by SearchTool"`).
+Slack-bot federated search runs through `SearchTool`'s own Slack prefetch
+(`tools/tool_implementations/search/search_tool.py:_prefetch_slack_data`), which
+picks the bot's `user_token`, else its `bot_token`. So today, for the only
+source that exists, the registry path always contributes `[]` and
+`_run_slack_search` is the sole Slack lane. There is no cross-check gate between
+the two mechanisms. If a second federated source is added whose OAuth token is
+not explicitly skipped, or if the explicit `FEDERATED_SLACK` skip is removed,
+both mechanisms would fire. [[internal-search]]'s `combine_retrieval_results`
 (`context/search/retrieval/search_runner.py:combine_retrieval_results`) would
 only absorb a true double-fetch if both fetches assign the **same**
-`(document_id, chunk_id)` to the same message; Slack's `document_id` is derived
-per-message inside `slack_search.py`, not from a stable index-side ID, so two
-independently-run Slack fetches are not guaranteed to collide on
-`(document_id, chunk_id)` and would more likely appear as duplicate-content
-sections rather than be deduplicated. See §9.
+`(document_id, chunk_id)` to the same message. Slack's `document_id` is derived
+per message inside `slack_search.py`, not from a stable index-side ID. Two
+independent Slack fetches would more likely appear as duplicate-content
+sections than be deduplicated. See §9.
 
 ### 4.2 Per-user token resolution
 
@@ -204,9 +201,8 @@ whether `_run_slack_search` is added to the parallel lane list.
 
 ### 4.3 The document-set gate
 
-Both the bot-context path (`_prefetch_slack_data`) and the registry's bot-context
-branch (`federated_retrieval.py:get_federated_retrieval_functions`, unreachable
-today per §4.1) apply the same rule: **Slack federated search requires a
+The bot-context path in `SearchTool._prefetch_slack_data` applies this rule:
+**Slack federated search requires a
 `FEDERATED_SLACK` connector to be linked to one of the current persona's document
 sets, via `FederatedConnector__DocumentSet`.**
 
@@ -295,8 +291,7 @@ future source makes it non-empty) merge the same way, but arrive through
    other.
 6. **`get_federated_retrieval_functions`'s skip of `FEDERATED_SLACK` in the
    user-OAuth branch must stay in sync with `SearchTool`'s Slack handling.** If
-   `SearchTool` ever stops being the sole Slack caller, or the registry starts
-   being called with `slack_context` set, re-verify this document's §4.1
+   `SearchTool` ever stops being the sole Slack caller, or the registry gains a Slack-bot branch, re-verify this document's §4.1
    analysis: it currently holds only because of the specific call-site
    arguments observed in the code, not because of an explicit mutual-exclusion
    check between the two mechanisms.
@@ -353,7 +348,7 @@ future source makes it non-empty) merge the same way, but arrive through
 | If your change... | Also check |
 |---|---|
 | adds a new federated source (a second `FederatedConnectorSource` member) | implement every abstract method in `interfaces.py:FederatedConnector`; add it to `FEDERATED_CONNECTOR_CLASS_MAP` (`registry.py`); decide whether it needs a `SearchTool`-level dedicated lane like Slack or can rely purely on the registry path; if the latter, this is the first source that actually exercises `get_federated_retrieval_functions`'s user-OAuth branch in production, re-verify §4.1's dead-code claims still hold for the new source |
-| changes the lane assembly in `search_tool.py` (`run`, `_run_slack_search`, `_prefetch_slack_data`) | re-walk §4.1's call-site argument analysis; a change that starts passing `slack_context` into `get_federated_retrieval_functions`, or stops the explicit `FEDERATED_SLACK` skip, opens the double-fetch path this document currently rules out |
+| changes the lane assembly in `search_tool.py` (`run`, `_run_slack_search`, `_prefetch_slack_data`) | re-walk §4.1's call-site argument analysis; a change that adds a Slack-bot branch to `get_federated_retrieval_functions`, or stops the explicit `FEDERATED_SLACK` skip, opens the double-fetch path this document currently rules out |
 | changes token handling (`oauth_utils.py`, `db/federated.py`, `_prefetch_slack_data`) | the "no results on missing/expired token" contract (§5.2); the document-set gate (§5.4); whether refresh tokens are still silently discarded (§5.7) |
 | changes the document-set gate (`get_federated_connector_document_set_mappings_by_document_set_names`, `_prefetch_slack_data`'s document_set_names check) | both branches independently reimplement a version of this gate (bot-context in `search_tool.py`, bot-context in `federated_retrieval.py`); keep them in sync or delete the duplication |
 | changes `slack_search.py`'s chunk construction | [[citations]], since the citation pipeline assumes uniform `InferenceChunk` shape; also the entity-filter schema in `federated_connector.py:entities_schema`, which the admin form and this pipeline must agree on |
@@ -417,10 +412,9 @@ than launching Playwright ad hoc.
   for N sources, but only Slack has ever been implemented. Reading the registry
   code in isolation overstates how general the actual behavior is.
 - **The registry path returns `[]` for every call site that exists today.**
-  `get_federated_retrieval_functions`'s only branch that can return a non-empty
-  list for Slack (the `slack_context` bot branch) is never reached by any caller
-  in the repo; its other branch explicitly skips Slack. So despite looking like
-  "the" federated retrieval mechanism, it currently contributes nothing to any
+  `get_federated_retrieval_functions` takes no `slack_context`, and its
+  user-OAuth branch explicitly skips Slack. So despite looking like "the"
+  federated retrieval mechanism, it currently contributes nothing to any
   search. `_run_slack_search` inside `SearchTool` is the entire Slack federated
   search feature today. See §4.1.
 - **Two call sites of the same function do not mean two independent fetches.**

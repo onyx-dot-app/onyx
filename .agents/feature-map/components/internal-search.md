@@ -400,11 +400,8 @@ than launching Playwright ad hoc.
   should.
 - **`hybrid_alpha == 0.0` short-circuits to pure keyword retrieval**
   (`_keyword_search` in `search_runner.py`), skipping the embedding call
-  entirely. **The comment beside that branch is wrong.** It claims Vespa would
-  raise `NotImplementedError` on `keyword_retrieval`. Vespa implements
-  `keyword_retrieval` (`vespa_document_index.py:VespaDocumentIndex.keyword_retrieval`);
-  the method it does not implement is `semantic_retrieval`. Do not trust that
-  comment. See [[document-index]].
+  entirely.
+  See [[document-index]].
 - **An explicitly empty `source_type` list is a real answer, not a missing
   filter.** `SearchTool.run` treats `user_selected_filters.source_type == []`
   as "search nothing" and returns an empty response immediately, while `None`

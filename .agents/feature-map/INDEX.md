@@ -134,14 +134,15 @@ these components are the map into it.
 
 ---
 
-## Retired features
+## Incomplete features
 
-These have code in the tree but are not part of the product. Do not build on them,
-and do not treat their code as a live surface when reviewing a diff.
+These have code in the tree but do not work end to end yet. They are planned to
+return. Do not assume any part of them works, and keep the existing code in place
+when you clean up nearby code.
 
 | Feature | State |
 |---|---|
-| Knowledge graph | Removed from the product. `backend/onyx/kg/`, `db/entities.py`, `db/entity_type.py`, `db/relationships.py`, `db/kg_config.py` and `tools/tool_implementations/knowledge_graph/` still exist. `KnowledgeGraphTool` is in `BUILT_IN_TOOL_MAP`, but its branch in `tool_constructor.py:_construct_tools_impl` is commented out with "disabling for now because it's broken in the refactor", and the if/elif chain has no trailing `else`, so a persona referencing it silently gets no tool. See [[tools-framework]] §9. |
+| Knowledge graph | Incomplete. What exists: the `kg_*` tables, the `document.kg_stage` and `connector.kg_processing_enabled` columns, the config in the `kg_config` key-value row (`db/kg_config.py`), default entity types (`onyx/kg/setup/`), and the mounted admin API at `/admin/kg` (`server/kg/api.py`: `/exposed`, `/reset`, `/config`, `/entity-types`). Enabling it creates a "KG Beta" persona. What does not work: there is no extraction pipeline (no Celery task fills the tables), no admin page in `web/src`, and `KnowledgeGraphTool` cannot run. It is in `BUILT_IN_TOOL_MAP`, but `run` raises `NotImplementedError` and its branch in `tool_constructor.py:_construct_tools_impl` is commented out, so a persona that has it gets no KG tool. See [[tools-framework]] §9. |
 
 ## Admin panel coverage
 
@@ -161,7 +162,7 @@ Two traps when auditing this yourself:
   rewrite in `web/src/proxy.ts:EE_ROUTES`. Listing `web/src/app/admin/` alone misses
   theme, standard-answer, export-logs, performance, and groups.
 - A directory under `ee/admin/` that is **not** in `EE_ROUTES` is unreachable.
-  `ee/admin/billing/` is dead code; the live page is `web/src/app/admin/billing/`.
+  The billing page is `web/src/app/admin/billing/`.
 
 ## Unmapped code
 

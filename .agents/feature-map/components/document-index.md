@@ -279,8 +279,7 @@ Vespa implements the same three retrieval modes with YQL instead of OpenSearch D
 (`vespa_document_index.py:hybrid_retrieval`, `keyword_retrieval`). Verified in source:
 Vespa's `semantic_retrieval` raises `NotImplementedError`
 (`vespa_document_index.py:998`); `keyword_retrieval` is implemented there, using the
-`admin_search` ranking profile over `weakAnd(userInput(@query))`. See §9 for a
-discrepancy between this and an inline comment in `search_runner.py`.
+`admin_search` ranking profile over `weakAnd(userInput(@query))`.
 
 ### 4.4 The embedding-model swap state machine
 
@@ -503,12 +502,7 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
   the actual OpenSearch query; it does not, except at the `0.0` boundary.
 - **Vespa and OpenSearch are not symmetric on which method is unimplemented.**
   `VespaDocumentIndex.semantic_retrieval` raises `NotImplementedError`; its
-  `keyword_retrieval` is fully implemented. An inline comment in
-  `context/search/retrieval/search_runner.py` (near the `hybrid_alpha == 0.0` branch)
-  claims the opposite, that Vespa would raise `NotImplementedError` on
-  `keyword_retrieval`. That comment does not match the source as read for this
-  document; treat the comment as stale and the method bodies as the source of truth
-  if you touch this branch.
+  `keyword_retrieval` is fully implemented.
 - **Dual-write during a swap is easy to break silently.** Because
   `get_all_document_indices` and `get_default_document_index` return different
   numbers of indices (all-of vs. one pair), a refactor that consolidates them, or a

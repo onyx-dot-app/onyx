@@ -631,9 +631,6 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 
 ## 9. Footguns
 
-- **`backend/onyx/indexing/content_classification.py` is a genuinely empty file
-  (0 bytes) with no importers anywhere in the codebase.** There is no
-  content-classification step in the pipeline.
 - **The docfetching-to-docprocessing handoff is not `ChunkBatchStore`.** It is easy
   to conflate the two file-backed stores in this component: `DocumentBatchStorage`
   (file-store-backed, crosses the Celery task boundary, holds raw `Document`

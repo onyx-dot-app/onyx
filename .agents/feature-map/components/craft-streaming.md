@@ -339,7 +339,7 @@ missed."
 | changes the opencode-serve client (`OpencodeServeClient`) | both call sites, `send_message` (turn-owning) and `subscribe_to_opencode_session` (late-attach); the translator's `_TurnState` correlation logic; unit tests under `backend/tests/unit/onyx/server/features/craft/sandbox/test_translate_opencode_event.py` |
 | changes the interactive-turn lifecycle (claim, heartbeat, stale timeout) | `RUNNER_STALE_AFTER_SECONDS`/`INTERACTIVE_TURN_HARD_CAP_SECONDS` relationship in `timeouts.py`; the attach endpoint's `maybe_start_runner` retry throttle; scheduled-run's separate Celery-driven path in `session/manager.py`, which reuses the bus but not the runner claim |
 | adds a terminal/PTY-style channel | there is none today (§5.10); if built, follow the auth pattern in [[craft-webapp-proxy]]'s `current_user_from_websocket_cookie`, not a new scheme |
-| changes subagent (`task` tool) surfacing | `is_task_tool` synthetic-message branch in `persist_sandbox_event`; `subagentRouting.ts`'s `classifySubagentEvent`; the deferred `SubagentPanel` design in `docs/craft/ui/packet-rendering-overhaul.md` |
+| changes subagent (`task` tool) surfacing | `is_task_tool` synthetic-message branch in `persist_sandbox_event`; `subagentRouting.ts`'s `classifySubagentEvent`; `SubagentView.tsx`, `AgentSwitcher.tsx` and `useBuildSessionStore.ts:viewSubagent` on the web side |
 
 ---
 
@@ -410,13 +410,17 @@ work against the default Kubernetes backend, follow
   `/session`) that look like transport bugs but aren't.
 - **No terminal/PTY channel exists.** An old design note that mentions one
   describes an unbuilt branch; see §5.10.
-- **Sub-agent live view is designed but not built.** `subagentRouting.ts`
-  already classifies "child" vs "parent task" events, but there is no
-  dedicated sub-agent event-stream endpoint or `SubagentPanel`
-  (`docs/craft/ui/packet-rendering-overhaul.md`, issue 5 and §E "Deferred").
-  Today a completed `task` tool call only gets a synthetic final-answer
-  message spliced into the parent transcript (`persist_sandbox_event`'s
-  `is_task_tool` branch).
+- **The sub-agent view is a read-only transcript, not a live stream of its own.**
+  `web/src/app/craft/components/SubagentView.tsx` renders from `ChatPanel.tsx`
+  when `viewedSubagentSessionId` is set. `AgentSwitcher.tsx` sets it through
+  `useBuildSessionStore.ts:viewSubagent`. There is no dedicated sub-agent
+  event-stream endpoint. Child events arrive on the main turn stream.
+  `utils/subagentRouting.ts:classifySubagentEvent` splits them from the main
+  transcript. `useBuildStreaming.ts` (live path) and `useBuildSessionStore.ts`
+  (history reload) both use it, so the two paths agree. The view reuses
+  `BuildMessageList` and follows the run while the sub-agent status is `running`.
+  The main transcript still gets a synthetic final-answer message for a
+  completed `task` tool call (`persist_sandbox_event`'s `is_task_tool` branch).
 - **A stuck runner is only reclaimed after `RUNNER_STALE_AFTER_SECONDS` (six
   keepalive intervals, ~90s).** A rapid page reload during that window can
   make the attach endpoint wait rather than force a restart; this is

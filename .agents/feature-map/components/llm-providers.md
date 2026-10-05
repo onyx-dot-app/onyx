@@ -286,7 +286,7 @@ Explicit instrumentation:
 `tracing/flows.py:LLMFlow` enumerates every tagged flow: chat/agent flows
 (`CHAT_RESPONSE`, `CHAT_HISTORY_SUMMARIZATION`), secondary LLM flows (query
 rephrase, filter extraction, session naming), Craft (`CRAFT_LLM_GENERATION`),
-the gateway (`LLM_GATEWAY`), indexing (`CONTEXTUAL_RAG_*`), knowledge graph,
+the gateway (`LLM_GATEWAY`), indexing (`CONTEXTUAL_RAG_*`),
 image generation, voice (`STT`/`TTS`), and cross-process calls
 (`EMBED_QUERY`, `RERANK`).
 

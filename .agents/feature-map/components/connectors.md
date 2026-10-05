@@ -183,7 +183,6 @@ set in `backend/onyx/connectors/interfaces.py` is larger:
 | `CheckpointedConnectorWithPermSync` | `load_from_checkpoint_with_perm_sync` | Same call chain as above, selected by `ConnectorRunner` when `include_permissions=True`. |
 | `SlimConnector` | `retrieve_all_slim_docs` | Yes: `celery_utils.py:extract_ids_from_runnable_connector`, called from `backend/onyx/background/celery/tasks/pruning/tasks.py:connector_pruning_generator_task`, beat-scheduled via `check_for_pruning`. |
 | `SlimConnectorWithPermSync` | `retrieve_all_slim_docs_perm_sync` | Same pruning call chain, and consumed by EE permission-sync jobs. |
-| `EventConnector` | `handle_event` | **No.** `factory.py` only does an `isinstance` check at instantiation; nothing calls `handle_event`. The README's "currently not used" is still accurate. |
 | `Resolver` | `reindex` | Yes, but on demand, not beat-scheduled: `backend/onyx/background/indexing/run_targeted_reindex.py:process_targets_for_cc_pair`, reached from the admin-triggered `backend/onyx/background/celery/tasks/docprocessing/targeted_reindex_task.py`. Re-fetches specific documents named by stored `ConnectorFailure` rows. |
 | `HierarchyConnector` | `load_hierarchy` | Yes, beat-scheduled: `backend/onyx/background/celery/tasks/hierarchyfetching/tasks.py:_run_hierarchy_extraction`, gated by `_is_hierarchy_fetching_due`. |
 | `CredentialsConnector` | `set_credentials_provider` | Not a fetch flow; a marker interface `factory.py:instantiate_connector` checks to decide whether to call `load_credentials` or hand over a `CredentialsProviderInterface` (§4.3). |
@@ -514,8 +513,7 @@ lack of a key, ask instead. The shared helper
   There is no zero-count safety net (§5.5). A connector that catches a 401 and
   returns an empty generator will look, to pruning, exactly like "the source
   deleted everything."
-- **`EventConnector` is a real interface with zero call sites.** Implementing
-  it does nothing until a background job is written to drive `handle_event`.
+- **`InputType.EVENT` is rejected for every connector.** `factory.py` raises when a connector is built with `InputType.EVENT`, so no event-driven path exists.
 - **A missing `registry.py` entry only fails at first use**, not at import
   time or when the `DocumentSource` enum value is added, so a half-finished
   connector can sit invisible until someone tries to run it.

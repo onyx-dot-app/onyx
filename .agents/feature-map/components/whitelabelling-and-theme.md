@@ -330,13 +330,11 @@ exists for logo upload specifically.
 
 ## 9. Footguns
 
-- **`web/src/app/ee/admin/theme/` genuinely is the live page**, unlike the
-  equivalent-looking `web/src/app/ee/admin/billing/` directory, which is
-  dead code (see [[billing]] §9). The difference: `web/src/proxy.ts:EE_ROUTES`
+- **`web/src/app/ee/admin/theme/` is the live page.** `web/src/proxy.ts:EE_ROUTES`
   lists `"/admin/theme"` and rewrites it to `/ee/admin/theme`, and there is no
-  `web/src/app/admin/theme/` to shadow it. Do not assume the `ee/admin/*`
-  pattern is uniformly stale; check `EE_ROUTES` and whether a CE-tree sibling
-  exists before concluding either way for a given admin surface.
+  `web/src/app/admin/theme/` to shadow it. A directory under `ee/admin/` that is
+  not in `EE_ROUTES` is unreachable. Check `EE_ROUTES` and whether a CE-tree
+  sibling exists before you decide which copy of an admin surface runs.
 - **The rewrite only fires when `SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED`
   is true**, which (per `web/src/lib/constants.ts`) mirrors the backend's
   `LICENSE_ENFORCEMENT_ENABLED` default-true behavior described in

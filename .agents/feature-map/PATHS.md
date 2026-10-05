@@ -34,7 +34,7 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
 | `backend/onyx/tools/tool_implementations/search/`, `search_like_tool_utils.py` | internal-search, tools-framework |
 | `backend/onyx/tools/tool_implementations/web_search/`, `open_url/` | web-search |
-| `backend/onyx/tools/tool_implementations/knowledge_graph/` | **retired.** The knowledge graph is not part of the product. See INDEX.md, Retired features. |
+| `backend/onyx/tools/tool_implementations/knowledge_graph/` | **incomplete feature.** The knowledge graph tool cannot run yet. See INDEX.md, Incomplete features. |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
 | `backend/onyx/tools/tool_implementations/bash/`, `python/` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `custom/` | mcp-and-custom-tools |
@@ -57,7 +57,7 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py`, `db/permissions.py`, `db/scoped_permissions.py` | access-control |
 | `backend/onyx/db/document_set.py`, `db/user_group.py`, `server/features/document_set/` | access-control |
 | `backend/ee/onyx/external_permissions/`, `backend/onyx/db/permission_sync_attempt.py` | permission-sync |
-| `backend/onyx/kg/`, `backend/onyx/db/entities.py`, `db/entity_type.py`, `db/relationships.py`, `db/kg_config.py` | **retired.** Knowledge graph code with no live surface. See INDEX.md, Retired features. |
+| `backend/onyx/kg/`, `backend/onyx/db/entities.py`, `db/entity_type.py`, `db/relationships.py`, `db/kg_config.py`, `server/kg/` | **incomplete feature.** Knowledge graph storage, config and admin API; no extraction pipeline or UI yet. See INDEX.md, Incomplete features. |
 | `backend/onyx/federated_connectors/`, `backend/onyx/db/federated.py`, `server/federated/` | federated-search |
 | `backend/onyx/server/features/web_search/`, `server/manage/web_search/`, `db/web_search.py` | web-search |
 
@@ -160,7 +160,7 @@ so verify the callers rather than a single component.
 | `web/src/app/admin/bots/`, `admin/discord-bot/` | slack-bot, discord-bot |
 | `web/src/app/admin/sso-providers/`, `admin/security/`, `admin/oauth-test/` | auth-and-identity |
 | `web/src/app/admin/token-rate-limits/` | rate-and-usage-limits |
-| `web/src/app/ee/admin/` | **a second admin route tree**, reached by a rewrite. `web/src/proxy.ts:EE_ROUTES` lists the `/admin/*` paths that get rewritten to `/ee/admin/*`: groups, performance/usage, performance/analytics, performance/query-history, performance/custom-analytics, theme, standard-answer, export-logs, and agents/stats. A directory under `ee/admin/` that is **not** in `EE_ROUTES` is unreachable: `ee/admin/billing/` is dead code, and the live page is `web/src/app/admin/billing/`. Check `EE_ROUTES` before assuming which copy runs. |
+| `web/src/app/ee/admin/` | **a second admin route tree**, reached by a rewrite. `web/src/proxy.ts:EE_ROUTES` lists the `/admin/*` paths that get rewritten to `/ee/admin/*`: groups, performance/usage, performance/analytics, performance/query-history, performance/custom-analytics, theme, standard-answer, export-logs, and agents/stats. A directory under `ee/admin/` that is **not** in `EE_ROUTES` is unreachable. Check `EE_ROUTES` before assuming which copy runs. |
 | `web/src/lib/admin-routes.ts` | the authoritative list of admin routes. Changing it changes the admin panel's surface, so re-check coverage against this map. |
 | `web/src/app/admin/craft/` | craft-admin |
 | `web/src/app/admin/tracing/`, `admin/systeminfo/` | observability |

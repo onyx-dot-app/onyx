@@ -365,7 +365,7 @@ that point is not the message's original asker.
 - Slack as a **search source**: `backend/onyx/context/search/federated/slack_search.py`
   lets the chat loop's search tool query live Slack messages/channels as a
   retrieval source, gated by `_should_enable_slack_search` and
-  `slack_context`. This runs for *any* chat turn (web, API, or Slack bot) whose
+  `SearchTool`'s `slack_context`. This runs for *any* chat turn (web, API, or Slack bot) whose
   persona/filters select the Slack source, and requires a **federated Slack
   connector**, a separate config from `SlackBot`/`SlackChannelConfig`. The Slack
   *bot* (this document) is the inbound event listener that turns a Slack message
@@ -484,9 +484,11 @@ See `backend/AGENTS.md` for required env and secrets.
   retries them, but the process may still briefly act on a bot that no longer
   exists in the DB (guarded by `prefilter_requests`'s `slack_bot is None` check,
   which then drops the request).
-- **`user_token` is validated on every save but has no confirmed reader** in
-  this listener/handler tree; treat it as reserved, not as a token something
-  currently depends on, unless you find a consumer.
+- **`user_token` is validated on every save and feeds federated Slack search.**
+  `SearchTool._prefetch_slack_data` (`tools/tool_implementations/search/search_tool.py`)
+  prefers an enabled bot row that has a `user_token`. It then sets
+  `access_token = user_token or bot_token`. Federated Slack search uses the user
+  token when one is set.
 - **Standard-answer de-duplication is thread-scoped, not global**: the same
   standard answer can be given again in a different Slack thread even if a user
   already saw it elsewhere, because `used_standard_answer_ids` is computed from

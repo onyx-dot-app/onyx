@@ -355,12 +355,10 @@ used only when a pairing has no indexed documents; see §2). The real flow:
    before finishing.
 
 `db/deletion_attempt.py:check_deletion_attempt_is_allowed` (requires the pair
-be paused with no in-progress index attempt) is commented out as a delete
-gate in `administrative.py` ("background locking improvements" made it
-redundant there). It still has a live call site in
-`server/documents/connector.py:get_currently_failed_indexing_status`, which uses it
-to compute the `is_deletable` field the admin UI shows per connector. It no
-longer blocks the delete call itself; see §9.
+be paused with no in-progress index attempt) no longer gates deletion.
+It has one live call site, `server/documents/connector.py:get_currently_failed_indexing_status`,
+which uses it to compute the `is_deletable` field the admin UI shows per connector.
+It does not block the delete call; see §9.
 
 ---
 
@@ -526,10 +524,9 @@ Existing coverage worth reading before adding more:
   config knob in CE. Setting `ENCRYPTION_KEY_SECRET` in CE only produces a
   warning log; it does nothing.
 - **`check_deletion_attempt_is_allowed` (`db/deletion_attempt.py`) no longer
-  gates deletion.** Its call in `server/manage/administrative.py` is
-  commented out. It still runs from
-  `server/documents/connector.py:get_currently_failed_indexing_status`, but
-  only to compute the `is_deletable` display field; it does not block the
+  gates deletion.** It runs only from
+  `server/documents/connector.py:get_currently_failed_indexing_status`, to
+  compute the `is_deletable` display field. It does not block the
   delete call. The actual guard against deleting an actively-indexing
   cc-pair is the Redis-fenced `TaskDependencyError` retry loop in the Celery
   task.
