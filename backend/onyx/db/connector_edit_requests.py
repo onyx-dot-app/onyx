@@ -6,7 +6,7 @@ edit."""
 from datetime import datetime, timedelta
 
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
@@ -68,6 +68,29 @@ def _lock_cc_pair_for_request(
     return cc_pair
 
 
+def _restartable_attempts_select(cc_pair_id: int) -> Select[tuple[IndexAttempt]]:
+    """The pair's active attempts that run with its config. All search
+    settings and backfills too: they all run with the old config. The beat
+    recreates a FUTURE attempt by its own rules."""
+    return select(IndexAttempt).where(
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
+        IndexAttempt.status.in_(
+            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+        ),
+        # A targeted reindex fetches named documents, not the config's
+        # scope, and does not block the new attempt.
+        IndexAttempt.targeted_reindex_job_id.is_(None),
+    )
+
+
+def has_restartable_attempt(db_session: Session, cc_pair_id: int) -> bool:
+    """True when an edit applied now would restart an attempt of the pair."""
+    return (
+        db_session.scalar(select(_restartable_attempts_select(cc_pair_id).exists()))
+        is True
+    )
+
+
 def request_attempt_restart__no_commit(
     db_session: Session, cc_pair_id: int, indexing_mode: IndexingMode
 ) -> list[str]:
@@ -83,20 +106,8 @@ def request_attempt_restart__no_commit(
     if cc_pair.indexing_trigger != IndexingMode.REINDEX:
         cc_pair.indexing_trigger = indexing_mode
 
-    # All search settings and backfills too: they all run with the old config.
-    # The beat recreates a FUTURE attempt by its own rules.
     attempts = db_session.scalars(
-        select(IndexAttempt)
-        .where(
-            IndexAttempt.connector_credential_pair_id == cc_pair_id,
-            IndexAttempt.status.in_(
-                [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-            ),
-            # A targeted reindex fetches named documents, not the config's
-            # scope, and does not block the new attempt.
-            IndexAttempt.targeted_reindex_job_id.is_(None),
-        )
-        .with_for_update()
+        _restartable_attempts_select(cc_pair_id).with_for_update()
     ).all()
 
     task_ids: list[str] = []
