@@ -151,13 +151,19 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // card's whole life: it also holds off the box's own entrance on the
     // rows, which would otherwise replay the moment the attribute left.
     const [enter, setEnter] = useState<"forward" | "back" | null>(null);
-    // The card as the list closed. The view resets underneath the exit, so
-    // the list keeps showing this snapshot until it unmounts.
+    // The card and its place as the list closed. The view resets and the
+    // trigger may hide underneath the exit, so the list keeps showing this
+    // snapshot, where it was, until it unmounts.
     const [frozen, setFrozen] = useState<{
       key: string;
       props: CardProps;
+      styles: React.CSSProperties;
     } | null>(null);
-    const lastCardRef = useRef<{ key: string; props: CardProps } | null>(null);
+    const lastCardRef = useRef<{
+      key: string;
+      props: CardProps;
+      styles: React.CSSProperties;
+    } | null>(null);
     const lastViewKeyRef = useRef(viewKey);
     useLayoutEffect(() => {
       if (!isOpen) {
@@ -225,7 +231,11 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // What this commit shows, for the next view change to animate away.
     useLayoutEffect(() => {
       if (!isOpen) return;
-      lastCardRef.current = { key: viewKey, props: cardProps };
+      lastCardRef.current = {
+        key: viewKey,
+        props: cardProps,
+        styles: floatingStyles,
+      };
     });
 
     if (!presence.mounted || disabled || typeof document === "undefined") {
@@ -253,7 +263,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
         data-keyboard-nav={keyboardNav || undefined}
         onMouseMove={onMouseMove}
         className="opal-dropdown"
-        style={floatingStyles}
+        style={frozen?.styles ?? floatingStyles}
         onAnimationEnd={presence.onAnimationEnd}
         onMouseDown={(e) => {
           // Clicks on padding, gaps, or dividers must not steal focus from
