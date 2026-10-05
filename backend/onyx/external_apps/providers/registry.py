@@ -2,6 +2,7 @@ from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.custom_oauth import CustomOAuthConfig, CustomOAuthHandler
 from onyx.external_apps.models import (
     ActionPolicyView,
     BuiltInExternalAppDescriptor,
@@ -9,7 +10,12 @@ from onyx.external_apps.models import (
     OrgCredentialFieldDescriptor,
 )
 from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.base import ExternalAppProvider, OnyxManagedExtApp
+from onyx.external_apps.providers.base import (
+    ExternalAppProvider,
+    OAuthExternalAppProvider,
+    OAuthFlowHandler,
+    OnyxManagedExtApp,
+)
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
@@ -60,6 +66,21 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     None`` is the "is this app Onyx-managed" check)."""
     provider = PROVIDERS.get(app_type)
     return provider if isinstance(provider, OnyxManagedExtApp) else None
+
+
+def resolve_oauth_handler(app: ExternalApp) -> OAuthFlowHandler | None:
+    """The single predicate every OAuth touchpoint (start/callback routes, lazy
+    refresh, ``supports_oauth``) dispatches on: the registered provider for a
+    built-in OAuth ``app_type``, a config-driven handler for a CUSTOM app
+    carrying an ``oauth_config``, else ``None`` (static-credential app). A
+    stored config that doesn't validate raises — corruption is surfaced, not
+    masked as "non-OAuth app"."""
+    if app.app_type == ExternalAppType.CUSTOM:
+        if app.oauth_config is None:
+            return None
+        return CustomOAuthHandler(CustomOAuthConfig.model_validate(app.oauth_config))
+    provider = PROVIDERS.get(app.app_type)
+    return provider if isinstance(provider, OAuthExternalAppProvider) else None
 
 
 def uses_cloud_scope(app_type: ExternalAppType) -> bool:

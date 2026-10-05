@@ -1,7 +1,6 @@
 import base64
 import uuid
 from datetime import datetime, timezone
-from urllib.parse import urlencode
 
 import requests
 from fastapi import APIRouter, Depends
@@ -19,8 +18,8 @@ from onyx.db.external_app import (
 from onyx.db.models import ExternalApp, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.registry import get_provider_or_raise
+from onyx.external_apps.providers.base import OAuthFlowHandler
+from onyx.external_apps.providers.registry import resolve_oauth_handler
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.external_apps.models import (
@@ -58,20 +57,23 @@ def _oauth_client_credentials(app: ExternalApp) -> tuple[str, str]:
     return client_id, client_secret
 
 
-def _frontend_callback_url() -> str:
+def oauth_redirect_uri() -> str:
+    """The redirect URI every external-app OAuth flow uses (built-in and
+    custom). Admins register this with the third-party app; it's derived from
+    ``WEB_DOMAIN`` because the browser origin can differ (proxies, tunnels)."""
     return f"{WEB_DOMAIN}{_FRONTEND_CALLBACK_PATH}"
 
 
-def _oauth_provider_or_raise(app: ExternalApp) -> OAuthExternalAppProvider:
-    """Resolve the app's provider and assert it authenticates via OAuth, or
-    400. Only the OAuth subset of built-in providers can drive these routes."""
-    provider = get_provider_or_raise(app)
-    if not isinstance(provider, OAuthExternalAppProvider):
+def _oauth_handler_or_raise(app: ExternalApp) -> OAuthFlowHandler:
+    """Resolve the app's OAuth handler (built-in provider, or the config-driven
+    handler for a CUSTOM app with an ``oauth_config``), or 400."""
+    handler = resolve_oauth_handler(app)
+    if handler is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"App '{app.name}' does not use an OAuth flow.",
         )
-    return provider
+    return handler
 
 
 class _OAuthStateRecord(BaseModel):
@@ -98,7 +100,7 @@ def start_external_app_oauth(
             OnyxErrorCode.INVALID_INPUT,
             "This app is currently disabled by an admin.",
         )
-    provider = _oauth_provider_or_raise(app)
+    handler = _oauth_handler_or_raise(app)
     client_id, _client_secret = _oauth_client_credentials(app)
 
     oauth_uuid = uuid.uuid4()
@@ -113,21 +115,9 @@ def start_external_app_oauth(
         ex=_REDIS_STATE_TTL_SECONDS,
     )
 
-    redirect_uri = _frontend_callback_url()
-    oauth = provider.spec.oauth
-    params: dict[str, str] = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        oauth.scope_param: oauth.scope,
-        "state": state,
-        **oauth.extra_authorize_params,
-    }
-    # Set after extra_authorize_params so a provider can't clobber it.
-    if oauth.optional_scope:
-        params[oauth.optional_scope_param] = oauth.optional_scope
-    # urlencode so URI-shaped scopes (Google) get `:` and `/`
-    # percent-encoded.
-    authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"
+    authorize_url = handler.build_authorize_url(
+        client_id=client_id, redirect_uri=oauth_redirect_uri(), state=state
+    )
     return OAuthStartResponse(authorize_url=authorize_url)
 
 
@@ -175,13 +165,13 @@ def handle_external_app_oauth_callback(
             "This app is currently disabled by an admin.",
         )
 
-    provider = _oauth_provider_or_raise(app)
-    oauth = provider.spec.oauth
+    handler = _oauth_handler_or_raise(app)
+    oauth = handler.oauth
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
 
-    token_request = provider.build_token_exchange_request(
-        request.code, client_id, client_secret, _frontend_callback_url()
+    token_request = handler.build_token_exchange_request(
+        request.code, client_id, client_secret, oauth_redirect_uri()
     )
     try:
         response = requests.post(
@@ -217,7 +207,7 @@ def handle_external_app_oauth_callback(
             status_code_override=response.status_code,
         )
 
-    error = provider.classify_token_response(response, response_data)
+    error = handler.classify_token_response(response, response_data)
     if error:
         logger.warning(
             "%s OAuth token exchange failed for user %s, app %d: %s",
@@ -234,12 +224,12 @@ def handle_external_app_oauth_callback(
     # Stamp an absolute `expires_at` now so the lazy-refresh path can later
     # decide staleness without "when was this written" bookkeeping.
     stored_credentials = stamp_expires_at(
-        provider.extract_credentials(response_data), datetime.now(timezone.utc)
+        handler.extract_credentials(response_data), datetime.now(timezone.utc)
     )
 
     # The grant is authoritative and captured only here (a refresh can't change
     # it); None when the provider gives no signal.
-    granted_scopes = provider.extract_granted_scopes(response_data)
+    granted_scopes = handler.extract_granted_scopes(response_data)
 
     upsert_external_app_user_credential(
         db_session,

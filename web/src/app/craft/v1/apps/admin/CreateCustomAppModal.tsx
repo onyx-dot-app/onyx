@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import { useRouter } from "next/navigation";
@@ -14,10 +14,20 @@ import {
   Text,
   Tooltip,
 } from "@opal/components";
-import { InputKeyValue, InputList, type KeyValue } from "@opal/components";
-import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
+import {
+  InputKeyValue,
+  InputList,
+  InputSingleSelect,
+  type KeyValue,
+} from "@opal/components";
+import {
+  CustomOAuthConfig,
+  ExternalAppAdminResponse,
+  TokenEndpointAuthMethod,
+} from "@/app/craft/v1/apps/registry";
 import {
   createCustomExternalApp,
+  fetchExternalAppOAuthRedirectUri,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
 import AssociatedSkillsEditor from "@/app/craft/v1/apps/admin/AssociatedSkillsEditor";
@@ -54,6 +64,46 @@ function toRecord(items: KeyValue[]): Record<string, string> {
   return out;
 }
 
+type AuthMode = "static" | "oauth";
+
+/** Default header template for an OAuth app: the proxy injects the user's token. */
+const OAUTH_DEFAULT_HEADERS: KeyValue[] = [
+  { key: "Authorization", value: "Bearer {access_token}" },
+];
+
+interface OAuthFormState {
+  authorize_url: string;
+  token_url: string;
+  scopes: string[];
+  client_id: string;
+  client_secret: string;
+  token_endpoint_auth_method: TokenEndpointAuthMethod;
+}
+
+function oauthFormFromApp(
+  app: ExternalAppAdminResponse | null,
+): OAuthFormState {
+  const config = app?.oauth_config ?? null;
+  return {
+    authorize_url: config?.authorize_url ?? "",
+    token_url: config?.token_url ?? "",
+    scopes: config?.scopes ?? [],
+    client_id: app?.organization_credentials.client_id ?? "",
+    client_secret: app?.organization_credentials.client_secret ?? "",
+    token_endpoint_auth_method:
+      config?.token_endpoint_auth_method ?? "client_secret_post",
+  };
+}
+
+function toOAuthConfig(form: OAuthFormState): CustomOAuthConfig {
+  return {
+    authorize_url: form.authorize_url.trim(),
+    token_url: form.token_url.trim(),
+    scopes: form.scopes,
+    token_endpoint_auth_method: form.token_endpoint_auth_method,
+  };
+}
+
 /** Expand a record into editable rows, seeding one empty row when empty. */
 function toKeyValues(record: Record<string, string>): KeyValue[] {
   const entries = Object.entries(record).map(([key, value]) => ({
@@ -76,45 +126,100 @@ export default function CreateCustomAppModal({
   const focusNameOnMount = useFocusOnMount<HTMLInputElement>(!isEdit);
 
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
-    null
+    null,
   );
   const [name, setName] = useState(existingApp?.name ?? "");
   const [upstreamPatterns, setUpstreamPatterns] = useState<string[]>(
-    existingApp?.upstream_url_patterns ?? []
+    existingApp?.upstream_url_patterns ?? [],
   );
   const [headers, setHeaders] = useState<KeyValue[]>(
     existingApp
       ? toKeyValues(existingApp.auth_template)
-      : [{ key: "", value: "" }]
+      : [{ key: "", value: "" }],
   );
   const [orgCredentials, setOrgCredentials] = useState<KeyValue[]>(
     existingApp
       ? toKeyValues(existingApp.organization_credentials)
-      : [{ key: "", value: "" }]
+      : [{ key: "", value: "" }],
+  );
+  const [authMode, setAuthMode] = useState<AuthMode>(
+    existingApp?.oauth_config ? "oauth" : "static",
+  );
+  const [oauthForm, setOAuthForm] = useState<OAuthFormState>(() =>
+    oauthFormFromApp(existingApp),
+  );
+  const [redirectUri, setRedirectUri] = useState<string | null>(
+    existingApp?.oauth_redirect_uri ?? null,
   );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] =
     useSyncedAssociatedSkillIds(existingApp);
   const upload = useSkillUploadModal();
+  const isOAuth = authMode === "oauth";
+
+  // The redirect URI is server-derived (WEB_DOMAIN); fetch it once the admin
+  // picks OAuth so they can register it with the third-party app.
+  useEffect(() => {
+    if (!isOAuth || redirectUri !== null) return;
+    let cancelled = false;
+    fetchExternalAppOAuthRedirectUri()
+      .then((uri) => {
+        if (!cancelled) setRedirectUri(uri);
+      })
+      .catch(() => {
+        /* non-blocking: the URI is informational */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOAuth, redirectUri]);
+
+  function switchAuthMode(mode: AuthMode) {
+    setAuthMode(mode);
+    // Seed the Bearer template when switching to OAuth over an empty form.
+    if (mode === "oauth" && Object.keys(toRecord(headers)).length === 0) {
+      setHeaders(OAUTH_DEFAULT_HEADERS);
+    }
+  }
+
+  /** Org credentials as sent: the key-value rows, plus the OAuth client pair. */
+  function effectiveOrgCredentials(): Record<string, string> {
+    const base = toRecord(orgCredentials);
+    if (!isOAuth) return base;
+    return {
+      ...base,
+      client_id: oauthForm.client_id.trim(),
+      client_secret: oauthForm.client_secret,
+    };
+  }
+  /** The oauth_config to send: the config, or null to clear it on edit. */
+  const effectiveOAuthConfig: CustomOAuthConfig | null = isOAuth
+    ? toOAuthConfig(oauthForm)
+    : null;
 
   const associationDirty =
     existingApp !== null &&
     !isEqual(
       new Set(selectedSkillIds),
-      new Set(existingApp.associated_skills.map((skill) => skill.id))
+      new Set(existingApp.associated_skills.map((skill) => skill.id)),
     );
   const configDirty = existingApp
     ? name !== existingApp.name ||
       associationDirty ||
       !isEqual(upstreamPatterns, existingApp.upstream_url_patterns) ||
       !isEqual(toRecord(headers), existingApp.auth_template) ||
-      !isEqual(toRecord(orgCredentials), existingApp.organization_credentials)
+      !isEqual(
+        effectiveOrgCredentials(),
+        existingApp.organization_credentials,
+      ) ||
+      !isEqual(effectiveOAuthConfig, existingApp.oauth_config)
     : Boolean(
         name ||
         upstreamPatterns.length ||
         Object.keys(toRecord(headers)).length ||
-        Object.keys(toRecord(orgCredentials)).length
+        Object.keys(toRecord(orgCredentials)).length ||
+        isOAuth,
       );
   const unsavedChanges = useUnsavedChangesGuard({
     isDirty: createdApp === null && configDirty,
@@ -130,6 +235,14 @@ export default function CreateCustomAppModal({
     }
     if (upstreamPatterns.length === 0) {
       return t("disabled.patternMissing");
+    }
+    if (isOAuth) {
+      if (!oauthForm.authorize_url.trim() || !oauthForm.token_url.trim()) {
+        return t("disabled.oauthUrlsMissing");
+      }
+      if (!oauthForm.client_id.trim() || !oauthForm.client_secret) {
+        return t("disabled.oauthClientMissing");
+      }
     }
     return null;
   })();
@@ -154,7 +267,11 @@ export default function CreateCustomAppModal({
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
-          organization_credentials: toRecord(orgCredentials),
+          organization_credentials: effectiveOrgCredentials(),
+          // Omit when unchanged; explicit null clears a previous OAuth config.
+          ...(isEqual(effectiveOAuthConfig, existingApp.oauth_config)
+            ? {}
+            : { oauth_config: effectiveOAuthConfig }),
           associated_skill_ids: associationDirty ? selectedSkillIds : undefined,
         });
         onSaved();
@@ -164,7 +281,10 @@ export default function CreateCustomAppModal({
           name: name.trim(),
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
-          organization_credentials: toRecord(orgCredentials),
+          organization_credentials: effectiveOrgCredentials(),
+          ...(effectiveOAuthConfig
+            ? { oauth_config: effectiveOAuthConfig }
+            : {}),
         });
         setCreatedApp(created);
         onSaved();
@@ -183,16 +303,16 @@ export default function CreateCustomAppModal({
       router.push(
         skillEditorUrlForApp(
           existingApp,
-          draft ? stageSkillCreationDraft(draft) : undefined
-        )
-      )
+          draft ? stageSkillCreationDraft(draft) : undefined,
+        ),
+      ),
     );
   }
 
   function openExistingSkill(skillId: string) {
     if (!existingApp) return;
     unsavedChanges.requestLeave(() =>
-      router.push(skillEditUrlForApp(skillId, existingApp))
+      router.push(skillEditUrlForApp(skillId, existingApp)),
     );
   }
 
@@ -257,7 +377,7 @@ export default function CreateCustomAppModal({
               preserveDraftOnContinue
               validateDraft={(draft) =>
                 existingApp.associated_skills.some(
-                  (skill) => skill.name === draft.contents.name
+                  (skill) => skill.name === draft.contents.name,
                 )
                   ? tApps("errors.duplicateSkillName", {
                       appName: existingApp.name,
@@ -310,6 +430,151 @@ export default function CreateCustomAppModal({
                 </div>
 
                 <div className="flex flex-col gap-1">
+                  <Text font="main-ui-action">
+                    {t("fields.authMode.label")}
+                  </Text>
+                  <Text font="secondary-body" color="text-03">
+                    {t("fields.authMode.description")}
+                  </Text>
+                  <InputSingleSelect
+                    value={authMode}
+                    onValueChange={(value) => {
+                      if (value === "static" || value === "oauth") {
+                        switchAuthMode(value);
+                      }
+                    }}
+                    placeholder={t("fields.authMode.label")}
+                    options={[
+                      { value: "static", title: t("fields.authMode.static") },
+                      { value: "oauth", title: t("fields.authMode.oauth") },
+                    ]}
+                  />
+                </div>
+
+                {isOAuth && (
+                  <div
+                    className="flex flex-col gap-3"
+                    data-testid="custom-app-oauth-fields"
+                  >
+                    {redirectUri && (
+                      <MessageCard
+                        outerPadding={1}
+                        innerPadding={1}
+                        variant="info"
+                        title={t("fields.oauth.redirectUri.label")}
+                        description={t("fields.oauth.redirectUri.description", {
+                          uri: redirectUri,
+                        })}
+                      />
+                    )}
+                    <div className="flex flex-col gap-1">
+                      <Text font="main-ui-action">
+                        {t("fields.oauth.authorizeUrl.label")}
+                      </Text>
+                      <InputTypeIn
+                        value={oauthForm.authorize_url}
+                        onChange={(e) =>
+                          setOAuthForm({
+                            ...oauthForm,
+                            authorize_url: e.target.value,
+                          })
+                        }
+                        placeholder="https://example.com/oauth/authorize"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Text font="main-ui-action">
+                        {t("fields.oauth.tokenUrl.label")}
+                      </Text>
+                      <InputTypeIn
+                        value={oauthForm.token_url}
+                        onChange={(e) =>
+                          setOAuthForm({
+                            ...oauthForm,
+                            token_url: e.target.value,
+                          })
+                        }
+                        placeholder="https://example.com/oauth/token"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Text font="main-ui-action">
+                        {t("fields.oauth.clientId.label")}
+                      </Text>
+                      <InputTypeIn
+                        value={oauthForm.client_id}
+                        onChange={(e) =>
+                          setOAuthForm({
+                            ...oauthForm,
+                            client_id: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Text font="main-ui-action">
+                        {t("fields.oauth.clientSecret.label")}
+                      </Text>
+                      <InputTypeIn
+                        type="password"
+                        value={oauthForm.client_secret}
+                        onChange={(e) =>
+                          setOAuthForm({
+                            ...oauthForm,
+                            client_secret: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Text font="main-ui-action">
+                        {t("fields.oauth.scopes.label")}
+                      </Text>
+                      <Text font="secondary-body" color="text-03">
+                        {t("fields.oauth.scopes.description")}
+                      </Text>
+                      <InputList
+                        values={oauthForm.scopes}
+                        onChange={(scopes) =>
+                          setOAuthForm({ ...oauthForm, scopes })
+                        }
+                        placeholder="read:user"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Text font="main-ui-action">
+                        {t("fields.oauth.tokenAuthMethod.label")}
+                      </Text>
+                      <InputSingleSelect
+                        value={oauthForm.token_endpoint_auth_method}
+                        onValueChange={(value) => {
+                          if (
+                            value === "client_secret_post" ||
+                            value === "client_secret_basic"
+                          ) {
+                            setOAuthForm({
+                              ...oauthForm,
+                              token_endpoint_auth_method: value,
+                            });
+                          }
+                        }}
+                        placeholder={t("fields.oauth.tokenAuthMethod.label")}
+                        options={[
+                          {
+                            value: "client_secret_post",
+                            title: t("fields.oauth.tokenAuthMethod.post"),
+                          },
+                          {
+                            value: "client_secret_basic",
+                            title: t("fields.oauth.tokenAuthMethod.basic"),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1">
                   <Text font="main-ui-action">{t("fields.headers.label")}</Text>
                   <Text font="secondary-body" color="text-03">
                     {t("fields.headers.description")}
@@ -318,7 +583,9 @@ export default function CreateCustomAppModal({
                     keyTitle={t("fields.headers.keyTitle")}
                     valueTitle={t("fields.headers.valueTitle")}
                     keyPlaceholder="Authorization"
-                    valuePlaceholder="Bearer {api_key}"
+                    valuePlaceholder={
+                      isOAuth ? "Bearer {access_token}" : "Bearer {api_key}"
+                    }
                     items={headers}
                     onChange={setHeaders}
                     mode="line"

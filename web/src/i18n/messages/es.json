@@ -11948,6 +11948,8 @@
         "creatingButton": "Creando…",
         "disabled": {
           "nameMissing": "Escribe un nombre antes de crear esta app personalizada.",
+          "oauthClientMissing": "Enter the OAuth client ID and client secret.",
+          "oauthUrlsMissing": "Enter the OAuth authorize URL and token URL.",
           "patternMissing": "Añade al menos un patrón de URL de destino. Escribe un patrón y pulsa Intro.",
           "pristine": "Haz un cambio antes de guardar.",
           "saving": "Ya hay un guardado en curso."
@@ -11958,6 +11960,12 @@
           "saveFailedTitle": "No se pudo guardar"
         },
         "fields": {
+          "authMode": {
+            "description": "How users authenticate with this app.",
+            "label": "Authentication",
+            "oauth": "OAuth 2.0 — each user connects their own account",
+            "static": "Static credentials — API keys or tokens"
+          },
           "headers": {
             "addButton": "Añadir encabezado",
             "description": "Opcional: encabezados inyectados en las solicitudes salientes. Usa '{placeholder}' para los valores que aporta el usuario (o la organización abajo), p. ej., \"Bearer '{api_key}'\". Déjalo vacío para permitir los patrones de destino sin inyectar credenciales.",
@@ -11968,6 +11976,33 @@
           "name": {
             "label": "Nombre",
             "placeholder": "Mi app personalizada"
+          },
+          "oauth": {
+            "authorizeUrl": {
+              "label": "Authorize URL"
+            },
+            "clientId": {
+              "label": "Client ID"
+            },
+            "clientSecret": {
+              "label": "Client secret"
+            },
+            "redirectUri": {
+              "description": "Register this redirect URL in the third-party app's OAuth settings: {uri}",
+              "label": "Redirect URL"
+            },
+            "scopes": {
+              "description": "Scopes to request. Type a scope and press Enter. Leave empty to use the provider's defaults.",
+              "label": "Scopes"
+            },
+            "tokenAuthMethod": {
+              "basic": "HTTP Basic authorization header",
+              "label": "Token endpoint client authentication",
+              "post": "Client credentials in request body (default)"
+            },
+            "tokenUrl": {
+              "label": "Token URL"
+            }
           },
           "orgCredentials": {
             "addButton": "Añadir credencial",

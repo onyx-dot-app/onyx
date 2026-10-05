@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -32,17 +33,20 @@ from onyx.db.external_app import (
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.utils import UNSET, none_as_unset
+from onyx.db.utils import UNSET, UnsetType, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.custom_oauth import (
+    CustomOAuthConfig,
+    validate_custom_oauth_app,
+)
 from onyx.external_apps.models import BuiltInExternalAppDescriptor
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import (
     action_policy_views,
     fetch_available_built_in_apps,
     get_onyx_managed_provider,
-    get_provider_for_app,
     resolve_action_overrides,
+    resolve_oauth_handler,
 )
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.server.features.build import connect_app
@@ -55,9 +59,11 @@ from onyx.server.features.build.external_apps.models import (
     ExternalAppAdminResponse,
     ExternalAppAssociatedSkill,
     ExternalAppUserResponse,
+    OAuthRedirectUriResponse,
     UpdateExternalAppRequest,
     UpsertUserCredentialsRequest,
 )
+from onyx.server.features.build.external_apps.oauth import oauth_redirect_uri
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
 from onyx.utils.encryption import mask_string
@@ -86,6 +92,13 @@ def _to_admin_response(
 ) -> ExternalAppAdminResponse:
     # ``stored`` is the app's per-action policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
+    # `is not None`, not truthiness: a corrupt falsy value (`{}`) must raise
+    # here, not render as "no OAuth config".
+    oauth_config = (
+        CustomOAuthConfig.model_validate(app.oauth_config)
+        if app.oauth_config is not None
+        else None
+    )
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.name,
@@ -114,6 +127,10 @@ def _to_admin_response(
             )
         ],
         is_onyx_managed=managed,
+        oauth_config=oauth_config,
+        oauth_redirect_uri=(
+            oauth_redirect_uri() if resolve_oauth_handler(app) is not None else None
+        ),
     )
 
 
@@ -146,7 +163,9 @@ def _to_user_response(
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
-        supports_oauth=isinstance(get_provider_for_app(app), OAuthExternalAppProvider),
+        # Same predicate the OAuth routes dispatch on, so the FE can't drift:
+        # built-in OAuth providers and CUSTOM apps with an `oauth_config`.
+        supports_oauth=resolve_oauth_handler(app) is not None,
     )
 
 
@@ -224,6 +243,50 @@ def update_external_app_admin(
         for pattern in request.upstream_url_patterns:
             UrlGlob.parse(pattern)
 
+    # oauth_config: omitted → untouched; explicit null → clear. Non-null is
+    # CUSTOM-only; null on a built-in is a no-op (already NULL, and full-body
+    # clients send it routinely).
+    oauth_config_update: dict[str, Any] | None | UnsetType = UNSET
+    if "oauth_config" in request.model_fields_set:
+        if request.oauth_config is not None and app.app_type != ExternalAppType.CUSTOM:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "oauth_config applies only to custom apps; a built-in app's "
+                "OAuth flow comes from its provider.",
+            )
+        if app.app_type == ExternalAppType.CUSTOM:
+            oauth_config_update = (
+                request.oauth_config.model_dump(mode="json")
+                if request.oauth_config is not None
+                else None
+            )
+
+    # Cross-validate the auth template / org creds against the auth method the
+    # app will have *after* this update (only keys matter, so masked org creds
+    # are fine).
+    if app.app_type == ExternalAppType.CUSTOM:
+        will_have_oauth = (
+            request.oauth_config is not None
+            if "oauth_config" in request.model_fields_set
+            else app.oauth_config is not None
+        )
+        if will_have_oauth:
+            effective_template = (
+                request.auth_template
+                if request.auth_template is not None
+                else app.auth_template
+            )
+            effective_org_creds = (
+                request.organization_credentials
+                if request.organization_credentials is not None
+                else app.organization_credentials.get_value(apply_mask=True)
+            )
+            validate_auth_template(effective_template, effective_org_creds)
+            validate_custom_oauth_app(
+                effective_org_creds,
+                placeholders=placeholders_in_template(effective_template),
+            )
+
     action_policies = resolve_action_overrides(
         app.app_type,
         request.action_policies,
@@ -247,6 +310,7 @@ def update_external_app_admin(
             UNSET if managed else none_as_unset(request.organization_credentials)
         ),
         action_policies=action_policies,
+        oauth_config=oauth_config_update,
     )
     if request.associated_skill_ids is not None:
         affected_skills_by_id.update(
@@ -296,6 +360,11 @@ def create_custom_external_app(
     for pattern in request.upstream_url_patterns:
         UrlGlob.parse(pattern)
     validate_auth_template(request.auth_template, request.organization_credentials)
+    if request.oauth_config is not None:
+        validate_custom_oauth_app(
+            request.organization_credentials,
+            placeholders=placeholders_in_template(request.auth_template),
+        )
 
     app = create_external_app(
         db_session=db_session,
@@ -304,6 +373,11 @@ def create_custom_external_app(
         upstream_url_patterns=request.upstream_url_patterns,
         auth_template=request.auth_template,
         organization_credentials=request.organization_credentials,
+        oauth_config=(
+            request.oauth_config.model_dump(mode="json")
+            if request.oauth_config is not None
+            else None
+        ),
     )
     db_session.commit()
 
@@ -326,6 +400,16 @@ def list_external_apps_admin(
         )
         for app in apps
     ]
+
+
+@admin_router.get("/apps/oauth/redirect-uri")
+def get_external_app_oauth_redirect_uri(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> OAuthRedirectUriResponse:
+    """The redirect URI to register with a third-party OAuth app (the same
+    callback route every built-in provider uses), so an admin can configure
+    the provider side before creating a custom OAuth app."""
+    return OAuthRedirectUriResponse(redirect_uri=oauth_redirect_uri())
 
 
 @admin_router.get("/apps/built-in/options")

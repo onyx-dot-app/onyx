@@ -11948,6 +11948,8 @@
         "creatingButton": "正在创建…",
         "disabled": {
           "nameMissing": "创建此自定义应用前请输入名称。",
+          "oauthClientMissing": "Enter the OAuth client ID and client secret.",
+          "oauthUrlsMissing": "Enter the OAuth authorize URL and token URL.",
           "patternMissing": "请至少添加一个上游 URL 模式。输入模式后按回车键。",
           "pristine": "请先进行更改再保存。",
           "saving": "保存已在进行中。"
@@ -11958,6 +11960,12 @@
           "saveFailedTitle": "无法保存"
         },
         "fields": {
+          "authMode": {
+            "description": "How users authenticate with this app.",
+            "label": "Authentication",
+            "oauth": "OAuth 2.0 — each user connects their own account",
+            "static": "Static credentials — API keys or tokens"
+          },
           "headers": {
             "addButton": "添加标头",
             "description": "可选。注入到出站请求中的标头。使用 '{placeholder}' 表示由用户（或下方的组织）提供的值，例如 \"Bearer '{api_key}'\"。留空则仅将上游模式加入允许列表而不注入凭据。",
@@ -11968,6 +11976,33 @@
           "name": {
             "label": "名称",
             "placeholder": "我的自定义应用"
+          },
+          "oauth": {
+            "authorizeUrl": {
+              "label": "Authorize URL"
+            },
+            "clientId": {
+              "label": "Client ID"
+            },
+            "clientSecret": {
+              "label": "Client secret"
+            },
+            "redirectUri": {
+              "description": "Register this redirect URL in the third-party app's OAuth settings: {uri}",
+              "label": "Redirect URL"
+            },
+            "scopes": {
+              "description": "Scopes to request. Type a scope and press Enter. Leave empty to use the provider's defaults.",
+              "label": "Scopes"
+            },
+            "tokenAuthMethod": {
+              "basic": "HTTP Basic authorization header",
+              "label": "Token endpoint client authentication",
+              "post": "Client credentials in request body (default)"
+            },
+            "tokenUrl": {
+              "label": "Token URL"
+            }
           },
           "orgCredentials": {
             "addButton": "添加凭据",

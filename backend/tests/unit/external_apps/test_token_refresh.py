@@ -277,7 +277,7 @@ def _setup(
     monkeypatch.setattr(tr, "redis_shared_lock", _noop_cm)
     monkeypatch.setattr(tr, "get_session_with_tenant", _noop_cm)
     monkeypatch.setattr(tr, "get_external_app_by_id", lambda *_a, **_k: app)
-    monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: provider)
+    monkeypatch.setattr(tr, "resolve_oauth_handler", lambda *_a, **_k: provider)
     monkeypatch.setattr(
         tr,
         "get_external_app_user_credential",
@@ -410,7 +410,7 @@ def test_ensure_fresh_noop_for_non_oauth_app(monkeypatch: pytest.MonkeyPatch) ->
     # Stale creds pass the pre-check, but a non-OAuth provider has no refresh
     # flow → bail under the lock, no refresh/upsert.
     spies = _setup(monkeypatch, creds_sequence=[_stale_creds(), _stale_creds()])
-    monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: None)
+    monkeypatch.setattr(tr, "resolve_oauth_handler", lambda *_a, **_k: None)
     _run()
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()

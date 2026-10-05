@@ -53,6 +53,8 @@ const APP: ExternalAppAdminResponse = {
   actions: [],
   associated_skills: [],
   is_onyx_managed: false,
+  oauth_config: null,
+  oauth_redirect_uri: null,
 };
 
 const SLACK_DESCRIPTOR: BuiltInExternalAppDescriptor = {
@@ -135,7 +137,7 @@ describe("ExternalAppsPage", () => {
     mockMutateApps.mockReturnValue(
       new Promise<void>((resolve) => {
         finishRefresh = resolve;
-      })
+      }),
     );
 
     render(<ExternalAppsPage />);
@@ -148,7 +150,7 @@ describe("ExternalAppsPage", () => {
     });
     expect(appSwitch()).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Custom app actions" })
+      screen.getByRole("button", { name: "Custom app actions" }),
     ).toBeDisabled();
 
     await act(async () => finishRefresh?.());
@@ -168,8 +170,8 @@ describe("ExternalAppsPage", () => {
     expect(screen.getByText("Custom")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "0 upstream patterns · no credentials · no custom skills"
-      )
+        "0 upstream patterns · no credentials · no custom skills",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/12 tools/)).not.toBeInTheDocument();
 
@@ -201,13 +203,13 @@ describe("ExternalAppsPage", () => {
     const { rerender } = render(<ExternalAppsPage />);
     expect(screen.getByRole("tab", { name: "Apps · 1" })).toHaveAttribute(
       "aria-selected",
-      "true"
+      "true",
     );
 
     mockSearchParams = new URLSearchParams({ tab: "mcp" });
     rerender(<ExternalAppsPage />);
     expect(
-      screen.getByRole("tab", { name: "MCP servers · 0" })
+      screen.getByRole("tab", { name: "MCP servers · 0" }),
     ).toHaveAttribute("aria-selected", "true");
   });
 
@@ -252,14 +254,14 @@ describe("ExternalAppsPage", () => {
 
     expect(
       screen.getByText(
-        "2 associated custom skills will be kept, unlinked from this app, and disabled for everyone."
-      )
+        "2 associated custom skills will be kept, unlinked from this app, and disabled for everyone.",
+      ),
     ).toBeInTheDocument();
     expect(externalAppsService.deleteExternalApp).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Delete app" }));
     await waitFor(() =>
-      expect(externalAppsService.deleteExternalApp).toHaveBeenCalledWith(1)
+      expect(externalAppsService.deleteExternalApp).toHaveBeenCalledWith(1),
     );
   });
 

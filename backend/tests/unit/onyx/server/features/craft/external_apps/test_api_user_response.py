@@ -24,6 +24,7 @@ def _external_app(
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
+    oauth_config: dict[str, Any] | None = None,
 ) -> ExternalApp:
     return cast(
         ExternalApp,
@@ -33,6 +34,7 @@ def _external_app(
             app_type=app_type,
             auth_template=auth_template,
             organization_credentials=_sensitive_dict(organization_credentials),
+            oauth_config=oauth_config,
         ),
     )
 
@@ -115,3 +117,26 @@ def test_user_response_uses_raw_presence_for_authentication() -> None:
     assert response.credential_values == {
         "access_token": mask_string("USER_ACCESS_TOKEN")
     }
+
+
+def test_user_response_supports_oauth_for_custom_app_with_oauth_config() -> None:
+    org = {"client_id": "cid", "client_secret": "sec"}
+    template = {"Authorization": "Bearer {access_token}"}
+    oauth_config = {
+        "authorize_url": "https://auth.example.com/authorize",
+        "token_url": "https://auth.example.com/token",
+        "scopes": ["read"],
+    }
+    static_app = _external_app(auth_template=template, organization_credentials=org)
+    oauth_app = _external_app(
+        auth_template=template,
+        organization_credentials=org,
+        oauth_config=oauth_config,
+    )
+
+    assert _to_user_response(static_app, None).supports_oauth is False
+    response = _to_user_response(oauth_app, None)
+    assert response.supports_oauth is True
+    # The OAuth flow fills `access_token`; until then the user isn't connected.
+    assert response.credential_keys == ["access_token"]
+    assert response.authenticated is False

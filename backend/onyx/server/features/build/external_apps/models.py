@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.external_apps.custom_oauth import CustomOAuthConfig
 from onyx.external_apps.models import ActionPolicyView
 from onyx.server.features.build.connect_app import ConnectAppDecision
 
@@ -33,12 +34,20 @@ class CreateBuiltInExternalAppRequest(BaseModel):
 
 
 class CreateCustomExternalAppRequest(BaseModel):
-    """Create a custom external-app gateway without creating skill content."""
+    """Create a custom external-app gateway without creating skill content.
+
+    ``oauth_config`` (optional) makes the app authenticate users via an
+    admin-defined OAuth 2.0 authorization-code flow instead of manually
+    entered credentials. The OAuth ``client_id`` / ``client_secret`` ride in
+    ``organization_credentials`` (stored encrypted) and ``auth_template`` must
+    reference ``{access_token}``.
+    """
 
     name: str
     upstream_url_patterns: list[str]
     auth_template: dict[str, str]
     organization_credentials: dict[str, str]
+    oauth_config: CustomOAuthConfig | None = None
 
 
 class UpdateExternalAppRequest(BaseModel):
@@ -62,6 +71,10 @@ class UpdateExternalAppRequest(BaseModel):
     associated_skill_ids: list[UUID] | None = None
     # Full-replace stored overrides when present (empty clears); None leaves them.
     action_policies: dict[str, EndpointPolicy] | None = None
+    # CUSTOM apps only. Unlike the fields above, explicit null clears the
+    # config (back to static credentials); the route distinguishes omitted vs
+    # null via `model_fields_set`.
+    oauth_config: CustomOAuthConfig | None = None
 
 
 class ExternalAppAssociatedSkill(BaseModel):
@@ -88,6 +101,20 @@ class ExternalAppAdminResponse(BaseModel):
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
     # admin may only set availability and policies. UI hides the rest.
     is_onyx_managed: bool = False
+    # Admin-defined OAuth flow for CUSTOM apps (holds no secrets); None for
+    # static-credential custom apps and all built-ins.
+    oauth_config: CustomOAuthConfig | None = None
+    # The redirect URI to register with the third-party OAuth app. Present for
+    # every app that authenticates via OAuth (built-in or custom).
+    oauth_redirect_uri: str | None = None
+
+
+class OAuthRedirectUriResponse(BaseModel):
+    """The redirect URI the OAuth flow sends, derived from WEB_DOMAIN — the
+    browser origin can differ (proxies, tunnels). Admins paste it into the
+    third-party app's settings before saving a custom OAuth app."""
+
+    redirect_uri: str
 
 
 class UpsertUserCredentialsRequest(BaseModel):
