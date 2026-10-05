@@ -33,13 +33,13 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CredentialCapabilityReport,
     NamedCheckRun,
-    compute_connector_config_hash,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
     generate_capability_report,
     merge_capability_results,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP

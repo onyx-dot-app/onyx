@@ -2561,6 +2561,11 @@ class IndexAttempt(Base):
     # Points to the last checkpoint that was saved for this run. The pointer here
     # can be taken to the FileStore to grab the actual checkpoint value
     checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
+    # sha256 of the connector config this attempt ran with (see
+    # compute_connector_config_hash). A later attempt reuses this attempt's
+    # checkpoint and poll window only if the config hash is the same. NULL on
+    # attempts created before this column existed.
+    connector_config_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Database-based coordination fields (replacing Redis fencing)
     celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)

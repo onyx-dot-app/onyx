@@ -25,12 +25,12 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapability,
-    compute_connector_config_hash,
 )
 from onyx.connectors.capability_checks.runner import (
     CheckReadinessKind,
     decide_check_readiness,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.db.enums import AccessType
 

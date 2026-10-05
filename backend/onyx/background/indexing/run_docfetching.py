@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import source_should_fetch_permissions_during_indexing
 from onyx.background.indexing.checkpointing_utils import (
+    attempt_config_differs,
     check_checkpoint_size,
     get_latest_valid_checkpoint,
     save_checkpoint,
@@ -36,6 +37,7 @@ from onyx.configs.constants import (
 from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -570,6 +572,21 @@ def connector_document_extraction(
             None,
         )
 
+        # The hash of the config this run uses. It replaces the hash stamped at
+        # creation, because the config can change before the attempt starts.
+        connector_config_hash = compute_connector_config_hash(
+            db_connector.connector_specific_config
+        )
+        config_changed_since_last_attempt = (
+            most_recent_attempt is not None
+            and attempt_config_differs(most_recent_attempt, connector_config_hash)
+        )
+        if config_changed_since_last_attempt:
+            logger.info(
+                "Connector config changed since the last attempt; starting a fresh window and checkpoint: cc_pair=%s",
+                cc_pair_id,
+            )
+
         # if the last attempt didn't complete cleanly, reuse the same window. This
         # is necessary to ensure correctness with checkpointing. If we don't do this,
         # things like new slack channels could be missed (since existing slack
@@ -578,6 +595,7 @@ def connector_document_extraction(
             most_recent_attempt
             and most_recent_attempt.poll_range_end
             and most_recent_attempt.status.should_reuse_checkpoint()
+            and not config_changed_since_last_attempt
         ):
             window_end = most_recent_attempt.poll_range_end
         else:
@@ -586,6 +604,7 @@ def connector_document_extraction(
         # set time range in db
         index_attempt.poll_range_start = window_start
         index_attempt.poll_range_end = window_end
+        index_attempt.connector_config_hash = connector_config_hash
         db_session.commit()
 
         # TODO: maybe memory tracer here
@@ -606,9 +625,13 @@ def connector_document_extraction(
         # checkpointing / failure handling
         # OR
         # if the last attempt was successful
+        # OR
+        # if the connector config changed since the last attempt
         with time_stage(IndexAttemptStage.CHECKPOINT_LOAD, index_attempt_id):
-            if index_attempt.from_beginning or (
-                most_recent_attempt and most_recent_attempt.status.is_successful()
+            if (
+                index_attempt.from_beginning
+                or (most_recent_attempt and most_recent_attempt.status.is_successful())
+                or config_changed_since_last_attempt
             ):
                 logger.info(
                     "Cleaning up all old batches for index attempt %s before starting new run",
@@ -628,6 +651,7 @@ def connector_document_extraction(
                     window_start=window_start,
                     window_end=window_end,
                     connector=connector_runner.connector,
+                    connector_config_hash=connector_config_hash,
                 )
 
                 # checkpoint resumption OR the connector already finished.

@@ -69,6 +69,17 @@ def load_checkpoint(
     return ConnectorCheckpoint.model_validate_json(checkpoint_data)
 
 
+def attempt_config_differs(
+    attempt: IndexAttempt, connector_config_hash: str | None
+) -> bool:
+    """True if the attempt ran with a config other than the given one. An
+    attempt created before config hashes were stored (NULL hash) never differs."""
+    return (
+        attempt.connector_config_hash is not None
+        and attempt.connector_config_hash != connector_config_hash
+    )
+
+
 def get_latest_valid_checkpoint(
     db_session: Session,
     cc_pair_id: int,
@@ -76,8 +87,13 @@ def get_latest_valid_checkpoint(
     window_start: datetime,
     window_end: datetime,
     connector: BaseConnector,
+    connector_config_hash: str | None,
 ) -> tuple[ConnectorCheckpoint, bool]:
-    """Get the latest valid checkpoint for a given connector credential pair"""
+    """Get the latest valid checkpoint for a given connector credential pair.
+
+    ``connector_config_hash`` is the hash of the config the new run uses. A
+    candidate built with a different config is not valid.
+    """
     checkpoint_candidates = get_recent_completed_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
         search_settings_id=search_settings_id,
@@ -105,6 +121,21 @@ def get_latest_valid_checkpoint(
                 cc_pair_id,
             )
             return connector.build_dummy_checkpoint(), False
+
+    # a checkpoint can cache config-derived state (e.g. Slack channel IDs), so
+    # never resume one built with another config
+    config_matched_candidates = [
+        candidate
+        for candidate in checkpoint_candidates
+        if not attempt_config_differs(candidate, connector_config_hash)
+    ]
+    if len(config_matched_candidates) < len(checkpoint_candidates):
+        logger.info(
+            "Skipping checkpoints of %s attempt(s) for cc_pair=%s: the connector config changed since they ran.",
+            len(checkpoint_candidates) - len(config_matched_candidates),
+            cc_pair_id,
+        )
+    checkpoint_candidates = config_matched_candidates
 
     # filter out any candidates that don't meet the criteria
     checkpoint_candidates = [

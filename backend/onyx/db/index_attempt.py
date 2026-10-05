@@ -16,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session, joinedload
 
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
@@ -24,6 +25,7 @@ from onyx.db.enums import (
     IndexModelStatus,
 )
 from onyx.db.models import (
+    Connector,
     ConnectorCredentialPair,
     IndexAttempt,
     IndexAttemptError,
@@ -142,6 +144,21 @@ def count_error_rows_for_index_attempt(
     )
 
 
+def get_connector_config_hash_for_cc_pair(
+    db_session: Session, cc_pair_id: int
+) -> str | None:
+    """Returns the hash of the current config of the cc_pair's connector."""
+    connector_specific_config = db_session.execute(
+        select(Connector.connector_specific_config)
+        .join(
+            ConnectorCredentialPair,
+            ConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(ConnectorCredentialPair.id == cc_pair_id)
+    ).scalar_one()
+    return compute_connector_config_hash(connector_specific_config)
+
+
 def create_index_attempt(
     connector_credential_pair_id: int,
     search_settings_id: int,
@@ -155,6 +172,9 @@ def create_index_attempt(
         from_beginning=from_beginning,
         status=IndexingStatus.NOT_STARTED,
         celery_task_id=celery_task_id,
+        connector_config_hash=get_connector_config_hash_for_cc_pair(
+            db_session, connector_credential_pair_id
+        ),
     )
     db_session.add(new_attempt)
     db_session.commit()
@@ -185,6 +205,9 @@ def create_synthetic_seed_attempt(
         time_started=db_now,
         time_updated=db_now,
         poll_range_end=datetime.fromtimestamp(poll_range_end, tz=timezone.utc),
+        connector_config_hash=get_connector_config_hash_for_cc_pair(
+            db_session, connector_credential_pair_id
+        ),
     )
     db_session.add(seed)
     db_session.flush()
@@ -217,6 +240,9 @@ def mock_successful_index_attempt(
         # or the indexing rate would calculate out to infinity
         time_started=db_time - timedelta(seconds=1.92),
         time_updated=db_time,
+        connector_config_hash=get_connector_config_hash_for_cc_pair(
+            db_session, connector_credential_pair_id
+        ),
     )
     db_session.add(new_attempt)
     db_session.commit()
