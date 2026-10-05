@@ -201,6 +201,7 @@ const items: DropdownMenuItem[] = [
 | `DropdownView.key?`    | Identifies the view on the stack; its depth when left out                                                                 |
 | `DropdownView.items`   | The view's rows and groups                                                                                                |
 | `DropdownView.search?` | A search field pinned above the view's rows. It filters this view only, and keeps its text while the view is on the stack |
+| `DropdownView.width?`  | The list's width while this view is on top; else the list's own                                                           |
 | `DropdownViews.push`   | Replace the rows with a view: a key from `views`, or an object (refreshed from `views` when its `key` is there)           |
 | `DropdownViews.pop`    | Back one view; nothing at the root                                                                                        |
 | `DropdownViews.close`  | Close the list                                                                                                            |

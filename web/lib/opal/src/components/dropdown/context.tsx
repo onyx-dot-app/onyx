@@ -8,6 +8,7 @@ import type {
 import type {
   DropdownMode,
   DropdownViews,
+  DropdownWidth,
 } from "@opal/components/dropdown/types";
 
 /**
@@ -47,6 +48,8 @@ export interface DropdownContextValue {
   /** Picker or menu, as `Dropdown.Data` declared it. */
   mode: DropdownMode;
   setMode: (mode: DropdownMode) => void;
+  /** The width the view on top asks for, if any. */
+  setViewWidth: (width: DropdownWidth | undefined) => void;
   /** The highlighted stop's element id, for `aria-activedescendant`. */
   activeId: string | undefined;
   setActiveId: (id: string | undefined) => void;

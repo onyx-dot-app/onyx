@@ -145,6 +145,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     const [exiting, setExiting] = useState<{
       key: string;
       props: CardProps;
+      width: number | null;
       direction: "forward" | "back";
     } | null>(null);
     // The live card arrived by a view change, from this side. Kept for the
@@ -158,11 +159,13 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       key: string;
       props: CardProps;
       styles: React.CSSProperties;
+      width: number | null;
     } | null>(null);
     const lastCardRef = useRef<{
       key: string;
       props: CardProps;
       styles: React.CSSProperties;
+      width: number | null;
     } | null>(null);
     const lastViewKeyRef = useRef(viewKey);
     useLayoutEffect(() => {
@@ -235,6 +238,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
         key: viewKey,
         props: cardProps,
         styles: floatingStyles,
+        width: liveCard(listRef.current)?.offsetWidth ?? null,
       };
     });
 
@@ -297,6 +301,10 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
               key={`exit-${exiting.key}`}
               live={false}
               data-exit={exiting.direction}
+              // Its own width, should the new view ask for another.
+              style={
+                exiting.width === null ? undefined : { width: exiting.width }
+              }
               onExit={() => setExiting(null)}
               {...exiting.props}
               listId={`${listId}-exit`}
@@ -349,6 +357,7 @@ interface CardElementProps extends CardProps {
   searchRef?: React.RefObject<HTMLInputElement | null>;
   "data-enter"?: "forward" | "back";
   "data-exit"?: "forward" | "back";
+  style?: React.CSSProperties;
   /** The leaving card's own exit animation ended. */
   onExit?: () => void;
 }
@@ -362,6 +371,7 @@ function Card({
   searchRef,
   "data-enter": enter,
   "data-exit": exit,
+  style,
   onExit,
   listId,
   mode,
@@ -390,6 +400,7 @@ function Card({
       className="opal-dropdown-card"
       data-enter={enter}
       data-exit={exit}
+      style={style}
       inert={!live || undefined}
       aria-hidden={!live || undefined}
       onAnimationEnd={(e) => {

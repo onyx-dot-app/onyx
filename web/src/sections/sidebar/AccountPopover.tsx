@@ -281,6 +281,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   };
   const items = useSettingsItems({ undismissedCount });
   const notificationsView: DropdownView = {
+    width: 22.5,
     items: [
       {
         kind: "custom",
@@ -300,7 +301,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
 
   return (
     <Dropdown
-      width={25}
+      width={15}
       side="right"
       align="end"
       open={menuOpen}

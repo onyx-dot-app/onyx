@@ -23,11 +23,8 @@ import {
   useDropdownKeyboard,
   useDropdownOverlay,
   useFoldedGroups,
-  type DropdownAlign,
-  type DropdownSide,
   type DropdownTabKey,
   type DropdownVirtualAnchor,
-  type DropdownWidth,
   type ListModel,
 } from "@opal/components/dropdown/hooks";
 import {
@@ -44,6 +41,9 @@ import {
 } from "@opal/components/dropdown/model";
 import { DropdownList } from "@opal/components/dropdown/list";
 import type {
+  DropdownAlign,
+  DropdownSide,
+  DropdownWidth,
   DropdownItem,
   DropdownMenuItem,
   DropdownMode,
@@ -134,12 +134,17 @@ function Dropdown({
 }: DropdownProps) {
   const autoId = useId();
   const id = idProp ?? `dropdown-${autoId}`;
+  const [mode, setMode] = useState<DropdownMode>("picker");
+  // A view on top may ask for a width of its own.
+  const [viewWidth, setViewWidth] = useState<DropdownWidth | undefined>(
+    undefined
+  );
   const overlay = useDropdownOverlay({
     open,
     onOpenChange,
     disabled,
     virtualAnchor,
-    width,
+    width: viewWidth ?? width,
     align,
     side,
   });
@@ -152,7 +157,6 @@ function Dropdown({
   } = overlay;
 
   const listRef = useRef<ListModel>(EMPTY_LIST);
-  const [mode, setMode] = useState<DropdownMode>("picker");
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
 
   const { handleKeyDown } = useDropdownKeyboard({
@@ -204,6 +208,7 @@ function Dropdown({
       listRef,
       mode,
       setMode,
+      setViewWidth,
       activeId,
       setActiveId,
       handleKeyDown,
@@ -532,6 +537,7 @@ function DropdownData(props: DropdownDataProps) {
     listRef,
     mode,
     setMode,
+    setViewWidth,
     setActiveId,
     handleKeyDown,
   } = useDropdownContext();
@@ -562,6 +568,11 @@ function DropdownData(props: DropdownDataProps) {
       ? viewKey({ ...topView, key: top.key }, stack.length)
       : "root";
   const items = topView ? topView.items : rootItems;
+  // The view on top may size the list; the root takes it back.
+  const topWidth = topView?.width;
+  useLayoutEffect(() => {
+    setViewWidth(topWidth);
+  }, [topWidth, setViewWidth]);
   const search = topView ? topView.search : rootSearch;
   const create = top ? undefined : rootCreate;
   const otherOptionsTitle = top ? undefined : rootOtherOptionsTitle;
@@ -969,7 +980,4 @@ export {
   type DropdownDataProps,
   type DropdownTabKey,
   type DropdownVirtualAnchor,
-  type DropdownWidth,
-  type DropdownAlign,
-  type DropdownSide,
 };

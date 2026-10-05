@@ -131,6 +131,13 @@ export type DropdownMenuItem = DropdownMenuRow | DropdownGroup<DropdownMenuRow>;
 /** Picker (`listbox`, something is selected) or menu (`menu`, commands). */
 export type DropdownMode = "picker" | "menu";
 
+/** A fixed list width in rem, from the contextual-menu steps. */
+export type DropdownWidth = 15 | 17.5 | 20 | 22.5 | 25;
+/** Which edge of the anchor the list lines up with. */
+export type DropdownAlign = "start" | "end";
+/** Below the anchor, or a flyout beside it. */
+export type DropdownSide = "bottom" | "right";
+
 // ---------------------------------------------------------------------------
 // Views
 // ---------------------------------------------------------------------------
@@ -151,6 +158,8 @@ export interface DropdownView {
   key?: string;
   items: DropdownMenuItem[];
   search?: DropdownSearch;
+  /** The list's width while this view is on top; else the list's own. */
+  width?: DropdownWidth;
 }
 
 /**

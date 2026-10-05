@@ -16,7 +16,10 @@ import {
   type ReferenceType,
 } from "@floating-ui/react-dom";
 import type {
+  DropdownAlign,
   DropdownRow,
+  DropdownSide,
+  DropdownWidth,
   NavItem,
   RowGroup,
 } from "@opal/components/dropdown/types";
@@ -390,13 +393,6 @@ export interface DropdownVirtualAnchor {
   contextElement?: Element;
 }
 
-/** A fixed list width in rem, from the contextual-menu steps. */
-export type DropdownWidth = 15 | 17.5 | 20 | 22.5 | 25;
-/** Which edge of the anchor the list lines up with. */
-export type DropdownAlign = "start" | "end";
-/** Below the anchor, or a flyout beside it. */
-export type DropdownSide = "bottom" | "right";
-
 /** How far the list reaches past the anchor on its aligned side, in px. */
 const PUNCH_OUT_PX = 6;
 
@@ -471,37 +467,46 @@ export function useDropdownOverlay({
     }
   }, [isOpen]);
 
-  const { refs, floatingStyles, isPositioned } = useFloating<ReferenceType>({
-    open: isOpen,
-    placement: `${side}-${align}`,
-    middleware: [
-      // Below the anchor, the list reaches 6px past it on its aligned side:
-      // with its 4px inset and 1px border, the rows' bounding boxes then
-      // align flush with the anchor's content, inside its own border.
-      // Matched to the anchor it reaches 6px past both sides; a fixed width
-      // includes that reach. A flyout beside the anchor lines its edge up
-      // exactly. crossAxis is direction-aware, so RTL mirrors.
-      offset({
-        mainAxis: 4,
-        crossAxis:
-          side === "right" ? 0 : align === "end" ? PUNCH_OUT_PX : -PUNCH_OUT_PX,
-      }),
-      flip(),
-      shift({ padding: 8 }),
-      size({
-        apply({ rects, elements }) {
-          // Inline, so a fixed width also beats the stylesheet's floor.
-          Object.assign(
-            elements.floating.style,
-            width !== undefined
-              ? { width: `${width}rem`, minWidth: `${width}rem` }
-              : { width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px` }
-          );
-        },
-      }),
-    ],
-    whileElementsMounted: autoUpdate,
-  });
+  const { refs, floatingStyles, isPositioned, update } =
+    useFloating<ReferenceType>({
+      open: isOpen,
+      placement: `${side}-${align}`,
+      middleware: [
+        // Below the anchor, the list reaches 6px past it on its aligned side:
+        // with its 4px inset and 1px border, the rows' bounding boxes then
+        // align flush with the anchor's content, inside its own border.
+        // Matched to the anchor it reaches 6px past both sides; a fixed width
+        // includes that reach. A flyout beside the anchor lines its edge up
+        // exactly. crossAxis is direction-aware, so RTL mirrors.
+        offset({
+          mainAxis: 4,
+          crossAxis:
+            side === "right"
+              ? 0
+              : align === "end"
+                ? PUNCH_OUT_PX
+                : -PUNCH_OUT_PX,
+        }),
+        flip(),
+        shift({ padding: 8 }),
+        size({
+          apply({ rects, elements }) {
+            // Inline, so a fixed width also beats the stylesheet's floor.
+            Object.assign(
+              elements.floating.style,
+              width !== undefined
+                ? { width: `${width}rem`, minWidth: `${width}rem` }
+                : { width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px` }
+            );
+          },
+        }),
+      ],
+      whileElementsMounted: autoUpdate,
+    });
+  // A view can change the width while the list is open: measure again.
+  useLayoutEffect(() => {
+    update();
+  }, [width, update]);
 
   const setReference = useCallback(
     (node: HTMLElement | null) => {
