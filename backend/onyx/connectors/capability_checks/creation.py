@@ -15,6 +15,8 @@ from functools import partial
 from typing import Any
 from uuid import UUID
 
+from pydantic import BaseModel
+
 from onyx.background.celery.tasks.capability_checks.enqueue import (
     send_capability_check_run_task,
 )
@@ -63,6 +65,25 @@ _TRIGGER = CapabilityCheckTrigger.CC_PAIR_VALIDATION
 CREATION_BLOCKING_BUDGET_SECONDS = 3.0
 
 _REJECTED_MESSAGE = "Did not finish before the connector was rejected."
+
+
+class NamedCheckRun(BaseModel):
+    """The outcome of the named checks after the blocking budget."""
+
+    # Results of the checks that finished, reused draft results included.
+    finished_results: list[CapabilityCheckResult]
+    # Checks that were still running at the end of the budget.
+    unfinished_check_ids: frozenset[str]
+
+    @property
+    def failed_required_results(self) -> list[CapabilityCheckResult]:
+        """The finished required checks that failed. Only these block a
+        pairing."""
+        return [
+            result
+            for result in self.finished_results
+            if result.required and result.status == CapabilityCheckStatus.FAILED
+        ]
 
 
 def _fresh_draft_results(
@@ -122,7 +143,7 @@ def _run_check_group(
     check_id: str,
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
-    connector_id: int,
+    connector_id: int | None,
     input_type: InputType | None,
     access_type: AccessType,
 ) -> list[CapabilityCheckResult]:
@@ -145,7 +166,7 @@ def _run_checks_within_budget(
     credential_id: int,
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
-    connector_id: int,
+    connector_id: int | None,
     input_type: InputType | None,
     access_type: AccessType,
 ) -> tuple[list[CapabilityCheckResult], frozenset[str]]:
@@ -314,6 +335,50 @@ def _enqueue_unfinished_checks(
         )
 
 
+def run_named_checks_within_budget(
+    *,
+    connector_id: int | None,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+    access_type: AccessType,
+) -> NamedCheckRun:
+    """Runs the source's named checks for a pairing, with no writes.
+
+    Fresh draft results for the same form are reused and count as finished at
+    once. The other checks run for at most ``CREATION_BLOCKING_BUDGET_SECONDS``.
+    Does not claim or store a report row and does not start a background run.
+    """
+    checks = get_capability_checks(source)
+    reused = _fresh_draft_results(
+        checks,
+        credential=credential,
+        source=source,
+        access_type=access_type,
+        connector_specific_config=connector_specific_config,
+    )
+    finished, unfinished = _run_checks_within_budget(
+        list(
+            dict.fromkeys(
+                check.check_id for check in checks if check.check_id not in reused
+            )
+        ),
+        credential_id=credential.id,
+        source=source,
+        connector_specific_config=connector_specific_config,
+        connector_id=connector_id,
+        input_type=input_type,
+        access_type=access_type,
+    )
+    finished.extend(
+        cached_check_result(check, cached)
+        for check in checks
+        if (cached := reused.get(check.check_id)) is not None
+    )
+    return NamedCheckRun(finished_results=finished, unfinished_check_ids=unfinished)
+
+
 def validate_pairing_with_named_checks(
     *,
     connector_id: int,
@@ -338,14 +403,6 @@ def validate_pairing_with_named_checks(
         ConnectorValidationError: A required check failed and
             ``enforce_creation`` is True. The message names each failed check.
     """
-    checks = get_capability_checks(source)
-    reused = _fresh_draft_results(
-        checks,
-        credential=credential,
-        source=source,
-        access_type=access_type,
-        connector_specific_config=connector_specific_config,
-    )
     credential_id = credential.id
     run_id = _mark_running(
         credential_id=credential_id, connector_id=connector_id, source=source
@@ -353,29 +410,17 @@ def validate_pairing_with_named_checks(
     # Every write after the claim is in this block, so a failure anywhere
     # retires the RUNNING mark instead of leaving it until the stale sweep.
     try:
-        finished, unfinished = _run_checks_within_budget(
-            list(
-                dict.fromkeys(
-                    check.check_id for check in checks if check.check_id not in reused
-                )
-            ),
-            credential_id=credential_id,
-            source=source,
-            connector_specific_config=connector_specific_config,
+        run = run_named_checks_within_budget(
             connector_id=connector_id,
+            source=source,
             input_type=input_type,
+            connector_specific_config=connector_specific_config,
+            credential=credential,
             access_type=access_type,
         )
-        finished.extend(
-            cached_check_result(check, cached)
-            for check in checks
-            if (cached := reused.get(check.check_id)) is not None
-        )
-        failed = [
-            result
-            for result in finished
-            if result.required and result.status == CapabilityCheckStatus.FAILED
-        ]
+        finished = run.finished_results
+        unfinished = run.unfinished_check_ids
+        failed = run.failed_required_results
         if run_id is None:
             logger.info(
                 "A capability run for connector %s, credential %s started in the "
@@ -396,7 +441,10 @@ def validate_pairing_with_named_checks(
             )
         else:
             _store_report(
-                finished + _unfinished_results(checks, unfinished, _REJECTED_MESSAGE),
+                finished
+                + _unfinished_results(
+                    get_capability_checks(source), unfinished, _REJECTED_MESSAGE
+                ),
                 credential_id=credential_id,
                 connector_id=connector_id,
                 source=source,

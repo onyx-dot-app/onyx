@@ -996,6 +996,8 @@ def add_credential_to_connector(
     seeding_flow: bool = False,
     processing_mode: ProcessingMode = ProcessingMode.REGULAR,
 ) -> StatusResponse:
+    """Callers check the access type and data-access groups first with
+    ``validate_pairing_access``."""
     connector = fetch_connector_by_id(connector_id, db_session)
 
     # If we are in the seeding flow, we shouldn't need to check if the credential belongs to the user
@@ -1013,22 +1015,6 @@ def add_credential_to_connector(
 
     if connector is None:
         raise HTTPException(status_code=404, detail="Connector does not exist")
-
-    if access_type.is_perm_synced():
-        fetch_ee_implementation_or_noop(
-            "onyx.utils.tier",
-            "require_business_tier_for_sync_access",
-            noop_return_value=None,
-        )(access_type)
-        if not fetch_ee_implementation_or_noop(
-            "onyx.external_permissions.sync_params",
-            "check_if_valid_sync_source",
-            noop_return_value=True,
-        )(connector.source):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Connector of type {connector.source} does not support permission sync",
-            )
 
     if credential is None:
         error_msg = (

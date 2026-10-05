@@ -68,6 +68,7 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     GoogleOAuthAuthenticationMethod,
 )
+from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.connector import (
     create_connector,
     delete_connector,
@@ -1598,6 +1599,13 @@ def create_connector_with_mock_credential(
         current_group_ids=[],
         requested_group_ids=connector_data.groups or [],
         is_non_public=connector_data.access_type != AccessType.PUBLIC,
+    )
+    validate_pairing_access(
+        db_session,
+        user=user,
+        source=connector_data.source,
+        access_type=connector_data.access_type,
+        data_access_group_ids=None,
     )
 
     connector_id: int | None = None
