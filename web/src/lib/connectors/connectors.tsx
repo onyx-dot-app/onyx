@@ -1186,8 +1186,9 @@ export const connectorConfigs: Record<
         optional: true,
         default: 730,
         description:
-          "Mail received longer ago than this is not indexed. " +
-          "Leave empty to index every message, which can take very long on a large tenant.",
+          "Threads whose newest message is older than this are not indexed. " +
+          "A thread that gained a message within the window is indexed whole. " +
+          "Leave empty to index all mail, which can take very long on a large tenant.",
       },
       buildIncludeAttachmentsOption(
         false,

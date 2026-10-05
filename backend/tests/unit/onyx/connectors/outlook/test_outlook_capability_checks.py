@@ -27,6 +27,7 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     INVALID_AUTHORITY_CODE,
     MISSING_CREDENTIAL_CODE,
@@ -221,6 +222,21 @@ def test_mail_read_check_runs_on_a_config_less_run() -> None:
     assert result.status is CapabilityCheckStatus.PASSED
 
 
+def test_mail_read_check_samples_from_the_configured_groups() -> None:
+    """With groups configured, the checks must not open a mailbox outside them."""
+    gateway = _gateway()
+    gateway.resolve_groups.return_value = [EntraGroup(id="g-1")]
+    gateway.list_group_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox(id="member")]
+    )
+
+    _run("outlook_mail_read", _context(gateway, {"mailbox_groups": ["Onyx Users"]}))
+
+    gateway.list_mailbox_users.assert_not_called()
+    assert gateway.list_group_mailbox_users.call_args.kwargs["group_id"] == "g-1"
+    assert gateway.probe_mailbox.call_args.kwargs["mailbox_id"] == "member"
+
+
 def test_mail_read_check_falls_back_to_the_first_tenant_user() -> None:
     gateway = _gateway()
 
@@ -367,6 +383,50 @@ def test_mail_read_check_reports_a_configured_mailbox_that_does_not_exist() -> N
 
     with pytest.raises(ConnectorValidationError, match="MailboxNotEnabledForRESTAPI"):
         _run("outlook_mail_read", _context(gateway, {"mailboxes": [MAILBOX_ADDRESS]}))
+
+
+# ---------------------------------------------------------------------------
+# outlook_configured_groups
+# ---------------------------------------------------------------------------
+
+
+def test_groups_check_does_nothing_without_groups() -> None:
+    gateway = _gateway()
+
+    _run("outlook_configured_groups", _context(gateway, {"mailbox_groups": []}))
+
+    gateway.resolve_groups.assert_not_called()
+
+
+def test_groups_check_lists_every_group_that_does_not_resolve() -> None:
+    gateway = _gateway()
+    gateway.resolve_groups.side_effect = [
+        [],
+        [EntraGroup(id="g-1"), EntraGroup(id="g-2")],
+        [EntraGroup(id="g-3")],
+    ]
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        _run(
+            "outlook_configured_groups",
+            _context(gateway, {"mailbox_groups": ["Ghost", "Sales", "Onyx Users"]}),
+        )
+
+    message = str(exc_info.value)
+    assert "No group matches Ghost" in message
+    assert "More than one group is named Sales" in message
+    assert "Onyx Users" not in message
+
+
+def test_groups_check_maps_a_denied_listing_to_the_group_permission() -> None:
+    gateway = _gateway()
+    gateway.resolve_groups.side_effect = graph_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="GroupMember.Read.All"):
+        _run(
+            "outlook_configured_groups",
+            _context(gateway, {"mailbox_groups": ["Sales"]}),
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -34,6 +34,7 @@ from onyx.connectors.microsoft_utils.entra import (
     ENTRA_NAMED_GROUP_SELECT,
     ENTRA_PAGE_SIZE,
     ENTRA_USER_SELECT,
+    MAX_ENTRA_COLLECTION_PAGES,
     EntraGroup,
     EntraUser,
     fetch_entra_page,
@@ -176,12 +177,12 @@ def _mailbox(user: EntraUser) -> OutlookMailbox | None:
     )
 
 
-def _is_object_id(identifier: str) -> bool:
+def _object_id(identifier: str) -> str | None:
+    """The identifier as a canonical Entra object id, None for anything else."""
     try:
-        UUID(identifier)
+        return str(UUID(identifier))
     except ValueError:
-        return False
-    return True
+        return None
 
 
 def _parse_folder(raw: dict[str, Any]) -> OutlookFolder:
@@ -471,10 +472,11 @@ class OutlookSourceOperations(SourceOperations):
 
         Needs ``GroupMember.Read.All``.
         """
-        if _is_object_id(identifier):
+        object_id = _object_id(identifier)
+        if object_id is not None:
             try:
                 data = self._get(
-                    f"{self._graph_base()}/groups/{quote(identifier)}",
+                    f"{self._graph_base()}/groups/{object_id}",
                     {"$select": ENTRA_NAMED_GROUP_SELECT},
                 )
             except OutlookGraphError as e:
@@ -482,15 +484,25 @@ class OutlookSourceOperations(SourceOperations):
                     raise
                 return []
             return [EntraGroup.model_validate(data)]
-        page = fetch_entra_page(
-            self._gateway().get_json,
-            url=f"{self._graph_base()}/groups",
-            item_model=EntraGroup,
-            select_fields=ENTRA_NAMED_GROUP_SELECT,
-            page_size=GROUP_NAME_MATCH_LIMIT,
-            filter_expression=f"displayName eq '{_odata_quote(identifier)}'",
-        )
-        return page.items
+        # Pages are followed until a second match or the end, since one
+        # match with a continuation proves nothing about the rest.
+        matches: list[EntraGroup] = []
+        next_link: str | None = None
+        for _ in range(MAX_ENTRA_COLLECTION_PAGES):
+            page = fetch_entra_page(
+                self._gateway().get_json,
+                url=f"{self._graph_base()}/groups",
+                item_model=EntraGroup,
+                select_fields=ENTRA_NAMED_GROUP_SELECT,
+                next_link=next_link,
+                page_size=GROUP_NAME_MATCH_LIMIT,
+                filter_expression=f"displayName eq '{_odata_quote(identifier)}'",
+            )
+            matches.extend(page.items)
+            next_link = page.next_link
+            if next_link is None or len(matches) >= GROUP_NAME_MATCH_LIMIT:
+                return matches
+        raise RuntimeError(f"Outlook: the group listing for {identifier} never ends")
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

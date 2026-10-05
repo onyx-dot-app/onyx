@@ -22,9 +22,19 @@ from onyx.connectors.outlook.models import OutlookMailbox
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 
 
+def clean_names(values: list[str] | None) -> list[str]:
+    """The configured names stripped and without blanks."""
+    return [value.strip() for value in values or [] if value.strip()]
+
+
 def configured_addresses(config: OutlookConnectorConfig) -> list[str]:
-    """The explicit mailbox list without blanks. Empty means every mailbox the app may open."""
-    return [address.strip() for address in config.mailboxes or [] if address.strip()]
+    """The explicit mailbox list. Empty with no groups means every mailbox the app may open."""
+    return clean_names(config.mailboxes)
+
+
+def configured_groups(config: OutlookConnectorConfig) -> list[str]:
+    """The configured Entra groups, by display name or object id."""
+    return clean_names(config.mailbox_groups)
 
 
 def resolve_mailbox_for_validation(

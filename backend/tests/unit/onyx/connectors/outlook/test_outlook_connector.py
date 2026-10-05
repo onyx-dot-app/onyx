@@ -629,6 +629,43 @@ def test_validation_maps_a_denied_group_read_to_the_group_permission() -> None:
         _connector(gateway, mailbox_groups=["Sales"]).validate_connector_settings()
 
 
+def test_pruning_stops_at_an_unresolved_group() -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.return_value = []
+    connector = _connector(gateway, mailbox_groups=["Sales"])
+
+    with pytest.raises(ConnectorValidationError, match="cannot be resolved: Sales"):
+        list(connector.retrieve_all_slim_docs())
+
+
+def test_pruning_drops_mail_older_than_the_history_cutoff() -> None:
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = None
+    gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
+        changes=[
+            change(),
+            change(
+                id="msg-old",
+                conversation_id="conv-old",
+                received_at=RECEIVED - timedelta(days=4000),
+            ),
+        ]
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=30)
+
+    ids = [
+        d.id
+        for batch in connector.retrieve_all_slim_docs()
+        for d in batch
+        if isinstance(d, SlimDocument)
+    ]
+
+    assert conversation_document_id(mailbox(), "conv-old") not in ids
+    assert (
+        gateway.fetch_folder_delta_page.call_args.kwargs.get("received_after") is None
+    )
+
+
 def test_denied_mailbox_is_a_failure_when_named_and_a_skip_otherwise() -> None:
     gateway = _happy_gateway()
     gateway.probe_mailbox.side_effect = graph_error(403)

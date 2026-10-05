@@ -126,6 +126,18 @@ def test_resolve_groups_treats_an_unknown_object_id_as_no_match() -> None:
     assert gateway.resolve_groups(identifier=GROUP_ID) == []
 
 
+def test_resolve_groups_follows_a_continuation_after_one_match() -> None:
+    gateway, client = _gateway()
+    first = page_json([{"id": "group-1"}])
+    first["@odata.nextLink"] = "https://graph/next"
+    client.get_json.side_effect = [first, page_json([{"id": "group-2"}])]
+
+    result = gateway.resolve_groups(identifier="Sales")
+
+    assert [group.id for group in result] == ["group-1", "group-2"]
+    assert client.get_json.call_args.args[0] == "https://graph/next"
+
+
 def test_resolve_groups_returns_every_group_sharing_a_display_name() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json(
@@ -138,6 +150,24 @@ def test_resolve_groups_returns_every_group_sharing_a_display_name() -> None:
     assert url == f"{GRAPH_BASE}/groups"
     assert params["$filter"] == "displayName eq 'Sales''s'"
     assert [group.id for group in result] == ["group-1", "group-2"]
+
+
+def test_group_member_without_an_account_enabled_field_is_kept() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([user_json()])
+
+    result = gateway.list_group_mailbox_users(group_id=GROUP_ID)
+
+    assert [m.id for m in result.mailboxes] == [MAILBOX_ID]
+
+
+def test_resolve_groups_canonicalises_an_object_id_in_the_path() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = {"id": GROUP_ID, "displayName": "Onyx Users"}
+
+    gateway.resolve_groups(identifier="{" + GROUP_ID.upper() + "}")
+
+    assert client.get_json.call_args.args[0] == f"{GRAPH_BASE}/groups/{GROUP_ID}"
 
 
 def test_group_members_keep_only_enabled_users_with_a_mail_address() -> None:

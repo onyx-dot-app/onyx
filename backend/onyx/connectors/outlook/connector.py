@@ -49,6 +49,7 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_GRAPH_API_HOST,
 )
 from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError as OutlookAuthError,
@@ -81,6 +82,7 @@ from onyx.connectors.outlook.errors import (
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
+    clean_names,
     describe_group_mismatch,
     describe_unavailable_groups,
     describe_unavailable_mailboxes,
@@ -133,8 +135,9 @@ CONVERSATION_FETCH_LIMIT = 500
 # every step, so past this many the oldest ids are forgotten first.
 MAX_TRACKED_CONVERSATIONS_PER_MAILBOX = 20_000
 
-# Pages of the tenant's user listing one step may read. No tenant has this many
-# users, so running past it means the paging never ends.
+# Pages of a mailbox listing, the tenant's users or a group's members, one
+# step may read. No tenant has this many users, so running past it means the
+# paging never ends.
 MAX_MAILBOX_LISTING_PAGES = 10_000
 
 # Attachment bytes come from whoever sent the mail, so what one message and
@@ -557,10 +560,10 @@ class OutlookConnector(
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
-        # Both empty means every mailbox the app may open.
-        self.mailboxes = [a.strip() for a in mailboxes or [] if a.strip()]
-        # Entra groups, by display name or object id, whose members are walked.
-        self.mailbox_groups = [g.strip() for g in mailbox_groups or [] if g.strip()]
+        # Addresses, then Entra groups by display name or object id whose
+        # members are walked. Both empty means every mailbox the app may open.
+        self.mailboxes = clean_names(mailboxes)
+        self.mailbox_groups = clean_names(mailbox_groups)
         self.include_attachments = include_attachments
         self.include_calendar = include_calendar
         if mail_history_days is not None and mail_history_days <= 0:
@@ -768,7 +771,7 @@ class OutlookConnector(
                 continue
             found.append(mailbox)
         for identifier in self.mailbox_groups:
-            groups = self.ops.resolve_groups(identifier=identifier)
+            groups: list[EntraGroup] = self.ops.resolve_groups(identifier=identifier)
             if len(groups) != 1:
                 failures.append(
                     _mailbox_failure(
@@ -794,7 +797,7 @@ class OutlookConnector(
     def _listed_mailboxes(
         self, fetch_page: Callable[[str | None], OutlookMailboxPage]
     ) -> list[OutlookMailbox]:
-        """Every mailbox of a paged user listing."""
+        """Every mailbox of a paged mailbox listing."""
         # TODO(nmgarza5): list across checkpoint steps and carry compact
         # mailbox records, so a huge tenant survives a failure mid-listing.
         mailboxes: list[OutlookMailbox] = []
@@ -806,11 +809,12 @@ class OutlookConnector(
             if next_link is None:
                 return mailboxes
         raise RuntimeError(
-            "Outlook: the user listing ran past "
+            "Outlook: the mailbox listing ran past "
             f"{MAX_MAILBOX_LISTING_PAGES} pages without ending"
         )
 
     def _group_mailboxes(self, group_id: str) -> list[OutlookMailbox]:
+        # Bound per group here, since a lambda in the loop above late-binds.
         return self._listed_mailboxes(
             lambda next_link: self.ops.list_group_mailbox_users(
                 group_id=group_id, next_link=next_link
@@ -923,6 +927,7 @@ class OutlookConnector(
         delta page and deduplicated within it. The parent is left unset so
         pruning keeps the folder indexing chose. Any Graph error raises, since
         pruning and permission sync must both see the whole mailbox or nothing."""
+        cutoff: datetime | None = self._history_cutoff()
         for folder, _ in tree:
             next_link: str | None = None
             while True:
@@ -932,10 +937,16 @@ class OutlookConnector(
                 page = self.ops.fetch_folder_delta_page(
                     mailbox_id=mailbox.id, folder_id=folder.id, next_link=next_link
                 )
+                # Unfiltered, since a filtered round caps at FILTERED_DELTA_CAP,
+                # so mail older than the cutoff is dropped here and pruned.
                 conversation_ids = dict.fromkeys(
                     change.conversation_id
                     for change in page.changes
-                    if not change.removed and change.conversation_id
+                    if not change.removed
+                    and change.conversation_id
+                    and not (
+                        cutoff and change.received_at and change.received_at < cutoff
+                    )
                 )
                 yield [
                     SlimDocument(
@@ -1236,12 +1247,18 @@ class OutlookConnector(
             return
         checkpoint.current_folder = None
 
+    def _history_cutoff(self) -> datetime | None:
+        """The oldest receipt time still indexed, None when all mail is."""
+        if self.mail_history_days is None:
+            return None
+        return datetime.now(timezone.utc) - timedelta(days=self.mail_history_days)
+
     def _mail_window_start(self, start: SecondsSinceUnixEpoch) -> datetime | None:
         """The poll window start, held to the mail history cutoff when one is set."""
-        window_start = _poll_bound(start)
-        if self.mail_history_days is None:
+        window_start: datetime | None = _poll_bound(start)
+        cutoff: datetime | None = self._history_cutoff()
+        if cutoff is None:
             return window_start
-        cutoff = datetime.now(timezone.utc) - timedelta(days=self.mail_history_days)
         return max(window_start, cutoff) if window_start else cutoff
 
     def _calendar_window(self) -> tuple[datetime, datetime]:
