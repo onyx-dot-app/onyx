@@ -7,11 +7,14 @@ plain models in ``models.py`` so a Graph schema change surfaces in one file.
 
 Application permissions this gateway needs: ``Mail.Read`` for folders and
 messages, ``Calendars.Read`` for the calendar view, ``User.Read.All`` to
-enumerate and resolve mailboxes.
+enumerate and resolve mailboxes, ``GroupMember.Read.All`` when mailboxes are
+chosen by group.
 """
 
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
+from uuid import UUID
 
 import bs4
 import requests
@@ -28,8 +31,10 @@ from onyx.connectors.microsoft_utils.drive_items import (
 )
 from onyx.connectors.microsoft_utils.entra import (
     ENABLED_USERS_FILTER,
+    ENTRA_NAMED_GROUP_SELECT,
     ENTRA_PAGE_SIZE,
     ENTRA_USER_SELECT,
+    EntraGroup,
     EntraUser,
     fetch_entra_page,
     fetch_entra_user,
@@ -88,6 +93,8 @@ FOLDERS_PAGE_SIZE = 250
 MESSAGES_PAGE_SIZE = 100
 # The calendar view delta takes no $select, so every row carries a full body.
 EVENTS_PAGE_SIZE = 50
+# Enough to tell one group with a display name from several.
+GROUP_NAME_MATCH_LIMIT = 2
 
 MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
@@ -167,6 +174,14 @@ def _mailbox(user: EntraUser) -> OutlookMailbox | None:
         address=address,
         display_name=user.display_name,
     )
+
+
+def _is_object_id(identifier: str) -> bool:
+    try:
+        UUID(identifier)
+    except ValueError:
+        return False
+    return True
 
 
 def _parse_folder(raw: dict[str, Any]) -> OutlookFolder:
@@ -440,6 +455,83 @@ class OutlookSourceOperations(SourceOperations):
             mailboxes=mailboxes,
             next_link=page.next_link,
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Runs only for a configured group, and the coverage spy carries no "
+            "connector config."
+        ),
+    )
+    def resolve_groups(self, *, identifier: str) -> list[EntraGroup]:
+        """The groups an identifier names: the one with that object id, or
+        every group with that display name. Names are not unique in Entra, so
+        the caller decides what more than one match means.
+
+        Needs ``GroupMember.Read.All``.
+        """
+        if _is_object_id(identifier):
+            try:
+                data = self._get(
+                    f"{self._graph_base()}/groups/{quote(identifier)}",
+                    {"$select": ENTRA_NAMED_GROUP_SELECT},
+                )
+            except OutlookGraphError as e:
+                if e.status != 404:
+                    raise
+                return []
+            return [EntraGroup.model_validate(data)]
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=f"{self._graph_base()}/groups",
+            item_model=EntraGroup,
+            select_fields=ENTRA_NAMED_GROUP_SELECT,
+            page_size=GROUP_NAME_MATCH_LIMIT,
+            filter_expression=f"displayName eq '{_odata_quote(identifier)}'",
+        )
+        return page.items
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Group expansion needs a concrete group id unavailable to "
+            "credential checks."
+        ),
+    )
+    def list_group_mailbox_users(
+        self,
+        *,
+        group_id: str,
+        page_size: int = ENTRA_PAGE_SIZE,
+        next_link: str | None = None,
+    ) -> OutlookMailboxPage:
+        """One page of a group's enabled users with a mail address, members of
+        nested groups included.
+
+        Needs ``GroupMember.Read.All``.
+        """
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=(
+                f"{self._graph_base()}/groups/{quote(group_id)}"
+                "/transitiveMembers/microsoft.graph.user"
+            ),
+            item_model=EntraUser,
+            select_fields=ENTRA_USER_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+        )
+        # The member listing takes no accountEnabled filter without advanced
+        # query parameters, so disabled accounts are dropped here.
+        mailboxes = [
+            mailbox
+            for user in page.items
+            if user.mail and user.account_enabled is not False
+            if (mailbox := _mailbox(user)) is not None
+        ]
+        return OutlookMailboxPage(mailboxes=mailboxes, next_link=page.next_link)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

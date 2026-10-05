@@ -17,7 +17,7 @@ keeps the stale text until it gains a message or a full re-index rebuilds it.
 """
 
 from collections import deque
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -76,11 +76,15 @@ from onyx.connectors.outlook.config import (
 from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
+    GROUP_UNAVAILABLE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
+    describe_group_mismatch,
+    describe_unavailable_groups,
     describe_unavailable_mailboxes,
+    raise_if_groups_unavailable,
     raise_if_unavailable,
 )
 from onyx.connectors.outlook.models import (
@@ -89,6 +93,7 @@ from onyx.connectors.outlook.models import (
     OutlookEvent,
     OutlookFolder,
     OutlookMailbox,
+    OutlookMailboxPage,
     OutlookMessage,
     OutlookRecipient,
 )
@@ -541,6 +546,7 @@ class OutlookConnector(
     def __init__(
         self,
         mailboxes: list[str] | None = None,
+        mailbox_groups: list[str] | None = None,
         excluded_folders: list[str] | None = None,
         include_attachments: bool = False,
         include_calendar: bool = False,
@@ -550,8 +556,10 @@ class OutlookConnector(
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
-        # An empty list means every mailbox the app may open.
+        # Both empty means every mailbox the app may open.
         self.mailboxes = [a.strip() for a in mailboxes or [] if a.strip()]
+        # Entra groups, by display name or object id, whose members are walked.
+        self.mailbox_groups = [g.strip() for g in mailbox_groups or [] if g.strip()]
         self.include_attachments = include_attachments
         self.include_calendar = include_calendar
         if calendar_past_days < 0 or calendar_future_days < 0:
@@ -600,7 +608,7 @@ class OutlookConnector(
         except OutlookGraphError as e:
             raise_for_graph_error(e, "Microsoft's token endpoint refused the request.")
 
-        if not self.mailboxes:
+        if not self.mailboxes and not self.mailbox_groups:
             try:
                 self.ops.list_mailbox_users(page_size=1)
             except OutlookGraphError as e:
@@ -609,6 +617,9 @@ class OutlookConnector(
                 )
             return
         raise_if_unavailable(describe_unavailable_mailboxes(self.ops, self.mailboxes))
+        raise_if_groups_unavailable(
+            describe_unavailable_groups(self.ops, self.mailbox_groups)
+        )
 
     def build_dummy_checkpoint(self) -> OutlookCheckpoint:
         return OutlookCheckpoint(has_more=True)
@@ -730,46 +741,74 @@ class OutlookConnector(
     def _resolve_mailboxes(
         self,
     ) -> tuple[list[OutlookMailbox], list[ConnectorFailure]]:
-        """The mailboxes to walk, in configured order, plus a failure per
-        configured address that matches no user."""
+        """The mailboxes to walk: the configured addresses, then the members
+        of the configured groups, or every mailbox when neither is set. Comes
+        with a failure per configured address or group that cannot be resolved."""
         found: list[OutlookMailbox] = []
         failures: list[ConnectorFailure] = []
-        if self.mailboxes:
-            for address in self.mailboxes:
-                # Resolution reads the directory, never the mailbox, so a Graph
-                # error here is about the app or the service and fails the
-                # attempt instead of dropping the address.
-                mailbox = self.ops.resolve_mailbox(address=address)
-                if mailbox is None:
-                    failures.append(
-                        _mailbox_failure(
-                            address,
-                            f"No user matches {address}. "
-                            f"{MAILBOX_UNAVAILABLE_REMEDIATION}",
-                        )
+        # Resolution reads the directory, never a mailbox, so a Graph error
+        # here is about the app or the service and fails the attempt instead
+        # of dropping the address or the group.
+        for address in self.mailboxes:
+            mailbox = self.ops.resolve_mailbox(address=address)
+            if mailbox is None:
+                failures.append(
+                    _mailbox_failure(
+                        address,
+                        f"No user matches {address}. {MAILBOX_UNAVAILABLE_REMEDIATION}",
                     )
-                    continue
-                found.append(mailbox)
-        else:
-            # TODO(nmgarza5): list across checkpoint steps and carry compact
-            # mailbox records, so a huge tenant survives a failure mid-listing.
-            next_link: str | None = None
-            for _ in range(MAX_MAILBOX_LISTING_PAGES):
-                page = self.ops.list_mailbox_users(next_link=next_link)
-                found.extend(page.mailboxes)
-                next_link = page.next_link
-                if next_link is None:
-                    break
-            if next_link is not None:
-                raise RuntimeError(
-                    "Outlook: the user listing ran past "
-                    f"{MAX_MAILBOX_LISTING_PAGES} pages without ending"
                 )
+                continue
+            found.append(mailbox)
+        for identifier in self.mailbox_groups:
+            groups = self.ops.resolve_groups(identifier=identifier)
+            if len(groups) != 1:
+                failures.append(
+                    _mailbox_failure(
+                        identifier,
+                        f"{describe_group_mismatch(identifier, len(groups))}. "
+                        f"{GROUP_UNAVAILABLE_REMEDIATION}",
+                    )
+                )
+                continue
+            found.extend(self._group_mailboxes(groups[0].id))
+        if not self.mailboxes and not self.mailbox_groups:
+            found.extend(
+                self._listed_mailboxes(
+                    lambda next_link: self.ops.list_mailbox_users(next_link=next_link)
+                )
+            )
         # A UPN and a primary SMTP address, or two listing pages, can name the
         # same mailbox. The dict keeps the first occurrence in order.
         unique = list({mailbox.id: mailbox for mailbox in found}.values())
         logger.info("Outlook: %s mailboxes to walk", len(unique))
         return unique, failures
+
+    def _listed_mailboxes(
+        self, fetch_page: Callable[[str | None], OutlookMailboxPage]
+    ) -> list[OutlookMailbox]:
+        """Every mailbox of a paged user listing."""
+        # TODO(nmgarza5): list across checkpoint steps and carry compact
+        # mailbox records, so a huge tenant survives a failure mid-listing.
+        mailboxes: list[OutlookMailbox] = []
+        next_link: str | None = None
+        for _ in range(MAX_MAILBOX_LISTING_PAGES):
+            page = fetch_page(next_link)
+            mailboxes.extend(page.mailboxes)
+            next_link = page.next_link
+            if next_link is None:
+                return mailboxes
+        raise RuntimeError(
+            "Outlook: the user listing ran past "
+            f"{MAX_MAILBOX_LISTING_PAGES} pages without ending"
+        )
+
+    def _group_mailboxes(self, group_id: str) -> list[OutlookMailbox]:
+        return self._listed_mailboxes(
+            lambda next_link: self.ops.list_group_mailbox_users(
+                group_id=group_id, next_link=next_link
+            )
+        )
 
     def _enumerate_mailboxes(
         self, checkpoint: OutlookCheckpoint
@@ -813,18 +852,18 @@ class OutlookConnector(
         self, callback: IndexingHeartbeatInterface | None, include_permissions: bool
     ) -> GenerateSlimDocumentOutput:
         mailboxes, failures = self._resolve_mailboxes()
-        # An address that matches no user is a configuration problem, not a
-        # verdict on the mailbox behind it, so the walk stops here rather than
-        # list that mailbox as empty.
+        # An address or a group that cannot be resolved is a configuration
+        # problem, not a verdict on the mailboxes behind it, so the walk stops
+        # here rather than list those mailboxes as empty.
         if failures:
-            addresses = ", ".join(
+            names = ", ".join(
                 failure.failed_entity.entity_id
                 for failure in failures
                 if failure.failed_entity is not None
             )
             raise ConnectorValidationError(
-                f"These mailboxes match no user: {addresses}. Fix or remove them "
-                "from the mailbox list before pruning or permission sync."
+                f"These mailboxes or groups cannot be resolved: {names}. Fix or "
+                "remove them from the connector before pruning or permission sync."
             )
         for mailbox in mailboxes:
             try:

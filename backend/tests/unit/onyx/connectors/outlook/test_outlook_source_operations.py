@@ -106,6 +106,60 @@ def test_list_mailbox_users_follows_next_link_without_resending_params() -> None
     assert client.get_json.call_args.args[:2] == ("https://graph/next", None)
 
 
+GROUP_ID = "0b7c4c6e-5b7b-4c53-9a36-1e6a5f3f2d10"
+
+
+def test_resolve_groups_reads_an_object_id_directly() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = {"id": GROUP_ID, "displayName": "Onyx Users"}
+
+    result = gateway.resolve_groups(identifier=GROUP_ID)
+
+    assert [group.id for group in result] == [GROUP_ID]
+    assert client.get_json.call_args.args[0] == f"{GRAPH_BASE}/groups/{GROUP_ID}"
+
+
+def test_resolve_groups_treats_an_unknown_object_id_as_no_match() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = http_error(404, "Request_ResourceNotFound")
+
+    assert gateway.resolve_groups(identifier=GROUP_ID) == []
+
+
+def test_resolve_groups_returns_every_group_sharing_a_display_name() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [{"id": "group-1", "displayName": "Sales"}, {"id": "group-2"}]
+    )
+
+    result = gateway.resolve_groups(identifier="Sales's")
+
+    url, params = client.get_json.call_args.args[:2]
+    assert url == f"{GRAPH_BASE}/groups"
+    assert params["$filter"] == "displayName eq 'Sales''s'"
+    assert [group.id for group in result] == ["group-1", "group-2"]
+
+
+def test_group_members_keep_only_enabled_users_with_a_mail_address() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [
+            user_json(),
+            user_json(id="user-disabled", accountEnabled=False),
+            user_json(id="user-no-mail", mail=None),
+        ]
+    )
+    client.get_json.return_value["@odata.nextLink"] = "https://graph/next"
+
+    result = gateway.list_group_mailbox_users(group_id=GROUP_ID)
+
+    assert client.get_json.call_args.args[0] == (
+        f"{GRAPH_BASE}/groups/{GROUP_ID}/transitiveMembers/microsoft.graph.user"
+    )
+    assert [m.id for m in result.mailboxes] == [MAILBOX_ID]
+    assert result.next_link == "https://graph/next"
+
+
 def test_resolve_mailbox_falls_back_to_the_primary_smtp_address() -> None:
     gateway, client = _gateway()
     client.get_json.side_effect = [

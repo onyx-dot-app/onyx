@@ -11,6 +11,9 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.outlook.errors import (
     EXCHANGE_SCOPE_REMEDIATION,
+    GROUP_LISTING_DENIED,
+    GROUP_LISTING_REMEDIATION,
+    GROUP_UNAVAILABLE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     USER_LISTING_DENIED,
     raise_for_graph_error,
@@ -65,4 +68,37 @@ def raise_if_unavailable(problems: list[str]) -> None:
         "These mailboxes cannot be indexed: "
         + ", ".join(problems)
         + f". {MAILBOX_UNAVAILABLE_REMEDIATION} {EXCHANGE_SCOPE_REMEDIATION}"
+    )
+
+
+def describe_group_mismatch(identifier: str, match_count: int) -> str:
+    """Why a group identifier that does not name exactly one group is unusable."""
+    if match_count == 0:
+        return f"No group matches {identifier}"
+    return f"More than one group is named {identifier}"
+
+
+def describe_unavailable_groups(
+    gateway: OutlookSourceOperations, identifiers: list[str]
+) -> list[str]:
+    """One line per configured group that does not name exactly one Entra
+    group, empty when all do."""
+    problems: list[str] = []
+    for identifier in identifiers:
+        try:
+            match_count = len(gateway.resolve_groups(identifier=identifier))
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, GROUP_LISTING_DENIED, GROUP_LISTING_REMEDIATION)
+        if match_count != 1:
+            problems.append(describe_group_mismatch(identifier, match_count))
+    return problems
+
+
+def raise_if_groups_unavailable(problems: list[str]) -> None:
+    if not problems:
+        return
+    raise ConnectorValidationError(
+        "These groups cannot be used: "
+        + ", ".join(problems)
+        + f". {GROUP_UNAVAILABLE_REMEDIATION}"
     )

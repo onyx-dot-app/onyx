@@ -1164,8 +1164,20 @@ export const connectorConfigs: Record<
         optional: true,
         description:
           "User principal names or primary email addresses of the mailboxes to index. " +
-          "Leave empty to index every mailbox the app registration may open. " +
+          "Leave this and Mailbox Groups empty to index every mailbox the app registration may open. " +
           "Shared mailboxes are never picked up automatically and must be listed here.",
+      },
+      {
+        type: "list",
+        query: "Enter groups whose mailboxes to index:",
+        label: "Mailbox Groups",
+        name: "mailbox_groups",
+        optional: true,
+        description:
+          "Display names or object IDs of Entra groups. The mailbox of every member is indexed, " +
+          "members of nested groups included, so a tenant can be limited to the people who use Onyx. " +
+          "Needs the GroupMember.Read.All application permission. " +
+          "To skip old mail, set Indexing Start under Advanced.",
       },
       buildIncludeAttachmentsOption(
         false,

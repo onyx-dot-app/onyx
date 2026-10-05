@@ -13,8 +13,13 @@ import pytest
 
 from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.connector_runner import ConnectorRunner
-from onyx.connectors.exceptions import ConnectorValidationError, CredentialInvalidError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError as OutlookAuthError,
 )
@@ -495,6 +500,102 @@ def test_failures_are_yielded_only_once_every_address_resolved() -> None:
 
     with pytest.raises(Exception, match="ServiceUnavailable"):
         next(generator)
+
+
+def _group_gateway() -> MagicMock:
+    gateway = _happy_gateway()
+    gateway.resolve_groups.return_value = [EntraGroup(id="group-1")]
+    gateway.list_group_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox()]
+    )
+    return gateway
+
+
+def _walked_mailbox_ids(gateway: MagicMock) -> list[str]:
+    return [c.kwargs["mailbox_id"] for c in gateway.probe_mailbox.call_args_list]
+
+
+def test_group_mode_walks_the_group_members_instead_of_every_user() -> None:
+    gateway = _group_gateway()
+    gateway.list_group_mailbox_users.side_effect = [
+        OutlookMailboxPage(mailboxes=[mailbox()], next_link="https://graph/next"),
+        OutlookMailboxPage(mailboxes=[mailbox(id="user-2")]),
+    ]
+
+    _run(_connector(gateway, mailbox_groups=["Onyx Users"]))
+
+    gateway.resolve_groups.assert_called_once_with(identifier="Onyx Users")
+    assert gateway.list_group_mailbox_users.call_args_list == [
+        call(group_id="group-1", next_link=None),
+        call(group_id="group-1", next_link="https://graph/next"),
+    ]
+    gateway.list_mailbox_users.assert_not_called()
+    assert sorted(_walked_mailbox_ids(gateway)) == sorted([mailbox().id, "user-2"])
+
+
+def test_named_mailboxes_and_group_members_are_walked_together_once() -> None:
+    gateway = _group_gateway()
+    gateway.list_group_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox(), mailbox(id="user-2")]
+    )
+
+    _run(_connector(gateway, mailboxes=[MAILBOX_ADDRESS], mailbox_groups=["g"]))
+
+    assert sorted(_walked_mailbox_ids(gateway)) == sorted([mailbox().id, "user-2"])
+
+
+@pytest.mark.parametrize(
+    ("matches", "reason"),
+    [
+        ([], "No group matches Sales"),
+        (
+            [EntraGroup(id="group-1"), EntraGroup(id="group-2")],
+            "More than one group is named Sales",
+        ),
+    ],
+)
+def test_group_that_does_not_name_one_group_is_a_recorded_failure(
+    matches: list[EntraGroup], reason: str
+) -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.return_value = matches
+
+    items = _run(_connector(gateway, mailbox_groups=["Sales"]))
+
+    failures = [item for item in items if isinstance(item, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_entity is not None
+    assert failures[0].failed_entity.entity_id == "Sales"
+    assert reason in failures[0].failure_message
+    gateway.list_group_mailbox_users.assert_not_called()
+    gateway.list_mailbox_users.assert_not_called()
+
+
+def test_failed_group_lookup_fails_the_attempt_instead_of_dropping_it() -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.side_effect = graph_error(503, "ServiceUnavailable")
+
+    with pytest.raises(Exception, match="ServiceUnavailable"):
+        _run(_connector(gateway, mailbox_groups=["Sales"]))
+
+
+def test_validation_names_groups_that_do_not_resolve() -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.return_value = []
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        _connector(gateway, mailbox_groups=["Sales"]).validate_connector_settings()
+
+    assert "No group matches Sales" in str(exc_info.value)
+    gateway.list_mailbox_users.assert_not_called()
+
+
+def test_validation_maps_a_denied_group_read_to_the_group_permission() -> None:
+    gateway = _group_gateway()
+    gateway.resolve_groups.side_effect = graph_error(403, "Authorization_RequestDenied")
+
+    with pytest.raises(InsufficientPermissionsError, match="GroupMember.Read.All"):
+        _connector(gateway, mailbox_groups=["Sales"]).validate_connector_settings()
 
 
 def test_denied_mailbox_is_a_failure_when_named_and_a_skip_otherwise() -> None:
