@@ -1,4 +1,5 @@
 import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { InputTypeInProps } from "@opal/components/inputs/texts/input-type-in/components";
 
 // ---------------------------------------------------------------------------
 // Rows
@@ -142,11 +143,27 @@ export type DropdownSide = "bottom" | "right";
 // Views
 // ---------------------------------------------------------------------------
 
-/** A search field pinned above the rows. `onChange` reports the text, and `""` when the rows leave. */
-export interface DropdownSearch {
-  placeholder: string;
-  onChange?: (query: string) => void;
-}
+/**
+ * A search field pinned above the rows: `InputTypeIn`'s props, less the
+ * ones the list owns (its text, keys, ref, variant and icon), so a caller
+ * can add `rightChildren`, `clearButton`, a test id and the like.
+ * `onChange` reports the text, and `""` when the rows leave.
+ */
+export type DropdownSearch = Omit<
+  InputTypeInProps,
+  | "value"
+  | "onChange"
+  | "onKeyDown"
+  | "ref"
+  | "variant"
+  | "searchIcon"
+  | "aria-label"
+  | "placeholder"
+> &
+  Record<`data-${string}`, string | undefined> & {
+    placeholder: string;
+    onChange?: (query: string) => void;
+  };
 
 /**
  * A secondary view: rows that replace the list's rows in place. Nothing is

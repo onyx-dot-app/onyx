@@ -935,6 +935,7 @@ function DropdownData(props: DropdownDataProps) {
         searchField={
           search
             ? {
+                ...search,
                 value: searchText,
                 placeholder:
                   search.placeholder || strings.selectSearchPlaceholder,

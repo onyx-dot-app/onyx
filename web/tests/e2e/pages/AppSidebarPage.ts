@@ -11,16 +11,18 @@ export class ProjectsPopover {
     return this.page.getByTestId("AppSidebar/projects");
   }
 
+  /** The list of projects: a menu named by the trigger's label. */
   get content(): Locator {
-    return this.page.getByTestId("ProjectsPopover");
+    return this.page.getByRole("menu", { name: "Projects" });
   }
 
+  /** The search field sits above the menu, not inside it; only one is open. */
   get searchField(): Locator {
-    return this.content.getByTestId("ProjectsPopover/search");
+    return this.page.getByTestId("ProjectsPopover/search");
   }
 
   get newProjectButton(): Locator {
-    return this.content.getByTestId("ProjectsPopover/new-project");
+    return this.page.getByTestId("ProjectsPopover/new-project");
   }
 
   async open(): Promise<void> {

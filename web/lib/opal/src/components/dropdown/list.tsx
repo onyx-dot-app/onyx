@@ -26,6 +26,7 @@ import { Row, targetTakesFocus } from "@opal/components/dropdown/rows";
 import type {
   DropdownMode,
   DropdownRow,
+  DropdownSearch,
   RowGroup,
 } from "@opal/components/dropdown/types";
 
@@ -77,9 +78,8 @@ interface DropdownListProps {
    * opens; the key handler is the trigger's, so arrows, Enter, Escape and
    * Tab behave the same from either.
    */
-  searchField?: {
+  searchField?: Omit<DropdownSearch, "onChange"> & {
     value: string;
-    placeholder: string;
     onChange: (value: string) => void;
     onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   };
@@ -397,6 +397,14 @@ function Card({
 }: CardElementProps) {
   const strings = useOpalStrings();
   const hasSearch = searchField !== undefined;
+  // The list owns the field's text and keys; the rest is the caller's.
+  const {
+    value = "",
+    placeholder = "",
+    onChange = () => {},
+    onKeyDown,
+    ...fieldProps
+  } = searchField ?? {};
   const totalRows = groups.reduce(
     (count, group) => count + group.rows.length,
     0
@@ -428,14 +436,15 @@ function Card({
           onClick={(e) => e.stopPropagation()}
         >
           <InputTypeIn
+            {...fieldProps}
             ref={searchRef}
             searchIcon
             variant="internal"
-            placeholder={searchField.placeholder}
-            aria-label={searchField.placeholder}
-            value={searchField.value}
-            onChange={(e) => searchField.onChange(e.target.value)}
-            onKeyDown={searchField.onKeyDown}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
           />
         </div>
       )}
