@@ -3,7 +3,7 @@
 import logging
 
 from onyx.llm.api_surfaces import LlmApiSurface, resolve_api_surface
-from onyx.llm.constants import LlmProviderNames
+from onyx.llm.constants import AGGREGATOR_PROVIDERS, LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.prompt_cache.providers.anthropic import AnthropicPromptCacheProvider
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
@@ -21,22 +21,9 @@ OPENROUTER_ANTHROPIC_PREFIX = "anthropic/"
 OPENROUTER_GOOGLE_PREFIX = "google/"
 OPENROUTER_OPENAI_PREFIX = "openai/"
 
-# Gateways/proxies: the upstream model varies per deployment, so the adapter
-# is picked from the API surface and the model name rather than the provider.
-GATEWAY_PROVIDERS: frozenset[str] = frozenset(
-    {
-        LlmProviderNames.LITELLM_PROXY,
-        LlmProviderNames.BIFROST,
-        LlmProviderNames.OPENAI_COMPATIBLE,
-        LlmProviderNames.NEBIUS_TOKENFACTORY,
-        LlmProviderNames.PORTKEY,
-        LlmProviderNames.VERCEL_AI_GATEWAY,
-    }
-)
 
-
-def _adapter_for_gateway(llm_config: LLMConfig) -> PromptCacheProvider:
-    """Pick a cache adapter for a gateway provider from its surface + model name.
+def _adapter_for_aggregator(llm_config: LLMConfig) -> PromptCacheProvider:
+    """Pick a cache adapter for an aggregator/gateway by surface + model name.
 
     Gateways forward message-level ``cache_control`` to Anthropic upstreams
     (LiteLLM, Bifrost, and Portkey all translate it on their chat-completions
@@ -111,8 +98,12 @@ def get_provider_adapter(llm_config: LLMConfig) -> PromptCacheProvider:
                 "Prompt caching not supported for OpenRouter model: %s", model_name
             )
             return NoOpPromptCacheProvider()
-    elif llm_config.model_provider in GATEWAY_PROVIDERS:
-        return _adapter_for_gateway(llm_config)
+    elif llm_config.model_provider in AGGREGATOR_PROVIDERS:
+        # Aggregators/gateways can serve any upstream model, so the adapter is
+        # picked from the API surface and the model name. Providers with their
+        # own handling (openrouter, bedrock+anthropic, vertex) are matched
+        # above and never reach this branch.
+        return _adapter_for_aggregator(llm_config)
     else:
         # Default to no-op for providers without caching support
         return NoOpPromptCacheProvider()
