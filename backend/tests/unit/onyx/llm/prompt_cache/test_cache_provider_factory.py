@@ -7,6 +7,7 @@ from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMes
 from onyx.llm.prompt_cache import processor as processor_module
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.prompt_cache.providers.anthropic import AnthropicPromptCacheProvider
+from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
 from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
 from onyx.llm.prompt_cache.providers.openai import OpenAIPromptCacheProvider
@@ -28,17 +29,21 @@ def _config(
 
 def test_gateway_anthropic_model_gets_anthropic_adapter() -> None:
     for provider in ("litellm_proxy", "bifrost", "openai_compatible", "portkey"):
-        adapter = get_provider_adapter(_config(provider, "claude-sonnet-5"))
+        adapter: PromptCacheProvider = get_provider_adapter(
+            _config(provider, "claude-sonnet-5")
+        )
         assert isinstance(adapter, AnthropicPromptCacheProvider), provider
 
 
 def test_gateway_prefixed_anthropic_model_gets_anthropic_adapter() -> None:
-    adapter = get_provider_adapter(_config("bifrost", "anthropic/claude-sonnet-4-5"))
+    adapter: PromptCacheProvider = get_provider_adapter(
+        _config("bifrost", "anthropic/claude-sonnet-4-5")
+    )
     assert isinstance(adapter, AnthropicPromptCacheProvider)
 
 
 def test_portkey_messages_surface_gets_anthropic_adapter() -> None:
-    adapter = get_provider_adapter(
+    adapter: PromptCacheProvider = get_provider_adapter(
         _config("portkey", "any-model", custom_config={"portkey_api_mode": "messages"})
     )
     assert isinstance(adapter, AnthropicPromptCacheProvider)
@@ -46,13 +51,25 @@ def test_portkey_messages_surface_gets_anthropic_adapter() -> None:
 
 def test_gateway_non_anthropic_model_stays_noop() -> None:
     for provider in ("litellm_proxy", "bifrost", "openai_compatible", "portkey"):
-        adapter = get_provider_adapter(_config(provider, "gpt-5-mini"))
+        adapter: PromptCacheProvider = get_provider_adapter(
+            _config(provider, "gpt-5-mini")
+        )
         assert isinstance(adapter, NoOpPromptCacheProvider), provider
 
 
 def test_gateway_unknown_model_stays_noop() -> None:
-    adapter = get_provider_adapter(_config("litellm_proxy", "my-deployment"))
+    adapter: PromptCacheProvider = get_provider_adapter(
+        _config("litellm_proxy", "my-deployment")
+    )
     assert isinstance(adapter, NoOpPromptCacheProvider)
+
+
+def test_gateway_substring_lookalikes_stay_noop() -> None:
+    for name in ("claudio-fast", "myanthropic-proxy", "declauded-v1"):
+        adapter: PromptCacheProvider = get_provider_adapter(
+            _config("litellm_proxy", name)
+        )
+        assert isinstance(adapter, NoOpPromptCacheProvider), name
 
 
 def test_direct_providers_unchanged() -> None:

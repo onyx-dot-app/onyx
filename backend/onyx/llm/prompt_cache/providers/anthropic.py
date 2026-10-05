@@ -24,7 +24,7 @@ def _add_anthropic_cache_control(
     Returns:
         Messages with cache_control added
     """
-    result = list(messages)
+    result: list[ChatCompletionMessage] = list(messages)
     result[-1] = result[-1].model_copy(update={"cache_control": {"type": "ephemeral"}})
     if len(result) > 1:
         result[0] = result[0].model_copy(

@@ -1,6 +1,7 @@
 """Factory for creating provider-specific prompt cache adapters."""
 
 import logging
+import re
 
 from onyx.llm.api_surfaces import LlmApiSurface, resolve_api_surface
 from onyx.llm.constants import AGGREGATOR_PROVIDERS, LlmProviderNames
@@ -35,8 +36,12 @@ def _adapter_for_aggregator(llm_config: LLMConfig) -> PromptCacheProvider:
         == LlmApiSurface.ANTHROPIC_MESSAGES
     ):
         return AnthropicPromptCacheProvider()
-    model_name = (llm_config.model_name or "").lower()
-    if "anthropic" in model_name or "claude" in model_name:
+    # Match on name segments only ("anthropic/claude-sonnet", "claude-sonnet-4-5"),
+    # so an unrelated deployment that merely contains the substring
+    # ("claudio-fast", "myanthropic-proxy") is not misclassified.
+    model_name: str = (llm_config.model_name or "").lower()
+    segments: frozenset[str] = frozenset(re.split(r"[/._\-\s]+", model_name))
+    if "anthropic" in segments or "claude" in segments:
         logger.debug(
             "Prompt caching enabled for gateway Anthropic model: %s (provider=%s)",
             llm_config.model_name,
