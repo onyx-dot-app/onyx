@@ -79,9 +79,10 @@ and §9).
 
 ### The role/permission model
 
-There is no role enum. `User.role` is an unmapped legacy DB column that the
-application never reads or writes. Authorization is `Permission` plus
-`AccountType`. The live mechanism is:
+`UserRole` (`backend/onyx/auth/schemas.py`) is an explicit **legacy tombstone**: it
+still exists as the type of the `User.role` column, but the column is never read
+or written, and the docstring says so. **Do not treat `UserRole.ADMIN` /
+`CURATOR` / `BASIC` as the live authorization mechanism.** The live mechanism is:
 
 - `Permission` (`backend/onyx/db/enums.py`), a flat set of capability tokens
   (`BASIC_ACCESS`, `READ_DOCUMENT_SETS`, `MANAGE_USER_GROUPS`,
