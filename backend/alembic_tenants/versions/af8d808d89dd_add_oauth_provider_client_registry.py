@@ -1,4 +1,4 @@
-"""add inbound mcp oauth client registry
+"""add oauth provider client registry
 
 Revision ID: af8d808d89dd
 Revises: 5e0d2a7c9f41
@@ -20,7 +20,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "mcp_oauth_client",
+        "oauth_provider_client",
         sa.Column("client_id", sa.String(64), primary_key=True),
         sa.Column("client_metadata", postgresql.JSONB(), nullable=False),
         sa.Column(
@@ -38,12 +38,12 @@ def upgrade() -> None:
         schema="public",
     )
     op.create_index(
-        "ix_mcp_oauth_client_last_used_at",
-        "mcp_oauth_client",
+        "ix_oauth_provider_client_last_used_at",
+        "oauth_provider_client",
         ["last_used_at"],
         schema="public",
     )
 
 
 def downgrade() -> None:
-    op.drop_table("mcp_oauth_client", schema="public")
+    op.drop_table("oauth_provider_client", schema="public")

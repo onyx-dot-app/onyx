@@ -9,10 +9,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
-from onyx.mcp_oauth.models import (
-    MCPOAuthConsentBinding,
-    PendingMCPOAuthAuthorization,
-    StoredMCPOAuthCode,
+from onyx.oauth_provider.models import (
+    OAuthProviderConsentBinding,
+    PendingOAuthProviderAuthorization,
+    StoredOAuthProviderCode,
 )
 from onyx.redis.redis_pool import get_async_redis_connection
 from shared_configs.configs import DEFAULT_REDIS_PREFIX
@@ -21,7 +21,7 @@ AUTHORIZATION_REQUEST_TTL_SECONDS = 10 * 60
 AUTHORIZATION_CODE_TTL_SECONDS = 60
 
 _HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
-_KEY_PREFIX = f"{DEFAULT_REDIS_PREFIX}:mcp_oauth"
+_KEY_PREFIX = f"{DEFAULT_REDIS_PREFIX}:oauth_provider"
 _REQUEST_KEY_PREFIX = f"{_KEY_PREFIX}:request"
 _CODE_KEY_PREFIX = f"{_KEY_PREFIX}:code"
 
@@ -72,12 +72,12 @@ def _loads_model[T: BaseModel](raw: object, model_type: type[T]) -> T | None:
 
 
 async def store_authorization_request(
-    authorization: PendingMCPOAuthAuthorization,
+    authorization: PendingOAuthProviderAuthorization,
 ) -> str:
     handle = secrets.token_urlsafe(32)
     pending_key, _ = _request_keys(handle) or (None, None)
     if pending_key is None:
-        raise RuntimeError("Generated invalid MCP OAuth authorization handle")
+        raise RuntimeError("Generated invalid OAuth provider authorization handle")
 
     redis = await get_async_redis_connection()
     was_stored = await redis.set(
@@ -87,19 +87,19 @@ async def store_authorization_request(
         nx=True,
     )
     if not was_stored:
-        raise RuntimeError("MCP OAuth authorization handle collision")
+        raise RuntimeError("OAuth provider authorization handle collision")
     return handle
 
 
 async def get_authorization_request(
     handle: str,
-) -> PendingMCPOAuthAuthorization | None:
+) -> PendingOAuthProviderAuthorization | None:
     keys = _request_keys(handle)
     if keys is None:
         return None
 
     redis = await get_async_redis_connection()
-    return _loads_model(await redis.get(keys[0]), PendingMCPOAuthAuthorization)
+    return _loads_model(await redis.get(keys[0]), PendingOAuthProviderAuthorization)
 
 
 async def bind_authorization_request(
@@ -108,7 +108,7 @@ async def bind_authorization_request(
     user_id: UUID,
     tenant_id: str,
     session_hash: str,
-) -> MCPOAuthConsentBinding | None:
+) -> OAuthProviderConsentBinding | None:
     keys = _request_keys(handle)
     if keys is None:
         return None
@@ -119,7 +119,7 @@ async def bind_authorization_request(
     if remaining_ttl_ms <= 0:
         return None
 
-    binding = MCPOAuthConsentBinding(
+    binding = OAuthProviderConsentBinding(
         user_id=user_id,
         tenant_id=tenant_id,
         session_hash=session_hash,
@@ -136,7 +136,7 @@ async def bind_authorization_request(
         return binding
 
     existing_binding = _loads_model(
-        await redis.get(binding_key), MCPOAuthConsentBinding
+        await redis.get(binding_key), OAuthProviderConsentBinding
     )
     if existing_binding is None:
         return None
@@ -156,7 +156,7 @@ async def consume_authorization_request(
     tenant_id: str,
     session_hash: str,
     csrf_token: str,
-) -> PendingMCPOAuthAuthorization | None:
+) -> PendingOAuthProviderAuthorization | None:
     keys = _request_keys(handle)
     if keys is None:
         return None
@@ -164,7 +164,7 @@ async def consume_authorization_request(
 
     redis = await get_async_redis_connection()
     raw_binding = await redis.get(binding_key)
-    binding = _loads_model(raw_binding, MCPOAuthConsentBinding)
+    binding = _loads_model(raw_binding, OAuthProviderConsentBinding)
     if binding is None:
         return None
     if (
@@ -187,19 +187,19 @@ async def consume_authorization_request(
             raw_binding,
         ),
     )
-    return _loads_model(raw_pending, PendingMCPOAuthAuthorization)
+    return _loads_model(raw_pending, PendingOAuthProviderAuthorization)
 
 
-async def store_authorization_code(record: StoredMCPOAuthCode) -> str:
+async def store_authorization_code(record: StoredOAuthProviderCode) -> str:
     seconds_until_expiry = record.expires_at - time.time()
     if seconds_until_expiry <= 0:
-        raise ValueError("MCP OAuth authorization code is already expired")
+        raise ValueError("OAuth provider authorization code is already expired")
     if seconds_until_expiry > AUTHORIZATION_CODE_TTL_SECONDS:
-        raise ValueError("MCP OAuth authorization code expiry exceeds maximum TTL")
+        raise ValueError("OAuth provider authorization code expiry exceeds maximum TTL")
     code = secrets.token_urlsafe(32)
     key = _code_key(code)
     if key is None:
-        raise RuntimeError("Generated invalid MCP OAuth authorization code")
+        raise RuntimeError("Generated invalid OAuth provider authorization code")
 
     redis = await get_async_redis_connection()
     was_stored = await redis.set(
@@ -209,29 +209,29 @@ async def store_authorization_code(record: StoredMCPOAuthCode) -> str:
         nx=True,
     )
     if not was_stored:
-        raise RuntimeError("MCP OAuth authorization code collision")
+        raise RuntimeError("OAuth provider authorization code collision")
     return code
 
 
-async def get_authorization_code(code: str) -> StoredMCPOAuthCode | None:
+async def get_authorization_code(code: str) -> StoredOAuthProviderCode | None:
     key = _code_key(code)
     if key is None:
         return None
 
     redis = await get_async_redis_connection()
-    record = _loads_model(await redis.get(key), StoredMCPOAuthCode)
+    record = _loads_model(await redis.get(key), StoredOAuthProviderCode)
     if record is None or record.expires_at <= time.time():
         return None
     return record
 
 
-async def consume_authorization_code(code: str) -> StoredMCPOAuthCode | None:
+async def consume_authorization_code(code: str) -> StoredOAuthProviderCode | None:
     key = _code_key(code)
     if key is None:
         return None
 
     redis = await get_async_redis_connection()
-    record = _loads_model(await redis.getdel(key), StoredMCPOAuthCode)
+    record = _loads_model(await redis.getdel(key), StoredOAuthProviderCode)
     if record is None or record.expires_at <= time.time():
         return None
     return record

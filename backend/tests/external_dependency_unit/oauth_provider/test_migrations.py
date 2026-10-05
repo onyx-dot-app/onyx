@@ -50,17 +50,19 @@ def test_self_hosted_migration_creates_catalog_and_tenant_tables(
         )
         assert set(inspect(connection).get_table_names(schema="public")) == {
             "user",
-            "mcp_oauth_client",
-            "mcp_oauth_grant",
-            "mcp_oauth_token",
+            "oauth_provider_client",
+            "oauth_provider_grant",
+            "oauth_provider_token",
         }
         connection.execute(
             text(
-                "INSERT INTO public.mcp_oauth_client (client_id, client_metadata) VALUES ('migration-test', '{}')"
+                "INSERT INTO public.oauth_provider_client (client_id, client_metadata) VALUES ('migration-test', '{}')"
             )
         )
         assert (
-            connection.scalar(text("SELECT client_id FROM public.mcp_oauth_client"))
+            connection.scalar(
+                text("SELECT client_id FROM public.oauth_provider_client")
+            )
             == "migration-test"
         )
         _run_revision(
@@ -97,20 +99,22 @@ def test_cloud_migrations_keep_one_registry_outside_tenant_schema(
             monkeypatch=monkeypatch,
         )
         assert inspect(connection).get_table_names(schema="public") == [
-            "mcp_oauth_client"
+            "oauth_provider_client"
         ]
         assert set(inspect(connection).get_table_names(schema="tenant_oauth_test")) == {
             "user",
-            "mcp_oauth_grant",
-            "mcp_oauth_token",
+            "oauth_provider_grant",
+            "oauth_provider_token",
         }
         connection.execute(
             text(
-                "INSERT INTO public.mcp_oauth_client (client_id, client_metadata) VALUES ('migration-test', '{}')"
+                "INSERT INTO public.oauth_provider_client (client_id, client_metadata) VALUES ('migration-test', '{}')"
             )
         )
         assert (
-            connection.scalar(text("SELECT client_id FROM public.mcp_oauth_client"))
+            connection.scalar(
+                text("SELECT client_id FROM public.oauth_provider_client")
+            )
             == "migration-test"
         )
         _run_revision(
@@ -121,7 +125,7 @@ def test_cloud_migrations_keep_one_registry_outside_tenant_schema(
             monkeypatch=monkeypatch,
         )
         assert inspect(connection).get_table_names(schema="public") == [
-            "mcp_oauth_client"
+            "oauth_provider_client"
         ]
         assert inspect(connection).get_table_names(schema="tenant_oauth_test") == [
             "user"

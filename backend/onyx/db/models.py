@@ -641,8 +641,8 @@ class PersonalAccessToken(Base):
     )
 
 
-class MCPOAuthGrant(Base):
-    __tablename__ = "mcp_oauth_grant"
+class OAuthProviderGrant(Base):
+    __tablename__ = "oauth_provider_grant"
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -665,16 +665,18 @@ class MCPOAuthGrant(Base):
     )
 
     __table_args__ = (
-        Index("ix_mcp_oauth_grant_user_created", "user_id", "created_at"),
+        Index("ix_oauth_provider_grant_user_created", "user_id", "created_at"),
     )
 
 
-class MCPOAuthToken(Base):
-    __tablename__ = "mcp_oauth_token"
+class OAuthProviderToken(Base):
+    __tablename__ = "oauth_provider_token"
 
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     grant_id: Mapped[UUID] = mapped_column(
-        ForeignKey("mcp_oauth_grant.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("oauth_provider_grant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     kind: Mapped[Literal["access", "refresh"]] = mapped_column(
         String(7), nullable=False
@@ -688,7 +690,7 @@ class MCPOAuthToken(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('access', 'refresh')", name="ck_mcp_oauth_token_kind"
+            "kind IN ('access', 'refresh')", name="ck_oauth_provider_token_kind"
         ),
     )
 
@@ -5658,8 +5660,8 @@ class PublicBase(DeclarativeBase):
     __abstract__ = True
 
 
-class MCPOAuthClient(PublicBase):
-    __tablename__ = "mcp_oauth_client"
+class OAuthProviderClient(PublicBase):
+    __tablename__ = "oauth_provider_client"
     __table_args__ = ({"schema": "public"},)
 
     client_id: Mapped[str] = mapped_column(String(64), primary_key=True)

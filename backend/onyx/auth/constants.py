@@ -9,9 +9,8 @@ API_KEY_LENGTH = 192
 PAT_PREFIX = "onyx_pat_"
 PAT_LENGTH = 192
 
-MCP_OAUTH_TOKEN_PREFIX = "onyx_mcp_"
-MCP_OAUTH_ACCESS_TOKEN_PREFIX = f"{MCP_OAUTH_TOKEN_PREFIX}a_"
-MCP_OAUTH_REFRESH_TOKEN_PREFIX = f"{MCP_OAUTH_TOKEN_PREFIX}r_"
+OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX = "onyx_oat_"
+OAUTH_PROVIDER_REFRESH_TOKEN_PREFIX = "onyx_ort_"
 
 # SCIM constants. Defined here rather than in `ee` so that tenant extraction in
 # `onyx.auth.utils` can recognise a SCIM token without importing from `ee`.

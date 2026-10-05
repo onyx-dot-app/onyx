@@ -6,8 +6,8 @@ import pytest
 from mcp.server.auth.provider import AuthorizationParams
 from redis.asyncio import Redis
 
-from onyx.mcp_oauth import attempts
-from onyx.mcp_oauth.attempts import (
+from onyx.oauth_provider import attempts
+from onyx.oauth_provider.attempts import (
     bind_authorization_request,
     consume_authorization_code,
     consume_authorization_request,
@@ -16,18 +16,18 @@ from onyx.mcp_oauth.attempts import (
     store_authorization_code,
     store_authorization_request,
 )
-from onyx.mcp_oauth.models import (
-    MCPOAuthConsentBinding,
-    PendingMCPOAuthAuthorization,
-    StoredMCPOAuthCode,
+from onyx.oauth_provider.models import (
+    OAuthProviderConsentBinding,
+    PendingOAuthProviderAuthorization,
+    StoredOAuthProviderCode,
 )
 
 pytestmark = pytest.mark.asyncio(loop_scope="module")
 
 
-def _authorization() -> PendingMCPOAuthAuthorization:
+def _authorization() -> PendingOAuthProviderAuthorization:
     unique_id = uuid4().hex
-    return PendingMCPOAuthAuthorization(
+    return PendingOAuthProviderAuthorization(
         client_id=f"client-{unique_id}",
         client_name=f"Test client {unique_id}",
         params=AuthorizationParams(
@@ -42,11 +42,11 @@ def _authorization() -> PendingMCPOAuthAuthorization:
 
 
 def _code_record(
-    authorization: PendingMCPOAuthAuthorization | None = None,
+    authorization: PendingOAuthProviderAuthorization | None = None,
     *,
     expires_in: float = 30,
-) -> StoredMCPOAuthCode:
-    return StoredMCPOAuthCode(
+) -> StoredOAuthProviderCode:
+    return StoredOAuthProviderCode(
         authorization=authorization or _authorization(),
         user_id=uuid4(),
         tenant_id=f"tenant-{uuid4().hex}",
@@ -84,7 +84,7 @@ async def test_authorization_request_lifecycle_binds_and_approves(
             tenant_id=tenant_id,
             session_hash=session_hash,
         )
-        assert isinstance(binding, MCPOAuthConsentBinding)
+        assert isinstance(binding, OAuthProviderConsentBinding)
         assert "csrf_token" not in repr(binding)
 
         assert (

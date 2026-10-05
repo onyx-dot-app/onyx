@@ -22,7 +22,7 @@ async def redis_client() -> AsyncGenerator[Redis, None]:
 
 @pytest.fixture
 def migration_database() -> Generator[Engine, None, None]:
-    with contextmanager(temporary_database)("mcp_oauth_migration") as name:
+    with contextmanager(temporary_database)("oauth_provider_migration") as name:
         engine = create_engine(build_connection_string(db_api=SYNC_DB_API, db=name))
         try:
             yield engine
