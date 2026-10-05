@@ -20,6 +20,14 @@ components/craft-sessions.md: opencode.json
 components/craft-webapp-proxy.md: start-webapp.sh
 components/skills.md: opencode.json
 
+# Local files that git ignores.
+components/cc-pairs-and-credentials.md: .vscode/.env
+components/connectors.md: .vscode/.env
+
+# MCP method names.
+components/craft-external-apps.md: tools/list
+components/craft-external-apps.md: tools/call
+
 # Library names.
 components/discord-bot.md: discord.py
 
