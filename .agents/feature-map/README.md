@@ -104,9 +104,9 @@ a runtime path, or a statement that a file does not exist), add it to
 through `PATHS.md` (longest prefix wins, tests and `.agents/` ignored), and names
 every component whose code changed but whose document did not. Run it by hand with
 `python3 .agents/feature-map/stale_docs.py <files>`. The agent Stop hook from #15555
-(`.agents/hooks/pre_commit_on_stop.py`) runs it on the branch's changes when an agent
-ends a turn, so the agent decides whether the document needs an update while it still
-knows what it changed. With the hook, it names each component at most once per session.
+runs it on the branch's changes when an agent ends a turn, so the agent decides
+whether the document needs an update while it still knows what it changed. With the
+hook, it names each component at most once per session.
 
 The check catches broken references only. It cannot tell when a description is
 wrong while every path it cites still exists. That is why each component records
