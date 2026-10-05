@@ -1155,9 +1155,6 @@ slackbot:
 # Onyx Model Context Protocol (MCP) Server
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
-  # Set configMap.MCP_SERVER_OAUTH_ENABLED="true" on both API and MCP services.
-  # Keep disabled until the consent UI and discovery routing are deployed.
-  # configMap.MCP_SERVER_OAUTH_RESOURCE_URL overrides the default WEB_DOMAIN/mcp/.
   extraEnv: []
   enabled: false  # Disabled by default
   replicaCount: 1
