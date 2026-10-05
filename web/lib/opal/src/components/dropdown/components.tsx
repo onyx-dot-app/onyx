@@ -576,11 +576,13 @@ function DropdownData(props: DropdownDataProps) {
       ? viewKey({ ...topView, key: top.key }, stack.length)
       : "root";
   const items = topView ? topView.items : rootItems;
-  // The view on top may size the list; the root takes it back.
+  // The view on top may size the list; the root takes it back. Not while
+  // closing: the stack resets under the exit fade, and the width must not
+  // snap with it. The next open starts at the root and sets it then.
   const topWidth = topView?.width;
   useLayoutEffect(() => {
-    setViewWidth(topWidth);
-  }, [topWidth, setViewWidth]);
+    if (isOpen) setViewWidth(topWidth);
+  }, [isOpen, topWidth, setViewWidth]);
   const search = topView ? topView.search : rootSearch;
   const create = top ? undefined : rootCreate;
   const otherOptionsTitle = top ? undefined : rootOtherOptionsTitle;

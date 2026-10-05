@@ -500,7 +500,11 @@ export function useDropdownOverlay({
               elements.floating.style,
               fixed !== undefined
                 ? { width: `${fixed}rem`, minWidth: `${fixed}rem` }
-                : { width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px` }
+                : {
+                    width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px`,
+                    // Back from a fixed width: the stylesheet's floor again.
+                    minWidth: "",
+                  }
             );
           },
         }),

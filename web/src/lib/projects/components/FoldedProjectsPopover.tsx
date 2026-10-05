@@ -5,7 +5,7 @@ import {
   FolderIconProvider,
 } from "@/lib/projects/components/ProjectFolderButton";
 import CreateProjectModal from "@/lib/projects/components/CreateProjectModal";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -38,11 +38,14 @@ interface ProjectPopoverRowProps {
   onNavigate: () => void;
   /** The row props from the list. Its click stays with the tabs inside. */
   rowProps: DropdownRowProps;
+  /** The row's element, for the keyboard to step into its chats. */
+  rowRef: (node: HTMLDivElement | null) => void;
 }
 function ProjectPopoverRow({
   match,
   onNavigate,
   rowProps,
+  rowRef,
 }: ProjectPopoverRowProps) {
   const appPosition = useAppPosition();
   const pinChatAgent = usePinChatAgent();
@@ -70,6 +73,7 @@ function ProjectPopoverRow({
     <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
       <Section
         {...rowProps}
+        ref={rowRef}
         // A chat link's click must not also open the project.
         onClick={undefined}
         data-testid="ProjectsPopover/row"
@@ -131,6 +135,8 @@ export function FoldedProjectsPopover() {
   // are pinned past the list's own filter. The list clears the text on close.
   const [query, setQuery] = useState("");
   const matches = useProjectSearch(query);
+  // Each project's row element: ArrowRight steps into its chats.
+  const rowElements = useRef(new Map<number, HTMLDivElement>());
 
   // Any navigation means the popover has done its job. Folding a project's
   // chats never touches the URL, so the folder icon leaves the popover open.
@@ -169,11 +175,23 @@ export function FoldedProjectsPopover() {
             setOpen(false);
             appPosition.openProject(match.project.id);
           },
+          // ArrowRight moves focus to the project's first chat; Tab walks
+          // the rest and Enter follows one.
+          onSecondary: () => {
+            rowElements.current
+              .get(match.project.id)
+              ?.querySelector("a")
+              ?.focus();
+          },
           render: ({ props }) => (
             <ProjectPopoverRow
               match={match}
               onNavigate={() => setOpen(false)}
               rowProps={props}
+              rowRef={(node) => {
+                if (node) rowElements.current.set(match.project.id, node);
+                else rowElements.current.delete(match.project.id);
+              }}
             />
           ),
         }));
