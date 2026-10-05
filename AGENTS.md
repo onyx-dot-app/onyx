@@ -63,6 +63,11 @@ pre-commit run --all-files
 pre-commit run --files <path> [<path> ...]
 ```
 
+Claude Code and Codex also run pre-commit on your uncommitted files when you end a
+turn (`.agents/hooks/pre_commit_on_stop.py`, wired as a Stop hook in
+`.claude/settings.json` and `.codex/hooks.json`). If it fails, fix the reported
+problems before you finish.
+
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 
 NOTE: Keep code comments brief and focused on information that stays relevant long-term.

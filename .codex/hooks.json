@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/pre_commit_on_stop.py\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}
