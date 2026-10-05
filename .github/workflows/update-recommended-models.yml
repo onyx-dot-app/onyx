@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       agent_model:
-        description: "OpenAI model for the agent call (default: gpt-5)"
+        description: "OpenAI model for the agent call (default: gpt-6-luna)"
         required: false
         default: ""
   # When the chat-test workflow fails on the auto PR branch, iterate: re-run

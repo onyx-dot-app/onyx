@@ -62,7 +62,7 @@ DEFAULT_OUTPUT = (
 DEFAULT_RULES = SCRIPT_DIR / "update_recommended_models_rules.json"
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
-DEFAULT_AGENT_MODEL = "gpt-5"
+DEFAULT_AGENT_MODEL = "gpt-6-luna"
 # Built-in web search tool on the Responses API.
 WEB_SEARCH_TOOL = {"type": "web_search"}
 # Cap per vendor section so the prompt stays small enough to leave room for
