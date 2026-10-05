@@ -10,10 +10,10 @@ from onyx.tools.models import DynamicSchemaInfo, ToolResponse
 from onyx.tools.tool_implementations.custom.custom_tool import (
     CustomToolCallSummary,
     build_custom_tools_from_openapi_schema_and_headers,
-    validate_openapi_schema,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
+    validate_openapi_schema,
 )
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.headers import HeaderItemDict
@@ -445,7 +445,7 @@ class TestSanitizeToolName(unittest.TestCase):
         # what the user wrote, even though the LLM sees the sanitized form.
         self.assertEqual(specs[0].raw_name, "ServiceNow.list incidents")
         self.assertEqual(
-            specs[0].to_tool_definition()["function"]["name"],
+            specs[0].to_tool_definition().name,
             "ServiceNow_list_incidents",
         )
 

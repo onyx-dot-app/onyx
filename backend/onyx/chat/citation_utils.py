@@ -4,7 +4,7 @@ from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcess
 from onyx.chat.models import ContextFileMetadata
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
+from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 from onyx.tools.models import ToolResponse
 
 

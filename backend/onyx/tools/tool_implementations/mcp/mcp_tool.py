@@ -7,6 +7,7 @@ from mcp.client.auth import OAuthClientProvider
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
 from onyx.db.models import MCPConnectionConfig, MCPServer
+from onyx.llm.models import ToolDefinition
 from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import (
@@ -127,17 +128,13 @@ class MCPTool(Tool[None]):
     def use_disambiguated_name(self) -> None:
         self._name = self._llm_name
 
-    def tool_definition(self) -> dict:
+    def tool_definition(self) -> ToolDefinition:
         """Return the tool definition from the MCP server"""
-        # Convert MCP tool definition to OpenAI function calling format
-        return {
-            "type": "function",
-            "function": {
-                "name": self._name,
-                "description": self._description,
-                "parameters": _normalize_parameters_schema(self._tool_definition),
-            },
-        }
+        return ToolDefinition(
+            name=self._name,
+            description=self._description,
+            parameters=_normalize_parameters_schema(self._tool_definition),
+        )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
