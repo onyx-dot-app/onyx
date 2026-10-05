@@ -18,8 +18,8 @@ authorization state), `backend/onyx/connectors/credentials_provider.py`,
 `backend/onyx/background/celery/tasks/connector_deletion/`,
 `backend/onyx/utils/encryption.py`, `backend/onyx/utils/sensitive.py`,
 `backend/onyx/db/rotate_encryption_key.py`,
-`web/src/app/admin/add-connector/`, `web/src/app/admin/connectors/`,
-`web/src/app/admin/connector/`, `web/src/app/admin/indexing/`
+`web/src/app/admin/connectors/`, `web/src/app/admin/connector/`,
+`web/src/app/admin/indexing-status/`, `web/src/views/admin/connectors/`
 
 **Read first:** [[connectors]] for what a connector implementation does once it
 runs, and the ingestion vocabulary entry in `GLOSSARY.md`.
@@ -28,8 +28,8 @@ runs, and the ingestion vocabulary entry in `GLOSSARY.md`.
 
 ## 1. What the user experiences
 
-An admin picks a source tile in `web/src/app/admin/add-connector/page.tsx`
-(`listSourceMetadata`), fills in the connector's config (URLs, spaces, scopes),
+An admin picks a source tile in the catalog at `/admin/connectors`
+(`web/src/views/admin/connectors/CatalogPage.tsx`, which calls `listSourceMetadata`), fills in the connector's config (URLs, spaces, scopes),
 and authenticates: either by pasting a secret into a form, uploading a file (a
 service-account key), or an OAuth redirect through `/connector/oauth`
 (`backend/onyx/server/documents/standard_oauth.py`). The admin then chooses who
@@ -192,7 +192,7 @@ Connector (1) ---< ConnectorCredentialPair >--- (1) Credential
   and one per `(credential, connector)` scope, enforced by two partial unique
   indexes.
 - `sync_record` (`models.py:SyncRecord`, `db/sync_record.py`): a generic
-  progress row for any Vespa-syncing operation, keyed by
+  progress row for any document-index syncing operation, keyed by
   `(entity_id, sync_type)`. Connector deletion is `SyncType.CONNECTOR_DELETION`
   with `entity_id = cc_pair_id`; `monitor_connector_deletion_taskset`
   (`background/celery/tasks/connector_deletion/tasks.py`) updates it as the
@@ -339,7 +339,7 @@ used only when a pairing has no indexed documents; see §2). The real flow:
    (`background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`)
    calls `get_document_connector_count` for that document. Count `== 1` means
    this cc-pair is the document's only indexer: it is deleted from the
-   document index (Vespa/OpenSearch) and its Postgres rows. Count `> 1` means
+   document index (OpenSearch) and its Postgres rows. Count `> 1` means
    another cc-pair still indexes it: the document is **not** deleted, only
    updated (`MetadataUpdateRequest`) to drop this cc-pair's contribution to
    its access list and document-set membership.
@@ -437,7 +437,7 @@ It does not block the delete call; see §9.
 - [[permission-sync]]: reads `access_type`, `auto_sync_options`,
   `last_time_perm_sync`, `last_time_external_group_sync`.
 - [[document-index]]: the deletion task writes directly to it
-  (`get_all_document_indices`, `RetryDocumentIndex.delete`/`update`).
+  (`get_default_document_index`, then `DocumentIndex.delete`/`update`).
 - Document sets and personas: scope themselves to a list of cc-pair ids, never
   to connector ids.
 
@@ -447,7 +447,7 @@ It does not block the delete call; see §9.
 
 | If your change... | Also check |
 |---|---|
-| adds a field to `connector_specific_config` | The connector implementation that reads it ([[connectors]]), the add-connector form schema in `web/src/app/admin/add-connector/`, and whether the field is a secret that belongs in `credential_json` instead. |
+| adds a field to `connector_specific_config` | The connector implementation that reads it ([[connectors]]), the add-connector form schema in `web/src/views/admin/connectors/AddConnectorPage/`, and whether the field is a secret that belongs in `credential_json` instead. |
 | changes credential encryption (`utils/encryption.py`, EE variant, or `rotate_encryption_key.py`) | Both CE and EE code paths; `SensitiveValue`'s `is_json` branch; every `.get_value(apply_mask=...)` call site (there are 60+) still needs to decrypt correctly; run a rotation dry-run against a populated `credential` table. |
 | changes `AccessType` (adding a value, changing semantics) | [[permission-sync]] (what `SYNC` means to it), [[access-control]] (`build_only_permission_sync_included_where`-style clauses in `connector_credential_pair.py`), and every place that special-cases `PUBLIC`/`SYNC` in a `where_clause`. |
 | changes the deletion flow | The orphan-document invariant (§5.4) above all else; `sync_record` progress reporting; the Redis fence keys in `RedisConnector.delete`; whether `Connector`/`Credential` cascade rules still hold. |

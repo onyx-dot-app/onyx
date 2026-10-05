@@ -25,7 +25,7 @@ auth.
 `backend/ee/onyx/server/auth_check.py`,
 `backend/onyx/db/users.py`, `db/auth.py`, `db/api_key.py`, `db/pat.py`,
 `db/saml.py`, `db/sso_provider.py`, `db/permissions.py`,
-`db/scoped_permissions.py`, `db/oauth_config.py`, `db/user_oauth_token.py`,
+`db/scoped_permissions.py`, `db/oauth_config.py`, `server/features/user_oauth_token/`,
 `backend/onyx/oauth/`, the `User`/`PermissionGrant`/`ApiKey`/
 `PersonalAccessToken`/`SSOProvider`/`SamlAccount`/`ScimToken`/`OAuthConfig`/
 `OAuthUserToken` tables in `backend/onyx/db/models.py`.

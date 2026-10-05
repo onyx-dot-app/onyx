@@ -57,7 +57,6 @@ Turning a query into ranked, access-filtered context.
 | ✅ | [access-control](components/access-control.md) | Document ACLs, user groups, document sets, external permission sync, curator scoping. |
 | ✅ | [web-search](components/web-search.md) | External web search and page fetch as a tool. |
 | ✅ | [federated-search](components/federated-search.md) | Query-time search against a source you have not indexed. |
-| ✅ | [search-receipts](components/search-receipts.md) | The retrieval-quality evidence trail. |
 
 ## Domain: Ingestion
 

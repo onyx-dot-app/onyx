@@ -314,9 +314,6 @@ the LLM, assigning one citation number per unique `document_id` starting at
 **Depended on by**
 - [[core-chat-loop]]: `construct_tools` attaches `SearchTool` per turn; the loop
   executes it like any other tool and folds its `ToolResponse` into history.
-- [[search-receipts]]: consumes `SearchDocsResponse.retrieval_diagnostics` (only
-  populated when `include_retrieval_candidates=True`) to build a receipt; see
-  `_build_receipt_scope` for when a receipt can be produced at all.
 - [[web-search]]: a separate tool (`WebSearchTool`), not part of this component,
   but merged alongside it by the same `tool_runner.py` citation-range logic.
 - The onyx-cli/programmatic `/search` endpoint (`server/features/search/api.py`)
@@ -330,7 +327,7 @@ the LLM, assigning one citation number per unique `document_id` starting at
 | If your change... | Also check |
 |---|---|
 | changes a lane weight or the RRF formula | run a retrieval eval before merging; a weight swing changes which documents survive to LLM selection, which is invisible in a unit test |
-| adds a retrieval lane | the RRF weight list and `lane_specs` must stay parallel to `search_functions`; `_build_retrieval_candidate_lanes` (search receipts) must account for the new lane or `retrieval_diagnostics` will misreport it |
+| adds a retrieval lane | the RRF weight list and `lane_specs` must stay parallel to `search_functions` |
 | adds a filter field to `BaseFilters`/`IndexFilters` | `_build_index_filters`, the two document-set access checks, [[document-index]]'s query builder, and the Search UI filter form |
 | changes the LLM-facing string format in `convert_inference_sections_to_llm_string` | [[citations]]; this breaks citation parsing everywhere the string is consumed, not just here |
 | changes `SearchDocsResponse` fields | the UI renderer for `SearchToolDocumentsDelta`/search cards, and [[chat-persistence]]'s `SearchDoc` persistence, both of which read this shape |

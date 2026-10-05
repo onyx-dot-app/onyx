@@ -25,7 +25,6 @@ Some paths map to more than one component. Read all of them.
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `models.py`, `session_loading.py`, `chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `placement.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
-| `backend/onyx/chat/search_receipts.py`, `docs/SEARCH_RECEIPTS.md` | search-receipts |
 
 ## Backend: tools
 
@@ -48,9 +47,9 @@ Some paths map to more than one component. Read all of them.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/context/` | internal-search |
-| `backend/onyx/document_index/`, `backend/ee/onyx/document_index/` | document-index |
+| `backend/onyx/document_index/` | document-index |
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
-| `backend/onyx/db/search_settings.py`, `db/swap_index.py`, `db/opensearch_migration.py`, `server/manage/opensearch_migration/` | document-index |
+| `backend/onyx/db/search_settings.py`, `db/swap_index.py` | document-index |
 | `backend/onyx/server/manage/search_settings.py`, `server/manage/embedding/` | document-index |
 | `backend/onyx/server/features/search/`, `server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/search_backend.py`, `backend/ee/onyx/search/` | internal-search |
 | `backend/ee/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
@@ -90,7 +89,7 @@ Some paths map to more than one component. Read all of them.
 |---|---|
 | `backend/onyx/auth/`, `backend/ee/onyx/auth/`, `backend/onyx/server/auth/`, `server/saml*.py`, `server/oidc_multi.py`, `server/sso_discovery.py`, `server/manage/sso/` | auth-and-identity |
 | `backend/onyx/db/users.py`, `db/auth.py`, `db/api_key.py`, `db/pat.py`, `db/saml.py`, `db/sso_provider.py`, `server/api_key/`, `server/pat/`, `server/manage/users.py` | auth-and-identity |
-| `backend/onyx/oauth/`, `backend/onyx/db/oauth_config.py`, `server/features/oauth_config/`, `db/user_oauth_token.py` | auth-and-identity |
+| `backend/onyx/oauth/`, `backend/onyx/db/oauth_config.py`, `server/features/oauth_config/`, `server/features/user_oauth_token/` | auth-and-identity |
 | `backend/onyx/db/tenant_shard.py`, `db/engine/`, `backend/onyx/server/middleware/` | multi-tenancy |
 | `backend/onyx/background/celery/`, `background/periodic_poller.py`, `background/task_utils.py`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `db/scheduled_task.py`, `db/sync_record.py` | background-jobs |
 | `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/db/gated_app.py`, `backend/onyx/configs/` | editions-and-gating |
@@ -119,7 +118,7 @@ so verify the callers rather than a single component.
 |---|---|
 | `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/` | Cache and KV abstractions. Used by fences, rate limits, and the stream buffer. |
 | `backend/onyx/error_handling/` | `OnyxError` and the error-code taxonomy surfaced to clients. |
-| `backend/onyx/utils/`, `backend/onyx/httpx/` | Shared helpers. `utils/variable_functionality.py` holds `fetch_versioned_implementation` and `fetch_ee_implementation_or_noop`, the CE-to-EE dispatch mechanism. |
+| `backend/onyx/utils/` | Shared helpers. `utils/variable_functionality.py` holds `fetch_versioned_implementation` and `fetch_ee_implementation_or_noop`, the CE-to-EE dispatch mechanism. |
 
 ## Backend: integrations
 
@@ -152,7 +151,7 @@ so verify the callers rather than a single component.
 | `web/src/app/app/` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
-| `web/src/app/admin/connector*/`, `admin/add-connector/`, `admin/indexing/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
+| `web/src/app/admin/connector*/`, `admin/indexing-status/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
 | `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
 | `web/src/app/admin/agents/` | agents-personas |
 | `web/src/app/admin/language-models/` | llm-providers |

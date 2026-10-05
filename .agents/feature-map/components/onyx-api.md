@@ -88,7 +88,7 @@ an `APIRouter` (marks every route in the router) or on an individual
 This list is exhaustive; re-run the grep above before
 trusting a specific count, since new endpoints can add or drop the tag.
 
-### The ingestion router (`onyx-api/ingestion.py`, prefix `/onyx-api`)
+### The ingestion router (`onyx/server/onyx_api/ingestion.py`, prefix `/onyx-api`)
 
 | Method | Path | Handler | Auth | Notes |
 |---|---|---|---|---|

@@ -95,7 +95,7 @@ calls `fetch_versioned_implementation_with_fallback` for
 `NoOpFeatureFlagProvider()` directly. `backend/onyx/feature_flags/flags.py` and
 `backend/onyx/feature_flags/feature_flags_keys.py` are currently empty
 scaffolding; flag keys are defined ad hoc at their call sites (see
-`backend/onyx/chat/search_receipts.py:SEARCH_RECEIPTS_FLAG`).
+`backend/onyx/server/features/build/utils.py:ONYX_CRAFT_ENABLED_FLAG`).
 
 ### Gated apps (`backend/onyx/db/gated_app.py`)
 
@@ -219,15 +219,13 @@ itself falling back to `NoOpFeatureFlagProvider` if `posthog` (the client) is
 
 Two shapes of flag exist, both on `FeatureFlagProvider`
 (`backend/onyx/feature_flags/interface.py`):
-- `feature_enabled_for_user_tenant`: no default parameter; an unresolvable
-  flag answers whatever the provider's base `feature_enabled` returns
-  (`False` for `NoOpFeatureFlagProvider`).
-- `feature_enabled_for_user_tenant_or_default(..., default: bool)`: an
-  unresolvable flag (no provider, flag undefined, or evaluation error)
-  returns `default`, not `False`. `backend/onyx/chat/search_receipts.py:search_receipts_enabled`
-  calls this with `default=True` and flag key `"onyx-search-receipts"`, so the
-  flag can only ever turn the feature **off** for a targeted cohort; it can
-  never be the reason the feature turns on. See [[search-receipts]].
+- `feature_enabled_for_user_tenant`: evaluates a flag for one user. It has no
+  default parameter. An unresolvable flag answers whatever the provider's base
+  `feature_enabled` returns (`False` for `NoOpFeatureFlagProvider`).
+- `feature_variant_for_tenant`: reads a multivariate flag for the whole tenant.
+  The base class and `NoOpFeatureFlagProvider` return `None`. The PostHog
+  provider keys the flag on `tenant_id`
+  (`backend/ee/onyx/feature_flags/posthog_provider.py`).
 
 ### 4.4 Licensing
 
@@ -321,8 +319,6 @@ sufficient for a paid feature to respond.
 - [[background-jobs]]: every Celery app variant under
   `backend/onyx/background/celery/versioned_apps/` calls
   `set_is_ee_based_on_env_variable()` before building its app.
-- [[search-receipts]]: `search_receipts_enabled` is the worked example of a
-  flag with a non-`False` default.
 - [[observability]]: license and tier decisions are logged via
   `global_version`/`get_tier` state, useful when diagnosing which code path a
   request actually took.
@@ -336,7 +332,7 @@ sufficient for a paid feature to respond.
 | adds a new versioned symbol (new `fetch_versioned_implementation` call) | both a CE and an `ee.` implementation exist at the mirrored path with an identical signature; add the `# IMPORTANT DO NOT DELETE` comment on the CE side; decide `fetch_versioned_implementation` vs. `_with_fallback` vs. `_or_noop` deliberately, per §4.2 |
 | changes an EE flag's default (`ENABLE_PAID_ENTERPRISE_EDITION_FEATURES`, `LICENSE_ENFORCEMENT_ENABLED`) | every place that reads the flag directly rather than through `global_version` (`beat_schedule.py`, `ee/onyx/server/middleware/license_enforcement.py`, `ee/onyx/utils/tier.py`, `ee/onyx/server/settings/api.py`, `ee/onyx/server/tenants/proxy.py`); the unit-suite `_reset_leaked_ee_state` fixture assumption in `backend/tests/unit/conftest.py` |
 | changes the Dockerfile's `ee` copy or the `ee` requirements split | `backend/Dockerfile:COPY ./ee`, `backend/requirements/ee.txt`; a build that stops shipping `ee` flips every standard deployment's default resolution from EE to CE, which is the whole safety story in §5 point 2 |
-| adds a feature flag | whether it needs a non-`False` default (`feature_enabled_for_user_tenant_or_default`) or a plain boolean (`feature_enabled_for_user_tenant`); whether `MULTI_TENANT` gating on the PostHog provider is the intended scope, since self-hosted always gets `NoOpFeatureFlagProvider` unless `DEV_MODE` |
+| adds a feature flag | whether it is a per-user boolean (`feature_enabled_for_user_tenant`) or a tenant-wide variant (`feature_variant_for_tenant`); what an unresolvable flag must do, since the first returns `False` when it cannot resolve; whether `MULTI_TENANT` gating on the PostHog provider is the intended scope, since self-hosted always gets `NoOpFeatureFlagProvider` unless `DEV_MODE` |
 | changes licensing (claim/upload/refresh/delete, or `get_tier`) | `MULTI_TENANT` rejection branches in `ee/onyx/server/license/api.py`; `check_ee_features_enabled` in `ee/onyx/server/settings/api.py`; seat-limit and `GATED_ACCESS` behaviour in `license_enforcement.py` |
 | changes `gated_app`/`GatedActionPolicy` policy resolution | every consumer: `server/features/mcp/api.py`, `server/features/build/external_apps/api.py`, `sandbox_proxy/addons/gate.py`, `external_apps/matching/engine.py`; this is unrelated to CE/EE dispatch and must not be conflated with it |
 

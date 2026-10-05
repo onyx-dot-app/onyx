@@ -190,18 +190,18 @@ types present and returns one renderer:
 | Packet family | Renderer |
 |---|---|
 | `message_start`/`message_delta`/`message_end` | `MessageTextRenderer` (`messageComponents/renderers/MessageTextRenderer.tsx`) |
-| `deep_research_plan_start`/`_delta` | `DeepResearchPlanRenderer` (`timeline/renderers/deepresearch/`) |
-| `research_agent_start`, `intermediate_report_*` | `ResearchAgentRenderer` (`timeline/renderers/deepresearch/`) |
-| Coding-agent and bash-tool packets (`isCodingAgentPackets`, `timeline/packetHelpers.ts`) | `CodingAgentRenderer` (`timeline/renderers/code/`) |
-| `search_tool_start` with `is_internet_search: true` | `WebSearchToolRenderer` (`timeline/renderers/search/`) |
-| `search_tool_start` with `is_internet_search` falsy | `InternalSearchToolRenderer` (`timeline/renderers/search/`) |
+| `deep_research_plan_start`/`_delta` | `DeepResearchPlanRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/deepresearch/`) |
+| `research_agent_start`, `intermediate_report_*` | `ResearchAgentRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/deepresearch/`) |
+| Coding-agent and bash-tool packets (`isCodingAgentPackets`, `timeline/packetHelpers.ts`) | `CodingAgentRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/code/`) |
+| `search_tool_start` with `is_internet_search: true` | `WebSearchToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/search/`) |
+| `search_tool_start` with `is_internet_search` falsy | `InternalSearchToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/search/`) |
 | `image_generation_start` | `ImageToolRenderer` (`messageComponents/renderers/ImageToolRenderer.tsx`) |
-| `python_tool_start`, or `tool_call_argument_delta` for a code-interpreter tool type | `PythonToolRenderer` (`timeline/renderers/code/`) |
-| `file_reader_start` | `FileReaderToolRenderer` (`timeline/renderers/filereader/`) |
+| `python_tool_start`, or `tool_call_argument_delta` for a code-interpreter tool type | `PythonToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/code/`) |
+| `file_reader_start` | `FileReaderToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/filereader/`) |
 | `custom_tool_start` | `CustomToolRenderer` (`messageComponents/renderers/CustomToolRenderer.tsx`) |
-| `open_url_start` | `FetchToolRenderer` (`timeline/renderers/fetch/`) |
-| `memory_tool_start`/`memory_tool_no_access` | `MemoryToolRenderer` (`timeline/renderers/memory/`) |
-| `reasoning_start`/`_delta`, or a bare `section_end`/`error` | `ReasoningRenderer` (`timeline/renderers/reasoning/`) |
+| `open_url_start` | `FetchToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/fetch/`) |
+| `memory_tool_start`/`memory_tool_no_access` | `MemoryToolRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/memory/`) |
+| `reasoning_start`/`_delta`, or a bare `section_end`/`error` | `ReasoningRenderer` (`web/src/app/app/message/messageComponents/timeline/renderers/reasoning/`) |
 | `citation_info`, `stop` | **No renderer.** See below. |
 
 `findRenderer` checks in a fixed order (chat text, then deep research, then research

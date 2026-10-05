@@ -165,10 +165,7 @@ Records one external write-effect action a session performed:
 later catalog reclassification), `destination`, `link`, `operation_key` (lets
 multi-request provider flows, e.g. a chunked Slack upload, coalesce into one
 receipt), `status` (`PENDING` → `CONFIRMED`/`FAILED`, swept to `UNKNOWN` after
-`PENDING_RECEIPT_TTL` = 10 min if orphaned). **This is a distinct concept from
-the retrieval "Receipt" in `GLOSSARY.md`** (internal-search metadata appended
-to a tool response); the Craft table is named `ActionReceipt` precisely to
-avoid that collision, and the two share no code.
+`PENDING_RECEIPT_TTL` = 10 min if orphaned).
 
 ### `ActionApproval` (`backend/onyx/db/models.py:ActionApproval`)
 
@@ -748,6 +745,3 @@ general Craft work.
   Craft-only table. A change to generic document/connector logic (deletion,
   metadata handling, permission sync) can silently affect Craft's user
   library, and vice versa.
-- **`ActionReceipt` is not the retrieval "Receipt" from `GLOSSARY.md`.**
-  Same English word, unrelated tables and code paths; do not assume a
-  search-receipts change touches Craft or vice versa.

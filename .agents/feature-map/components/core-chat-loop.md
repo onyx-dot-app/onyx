@@ -73,7 +73,7 @@ answers side by side, then mark one as preferred.
 | `DEV_MODE` |  | Includes stack traces in `StreamingError`. |
 
 Admin-configured, not env: workspace setting `auto_detect_search_filters`
-(`load_settings()`), and the per-user flag behind `search_receipts_enabled(user)`.
+(`load_settings()`).
 
 ---
 
@@ -271,7 +271,6 @@ whenever you touch this component.
 - [[chat-frontend]]: consumes the packet stream.
 - [[slack-bot]], [[discord-bot]], [[onyx-api]], [[mcp-server]], [[mobile-app]]: all of
   these drive a turn through this loop. A change here reaches all of them.
-- [[search-receipts]]: appended to search results inside the turn.
 
 ---
 

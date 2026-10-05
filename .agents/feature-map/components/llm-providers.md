@@ -8,7 +8,7 @@
 **Edition:** CE, with EE gating on visibility (`is_public`) and groups
 **Owns:**
 `backend/onyx/llm/factory.py`, `interfaces.py`, `multi_llm.py`, `model_response.py`,
-`tracing_wrap.py`, `cost.py`, and the rest of `backend/onyx/llm/`,
+`tool_parsing.py`, `cost.py`, and the rest of `backend/onyx/llm/`,
 `backend/onyx/db/llm.py`, `db/llm_usage.py`,
 `backend/onyx/server/manage/llm/api.py`,
 `backend/onyx/tracing/flows.py`, `llm_utils.py`, `setup.py`, `provider_config.py`,
@@ -230,10 +230,15 @@ and retries with a narrower request, up to the ladder's length.
 
 ### 4.5 Streaming contract
 
-`interfaces.py:LLM.stream` is abstract, returning `Iterator[ModelResponseStream]`.
-`multi_llm.py:LitellmLLM.stream` calls `_completion(..., stream=True,
-parallel_tool_calls=True, ...)` and converts each LiteLLM chunk with
-`model_response.py:from_litellm_model_response_stream`.
+`interfaces.py:LLM.invoke(request: GenerationRequest, context)` returns one
+`AssistantMessage`. `LLM.stream(request, context)` yields `GenerationEvent` objects
+(`models.py`: text, thinking, and tool-call events, then lifecycle and usage events).
+`LitellmLLM` builds both on two lower-level methods. `invoke_raw` and `stream_raw` call
+`_completion(..., parallel_tool_calls=True, ...)`. `stream_raw` converts each LiteLLM
+chunk with `model_response.py:from_litellm_model_response_stream` into a
+`ModelResponseStream`. `LitellmLLM.stream` feeds those chunks to
+`model_response.py:MessageAccumulator`, which emits the ordered events.
+The LLM gateway skips the event layer. It reads `stream_raw` chunks directly.
 
 `model_response.py:ModelResponseStream` carries `choice.delta.content`,
 `choice.delta.tool_calls` (a list of `ChatCompletionDeltaToolCall`
@@ -241,8 +246,9 @@ parallel_tool_calls=True, ...)` and converts each LiteLLM chunk with
 call fragments are keyed by `index`: an early chunk carries `id` and
 `function.name`, later chunks for the same index carry only
 `function.arguments` slices with `id`/`name` unset. Callers must accumulate by
-`index` (see `tracing_wrap.py:_merge_tool_call_delta` for the reference
-accumulation logic); reading any single chunk's `tool_calls` as complete
+`index` (see `model_response.py:MessageAccumulator.add`, or
+`ee/onyx/server/gateway/stream_bridge.py:merge_tool_call_delta` for raw chunks);
+reading any single chunk's `tool_calls` as complete
 truncates the call.
 
 Cost is tracked with `LitellmLLM._track_llm_cost` whenever a chunk's `usage`
@@ -252,7 +258,7 @@ trailing usage-only chunk with empty `choices`, handled explicitly in
 
 ### 4.6 Retries
 
-`multi_llm.py:LitellmLLM.stream` retries only on a fixed set of transient
+`multi_llm.py:LitellmLLM.stream_raw` retries only on a fixed set of transient
 LiteLLM exceptions: `Timeout`, `APIConnectionError`, `ServiceUnavailableError`,
 `InternalServerError`. It retries **only if nothing has been yielded yet**
 (`yielded_any` is `False`), up to `1 + LLM_FIRST_CHUNK_MAX_RETRIES` total
@@ -261,20 +267,17 @@ propagates immediately; the stream is not restarted mid-answer.
 
 ### 4.7 Tracing
 
-`interfaces.py:LLM.__init_subclass__` wraps every concrete subclass's
-`invoke` and `stream` with `tracing_wrap.py:wrap_invoke` /
-`tracing_wrap.py:wrap_stream`, wrapping only methods defined directly on that
-subclass (inherited methods are already wrapped on the parent, so they are
-skipped to avoid double-wrapping). Both wrappers check
-`tracing_wrap.py:_outer_generation_span_active`: if a `generation_span` is
-already open, the wrap is a no-op and simply calls straight through.
-Otherwise it opens a fallback span tagged `LLMFlow.UNTAGGED_INVOKE` or
-`LLMFlow.UNTAGGED_STREAM` (`tracing/flows.py`).
+`LitellmLLM.invoke` and `LitellmLLM.stream` each open their own generation span with
+`tracing/llm_utils.py:llm_generation_span`. The flow tag comes from
+`GenerationContext.flow`. If the caller sets no flow, the span uses
+`LLMFlow.UNTAGGED_INVOKE` or `LLMFlow.UNTAGGED_STREAM` (`tracing/flows.py`). No wrapper
+adds spans on its own. `invoke_raw` and `stream_raw` open no span, so a caller of those
+methods owns the span.
 
 **This is the single most important verification signal for this component.**
 `UNTAGGED_INVOKE` / `UNTAGGED_STREAM` appearing in a tracing dashboard means a
-call site reached an `LLM` subclass without opening its own tagged
-`llm_generation_span`. Any new call site should carry an explicit tag.
+call site invoked an `LLM` without setting `GenerationContext.flow`. Any new call
+site should set an explicit flow.
 
 Explicit instrumentation:
 - `tracing/llm_utils.py:llm_generation_span(llm, flow, ...)` for any call that
@@ -322,10 +325,10 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
    that reads one chunk's `tool_calls` as a finished call will get a partial
    name or truncated arguments.
 5. **Retries must not fire after the first yielded chunk.** `yielded_any`
-   gates the retry loop in `LitellmLLM.stream`. If it fires after content has
+   gates the retry loop in `LitellmLLM.stream_raw`. If it fires after content has
    streamed, the client would see duplicated or garbled output.
-6. **Every new LLM call site needs an explicit `LLMFlow` tag.** The auto-wrap
-   fallback exists as a safety net, not a substitute for instrumentation.
+6. **Every new LLM call site needs an explicit `LLMFlow` tag.** The untagged
+   sentinel flows exist as a safety net, not a substitute for instrumentation.
    Leaving a call untagged degrades cost attribution and dashboard grouping.
 7. **API keys are encrypted at rest (`EncryptedString`) and must never be
    logged or returned by an endpoint.** Every provider view returned by
@@ -338,7 +341,7 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 
 **Depends on**
 - [[observability]]: the tracing framework (`generation_span`, trace
-  processors) that `tracing_wrap.py` and `tracing/llm_utils.py` build on.
+  processors) that `multi_llm.py` and `tracing/llm_utils.py` build on.
 - [[rate-and-usage-limits]]: `db/usage.py` and `server/usage_limits.py`, which
   `LitellmLLM._track_llm_cost` calls into.
 - [[auth-and-identity]]: `has_global_permission(user, Permission.MANAGE_LLMS)`
@@ -366,7 +369,7 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 |---|---|
 | adds a new `LLMModelFlowType` value | No database migration is required (the column is a plain `VARCHAR` with no `CHECK` constraint); but you must seed or backfill an `LLMModelFlow` row for it, add a `fetch_default_*` wrapper if callers need one, and decide the fallback behavior when no row exists yet (see §9) |
 | adds a provider | `llm/well_known_providers/`, `_build_provider_extra_headers` if it needs special header handling, `PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING` if it needs a synthesized Authorization header, the admin UI catalogue, and a `/admin/llm/{provider}/available-models` endpoint if it supports live model discovery |
-| changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`llm_step.py`), the tracing accumulation in `tracing_wrap.py:_merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
+| changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`llm_step.py`), `model_response.py:MessageAccumulator`, the gateway's `stream_bridge.py:merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
 | changes default resolution (`fetch_default_model`, `_update_default_model`) | the partial unique index still holds after a migration or backfill; `get_default_llm` and every `get_default_*` wrapper still returns a model, not `None`, where callers assume one exists |
 | adds a new LLM call site | tag it with an `LLMFlow` via `llm_generation_span` or `traced_llm_call`; verify in a Braintrust/Langfuse trace that it does not show up as `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` |
 | changes retry behavior in `LitellmLLM.stream` | the `yielded_any` gate must still prevent post-first-chunk retries; confirm against the retryable exception tuple, which is intentionally narrow |

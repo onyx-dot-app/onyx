@@ -388,8 +388,8 @@ lines) into its own wire format: OpenAI chat-completion chunks
 (`ChatCompletionChunk.from_stream_chunk`), OpenAI Responses events
 (`ResponsesOutputTextDeltaEvent` etc.), or Anthropic content-block events
 (`AnthropicContentBlockDeltaEvent` etc.), reusing
-`onyx/llm/tracing_wrap.py:_merge_tool_call_delta` /
-`_finalize_tool_calls` for tool-call-delta accumulation, per
+`stream_bridge.py:merge_tool_call_delta` /
+`finalize_tool_calls` for tool-call-delta accumulation, per
 [[llm-providers]] §4.5's contract. `_stream_worker_guard`
 (`stream_bridge.py:117-180`) is the single teardown point: on any exception
 it emits a sanitized, dialect-appropriate in-band error frame (the HTTP
@@ -422,11 +422,11 @@ records the span before signalling `_STREAM_END`.
 4. **Every call must be metered and tagged.** Every handler, translation and
    passthrough, streaming and non-streaming, opens a `_gateway_trace` plus an
    `llm_generation_span`/manual `_track_llm_cost` call. A new endpoint or a
-   new passthrough branch that skips this produces an
-   `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` span at best (translation path,
-   auto-wrap fallback in [[llm-providers]] §4.7) or **silently unmetered
-   cost** at worst (passthrough path, which bypasses the auto-wrap entirely
-   since it never calls `LLM.invoke`/`.stream`).
+   new passthrough branch that skips this loses its span (translation
+   path: `llm.invoke_raw` and `llm.stream_raw` open no span, see
+   [[llm-providers]] §4.7) or **silently unmetered cost** at worst
+   (passthrough path, which never calls `LLM.invoke_raw`/`.stream_raw` and
+   must call `llm._track_llm_cost` itself).
 5. **`store` must stay forced false on the OpenAI Responses passthrough**,
    and `previous_response_id`/`conversation` must stay refused. Relaxing
    either reopens the cross-user stored-state read this code exists to
@@ -485,7 +485,7 @@ records the span before signalling `_STREAM_END`.
 
 | If your change… | Also check |
 |---|---|
-| adds an endpoint or a new dialect | wire it through both GATE 1 (`require_permission(Permission.USE_LLM_GATEWAY)`) and GATE 2 (`_authorize_gateway_request`); add `check_token_rate_limits` and resolve through `_resolve_metered_gateway_model` unless the endpoint generates nothing; open a `_gateway_trace`/`llm_generation_span` or call `_track_llm_cost` manually if it bypasses `LLM.invoke`/`.stream` |
+| adds an endpoint or a new dialect | wire it through both GATE 1 (`require_permission(Permission.USE_LLM_GATEWAY)`) and GATE 2 (`_authorize_gateway_request`); add `check_token_rate_limits` and resolve through `_resolve_metered_gateway_model` unless the endpoint generates nothing; open a `_gateway_trace`/`llm_generation_span` or call `_track_llm_cost` manually if it bypasses `LLM.invoke_raw`/`.stream_raw` |
 | changes scope checks (`gateway_request_flow`, `IMPLIED_PERMISSIONS`) | re-verify the asymmetry in §4.2 still holds: a bare `USE_LLM_GATEWAY` grant must not require Craft enablement, and a `CRAFT_SANDBOX` token must still require it; re-run `backend/tests/unit/onyx/server/features/craft/test_craft_gateway.py` |
 | changes the `llm_gateway_enabled` check (`_authorize_gateway_request`, `_validate_assignable_scopes`, `list_selectable_scopes`) | re-verify it still fails closed on a settings-read error, still exempts Craft sandbox traffic, and still blocks both new PAT minting and existing-PAT gateway calls; re-run `backend/tests/unit/ee/onyx/server/gateway/test_llm_gateway_api.py` and `backend/tests/unit/onyx/server/pat/test_pat_api.py` |
 | changes model resolution (`resolve_gateway_model`, the `<provider_id>/<model_name>` wire format) | `model_catalog.py:build_gateway_model_catalog` (the id format `GET /v1/models` returns must still round-trip), and `onyx/server/features/build/session/llm_config.py` which parses the same id format for Craft's stored selection |
@@ -573,13 +573,12 @@ See `backend/AGENTS.md` for required env and secrets.
   (`gateway_request_flow`/`is_craft_gateway_request`), not a second router,
   and Craft's sandboxes call the one router under `/gateway`, mounted only
   from `backend/ee/onyx/main.py`.
-- **Native passthrough bypasses `LitellmLLM.invoke`/`.stream` entirely**, so
-  it also bypasses that class's built-in cost-tracking hook. Both
+- **Native passthrough bypasses `LitellmLLM.invoke_raw`/`.stream_raw` entirely**, so
+  it also bypasses their built-in cost-tracking hook. Both
   passthrough modules compensate with a manual `llm._track_llm_cost(usage)`
   call; a future passthrough addition that forgets this call meters nothing,
-  with no `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` sentinel to reveal the gap,
-  because the auto-wrap fallback in [[llm-providers]] only fires for calls
-  that actually reach an `LLM` subclass.
+  with no span or `UNTAGGED_*` sentinel to reveal the gap,
+  because neither raw method runs on that path.
 - **The kill switches (`ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED`,
   `OPENAI_GATEWAY_PASSTHROUGH_ENABLED`) silently change fidelity, not just
   availability.** Turning a passthrough off does not disable the model; it

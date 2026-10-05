@@ -66,8 +66,9 @@ Per-user Slack connection is reached from the account popover
 (`web/src/sections/sidebar/AccountPopover.tsx`), not from an admin page. The
 workspace-level connector (app credentials, entity config, document-set link) is
 configured from `web/src/app/admin/federated/[id]/page.tsx`, reached only by
-cross-link, not a sidebar entry: `web/src/app/admin/add-connector/page.tsx` routes
-there after creating a federated connector,
+cross-link, not a sidebar entry: the connector catalog
+(`web/src/views/admin/connectors/CatalogPage.tsx`) routes there for a source that
+already has a federated connector,
 `web/src/app/admin/documents/sets/page.tsx` links to it from a document set's
 linked federated connector, and `CCPairIndexingStatusTable.tsx` links to it
 alongside regular cc-pairs. `web/src/lib/admin-routes.ts` lists `/admin/federated`
@@ -376,9 +377,9 @@ OAuth exchange for real).
 
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
 2. Sign in as `admin_user@example.com` / `TestPassword123!` at `http://localhost:3000`.
-3. As admin, add a Slack federated connector: `/admin/add-connector` → select
+3. As admin, add a Slack federated connector: `/admin/connectors` → select
    Slack (federated), enter a Slack app's client id/secret. Confirm it redirects
-   to `/admin/federated/{id}`.
+   to `/admin/indexing-status`, then open the connector at `/admin/federated/{id}`.
 4. Link the connector to a document set the test persona uses
    (`/admin/documents/sets`), since document-set linkage gates whether the bot
    path (and, if extended, non-bot paths reusing that check) will ever fire.

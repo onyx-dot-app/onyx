@@ -7,14 +7,13 @@
 **Domain:** search-index
 **Edition:** CE, with multi-tenant sharding differences on AWS-managed OpenSearch
 **Owns:**
-`backend/onyx/document_index/interfaces_new.py`, `factory.py`, `disabled.py`,
+`backend/onyx/document_index/interfaces.py`, `factory.py`, `disabled.py`,
 `backend/onyx/document_index/opensearch/` (`opensearch_document_index.py`, `search.py`,
 `schema.py`, `constants.py`, `client.py`, `cluster_settings.py`, `index_reclaim.py`,
-`port_copy.py`, `string_filtering.py`), `backend/onyx/document_index/vespa/vespa_document_index.py`,
-`backend/onyx/db/search_settings.py`, `swap_index.py`, `opensearch_migration.py`,
+`port_copy.py`, `string_filtering.py`),
+`backend/onyx/db/search_settings.py`, `swap_index.py`,
 `backend/onyx/natural_language_processing/search_nlp_models.py`,
-`backend/onyx/server/manage/search_settings.py`, `backend/onyx/server/manage/embedding/`,
-`backend/onyx/server/manage/opensearch_migration/`
+`backend/onyx/server/manage/search_settings.py`, `backend/onyx/server/manage/embedding/`
 
 **Does not own:** the retrieval orchestration that decides what to search and how to
 merge results across sources ([[internal-search]]), or the chunking/embedding pipeline
@@ -41,9 +40,9 @@ Onyx switches live search to the new index automatically, and the old index is l
 torn down. Search quality and result ordering can visibly shift right after a switch,
 because the new model can rank chunks differently.
 
-Separately, an admin can flip a low-level toggle that controls whether search queries
-run against OpenSearch or the legacy Vespa backend, without touching the embedding
-model at all. This exists for migration safety, not model choice.
+OpenSearch is the only backend. The earlier Vespa backend and the Vespa-to-OpenSearch
+data migration are gone. Migration `3067343245d1_drop_opensearch_migration_tables`
+dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 
 ---
 
@@ -67,8 +66,6 @@ model at all. This exists for migration safety, not model choice.
 | POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. |
 | GET | `/admin/embedding` | `list_embedding_models` | |
 | GET/PUT/DELETE | `/admin/embedding/embedding-provider[/{provider_type}]` | | Cloud embedding provider credentials. |
-| GET | `/admin/opensearch-migration/status` | `get_opensearch_migration_status` (`server/manage/opensearch_migration/api.py`) | Vespa-to-OpenSearch data migration progress. |
-| GET/PUT | `/admin/opensearch-migration/retrieval` | `get_opensearch_retrieval_status` / `set_opensearch_retrieval_status` | The OpenSearch-vs-Vespa retrieval toggle described in §1. |
 
 Per the frontend rule in `CLAUDE.md`, always call these through the web server
 (`http://localhost:3000/api/...`), never the backend port directly.
@@ -77,10 +74,7 @@ Per the frontend rule in `CLAUDE.md`, always call these through the web server
 
 | Variable | Default | Effect |
 |---|---|---|
-| `DISABLE_VECTOR_DB` | false | `get_default_document_index`/`get_all_document_indices` return `DisabledDocumentIndex` (no-op) instead of a real backend. |
-| `ONYX_DISABLE_VESPA` | **true** | Vespa is off by default. `get_opensearch_retrieval_state` short-circuits to `True` (OpenSearch) when this is set, regardless of the DB toggle. `get_all_document_indices` skips building the Vespa pair. |
-| `ENABLE_OPENSEARCH_INDEXING_FOR_ONYX` | true | Whether writes fan out to OpenSearch at all (`factory.py:get_all_document_indices`). |
-| `ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX` | false, and only meaningful if the above is true | Fallback retrieval backend if the DB migration record is missing; in practice the DB-stored `enable_opensearch_retrieval` flag and `ONYX_DISABLE_VESPA` dominate. |
+| `DISABLE_VECTOR_DB` | false | `get_default_document_index` returns `DisabledDocumentIndex` (no-op) instead of a real backend. |
 | `USING_AWS_MANAGED_OPENSEARCH` | false | Changes shard/replica counts (`schema.py:DocumentSchema.get_index_settings_based_on_environment`) and gates IAM auth. |
 | `OPENSEARCH_TEXT_ANALYZER` | `"english"` | Stemming/tokenization analyzer for `title`/`content`. Changing it needs a reindex of existing indices. |
 | `OPENSEARCH_INDEX_NUM_SHARDS` / `OPENSEARCH_INDEX_NUM_REPLICAS` | environment-dependent | Override shard/replica counts. |
@@ -113,7 +107,7 @@ raises if none is PRESENT.
 
 Fields that matter to this component: `model_name`, `model_dim`, `normalize`,
 `query_prefix`, `passage_prefix`, `api_key`, `provider_type`, `api_url`,
-`deployment_name`, `reduced_dimension`, `embedding_precision`, `index_name`,
+`deployment_name`, `reduced_dimension`, `vector_quantization`, `index_name`,
 `switchover_type`, `use_port_flow`, `port_backfill_source_id`, and the reclaim columns
 `reclaim_status`, `reclaim_stopped_reading_at`, `reclaim_attempts`,
 `reclaim_last_error`, `pending_cc_pair_deletions`.
@@ -170,39 +164,41 @@ None owned directly by this component; caching for search results lives above it
 
 ### 4.1 The abstraction and backend selection
 
-`DocumentIndex` (`interfaces_new.py`) is the contract every backend implements. It is
+`DocumentIndex` (`interfaces.py`) is the contract every backend implements. It is
 composed from capability mixins so different call sites can type-narrow to only what
 they need: `SchemaVerifiable` (`verify_and_create_index_if_necessary`), `Indexable`
 (`index`), `Updatable` (`update`), `Deletable` (`delete`), `HybridCapable`
 (`hybrid_retrieval`, `keyword_retrieval`, `semantic_retrieval`), `IdRetrievalCapable`
 (`id_based_retrieval`), `RandomCapable` (`random_retrieval`).
 
-Two real backends implement it: `OpenSearchDocumentIndex`
-(`opensearch/opensearch_document_index.py`) is current, `VespaDocumentIndex`
-(`vespa/vespa_document_index.py`) is legacy and disabled by default
-(`ONYX_DISABLE_VESPA` defaults to `true`). A `DisabledDocumentIndex`
-(`document_index/disabled.py`) is a no-op used when `DISABLE_VECTOR_DB` is set.
+`OpenSearchDocumentIndex` (`opensearch/opensearch_document_index.py`) is the only real
+implementation. A `DisabledDocumentIndex` (`document_index/disabled.py`) is a no-op
+used when `DISABLE_VECTOR_DB` is set.
 
-Each real backend has a pair wrapper, `OpenSearchIndexPair` and `VespaIndexPair`, that
-implements the same `DocumentIndex` interface but fans calls out to a `primary` and an
-optional `secondary` index. The pair is what callers actually get back.
+`OpenSearchIndexPair` wraps a `primary` and an optional `secondary`
+`OpenSearchDocumentIndex` behind the same `DocumentIndex` interface. Its fan-out rules
+differ by call:
 
-`factory.py:get_default_document_index(search_settings, secondary_search_settings,
-db_session)` is the entry point for retrieval and for the one-index-per-swap-side
-model:
+- `index` writes to the primary only. The port backfill (`port_copy.py`, the `port`
+  Celery tasks) fills the secondary.
+- `delete`, `update`, and `verify_and_create_index_if_necessary` go to both.
+- All retrieval goes to the primary.
+
+`factory.py:get_default_document_index(search_settings, secondary_search_settings, *,
+primary_backfill_in_progress=False)` is the single entry point for both retrieval and
+writes:
 
 1. `DISABLE_VECTOR_DB` -> `DisabledDocumentIndex()`.
-2. Otherwise, `db/opensearch_migration.py:get_opensearch_retrieval_state(db_session)`
-   decides OpenSearch vs. Vespa: `True` if `ONYX_DISABLE_VESPA`, else the DB-stored
-   `enable_opensearch_retrieval` flag, else `ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX`.
-3. Builds the corresponding pair (`_build_opensearch_pair` / `_build_vespa_pair`) from
-   the PRESENT and FUTURE `SearchSettings`.
+2. Otherwise, it builds an `OpenSearchIndexPair` (`build_opensearch_document_index`
+   per `SearchSettings`). `secondary` is `None` when `secondary_search_settings` is
+   `None`.
 
-`factory.py:get_all_document_indices(...)` is the entry point for **writes**: it
-returns every backend index that indexing must write to, not just the one retrieval
-currently reads from. It always puts the Vespa pair first when Vespa is enabled,
-because in the rare event indexing and the OpenSearch migration disagree, Vespa's
-state is treated as more up to date.
+Most callers pass `None` as the second argument. They get a one-index handle for the
+generation they work on. Callers that must reach both generations pass the FUTURE
+settings, for example `server/manage/search_settings.py` and the connector cleanup task
+(`tasks/shared/tasks.py`). `primary_backfill_in_progress` marks an INSTANT-swap primary
+that the port is still filling. `OpenSearchIndexPair.update` then raises
+`SecondaryIndexDocumentMissingError` for documents the port has not copied yet.
 
 ### 4.2 Writing
 
@@ -221,8 +217,7 @@ mid-port, when a metadata update lands on the primary before the reindex port ha
 copied that document into the FUTURE index; callers use this to defer the secondary
 sync instead of failing outright.
 
-`SchemaVerifiable.verify_and_create_index_if_necessary(embedding_dim,
-embedding_precision)` is called on backend construction paths and at swap time
+`SchemaVerifiable.verify_and_create_index_if_necessary(embedding_dim)` is called on backend construction paths and at swap time
 (`swap_index.py:_perform_index_swap`) to make sure the physical index exists before
 anything writes to it.
 
@@ -275,12 +270,6 @@ tags, document sets, per-user-project and per-persona filters, created/updated t
 ranges, chunk index and chunk size, an attached-document-id or hierarchy-node clause,
 tenant ID (multi-tenant only), and forced document sets.
 
-Vespa implements the same three retrieval modes with YQL instead of OpenSearch DSL
-(`vespa_document_index.py:hybrid_retrieval`, `keyword_retrieval`). Verified in source:
-Vespa's `semantic_retrieval` raises `NotImplementedError`
-(`vespa_document_index.py:998`); `keyword_retrieval` is implemented there, using the
-`admin_search` ranking profile over `weakAnd(userInput(@query))`.
-
 ### 4.4 The embedding-model swap state machine
 
 Two state machines exist, and they interlock at the moment of promotion.
@@ -310,8 +299,8 @@ on the new settings to match the connector count; ACTIVE_ONLY waits only on
 non-paused connectors. `_perform_index_swap` does the actual promotion:
 `update_search_settings_status(current, PAST)`,
 `update_search_settings_status(new, PRESENT)`, then calls
-`verify_and_create_index_if_necessary` on every index from
-`get_all_document_indices(new_search_settings, None)` before returning.
+`verify_and_create_index_if_necessary` on the index from
+`get_default_document_index(new_search_settings, None)` before returning.
 
 **Reclaim status** (`IndexReclaimStatus` on the now-PAST `SearchSettings` row), driven
 by a beat task, one step per tick, via the `advance_to_*` helpers in
@@ -356,10 +345,11 @@ comment reads `# No longer used`. See §9.
 
 ## 5. Contracts and invariants
 
-1. **Every write must reach every index `get_all_document_indices` returns**, not just
-   the one `get_default_document_index` currently reads from. A code path that writes
-   through `get_default_document_index` during a swap silently skips the secondary
-   index and it diverges from the primary.
+1. **A write must target the index of the generation it belongs to.** Docprocessing
+   passes the attempt's own `SearchSettings` to `get_default_document_index(..., None)`.
+   `OpenSearchIndexPair.index` writes to the primary only, so a caller that passes the
+   FUTURE settings as `secondary` does not get its chunks written there. The port
+   backfill fills the FUTURE index.
 2. **All chunk-permission filtering flows through `_get_search_filters`.** Nothing may
    query OpenSearch with a hand-built filter that bypasses
    `_get_acl_visibility_filter`; that is the only place ACL and public-doc visibility
@@ -379,14 +369,11 @@ comment reads `# No longer used`. See §9.
 7. **The chunks of one document are never split across `index()` calls.** Backends may
    assume this when computing which trailing chunks to delete for a shortened
    document.
-8. **Vespa and OpenSearch must keep behavioral parity for any method both implement,
-   or the branch must be explicit at the call site.** `semantic_retrieval` is the one
-   verified exception: OpenSearch implements it, Vespa raises `NotImplementedError`.
-9. **The reclaim state machine only advances forward, one step at a time**, and each
+8. **The reclaim state machine only advances forward, one step at a time**, and each
    `advance_to_*` helper is a no-op unless the row is in the exact prior state. A
    caller that mutates `reclaim_status` directly instead of going through these
    helpers can desynchronize `reclaim_stopped_reading_at` from the actual state.
-10. **`get_current_search_settings` requires exactly one PRESENT row** and raises if
+9. **`get_current_search_settings` requires exactly one PRESENT row** and raises if
     none exists; the DB must never be left with zero PRESENT rows mid-swap.
 
 ---
@@ -420,13 +407,12 @@ comment reads `# No longer used`. See §9.
 
 | If your change… | Also check |
 |---|---|
-| adds a chunk field | `opensearch/schema.py` mapping, `DocumentChunk`/`DocumentChunkWithoutVectors`, the writer in [[indexing-pipeline]], any query/filter that should read it, **both** `OpenSearchDocumentIndex` and `VespaDocumentIndex` if Vespa still needs parity, and a migration path for indices created before the change |
+| adds a chunk field | `opensearch/schema.py` mapping, `DocumentChunk`/`DocumentChunkWithoutVectors`, the writer in [[indexing-pipeline]], any query/filter that should read it, and a migration path for indices created before the change |
 | changes hybrid weights or the subquery configuration | run a retrieval-quality eval before shipping; the weights-sum-to-1.0 assert catches arithmetic mistakes but not quality regressions |
 | adds a filter | `_get_search_filters` and every one of its private helper functions that builds one clause; the hybrid, keyword, semantic, and random query builders all call the same function, so a filter added there applies everywhere automatically, but a filter added ad hoc to just one query builder will not |
 | changes `SearchSettings` | `create_search_settings`, `update_search_settings`, the reindex request models in `server/manage/search_settings.py`, and `EmbeddingModel.from_db_model` if the field feeds the embedder |
 | touches the swap state machine (`IndexModelStatus` or `IndexReclaimStatus`) | `swap_index.py:_perform_index_swap`, every `advance_to_*` helper's prior-state guard, and the reclaim beat task; a broken guard can double-delete or skip the soak window |
-| changes `get_default_document_index` or `get_all_document_indices` | every caller of both; a write path that starts using the wrong one will silently stop dual-writing during a swap |
-| changes the OpenSearch <-> Vespa retrieval toggle | `get_opensearch_retrieval_state`, the `/admin/opensearch-migration/retrieval` endpoint, and confirm `ONYX_DISABLE_VESPA`'s default still short-circuits the DB flag the way you expect |
+| changes `get_default_document_index` or `OpenSearchIndexPair` fan-out rules | every caller, since most pass `None` as the secondary; a change to which calls reach the secondary affects the port backfill and swap-time deletes |
 
 ---
 
@@ -477,7 +463,7 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 ### What "working" looks like
 
 - No documents missing from search results due to a filter bug or an incomplete
-  dual-write during a swap.
+  port backfill during a swap.
 - The old index's data is actually gone after `RECLAIMED`, and the row is never
   deleted.
 - Hybrid search returns results that blend keyword and vector matches in the
@@ -500,14 +486,9 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
   that `OpenSearchDocumentIndex.hybrid_retrieval` receives and ignores (marked
   `# noqa: ARG002`). Do not expect tuning `hybrid_alpha` between 0 and 1 to change
   the actual OpenSearch query; it does not, except at the `0.0` boundary.
-- **Vespa and OpenSearch are not symmetric on which method is unimplemented.**
-  `VespaDocumentIndex.semantic_retrieval` raises `NotImplementedError`; its
-  `keyword_retrieval` is fully implemented.
-- **Dual-write during a swap is easy to break silently.** Because
-  `get_all_document_indices` and `get_default_document_index` return different
-  numbers of indices (all-of vs. one pair), a refactor that consolidates them, or a
-  write path that picks the wrong one, produces no error, just a secondary index that
-  quietly diverges until the swap happens and users start seeing stale results.
+- **`OpenSearchIndexPair.index` writes to the primary only.** A caller that expects
+  both generations to receive a write is wrong, and nothing errors. Only the port
+  backfill fills the secondary. `delete` and `update` do reach both.
 - **A local OpenSearch under disk pressure fails as "Could not connect to a document
   index".** OpenSearch's flood-stage watermark flips affected indices read-only when
   disk usage crosses the threshold; the resulting error at the Onyx layer looks like a

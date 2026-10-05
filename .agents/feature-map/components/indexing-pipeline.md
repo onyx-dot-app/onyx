@@ -20,7 +20,7 @@
 **Does not own:** how a connector talks to a source and yields `Document` objects
 ([[connectors]]); the cc-pair/credential model, scheduling triggers, and admin
 connect flow ([[cc-pairs-and-credentials]]); the `DocumentIndex` interface, the
-OpenSearch/Vespa schema, hybrid retrieval, and the embedding-model swap state
+OpenSearch schema, hybrid retrieval, and the embedding-model swap state
 machine ([[document-index]], read first, this document does not repeat its §4.4
 swap state machine); ACL computation ([[access-control]]); external permission
 sync ([[permission-sync]]); user file upload/project storage
@@ -179,7 +179,7 @@ not define the OpenSearch mapping those objects must match.
    |  embed_and_stream(...)                                  -- IndexChunk, spilled to local disk (ChunkBatchStore)
    |  adapter.lock_context(...)                               -- per-document Postgres row lock
    |    enricher.enrich_chunk(...)                            -- ACL, doc sets, boost -> DocMetadataAwareIndexChunk
-   |    write_chunks_to_vector_db_with_backoff(...)  x N      -- once per index from get_all_document_indices
+   |    write_chunks_to_vector_db_with_backoff(...)  x N      -- once, to the index of the attempt's SearchSettings
    |    adapter.post_index(...)                                -- chunk counts, indexed timestamps
    |  IndexingCoordination.update_batch_completion_and_docs    -- cross-batch Redis-locked counter update
    |
@@ -238,8 +238,8 @@ crosses a process or task boundary.
 
 `docprocessing_task` starts a DB heartbeat thread (`docprocessing/heartbeat.py:start_heartbeat`,
 §4.7), loads the staged batch (`storage.get_batch(batch_num)`), and opens a
-short-lived session to resolve the embedder, all configured document indices
-(`document_index.factory:get_all_document_indices`), and the `IndexAttemptMetadata`
+short-lived session to resolve the embedder, the document index for the attempt's
+`SearchSettings` (`document_index.factory:get_default_document_index`), and the `IndexAttemptMetadata`
 for this batch, then closes that session before the slow work begins.
 
 `run_indexing_pipeline` (`indexing_pipeline.py`) resolves which `SearchSettings`
@@ -329,10 +329,11 @@ already written to disk (`store.scrub_failed_docs`), keeping the per-document
 all-or-nothing invariant (§5).
 
 **Writing** (`vector_db_insertion.py:write_chunks_to_vector_db_with_backoff`,
-called once per entry in `document_indices`). `document_indices` comes from
-`document_index.factory:get_all_document_indices`, confirming the dual-write
-invariant [[document-index]] states: docprocessing writes to **every** configured
-index, not just the one retrieval currently reads from. The write tries the whole
+called once per batch). `docprocessing_task` builds the index with
+`get_default_document_index(index_attempt.search_settings, None)`, so a batch
+writes only to the index of the attempt's own `SearchSettings`: PRESENT or FUTURE.
+It does not write to both generations. The port backfill (`port/tasks.py`) fills a
+FUTURE index (see [[document-index]] §4.4). The write tries the whole
 batch in one call to `DocumentIndex.index()`; on any exception it falls back to a
 per-document retry loop so one bad document doesn't fail the batch. Before writing,
 `adapter.lock_context` (`document.py:prepare_to_modify_documents` ->
@@ -478,8 +479,9 @@ this component only describes how a `UserFile` reaches the vector index.
 
 ## 5. Contracts and invariants
 
-1. **Every index attempt writes to every index `get_all_document_indices` returns.**
-   Skipping one during a swap silently desyncs the secondary index; see
+1. **An index attempt writes only to the index of its own `SearchSettings`.**
+   Docprocessing builds a single-index handle with `get_default_document_index(...,
+   None)`. The port backfill, not a second write, fills the FUTURE index; see
    [[document-index]] §5 for the retrieval-side half of this contract.
 2. **A document's chunks are written atomically per document, per index.** All
    chunks for one document must be passed to `DocumentIndex.index()` in a single

@@ -70,7 +70,7 @@ Verified worker-to-queue mapping, cross-checked against
 | Worker | App file | Queues (`-Q`) |
 |---|---|---|
 | Primary | `apps/primary.py` | `celery` (local); the Helm chart additionally passes `celery,periodic_tasks` for the primary deployment, but no task or beat entry in this codebase routes to a `periodic_tasks` queue (see §9). |
-| Light | `apps/light.py` | `vespa_metadata_sync, connector_deletion, doc_permissions_upsert, checkpoint_cleanup, index_attempt_cleanup, index_reclaim, opensearch_migration, chat_ttl_deletion` |
+| Light | `apps/light.py` | `vespa_metadata_sync, connector_deletion, doc_permissions_upsert, checkpoint_cleanup, index_attempt_cleanup, index_reclaim, chat_ttl_deletion, capability_checks_draft` |
 | Heavy | `apps/heavy.py` | `connector_pruning, connector_doc_permissions_sync, connector_external_group_sync, csv_generation, sandbox, connector_hierarchy_fetching, capability_checks` |
 | Docprocessing | `apps/docprocessing.py` | `docprocessing, port` |
 | Docfetching | `apps/docfetching.py` | `connector_doc_fetching` |
@@ -84,7 +84,7 @@ not exist** (`ls backend/onyx/background/celery/apps/` has no `background.py`,
 and none of `supervisord.conf`, the Helm templates, or `versioned_apps/` reference
 it). The README's table also omits the `scheduled_tasks` worker entirely, and
 understates the Light and Heavy queue lists (missing `index_reclaim`,
-`opensearch_migration`, `chat_ttl_deletion` on Light, and
+`chat_ttl_deletion`, `capability_checks_draft` on Light, and
 `connector_hierarchy_fetching`, `capability_checks` on Heavy). Treat the table
 above, not the README's, as current. `backend/AGENTS.md`'s worker table matches
 this document.
@@ -166,7 +166,7 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
 | `CELERY_WORKER_PRIMARY_CONCURRENCY`, `CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY`, etc. | Per-worker thread-pool sizes, read into each `configs/<worker>.py` (e.g. `configs/scheduled_tasks.py:worker_concurrency`). |
 | `LOG_LEVEL` | Global worker log level, overridable per-process by an explicit `--loglevel` CLI flag (`app_base.py:_resolve_effective_loglevel`). |
 | `IGNORED_SYNCING_TENANT_LIST` | Tenants Beat skips when generating the self-hosted-style per-tenant schedule (`apps/beat.py:_generate_schedule`). |
-| `ENABLE_OPENSEARCH_INDEXING_FOR_ONYX`, `ONYX_DISABLE_VESPA` | Gate which document-index readiness probe workers wait on at startup (`app_base.py:wait_for_document_index_or_shutdown`). |
+| `DISABLE_VECTOR_DB` | Skips the OpenSearch readiness probe that workers run at startup (`app_base.py:wait_for_document_index_or_shutdown`). |
 
 ---
 
@@ -473,7 +473,7 @@ shared machinery, not feature correctness.
   reflect the current deployment topology.
 - **The README's worker-to-queue table is out of date in three ways**: it is
   missing the `scheduled_tasks` worker, and it understates both Light's queues
-  (missing `index_reclaim`, `opensearch_migration`, `chat_ttl_deletion`) and
+  (missing `index_reclaim`, `chat_ttl_deletion`, `capability_checks_draft`) and
   Heavy's queues (missing `connector_hierarchy_fetching`, `capability_checks`).
   `backend/AGENTS.md`'s worker table is closer to correct (it does list
   `scheduled_tasks`) but doesn't enumerate queues per worker either. Trust

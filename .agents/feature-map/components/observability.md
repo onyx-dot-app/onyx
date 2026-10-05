@@ -232,16 +232,16 @@ tagged operation, grouped by area (chat/agent, secondary LLM flows, Craft,
 `[[llm-providers]]` covers the LLM-provider-side detail of resolution and
 retries; this file covers what happens to a span once it is opened.
 
-### 4.5 The auto-wrap fallback
+### 4.5 The untagged fallback flows
 
-`onyx/llm/interfaces.py:LLM.__init_subclass__` wraps every concrete `LLM`
-subclass's `invoke`/`stream` (`llm/tracing_wrap.py:wrap_invoke`,
-`wrap_stream`). If a call reaches one of these without an already-open
-generation span, the wrapper opens a fallback span tagged
+`LitellmLLM.invoke` and `LitellmLLM.stream` (`onyx/llm/multi_llm.py`) open their
+own generation span with `llm_generation_span`. The flow comes from
+`GenerationContext.flow`. If the caller sets none, the span uses
 `LLMFlow.UNTAGGED_INVOKE` or `LLMFlow.UNTAGGED_STREAM`. This is a safety net
 so untagged calls still get *some* observability, not a substitute for
-instrumentation: a dashboard showing either sentinel means a call site is
-missing an explicit `llm_generation_span` / `traced_llm_call`.
+instrumentation: a dashboard showing either sentinel means a call site did
+not set `GenerationContext.flow`. Direct callers of `invoke_raw`/`stream_raw`
+open no span, so they must call `llm_generation_span` or `traced_llm_call`.
 
 ### 4.6 Masking and incognito
 
@@ -381,8 +381,8 @@ reject content an external tool sends to a model provider through
 ## 6. Relationships
 
 **Depends on**
-- [[llm-providers]]: the `LLM` subclass wrapping (`tracing_wrap.py`) that
-  triggers the auto-wrap fallback, and the cost computation
+- [[llm-providers]]: `LitellmLLM.invoke`/`stream` (`multi_llm.py`), which open
+  the generation span and fall back to the untagged flows, and the cost computation
   (`llm/cost.py:compute_cost_cents`) that usage accounting calls.
 - [[multi-tenancy]]: `MULTI_TENANT` gates tracing admin config, per-tenant
   metric labelling, and connector-state metric collection.
@@ -449,7 +449,7 @@ cd backend && uv run pytest -xv tests/unit/server/metrics tests/unit/onyx/server
 cd backend && uv run pytest -xv tests/external_dependency_unit/db/test_index_attempt_stage_metrics.py
 
 # Tracing
-cd backend && uv run pytest -xv tests/unit/onyx/tracing tests/unit/onyx/llm/test_tracing_wrap.py
+cd backend && uv run pytest -xv tests/unit/onyx/tracing tests/unit/onyx/llm/test_client_tracing.py
 cd backend && uv run --env-file .vscode/.env pytest -xv tests/external_dependency_unit/tracing
 
 # Hooks

@@ -57,7 +57,7 @@ watching an index run fail.
 
 | Route | Purpose |
 |---|---|
-| `web/src/app/admin/add-connector/page.tsx` | The source picker: cards for every entry in `SOURCE_METADATA_MAP`. |
+| `web/src/app/admin/connectors/page.tsx` | The source picker (re-exports `web/src/views/admin/connectors/CatalogPage.tsx`): cards for every entry in `SOURCE_METADATA_MAP`. `/admin/add-connector` redirects here (`web/next.config.js`). |
 | `web/src/app/admin/connectors/[connector]/` | The dynamic per-source config route: renders the form described by `connectorConfigs[source]`. |
 
 ### Frontend config surfaces
@@ -447,7 +447,7 @@ lack of a key, ask instead. The shared helper
 ### Manual reproduction
 
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
-2. Open `http://localhost:3000/admin/add-connector`, sign in as
+2. Open `http://localhost:3000/admin/connectors`, sign in as
    `admin_user@example.com` / `TestPassword123!`.
 3. Add a connector for a source you changed, watch it move through indexing to
    a document count on the connector status page.

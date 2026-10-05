@@ -64,7 +64,6 @@ sub-loop (the deep research agent, the coding agent), or the AI assistant genera
 | Lane | One parallel retrieval path inside a single search tool call. One per expanded query, plus an optional Slack lane. Lanes are combined by weighted RRF. |
 | Expansion | Two unrelated meanings. **Query expansion** rewrites one query into several. **Section expansion** pulls chunks surrounding an already-selected section. |
 | Selection | The LLM stage that picks which retrieved sections are worth expanding. It is what Onyx has instead of a reranking model. |
-| Receipt | Retrieval metadata appended to the tool's LLM-facing response, so a later turn knows what was already searched. See [[search-receipts]]. |
 
 ## Ingestion vocabulary
 
