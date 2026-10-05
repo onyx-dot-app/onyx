@@ -429,6 +429,87 @@ async def test_expired_access_token_does_not_resolve(
 
 
 @pytest.mark.asyncio(loop_scope="module")
+async def test_expired_grant_blocks_access_and_refresh(
+    db_session: Session, mcp_oauth_rows: _MCPOAuthRows
+) -> None:
+    _, access_token, refresh_token, client_id = mcp_oauth_rows.create_grant()
+    assert refresh_token is not None
+    grant = db_session.scalar(
+        select(MCPOAuthGrant).where(MCPOAuthGrant.client_id == client_id)
+    )
+    assert grant is not None
+    grant.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    assert await _resolve_access_token(access_token) is None
+    assert (
+        rotate_mcp_oauth_refresh__no_commit(
+            db_session, refresh_token, client_id=client_id, resource=_RESOURCE
+        )
+        is None
+    )
+
+
+def test_expired_refresh_token_does_not_rotate(
+    db_session: Session, mcp_oauth_rows: _MCPOAuthRows
+) -> None:
+    _, _, refresh_token, client_id = mcp_oauth_rows.create_grant()
+    assert refresh_token is not None
+    token = db_session.get(MCPOAuthToken, hash_mcp_oauth_token(refresh_token))
+    assert token is not None
+    token.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db_session.commit()
+
+    assert (
+        rotate_mcp_oauth_refresh__no_commit(
+            db_session, refresh_token, client_id=client_id, resource=_RESOURCE
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_access_token_does_not_resolve_for_other_resource(
+    mcp_oauth_rows: _MCPOAuthRows,
+) -> None:
+    _, access_token, _, _ = mcp_oauth_rows.create_grant()
+
+    async with get_async_session_context_manager() as async_session:
+        resolved = await resolve_mcp_oauth_access_token(
+            async_session, access_token, resource=_OTHER_RESOURCE
+        )
+
+    assert resolved is None
+    assert await _resolve_access_token(access_token) is not None
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_rotated_tokens_resolve_and_rotate_again(
+    db_session: Session, mcp_oauth_rows: _MCPOAuthRows
+) -> None:
+    user, _, refresh_token, client_id = mcp_oauth_rows.create_grant()
+    assert refresh_token is not None
+    rotated = rotate_mcp_oauth_refresh__no_commit(
+        db_session, refresh_token, client_id=client_id, resource=_RESOURCE
+    )
+    db_session.commit()
+    assert rotated is not None and rotated.refresh_token is not None
+
+    resolved = await _resolve_access_token(rotated.access_token)
+    rotated_again = rotate_mcp_oauth_refresh__no_commit(
+        db_session, rotated.refresh_token, client_id=client_id, resource=_RESOURCE
+    )
+    db_session.commit()
+
+    assert resolved is not None
+    resolved_user, resolved_info = resolved
+    assert resolved_user.id == user.id
+    assert resolved_info.grant.id == rotated.grant_id
+    assert rotated_again is not None
+    assert rotated_again.grant_id == rotated.grant_id
+
+
+@pytest.mark.asyncio(loop_scope="module")
 async def test_old_access_token_resolves_after_normal_refresh(
     db_session: Session, mcp_oauth_rows: _MCPOAuthRows
 ) -> None:
