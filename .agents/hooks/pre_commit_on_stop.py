@@ -12,25 +12,31 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 _BLOCK = 2
 _TIMEOUT_SECONDS = 540
 _MAX_OUTPUT_LINES = 80
 
 
-def _git(repo: Path, *args: str) -> list[str]:
-    result = subprocess.run(
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
         ["git", *args], cwd=repo, capture_output=True, text=True, check=True
-    )
-    return [line for line in result.stdout.splitlines() if line]
+    ).stdout
+
+
+def _git_paths(repo: Path, *args: str) -> set[str]:
+    # -z keeps paths with non-ASCII characters unquoted.
+    return {path for path in _git(repo, *args, "-z").split("\0") if path}
 
 
 def _changed_files(repo: Path) -> list[str]:
-    changed = set(_git(repo, "diff", "--name-only", "--diff-filter=d", "HEAD"))
-    changed.update(_git(repo, "ls-files", "--others", "--exclude-standard"))
+    changed = _git_paths(repo, "diff", "--name-only", "--diff-filter=d", "HEAD")
+    changed |= _git_paths(repo, "ls-files", "--others", "--exclude-standard")
     return sorted(path for path in changed if (repo / path).is_file())
 
 
@@ -51,6 +57,7 @@ def _pre_commit(repo: Path) -> str | None:
 
 
 def main() -> int:
+    payload: dict[str, Any]
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
@@ -62,10 +69,10 @@ def main() -> int:
         repo = Path(
             _git(
                 Path(payload.get("cwd") or os.getcwd()), "rev-parse", "--show-toplevel"
-            )[0]
+            ).strip()
         )
         files = _changed_files(repo)
-    except (subprocess.CalledProcessError, IndexError, OSError):
+    except (subprocess.CalledProcessError, OSError):
         return 0
     pre_commit = _pre_commit(repo)
     if not files or pre_commit is None:
@@ -74,30 +81,36 @@ def main() -> int:
     # pre-commit spots formatter rewrites through `git diff`, which cannot see
     # untracked files, so compare contents to catch rewrites of new files too.
     before = _digests(repo, files)
+    # A new session lets a timeout stop the hooks pre-commit started, not only
+    # pre-commit itself.
+    proc = subprocess.Popen(
+        [pre_commit, "run", "--files", *files],
+        cwd=repo,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
     try:
-        result = subprocess.run(
-            [pre_commit, "run", "--files", *files],
-            cwd=repo,
-            capture_output=True,
-            text=True,
-            timeout=_TIMEOUT_SECONDS,
-        )
+        stdout, stderr = proc.communicate(timeout=_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.communicate()
         print(
             "pre-commit timed out; run it yourself before finishing.", file=sys.stderr
         )
-        return 0
+        return _BLOCK
     rewritten = sorted(
         path
         for path, digest in _digests(repo, files).items()
         if before.get(path) != digest
     )
-    if result.returncode == 0 and not rewritten:
+    if proc.returncode == 0 and not rewritten:
         return 0
 
     lines = [
         line
-        for line in (result.stdout + result.stderr).splitlines()
+        for line in (stdout + stderr).splitlines()
         if not line.rstrip().endswith(("Passed", "Skipped"))
     ]
     print(
