@@ -178,25 +178,6 @@ class JiraServiceManagementConnector(JiraConnector):
             attachments = self._fetch_issue_attachments(issue.key)
         except Exception as e:
             # Listing failed entirely: record one failure for the issue's
-            # attachment set without losing the ticket itself.
-            logger.exception("Failed to list attachments for %s", issue.key)
-            return [
-                ConnectorFailure(
-                    failed_document=DocumentFailure(
-                        document_id=f"{ticket_document_id}/attachments",
-                        document_link=build_jira_url(self.jira_base, issue.key),
-                    ),
-                    failure_message=(
-                        f"Failed to list attachments for JSM issue {issue.key}"
-                    ),
-                    exception=e,
-                )
-            ]
-
-        try:
-            attachments = self._fetch_issue_attachments(issue.key)
-        except Exception as e:
-            # Listing failed entirely: record one failure for the issue's
             # attachment set without losing the ticket itself. The slim pass
             # admits no attachment IDs when listing fails (it also records
             # the failure and emits nothing), so the two ID sets stay in
