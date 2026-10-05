@@ -1176,8 +1176,18 @@ export const connectorConfigs: Record<
         description:
           "Display names or object IDs of Entra groups. The mailbox of every member is indexed, " +
           "members of nested groups included, so a tenant can be limited to the people who use Onyx. " +
-          "Needs the GroupMember.Read.All application permission. " +
-          "To skip old mail, set Indexing Start under Advanced.",
+          "Needs the GroupMember.Read.All application permission.",
+      },
+      {
+        type: "number",
+        query: "Days of mail history to index:",
+        label: "Mail History Days",
+        name: "mail_history_days",
+        optional: true,
+        default: 730,
+        description:
+          "Mail received longer ago than this is not indexed. " +
+          "Leave empty to index every message, which can take very long on a large tenant.",
       },
       buildIncludeAttachmentsOption(
         false,

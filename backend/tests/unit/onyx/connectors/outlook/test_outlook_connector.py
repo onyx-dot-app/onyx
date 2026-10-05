@@ -331,6 +331,37 @@ def test_walk_filters_delta_by_the_poll_window_start() -> None:
     )
 
 
+def test_mail_history_cutoff_bounds_a_walk_from_the_beginning() -> None:
+    gateway = _happy_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=30)
+    before = datetime.now(timezone.utc) - timedelta(days=30)
+
+    generator = connector.load_from_checkpoint(0, END, _folder_checkpoint())
+    with pytest.raises(StopIteration):
+        while True:
+            next(generator)
+
+    received_after = gateway.fetch_folder_delta_page.call_args.kwargs["received_after"]
+    assert before <= received_after <= datetime.now(timezone.utc) - timedelta(days=30)
+
+
+def test_mail_history_cutoff_never_widens_a_later_poll_window() -> None:
+    gateway = _happy_gateway()
+    connector = _connector(
+        gateway, mailboxes=[MAILBOX_ADDRESS], mail_history_days=100_000
+    )
+
+    _step(connector, _folder_checkpoint())
+
+    received_after = gateway.fetch_folder_delta_page.call_args.kwargs["received_after"]
+    assert received_after == datetime.fromtimestamp(START, tz=timezone.utc)
+
+
+def test_mail_history_days_must_be_positive() -> None:
+    with pytest.raises(ConnectorValidationError):
+        OutlookConnector(mail_history_days=0)
+
+
 def test_walk_excludes_junk_deleted_hidden_and_search_folders() -> None:
     gateway = _happy_gateway()
 

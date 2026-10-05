@@ -547,6 +547,7 @@ class OutlookConnector(
         self,
         mailboxes: list[str] | None = None,
         mailbox_groups: list[str] | None = None,
+        mail_history_days: int | None = None,
         excluded_folders: list[str] | None = None,
         include_attachments: bool = False,
         include_calendar: bool = False,
@@ -562,6 +563,12 @@ class OutlookConnector(
         self.mailbox_groups = [g.strip() for g in mailbox_groups or [] if g.strip()]
         self.include_attachments = include_attachments
         self.include_calendar = include_calendar
+        if mail_history_days is not None and mail_history_days <= 0:
+            raise ConnectorValidationError(
+                "Mail history days must be positive. Leave it empty for all mail."
+            )
+        # Mail received longer ago than this is never read. None reads it all.
+        self.mail_history_days = mail_history_days
         if calendar_past_days < 0 or calendar_future_days < 0:
             raise ConnectorValidationError("Calendar window days cannot be negative.")
         self.calendar_past_days = calendar_past_days
@@ -1149,7 +1156,7 @@ class OutlookConnector(
         folder = checkpoint.current_folder
         assert mailbox is not None and folder is not None
 
-        window_start = _poll_bound(start)
+        window_start = self._mail_window_start(start)
         try:
             page = self.ops.fetch_folder_delta_page(
                 mailbox_id=mailbox.id,
@@ -1228,6 +1235,14 @@ class OutlookConnector(
             checkpoint.folder_unfiltered = True
             return
         checkpoint.current_folder = None
+
+    def _mail_window_start(self, start: SecondsSinceUnixEpoch) -> datetime | None:
+        """The poll window start, held to the mail history cutoff when one is set."""
+        window_start = _poll_bound(start)
+        if self.mail_history_days is None:
+            return window_start
+        cutoff = datetime.now(timezone.utc) - timedelta(days=self.mail_history_days)
+        return max(window_start, cutoff) if window_start else cutoff
 
     def _calendar_window(self) -> tuple[datetime, datetime]:
         """The event times the calendar view covers, around the moment of the call."""

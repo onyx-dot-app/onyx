@@ -12,6 +12,7 @@ DEFAULT_CALENDAR_FUTURE_DAYS = 180
 class OutlookConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
     mailboxes: list[str] | None = None
     mailbox_groups: list[str] | None = None
+    mail_history_days: int | None = None
     excluded_folders: list[str] | None = None
     include_attachments: bool = False
     include_calendar: bool = False
