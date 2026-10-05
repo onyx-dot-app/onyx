@@ -8444,6 +8444,9 @@
         "makeAdmin": {
           "label": "设为管理员"
         },
+        "menuButton": {
+          "ariaLabel": "用户操作"
+        },
         "removeAdmin": {
           "label": "移除管理员权限"
         },
@@ -11259,6 +11262,9 @@
         "expand": {
           "ariaLabel": "展开项目"
         },
+        "options": {
+          "label": "项目选项"
+        },
         "rename": {
           "label": "重命名项目"
         }
@@ -11898,7 +11904,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "关联 {name}",
         "associateButton": "关联现有技能",
         "create": {
           "github": {
@@ -12609,6 +12614,9 @@
       },
       "newSession": {
         "label": "开始创作"
+      },
+      "options": {
+        "label": "会话选项"
       },
       "rename": {
         "label": "重命名"
@@ -14073,6 +14081,9 @@
       },
       "moveToProject": {
         "label": "移动到项目"
+      },
+      "options": {
+        "label": "聊天选项"
       },
       "projectSearchInput": {
         "placeholder": "搜索项目"

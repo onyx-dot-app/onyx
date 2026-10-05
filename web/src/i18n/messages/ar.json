@@ -8444,6 +8444,9 @@
         "makeAdmin": {
           "label": "تعيين كمسؤول"
         },
+        "menuButton": {
+          "ariaLabel": "إجراءات المستخدم"
+        },
         "removeAdmin": {
           "label": "إزالة صلاحية المسؤول"
         },
@@ -11259,6 +11262,9 @@
         "expand": {
           "ariaLabel": "توسيع المشروع"
         },
+        "options": {
+          "label": "خيارات المشروع"
+        },
         "rename": {
           "label": "إعادة تسمية المشروع"
         }
@@ -11898,7 +11904,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "ربط {name}",
         "associateButton": "ربط مهارة موجودة",
         "create": {
           "github": {
@@ -12609,6 +12614,9 @@
       },
       "newSession": {
         "label": "ابدأ الصنع"
+      },
+      "options": {
+        "label": "خيارات الجلسة"
       },
       "rename": {
         "label": "إعادة تسمية"
@@ -14073,6 +14081,9 @@
       },
       "moveToProject": {
         "label": "نقل إلى مشروع"
+      },
+      "options": {
+        "label": "خيارات الدردشة"
       },
       "projectSearchInput": {
         "placeholder": "البحث في المشاريع"

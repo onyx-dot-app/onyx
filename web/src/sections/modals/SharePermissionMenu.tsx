@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { LineItemButton, OpenButton, Popover } from "@opal/components";
+import { Dropdown, OpenButton, type DropdownItem } from "@opal/components";
 import { SvgMinusCircle } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 
@@ -22,9 +22,6 @@ export interface SharePermissionMenuProps<T extends string> {
   /** The status row's qualifier already shows the scope icon — the mock's
       scope pill is text + chevron only */
   showTriggerIcon?: boolean;
-  /** Fixed menu width — full-width items inside a fit-content popover
-      collapse to min-content and truncate */
-  menuWidth?: "sm" | "md" | "lg" | "xl" | "2xl";
   ariaLabel?: string;
 }
 
@@ -37,7 +34,6 @@ export function SharePermissionMenu<T extends string>({
   disabled = false,
   width = "fit",
   showTriggerIcon = true,
-  menuWidth = "md",
   ariaLabel,
 }: SharePermissionMenuProps<T>) {
   const t = useTranslations("chat.modals.share");
@@ -66,9 +62,34 @@ export function SharePermissionMenu<T extends string>({
     );
   }
 
+  // A picker with one command at its end: the options pick a scope, and
+  // the danger row removes access.
+  const items: DropdownItem[] = [
+    ...options.map(
+      (option): DropdownItem => ({
+        kind: "option",
+        value: option.value,
+        icon: option.icon,
+        title: option.label,
+      })
+    ),
+    ...(onRemove
+      ? [
+          {
+            kind: "action" as const,
+            id: "remove-access",
+            icon: SvgMinusCircle,
+            danger: true,
+            title: removeLabel ?? t("permissionMenu.removeAccess.label"),
+            onSelect: onRemove,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <Popover>
-      <Popover.Trigger asChild>
+    <Dropdown>
+      <Dropdown.Trigger asChild>
         <OpenButton
           aria-label={ariaLabel}
           foldable={false}
@@ -81,43 +102,16 @@ export function SharePermissionMenu<T extends string>({
         >
           {selectedOption.label}
         </OpenButton>
-      </Popover.Trigger>
-
-      <Popover.Content align="end" side="bottom" width={menuWidth}>
-        <Popover.Menu>
-          {options.map((option) => (
-            <Popover.Close asChild key={option.value}>
-              <LineItemButton
-                icon={option.icon}
-                onClick={() => onChange?.(option.value)}
-                rounding={3}
-                selectVariant="select-heavy"
-                sizePreset="main-ui"
-                state={option.value === value ? "selected" : "empty"}
-                title={option.label}
-                variant="section"
-                width="full"
-              />
-            </Popover.Close>
-          ))}
-
-          {onRemove && (
-            <Popover.Close asChild>
-              <LineItemButton
-                color="danger"
-                icon={SvgMinusCircle}
-                onClick={onRemove}
-                rounding={3}
-                selectVariant="select-heavy"
-                sizePreset="main-ui"
-                title={removeLabel ?? t("permissionMenu.removeAccess.label")}
-                variant="section"
-                width="full"
-              />
-            </Popover.Close>
-          )}
-        </Popover.Menu>
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={ariaLabel}
+        value={value}
+        onSelect={(option) => {
+          const next = options.find((o) => o.value === option.value);
+          if (next) onChange?.(next.value);
+        }}
+        items={items}
+      />
+    </Dropdown>
   );
 }

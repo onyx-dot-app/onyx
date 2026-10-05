@@ -8444,6 +8444,9 @@
         "makeAdmin": {
           "label": "Convertir en administrador"
         },
+        "menuButton": {
+          "ariaLabel": "Acciones de usuario"
+        },
         "removeAdmin": {
           "label": "Quitar el acceso de administrador"
         },
@@ -11259,6 +11262,9 @@
         "expand": {
           "ariaLabel": "Expandir proyecto"
         },
+        "options": {
+          "label": "Opciones del proyecto"
+        },
         "rename": {
           "label": "Renombrar proyecto"
         }
@@ -11898,7 +11904,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "Asociar {name}",
         "associateButton": "Asociar existente",
         "create": {
           "github": {
@@ -12609,6 +12614,9 @@
       },
       "newSession": {
         "label": "Empezar a crear"
+      },
+      "options": {
+        "label": "Opciones de sesión"
       },
       "rename": {
         "label": "Renombrar"
@@ -14073,6 +14081,9 @@
       },
       "moveToProject": {
         "label": "Mover a un proyecto"
+      },
+      "options": {
+        "label": "Opciones del chat"
       },
       "projectSearchInput": {
         "placeholder": "Buscar proyectos"

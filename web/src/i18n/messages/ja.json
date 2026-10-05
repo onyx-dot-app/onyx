@@ -8444,6 +8444,9 @@
         "makeAdmin": {
           "label": "管理者にする"
         },
+        "menuButton": {
+          "ariaLabel": "ユーザー操作"
+        },
         "removeAdmin": {
           "label": "管理者権限を削除"
         },
@@ -11259,6 +11262,9 @@
         "expand": {
           "ariaLabel": "プロジェクトを展開する"
         },
+        "options": {
+          "label": "プロジェクトのオプション"
+        },
         "rename": {
           "label": "プロジェクト名を変更"
         }
@@ -11898,7 +11904,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "{name} を関連付け",
         "associateButton": "既存のスキルを関連付け",
         "create": {
           "github": {
@@ -12609,6 +12614,9 @@
       },
       "newSession": {
         "label": "クラフトを始める"
+      },
+      "options": {
+        "label": "セッションのオプション"
       },
       "rename": {
         "label": "名前を変更"
@@ -14073,6 +14081,9 @@
       },
       "moveToProject": {
         "label": "プロジェクトに移動"
+      },
+      "options": {
+        "label": "チャットのオプション"
       },
       "projectSearchInput": {
         "placeholder": "プロジェクトを検索"

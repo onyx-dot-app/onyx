@@ -284,6 +284,9 @@ export {
   type DropdownSearch,
   type DropdownView,
   type DropdownViews,
+  type DropdownWidth,
+  type DropdownAlign,
+  type DropdownSide,
 } from "@opal/components/dropdown/types";
 export { useDropdownViews } from "@opal/components/dropdown/context";
 

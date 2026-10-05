@@ -5,13 +5,14 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
-  InputTypeIn,
-  LineItemButton,
-  Popover,
+  Dropdown,
   Tag,
   Text,
+  type DropdownItem,
+  type DropdownView,
+  type DropdownViews,
 } from "@opal/components";
-import { SvgCheck, SvgEdit, SvgPlus, SvgUploadCloud, SvgX } from "@opal/icons";
+import { SvgEdit, SvgPlus, SvgUploadCloud, SvgX } from "@opal/icons";
 import { SvgGithub } from "@opal/logos";
 import useUserSkills from "@/hooks/useUserSkills";
 import type { Skill } from "@/lib/skills/types";
@@ -41,9 +42,10 @@ export default function AssociatedSkillsEditor({
 }: AssociatedSkillsEditorProps) {
   const t = useTranslations("craft.apps.associatedSkills");
   const { data, isLoading } = useUserSkills();
-  const [query, setQuery] = useState("");
   const [associateOpen, setAssociateOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  // Where the lists portal to: a spot of our own inside the modal.
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<Skill | null>(null);
   const [pendingUnlink, setPendingUnlink] = useState<PendingUnlink | null>(
     null
@@ -69,21 +71,15 @@ export default function AssociatedSkillsEditor({
       ),
     [app.associated_skills, customSkillById, selectedSkillIds]
   );
-  const selectableSkills = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return customSkills
-      .filter(
+  const selectableSkills = useMemo(
+    () =>
+      customSkills.filter(
         (skill) =>
           skill.user_permission === "OWNER" ||
           skill.user_permission === "EDITOR"
-      )
-      .filter(
-        (skill) =>
-          normalizedQuery.length === 0 ||
-          skill.name.toLowerCase().includes(normalizedQuery) ||
-          skill.description.toLowerCase().includes(normalizedQuery)
-      );
-  }, [app.id, customSkills, query]);
+      ),
+    [customSkills]
+  );
   function unavailableReason(skill: Skill): string | null {
     if (skill.is_valid === false) {
       return t("unavailable.invalid");
@@ -99,7 +95,7 @@ export default function AssociatedSkillsEditor({
     }
     return null;
   }
-  function select(skill: Skill) {
+  function select(skill: Skill, views: DropdownViews) {
     if (unavailableReason(skill)) return;
     if (selectedIds.has(skill.id)) {
       setPendingUnlink(skill);
@@ -107,15 +103,111 @@ export default function AssociatedSkillsEditor({
       return;
     }
     if (skill.public_permission === null) {
+      // The skill is private: promoting it is a page of its own.
       setPendingPromotion(skill);
+      views.push("promote");
       return;
     }
     onChange([...selectedSkillIds, skill.id]);
     setAssociateOpen(false);
   }
 
+  // The list's own search filters by name and description.
+  const skillItems: DropdownItem[] = isLoading
+    ? [
+        {
+          kind: "custom",
+          id: "loading",
+          disabled: true,
+          pinned: true,
+          render: ({ props }) => (
+            <div {...props} className="px-2 py-1">
+              <Text font="secondary-body" color="text-03">
+                {t("loading.label")}
+              </Text>
+            </div>
+          ),
+        },
+      ]
+    : selectableSkills.length === 0
+      ? [
+          {
+            kind: "custom",
+            id: "empty",
+            disabled: true,
+            pinned: true,
+            render: ({ props }) => (
+              <div {...props} className="px-2 py-1">
+                <Text font="secondary-body" color="text-03">
+                  {t("empty.label")}
+                </Text>
+              </div>
+            ),
+          },
+        ]
+      : selectableSkills.map((skill) => {
+          const disabledReason = unavailableReason(skill);
+          return {
+            kind: "option",
+            value: String(skill.id),
+            title: skill.name,
+            keywords: [skill.description],
+            description: disabledReason ?? skill.description,
+            // Skill descriptions are user-authored, so cap the row rather
+            // than let one grow the list.
+            descriptionMaxLines: 1,
+            disabled: disabledReason !== null,
+          };
+        });
+  const promoteView: DropdownView = {
+    items: [
+      {
+        kind: "custom",
+        id: "promote",
+        disabled: true,
+        render: ({ props }) => (
+          <div {...props} className="flex flex-col gap-1 px-2 py-1">
+            <Text font="main-ui-action">
+              {t("promote.title", { name: pendingPromotion?.name ?? "" })}
+            </Text>
+            <Text font="secondary-body" color="text-03">
+              {t("promote.description")}
+            </Text>
+          </div>
+        ),
+      },
+      {
+        kind: "group",
+        items: [
+          {
+            kind: "action",
+            id: "promote-cancel",
+            title: t("promote.cancelButton"),
+            onSelect: (views) => {
+              setPendingPromotion(null);
+              views.pop();
+            },
+          },
+          {
+            kind: "action",
+            id: "promote-confirm",
+            title: t("promote.confirmButton"),
+            onSelect: () => {
+              if (pendingPromotion) {
+                onChange([...selectedSkillIds, pendingPromotion.id]);
+              }
+              setPendingPromotion(null);
+              setAssociateOpen(false);
+            },
+          },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="flex flex-col gap-3">
+      <div ref={setContainer} />
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <Text font="main-ui-action">{t("title")}</Text>
@@ -124,135 +216,72 @@ export default function AssociatedSkillsEditor({
           </Text>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Popover
-            modal
+          <Dropdown
+            width={90}
+            align="end"
+            // Inside a modal, so the list portals into it: outside, the
+            // modal would block clicks on it.
+            container={container}
             open={associateOpen}
             onOpenChange={(open) => {
               setAssociateOpen(open);
               if (!open) setPendingPromotion(null);
             }}
           >
-            <Popover.Trigger asChild>
+            <Dropdown.Trigger asChild>
               <Button prominence="secondary">{t("associateButton")}</Button>
-            </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="xl">
-              <div className="flex max-h-[min(20rem,calc(var(--radix-popover-content-available-height)-0.5rem))] flex-col gap-2 overflow-hidden p-2">
-                <InputTypeIn
-                  searchIcon
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t("search.placeholder")}
-                  variant="internal"
-                />
-                <div className="flex min-h-0 flex-col gap-1 overflow-y-auto overscroll-contain">
-                  {isLoading ? (
-                    <Text font="secondary-body" color="text-03">
-                      {t("loading.label")}
-                    </Text>
-                  ) : selectableSkills.length === 0 ? (
-                    <Text font="secondary-body" color="text-03">
-                      {t("empty.label")}
-                    </Text>
-                  ) : (
-                    selectableSkills.map((skill) => {
-                      const disabledReason = unavailableReason(skill);
-                      return (
-                        <LineItemButton
-                          key={skill.id}
-                          sizePreset="main-ui"
-                          variant="section"
-                          title={skill.name}
-                          onClick={() => select(skill)}
-                          description={disabledReason ?? skill.description}
-                          // Skill descriptions are user-authored, so cap the
-                          // row rather than let one grow the popover.
-                          descriptionMaxLines={1}
-                          disabled={disabledReason !== null}
-                          state={
-                            selectedIds.has(skill.id) ? "selected" : "empty"
-                          }
-                          rightChildren={
-                            selectedIds.has(skill.id) ? (
-                              <SvgCheck className="size-4 stroke-action-selection-05" />
-                            ) : undefined
-                          }
-                          aria-label={t("associateAriaLabel", {
-                            name: skill.name,
-                          })}
-                        />
-                      );
-                    })
-                  )}
-                </div>
-                {pendingPromotion && (
-                  <div className="flex flex-col gap-2 border-t border-border-01 pt-2">
-                    <Text font="main-ui-action">
-                      {t("promote.title", { name: pendingPromotion.name })}
-                    </Text>
-                    <Text font="secondary-body" color="text-03">
-                      {t("promote.description")}
-                    </Text>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        prominence="secondary"
-                        onClick={() => setPendingPromotion(null)}
-                      >
-                        {t("promote.cancelButton")}
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          onChange([...selectedSkillIds, pendingPromotion.id]);
-                          setPendingPromotion(null);
-                          setAssociateOpen(false);
-                        }}
-                      >
-                        {t("promote.confirmButton")}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Popover.Content>
-          </Popover>
-          <Popover modal open={createOpen} onOpenChange={setCreateOpen}>
-            <Popover.Trigger asChild>
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("associateButton")}
+              search={{ placeholder: t("search.placeholder") }}
+              values={new Set(Array.from(selectedIds, String))}
+              onSelect={(option, views) => {
+                const skill = customSkillById.get(option.value);
+                if (skill) select(skill, views);
+              }}
+              items={skillItems}
+              views={{ promote: promoteView }}
+            />
+          </Dropdown>
+          <Dropdown
+            container={container}
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+          >
+            <Dropdown.Trigger asChild>
               <Button icon={SvgPlus}>{t("createSkillButton")}</Button>
-            </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="lg">
-              <Popover.Menu>
-                <LineItemButton
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgEdit}
-                  title={t("create.scratch.label")}
-                  onClick={() => {
-                    setCreateOpen(false);
-                    onCreateSkill();
-                  }}
-                  description={t("create.scratch.description")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgUploadCloud}
-                  title={t("create.upload.label")}
-                  onClick={() => {
-                    setCreateOpen(false);
-                    onUploadSkill();
-                  }}
-                  description={t("create.upload.description")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  variant="section"
-                  icon={SvgGithub}
-                  title={t("create.github.label")}
-                  disabled
-                  description={t("create.github.description")}
-                />
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("createSkillButton")}
+              items={[
+                {
+                  kind: "action",
+                  id: "scratch",
+                  icon: SvgEdit,
+                  title: t("create.scratch.label"),
+                  description: t("create.scratch.description"),
+                  onSelect: () => onCreateSkill(),
+                },
+                {
+                  kind: "action",
+                  id: "upload",
+                  icon: SvgUploadCloud,
+                  title: t("create.upload.label"),
+                  description: t("create.upload.description"),
+                  onSelect: () => onUploadSkill(),
+                },
+                {
+                  kind: "action",
+                  id: "github",
+                  icon: SvgGithub,
+                  title: t("create.github.label"),
+                  description: t("create.github.description"),
+                  disabled: true,
+                  onSelect: () => {},
+                },
+              ]}
+            />
+          </Dropdown>
         </div>
       </div>
 

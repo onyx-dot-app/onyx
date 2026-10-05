@@ -3,9 +3,21 @@ import type {
   DropdownOption,
   DropdownRow,
   DropdownView,
+  DropdownWidth,
   NavItem,
   RowGroup,
 } from "@opal/components/dropdown/types";
+
+/** Each width on the Tailwind scale and the sizes.css token it stands for. */
+export const DROPDOWN_WIDTH_TOKENS: Record<DropdownWidth, string> = {
+  30: "--block-width-contextual-menu-extra-small",
+  40: "--block-width-contextual-menu-small",
+  50: "--block-width-contextual-menu-medium-small",
+  60: "--block-width-contextual-menu-medium",
+  70: "--block-width-contextual-menu-medium-large",
+  80: "--block-width-contextual-menu-large",
+  90: "--block-width-contextual-menu-extra-large",
+};
 
 /** What identifies a row: an option's value, any other row's id. */
 export function rowKey(row: DropdownRow): string {
@@ -105,6 +117,7 @@ export function rowMatchesSearch(
   row: DropdownRow,
   searchTerm: string
 ): boolean {
+  if (row.pinned) return true;
   if (row.kind === "option") return optionMatchesSearch(row, searchTerm);
   if (row.kind === "custom") return keywordsMatch(row.keywords, searchTerm);
   return (

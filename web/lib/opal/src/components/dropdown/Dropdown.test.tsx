@@ -203,6 +203,58 @@ describe("Dropdown picker", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
+  test("an open list takes Escape before a dialog's document listener", async () => {
+    const user = setupUser();
+    render(<Harness />);
+    // A dialog listens for Escape on the document in the capture phase.
+    const dialogEscape = jest.fn();
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dialogEscape();
+    };
+    document.addEventListener("keydown", onDocumentKeyDown, true);
+    try {
+      const trigger = screen.getByRole("combobox", { name: "Fruit" });
+      await user.click(trigger);
+      await user.keyboard("{ArrowDown}");
+      expect(trigger).toHaveAttribute("aria-expanded", "true");
+      await user.keyboard("{Escape}");
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+      expect(dialogEscape).not.toHaveBeenCalled();
+      // Closed, the key is the dialog's.
+      await user.keyboard("{Escape}");
+      expect(dialogEscape).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("keydown", onDocumentKeyDown, true);
+    }
+  });
+
+  test("ArrowRight from a text field reaches a row's secondary control once the caret is at the end", async () => {
+    const user = setupUser();
+    const onSecondary = jest.fn();
+    const items: DropdownItem[] = [
+      {
+        kind: "custom",
+        id: "folder",
+        pinned: true,
+        onSecondary,
+        render: ({ props }) => <div {...props}>Folder</div>,
+      },
+      ...ITEMS,
+    ];
+    render(<Harness items={items} />);
+    const field = screen.getByRole("combobox", { name: "Fruit" });
+    await user.click(field);
+    // An empty field: the caret is at its end.
+    await user.keyboard("{ArrowDown}{ArrowRight}");
+    expect(onSecondary).toHaveBeenCalledTimes(1);
+
+    // Text behind the caret: ArrowRight is the caret's.
+    await user.type(field, "ab");
+    (field as HTMLInputElement).setSelectionRange(1, 1);
+    await user.keyboard("{ArrowRight}");
+    expect(onSecondary).toHaveBeenCalledTimes(1);
+  });
+
   test("the query filters the rows and opens folded groups to show matches", async () => {
     const user = setupUser();
     render(<Harness />);
@@ -338,9 +390,9 @@ describe("Dropdown triggers", () => {
   test("a click on another trigger toggles the list rather than reopening it", async () => {
     const user = setupUser();
     render(<TwoTriggersHarness />);
-    // A button that triggers a picker is a combobox.
-    const left = screen.getByRole("combobox", { name: "Left" });
-    const right = screen.getByRole("combobox", { name: "Right" });
+    // A button that triggers a picker keeps its role, and so its name.
+    const left = screen.getByRole("button", { name: "Left" });
+    const right = screen.getByRole("button", { name: "Right" });
     await user.click(left);
     expect(left).toHaveAttribute("aria-expanded", "true");
 
@@ -354,11 +406,34 @@ describe("Dropdown triggers", () => {
   });
 });
 
+describe("Dropdown pinned rows", () => {
+  test("a pinned row stays while a search is on, in a group too", async () => {
+    const user = setupUser();
+    const items: DropdownItem[] = [
+      { kind: "option", value: "all", title: "All", pinned: true },
+      { kind: "option", value: "apple", title: "Apple" },
+      {
+        kind: "group",
+        title: "More",
+        items: [
+          { kind: "option", value: "new", title: "New", pinned: true },
+          { kind: "option", value: "pear", title: "Pear" },
+        ],
+      },
+    ];
+    render(<Harness items={items} />);
+    await user.type(screen.getByRole("combobox", { name: "Fruit" }), "pe");
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent)
+    ).toEqual(["All", "New", "Pear"]);
+  });
+});
+
 describe("Dropdown groups", () => {
   test("ArrowRight unfolds a title and enters it", async () => {
     const user = setupUser();
     render(<ButtonPickerHarness />);
-    await user.click(screen.getByRole("combobox", { name: "Fruit" }));
+    await user.click(screen.getByRole("button", { name: "Fruit" }));
     // Apple, then (Banana is disabled) the folded Citrus title.
     await user.keyboard("{ArrowDown}{ArrowDown}");
     const title = screen.getByRole("button", { name: /Citrus/ });
@@ -532,7 +607,6 @@ function ViewsHarness({
         kind: "action",
         id: "wrap",
         title: "Wrap up",
-        opensView: true,
         onSelect: (views) =>
           views.push({
             key: "wrap",
@@ -573,11 +647,18 @@ function ViewsHarness({
       onSelect: () => onRun("rename"),
     },
     {
-      kind: "action",
+      // A row that leads to a page is the caller's: it pushes on Enter and
+      // on ArrowRight, and renders its own chevron.
+      kind: "custom",
       id: "skills",
-      title: "Skills",
-      opensView: true,
-      onSelect: (views) => views.push(skills),
+      keywords: ["Skills"],
+      onActivate: (views) => views.push(skills),
+      onSecondary: (views) => views.push(skills),
+      render: ({ highlighted, props }) => (
+        <div data-interaction={highlighted ? "hover" : "rest"} {...props}>
+          Skills
+        </div>
+      ),
     },
     {
       kind: "action",
@@ -622,7 +703,7 @@ describe("Dropdown views", () => {
     expect(screen.queryByRole("menuitem", { name: "Write" })).toBeNull();
   });
 
-  test("ArrowRight opens an `opensView` row; Escape leaves the view, then closes", async () => {
+  test("ArrowRight opens a page through onSecondary; Escape leaves the view, then closes", async () => {
     const user = setupUser();
     render(<ViewsHarness onRun={jest.fn()} />);
     const trigger = screen.getByRole("button", { name: "Actions" });
@@ -661,7 +742,7 @@ describe("Dropdown views", () => {
     rerender(<ViewsHarness onRun={onRun} authed />);
     await user.click(trigger);
     await user.click(menuItem("Apps"));
-    // Pushing keeps the list open, with no `opensView` or `keepOpen` needed.
+    // Pushing keeps the list open, with no `keepOpen` needed.
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(menuItem("Slack")).toBeInTheDocument();
   });
@@ -736,7 +817,6 @@ function RegistryHarness() {
       kind: "action",
       id: "prefs",
       title: "Preferences",
-      opensView: true,
       onSelect: (views) => views.push("prefs"),
     },
   ];
