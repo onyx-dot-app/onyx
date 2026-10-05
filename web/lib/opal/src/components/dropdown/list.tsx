@@ -43,6 +43,8 @@ interface DropdownListProps {
    * at the wrong width, so anything measured against them is off.
    */
   isPositioned: boolean;
+  /** The edge the list grows from: a leaving card stays pinned to it. */
+  anchoredEdge: "top" | "bottom";
   setFloatingRef: (node: HTMLDivElement | null) => void;
   /** The view on show; a change swaps the rows in place, animated. */
   viewKey: string;
@@ -103,6 +105,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       label,
       floatingStyles,
       isPositioned,
+      anchoredEdge,
       setFloatingRef,
       viewKey,
       viewDirection,
@@ -301,6 +304,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
               key={`exit-${exiting.key}`}
               live={false}
               data-exit={exiting.direction}
+              data-pin={anchoredEdge}
               // Its own width, should the new view ask for another.
               style={
                 exiting.width === null ? undefined : { width: exiting.width }
@@ -357,6 +361,8 @@ interface CardElementProps extends CardProps {
   searchRef?: React.RefObject<HTMLInputElement | null>;
   "data-enter"?: "forward" | "back";
   "data-exit"?: "forward" | "back";
+  /** Which stage edge a leaving card stays on while the live one resizes. */
+  "data-pin"?: "top" | "bottom";
   style?: React.CSSProperties;
   /** The leaving card's own exit animation ended. */
   onExit?: () => void;
@@ -371,6 +377,7 @@ function Card({
   searchRef,
   "data-enter": enter,
   "data-exit": exit,
+  "data-pin": pin,
   style,
   onExit,
   listId,
@@ -400,6 +407,7 @@ function Card({
       className="opal-dropdown-card"
       data-enter={enter}
       data-exit={exit}
+      data-pin={pin}
       style={style}
       inert={!live || undefined}
       aria-hidden={!live || undefined}

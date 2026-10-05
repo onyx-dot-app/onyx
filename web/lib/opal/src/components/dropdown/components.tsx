@@ -205,6 +205,7 @@ function Dropdown({
       setFloatingRef: overlay.setFloatingRef,
       floatingStyles: overlay.floatingStyles,
       isPositioned: overlay.isPositioned,
+      anchoredEdge: overlay.anchoredEdge,
       listRef,
       mode,
       setMode,
@@ -234,6 +235,7 @@ function Dropdown({
       overlay.setFloatingRef,
       overlay.floatingStyles,
       overlay.isPositioned,
+      overlay.anchoredEdge,
       mode,
       activeId,
       handleKeyDown,
@@ -534,6 +536,7 @@ function DropdownData(props: DropdownDataProps) {
     setFloatingRef,
     floatingStyles,
     isPositioned,
+    anchoredEdge,
     listRef,
     mode,
     setMode,
@@ -906,6 +909,7 @@ function DropdownData(props: DropdownDataProps) {
         label={label ?? ""}
         floatingStyles={floatingStyles}
         isPositioned={isPositioned}
+        anchoredEdge={anchoredEdge}
         setFloatingRef={setFloatingRef}
         viewKey={currentViewKey}
         viewDirection={viewDirection}

@@ -43,6 +43,8 @@ export interface DropdownContextValue {
   setFloatingRef: (node: HTMLDivElement | null) => void;
   floatingStyles: React.CSSProperties;
   isPositioned: boolean;
+  /** The edge the list grows from, as floating-ui placed it. */
+  anchoredEdge: "top" | "bottom";
   /** Filled by `Dropdown.Data`; read by the keyboard handler at event time. */
   listRef: React.RefObject<ListModel>;
   /** Picker or menu, as `Dropdown.Data` declared it. */

@@ -468,7 +468,7 @@ export function useDropdownOverlay({
   }, [isOpen]);
 
   const widthRef = useRef(width);
-  const { refs, floatingStyles, isPositioned, update } =
+  const { refs, floatingStyles, isPositioned, placement, update } =
     useFloating<ReferenceType>({
       open: isOpen,
       placement: `${side}-${align}`,
@@ -613,5 +613,12 @@ export function useDropdownOverlay({
     setFloatingRef,
     floatingStyles,
     isPositioned,
+    // The edge the list grows from: its top, unless it was flipped above
+    // the anchor or flies out beside it bottoms-aligned.
+    anchoredEdge:
+      placement.startsWith("top") ||
+      (!placement.startsWith("bottom") && placement.endsWith("-end"))
+        ? ("bottom" as const)
+        : ("top" as const),
   };
 }
