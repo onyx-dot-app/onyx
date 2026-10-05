@@ -1886,11 +1886,10 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
         return session_id
 
     def _generate_token(self, user: User, session_id: str) -> str:
-        now = datetime.now(timezone.utc)
-        data = {
+        data: dict[str, Any] = {
             "sub": str(user.id),
             "aud": self.token_audience,
-            "iat": int(now.timestamp()),
+            "iat": int(datetime.now(timezone.utc).timestamp()),
             "sid": session_id,
         }
         return generate_jwt(
