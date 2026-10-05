@@ -8,6 +8,7 @@ Summaries are branch-aware: each summary's parent_message_id points to the last
 message when compression triggered, making it part of the tree structure.
 """
 
+import re
 from typing import NamedTuple
 
 from pydantic import BaseModel
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import COMPRESSION_TRIGGER_RATIO
 from onyx.configs.constants import MessageType
+from onyx.db.chat import find_summary_for_branch
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tools
@@ -71,6 +73,17 @@ class SummaryContent(NamedTuple):
     recent_messages: list[ChatMessage]
 
 
+class BranchSummary(NamedTuple):
+    """A branch summary and the chat message ID of its cutoff."""
+
+    message: ChatMessage
+    cutoff_id: int
+
+
+_CHAT_MESSAGE_CUTOFF_PREFIX = "chat:"
+_CHAT_MESSAGE_CUTOFF = re.compile(rf"{_CHAT_MESSAGE_CUTOFF_PREFIX}([0-9]+)")
+
+
 def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
     """
     Calculate the total token count for the given chat history, including
@@ -124,46 +137,43 @@ def get_compression_params(
     )
 
 
-def find_summary_for_branch(
+def chat_message_cutoff(message_id: int) -> str:
+    """Return the summary cutoff that covers a whole chat message."""
+    return f"{_CHAT_MESSAGE_CUTOFF_PREFIX}{message_id}"
+
+
+def load_branch_summary(
     db_session: Session,
     chat_history: list[ChatMessage],
-) -> ChatMessage | None:
+) -> BranchSummary | None:
+    """Find the branch summary whose cutoff ends a chat message in this history.
+
+    A summary is discarded if its cutoff does not name a whole chat message, or
+    if that message is not in the history.
     """
-    Find the most recent summary that applies to the current branch.
-
-    A summary applies if its parent_message_id is in the current chat history,
-    meaning it was created on this branch.
-
-    Args:
-        db_session: Database session
-        chat_history: Branch-aware list of messages
-
-    Returns:
-        The applicable summary message, or None if no summary exists for this branch
-    """
-    if not chat_history:
+    summary = find_summary_for_branch(db_session, chat_history)
+    if summary is None or summary.last_summarized_message_id is None:
         return None
 
-    history_ids = {m.id for m in chat_history}
-    chat_session_id = chat_history[0].chat_session_id
-
-    # Query all summaries for this session (typically few), then filter in Python.
-    # Order by time_sent descending to get the most recent summary first.
-    summaries = (
-        db_session.query(ChatMessage)
-        .filter(
-            ChatMessage.chat_session_id == chat_session_id,
-            ChatMessage.last_summarized_message_id.isnot(None),
+    cutoff = summary.last_summarized_message_id
+    match = _CHAT_MESSAGE_CUTOFF.fullmatch(cutoff)
+    if match is None:
+        logger.warning(
+            "Ignoring summary %s: cutoff %r does not name a chat message",
+            summary.id,
+            cutoff,
         )
-        .order_by(ChatMessage.time_sent.desc())
-        .all()
-    )
-    # Optimization to avoid using IN clause for large histories
-    for summary in summaries:
-        if summary.parent_message_id in history_ids:
-            return summary
+        return None
 
-    return None
+    cutoff_id = int(match.group(1))
+    if all(message.id != cutoff_id for message in chat_history):
+        logger.warning(
+            "Ignoring summary %s: cutoff message %s is not in the history",
+            summary.id,
+            cutoff_id,
+        )
+        return None
+    return BranchSummary(message=summary, cutoff_id=cutoff_id)
 
 
 def get_summary_parent_message_id(chat_history: list[ChatMessage]) -> int:
@@ -188,7 +198,7 @@ def get_summary_parent_message_id(chat_history: list[ChatMessage]) -> int:
 
 def get_messages_to_summarize(
     chat_history: list[ChatMessage],
-    existing_summary: ChatMessage | None,
+    existing_summary: BranchSummary | None,
     tokens_for_recent: int,
 ) -> SummaryContent:
     """
@@ -203,9 +213,10 @@ def get_messages_to_summarize(
         SummaryContent with older_messages to summarize and recent_messages to keep
     """
     # Filter to messages after the existing summary's cutoff using timestamp
-    if existing_summary and existing_summary.last_summarized_message_id:
-        cutoff_id = existing_summary.last_summarized_message_id
-        last_summarized_msg = next(m for m in chat_history if m.id == cutoff_id)
+    if existing_summary is not None:
+        last_summarized_msg = next(
+            m for m in chat_history if m.id == existing_summary.cutoff_id
+        )
         messages = [
             m for m in chat_history if m.time_sent > last_summarized_msg.time_sent
         ]
@@ -446,9 +457,9 @@ def compress_chat_history(
         try:
             # Read phase: existing summary + tool name map. Closed before LLM call.
             with get_session_with_current_tenant() as read_session:
-                existing_summary = find_summary_for_branch(read_session, chat_history)
+                existing_summary = load_branch_summary(read_session, chat_history)
                 existing_summary_text = (
-                    existing_summary.message if existing_summary else None
+                    existing_summary.message.message if existing_summary else None
                 )
                 all_tools = get_tools(read_session)
                 tool_id_to_name: dict[int, str] = {
@@ -490,7 +501,9 @@ def compress_chat_history(
                     message=summary_text,
                     token_count=summary_token_count,
                     parent_message_id=get_summary_parent_message_id(chat_history),
-                    last_summarized_message_id=summary_content.older_messages[-1].id,
+                    last_summarized_message_id=chat_message_cutoff(
+                        summary_content.older_messages[-1].id
+                    ),
                 )
                 write_session.add(summary_message)
                 write_session.commit()

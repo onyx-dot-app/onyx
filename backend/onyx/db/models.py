@@ -3259,14 +3259,11 @@ class ChatMessage(Base):
         ForeignKey("chat_message.id"), nullable=True
     )
 
-    # Only set on summary messages - the ID of the last message included in this summary
-    # Used for chat history compression
-    last_summarized_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="SET NULL"),
-        nullable=True,
+    # Set on summary messages: the ID of the last covered message. `chat:<id>`
+    # covers the whole chat message with that row ID.
+    last_summarized_message_id: Mapped[str | None] = mapped_column(
+        String, nullable=True
     )
-    summary_covered_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    summary_covered_digest: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # For multi-model turns: the user message points to which assistant response
     # was selected as the preferred one to continue the conversation with.

@@ -1,17 +1,19 @@
 """Unit tests for chat history compression module."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from onyx.chat.compression import (
+    BranchSummary,
     SummaryContent,
     _build_llm_messages_for_summarization,
     calculate_total_history_tokens,
-    find_summary_for_branch,
+    chat_message_cutoff,
     generate_summary,
     get_compression_params,
     get_messages_to_summarize,
     get_summary_parent_message_id,
+    load_branch_summary,
 )
 from onyx.configs.constants import MessageType
 from onyx.llm.models import AssistantMessage, SystemMessage, TextContent, UserMessage
@@ -34,7 +36,7 @@ def create_mock_message(
     message_type: MessageType = MessageType.USER,
     chat_session_id: int = 1,
     parent_message_id: int | None = None,
-    last_summarized_message_id: int | None = None,
+    last_summarized_message_id: str | None = None,
     tool_calls: list | None = None,
 ) -> MagicMock:
     """Create a mock ChatMessage for testing."""
@@ -97,8 +99,7 @@ def test_messages_after_summary_cutoff_only() -> None:
         create_mock_message(2, "also summarized", 100),
         create_mock_message(3, "new message", 100),
     ]
-    existing_summary = MagicMock()
-    existing_summary.last_summarized_message_id = 2
+    existing_summary = BranchSummary(message=MagicMock(), cutoff_id=2)
 
     result = get_messages_to_summarize(
         chat_history=messages,  # ty: ignore[invalid-argument-type]
@@ -241,65 +242,65 @@ def test_no_user_messages_at_all_skips_compression() -> None:
     assert result.older_messages == []
 
 
-def test_find_summary_for_branch_returns_matching_branch() -> None:
-    """Should return summary whose parent_message_id is in current branch."""
-    branch_history = [
-        create_mock_message(1, "msg1", 100),
-        create_mock_message(2, "msg2", 100),
-        create_mock_message(3, "msg3", 100),
-    ]
+def _load_with_summary(
+    history: list[MagicMock], summary: MagicMock | None
+) -> BranchSummary | None:
+    with patch("onyx.chat.compression.find_summary_for_branch", return_value=summary):
+        return load_branch_summary(
+            MagicMock(),
+            history,  # ty: ignore[invalid-argument-type]
+        )
 
-    matching_summary = create_mock_message(
+
+def test_chat_message_cutoff_covers_whole_message() -> None:
+    assert chat_message_cutoff(42) == "chat:42"
+
+
+def test_load_branch_summary_returns_chat_message_cutoff() -> None:
+    history = [create_mock_message(i, f"msg{i}", 100) for i in (1, 2, 3)]
+    summary = create_mock_message(
         id=100,
         message="Summary of conversation",
         token_count=50,
         parent_message_id=3,
-        last_summarized_message_id=2,
+        last_summarized_message_id="chat:2",
     )
 
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
-        matching_summary
-    ]
+    result = _load_with_summary(history, summary)
 
-    result = find_summary_for_branch(
-        mock_db,
-        branch_history,  # ty: ignore[invalid-argument-type]
-    )
-
-    assert result == matching_summary
+    assert result == BranchSummary(message=summary, cutoff_id=2)
 
 
-def test_find_summary_for_branch_ignores_other_branch() -> None:
-    """Should not return summary from a different branch."""
-    # Branch B has messages 1, 2, 6, 7 (diverged after message 2)
-    branch_b_history = [
-        create_mock_message(1, "msg1", 100),
-        create_mock_message(2, "msg2", 100),
-        create_mock_message(6, "branch b msg1", 100),
-        create_mock_message(7, "branch b msg2", 100),
-    ]
+def test_load_branch_summary_without_summary() -> None:
+    history = [create_mock_message(1, "msg1", 100)]
 
-    # Summary was created on branch A (parent_message_id=5 is NOT in branch B)
-    other_branch_summary = create_mock_message(
+    assert _load_with_summary(history, None) is None
+
+
+def test_load_branch_summary_ignores_cutoff_outside_history() -> None:
+    history = [create_mock_message(i, f"msg{i}", 100) for i in (1, 2, 3)]
+    summary = create_mock_message(
         id=100,
-        message="Summary from branch A",
+        message="Summary",
         token_count=50,
-        parent_message_id=5,
-        last_summarized_message_id=4,
+        parent_message_id=3,
+        last_summarized_message_id="chat:9",
     )
 
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
-        other_branch_summary
-    ]
+    assert _load_with_summary(history, summary) is None
 
-    result = find_summary_for_branch(
-        mock_db,
-        branch_b_history,  # ty: ignore[invalid-argument-type]
+
+def test_load_branch_summary_ignores_partial_message_cutoff() -> None:
+    history = [create_mock_message(i, f"msg{i}", 100) for i in (1, 2, 3)]
+    summary = create_mock_message(
+        id=100,
+        message="Summary",
+        token_count=50,
+        parent_message_id=3,
+        last_summarized_message_id="chat:2:step:1",
     )
 
-    assert result is None
+    assert _load_with_summary(history, summary) is None
 
 
 def test_cutoff_always_before_user_message() -> None:

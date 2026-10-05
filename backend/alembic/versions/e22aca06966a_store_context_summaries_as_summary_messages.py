@@ -28,24 +28,57 @@ def upgrade() -> None:
         UPDATE chat_message SET message_type = 'SUMMARY'
         WHERE message_type = 'ASSISTANT' AND last_summarized_message_id IS NOT NULL
     """)
-    op.add_column(
+    op.drop_constraint(
+        "chat_message_last_summarized_message_id_fkey",
         "chat_message",
-        sa.Column("summary_covered_count", sa.Integer(), nullable=True),
+        type_="foreignkey",
     )
-    op.add_column(
+    op.alter_column(
         "chat_message",
-        sa.Column("summary_covered_digest", sa.String(), nullable=True),
+        "last_summarized_message_id",
+        existing_type=sa.Integer(),
+        type_=sa.String(),
+        existing_nullable=True,
+        postgresql_using="'chat:' || last_summarized_message_id::text",
     )
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM chat_message WHERE summary_covered_count IS NOT NULL")
+    # Integer cutoffs can reference only complete chat-message rows.
+    op.execute("""
+        DELETE FROM chat_message AS summary
+        WHERE message_type = 'SUMMARY' AND last_summarized_message_id IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM chat_message AS covered
+              WHERE summary.last_summarized_message_id = 'chat:' || covered.id::text
+          )
+    """)
+    op.execute("""
+        UPDATE chat_message AS summary
+        SET last_summarized_message_id = covered.id::text
+        FROM chat_message AS covered
+        WHERE summary.last_summarized_message_id = 'chat:' || covered.id::text
+    """)
+    op.alter_column(
+        "chat_message",
+        "last_summarized_message_id",
+        existing_type=sa.String(),
+        type_=sa.Integer(),
+        existing_nullable=True,
+        postgresql_using="last_summarized_message_id::integer",
+    )
+    op.create_foreign_key(
+        "chat_message_last_summarized_message_id_fkey",
+        "chat_message",
+        "chat_message",
+        ["last_summarized_message_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
     op.execute("""
         UPDATE chat_message SET message_type = 'ASSISTANT'
         WHERE message_type = 'SUMMARY'
     """)
-    op.drop_column("chat_message", "summary_covered_digest")
-    op.drop_column("chat_message", "summary_covered_count")
     op.alter_column(
         "chat_message",
         "message_type",

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
-from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
+from sqlalchemy import Row, case, delete, desc, func, nullsfirst, or_, select, update
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.sql.expression import ColumnElement
@@ -1255,3 +1255,41 @@ def create_chat_history_chain(
         previous_message = current_message
 
     return mainline_messages
+
+
+def find_summary_for_ancestry(
+    db_session: Session,
+    session_id: UUID,
+    message_ids: list[int],
+) -> ChatMessage | None:
+    """Find a summary on selected ancestry; IDs must run from newest to oldest."""
+    if not message_ids:
+        return None
+    query = select(ChatMessage).where(
+        ChatMessage.chat_session_id == session_id,
+        ChatMessage.parent_message_id.in_(message_ids),
+        ChatMessage.message_type == MessageType.SUMMARY,
+    )
+    return db_session.scalar(
+        query.order_by(
+            case(
+                {message_id: index for index, message_id in enumerate(message_ids)},
+                value=ChatMessage.parent_message_id,
+            ),
+            ChatMessage.id.desc(),
+        ).limit(1)
+    )
+
+
+def find_summary_for_branch(
+    db_session: Session,
+    chat_history: list[ChatMessage],
+) -> ChatMessage | None:
+    """Find the summary on the nearest selected ancestor, regardless of save time."""
+    if not chat_history:
+        return None
+    return find_summary_for_ancestry(
+        db_session,
+        chat_history[0].chat_session_id,
+        [message.id for message in reversed(chat_history)],
+    )
