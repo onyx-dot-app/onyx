@@ -270,6 +270,7 @@ export {
   type DropdownVirtualAnchor,
   type DropdownWidth,
   type DropdownAlign,
+  type DropdownSide,
 } from "@opal/components/dropdown/components";
 export {
   type DropdownItem,

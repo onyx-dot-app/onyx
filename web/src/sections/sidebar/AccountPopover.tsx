@@ -301,6 +301,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   return (
     <Dropdown
       width={25}
+      side="right"
       align="end"
       open={menuOpen}
       onOpenChange={handlePopoverOpen}

@@ -24,6 +24,7 @@ import {
   useDropdownOverlay,
   useFoldedGroups,
   type DropdownAlign,
+  type DropdownSide,
   type DropdownTabKey,
   type DropdownVirtualAnchor,
   type DropdownWidth,
@@ -84,10 +85,17 @@ interface DropdownProps {
    */
   width?: DropdownWidth;
   /**
-   * The anchor edge the list lines up with. It reaches 6px past that edge.
+   * The anchor edge the list lines up with. Below the anchor it reaches 6px
+   * past that edge; beside it, it lines up exactly.
    * @default "start"
    */
   align?: DropdownAlign;
+  /**
+   * Below the anchor, or a flyout to its right (left when there is no
+   * room). A flyout lines up its `align` edge with the anchor's.
+   * @default "bottom"
+   */
+  side?: DropdownSide;
   /**
    * What Tab does while the list is open. By default a type-in trigger
    * walks the rows and any other trigger closes the list and lets focus
@@ -120,6 +128,7 @@ function Dropdown({
   container,
   width,
   align = "start",
+  side = "bottom",
   tabKey,
   children,
 }: DropdownProps) {
@@ -132,6 +141,7 @@ function Dropdown({
     virtualAnchor,
     width,
     align,
+    side,
   });
   const {
     isOpen,
@@ -961,4 +971,5 @@ export {
   type DropdownVirtualAnchor,
   type DropdownWidth,
   type DropdownAlign,
+  type DropdownSide,
 };

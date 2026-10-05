@@ -394,6 +394,8 @@ export interface DropdownVirtualAnchor {
 export type DropdownWidth = 15 | 17.5 | 20 | 22.5 | 25;
 /** Which edge of the anchor the list lines up with. */
 export type DropdownAlign = "start" | "end";
+/** Below the anchor, or a flyout beside it. */
+export type DropdownSide = "bottom" | "right";
 
 /** How far the list reaches past the anchor on its aligned side, in px. */
 const PUNCH_OUT_PX = 6;
@@ -407,6 +409,7 @@ interface UseDropdownOverlayProps {
   /** A fixed width; left out, the list matches its anchor. */
   width?: DropdownWidth;
   align: DropdownAlign;
+  side: DropdownSide;
 }
 
 /**
@@ -422,6 +425,7 @@ export function useDropdownOverlay({
   virtualAnchor,
   width,
   align,
+  side,
 }: UseDropdownOverlayProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isOpen = openProp ?? uncontrolledOpen;
@@ -469,16 +473,18 @@ export function useDropdownOverlay({
 
   const { refs, floatingStyles, isPositioned } = useFloating<ReferenceType>({
     open: isOpen,
-    placement: align === "end" ? "bottom-end" : "bottom-start",
+    placement: `${side}-${align}`,
     middleware: [
-      // The list reaches 6px past the anchor on its aligned side: with its
-      // 4px inset and 1px border, the rows' bounding boxes then align flush
-      // with the anchor's content, inside its own border. Matched to the
-      // anchor it reaches 6px past both sides; a fixed width includes that
-      // reach. crossAxis is direction-aware, so RTL mirrors.
+      // Below the anchor, the list reaches 6px past it on its aligned side:
+      // with its 4px inset and 1px border, the rows' bounding boxes then
+      // align flush with the anchor's content, inside its own border.
+      // Matched to the anchor it reaches 6px past both sides; a fixed width
+      // includes that reach. A flyout beside the anchor lines its edge up
+      // exactly. crossAxis is direction-aware, so RTL mirrors.
       offset({
         mainAxis: 4,
-        crossAxis: align === "end" ? PUNCH_OUT_PX : -PUNCH_OUT_PX,
+        crossAxis:
+          side === "right" ? 0 : align === "end" ? PUNCH_OUT_PX : -PUNCH_OUT_PX,
       }),
       flip(),
       shift({ padding: 8 }),
