@@ -169,6 +169,12 @@
 .opal-dropdown-card[data-exit] {
   @apply absolute inset-x-0 top-0 pointer-events-none;
 }
+/* A list anchored by its bottom grows upward: the leaving card stays on
+   the bottom edge, where it was. */
+.opal-dropdown-card[data-exit][data-pin="bottom"] {
+  top: auto;
+  bottom: 0;
+}
 .opal-dropdown-card[data-enter="forward"] {
   animation: opal-dropdown-card-in-forward 200ms ease-in-out;
 }
