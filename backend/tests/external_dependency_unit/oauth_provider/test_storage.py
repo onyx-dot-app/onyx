@@ -192,9 +192,11 @@ def _client_information(
         "none", "client_secret_post", "client_secret_basic", "private_key_jwt"
     ] = "none",
     client_secret: str | None = None,
+    client_name: str | None = None,
 ) -> OAuthClientInformationFull:
     return OAuthClientInformationFull(
         client_id=client_id,
+        client_name=client_name,
         redirect_uris=["http://127.0.0.1:6274/oauth/callback"],
         token_endpoint_auth_method=token_endpoint_auth_method,
         client_secret=client_secret,
@@ -650,6 +652,15 @@ def test_register_client_rejects_non_none_auth_method() -> None:
                 client_id,
                 token_endpoint_auth_method="client_secret_post",
             )
+        )
+
+
+def test_register_client_rejects_overlong_name() -> None:
+    client_id = f"oauth-provider-long-name-{uuid4().hex}"
+
+    with pytest.raises(ValueError, match="client name exceeds"):
+        register_oauth_provider_client(
+            _client_information(client_id, client_name="x" * 257)
         )
 
 

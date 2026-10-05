@@ -50,6 +50,8 @@ def register_oauth_provider_client(client: OAuthClientInformationFull) -> None:
         or client.client_secret is not None
     ):
         raise ValueError("Only public OAuth provider clients can be registered")
+    if client.client_name is not None and len(client.client_name) > 256:
+        raise ValueError("OAuth provider client name exceeds 256 characters")
     with get_catalog_session() as session:
         session.add(
             OAuthProviderClient(
