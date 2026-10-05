@@ -1054,12 +1054,13 @@ def build_chat_turn(
         )
         simple_chat_history.insert(0, summary_simple)
 
-    # Capture before the processing fence so a failure here cannot leave it set.
-    tool_configuration = capture_persona_tool_configuration(persona)
-
     # ── Stop signal and processing status ────────────────────────────────────
     cache = get_cache_backend()
     reset_cancel_status(chat_session.id, cache)
+
+    # Capture after clearing stale stops and before the processing fence, so a
+    # failure here cannot leave the fence set.
+    tool_configuration = capture_persona_tool_configuration(persona)
 
     # Bind the id, not the row: this closure is stored on ChatTurnSetup and
     # would otherwise keep a detached ChatSession reachable for the whole turn.
