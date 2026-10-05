@@ -3,7 +3,20 @@ from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
-from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
+from sqlalchemy import (
+    Integer,
+    Row,
+    any_,
+    bindparam,
+    delete,
+    desc,
+    func,
+    nullsfirst,
+    or_,
+    select,
+    update,
+)
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.sql.expression import ColumnElement
@@ -1265,24 +1278,22 @@ def find_summary_for_ancestry(
     """Find a summary on selected ancestry; IDs must run from newest to oldest."""
     if not message_ids:
         return None
-    # Rank summaries by their IDs in Python so the query stays the same size
-    # however long the history is, then load only the selected row.
-    candidates = db_session.execute(
-        select(ChatMessage.id, ChatMessage.parent_message_id).where(
+    # One array parameter keeps the query the same size however long the history is.
+    ancestry = bindparam("ancestry", message_ids, type_=postgresql.ARRAY(Integer))
+    return db_session.scalar(
+        select(ChatMessage)
+        .where(
             ChatMessage.chat_session_id == session_id,
             ChatMessage.message_type == MessageType.SUMMARY,
+            ChatMessage.parent_message_id == any_(ancestry),
         )
-    ).all()
-    depth = {message_id: index for index, message_id in enumerate(message_ids)}
-    best: tuple[int, int] | None = None
-    for summary_id, parent_id in candidates:
-        if parent_id is None or parent_id not in depth:
-            continue
         # Nearest ancestor first, then the newest summary on that ancestor.
-        rank = (depth[parent_id], -summary_id)
-        if best is None or rank < best:
-            best = rank
-    return db_session.get(ChatMessage, -best[1]) if best else None
+        .order_by(
+            func.array_position(ancestry, ChatMessage.parent_message_id),
+            ChatMessage.id.desc(),
+        )
+        .limit(1)
+    )
 
 
 def find_summary_for_branch(
