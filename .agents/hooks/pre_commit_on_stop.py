@@ -71,14 +71,17 @@ def _pre_commit_failures(repo: Path, files: list[str]) -> str | None:
     before = _digests(repo, files)
     # A new session lets a timeout stop the hooks pre-commit started, not only
     # pre-commit itself.
-    proc = subprocess.Popen(
-        [pre_commit, "run", "--files", *files],
-        cwd=repo,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    )
+    try:
+        proc = subprocess.Popen(
+            [pre_commit, "run", "--files", *files],
+            cwd=repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+    except OSError as e:
+        return f"Could not run pre-commit ({e}); run it yourself before finishing."
     try:
         stdout, stderr = proc.communicate(timeout=_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
@@ -156,16 +159,16 @@ def main() -> int:
                 Path(payload.get("cwd") or os.getcwd()), "rev-parse", "--show-toplevel"
             ).strip()
         )
-        messages = [
-            message
-            for message in (
-                _pre_commit_failures(repo, _changed_files(repo)),
-                _stale_doc_reminder(repo, payload.get("session_id")),
-            )
-            if message
-        ]
+        files = _changed_files(repo)
     except (subprocess.CalledProcessError, OSError):
         return 0
+    try:
+        reminder = _stale_doc_reminder(repo, payload.get("session_id"))
+    except (subprocess.CalledProcessError, OSError):
+        reminder = None
+    messages = [
+        message for message in (_pre_commit_failures(repo, files), reminder) if message
+    ]
     if not messages:
         return 0
     print("\n\n".join(messages), file=sys.stderr)
