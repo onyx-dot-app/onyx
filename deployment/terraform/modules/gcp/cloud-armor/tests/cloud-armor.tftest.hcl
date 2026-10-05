@@ -76,8 +76,29 @@ run "defaults_enforce_the_owasp_rule_sets_at_sensitivity_one" {
     condition = one([
       for r in google_compute_security_policy.this.rule :
       one(r.match).expr[0].expression if r.description == "OWASP CRS sqli"
-    ]) == "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
+    ]) == "request.path != '/api/license/upload' && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
     error_message = "The SQLi rule should evaluate sqli-v33-stable at sensitivity 1."
+  }
+}
+
+run "the_license_upload_skips_the_waf_rules_but_not_the_rate_limits" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for r in google_compute_security_policy.this.rule :
+      startswith(one(r.match).expr[0].expression, "request.path != '/api/license/upload' && evaluatePreconfiguredWaf(")
+      if r.priority >= 3000 && r.priority < 4000
+    ])
+    error_message = "Every WAF rule should leave the license upload alone, because its multipart body trips the protocol attack signatures."
+  }
+
+  assert {
+    condition = one([
+      for r in google_compute_security_policy.this.rule :
+      one(r.match).expr[0].expression if r.priority == 5000
+    ]) == "request.path.startsWith('/api')"
+    error_message = "The API rate limit should still count the license upload."
   }
 }
 
@@ -239,7 +260,7 @@ run "per_rule_settings_override_the_module_wide_ones" {
   assert {
     condition = one([
       for r in google_compute_security_policy.this.rule : one(r.match).expr[0].expression if r.description == "OWASP CRS sqli"
-    ]) == "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 2, 'opt_out_rule_ids': ['owasp-crs-v030301-id942421-sqli', 'owasp-crs-v030301-id942432-sqli']})"
+    ]) == "request.path != '/api/license/upload' && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 2, 'opt_out_rule_ids': ['owasp-crs-v030301-id942421-sqli', 'owasp-crs-v030301-id942432-sqli']})"
     error_message = "The SQLi rule should carry its own sensitivity and opt-outs."
   }
 
