@@ -98,6 +98,16 @@ a runtime path, or a statement that a file does not exist), add it to
 `path-allowlist.txt`. Run the check by hand with
 `python3 .agents/feature-map/check_feature_map.py`.
 
+## The stale-document reminder
+
+`stale_docs.py` takes a list of changed files, maps each one to its components
+through `PATHS.md` (longest prefix wins, tests and `.agents/` ignored), and names
+every component whose code changed but whose document did not. The agent Stop hook
+(see Code Quality in the root `AGENTS.md`) runs it on the branch's changes when an
+agent ends a turn, so the agent decides whether the document needs an update while it
+still knows what it changed. It names each component at most once per session. Run
+it by hand with `python3 .agents/feature-map/stale_docs.py <files>`.
+
 The check catches broken references only. It cannot tell when a description is
 wrong while every path it cites still exists. That is why each component records
 the commit it was last verified against.
