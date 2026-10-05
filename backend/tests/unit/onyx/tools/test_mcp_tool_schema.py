@@ -15,7 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
+from onyx.db.models import MCPServer
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
@@ -122,12 +123,18 @@ def _make_tool(
     input_schema: dict,
     tool_name: str = "aws___list_regions",
     server_name: str = "aws-knowledge",
+    auth_type: MCPAuthenticationType | None = MCPAuthenticationType.NONE,
 ) -> MCPTool:
-    mcp_server = MagicMock()
-    mcp_server.name = server_name
-    mcp_server.server_url = "http://mcp.example"
-    mcp_server.auth_type = MCPAuthenticationType.NONE
-    mcp_server.transport = None
+    mcp_server = MCPServer(
+        id=1,
+        name=server_name,
+        server_url="http://mcp.example",
+        auth_type=auth_type,
+        transport=None,
+        oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_authorization_endpoint=None,
+        oauth_token_endpoint=None,
+    )
     return MCPTool(
         tool_id=1,
         emitter=MagicMock(),
@@ -136,6 +143,12 @@ def _make_tool(
         tool_description="List AWS regions",
         tool_definition=input_schema,
     )
+
+
+def test_server_without_auth_type_builds_tool() -> None:
+    tool = _make_tool({"type": "object"}, auth_type=None)
+
+    assert tool.mcp_server.auth_type is None
 
 
 class TestMCPToolDefinition:

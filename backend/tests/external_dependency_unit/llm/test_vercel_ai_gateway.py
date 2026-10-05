@@ -113,7 +113,7 @@ def test_streaming_completion_through_the_gateway(
     )
 
     prompt: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content="Reply with exactly the word: pong")
+        UserMessage(content="Reply with exactly the word: pong")
     ]
 
     content = "".join(

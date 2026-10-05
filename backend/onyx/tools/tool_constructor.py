@@ -10,14 +10,10 @@ from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.context.search.models import BaseFilters, PersonaSearchInfo
+from onyx.context.search.models import BaseFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.mcp import (
-    get_all_mcp_tools_for_server,
-    get_mcp_server_by_id,
-)
-from onyx.db.models import Persona, User
-from onyx.db.models import Tool as ToolDBModel
+from onyx.db.mcp import get_mcp_server_by_id
+from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
@@ -31,7 +27,12 @@ from onyx.server.features.mcp.credentials import (
 )
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
-from onyx.tools.models import DynamicSchemaInfo, SearchToolUsage
+from onyx.tools.models import (
+    DynamicSchemaInfo,
+    PersonaToolConfiguration,
+    SearchToolUsage,
+    ToolConfiguration,
+)
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )
@@ -134,7 +135,7 @@ def _require_chat_session_id(
 
 
 def should_disable_open_url_web_fetch(
-    persona_tools: Sequence[ToolDBModel],
+    persona_tools: Sequence[ToolConfiguration],
     allowed_tool_ids: list[int] | None,
 ) -> bool:
     """OpenURLTool is hidden from the chat tool toggles (chat_selectable=False)
@@ -153,7 +154,7 @@ def should_disable_open_url_web_fetch(
 
 
 def construct_tools(
-    persona: Persona,
+    configuration: PersonaToolConfiguration,
     emitter: Emitter,
     user: User,
     llm: LLM,
@@ -164,17 +165,10 @@ def construct_tools(
     allowed_tool_ids: list[int] | None = None,
     search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
 ) -> dict[int, list[Tool]]:
-    """Constructs tools based on persona configuration and available APIs.
-
-    Will simply skip tools that are not allowed/available.
-
-    Callers must supply a persona with ``tools``, ``document_sets``,
-    ``attached_documents``, and ``hierarchy_nodes`` already eager-loaded
-    (e.g. via ``eager_load_persona=True`` or ``eager_load_for_tools=True``)
-    to avoid lazy SQL queries after the session may have been flushed."""
+    """Build tools from captured settings; resolve current service credentials."""
     with get_session_with_current_tenant_if_none(db_session) as db_session:
         return _construct_tools_impl(
-            persona=persona,
+            configuration=configuration,
             db_session=db_session,
             emitter=emitter,
             user=user,
@@ -188,7 +182,7 @@ def construct_tools(
 
 
 def _construct_tools_impl(
-    persona: Persona,
+    configuration: PersonaToolConfiguration,
     db_session: Session,
     emitter: Emitter,
     user: User,
@@ -201,12 +195,11 @@ def _construct_tools_impl(
 ) -> dict[int, list[Tool]]:
     tool_dict: dict[int, list[Tool]] = {}
 
-    # Log which tools are attached to the persona for debugging
-    persona_tool_names = [t.name for t in persona.tools]
+    persona_tool_names = [t.name for t in configuration.tools]
     logger.debug(
         "Constructing tools for persona '%s' (id=%s): %s",
-        persona.name,
-        persona.id,
+        configuration.persona_name,
+        configuration.persona_id,
         persona_tool_names,
     )
 
@@ -217,17 +210,11 @@ def _construct_tools_impl(
     document_index = get_default_document_index(search_settings, None)
 
     def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
-        persona_search_info = PersonaSearchInfo(
-            document_set_names=[ds.name for ds in persona.document_sets],
-            search_start_date=persona.search_start_date,
-            attached_document_ids=[doc.id for doc in persona.attached_documents],
-            hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
-        )
         return SearchTool(
             tool_id=tool_id,
             emitter=emitter,
             user=user,
-            persona_search_info=persona_search_info,
+            persona_search_info=configuration.search,
             llm=llm,
             document_index=document_index,
             user_selected_filters=config.user_selected_filters,
@@ -239,11 +226,11 @@ def _construct_tools_impl(
         )
 
     open_url_web_fetch_disabled = should_disable_open_url_web_fetch(
-        persona.tools, allowed_tool_ids
+        configuration.tools, allowed_tool_ids
     )
 
     added_search_tool = False
-    for db_tool_model in persona.tools:
+    for db_tool_model in configuration.tools:
         # Disabling an action leaves it attached to its personas, so an attached
         # tool is not necessarily a usable one (see Persona__Tool). Only the tool
         # listing endpoints filtered on this, which left a disabled tool callable
@@ -481,8 +468,12 @@ def _construct_tools_impl(
                 logger.warning(str(e))
                 continue
 
-            # Get all saved tools for this MCP server
-            saved_tools = get_all_mcp_tools_for_server(mcp_server.id, db_session)
+            # Reuse captured schemas across model responses.
+            saved_tools = [
+                tool
+                for tool in configuration.tools
+                if tool.mcp_server_id == mcp_server.id
+            ]
 
             # Find the specific tool that this database entry represents
             expected_tool_name = db_tool_model.display_name
@@ -501,9 +492,8 @@ def _construct_tools_impl(
                     emitter=emitter,
                     mcp_server=mcp_server,
                     tool_name=saved_tool.name,
-                    tool_description=saved_tool.description,
+                    tool_description=saved_tool.description or "",
                     tool_definition=saved_tool.mcp_input_schema or {},
-                    connection_config=mcp_credentials.connection_config,
                     user_email=user.email,
                     user_id=str(user.id),
                     user_oauth_token=mcp_credentials.user_oauth_token,
@@ -513,7 +503,7 @@ def _construct_tools_impl(
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 
                 if saved_tool.id == db_tool_model.id:
-                    tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
+                    tool_dict[saved_tool.id] = [mcp_tool]
             if db_tool_model.id not in tool_dict:
                 logger.warning(
                     "Tool '%s' not found in MCP server '%s'",

@@ -10,7 +10,11 @@ from pydantic import BaseModel, ConfigDict, JsonValue, model_validator
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT, NUM_RETURNED_HITS
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.context.search.models import (
+    PersonaSearchInfo,
+    SearchDoc,
+    SearchDocsResponse,
+)
 from onyx.db.memory import UserMemoryContext
 from onyx.file_store.models import (
     install_lazy_content_loader,
@@ -23,9 +27,36 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.utils.headers import HeaderItemDict
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
+
+
+class ToolConfiguration(BaseModel):
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None
+    display_name: str | None
+    in_code_tool_id: str | None
+    enabled: bool
+    openapi_schema: dict[str, JsonValue] | None
+    mcp_input_schema: dict[str, JsonValue] | None
+    custom_headers: list[HeaderItemDict] | None
+    passthrough_auth: bool
+    mcp_server_id: int | None
+    oauth_config_id: int | None
+
+
+class PersonaToolConfiguration(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    persona_id: int
+    persona_name: str
+    tools: list[ToolConfiguration]
+    search: PersonaSearchInfo
 
 
 class ToolCallException(Exception):

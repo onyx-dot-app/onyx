@@ -757,6 +757,7 @@ if __name__ == "__main__":
     from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
     from onyx.db.models import User
     from onyx.db.persona import get_default_behavior_persona
+    from onyx.db.tools import capture_persona_tool_configuration
     from onyx.llm.factory import get_default_llm, get_llm_token_counter
     from onyx.llm.model_capabilities import model_is_reasoning_model
     from onyx.server.query_and_chat.placement import Placement
@@ -791,7 +792,7 @@ if __name__ == "__main__":
         # No chat session exists here, so skip the tools that write
         # session-scoped generated files.
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=emitter,
             user=user,
