@@ -34,3 +34,7 @@ components/discord-bot.md: discord.py
 # Build outputs.
 components/desktop-widget-extensions.md: src-tauri/target/release/bundle/
 components/desktop-widget-extensions.md: dist/onyx-widget.js
+
+# Added by the agent Stop hook PR (#15555), which is not merged yet.
+# Remove this entry when #15555 merges.
+README.md: .agents/hooks/pre_commit_on_stop.py
