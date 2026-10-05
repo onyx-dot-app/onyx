@@ -285,9 +285,33 @@ object access and the narrow read that Onyx needs at startup.
 
 A backend security policy with the OWASP Core Rule Set at sensitivity 1, an API
 rate limit, a global rate limit and Adaptive Protection. It takes effect only on
-an L7 load balancer; see below. The WAF rules skip `/api/license/upload`,
-because its multipart body trips the protocol attack signatures. The rate
-limits still apply to it.
+an L7 load balancer; see below.
+
+The rule sets are tuned the standard way, with request field exclusions, so
+they deny without breaking Onyx. Without the tuning, sensitivity 1 denies chat
+messages that hold code, shell commands or file paths, every upload, and the
+Google sign-in callback.
+
+- No rule set except `methodenforcement`, `scannerdetection` and
+  `sessionfixation` reads the values of the Onyx fields that carry chat text,
+  prompts, code, URLs and secrets, such as `message`, `system_prompt`,
+  `api_base` and `password`. A name covers the query string, a form body and
+  the top-level keys of a JSON body, on every path. A nested key is reached
+  only through its parent, so free-form objects such as a connector's
+  configuration are covered by prefix. Everything else in the request is still
+  checked: the path, the headers, the cookies, the other parameters, and the
+  parameter names.
+- The same rule sets skip an upload, a `POST`, `PUT` or `PATCH` with a
+  `multipart/form-data` body. Cloud Armor does not parse a multipart body and
+  reads the file content as parameter names, which no exclusion covers. The
+  header alone exempts nothing: a `GET` is checked in full whatever it sends.
+- `scannerdetection` and `sessionfixation` check every request in full.
+
+When a legitimate request gets a 403, the load balancer log names the
+signature and the request. Add the field to
+`cloud_armor_extra_uninspected_fields`, or its parent object to
+`cloud_armor_extra_uninspected_field_prefixes`. Both add to the module
+defaults. The rate limits apply to every request.
 
 ### `l7-ingress`
 
