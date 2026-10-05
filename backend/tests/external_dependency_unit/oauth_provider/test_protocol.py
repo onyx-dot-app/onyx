@@ -238,9 +238,9 @@ async def test_complete_consent_exchange_refresh_and_revoke(
         assert introspected.status_code == 200, introspected.text
         assert introspected.json()["resource"] == _RESOURCE
         assert "token" not in introspected.json()
-        assert (
-            await protocol_client.post("/search", headers=bearer)
-        ).status_code == 200
+        searched = await protocol_client.post("/search", headers=bearer)
+        assert searched.status_code == 200, searched.text
+        assert searched.json()["user_id"] == protocol_client.headers["X-Mcp-Test-Owner"]
         assert (
             await protocol_client.get("/unrelated", headers=bearer)
         ).status_code == 403

@@ -8,6 +8,7 @@ from prometheus_client import CollectorRegistry
 from prometheus_fastapi_instrumentator import Instrumentator
 from starlette.requests import Request
 
+from onyx.auth.schemas import AuthBackend
 from onyx.configs import app_configs
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.enums import AccountType
@@ -156,7 +157,10 @@ def test_non_mcp_credentials_keep_existing_auth_path() -> None:
     assert extract_mcp_oauth_bearer(request) is None
 
 
-def test_consent_binding_tracks_bearer_even_with_an_unrelated_cookie() -> None:
+def test_consent_binding_tracks_bearer_even_with_an_unrelated_cookie(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(app_configs, "AUTH_BACKEND", AuthBackend.REDIS)
     user = User(id=uuid4(), account_type=AccountType.STANDARD)
     fingerprints = []
     for token in ("first-session", "second-session"):
