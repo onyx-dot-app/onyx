@@ -1,8 +1,14 @@
 ### Regenerates backend/onyx/llm/well_known_providers/recommended-models.json
-### from the OpenRouter catalog (via backend/scripts/update_recommended_models.py)
+### via an OpenAI agent (backend/scripts/update_recommended_models_agent.py)
 ### and opens a reviewed PR when the model set changed. The file is live
 ### production config — deployments poll it from GitHub raw main — so changes
 ### always go through a human-reviewed PR, never a direct push.
+###
+### The agent decides which models each vendor actually recommends today
+### (web search + OpenRouter catalog digest); the deterministic sibling script
+### is the fallback when the agent can't run. If the PR's provider chat tests
+### fail, the workflow_run trigger re-runs the agent with the failure logs so
+### it can fix its own picks.
 
 name: Update Recommended Models
 
@@ -10,6 +16,19 @@ on:
   schedule:
     - cron: "0 13 * * 1" # weekly, Monday 13:00 UTC (off the nightly 10:30/11:00 slots)
   workflow_dispatch:
+    inputs:
+      agent_model:
+        description: "OpenAI model for the agent call (default: gpt-5)"
+        required: false
+        default: ""
+  # When the chat-test workflow fails on the auto PR branch, iterate: re-run
+  # the agent with the failing logs so the next push fixes the bad picks.
+  # Safe: restricted to the bot-owned auto branch — only this workflow's App
+  # token can create it, and the job checks out that run's own head_sha.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: ["Recommended LLM Models Chat Tests"]
+    types: [completed]
+    branches: [auto/update-recommended-models]
 
 permissions:
   contents: read
@@ -18,10 +37,21 @@ concurrency:
   group: update-recommended-models
   cancel-in-progress: false
 
+env:
+  REVIEWER: rohoswagger
+  BRANCH: auto/update-recommended-models
+  FILE: backend/onyx/llm/well_known_providers/recommended-models.json
+
 jobs:
   update-recommended-models:
+    # Scheduled/dispatch runs always run; workflow_run only on chat-test
+    # failure of the auto PR branch.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Agent call + one retry with validation feedback can take a while.
+    timeout-minutes: 45
     steps:
       - name: Mint GitHub App installation token
         id: app-token
@@ -36,7 +66,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: true
-          ref: main
+          # On a chat-test failure retry, check out the PR head so the agent
+          # iterates on its own last attempt instead of regenerating from main.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || 'main' }}
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git identity as App
@@ -48,16 +80,52 @@ jobs:
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
 
+      - name: Collect failing chat-test context
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          # Agent gets the tail of the failing logs plus which matrix legs died.
+          gh api "repos/${{ github.repository }}/actions/runs/${FAILED_RUN_ID}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "failure") | .name' \
+            > /tmp/failed_jobs.txt || true
+          {
+            echo "Failed jobs:"
+            cat /tmp/failed_jobs.txt
+            echo ""
+            gh run view "${FAILED_RUN_ID}" --repo "${{ github.repository }}" --log-failed || true
+          } > /tmp/failure_context.txt
+          wc -c /tmp/failure_context.txt
+
       - name: Regenerate recommended-models.json
-        # The script is standard-library-only, so the runner's python3 is all
-        # it needs — no uv, no dependency install.
-        run: python3 backend/scripts/update_recommended_models.py --write
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ github.event.inputs.agent_model }}
+        # Scripts are standard-library-only, so the runner's python3 is all
+        # they need — no uv, no dependency install. The agent path uses the
+        # Responses API; fall back to the deterministic script when there's
+        # no key or the agent call fails, so the weekly update still lands.
+        run: |
+          set -o pipefail
+
+          args="--write --rationale-file /tmp/model_rationale.md"
+          if [ -s /tmp/failure_context.txt ]; then
+            args="$args --failure-context-file /tmp/failure_context.txt"
+          fi
+
+          if [ -n "${OPENAI_API_KEY:-}" ] && \
+             python3 backend/scripts/update_recommended_models_agent.py ${args}; then
+            echo "Agent regeneration succeeded."
+          else
+            echo "::warning::Agent path unavailable or failed; falling back to deterministic updater."
+            python3 backend/scripts/update_recommended_models.py --write
+          fi
 
       - name: Open or update PR
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          FILE: backend/onyx/llm/well_known_providers/recommended-models.json
         # Fixed branch + force-push (unlike release-devtools' skip-if-exists):
         # the content changes week over week, so an already-open PR should be
         # refreshed with the latest regeneration, not left stale.
@@ -67,22 +135,30 @@ jobs:
             exit 0
           fi
 
-          branch="auto/update-recommended-models"
-          git switch -C "${branch}"
+          git switch -C "${BRANCH}"
           git add "${FILE}"
           git commit -m "chore(llms): update recommended models"
-          git push --force origin "${branch}"
+          git push --force origin "${BRANCH}"
 
-          existing_pr="$(gh pr list --state open --head "${branch}" --json number --jq '.[0].number')"
-          if [ -n "${existing_pr}" ]; then
-            echo "Refreshed existing PR #${existing_pr} via force-push."
+          body="Generated by the [Update Recommended Models workflow run](${RUN_URL})."
+          if [ -s /tmp/model_rationale.md ]; then
+            body="$(printf '%s\n\n%s\n' "${body}" "$(cat /tmp/model_rationale.md)")"
+          fi
+
+          pr_number="$(gh pr list --state open --head "${BRANCH}" --json number --jq '.[0].number')"
+          if [ -n "${pr_number}" ]; then
+            echo "Refreshed existing PR #${pr_number} via force-push."
           else
             gh pr create \
               --base main \
-              --head "${branch}" \
+              --head "${BRANCH}" \
               --title "chore(llms): update recommended models" \
-              --body "Generated by the [Update Recommended Models workflow run](${RUN_URL}). Curation rules live in \`backend/scripts/update_recommended_models_rules.json\`."
+              --body "${body}"
+            pr_number="$(gh pr list --state open --head "${BRANCH}" --json number --jq '.[0].number')"
           fi
+
+          gh pr edit "${pr_number}" --add-reviewer "${REVIEWER}" \
+            || echo "::warning::Could not request review from ${REVIEWER}"
 
   notify-slack-on-failure:
     needs:

@@ -10,11 +10,12 @@ name overrides, pinned defaults.
 
 The generated file is live production config — deployments poll it from GitHub
 raw main (AUTO_LLM_CONFIG_URL) — so this script never pushes anything itself.
-The update-recommended-models workflow runs it and opens a reviewed PR, and
-that PR's CI is the validation gate: the runtime-schema/Craft-coverage unit
-tests and the provider chat tests all run against the regenerated file. The
-script itself is standard-library-only on purpose, so any python3 can run it
-with no environment setup.
+The update-recommended-models workflow prefers the agent updater
+(update_recommended_models_agent.py) and falls back to this script, then opens
+a reviewed PR; that PR's CI is the validation gate: the runtime-schema/
+Craft-coverage unit tests and the provider chat tests all run against the
+regenerated file. The script itself is standard-library-only on purpose, so
+any python3 can run it with no environment setup.
 
 `version`/`updated_at` are bumped only when the model set actually changes, so
 deployments' updated_at watermark is not disturbed by cosmetic diffs, and a
