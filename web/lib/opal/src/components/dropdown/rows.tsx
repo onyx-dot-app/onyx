@@ -120,6 +120,8 @@ export const Row = React.memo(function Row({
     title: row.title,
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
+    descriptionMaxLines:
+      row.kind === "option" ? row.descriptionMaxLines : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,
     sizePreset: "main-ui",
     // `body` resolves to `ContentSm`, which has no description or suffix

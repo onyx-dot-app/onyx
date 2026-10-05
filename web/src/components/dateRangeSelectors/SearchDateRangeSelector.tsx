@@ -18,7 +18,10 @@ export function SearchDateRangeSelector({
     <div>
       <Dropdown>
         <Dropdown.Trigger asChild>
+          {/* A focusable trigger; the clear control inside is its own button. */}
           <div
+            role="button"
+            tabIndex={0}
             className={`
             flex
             text-sm

@@ -83,7 +83,7 @@ A picker on a type-in:
 
 ### `Dropdown`
 
-Left to itself the list is its anchor's width, 6px wider on each side so the rows line up under the anchor's content, and never narrower than `--block-width-dropdown-min` (17.5rem). `width` fixes it instead, in rem steps that include the 6px reach; `align` picks which anchor edge it lines up with, and it reaches 6px past that edge.
+Left to itself the list sizes from its anchor: the anchor's width plus 6px on each side so the rows line up under the anchor's content, floored at `--block-width-dropdown-min` (17.5rem). `width` fixes it instead, in rem steps that include the 6px reach; `align` picks which anchor edge it lines up with, and it reaches 6px past that edge.
 
 | Prop            | Type                                         | Default    | Description                                                                                                          |
 | --------------- | -------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -129,6 +129,7 @@ The element the list positions against and matches in width, when that is not th
 | `create`              | `{ text; onCreate }`                                     | —           | A create row pinned first; shown only while given                                                                                                                                     |
 | `otherOptionsTitle`   | `string`                                                 | —           | Rows the query filtered out stay, under a group with this title                                                                                                                       |
 | `maxHeight`           | `string`                                                 | `15rem`     | Max height of the list                                                                                                                                                                |
+| `noMatchText`         | `string`                                                 | Opal's      | What the list says when a search matches nothing                                                                                                                                      |
 | `onReachEnd`          | `(shown: DropdownOption[]) => void`                      | —           | The rows scrolled near their end, with the options on show                                                                                                                            |
 | `views`               | `Record<string, DropdownView>`                           | —           | Secondary views by key, rebuilt every render, so a view on the stack shows its latest rows                                                                                            |
 
@@ -136,7 +137,7 @@ The element the list positions against and matches in width, when that is not th
 
 | Kind     | Fields                                                                                                            | Enter                                                                                                                |
 | -------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `option` | `value`, `title`, `description?`, `suffix?`, `icon?`                                                              | `onSelect(option)`; closes (single)                                                                                  |
+| `option` | `value`, `title`, `description?`, `descriptionMaxLines?`, `suffix?`, `icon?`                                      | `onSelect(option)`; closes (single)                                                                                  |
 | `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `keepOpen?`, and `onSelect(views)` and/or `href` (+ `target?`) | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen` or the handler moved the stack |
 | `toggle` | `id`, `title`, `description?`, `icon?`, `checked`, `onCheckedChange`                                              | flips `checked`; stays open                                                                                          |
 | `custom` | `id`, `render(row)`, `onActivate?(views)`, `onSecondary?(views)`, `keepOpen?`                                     | `onActivate`; closes unless `keepOpen` or the handler moved the stack                                                |

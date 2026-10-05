@@ -44,6 +44,8 @@ export default function AssociatedSkillsEditor({
   const { data, isLoading } = useUserSkills();
   const [associateOpen, setAssociateOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  // Where the lists portal to: a spot of our own inside the modal.
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<Skill | null>(null);
   const [pendingUnlink, setPendingUnlink] = useState<PendingUnlink | null>(
     null
@@ -151,6 +153,9 @@ export default function AssociatedSkillsEditor({
             title: skill.name,
             keywords: [skill.description],
             description: disabledReason ?? skill.description,
+            // Skill descriptions are user-authored, so cap the row rather
+            // than let one grow the list.
+            descriptionMaxLines: 1,
             disabled: disabledReason !== null,
           };
         });
@@ -202,6 +207,7 @@ export default function AssociatedSkillsEditor({
 
   return (
     <div className="flex flex-col gap-3">
+      <div ref={setContainer} />
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <Text font="main-ui-action">{t("title")}</Text>
@@ -213,6 +219,9 @@ export default function AssociatedSkillsEditor({
           <Dropdown
             width={22.5}
             align="end"
+            // Inside a modal, so the list portals into it: outside, the
+            // modal would block clicks on it.
+            container={container}
             open={associateOpen}
             onOpenChange={(open) => {
               setAssociateOpen(open);
@@ -234,7 +243,11 @@ export default function AssociatedSkillsEditor({
               views={{ promote: promoteView }}
             />
           </Dropdown>
-          <Dropdown open={createOpen} onOpenChange={setCreateOpen}>
+          <Dropdown
+            container={container}
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+          >
             <Dropdown.Trigger asChild>
               <Button icon={SvgPlus}>{t("createSkillButton")}</Button>
             </Dropdown.Trigger>

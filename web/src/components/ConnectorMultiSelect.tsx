@@ -145,7 +145,10 @@ export const ConnectorMultiSelect = ({
             value={searchQuery}
             variant={isInputDisabled ? "disabled" : undefined}
             onChange={(e) => {
-              if (!allConnectorsSelected) setSearchQuery(e.target.value);
+              if (allConnectorsSelected) return;
+              setSearchQuery(e.target.value);
+              // Typing opens the list, as a type-in does.
+              setOpen(true);
             }}
             data-testid="connector-search-input"
           />

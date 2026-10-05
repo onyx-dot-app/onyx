@@ -547,7 +547,11 @@ function Header() {
                       >
                         {t("share.label")}
                       </Button>
-                      <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
+                      <Dropdown
+                        width={15}
+                        open={menuOpen}
+                        onOpenChange={setMenuOpen}
+                      >
                         <Dropdown.Trigger asChild>
                           <Button
                             icon={SvgMoreHorizontal}

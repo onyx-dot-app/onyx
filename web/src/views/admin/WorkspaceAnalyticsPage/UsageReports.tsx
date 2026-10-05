@@ -152,6 +152,7 @@ function GenerateReportMenu({
 }: GenerateReportMenuProps) {
   const t = useTranslations("admin.analytics");
   const [open, setOpen] = useState(false);
+  const calendarRef = useRef<HTMLDivElement>(null);
   const [pendingStart, setPendingStart] = useState<Date | undefined>(undefined);
   const [draftRange, setDraftRange] = useState<
     { from: Date; to?: Date } | undefined
@@ -187,8 +188,12 @@ function GenerateReportMenu({
         kind: "custom",
         id: "calendar",
         keepOpen: true,
+        // ArrowRight steps into the calendar; its days take the keyboard
+        // from there.
+        onSecondary: () =>
+          calendarRef.current?.querySelector("button")?.focus(),
         render: ({ props }) => (
-          <div {...props}>
+          <div {...props} ref={calendarRef}>
             <Section
               flexDirection="column"
               justifyContent="start"

@@ -41,6 +41,7 @@ function PersonaPicker({
       <Dropdown.Data
         label={t("agentPicker.placeholder")}
         search={{ placeholder: t("agentPicker.search.placeholder") }}
+        noMatchText={t("agentPicker.empty.label")}
         value={selectedAgent ? String(selectedAgent.id) : ""}
         onSelect={(option) => {
           const agent = agents.find((a) => String(a.id) === option.value);

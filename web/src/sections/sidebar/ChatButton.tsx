@@ -129,8 +129,9 @@ const ChatButton = memo(
     }, [chatSession.name, mounted]);
 
     const filteredProjects = useMemo(() => {
-      if (!searchTerm) return projects;
-      const term = searchTerm.toLowerCase();
+      // Trimmed, as the list's own filter trims it.
+      const term = searchTerm.trim().toLowerCase();
+      if (!term) return projects;
       return projects.filter((project) =>
         project.name.toLowerCase().includes(term)
       );
@@ -344,17 +345,17 @@ const ChatButton = memo(
 
     const rightMenu = (
       <>
-        <Dropdown.Trigger asChild>
-          {/* The click stays here: the row underneath opens the chat. */}
-          <div
-            role="presentation"
-            data-testid="ChatButton/options"
-            onClick={noProp()}
-          >
-            {/* While renaming the row is an input, so the menu stays away unless
-                its own list is already open. */}
-            {(!renaming || menuOpen) && (
-              <Hoverable.Item group="ChatButton">
+        {/* The click stays here: the row underneath opens the chat. */}
+        <div
+          role="presentation"
+          data-testid="ChatButton/options"
+          onClick={noProp()}
+        >
+          {/* While renaming the row is an input, so the menu stays away unless
+              its own list is already open. */}
+          {(!renaming || menuOpen) && (
+            <Hoverable.Item group="ChatButton">
+              <Dropdown.Trigger asChild>
                 <Button
                   icon={SvgMoreHorizontal}
                   prominence="internal"
@@ -362,10 +363,10 @@ const ChatButton = memo(
                   interaction={menuOpen ? "hover" : "rest"}
                   aria-label={t("chatButton.options.label")}
                 />
-              </Hoverable.Item>
-            )}
-          </div>
-        </Dropdown.Trigger>
+              </Dropdown.Trigger>
+            </Hoverable.Item>
+          )}
+        </div>
         <Dropdown.Data
           label={t("chatButton.options.label")}
           items={menuItems}

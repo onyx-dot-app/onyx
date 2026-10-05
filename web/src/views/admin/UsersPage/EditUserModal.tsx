@@ -168,9 +168,14 @@ export default function EditUserModal({
                 <Dropdown.Trigger asChild typeIn behavior="open">
                   <InputTypeIn
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      // Typing opens the list, as a type-in does.
+                      setPopoverOpen(true);
+                    }}
                     placeholder={t("editModal.search.placeholder")}
                     searchIcon
+                    aria-label={t("editModal.search.placeholder")}
                   />
                 </Dropdown.Trigger>
                 <Dropdown.Data

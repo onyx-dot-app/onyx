@@ -171,7 +171,9 @@ function Dropdown({
 
   const getTriggerProps = useCallback(
     ({ typeIn }: { typeIn: boolean }): DropdownTriggerProps => ({
-      role: mode === "picker" ? "combobox" : undefined,
+      // A type-in is the combobox. A button keeps its role: a combobox takes
+      // no name from its content, so a button trigger would lose its name.
+      role: typeIn && mode === "picker" ? "combobox" : undefined,
       "aria-expanded": isOpen,
       "aria-haspopup": mode === "picker" ? "listbox" : "menu",
       "aria-controls": `${id}-listbox`,
@@ -411,6 +413,8 @@ interface DropdownDataBaseProps {
   otherOptionsTitle?: string;
   /** Max height of the list in CSS units. Defaults to 15rem. */
   maxHeight?: string;
+  /** What the list says when a search matches nothing. Opal's own text when left out. */
+  noMatchText?: string;
   /**
    * The rows scrolled near their end. `shown` is the options on show, a
    * folded group's rows left out, so a caller pages in only what is being
@@ -513,6 +517,7 @@ function DropdownData(props: DropdownDataProps) {
     create: rootCreate,
     otherOptionsTitle: rootOtherOptionsTitle,
     maxHeight,
+    noMatchText,
     onReachEnd,
     views: viewRegistry,
     value,
@@ -923,6 +928,7 @@ function DropdownData(props: DropdownDataProps) {
         onToggleGroup={handleGroupToggle}
         create={create}
         maxHeight={maxHeight}
+        noMatchText={noMatchText}
         onReachEnd={onReachEnd && (() => onReachEnd(shownOptions))}
         // The pointer took over: the keyboard highlight yields to the row's
         // own hover on whatever the pointer is on.

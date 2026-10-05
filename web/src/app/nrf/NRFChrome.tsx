@@ -123,6 +123,7 @@ export default function NRFChrome() {
             <Dropdown open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
               <Dropdown.Trigger asChild>
                 <OpenButton
+                  aria-label={t("appChrome.modeButton.ariaLabel")}
                   icon={
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                   }
@@ -134,7 +135,7 @@ export default function NRFChrome() {
                 </OpenButton>
               </Dropdown.Trigger>
               <Dropdown.Data
-                label={t("appChrome.mode.search.label")}
+                label={t("appChrome.modeButton.ariaLabel")}
                 value={effectiveMode}
                 onSelect={(option) =>
                   setAppMode(option.value === "search" ? "search" : "chat")

@@ -181,11 +181,18 @@ export default function ApiKeyFormModal({
                           <InputTypeIn
                             data-testid="groups-search-input"
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(e) => {
+                              setSearchTerm(e.target.value);
+                              // Typing opens the list, as a type-in does.
+                              setPopoverOpen(true);
+                            }}
                             placeholder={t(
                               "formModal.groups.search.placeholder"
                             )}
                             searchIcon
+                            aria-label={t(
+                              "formModal.groups.search.placeholder"
+                            )}
                           />
                         </Dropdown.Trigger>
                         <Dropdown.Data

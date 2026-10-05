@@ -1,6 +1,7 @@
 import { JSX } from "react";
 import { useTranslations } from "next-intl";
-import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
+import { FiChevronDown, FiXCircle } from "react-icons/fi";
+import { SvgCheck } from "@opal/icons";
 import { Dropdown, type DropdownMenuItem } from "@opal/components";
 import { cn } from "@opal/utils";
 
@@ -55,7 +56,7 @@ export function FilterDropdown({
           {option.display}
           {isSelected && (
             <div className="ms-auto my-auto me-1">
-              <FiCheck />
+              <SvgCheck size={16} />
             </div>
           )}
         </div>
@@ -66,7 +67,10 @@ export function FilterDropdown({
   return (
     <Dropdown>
       <Dropdown.Trigger asChild>
+        {/* A focusable trigger; the clear control inside is its own button. */}
         <div
+          role="button"
+          tabIndex={0}
           className={`
             flex
             ${width}

@@ -71,6 +71,7 @@ interface DropdownListProps {
   onMouseMove: () => void;
   create?: { text: string; onCreate: (text: string) => void };
   maxHeight?: string;
+  noMatchText?: string;
   /** The rows scrolled to within SCROLL_END_THRESHOLD_PX of their end. */
   onReachEnd?: () => void;
   /**
@@ -120,6 +121,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       onMouseMove,
       create,
       maxHeight,
+      noMatchText,
       onReachEnd,
       searchField,
     },
@@ -231,6 +233,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       onToggleGroup,
       create,
       maxHeight,
+      noMatchText,
       onReachEnd,
       searchField,
     };
@@ -347,6 +350,7 @@ interface CardProps {
   onToggleGroup: (group: RowGroup) => void;
   create?: { text: string; onCreate: (text: string) => void };
   maxHeight?: string;
+  noMatchText?: string;
   onReachEnd?: () => void;
   searchField?: DropdownListProps["searchField"];
 }
@@ -392,6 +396,7 @@ function Card({
   onToggleGroup,
   create,
   maxHeight,
+  noMatchText,
   onReachEnd,
   searchField,
 }: CardElementProps) {
@@ -490,7 +495,7 @@ function Card({
             </div>
           ) : (
             <div className="opal-dropdown-no-match">
-              {strings.comboBoxNoOptions}
+              {noMatchText ?? strings.comboBoxNoOptions}
             </div>
           )
         ) : (

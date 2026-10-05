@@ -67,15 +67,13 @@ export default function InsertUserVariableMenu({
   return (
     <Dropdown open={open} onOpenChange={setOpen}>
       <Dropdown.Trigger asChild>
-        <div>
-          <Button
-            prominence="internal"
-            size="xs"
-            icon={SvgBracketCurly}
-            tooltip={t("userVariables.insert.tooltip")}
-            aria-label={t("userVariables.insert.tooltip")}
-          />
-        </div>
+        <Button
+          prominence="internal"
+          size="xs"
+          icon={SvgBracketCurly}
+          tooltip={t("userVariables.insert.tooltip")}
+          aria-label={t("userVariables.insert.tooltip")}
+        />
       </Dropdown.Trigger>
       <Dropdown.Data
         label={t("userVariables.insert.tooltip")}

@@ -338,9 +338,9 @@ describe("Dropdown triggers", () => {
   test("a click on another trigger toggles the list rather than reopening it", async () => {
     const user = setupUser();
     render(<TwoTriggersHarness />);
-    // A button that triggers a picker is a combobox.
-    const left = screen.getByRole("combobox", { name: "Left" });
-    const right = screen.getByRole("combobox", { name: "Right" });
+    // A button that triggers a picker keeps its role, and so its name.
+    const left = screen.getByRole("button", { name: "Left" });
+    const right = screen.getByRole("button", { name: "Right" });
     await user.click(left);
     expect(left).toHaveAttribute("aria-expanded", "true");
 
@@ -354,11 +354,34 @@ describe("Dropdown triggers", () => {
   });
 });
 
+describe("Dropdown pinned rows", () => {
+  test("a pinned row stays while a search is on, in a group too", async () => {
+    const user = setupUser();
+    const items: DropdownItem[] = [
+      { kind: "option", value: "all", title: "All", pinned: true },
+      { kind: "option", value: "apple", title: "Apple" },
+      {
+        kind: "group",
+        title: "More",
+        items: [
+          { kind: "option", value: "new", title: "New", pinned: true },
+          { kind: "option", value: "pear", title: "Pear" },
+        ],
+      },
+    ];
+    render(<Harness items={items} />);
+    await user.type(screen.getByRole("combobox", { name: "Fruit" }), "pe");
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent)
+    ).toEqual(["All", "New", "Pear"]);
+  });
+});
+
 describe("Dropdown groups", () => {
   test("ArrowRight unfolds a title and enters it", async () => {
     const user = setupUser();
     render(<ButtonPickerHarness />);
-    await user.click(screen.getByRole("combobox", { name: "Fruit" }));
+    await user.click(screen.getByRole("button", { name: "Fruit" }));
     // Apple, then (Banana is disabled) the folded Citrus title.
     await user.keyboard("{ArrowDown}{ArrowDown}");
     const title = screen.getByRole("button", { name: /Citrus/ });

@@ -143,6 +143,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
     string | null
   >(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const iconGridRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -263,8 +264,16 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                   kind: "custom",
                   id: "icon-grid",
                   keepOpen: true,
+                  // ArrowRight steps into the grid; its buttons take the
+                  // keyboard from there.
+                  onSecondary: () =>
+                    iconGridRef.current?.querySelector("button")?.focus(),
                   render: ({ props }) => (
-                    <div {...props} className="grid grid-cols-4 gap-1">
+                    <div
+                      {...props}
+                      ref={iconGridRef}
+                      className="grid grid-cols-4 gap-1"
+                    >
                       <SquareButton
                         key="default-icon"
                         icon={() => (

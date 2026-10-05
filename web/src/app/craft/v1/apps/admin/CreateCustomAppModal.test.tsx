@@ -316,7 +316,7 @@ describe("CreateCustomAppModal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(
-      screen.getByRole("button", { name: /^Start from scratch/ })
+      screen.getByRole("menuitem", { name: /^Start from scratch/ })
     );
 
     expect(mockRouterPush).not.toHaveBeenCalled();
@@ -411,7 +411,7 @@ describe("CreateCustomAppModal", () => {
       target: { value: "Edited Acme CRM" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
 
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
@@ -425,7 +425,7 @@ describe("CreateCustomAppModal", () => {
   it("preserves a selected upload when accidental close is canceled", () => {
     renderExistingApp();
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -454,7 +454,7 @@ describe("CreateCustomAppModal", () => {
       target: { value: "Unsaved Acme CRM" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
@@ -493,7 +493,7 @@ describe("CreateCustomAppModal", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 

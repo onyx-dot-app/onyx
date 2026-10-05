@@ -146,6 +146,7 @@ export function AccessTypeForm({
       <InputSingleSelect
         value={access_type.value}
         onValueChange={(selected) => {
+          // A re-pick emits "": the pick stands.
           const option = options.find((o) => o.value === selected);
           if (option) access_type_helpers.setValue(option.value);
         }}

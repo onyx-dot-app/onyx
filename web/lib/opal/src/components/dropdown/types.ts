@@ -23,6 +23,8 @@ export interface DropdownOption extends DropdownRowBase {
   /** Muted text beside the title in the list, like "(Default)". */
   suffix?: string;
   icon?: IconFunctionComponent;
+  /** Lines the description may take before it clamps, for text a user wrote. */
+  descriptionMaxLines?: number;
 }
 
 /**

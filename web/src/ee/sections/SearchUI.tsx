@@ -81,7 +81,8 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
-  const tagKey = (tag: Tag) => `${tag.tag_key}=${tag.tag_value}`;
+  // JSON, so a key or value holding "=" cannot collide with another pair.
+  const tagKey = (tag: Tag) => JSON.stringify([tag.tag_key, tag.tag_value]);
   const selectedTagKeys = new Set(selectedTags.map(tagKey));
 
   // Build the combined server-side filters from current state
@@ -257,7 +258,11 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                 items={availableTags.map((tag) => ({
                   kind: "option",
                   value: tagKey(tag),
-                  keywords: [tag.tag_key],
+                  keywords: [
+                    tag.tag_key,
+                    `${tag.tag_key} ${tag.tag_value}`,
+                    `${tag.tag_key}=${tag.tag_value}`,
+                  ],
                   icon: SvgTag,
                   title: tag.tag_value,
                 }))}

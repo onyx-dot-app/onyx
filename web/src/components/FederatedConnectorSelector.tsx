@@ -147,7 +147,11 @@ export const FederatedConnectorSelector = ({
             placeholder={effectivePlaceholder}
             value={searchQuery}
             variant={isInputDisabled ? "disabled" : undefined}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              // Typing opens the list, as a type-in does.
+              setOpen(true);
+            }}
           />
         </Dropdown.Trigger>
         <Dropdown.Data

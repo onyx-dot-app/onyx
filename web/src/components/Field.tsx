@@ -1012,6 +1012,8 @@ export function SelectorFormField({
         <InputSingleSelect
           value={field.value?.toString() ?? defaultValue ?? ""}
           onValueChange={(selected) => {
+            // A re-pick emits "": the pick stands. Clearing is the reset row.
+            if (selected === "") return;
             const value = selected === NONE_VALUE ? null : selected;
             if (onSelect) onSelect(value);
             else setFieldValue(name, value);
@@ -1024,6 +1026,7 @@ export function SelectorFormField({
                 ...options.map((option) => ({
                   value: String(option.value),
                   title: option.name,
+                  ...(option.icon && { icon: option.icon }),
                 })),
                 ...(includeReset
                   ? [{ value: NONE_VALUE, title: t("selector.noneOption") }]

@@ -242,6 +242,7 @@ export default function UserFilters({
         <Dropdown.Data
           label={t("filters.group.button.ariaLabel")}
           search={{ placeholder: t("filters.group.search.placeholder") }}
+          noMatchText={t("filters.group.empty.label")}
           values={picked(selectedGroups.map(String))}
           onSelect={(option) => {
             if (option.value === ALL) onGroupsChange([]);

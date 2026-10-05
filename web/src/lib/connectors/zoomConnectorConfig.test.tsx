@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { render, screen } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import { RenderField } from "@/views/admin/connectors/AddConnectorPage/form/FieldRendering";
@@ -66,13 +67,14 @@ test("the form posts the names the connector takes", () => {
   ]);
 });
 
-test("the plan select offers exactly the tiers the backend parses", () => {
+test("the plan select offers exactly the tiers the backend parses", async () => {
+  const user = userEvent.setup();
   render(<ZoomForm />);
 
-  const plan = screen.getByRole("combobox");
+  await user.click(screen.getByRole("combobox"));
   expect(
-    [...plan.querySelectorAll("option")].map((option) => option.value)
-  ).toEqual(["", "pro", "business_plus"]);
+    screen.getAllByRole("option").map((option) => option.textContent)
+  ).toEqual(["pro", "business_plus"]);
 });
 
 test("the rate limit share is an advanced number field", () => {

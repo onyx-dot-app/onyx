@@ -165,13 +165,13 @@ function BuildSessionButton({
 
   const rightMenu = (
     <>
-      <Dropdown.Trigger asChild>
-        {/* The click stays here: the row underneath loads the session. */}
-        <div role="presentation" onClick={noProp()}>
-          {/* While renaming the row is an input, so the menu stays away unless
-              its own list is already open. */}
-          {(!renaming || menuOpen) && (
-            <Hoverable.Item group="CraftSessionTab">
+      {/* The click stays here: the row underneath loads the session. */}
+      <div role="presentation" onClick={noProp()}>
+        {/* While renaming the row is an input, so the menu stays away unless
+            its own list is already open. */}
+        {(!renaming || menuOpen) && (
+          <Hoverable.Item group="CraftSessionTab">
+            <Dropdown.Trigger asChild>
               <Button
                 icon={SvgMoreHorizontal}
                 prominence="internal"
@@ -179,10 +179,10 @@ function BuildSessionButton({
                 interaction={menuOpen ? "hover" : "rest"}
                 aria-label={t("options.label")}
               />
-            </Hoverable.Item>
-          )}
-        </div>
-      </Dropdown.Trigger>
+            </Dropdown.Trigger>
+          </Hoverable.Item>
+        )}
+      </div>
       <Dropdown.Data
         label={t("options.label")}
         items={[

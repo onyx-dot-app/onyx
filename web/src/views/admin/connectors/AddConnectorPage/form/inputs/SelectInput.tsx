@@ -38,7 +38,11 @@ export default function SelectInput({
       <InputSingleSelect
         id={name}
         value={field.value ?? ""}
-        onValueChange={(value) => void helpers.setValue(value)}
+        onValueChange={(value) => {
+          // The empty option is a choice here, as it was in the native select.
+          void helpers.setValue(value);
+          void helpers.setTouched(true, false);
+        }}
         placeholder={t("selectInput.emptyOption.label")}
         options={[
           {

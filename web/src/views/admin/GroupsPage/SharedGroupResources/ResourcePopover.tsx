@@ -49,34 +49,37 @@ function ResourcePopover({
         ]
       : sections
           .filter((section) => section.items.length > 0)
-          .map((section, idx): DropdownMenuItem => ({
-            kind: "group",
-            ...(section.label !== undefined && { title: section.label }),
-            items: section.items.map(
-              (item): DropdownMenuRow => ({
-                kind: "custom",
-                id: `${section.label ?? idx}-${item.key}`,
-                keywords: [item.label],
-                disabled: item.disabled,
-                keepOpen: true,
-                onActivate: item.onSelect,
-                render: ({ highlighted, props }) => (
-                  <div
-                    {...props}
-                    aria-label={item.label}
-                    className={cn(
-                      "rounded-08 cursor-pointer transition-colors",
-                      item.disabled
-                        ? "bg-background-tint-02"
-                        : highlighted && "bg-background-tint-02"
-                    )}
-                  >
-                    {item.render(!!item.disabled)}
-                  </div>
-                ),
-              })
-            ),
-          }));
+          .map(
+            (section, idx): DropdownMenuItem => ({
+              kind: "group",
+              ...(section.label !== undefined && { title: section.label }),
+              items: section.items.map(
+                (item): DropdownMenuRow => ({
+                  // `item.disabled` is a look (already picked), not a lock: the
+                  // row still toggles.
+                  kind: "custom",
+                  id: `${section.label ?? idx}-${item.key}`,
+                  keywords: [item.label],
+                  keepOpen: true,
+                  onActivate: item.onSelect,
+                  render: ({ highlighted, props }) => (
+                    <div
+                      {...props}
+                      aria-label={item.label}
+                      className={cn(
+                        "rounded-08 cursor-pointer transition-colors",
+                        item.disabled
+                          ? "bg-background-tint-02"
+                          : highlighted && "bg-background-tint-02"
+                      )}
+                    >
+                      {item.render(!!item.disabled)}
+                    </div>
+                  ),
+                })
+              ),
+            })
+          );
 
   return (
     <Dropdown open={open} onOpenChange={setOpen}>
@@ -84,7 +87,11 @@ function ResourcePopover({
         <InputTypeIn
           placeholder={placeholder}
           value={searchValue}
-          onChange={(e) => onSearchChange(e.target.value)}
+          onChange={(e) => {
+            onSearchChange(e.target.value);
+            // Typing opens the list, as a type-in does.
+            setOpen(true);
+          }}
         />
       </Dropdown.Trigger>
       <Dropdown.Data label={placeholder} items={items} />

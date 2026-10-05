@@ -249,13 +249,13 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
               onClick={isEditing ? undefined : noProp(handleTextClick)}
               rightChildren={
                 <>
-                  <Dropdown.Trigger asChild>
-                    {/* The click stays here: the tab underneath opens the project. */}
-                    <div role="presentation" onClick={noProp()}>
-                      {/* While renaming the row is an input, so the menu stays
+                  {/* The click stays here: the tab underneath opens the project. */}
+                  <div role="presentation" onClick={noProp()}>
+                    {/* While renaming the row is an input, so the menu stays
                         away unless its own list is already open. */}
-                      {(!isEditing || menuOpen) && (
-                        <Hoverable.Item group="ProjectFolderButton">
+                    {(!isEditing || menuOpen) && (
+                      <Hoverable.Item group="ProjectFolderButton">
+                        <Dropdown.Trigger asChild>
                           <Button
                             icon={SvgMoreHorizontal}
                             prominence="internal"
@@ -263,10 +263,10 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
                             interaction={menuOpen ? "hover" : "rest"}
                             aria-label={t("projects.folder.options.label")}
                           />
-                        </Hoverable.Item>
-                      )}
-                    </div>
-                  </Dropdown.Trigger>
+                        </Dropdown.Trigger>
+                      </Hoverable.Item>
+                    )}
+                  </div>
                   <Dropdown.Data
                     label={t("projects.folder.options.label")}
                     items={menuItems}
