@@ -74,6 +74,9 @@ from onyx.db.connector_credential_pair import (
     set_cc_pair_repeated_error_state,
     update_connector_credential_pair_from_id,
 )
+from onyx.db.connector_edit_requests import (
+    promote_prune_after_reindex_request__no_commit,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
@@ -657,6 +660,19 @@ def check_indexing_completion(
                     in_error=False,
                 )
 
+            if attempt.prune_after_reindex_requested_at is not None:
+                promote_prune_after_reindex_request__no_commit(
+                    db_session,
+                    cc_pair.id,
+                    served_request_at=attempt.prune_after_reindex_requested_at,
+                )
+                db_session.commit()
+                logger.info(
+                    "Full re-index succeeded, prune requested: cc_pair=%s attempt=%s",
+                    cc_pair.id,
+                    index_attempt_id,
+                )
+
             if attempt.status == IndexingStatus.SUCCESS:
                 logger.info(
                     "Resolving indexing entity errors for attempt %s", index_attempt_id
@@ -880,6 +896,14 @@ def _kickoff_indexing_tasks(
             )
 
             mark_ccpair_with_indexing_trigger(cc_pair.id, None, db_session)
+
+        # Until a full re-index succeeds, each run serves the pending request
+        # to prune after one.
+        if (
+            search_settings.status.is_current()
+            and cc_pair.prune_after_reindex_requested_at is not None
+        ):
+            reindex = True
 
         # using a task queue and only allowing one task per cc_pair/search_setting
         # prevents us from starving out certain attempts
