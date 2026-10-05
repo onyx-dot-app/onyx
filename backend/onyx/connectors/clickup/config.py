@@ -1,10 +1,16 @@
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import field_validator
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.field_policy import (
+    FieldClass,
+    FieldPolicy,
+    ScopeInclude,
+    ScopeOpaque,
+)
 
 
 class ClickupConnectorType(StrEnum):
@@ -15,10 +21,22 @@ class ClickupConnectorType(StrEnum):
 
 
 class ClickupConnectorConfig(ConnectorConfig):
-    batch_size: int = INDEX_BATCH_SIZE
-    connector_type: ClickupConnectorType | None = None
-    connector_ids: list[str] | None = None
-    retrieve_task_comments: bool = True
+    batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
+    # Picks the kind of container that connector_ids names.
+    connector_type: Annotated[
+        ClickupConnectorType | None,
+        FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque()),
+    ] = None
+    # Empty sends no container filter, so the whole workspace is fetched.
+    connector_ids: Annotated[
+        list[str] | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=True),
+            depends_on=("connector_type",),
+        ),
+    ] = None
+    retrieve_task_comments: Annotated[bool, FieldPolicy(FieldClass.BEHAVIOR)] = True
 
     # The constructor treats "" like None (a workspace connector).
     @field_validator("connector_type", mode="before")
