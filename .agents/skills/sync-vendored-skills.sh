@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-### Syncs each vendored skills repo in UPSTREAMS into .cursor/skills/<dir>,
+### Syncs each vendored skills repo in UPSTREAMS into .agents/skills/<dir>,
 ### and maintains the top-level symlinks that expose each vendored skill at
-### .cursor/skills/<name> (agents discover skills at
+### .agents/skills/<name> (agents discover skills at
 ### <skills-dir>/<name>/SKILL.md, so a multi-skill repo needs one symlink
 ### per skill).
 ###
@@ -15,12 +15,12 @@
 
 set -euo pipefail
 
-# One entry per vendored skills repo: "<dir under .cursor/skills> <url> <ref>".
+# One entry per vendored skills repo: "<dir under .agents/skills> <url> <ref>".
 UPSTREAMS=(
   "greptile https://github.com/greptileai/skills.git main"
 )
 
-SKILLS_DIR=".cursor/skills"
+SKILLS_DIR=".agents/skills"
 
 cd "$(git rev-parse --show-toplevel)"
 

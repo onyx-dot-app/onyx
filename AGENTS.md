@@ -52,6 +52,11 @@ there:
 
 Explore the tree with `ls` rather than relying on docs for the full package list.
 
+### Skills
+
+Shared agent skills live in `.agents/skills/`. `.claude/skills`, `.cursor/skills` and
+`.codex/skills` are symlinks to it, so add or edit skills only in `.agents/skills/`.
+
 ## Code Quality
 
 ```bash
