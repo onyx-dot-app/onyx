@@ -597,6 +597,80 @@ async def test_catalog_outage_does_not_consume_refresh_or_revoke_grant(
     ).status_code == 200
 
 
+async def test_refresh_by_retired_owner_revokes_grant(
+    protocol_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client_id = await _register(protocol_client)
+    code, verifier = await _authorize(protocol_client, client_id)
+    exchange = await _exchange(protocol_client, client_id, code, verifier)
+    assert exchange.status_code == 200, exchange.text
+    tokens = exchange.json()
+    refresh_request = {
+        "client_id": client_id,
+        "grant_type": "refresh_token",
+        "refresh_token": tokens["refresh_token"],
+        "resource": _RESOURCE,
+    }
+    with monkeypatch.context() as retired:
+        retired.setattr(
+            oauth_provider, "mcp_oauth_owner_is_member", Mock(return_value=False)
+        )
+        rejected = await protocol_client.post("/mcp-oauth/token", data=refresh_request)
+        assert rejected.status_code == 400, rejected.text
+        assert rejected.json()["error"] == "invalid_grant"
+    restored = await protocol_client.post("/mcp-oauth/token", data=refresh_request)
+    assert restored.status_code == 400, restored.text
+    assert (
+        await protocol_client.get(
+            "/mcp-oauth/introspect",
+            headers={"Authorization": f"Bearer {tokens['access_token']}"},
+        )
+    ).status_code == 401
+
+
+async def test_consent_rejects_redirect_removed_from_client_metadata(
+    protocol_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client_id = "https://client.example/changing.json"
+    redirect_uris = [_REDIRECT]
+
+    async def fetch_metadata(*_args: object, **_kwargs: object) -> SSRFFetchResponse:
+        return SSRFFetchResponse(
+            content=json.dumps(
+                {
+                    "client_id": client_id,
+                    "redirect_uris": list(redirect_uris),
+                    "token_endpoint_auth_method": "none",
+                }
+            ).encode(),
+            status_code=200,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    monkeypatch.setattr(cimd, "ssrf_safe_fetch_response", fetch_metadata)
+    _cimd_fetcher.cache_clear()
+    try:
+        handle, _ = await _begin_authorization(protocol_client, client_id)
+        details = await protocol_client.get(
+            "/mcp-oauth/consent", params={"request": handle}
+        )
+        assert details.status_code == 200, details.text
+        redirect_uris[:] = ["http://127.0.0.1:9877/other"]
+        approval = await protocol_client.post(
+            "/mcp-oauth/consent",
+            headers={"Origin": _ORIGIN},
+            json={
+                "request_id": handle,
+                "csrf_token": details.json()["csrf_token"],
+                "decision": "allow",
+            },
+        )
+        assert approval.status_code == 400, approval.text
+        assert "redirect_url" not in approval.json()
+    finally:
+        _cimd_fetcher.cache_clear()
+
+
 async def test_consent_csrf_and_denial(protocol_client: httpx.AsyncClient) -> None:
     client_id = await _register(protocol_client)
     handle, _ = await _begin_authorization(protocol_client, client_id)
