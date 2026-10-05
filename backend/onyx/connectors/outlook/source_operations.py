@@ -100,7 +100,7 @@ GROUP_NAME_MATCH_LIMIT = 2
 MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
 # The delta walk only needs to know which conversations changed.
-CHANGE_SELECT = "id,conversationId,receivedDateTime"
+CHANGE_SELECT = "id,conversationId,conversationIndex,receivedDateTime"
 MESSAGE_SELECT = ",".join(
     (
         "id",
@@ -202,6 +202,7 @@ def _parse_change(raw: dict[str, Any]) -> OutlookMessageChange:
         id=raw["id"],
         removed="@removed" in raw,
         conversation_id=raw.get("conversationId"),
+        conversation_index=raw.get("conversationIndex"),
         received_at=parse_graph_datetime(received) if received else None,
     )
 

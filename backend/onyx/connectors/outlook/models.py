@@ -98,6 +98,7 @@ class OutlookMessageChange(BaseModel):
     id: str
     removed: bool = False
     conversation_id: str | None = None
+    conversation_index: str | None = None
     received_at: datetime | None = None
 
 
@@ -163,9 +164,6 @@ class MailboxCursor(BaseModel):
     folder_change_count: int = 0
     # True once the current folder is being re-read without the server filter.
     folder_unfiltered: bool = False
-    # Conversations already rebuilt for this mailbox in this attempt, oldest
-    # first. The connector caps it per mailbox.
-    seen_conversation_ids: dict[str, None] = {}
     # The calendar view round, one page per step after the folders.
     calendar_next_link: str | None = None
     calendar_done: bool = False

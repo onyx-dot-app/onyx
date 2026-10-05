@@ -4,6 +4,8 @@ Every builder returns a complete shape, so a test names only the field under
 test and passes it as an override.
 """
 
+import base64
+import hashlib
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
@@ -22,6 +24,7 @@ from onyx.connectors.outlook.models import (
     OutlookMessageChange,
     OutlookRecipient,
 )
+from onyx.connectors.outlook.threads import thread_document_id, thread_key
 
 MAILBOX_ID = "user-1"
 MAILBOX_ADDRESS = "alice@contoso.com"
@@ -95,6 +98,7 @@ def change_json(**overrides: Any) -> dict[str, Any]:
     fields: dict[str, Any] = {
         "id": "msg-1",
         "conversationId": CONVERSATION_ID,
+        "conversationIndex": conversation_index(CONVERSATION_ID),
         "receivedDateTime": "2026-09-01T10:00:00Z",
     }
     return fields | overrides
@@ -143,12 +147,29 @@ def message(**overrides: Any) -> OutlookMessage:
     return OutlookMessage(**(fields | overrides))
 
 
+def conversation_index(conversation_id: str) -> str:
+    """A conversation index whose thread root is unique to the conversation id."""
+    return base64.b64encode(
+        hashlib.sha256(conversation_id.encode()).digest()[:22]
+    ).decode()
+
+
+def thread_doc_id(conversation_id: str) -> str:
+    """The thread document id a change made with ``change()`` leads to."""
+    key = thread_key(conversation_index(conversation_id))
+    assert key is not None
+    return thread_document_id(key)
+
+
 def change(**overrides: Any) -> OutlookMessageChange:
     fields: dict[str, Any] = {
         "id": "msg-1",
         "conversation_id": CONVERSATION_ID,
         "received_at": RECEIVED,
     }
+    conversation_id = overrides.get("conversation_id", CONVERSATION_ID)
+    if conversation_id is not None:
+        fields["conversation_index"] = conversation_index(conversation_id)
     return OutlookMessageChange(**(fields | overrides))
 
 

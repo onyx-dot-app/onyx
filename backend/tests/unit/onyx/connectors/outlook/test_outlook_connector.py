@@ -6,7 +6,7 @@ machine and document assembly against the gateway's plain models.
 
 import json
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Generator, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock, call, create_autospec, patch
@@ -48,16 +48,14 @@ from onyx.connectors.outlook.connector import (
     MAX_ATTACHMENT_TEXT_PER_CONVERSATION,
     MAX_ATTACHMENTS_PER_MESSAGE,
     MAX_MESSAGES_PER_CONVERSATION,
-    MAX_TRACKED_CONVERSATIONS_PER_MAILBOX,
     MAX_TRACKED_SERIES_PER_MAILBOX,
     SLIM_BATCH_SIZE,
     OutlookCheckpoint,
     OutlookConnector,
     attachment_skip_reason,
-    build_conversation_document,
     build_event_document,
+    build_thread_document,
     calendar_node_id,
-    conversation_document_id,
     event_document_id,
     extract_attachment_text,
     indexable_messages,
@@ -74,6 +72,7 @@ from onyx.connectors.outlook.models import (
     OutlookRecipient,
 )
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
+from onyx.connectors.outlook.threads import ThreadEntry, ThreadListing
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.process_isolation import IsolatedProcessError
 from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
@@ -88,9 +87,45 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     graph_error,
     mailbox,
     message,
+    thread_doc_id,
 )
 
 CONNECTOR_MODULE = "onyx.connectors.outlook.connector"
+
+
+class _MemoryThreadTable:
+    """The thread table kept in memory, so no test touches the file store."""
+
+    tables: dict[str, dict[str, list[Any]]] = {}
+
+    def __init__(self, run_id: str) -> None:
+        self._files = self.tables.setdefault(run_id, {})
+
+    def write_page(self, page: int, listings: list[ThreadListing]) -> None:
+        self._files[f"listing-{page}"] = list(listings)
+
+    def read_pages(self, pages: int) -> list[ThreadListing]:
+        return [row for page in range(pages) for row in self._files[f"listing-{page}"]]
+
+    def write_shards(self, entries: list[ThreadEntry], per_shard: int) -> int:
+        shards = [entries[i : i + per_shard] for i in range(0, len(entries), per_shard)]
+        for shard, rows in enumerate(shards):
+            self._files[f"shard-{shard}"] = list(rows)
+        return len(shards)
+
+    def read_shard(self, shard: int) -> list[ThreadEntry]:
+        return list(self._files[f"shard-{shard}"])
+
+    def delete_all(self) -> None:
+        self._files.clear()
+
+
+@pytest.fixture(autouse=True)
+def _memory_thread_table() -> Generator[None, None, None]:
+    _MemoryThreadTable.tables.clear()
+    with patch(f"{CONNECTOR_MODULE}.ThreadTable", _MemoryThreadTable):
+        yield
+
 
 JUNK_ID = "folder-junk"
 DELETED_ID = "folder-deleted"
@@ -277,6 +312,37 @@ def _run(
     raise AssertionError("walk did not finish in 50 steps")
 
 
+def _finish(
+    connector: OutlookConnector,
+    checkpoint: OutlookCheckpoint,
+    include_permissions: bool = False,
+) -> list[Document | HierarchyNode | ConnectorFailure]:
+    """Drive the walk from the given checkpoint to completion, mutating it in
+    place the way a failing step leaves it."""
+    collected: list[Document | HierarchyNode | ConnectorFailure] = []
+    for _ in range(50):
+        items, checkpoint = _step(connector, checkpoint, include_permissions)
+        collected.extend(items)
+        if not checkpoint.has_more:
+            return collected
+    raise AssertionError("walk did not finish in 50 steps")
+
+
+def _entry(conversation_id: str = CONVERSATION_ID, **overrides: Any) -> ThreadEntry:
+    listing = ThreadListing(
+        key=thread_doc_id(conversation_id).split(":", 1)[1],
+        mailbox=mailbox(),
+        conversation_id=conversation_id,
+        folder_id=INBOX_ID,
+    )
+    fields: dict[str, Any] = {
+        "key": listing.key,
+        "first": listing,
+        "holders": [mailbox()],
+    }
+    return ThreadEntry(**(fields | overrides))
+
+
 def _folder_checkpoint(**overrides: Any) -> OutlookCheckpoint:
     """A checkpoint parked on the Inbox of an opened mailbox."""
     fields: dict[str, Any] = {
@@ -307,9 +373,7 @@ def test_walk_yields_hierarchy_then_one_document_per_conversation() -> None:
         (PROJECTS_ID, INBOX_ID, HierarchyNodeType.FOLDER),
     ]
 
-    assert [doc.id for doc in docs] == [
-        conversation_document_id(mailbox(), CONVERSATION_ID)
-    ]
+    assert [doc.id for doc in docs] == [thread_doc_id(CONVERSATION_ID)]
     gateway.fetch_conversation_messages_page.assert_called_once_with(
         mailbox_id=mailbox().id, conversation_id=CONVERSATION_ID, next_link=None
     )
@@ -433,7 +497,7 @@ def test_document_drops_excluded_and_draft_messages_and_keeps_order() -> None:
     assert doc.doc_created_at == RECEIVED
     assert doc.doc_updated_at == RECEIVED + timedelta(hours=1)
     assert doc.parent_hierarchy_raw_node_id == INBOX_ID
-    assert doc.metadata == {"mailbox": MAILBOX_ADDRESS, "message_count": "2"}
+    assert doc.metadata == {"mailboxes": [MAILBOX_ADDRESS], "message_count": "2"}
     assert [o.email for o in doc.primary_owners or []] == [MAILBOX_ADDRESS]
     assert [o.email for o in doc.secondary_owners or []] == ["bob@contoso.com"]
 
@@ -461,7 +525,7 @@ def test_conversation_paging_continues_past_excluded_messages() -> None:
     ]
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items, _ = _step(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint())
 
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs) == 1
@@ -478,7 +542,7 @@ def test_conversation_paging_stops_at_the_fetch_limit() -> None:
     )
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items, _ = _step(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint())
 
     assert items == []
     assert gateway.fetch_conversation_messages_page.call_count == (
@@ -506,7 +570,7 @@ def test_conversation_fetch_limit_cuts_the_last_page_before_filtering() -> None:
     gateway.fetch_conversation_messages_page.side_effect = pages
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items, _ = _step(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint())
 
     assert items == []
 
@@ -672,7 +736,8 @@ def test_pruning_drops_mail_older_than_the_history_cutoff() -> None:
         if isinstance(d, SlimDocument)
     ]
 
-    assert conversation_document_id(mailbox(), "conv-old") not in ids
+    assert thread_doc_id("conv-old") not in ids
+    assert thread_doc_id(CONVERSATION_ID) in ids
     assert (
         gateway.fetch_folder_delta_page.call_args.kwargs.get("received_after") is None
     )
@@ -705,10 +770,36 @@ def test_every_mailbox_past_the_worker_limit_is_still_walked() -> None:
 
     items = _run(_connector(gateway))
 
-    documents = [item.id for item in items if isinstance(item, Document)]
-    assert sorted(documents) == sorted(
-        conversation_document_id(mailbox(id=f"user-{n}"), CONVERSATION_ID)
-        for n in range(MAILBOX_WORKERS + 2)
+    probed = {c.kwargs["mailbox_id"] for c in gateway.probe_mailbox.call_args_list}
+    assert probed == {f"user-{n}" for n in range(MAILBOX_WORKERS + 2)}
+    documents = [item for item in items if isinstance(item, Document)]
+    assert [doc.id for doc in documents] == [thread_doc_id(CONVERSATION_ID)]
+
+
+def test_thread_held_by_several_mailboxes_is_built_once_for_all_holders() -> None:
+    gateway = _happy_gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[
+            mailbox(id="user-1", address="alice@contoso.com"),
+            mailbox(id="user-2", address="bob@contoso.com"),
+        ]
+    )
+
+    items = _run(_connector(gateway), include_permissions=True)
+
+    documents = [item for item in items if isinstance(item, Document)]
+    assert len(documents) == 1
+    assert documents[0].metadata["mailboxes"] == [
+        "alice@contoso.com",
+        "bob@contoso.com",
+    ]
+    assert documents[0].external_access is not None
+    assert {"alice@contoso.com", "bob@contoso.com"} <= set(
+        documents[0].external_access.external_user_emails
+    )
+    assert gateway.fetch_conversation_messages_page.call_count == 1
+    assert gateway.fetch_conversation_messages_page.call_args.kwargs["mailbox_id"] == (
+        "user-1"
     )
 
 
@@ -799,7 +890,6 @@ def test_checkpoint_saved_with_one_current_mailbox_resumes_where_it_stopped() ->
         "current_folder": folder().model_dump(),
         "delta_next_link": "https://graph/delta?more",
         "folder_change_count": 7,
-        "seen_conversation_ids": {CONVERSATION_ID: None},
         "calendar_done": True,
     }
 
@@ -815,25 +905,20 @@ def test_checkpoint_saved_with_one_current_mailbox_resumes_where_it_stopped() ->
     assert cursor.current_folder == folder()
     assert cursor.delta_next_link == "https://graph/delta?more"
     assert cursor.folder_change_count == 7
-    assert cursor.seen_conversation_ids == {CONVERSATION_ID: None}
     assert cursor.calendar_done
 
 
-def test_oversized_single_mailbox_checkpoint_keeps_the_newest_within_the_caps() -> None:
-    conversations: list[str] = [
-        f"c-{i}" for i in range(MAX_TRACKED_CONVERSATIONS_PER_MAILBOX + 3)
-    ]
+def test_oversized_single_mailbox_checkpoint_keeps_the_newest_within_the_cap() -> None:
     series: list[str] = [f"s-{i}" for i in range(MAX_TRACKED_SERIES_PER_MAILBOX + 2)]
     saved = {
         "has_more": True,
         "current_mailbox": mailbox().model_dump(),
-        "seen_conversation_ids": dict.fromkeys(conversations),
+        "seen_conversation_ids": {CONVERSATION_ID: None},
         "seen_series_ids": series,
     }
 
     cursor = OutlookCheckpoint.model_validate_json(json.dumps(saved)).active[0]
 
-    assert list(cursor.seen_conversation_ids) == conversations[3:]
     assert cursor.seen_series_ids == set(series[2:])
 
 
@@ -926,12 +1011,7 @@ def test_user_listing_that_never_ends_stops_the_step(
     assert gateway.list_mailbox_users.call_count == 2
 
 
-def test_conversation_tracking_is_capped_per_mailbox(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Past the cap the oldest thread is forgotten first, so a busy thread stays
-    deduplicated while the checkpoint stays bounded."""
-    monkeypatch.setattr(connector_module, "MAX_TRACKED_CONVERSATIONS_PER_MAILBOX", 1)
+def test_thread_listed_several_times_on_a_page_is_built_once() -> None:
     gateway = _happy_gateway()
     gateway.fetch_folder_delta_page.side_effect = None
     gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
@@ -944,17 +1024,14 @@ def test_conversation_tracking_is_capped_per_mailbox(
         ]
     )
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
-    checkpoint = _folder_checkpoint()
 
-    _step(connector, checkpoint)
+    _finish(connector, _folder_checkpoint())
 
-    rebuilt = [
-        call.kwargs["conversation_id"]
-        for call in gateway.fetch_conversation_messages_page.call_args_list
+    built = [
+        c.kwargs["conversation_id"]
+        for c in gateway.fetch_conversation_messages_page.call_args_list
     ]
-    # Each thread of the page is rebuilt once, in no fixed order.
-    assert sorted(rebuilt) == sorted([CONVERSATION_ID, "conv-b"])
-    assert checkpoint.active[0].seen_conversation_ids == {"conv-b": None}
+    assert sorted(built) == sorted([CONVERSATION_ID, "conv-b"])
 
 
 def test_conversations_of_a_page_are_yielded_in_page_order() -> None:
@@ -977,36 +1054,33 @@ def test_conversations_of_a_page_are_yielded_in_page_order() -> None:
     gateway.fetch_conversation_messages_page.side_effect = messages
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items, _ = _step(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint())
 
     assert [item.id for item in items if isinstance(item, Document)] == [
-        conversation_document_id(mailbox(), CONVERSATION_ID),
-        conversation_document_id(mailbox(), "conv-b"),
+        thread_doc_id(CONVERSATION_ID),
+        thread_doc_id("conv-b"),
     ]
 
 
-def test_failure_part_way_through_a_page_leaves_the_page_uncounted() -> None:
-    """The replayed page must not count twice toward the filtered delta cap,
-    and none of its threads may be remembered as rebuilt."""
+def test_failure_part_way_through_a_shard_leaves_the_shard_to_be_rebuilt() -> None:
     gateway = _happy_gateway()
     gateway.fetch_folder_delta_page.side_effect = None
     gateway.fetch_folder_delta_page.return_value = OutlookDeltaPage(
-        changes=[change(), change(id="msg-b", conversation_id="conv-b")],
-        next_link="https://graph/delta?more",
+        changes=[change(), change(id="msg-b", conversation_id="conv-b")]
     )
     gateway.fetch_conversation_messages_page.side_effect = [
         OutlookMessagePage(messages=[message()]),
         OutlookAuthError("invalid_client", "secret expired"),
     ]
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
-    checkpoint = _folder_checkpoint(folder_change_count=4997)
+    checkpoint = _folder_checkpoint()
 
     with pytest.raises(OutlookAuthError):
-        _step(connector, checkpoint)
+        _finish(connector, checkpoint)
 
-    assert checkpoint.active[0].folder_change_count == 4997
-    assert checkpoint.active[0].delta_next_link is None
-    assert checkpoint.active[0].seen_conversation_ids == {}
+    assert checkpoint.active == []
+    assert checkpoint.build_shards == 1
+    assert checkpoint.next_shard == 0
 
 
 def test_expired_delta_state_restarts_the_folder_round() -> None:
@@ -1061,9 +1135,10 @@ def test_folder_that_fills_the_filtered_cap_is_reread_without_the_filter() -> No
     assert checkpoint.active[0].folder_unfiltered is True
 
     items, checkpoint = _step(connector, checkpoint)
-    assert [type(item) for item in items] == [Document]
+    assert items == []
     assert checkpoint.active[0].current_folder is None
     assert windows == [datetime.fromtimestamp(START, tz=timezone.utc), None]
+    assert checkpoint.listing_pages == 1
 
 
 def test_conversation_fetch_refusal_is_a_document_failure() -> None:
@@ -1077,9 +1152,7 @@ def test_conversation_fetch_refusal_is_a_document_failure() -> None:
     failures = [item for item in items if isinstance(item, ConnectorFailure)]
     assert len(failures) == 1
     assert failures[0].failed_document is not None
-    assert failures[0].failed_document.document_id == conversation_document_id(
-        mailbox(), CONVERSATION_ID
-    )
+    assert failures[0].failed_document.document_id == thread_doc_id(CONVERSATION_ID)
 
 
 @pytest.mark.parametrize("status", [429, 503, 509, None])
@@ -1096,10 +1169,10 @@ def test_transient_conversation_fetch_failure_keeps_the_checkpoint(
     checkpoint = _folder_checkpoint()
 
     with pytest.raises(OutlookGraphError):
-        _step(connector, checkpoint)
+        _finish(connector, checkpoint)
 
-    assert checkpoint.active[0].seen_conversation_ids == {}
-    assert checkpoint.active[0].delta_next_link is None
+    assert checkpoint.build_shards == 1
+    assert checkpoint.next_shard == 0
 
 
 def test_indexable_messages_drop_drafts_and_excluded_folders() -> None:
@@ -1117,7 +1190,7 @@ def test_conversation_keeps_only_the_newest_messages() -> None:
         for i in range(MAX_MESSAGES_PER_CONVERSATION + 5)
     ]
 
-    doc = build_conversation_document(mailbox(), CONVERSATION_ID, messages)
+    doc = build_thread_document(_entry(), messages)
 
     assert doc is not None
     assert len(doc.sections) == MAX_MESSAGES_PER_CONVERSATION
@@ -1126,13 +1199,12 @@ def test_conversation_keeps_only_the_newest_messages() -> None:
 
 
 def test_conversation_without_messages_is_dropped() -> None:
-    assert build_conversation_document(mailbox(), CONVERSATION_ID, []) is None
+    assert build_thread_document(_entry(), []) is None
 
 
 def test_conversation_without_a_subject_gets_a_placeholder_and_root_parent() -> None:
-    doc = build_conversation_document(
-        mailbox(),
-        CONVERSATION_ID,
+    doc = build_thread_document(
+        _entry(),
         [message(subject=None, parent_folder_id=None, sender=None, to_recipients=[])],
     )
 
@@ -1145,9 +1217,8 @@ def test_conversation_without_a_subject_gets_a_placeholder_and_root_parent() -> 
 def test_senders_are_not_repeated_as_secondary_owners() -> None:
     bob = OutlookRecipient(address="bob@contoso.com", name="Bob")
     alice = OutlookRecipient(address=MAILBOX_ADDRESS, name="Alice")
-    doc = build_conversation_document(
-        mailbox(),
-        CONVERSATION_ID,
+    doc = build_thread_document(
+        _entry(),
         [
             message(sender=alice, to_recipients=[bob]),
             message(id="msg-2", sender=bob, to_recipients=[alice]),
@@ -1252,7 +1323,7 @@ def test_attachment_text_follows_its_message_and_skips_the_rest() -> None:
         f"{CONNECTOR_MODULE}.run_in_isolated_process",
         side_effect=_extraction("Quarterly numbers"),
     ):
-        items, _ = _step(connector, _folder_checkpoint())
+        items = _finish(connector, _folder_checkpoint())
 
     docs = [item for item in items if isinstance(item, Document)]
     texts = [section.text or "" for section in docs[0].sections]
@@ -1277,7 +1348,7 @@ def test_attachments_are_not_read_by_default() -> None:
     gateway = _attachment_gateway()
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
 
-    items, _ = _step(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint())
 
     assert len([item for item in items if isinstance(item, Document)]) == 1
     gateway.list_message_attachments.assert_not_called()
@@ -1288,12 +1359,12 @@ def test_attachment_over_the_cap_or_refused_is_skipped() -> None:
     gateway.download_attachment.side_effect = SizeCapExceeded("during_download")
     connector = _attachment_connector(gateway)
 
-    items, _ = _step(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint())
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs[0].sections) == 2
 
     gateway.download_attachment.side_effect = graph_error(404, "ErrorItemNotFound")
-    items, _ = _step(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint())
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs[0].sections) == 2
 
@@ -1305,9 +1376,9 @@ def test_throttled_attachment_read_keeps_the_checkpoint() -> None:
     checkpoint = _folder_checkpoint()
 
     with pytest.raises(OutlookGraphError):
-        _step(connector, checkpoint)
+        _finish(connector, checkpoint)
 
-    assert checkpoint.active[0].seen_conversation_ids == {}
+    assert checkpoint.next_shard == 0
 
 
 def test_refused_attachment_listing_keeps_the_message_text() -> None:
@@ -1315,7 +1386,7 @@ def test_refused_attachment_listing_keeps_the_message_text() -> None:
     gateway.list_message_attachments.side_effect = graph_error(403)
     connector = _attachment_connector(gateway)
 
-    items, _ = _step(connector, _folder_checkpoint())
+    items = _finish(connector, _folder_checkpoint())
 
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs[0].sections) == 2
@@ -1330,7 +1401,7 @@ def test_attachment_extraction_that_hangs_or_crashes_is_skipped() -> None:
         f"{CONNECTOR_MODULE}.run_in_isolated_process",
         side_effect=IsolatedProcessError("timed out"),
     ):
-        items, _ = _step(connector, _folder_checkpoint())
+        items = _finish(connector, _folder_checkpoint())
 
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs[0].sections) == 2
@@ -1349,7 +1420,7 @@ def test_attachment_text_is_capped_per_conversation() -> None:
     with patch(
         f"{CONNECTOR_MODULE}.run_in_isolated_process", side_effect=_extraction(text)
     ):
-        items, _ = _step(connector, _folder_checkpoint())
+        items = _finish(connector, _folder_checkpoint())
 
     docs = [item for item in items if isinstance(item, Document)]
     kept = [
@@ -1372,7 +1443,7 @@ def test_failed_extractions_spend_the_read_budget() -> None:
         f"{CONNECTOR_MODULE}.run_in_isolated_process",
         side_effect=IsolatedProcessError("timed out"),
     ):
-        items, _ = _step(connector, _folder_checkpoint())
+        items = _finish(connector, _folder_checkpoint())
 
     docs = [item for item in items if isinstance(item, Document)]
     assert len(docs[0].sections) == 2
@@ -1423,8 +1494,7 @@ def test_slim_docs_list_every_conversation_without_reading_bodies() -> None:
     # The unfiltered delta lists every conversation, old and late alike, and
     # the removed and conversation-less rows are skipped.
     assert sorted(_slim_ids(batches)) == sorted(
-        conversation_document_id(mailbox(), cid)
-        for cid in (CONVERSATION_ID, "conv-late", "conv-old")
+        thread_doc_id(cid) for cid in (CONVERSATION_ID, "conv-late", "conv-old")
     )
     assert all(
         item.parent_hierarchy_raw_node_id is None
@@ -1521,7 +1591,8 @@ def test_slim_docs_batch_and_report_progress() -> None:
 
     batches = list(connector.retrieve_all_slim_docs(callback=callback))
 
-    # Three walked folders of 501 each, batched across folder boundaries.
+    # Three walked folders of 501 threads each, listed per folder and
+    # batched once every mailbox is read.
     slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
     assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
     assert (
@@ -1554,8 +1625,8 @@ def test_slim_docs_follow_delta_pages_by_their_link() -> None:
     ids = _slim_ids(list(connector.retrieve_all_slim_docs(callback=callback)))
 
     assert ids == [
-        conversation_document_id(mailbox(), CONVERSATION_ID),
-        conversation_document_id(mailbox(), "conv-2"),
+        thread_doc_id(CONVERSATION_ID),
+        thread_doc_id("conv-2"),
     ]
     inbox_progress = [
         c for c in callback.progress.call_args_list if c == call("outlook_slim_docs", 1)
@@ -1636,16 +1707,16 @@ def test_calendar_follows_the_folders_with_one_document_per_event_or_series() ->
     ]
     docs = [item for item in items if isinstance(item, Document)]
     assert [doc.id for doc in docs] == [
-        conversation_document_id(mailbox(), CONVERSATION_ID),
         event_document_id(mailbox(), "evt-1"),
         event_document_id(mailbox(), SERIES_ID),
         event_document_id(mailbox(), "exc-1"),
+        thread_doc_id(CONVERSATION_ID),
     ]
     # Two occurrences, one master read, one document carrying the pattern.
     gateway.get_event.assert_called_once_with(
         mailbox_id=mailbox().id, event_id=SERIES_ID
     )
-    series = docs[2]
+    series = docs[1]
     assert series.semantic_identifier == "Standup"
     assert "Repeats: every week on monday from 2026-01-05" in (
         series.sections[0].text or ""
@@ -1763,7 +1834,7 @@ def test_denied_calendar_is_a_failure_when_named_and_a_skip_otherwise() -> None:
     assert failures[0].failed_entity.entity_id == f"{MAILBOX_ADDRESS} calendar"
     # The mail was indexed all the same.
     assert [doc.id for doc in named if isinstance(doc, Document)] == [
-        conversation_document_id(mailbox(), CONVERSATION_ID)
+        thread_doc_id(CONVERSATION_ID)
     ]
 
     every = _run(_connector(gateway, include_calendar=True))
@@ -1958,7 +2029,7 @@ def test_slim_docs_prune_the_events_of_a_calendar_that_is_gone() -> None:
 
     ids = _slim_ids(list(connector.retrieve_all_slim_docs()))
 
-    assert conversation_document_id(mailbox(), CONVERSATION_ID) in ids
+    assert thread_doc_id(CONVERSATION_ID) in ids
     assert not [i for i in ids if i.startswith(EVENT_DOCUMENT_ID_PREFIX)]
 
 
@@ -2064,9 +2135,13 @@ def _assert_each_readership(
     assert len(nodes) == 5
     assert all(_readers(n) == {MAILBOX_ADDRESS} for n in nodes)
     by_id = {i.id: i for i in items if isinstance(i, (Document, SlimDocument))}
-    assert _readers(by_id[conversation_document_id(mailbox(), CONVERSATION_ID)]) == {
-        MAILBOX_ADDRESS
-    }
+    thread_readers = _readers(by_id[thread_doc_id(CONVERSATION_ID)])
+    if isinstance(by_id[thread_doc_id(CONVERSATION_ID)], SlimDocument):
+        # Pruning and permission sync know the holders only.
+        assert thread_readers == {MAILBOX_ADDRESS}
+    else:
+        # Indexing adds everyone on the kept messages.
+        assert thread_readers == {MAILBOX_ADDRESS, "bob@contoso.com"}
     # The owner, the organizer (the owner here) and the attendees.
     assert _readers(by_id[event_document_id(mailbox(), "evt-1")]) == {
         MAILBOX_ADDRESS,

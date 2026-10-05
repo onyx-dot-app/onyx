@@ -359,6 +359,16 @@ def test_folder_listing_marks_hidden_folders() -> None:
     assert [f.is_hidden for f in result.folders] == [False, True]
 
 
+def test_delta_page_selects_the_conversation_index_the_thread_key_needs() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([change_json()])
+
+    page = gateway.fetch_folder_delta_page(mailbox_id=MAILBOX_ID, folder_id=INBOX_ID)
+
+    assert "conversationIndex" in client.get_json.call_args.args[1]["$select"]
+    assert page.changes[0].conversation_index == change_json()["conversationIndex"]
+
+
 def test_delta_page_sends_query_params_once_and_the_page_size_header_always() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json(
