@@ -67,7 +67,7 @@ THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
 
 
 RESEARCH_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
-    name="think_tool",
+    name=THINK_TOOL_NAME,
     description="Use this for reasoning between research steps. Think deeply about key results, identify knowledge gaps, and plan next steps.",
     parameters={
         "type": "object",
@@ -83,7 +83,7 @@ RESEARCH_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
 
 
 RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
-    name="generate_report",
+    name=GENERATE_REPORT_TOOL_NAME,
     description="Generate the final research report from all findings. Should be called when research is complete.",
     parameters={
         "type": "object",
