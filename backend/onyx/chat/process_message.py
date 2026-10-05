@@ -66,8 +66,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
-from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
-from onyx.chat.stop_signal_checker import reset_cancel_status
+from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.app_configs import DEV_MODE, DISABLE_VECTOR_DB
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
@@ -107,15 +106,11 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
 )
+from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import LLMErrorInfo, ReasoningEffort
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.utils import (
-    collect_credential_values,
-    litellm_exception_to_safe_error,
-    scrub_sensitive_values,
-)
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
@@ -986,7 +981,7 @@ def build_chat_turn(
             user_message_id=user_message.id,
             reserved_assistant_message_id=assistant_response.id,
         )
-    processing_run_id = user_message.id if is_multi else reserved_messages[0].id
+    processing_stream_id = user_message.id if is_multi else reserved_messages[0].id
 
     # Convert the chat history into a simple format that is free of any DB objects
     # and is easy to parse for the agent loop.
@@ -1056,20 +1051,22 @@ def build_chat_turn(
 
     # ── Stop signal and processing status ────────────────────────────────────
     cache = get_cache_backend()
-    reset_cancel_status(chat_session.id, cache)
+    clear_stop(chat_session.id, cache, stream_id=processing_stream_id)
 
     # Bind the id, not the row: this closure is stored on ChatTurnSetup and
     # would otherwise keep a detached ChatSession reachable for the whole turn.
     chat_session_id = chat_session.id
 
     def check_is_connected() -> bool:
-        return check_stop_signal(chat_session_id, cache)
+        return not is_stop_requested(
+            chat_session_id, cache, stream_id=processing_stream_id
+        )
 
     set_processing_status(
         chat_session_id=chat_session.id,
         cache=cache,
         value=True,
-        run_id=processing_run_id,
+        stream_id=processing_stream_id,
     )
 
     # Release any read transaction before the long-running LLM stream.
@@ -1094,7 +1091,7 @@ def build_chat_turn(
         simple_chat_history=simple_chat_history,
         extracted_context_files=extracted_context_files,
         reserved_messages=reserved_messages,
-        processing_run_id=processing_run_id,
+        processing_stream_id=processing_stream_id,
         reserved_token_count=reserved_token_count,
         reasoning_effort=chat_session.reasoning_effort_override or ReasoningEffort.AUTO,
         search_params=search_params,
@@ -1506,7 +1503,7 @@ def _run_models(
                             chat_session_id=setup.chat_session_id,
                             cache=setup.cache,
                             value=True,
-                            run_id=setup.processing_run_id,
+                            stream_id=setup.processing_stream_id,
                         )
                     except Exception:
                         # Worst case the fence lapses early; never kill the
@@ -1557,11 +1554,8 @@ def _run_models(
                     stack_trace = "".join(
                         traceback.format_exception(type(item), item, item.__traceback__)
                     )
-                    secrets = collect_credential_values(
-                        model_llm.config.api_key, model_llm.config.custom_config
-                    )
-                    error_msg = scrub_sensitive_values(info.message, secrets)
-                    stack_trace = scrub_sensitive_values(stack_trace, secrets)
+                    error_msg = model_llm.redact_error(info.message)
+                    stack_trace = model_llm.redact_error(stack_trace)
                     _publish(
                         StreamingError(
                             error=error_msg,
@@ -1768,7 +1762,7 @@ def _stream_chat_turn(
         stream_buffer = StreamBufferWriter(
             cache=setup.cache,
             chat_session_id=setup.chat_session_id,
-            run_id=setup.processing_run_id,
+            stream_id=setup.processing_stream_id,
             delete_on_done=content_free,
             session_ended=(
                 (lambda: incognito_session_ended(setup.chat_session_id))
@@ -1838,10 +1832,7 @@ def _stream_chat_turn(
         llm = setup.llms[0] if setup else None
         if llm:
             error_info = litellm_exception_to_safe_error(e, llm)
-            stack_trace = scrub_sensitive_values(
-                stack_trace,
-                collect_credential_values(llm.config.api_key, llm.config.custom_config),
-            )
+            stack_trace = llm.redact_error(stack_trace)
             yield StreamingError(
                 error=error_info.message,
                 stack_trace=stack_trace if DEV_MODE else None,

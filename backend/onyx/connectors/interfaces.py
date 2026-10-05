@@ -260,13 +260,6 @@ class CredentialsConnector(BaseConnector):
         raise NotImplementedError
 
 
-# Event driven
-class EventConnector(BaseConnector):
-    @abc.abstractmethod
-    def handle_event(self, event: Any) -> GenerateDocumentsOutput:
-        raise NotImplementedError
-
-
 CheckpointOutput: TypeAlias = Generator[
     Document | HierarchyNode | ConnectorFailure, None, CT
 ]

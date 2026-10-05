@@ -544,6 +544,13 @@ class ZoomClient:
             total_records=body.get("total_records"),
         )
 
+    def get_user(self, user_id: str) -> ZoomUser:
+        """One user by id, whatever their status: a recording outlives its
+        owner's deactivation, and the listing shows active users only. A user
+        Zoom has no record of answers 404 with code 1001, which raises."""
+        response = self._get(endpoints.USER, user_id)
+        return ZoomUser.model_validate(response.json())
+
     def list_users(self, page_token: str | None = None) -> ZoomUserPage:
         """Host emails are matched against this listing to get the user ids the
         recordings listing is called with. TODO(subash): that listing documents

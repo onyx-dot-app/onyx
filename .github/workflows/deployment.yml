@@ -147,6 +147,18 @@ jobs:
               # shellcheck disable=SC2016
               echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > "image-audit-${component}.sarif"
             fi
+            # A stage built here is named "name:tag" with no registry path, which
+            # the Security tab reads as a URI scheme and rejects; point its
+            # findings at the Dockerfile the stage comes from.
+            case "${component}" in
+              backend) dockerfile=backend/Dockerfile ;;
+              *) dockerfile="" ;;
+            esac
+            if [ -n "${dockerfile}" ]; then
+              jq --arg uri "${dockerfile}" '(.runs[]?.results[]?.locations[]?.physicalLocation.artifactLocation.uri) |= $uri' \
+                "image-audit-${component}.sarif" > "image-audit-${component}.sarif.tmp"
+              mv "image-audit-${component}.sarif.tmp" "image-audit-${component}.sarif"
+            fi
           done
           exit "${status}"
 
@@ -154,6 +166,8 @@ jobs:
       # authoritative for main; test runs upload against their own ref. Release
       # tags sit on older commits, so they gate without uploading.
       - name: Upload the web image audit to the GitHub Security tab
+        id: upload-web
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
         if: >-
           always() &&
           ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
@@ -166,6 +180,8 @@ jobs:
           sha: ${{ github.sha }}
 
       - name: Upload the model-server image audit to the GitHub Security tab
+        id: upload-model-server
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
         if: >-
           always() &&
           ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
@@ -178,6 +194,8 @@ jobs:
           sha: ${{ github.sha }}
 
       - name: Upload the backend image audit to the GitHub Security tab
+        id: upload-backend
+        continue-on-error: true # reporting never blocks a release; the gate's verdict is the step above
         if: >-
           always() &&
           ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
@@ -188,6 +206,22 @@ jobs:
           category: image-audit-backend
           ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
           sha: ${{ github.sha }}
+
+      # A rejected upload leaves the Security tab stale without failing the
+      # job, so it is called out where the run is read.
+      - name: Report failed uploads
+        if: always() && (steps.upload-web.outcome == 'failure' || steps.upload-model-server.outcome == 'failure' || steps.upload-backend.outcome == 'failure')
+        env:
+          WEB: ${{ steps.upload-web.outcome }}
+          MODEL_SERVER: ${{ steps.upload-model-server.outcome }}
+          BACKEND: ${{ steps.upload-backend.outcome }}
+        run: |
+          failed=""
+          [ "${WEB}" = failure ] && failed="${failed} web"
+          [ "${MODEL_SERVER}" = failure ] && failed="${failed} model-server"
+          [ "${BACKEND}" = failure ] && failed="${failed} backend"
+          echo "::warning::The Security tab upload failed for:${failed}. The tab is stale until the next nightly upload succeeds."
+          echo "Security tab upload failed for:${failed}" >> "${GITHUB_STEP_SUMMARY}"
 
   # Validate that a pushed release tag is versioned correctly, via
   # `ods release --check`. A cloud tag must be the tag `ods release cloud`

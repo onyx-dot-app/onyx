@@ -87,6 +87,7 @@ from onyx.indexing.models import (
     UpdatableChunkData,
 )
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.exceptions import LLMRateLimitError
 from onyx.llm.factory import (
     get_contextual_rag_llm_for_search_settings,
     get_default_llm_with_vision,
@@ -98,7 +99,6 @@ from onyx.llm.models import (
     ReasoningEffort,
     UserMessage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.utils import (
     BaseTokenizer,
@@ -1490,7 +1490,8 @@ def index_doc_batch(
 
     # contextual RAG
     if enable_contextual_rag and llm_enrichment_allowed:
-        assert llm is not None, "must provide an LLM for contextual RAG"
+        if llm is None:
+            raise ValueError("Contextual RAG requires a language model client")
         llm_tokenizer = get_tokenizer(
             model_name=llm.config.model_name,
             provider_type=llm.config.model_provider,
