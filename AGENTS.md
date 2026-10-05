@@ -66,7 +66,8 @@ procedure.
   `.agents/feature-map/GLOSSARY.md` before trusting a name.
 
 If you change behaviour a component document describes, update that document in the
-same pull request.
+same pull request. The `feature-map-integrity` pre-commit hook fails when a file the
+map cites is renamed or deleted.
 
 ### Skills
 

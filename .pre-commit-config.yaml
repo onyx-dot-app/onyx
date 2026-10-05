@@ -296,6 +296,16 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
         files: ^backend/alembic/versions/.*\.py$
+      # Runs on every commit so a rename or deletion of a file the map cites
+      # fails in the same PR.
+      - id: feature-map-integrity
+        name: feature map integrity
+        description: "Fail when the feature map is malformed or cites a repo path that does not exist"
+        language: system
+        entry: python3 .agents/feature-map/check_feature_map.py
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
       # Regenerate the baseline with `env_inventory.py --write-baseline`.
       - id: env-drift-baseline
         name: env drift baseline

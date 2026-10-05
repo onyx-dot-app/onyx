@@ -1,0 +1,19 @@
+# Code spans that look like repo paths but are not meant to exist in the repo.
+# One entry per line: `<document relative to .agents/feature-map>: <token>`.
+# Keep each entry justified by the sentence around it.
+
+# Negative statements: the text says these files do not exist.
+components/agents-personas.md: seeding/personas.yaml
+components/background-jobs.md: apps/background.py
+components/editions-and-gating.md: backend/onyx/external_permissions/
+components/whitelabelling-and-theme.md: web/src/app/admin/theme/
+
+# Routes relative to a base directory named in the same table.
+components/chat-frontend.md: agents/create/
+
+# Build outputs.
+components/desktop-widget-extensions.md: src-tauri/target/release/bundle/
+components/desktop-widget-extensions.md: dist/onyx-widget.js
+
+# Added by the LLM gateway switch PR (#15065), which the map describes as landed.
+components/llm-gateway.md: backend/tests/unit/onyx/server/pat/test_pat_api.py
