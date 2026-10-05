@@ -1,7 +1,15 @@
+from collections.abc import Callable
 from enum import Enum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+
+
+class LLMInputBudget(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    max_tokens: int
+    token_counter: Callable[[str], int]
 
 
 class LLMErrorInfo(BaseModel):
@@ -139,6 +147,7 @@ class ImageUrlDetail(BaseModel):
 class ImageContentPart(BaseModel):
     type: Literal["image_url"] = "image_url"
     image_url: ImageUrlDetail
+    token_count: int = Field(default=0, exclude=True)
 
 
 ContentPart = TextContentPart | ImageContentPart

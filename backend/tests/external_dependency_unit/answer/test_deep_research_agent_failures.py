@@ -29,7 +29,7 @@ from onyx.llm.model_response import (
     ResponseFunctionCall,
     StreamingChoice,
 )
-from onyx.llm.models import ReasoningEffort, ToolChoice
+from onyx.llm.models import LLMInputBudget, ReasoningEffort, ToolChoice
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
 from onyx.tools.fake_tools import research_agent
@@ -129,7 +129,9 @@ class DeepResearchScriptLLM(LitellmLLM):
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,  # noqa: ARG002
         operation: ProviderOperation | None = None,  # noqa: ARG002
+        input_budget: LLMInputBudget | None = None,
     ) -> Iterator[ModelResponseStream]:
+        del input_budget
         request = RecordedRequest(messages=list(prompt), tools=tools or [])
         with self._lock:
             self.requests.append(request)
