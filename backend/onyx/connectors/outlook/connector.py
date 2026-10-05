@@ -40,6 +40,9 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    RateLimitTriedTooManyTimesError,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -184,6 +187,12 @@ ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS = 120
 # A folder that fills the cap is read again without the filter, which has no
 # cap, and the poll window is applied to each entry here instead.
 FILTERED_DELTA_CAP = 5000
+
+THROTTLED_STATUS = 429
+THROTTLED_MESSAGE = (
+    "Microsoft Graph is rate limiting this connector. It resumes from its "
+    "checkpoint on the next run."
+)
 
 MAILBOX_NODE_PREFIX = "outlook-mailbox:"
 CALENDAR_NODE_PREFIX = "outlook-calendar:"
@@ -723,6 +732,22 @@ class OutlookConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: OutlookCheckpoint,
+        include_permissions: bool,
+    ) -> CheckpointOutput[OutlookCheckpoint]:
+        try:
+            return (yield from self._step(checkpoint, start, end, include_permissions))
+        except OutlookGraphError as e:
+            if e.status != THROTTLED_STATUS:
+                raise
+            # The client already backed off and retried. The attempt's error
+            # is what the admin reads, so say what happened in plain words.
+            raise RateLimitTriedTooManyTimesError(THROTTLED_MESSAGE) from e
+
+    def _step(
+        self,
+        checkpoint: OutlookCheckpoint,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
         include_permissions: bool,
     ) -> CheckpointOutput[OutlookCheckpoint]:
         if checkpoint.mailboxes is None:

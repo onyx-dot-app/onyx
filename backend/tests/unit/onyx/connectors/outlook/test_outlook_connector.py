@@ -16,6 +16,9 @@ from pydantic import ValidationError
 
 from onyx.configs.app_configs import OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.connector_runner import ConnectorRunner
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    RateLimitTriedTooManyTimesError,
+)
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialInvalidError,
@@ -50,6 +53,7 @@ from onyx.connectors.outlook.connector import (
     MAX_MESSAGES_PER_CONVERSATION,
     MAX_TRACKED_SERIES_PER_MAILBOX,
     SLIM_BATCH_SIZE,
+    THROTTLED_MESSAGE,
     OutlookCheckpoint,
     OutlookConnector,
     attachment_skip_reason,
@@ -1083,6 +1087,20 @@ def test_failure_part_way_through_a_shard_leaves_the_shard_to_be_rebuilt() -> No
     assert checkpoint.next_shard == 0
 
 
+def test_throttling_past_the_retries_fails_the_attempt_in_plain_words() -> None:
+    gateway = _happy_gateway()
+    gateway.fetch_folder_delta_page.side_effect = graph_error(429, "TooManyRequests")
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    checkpoint = _folder_checkpoint()
+
+    with pytest.raises(RateLimitTriedTooManyTimesError) as exc_info:
+        _step(connector, checkpoint)
+
+    assert str(exc_info.value) == THROTTLED_MESSAGE
+    assert isinstance(exc_info.value.__cause__, OutlookGraphError)
+    assert checkpoint.active[0].current_folder == folder()
+
+
 def test_expired_delta_state_restarts_the_folder_round() -> None:
     gateway = _happy_gateway()
     gateway.fetch_folder_delta_page.side_effect = graph_error(410, "SyncStateNotFound")
@@ -1168,7 +1186,7 @@ def test_transient_conversation_fetch_failure_keeps_the_checkpoint(
     connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
     checkpoint = _folder_checkpoint()
 
-    with pytest.raises(OutlookGraphError):
+    with pytest.raises((OutlookGraphError, RateLimitTriedTooManyTimesError)):
         _finish(connector, checkpoint)
 
     assert checkpoint.build_shards == 1
@@ -1375,7 +1393,7 @@ def test_throttled_attachment_read_keeps_the_checkpoint() -> None:
     connector = _attachment_connector(gateway)
     checkpoint = _folder_checkpoint()
 
-    with pytest.raises(OutlookGraphError):
+    with pytest.raises(RateLimitTriedTooManyTimesError):
         _finish(connector, checkpoint)
 
     assert checkpoint.next_shard == 0
@@ -1847,7 +1865,7 @@ def test_throttled_calendar_read_keeps_the_checkpoint() -> None:
     connector = _calendar_connector(gateway)
     checkpoint = _folder_checkpoint(current_folder=None)
 
-    with pytest.raises(OutlookGraphError):
+    with pytest.raises(RateLimitTriedTooManyTimesError):
         _step(connector, checkpoint)
 
     assert checkpoint.active[0].calendar_done is False
