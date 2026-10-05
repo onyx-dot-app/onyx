@@ -186,7 +186,7 @@ export function FoldedProjectsPopover() {
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      <Dropdown width={20} side="right" open={open} onOpenChange={setOpen}>
+      <Dropdown width={15} side="right" open={open} onOpenChange={setOpen}>
         <Dropdown.Trigger asChild>
           <div data-testid="AppSidebar/projects" tabIndex={-1}>
             <SidebarTab
