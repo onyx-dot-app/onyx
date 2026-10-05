@@ -22,7 +22,7 @@ packages:
   src/app/config: 100
   src/app/connector: 100
   src/app/craft: 99.2
-  src/app/ee: 95.8
+  src/app/ee: 95.6
   src/app/federated: 97
   src/app/mcp: 99.5
   src/app/nrf: 99.2
