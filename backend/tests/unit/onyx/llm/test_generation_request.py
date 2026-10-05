@@ -66,6 +66,7 @@ class RecordingProvider(LitellmLLM):
     def __init__(self, response: ModelResponse | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
         self._response = response or _response(Message(content="answer"))
+        self._model_kwargs: dict[str, Any] = {}
 
     @property
     def config(self) -> LLMConfig:

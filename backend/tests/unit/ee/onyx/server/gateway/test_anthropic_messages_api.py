@@ -16,6 +16,7 @@ from ee.onyx.server.gateway import stream_bridge
 from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_request import (
     AssistantMessage,
@@ -43,7 +44,6 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     Usage,
 )
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessageResponse,

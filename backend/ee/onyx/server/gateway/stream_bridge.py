@@ -13,6 +13,7 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from fastapi.responses import StreamingResponse
 
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.model_request import RequestFunctionCall, ToolCall
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -20,7 +21,6 @@ from onyx.llm.model_response import (
     ResponseFunctionCall,
 )
 from onyx.llm.models import Usage
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.llm_utils import record_llm_span_output
