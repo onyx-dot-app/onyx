@@ -27,7 +27,7 @@ WIKI_LINK = re.compile(r"\[\[([a-z][a-z0-9-]*)\]\]")
 SLUG = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 INDEX_LINK = re.compile(r"\(components/([a-z0-9-]+)\.md\)")
 PATH_SUFFIX = re.compile(
-    r"\.(py|ts|tsx|js|mjs|json|md|yaml|yml|toml|go|rs|sh|txt|html|css|template)$"
+    r"(\.(py|ts|tsx|js|mjs|json|md|yaml|yml|toml|go|rs|sh|txt|html|css|template)|(^|/)Dockerfile)$"
 )
 # Roots that a short path such as `db/models.py` or `lib/utils.ts` resolves against.
 PATH_ROOTS = (
@@ -98,7 +98,10 @@ def _looks_like_path(token: str) -> str | None:
     if any(c.isspace() for c in token):
         return None
     path = token.split(":")[0].rstrip("/").rstrip(",").strip("()")
-    if "/" not in path or path.startswith(("http", "/")):
+    if path.startswith(("http", "/")):
+        return None
+    # A bare extension such as `.py` names a file type, not a file.
+    if "/" not in path and "." not in path.lstrip(".") and path != "Dockerfile":
         return None
     if any(c in path for c in "{*<$[") or "..." in path:
         return None
@@ -134,10 +137,14 @@ def check() -> list[str]:
                 f"{rel}: missing a `**Verified against:** `<sha>` (YYYY-MM-DD)` line"
             )
 
-    index_text = (MAP_DIR / "INDEX.md").read_text()
+    indexed = set(INDEX_LINK.findall((MAP_DIR / "INDEX.md").read_text()))
     errors.extend(
         f"INDEX.md: component `{name}` is not listed"
-        for name in sorted(names - set(INDEX_LINK.findall(index_text)))
+        for name in sorted(names - indexed)
+    )
+    errors.extend(
+        f"INDEX.md: links to missing component `{name}`"
+        for name in sorted(indexed - names)
     )
 
     for line in (MAP_DIR / "PATHS.md").read_text().splitlines():
@@ -146,7 +153,10 @@ def check() -> list[str]:
             continue
         parts = [part.strip() for part in cells[1].split(",")]
         # A cell of prose (a note about the path) names no component to check.
-        if not all(SLUG.match(part) for part in parts):
+        if not (
+            all(SLUG.match(part) for part in parts)
+            or any(part in names for part in parts)
+        ):
             continue
         errors.extend(
             f"PATHS.md: unknown component `{name}`"

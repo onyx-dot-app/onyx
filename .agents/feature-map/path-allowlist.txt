@@ -7,13 +7,26 @@ components/agents-personas.md: seeding/personas.yaml
 components/background-jobs.md: apps/background.py
 components/editions-and-gating.md: backend/onyx/external_permissions/
 components/whitelabelling-and-theme.md: web/src/app/admin/theme/
+components/background-jobs.md: background.py
+components/craft-streaming.md: xterm.js
 
 # Routes relative to a base directory named in the same table.
 components/chat-frontend.md: agents/create/
+
+# Files the sandbox writes at runtime.
+components/craft-sandboxes.md: opencode.json
+components/craft-sandboxes.md: start-webapp.sh
+components/craft-sessions.md: opencode.json
+components/craft-webapp-proxy.md: start-webapp.sh
+components/skills.md: opencode.json
+
+# Library names.
+components/discord-bot.md: discord.py
 
 # Build outputs.
 components/desktop-widget-extensions.md: src-tauri/target/release/bundle/
 components/desktop-widget-extensions.md: dist/onyx-widget.js
 
-# Added by the LLM gateway switch PR (#15065), which the map describes as landed.
+# Added by the LLM gateway switch PR (#15065), which is not merged yet.
+# Remove this entry when #15065 merges.
 components/llm-gateway.md: backend/tests/unit/onyx/server/pat/test_pat_api.py
