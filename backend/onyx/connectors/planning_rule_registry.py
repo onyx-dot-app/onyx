@@ -1,4 +1,6 @@
-"""The planning rule of each source that has one (see ``planning_rule``).
+"""Per-source planning knowledge for connector edits: the planning rule of
+each source that has one (see ``planning_rule``), and the sources whose
+credential swaps usually need the full path.
 
 A source without an entry uses the default rules for every edit. Sources
 that share a config class can share a rule.
@@ -73,3 +75,9 @@ PLANNING_RULES: dict[DocumentSource, PlanningRule] = {
     DocumentSource.TEAMS: planning_rule(TeamsConnectorConfig, teams_planning_rule),
     DocumentSource.ZOOM: planning_rule(ZoomConnectorConfig, zoom_planning_rule),
 }
+
+# Sources where a new credential usually sees different content (e.g. a
+# scoped token), so a credential swap usually needs a full re-index and prune.
+CREDENTIAL_SWAP_FULL_PATH_SOURCES: frozenset[DocumentSource] = frozenset(
+    {DocumentSource.CONFLUENCE, DocumentSource.JIRA}
+)
