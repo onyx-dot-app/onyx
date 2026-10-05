@@ -2,9 +2,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from onyx.chat.token_budget import ChatTokenBudget, resolve_chat_token_budget
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.token_budget import TokenBudget, resolve_token_budget
 
 ModelMap = dict[str, dict[str, object]]
 
@@ -12,11 +12,9 @@ ModelMap = dict[str, dict[str, object]]
 @pytest.fixture
 def model_map(monkeypatch: pytest.MonkeyPatch) -> ModelMap:
     models: ModelMap = {}
-    monkeypatch.setattr("onyx.chat.token_budget.get_model_map", lambda: models)
-    monkeypatch.setattr("onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05)
-    monkeypatch.setattr(
-        "onyx.chat.token_budget.GEN_AI_NUM_RESERVED_OUTPUT_TOKENS", 1024
-    )
+    monkeypatch.setattr("onyx.llm.token_budget.get_model_map", lambda: models)
+    monkeypatch.setattr("onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0.05)
+    monkeypatch.setattr("onyx.llm.token_budget.GEN_AI_NUM_RESERVED_OUTPUT_TOKENS", 1024)
     return models
 
 
@@ -79,9 +77,9 @@ def test_model_budget(
     input_cap, margin, expected_input, expected_safety = input_config
     llm.config.max_input_tokens = input_cap
     monkeypatch.setattr(
-        "onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", margin
+        "onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", margin
     )
-    budget = resolve_chat_token_budget(llm)
+    budget = resolve_token_budget(llm)
     assert (budget.input_tokens, budget.safety_tokens) == (
         expected_input,
         expected_safety,
@@ -109,8 +107,13 @@ def test_missing_or_invalid_limits_keep_legacy_fallback(
     if metadata is not None:
         model_map["openai/model"] = metadata
     llm.config.max_input_tokens = GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-    budget = resolve_chat_token_budget(llm)
-    assert budget == ChatTokenBudget(30_400, None, None, 1_600)
+    budget = resolve_token_budget(llm)
+    assert budget == TokenBudget(
+        input_tokens=30_400,
+        max_output_tokens=None,
+        context_tokens=None,
+        safety_tokens=1_600,
+    )
     assert budget.output_allowance(1) is None
 
 
@@ -121,8 +124,11 @@ def test_deployment_alias(model_map: ModelMap, llm: Mock) -> None:
         "max_input_tokens": 128_000,
         "max_output_tokens": 16_000,
     }
-    assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        950_000, 16_000, 128_000, 50_000
+    assert resolve_token_budget(llm) == TokenBudget(
+        input_tokens=950_000,
+        max_output_tokens=16_000,
+        context_tokens=128_000,
+        safety_tokens=50_000,
     )
 
 
@@ -131,7 +137,7 @@ def test_provider_precedes_bare_model(
     llm: Mock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0)
+    monkeypatch.setattr("onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0)
     llm.config.model_provider = "azure"
     llm.config.model_name = "openai/model"
     model_map.update(
@@ -140,8 +146,11 @@ def test_provider_precedes_bare_model(
             "model": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
-    assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        1_000_000, 10_000, 100_000, 0
+    assert resolve_token_budget(llm) == TokenBudget(
+        input_tokens=1_000_000,
+        max_output_tokens=10_000,
+        context_tokens=100_000,
+        safety_tokens=0,
     )
 
 
@@ -150,7 +159,7 @@ def test_partial_metadata_uses_complete_alias(
     llm: Mock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("onyx.chat.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0)
+    monkeypatch.setattr("onyx.llm.token_budget.GEN_AI_INPUT_TOKEN_SAFETY_MARGIN", 0)
     llm.config.deployment_name = "alias"
     llm.config.max_input_tokens = 100_000
     model_map.update(
@@ -159,8 +168,11 @@ def test_partial_metadata_uses_complete_alias(
             "openai/alias": {"max_input_tokens": 200_000, "max_output_tokens": 20_000},
         }
     )
-    assert resolve_chat_token_budget(llm) == ChatTokenBudget(
-        100_000, 20_000, 200_000, 0
+    assert resolve_token_budget(llm) == TokenBudget(
+        input_tokens=100_000,
+        max_output_tokens=20_000,
+        context_tokens=200_000,
+        safety_tokens=0,
     )
 
 
@@ -170,5 +182,8 @@ def test_exhausted_context_keeps_legacy_fallback(
     estimated_input_tokens: int,
 ) -> None:
     assert (
-        ChatTokenBudget(95, 10, 100, 5).output_allowance(estimated_input_tokens) is None
+        TokenBudget(
+            input_tokens=95, max_output_tokens=10, context_tokens=100, safety_tokens=5
+        ).output_allowance(estimated_input_tokens)
+        is None
     )

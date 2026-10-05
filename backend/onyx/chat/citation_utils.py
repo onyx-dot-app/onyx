@@ -1,7 +1,9 @@
 import re
 
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.context.search.models import SearchDocsResponse
+from onyx.chat.models import ContextFileMetadata
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.tools.built_in_tools import CITEABLE_TOOLS_NAMES
 from onyx.tools.models import ToolResponse
 
@@ -214,3 +216,40 @@ def collapse_citations(
     combined_mapping.update(additional_mappings)
 
     return updated_text, combined_mapping
+
+
+def build_context_file_citation_mapping(
+    file_metadata: list[ContextFileMetadata],
+    starting_citation_num: int = 1,
+) -> dict[int, SearchDoc]:
+    """Build citation mapping for context files.
+
+    Converts context file metadata into SearchDoc objects that can be cited.
+    Citation numbers start from the provided starting number.
+
+    Args:
+        file_metadata: List of context file metadata
+        starting_citation_num: Starting citation number (default: 1)
+
+    Returns:
+        Dictionary mapping citation numbers to SearchDoc objects
+    """
+    citation_mapping: dict[int, SearchDoc] = {}
+
+    for idx, file_meta in enumerate(file_metadata, start=starting_citation_num):
+        search_doc = SearchDoc(
+            document_id=file_meta.file_id,
+            chunk_ind=0,
+            semantic_identifier=file_meta.filename,
+            link=None,
+            blurb=file_meta.file_content,
+            source_type=DocumentSource.FILE,
+            boost=1,
+            hidden=False,
+            metadata={},
+            score=0.0,
+            match_highlights=[file_meta.file_content],
+        )
+        citation_mapping[idx] = search_doc
+
+    return citation_mapping

@@ -22,11 +22,10 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import set_processing_status
-from onyx.chat.chat_state import AvailableFiles, ChatStateContainer, ChatTurnSetup
+from onyx.chat.chat_state import ChatStateContainer, ChatTurnSetup
 from onyx.chat.chat_utils import (
     build_file_context,
     convert_chat_history,
-    create_chat_history_chain,
     create_chat_session_from_request,
     get_custom_agent_prompt,
     is_last_assistant_message_clarification,
@@ -52,6 +51,7 @@ from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
 from onyx.chat.models import (
     AnswerStream,
     AnswerStreamPart,
+    AvailableFiles,
     ChatBasicResponse,
     ChatFullResponse,
     ChatLoadedFile,
@@ -78,6 +78,7 @@ from onyx.configs.constants import (
 )
 from onyx.context.search.models import BaseFilters, SearchDoc
 from onyx.db.chat import (
+    create_chat_history_chain,
     create_new_chat_message,
     get_chat_session_by_id,
     get_or_create_root_message,

@@ -32,9 +32,7 @@ from onyx.chat.chat_processing_checker import (
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import (
     convert_chat_history_basic,
-    create_chat_history_chain,
     create_chat_session_from_request,
-    extract_headers,
 )
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
@@ -64,6 +62,7 @@ from onyx.configs.constants import (
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
+    create_chat_history_chain,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
@@ -152,7 +151,10 @@ from onyx.server.usage_limits import (
 )
 from onyx.server.utils import get_json_line
 from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
-from onyx.utils.headers import get_custom_tool_additional_request_headers
+from onyx.utils.headers import (
+    get_custom_tool_additional_request_headers,
+    get_relevant_headers,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
@@ -514,7 +516,7 @@ def _generate_or_fallback_chat_session_name(
             persona=persona,
             user=user,
             llm_override=llm_override,
-            additional_headers=extract_headers(
+            additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
         )
@@ -856,7 +858,7 @@ def handle_send_chat_message(
                     new_msg_req=chat_message_req,
                     user=user,
                     llm_overrides=llm_overrides,
-                    litellm_additional_headers=extract_headers(
+                    litellm_additional_headers=get_relevant_headers(
                         request.headers, LITELLM_PASS_THROUGH_HEADERS
                     ),
                     custom_tool_additional_headers=get_custom_tool_additional_request_headers(
@@ -900,7 +902,7 @@ def handle_send_chat_message(
         packets = handle_stream_message_objects(
             new_msg_req=chat_message_req,
             user=user,
-            litellm_additional_headers=extract_headers(
+            litellm_additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
             custom_tool_additional_headers=get_custom_tool_additional_request_headers(
@@ -929,7 +931,7 @@ def handle_send_chat_message(
             for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
                 user=user,
-                litellm_additional_headers=extract_headers(
+                litellm_additional_headers=get_relevant_headers(
                     request.headers, LITELLM_PASS_THROUGH_HEADERS
                 ),
                 custom_tool_additional_headers=get_custom_tool_additional_request_headers(
