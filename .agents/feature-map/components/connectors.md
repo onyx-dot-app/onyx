@@ -468,47 +468,21 @@ lack of a key, ask instead. The shared helper
 
 ## 9. Footguns
 
-- **`DocumentFailure.document_id` must equal the `Document.id` you would have
-  indexed, and six sites get this wrong.** The convention is set by the internal
-  producer (`indexing/indexing_pipeline.py` builds `DocumentFailure(document_id=document.id)`)
-  and relied on by three consumers that compare it directly against `Document.id`:
-  `background/celery/tasks/docprocessing/tasks.py` (`document.id not in failed_document_ids`),
-  `background/indexing/run_targeted_reindex.py` (`{d.id for d in documents} - failed_ids`),
-  and `background/celery/celery_utils.py:_get_failure_id` (pruning preservation).
-
-  These connectors pass a source-native id instead, and put the real document id
-  in `document_link`:
-
-  | Site | Passes | Indexes |
-  |---|---|---|
-  | `confluence/connector.py` `_convert_page_to_document` failure | `page_id` | `page_url` |
-  | `drupal_wiki/connector.py` (two sites) | `str(page.id)` | `page_url` |
-  | `github/connector.py` (PR and issue conversion) | `str(pr.id)`, `str(issue.id)` | `html_url` |
-  | `jira/connector.py` | `issue_key` | `build_jira_url(...)` |
-  | `zendesk/connector.py` (article) | `f"{id}"` | `f"article:{id}"` |
-  | `zendesk/connector.py` (ticket) | `f"{id}"` | `f"zendesk_ticket_{id}"` |
-
-  Two more pass a placeholder when the id is unavailable: `gong/connector.py`
-  (`"unknown"`) and `sharepoint/connector.py` (`driveitem.id or "unknown"`).
-
-  **Pruning is not affected for the six**, because all six are `SlimConnector`s and
-  `extract_ids_from_runnable_connector` checks the slim path first, so their
-  `ConnectorFailure` objects never reach the prune diff. `gong` is not slim, so its
-  placeholder does reach it.
-
-  **Targeted reindex is affected, and Confluence demonstrably breaks.** A failed
-  page is persisted as an `IndexAttemptError` with the bare id, rebuilt into a
-  `ConnectorFailure` by `db/targeted_reindex.py`, and handed to
-  `ConfluenceConnector.reindex`, which calls `_extract_page_id_from_url`. Its
-  patterns are `/pages/(\d+)(?:/|$)` and `[?&]pageId=(\d+)`, so a bare numeric id
-  matches neither. The connector then yields "Cannot extract page id from doc URL",
-  and the page can never be repaired by targeted reindex.
-
-  Verified correct: `box`, `canvas`, `bitbucket`, `gmail`, `google_drive`,
-  `lumapps`, `outlook`, `sharepoint` (page and driveitem sites), `slack`, `teams`,
-  `zoom`, plus `github`'s other two sites and `confluence`'s `page_url` sites.
-  `github` and `confluence` are therefore internally inconsistent.
-
+- **`DocumentFailure.document_id` must equal the `Document.id` the connector
+  indexes, not a source-native id.** The internal producer
+  (`indexing/indexing_pipeline.py`, `DocumentFailure(document_id=document.id)`)
+  sets the convention, and three consumers compare it directly against
+  `Document.id`: `background/celery/tasks/docprocessing/tasks.py`
+  (`document.id not in failed_document_ids`),
+  `background/indexing/run_targeted_reindex.py` (`{d.id for d in documents} -
+  failed_ids`), and `background/celery/celery_utils.py:_get_failure_id` (pruning
+  preservation). Every connector follows it (#14962): for example Confluence
+  passes `page_url`, GitHub `html_url`, Jira `build_jira_url(...)`, and Zendesk
+  `article:{id}` / `zendesk_ticket_{id}`. A mismatched id breaks targeted reindex:
+  Confluence's `reindex` extracts the page id from a URL, so a bare numeric id can
+  never be repaired. Gong and SharePoint pass `"unknown"` only when the source
+  returns no id at all. Copy an existing connector's failure site when you add
+  one.
 - **The pruning framework trusts the connector to raise on auth failure.**
   There is no zero-count safety net (§5.5). A connector that catches a 401 and
   returns an empty generator will look, to pruning, exactly like "the source
