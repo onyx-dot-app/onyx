@@ -111,7 +111,7 @@ function backendMessages(assistantText: string): BackendMessage[] {
   ];
 }
 
-// Assistant run_id 2 is in flight — a hydrated session whose assistant node is still empty.
+// Assistant stream_id 2 is in flight — a hydrated session whose assistant node is still empty.
 function seedLiveSession(currentRunId: number | null): void {
   useChatSessionStore
     .getState()
@@ -124,7 +124,7 @@ function seedLiveSession(currentRunId: number | null): void {
     messages: backendMessages(""),
     packets: [[]],
     time_created: "",
-    current_run: currentRunId == null ? null : { run_id: currentRunId },
+    current_stream: currentRunId == null ? null : { stream_id: currentRunId },
   };
   client.setQueryData(QUERY_KEYS.chatSession(SERVER_URL, "s1"), snapshot);
 }
@@ -177,7 +177,7 @@ describe("useChatSessionController", () => {
       messages: backendMessages("final answer"),
       packets: [[historyPacket("final answer")]],
       time_created: "",
-      current_run: null,
+      current_stream: null,
     });
 
     renderHook(() => useChatSessionController("s1"), { wrapper });
@@ -206,7 +206,7 @@ describe("useChatSessionController", () => {
       messages: backendMessages("late"),
       packets: [[historyPacket("late")]],
       time_created: "",
-      current_run: null,
+      current_stream: null,
     });
 
     renderHook(() => useChatSessionController("s1"), { wrapper });
@@ -215,7 +215,7 @@ describe("useChatSessionController", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(resumeMock).not.toHaveBeenCalled();
 
-    // The hydration fetch resolves: the observer sees current_run and re-attaches.
+    // The hydration fetch resolves: the observer sees current_stream and re-attaches.
     act(() => {
       client.setQueryData(QUERY_KEYS.chatSession(SERVER_URL, "s1"), {
         chat_session_id: "s1",
@@ -224,7 +224,7 @@ describe("useChatSessionController", () => {
         messages: backendMessages(""),
         packets: [[]],
         time_created: "",
-        current_run: { run_id: 2 },
+        current_stream: { stream_id: 2 },
       });
     });
 
@@ -254,7 +254,7 @@ describe("useChatSessionController", () => {
       messages: backendMessages("Hello"),
       packets: [[historyPacket("Hello")]],
       time_created: "",
-      current_run: null,
+      current_stream: null,
     });
 
     renderHook(() => useChatSessionController("s1"), { wrapper });
@@ -383,7 +383,7 @@ describe("useChatSessionController", () => {
         messages: backendMessages("stale"),
         packets: [[historyPacket("stale")]],
         time_created: "",
-        current_run: null,
+        current_stream: null,
       }),
     );
 
@@ -403,7 +403,7 @@ describe("useChatSessionController", () => {
       messages: backendMessages("done"),
       packets: [[historyPacket("done")]],
       time_created: "",
-      current_run: null,
+      current_stream: null,
     });
     resumeMock.mockReturnValue(
       (async function* (): AsyncGenerator<StreamEvent> {
@@ -428,7 +428,7 @@ describe("useChatSessionController", () => {
       messages: backendMessages("done"),
       packets: [[historyPacket("done")]],
       time_created: "",
-      current_run: null,
+      current_stream: null,
     });
     resumeMock.mockReturnValue(
       (async function* (): AsyncGenerator<StreamEvent> {
@@ -459,7 +459,7 @@ describe("useChatSessionController", () => {
       messages: backendMessages("AB"),
       packets: [[historyPacket("AB")]],
       time_created: "",
-      current_run: null,
+      current_stream: null,
     });
     resumeMock.mockReturnValue(
       (async function* () {

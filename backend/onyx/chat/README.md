@@ -214,7 +214,8 @@ the database. The state container can be added to by any of the underlying layer
 ### Stopping Generation
 
 The drain loop in `_run_models` checks `check_is_connected()` every 50 ms (on queue timeout). The signal itself
-is stored in Redis and is set by the user calling the stop endpoint. On disconnect, the drain loop saves
+is stored in the shared cache, keyed by session and stream ID, and is set by the user calling the stop endpoint.
+A late Stop request for an earlier stream cannot stop a later stream in the same session. On disconnect, the drain loop saves
 partial state for every model, yields an `OverallStop(stop_reason="user_cancelled")` packet, and returns.
 A `drain_done` event signals emitters to stop blocking so worker threads can exit quickly. Workers that
 already completed successfully will self-complete (persist their response) if the drain loop exited before

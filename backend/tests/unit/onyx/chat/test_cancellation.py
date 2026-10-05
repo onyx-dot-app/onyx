@@ -1,22 +1,24 @@
-"""Unit tests for stop_signal_checker and chat_processing_checker.
+"""Unit tests for chat cancellation and chat_processing_checker.
 
 These modules are safety-critical — they control whether a chat stream
 continues or stops.  The tests use a simple in-memory CacheBackend stub
 so no external services are needed.
 """
 
+from unittest.mock import patch
 from uuid import uuid4
 
 from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.chat.chat_processing_checker import (
+    get_processing_stream_id,
     is_chat_session_processing,
     set_processing_status,
 )
 from onyx.chat.stop_signal_checker import (
-    FENCE_TTL,
-    is_connected,
-    reset_cancel_status,
-    set_fence,
+    STOP_TTL,
+    clear_stop,
+    is_stop_requested,
+    request_stop,
 )
 
 
@@ -25,19 +27,22 @@ class _MemoryCacheBackend(CacheBackend):
 
     def __init__(self) -> None:
         self._store: dict[str, bytes] = {}
+        self._ttls: dict[str, int] = {}
 
     def get(self, key: str) -> bytes | None:
         return self._store.get(key)
 
     def getdel(self, key: str) -> bytes | None:
+        self._ttls.pop(key, None)
         return self._store.pop(key, None)
 
     def set(
         self,
         key: str,
         value: str | bytes | int | float,
-        ex: int | None = None,  # noqa: ARG002
+        ex: int | None = None,
     ) -> None:
+        self._ttls[key] = ex if ex is not None else -1
         if isinstance(value, bytes):
             self._store[key] = value
         else:
@@ -56,12 +61,14 @@ class _MemoryCacheBackend(CacheBackend):
 
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
+        self._ttls.pop(key, None)
 
     def exists(self, key: str) -> bool:
         return key in self._store
 
     def expire(self, key: str, seconds: int) -> None:
-        pass
+        if key in self._store:
+            self._ttls[key] = seconds
 
     def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
         if self.get(key) != expected:
@@ -70,7 +77,7 @@ class _MemoryCacheBackend(CacheBackend):
         return True
 
     def ttl(self, key: str) -> int:
-        return -2 if key not in self._store else -1
+        return self._ttls.get(key, -2)
 
     def lock(self, name: str, timeout: float | None = None) -> CacheLock:
         raise NotImplementedError
@@ -82,80 +89,51 @@ class _MemoryCacheBackend(CacheBackend):
         raise NotImplementedError
 
 
-# ── stop_signal_checker ──────────────────────────────────────────────
+# ── chat cancellation ──────────────────────────────────────────────
 
 
-class TestSetFence:
-    def test_set_fence_true_creates_key(self) -> None:
+class TestStopRequests:
+    def test_request_stop_creates_key(self) -> None:
         cache = _MemoryCacheBackend()
         sid = uuid4()
-        set_fence(sid, cache, True)
-        assert not is_connected(sid, cache)
+        request_stop(sid, cache, stream_id=10)
+        assert is_stop_requested(sid, cache, stream_id=10)
 
-    def test_set_fence_false_removes_key(self) -> None:
+    def test_clear_stop_removes_key(self) -> None:
         cache = _MemoryCacheBackend()
         sid = uuid4()
-        set_fence(sid, cache, True)
-        set_fence(sid, cache, False)
-        assert is_connected(sid, cache)
+        request_stop(sid, cache, stream_id=10)
+        clear_stop(sid, cache, stream_id=10)
+        assert not is_stop_requested(sid, cache, stream_id=10)
 
-    def test_set_fence_false_noop_when_absent(self) -> None:
+    def test_request_stop_uses_ttl(self) -> None:
         cache = _MemoryCacheBackend()
         sid = uuid4()
-        set_fence(sid, cache, False)
-        assert is_connected(sid, cache)
-
-    def test_set_fence_uses_ttl(self) -> None:
-        """Verify set_fence passes ex=FENCE_TTL to cache.set."""
-        calls: list[dict[str, object]] = []
-        cache = _MemoryCacheBackend()
-        original_set = cache.set
-
-        def tracking_set(
-            key: str,
-            value: str | bytes | int | float,
-            ex: int | None = None,
-        ) -> None:
-            calls.append({"key": key, "ex": ex})
-            original_set(key, value, ex=ex)
-
-        cache.set = tracking_set  # ty: ignore[invalid-assignment]
-
-        set_fence(uuid4(), cache, True)
-        assert len(calls) == 1
-        assert calls[0]["ex"] == FENCE_TTL
+        with patch.object(cache, "set", wraps=cache.set) as cache_set:
+            request_stop(sid, cache, stream_id=10)
+        cache_set.assert_called_once_with(
+            f"chatsessionstop_fence_{sid}_10", 1, ex=STOP_TTL
+        )
 
 
-class TestIsConnected:
-    def test_connected_when_no_fence(self) -> None:
-        cache = _MemoryCacheBackend()
-        assert is_connected(uuid4(), cache)
+def test_delayed_stop_and_cleanup_cannot_affect_next_request() -> None:
+    cache = _MemoryCacheBackend()
+    session_id = uuid4()
+    set_processing_status(session_id, cache, True, stream_id=11)
+    request_stop(session_id, cache, stream_id=10)
+    assert not is_stop_requested(session_id, cache, stream_id=11)
+    request_stop(session_id, cache, stream_id=11)
+    clear_stop(session_id, cache, stream_id=10)
+    assert is_stop_requested(session_id, cache, stream_id=11)
 
-    def test_disconnected_when_fence_set(self) -> None:
-        cache = _MemoryCacheBackend()
-        sid = uuid4()
-        set_fence(sid, cache, True)
-        assert not is_connected(sid, cache)
 
+class TestIsStopRequested:
     def test_sessions_are_isolated(self) -> None:
         cache = _MemoryCacheBackend()
         sid1, sid2 = uuid4(), uuid4()
-        set_fence(sid1, cache, True)
-        assert not is_connected(sid1, cache)
-        assert is_connected(sid2, cache)
-
-
-class TestResetCancelStatus:
-    def test_clears_fence(self) -> None:
-        cache = _MemoryCacheBackend()
-        sid = uuid4()
-        set_fence(sid, cache, True)
-        reset_cancel_status(sid, cache)
-        assert is_connected(sid, cache)
-
-    def test_noop_when_no_fence(self) -> None:
-        cache = _MemoryCacheBackend()
-        reset_cancel_status(uuid4(), cache)
+        request_stop(sid1, cache, stream_id=10)
+        assert is_stop_requested(sid1, cache, stream_id=10)
+        assert not is_stop_requested(sid2, cache, stream_id=10)
 
 
 # ── chat_processing_checker ──────────────────────────────────────────
@@ -174,6 +152,19 @@ class TestSetProcessingStatus:
         set_processing_status(sid, cache, True)
         set_processing_status(sid, cache, False)
         assert not is_chat_session_processing(sid, cache)
+
+    def test_stream_id_is_exposed_to_readers(self) -> None:
+        cache = _MemoryCacheBackend()
+        sid = uuid4()
+        set_processing_status(sid, cache, True, stream_id=17)
+        assert get_processing_stream_id(sid, cache) == 17
+
+    def test_unknown_stream_id_reads_as_not_resumable(self) -> None:
+        cache = _MemoryCacheBackend()
+        sid = uuid4()
+        set_processing_status(sid, cache, True)
+        assert is_chat_session_processing(sid, cache)
+        assert get_processing_stream_id(sid, cache) is None
 
 
 class TestIsChatSessionProcessing:
