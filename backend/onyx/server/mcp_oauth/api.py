@@ -44,6 +44,7 @@ from onyx.mcp_oauth.models import (
 )
 from onyx.server.mcp_oauth.provider import OnyxMCPOAuthProvider
 from onyx.server.settings.store import load_settings
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import UsageCredentialIdentity, get_current_tenant_id
 from shared_configs.enums import UsageCredentialType
 
@@ -85,6 +86,8 @@ def _session_hash(request: Request, user: User) -> str:
         or not isinstance(credential, UsageCredentialIdentity)
         or credential.credential_type
         not in {UsageCredentialType.SESSION, UsageCredentialType.JWT}
+        # JWT passthrough does not bind the request to a tenant.
+        or (MULTI_TENANT and credential.credential_type == UsageCredentialType.JWT)
     ):
         raise OnyxError(
             OnyxErrorCode.UNAUTHENTICATED, "Sign in to manage MCP connections"

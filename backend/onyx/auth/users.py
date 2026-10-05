@@ -2263,9 +2263,11 @@ async def _resolve_optional_user(
 
     mcp_token = extract_mcp_oauth_bearer(request)
     if mcp_token is not None:
-        return await authenticate_mcp_oauth_request(
+        mcp_user = await authenticate_mcp_oauth_request(
             request, async_db_session, mcp_token
         )
+        await _maybe_refresh_oauth_tokens(mcp_user, async_db_session, user_manager)
+        return mcp_user
 
     if user is not None:
         request.state.usage_credential = UsageCredentialIdentity(
