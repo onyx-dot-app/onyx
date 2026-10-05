@@ -1858,15 +1858,47 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
             public_key=public_key,
         )
 
-    async def write_token(self, user: User) -> str:
+    def _decode_token(self, token: str) -> dict[str, Any] | None:
+        try:
+            return decode_jwt(
+                token,
+                self.decode_key,
+                self.token_audience,
+                algorithms=[self.algorithm],
+            )
+        except jwt.PyJWTError:
+            return None
+
+    def _verified_session_id(self, token: str, user: User) -> str | None:
+        data = self._decode_token(token)
+        if data is None or data.get("sub") != str(user.id):
+            return None
+
+        sid = data.get("sid")
+        if isinstance(sid, str) and sid:
+            return sid
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def get_session_id(self, token: str, user: User) -> str:
+        session_id = self._verified_session_id(token, user)
+        if session_id is None:
+            raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
+        return session_id
+
+    def _generate_token(self, user: User, session_id: str) -> str:
+        now = datetime.now(timezone.utc)
         data = {
             "sub": str(user.id),
             "aud": self.token_audience,
-            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "iat": int(now.timestamp()),
+            "sid": session_id,
         }
         return generate_jwt(
             data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm
         )
+
+    async def write_token(self, user: User) -> str:
+        return self._generate_token(user, secrets.token_urlsafe(32))
 
     async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
         # JWTs are stateless — nothing to invalidate server-side.
@@ -1879,11 +1911,14 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
 
     async def refresh_token(
         self,
-        token: Optional[str],  # noqa: ARG002
-        user: User,  # noqa: ARG002
+        token: Optional[str],
+        user: User,
     ) -> str:
         """Issue a fresh JWT with a new expiry."""
-        return await self.write_token(user)
+        session_id = self._verified_session_id(token, user) if token else None
+        if session_id is None:
+            return await self.write_token(user)
+        return self._generate_token(user, session_id)
 
 
 def get_redis_strategy() -> TenantAwareRedisStrategy:
@@ -2032,7 +2067,9 @@ fastapi_users = FastAPIUserWithRefreshRouter[User, uuid.UUID](
 # take care of that in `double_check_user` ourself. This is needed, since
 # we want the /me endpoint to still return a user even if they are not
 # yet verified, so that the frontend knows they exist
-optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
+optional_fastapi_current_user = fastapi_users.authenticator.current_user_token(
+    active=True, optional=True
+)
 
 
 _JWT_EMAIL_CLAIM_KEYS = ("email", "preferred_username", "upn")
@@ -2291,9 +2328,12 @@ async def _resolve_optional_user(
 async def optional_user(
     request: Request,
     async_db_session: AsyncSession = Depends(get_async_session),
-    user: User | None = Depends(optional_fastapi_current_user),
+    user_token: tuple[User | None, str | None] = Depends(optional_fastapi_current_user),
     user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
 ) -> AsyncGenerator[User | None, None]:
+    user, token = user_token
+    if user is not None and token is not None:
+        request.state.authenticated_session_token = token
     user = await _resolve_optional_user(
         request,
         async_db_session,
