@@ -5972,6 +5972,12 @@
             "placeholder": "Your Vercel AI Gateway base URL"
           }
         },
+        "atlasCloud": {
+          "apiBaseField": {
+            "description": "Use the Atlas Cloud endpoint, or paste a custom base URL.",
+            "placeholder": "Your Atlas Cloud base URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "With {appName} running in a container, use `host.docker.internal` in place of `localhost` to reach a service on your host.",

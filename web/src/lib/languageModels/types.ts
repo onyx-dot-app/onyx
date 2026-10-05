@@ -71,6 +71,7 @@ export enum LLMProviderName {
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   PORTKEY = "portkey",
   VERCEL_AI_GATEWAY = "vercel_ai_gateway",
+  ATLASCLOUD = "atlascloud",
   CUSTOM = "custom",
 }
 
@@ -306,6 +307,21 @@ export interface PortkeyFetchParams {
 }
 
 export interface PortkeyModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
+export interface AtlasCloudFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface AtlasCloudModelResponse {
   name: string;
   display_name: string;
   max_input_tokens: number | null;

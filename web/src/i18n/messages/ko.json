@@ -5972,6 +5972,12 @@
             "placeholder": "Vercel AI Gateway 기본 URL"
           }
         },
+        "atlasCloud": {
+          "apiBaseField": {
+            "description": "Atlas Cloud 엔드포인트를 사용하거나 사용자 지정 기본 URL을 붙여넣으세요.",
+            "placeholder": "Atlas Cloud 기본 URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "{appName}가 컨테이너에서 실행 중이면 호스트의 서비스에 연결할 때 `localhost` 대신 `host.docker.internal`을 사용하세요.",

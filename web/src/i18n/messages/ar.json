@@ -5972,6 +5972,12 @@
             "placeholder": "عنوان URL الأساسي لـ Vercel AI Gateway"
           }
         },
+        "atlasCloud": {
+          "apiBaseField": {
+            "description": "استخدم نقطة نهاية Atlas Cloud أو الصق عنوان URL أساسيًا مخصصًا.",
+            "placeholder": "عنوان URL الأساسي لـ Atlas Cloud"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "مع تشغيل {appName} في حاوية، استخدم `host.docker.internal` بدلًا من `localhost` للوصول إلى خدمة على مضيفك.",

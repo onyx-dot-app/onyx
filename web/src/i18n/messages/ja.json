@@ -5972,6 +5972,12 @@
             "placeholder": "Vercel AI Gateway のベース URL"
           }
         },
+        "atlasCloud": {
+          "apiBaseField": {
+            "description": "Atlas Cloud のエンドポイントを使用するか、カスタムのベース URL を貼り付けてください。",
+            "placeholder": "Atlas Cloud のベース URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "{appName} をコンテナで実行している場合、ホスト上のサービスに接続するには `localhost` の代わりに `host.docker.internal` を使用してください。",
