@@ -76,31 +76,130 @@ run "defaults_enforce_the_owasp_rule_sets_at_sensitivity_one" {
     condition = one([
       for r in google_compute_security_policy.this.rule :
       one(r.match).expr[0].expression if r.description == "OWASP CRS sqli"
-    ]) == "request.path != '/api/license/upload' && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
+    ]) == "!request.headers['content-type'].lower().startsWith('multipart/form-data') && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
     error_message = "The SQLi rule should evaluate sqli-v33-stable at sensitivity 1."
   }
 }
 
-run "the_license_upload_skips_the_waf_rules_but_not_the_rate_limits" {
+run "content_rule_sets_skip_multipart_uploads_only" {
   command = plan
 
   assert {
     condition = alltrue([
       for r in google_compute_security_policy.this.rule :
-      startswith(one(r.match).expr[0].expression, "request.path != '/api/license/upload' && evaluatePreconfiguredWaf(")
-      if r.priority >= 3000 && r.priority < 4000
+      startswith(one(r.match).expr[0].expression, "!request.headers['content-type'].lower().startsWith('multipart/form-data') && evaluatePreconfiguredWaf(")
+      if startswith(r.description, "OWASP CRS ") && !contains(["methodenforcement", "scannerdetection", "sessionfixation"], trimprefix(r.description, "OWASP CRS "))
     ])
-    error_message = "Every WAF rule should leave the license upload alone, because its multipart body trips the protocol attack signatures."
+    error_message = "Rule sets that read field values should skip multipart uploads, whose file content Cloud Armor reads as parameter names."
+  }
+
+  assert {
+    condition = alltrue([
+      for r in google_compute_security_policy.this.rule :
+      startswith(one(r.match).expr[0].expression, "evaluatePreconfiguredWaf(")
+      if contains(["methodenforcement", "scannerdetection", "sessionfixation"], trimprefix(r.description, "OWASP CRS "))
+    ])
+    error_message = "The untuned rule sets should check every request."
+  }
+}
+
+run "content_rule_sets_do_not_read_the_free_text_fields" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for r in google_compute_security_policy.this.rule :
+      length(one(r.preconfigured_waf_config).exclusion) == 1
+      && one(one(r.preconfigured_waf_config).exclusion).target_rule_set == "${trimprefix(r.description, "OWASP CRS ")}-v33-stable"
+      && one(one(r.preconfigured_waf_config).exclusion).target_rule_ids == null
+      && alltrue([for p in one(one(r.preconfigured_waf_config).exclusion).request_query_param : contains(["EQUALS", "STARTS_WITH"], p.operator)])
+      && length(one(one(r.preconfigured_waf_config).exclusion).request_query_param) > 30
+      if startswith(r.description, "OWASP CRS ") && !contains(["methodenforcement", "scannerdetection", "sessionfixation"], trimprefix(r.description, "OWASP CRS "))
+    ])
+    error_message = "Every content rule set should carry one exclusion for every signature, naming each uninspected field and prefix."
+  }
+
+  assert {
+    condition = alltrue([
+      for r in google_compute_security_policy.this.rule : length(r.preconfigured_waf_config) == 0
+      if !startswith(r.description, "OWASP CRS ") || contains(["methodenforcement", "scannerdetection", "sessionfixation"], trimprefix(r.description, "OWASP CRS "))
+    ])
+    error_message = "Only the content rule sets should carry exclusions."
+  }
+
+  assert {
+    condition = alltrue([
+      for f in [
+        { operator = "EQUALS", value = "message" },
+        { operator = "EQUALS", value = "password" },
+        { operator = "EQUALS", value = "api_base" },
+        { operator = "EQUALS", value = "scope" },
+        { operator = "EQUALS", value = "query" },
+        { operator = "STARTS_WITH", value = "connector_specific_config" },
+      ] :
+      contains(one([
+        for r in google_compute_security_policy.this.rule :
+        one(one(r.preconfigured_waf_config).exclusion).request_query_param if r.description == "OWASP CRS sqli"
+      ]), f)
+    ])
+    error_message = "The defaults should hold the fields measured to trip the signatures: chat text, passwords, URLs, the sign-in scope, search text, and the nested connector configuration."
+  }
+}
+
+run "extra_fields_join_the_defaults" {
+  command = plan
+
+  variables {
+    extra_uninspected_fields         = ["comment"]
+    extra_uninspected_field_prefixes = ["custom_config"]
+  }
+
+  assert {
+    condition = alltrue([
+      for r in google_compute_security_policy.this.rule :
+      contains(one(one(r.preconfigured_waf_config).exclusion).request_query_param, { operator = "EQUALS", value = "comment" })
+      && contains(one(one(r.preconfigured_waf_config).exclusion).request_query_param, { operator = "STARTS_WITH", value = "custom_config" })
+      && contains(one(one(r.preconfigured_waf_config).exclusion).request_query_param, { operator = "EQUALS", value = "message" })
+      if startswith(r.description, "OWASP CRS ") && !contains(["methodenforcement", "scannerdetection", "sessionfixation"], trimprefix(r.description, "OWASP CRS "))
+    ])
+    error_message = "Caller extras should be added to the defaults, not replace them."
+  }
+}
+
+run "a_rule_set_outside_the_defaults_is_tuned_too" {
+  command = plan
+
+  variables {
+    crs_version         = "v422"
+    preconfigured_rules = { generic = {} }
+  }
+
+  assert {
+    condition = startswith(one([
+      for r in google_compute_security_policy.this.rule : one(r.match).expr[0].expression if r.description == "OWASP CRS generic"
+    ]), "!request.headers['content-type'].lower().startsWith('multipart/form-data') && evaluatePreconfiguredWaf('generic-v422-stable'")
+    error_message = "Every rule set outside the untuned three should skip multipart uploads."
   }
 
   assert {
     condition = one([
       for r in google_compute_security_policy.this.rule :
-      one(r.match).expr[0].expression if r.priority == 5000
-    ]) == "request.path.startsWith('/api')"
-    error_message = "The API rate limit should still count the license upload."
+      one(one(r.preconfigured_waf_config).exclusion).target_rule_set if r.description == "OWASP CRS generic"
+    ]) == "generic-v422-stable"
+    error_message = "The exclusion should name the rule set of the chosen CRS version."
   }
 }
+
+run "rejects_a_field_name_that_is_not_a_parameter_name" {
+  command = plan
+
+  variables {
+    extra_uninspected_fields = ["a b"]
+  }
+
+  expect_failures = [var.extra_uninspected_fields]
+}
+
 
 run "rate_limits_mirror_the_aws_defaults" {
   command = plan
@@ -260,7 +359,7 @@ run "per_rule_settings_override_the_module_wide_ones" {
   assert {
     condition = one([
       for r in google_compute_security_policy.this.rule : one(r.match).expr[0].expression if r.description == "OWASP CRS sqli"
-    ]) == "request.path != '/api/license/upload' && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 2, 'opt_out_rule_ids': ['owasp-crs-v030301-id942421-sqli', 'owasp-crs-v030301-id942432-sqli']})"
+    ]) == "!request.headers['content-type'].lower().startsWith('multipart/form-data') && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 2, 'opt_out_rule_ids': ['owasp-crs-v030301-id942421-sqli', 'owasp-crs-v030301-id942432-sqli']})"
     error_message = "The SQLi rule should carry its own sensitivity and opt-outs."
   }
 
