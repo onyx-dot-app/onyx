@@ -471,16 +471,22 @@ async def test_old_access_token_stops_resolving_after_refresh_replay(
 
 
 @pytest.mark.asyncio(loop_scope="module")
-async def test_tampered_tenant_access_token_does_not_resolve(
+async def test_access_token_does_not_resolve_in_other_tenant(
     mcp_oauth_rows: _MCPOAuthRows,
 ) -> None:
     _, access_token, _, _ = mcp_oauth_rows.create_grant()
-    tampered_access_token = access_token.replace(
-        f"{get_current_tenant_id()}.", "wrong-tenant.", 1
-    )
 
-    assert tampered_access_token != access_token
-    assert await _resolve_access_token(tampered_access_token) is None
+    async with get_async_session_context_manager() as async_session:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("other_storage_tenant")
+        try:
+            resolved = await resolve_mcp_oauth_access_token(
+                async_session, access_token, resource=_RESOURCE
+            )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    assert resolved is None
+    assert await _resolve_access_token(access_token) is not None
 
 
 def test_create_grant_requires_user_api_key_permission(

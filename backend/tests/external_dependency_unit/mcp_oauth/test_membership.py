@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db import mcp_oauth
 from onyx.db.models import UserTenantMapping, UserTenantMappingOAuthAccount
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
 @pytest.fixture
@@ -111,7 +112,10 @@ def test_self_hosted_does_not_open_catalog(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(mcp_oauth, "get_catalog_session", unexpected_catalog)
     assert (
-        mcp_oauth.mcp_oauth_owner_is_member("public", "owner@example.com", []) is True
+        mcp_oauth.mcp_oauth_owner_is_member(
+            POSTGRES_DEFAULT_SCHEMA, "owner@example.com", []
+        )
+        is True
     )
-    assert mcp_oauth.mcp_oauth_tenant_has_members("public") is True
+    assert mcp_oauth.mcp_oauth_tenant_has_members(POSTGRES_DEFAULT_SCHEMA) is True
     assert mcp_oauth.mcp_oauth_tenant_has_members("tenant_other") is False
