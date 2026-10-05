@@ -50,10 +50,6 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
-from onyx.kg.models import KGException
-from onyx.kg.setup.kg_default_entity_definitions import (
-    populate_missing_default_entity_types__commit,
-)
 from onyx.llm.models import AnyThinkingBlock
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
