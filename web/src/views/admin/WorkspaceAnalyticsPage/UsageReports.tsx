@@ -196,6 +196,7 @@ function GenerateReportMenu({
           <div
             {...props}
             role="menuitem"
+            tabIndex={-1}
             ref={calendarRef}
             // Escape from a focused day closes the list.
             onKeyDown={(e) => {

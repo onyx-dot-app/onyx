@@ -272,6 +272,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                     <div
                       {...props}
                       role="menuitem"
+                      tabIndex={-1}
                       ref={iconGridRef}
                       className="grid grid-cols-4 gap-1"
                       // Escape from a focused icon closes the list.
