@@ -55,11 +55,14 @@ from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.models import (
+    AnthropicCountTokensRequest,
+    AnthropicMessagesRequest,
     ChatCompletionRequest,
     ChatCompletionResponse,
     ResponsesRequest,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.server.settings.models import Settings
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import get_current_trace
 
@@ -1218,6 +1221,121 @@ def test_list_models_rejects_non_gateway_credentials() -> None:
             db_session=cast(Session, MagicMock(spec=Session)),
         )
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def test_authorize_rejects_pat_flow_when_gateway_disabled() -> None:
+    """The workspace switch rejects PAT traffic even when the credential
+    would otherwise authorize."""
+    with (
+        patch.object(
+            gateway_api,
+            "load_settings",
+            MagicMock(return_value=Settings(llm_gateway_enabled=False)),
+        ),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api._authorize_gateway_request(
+            cast(Request, MagicMock(spec=Request)),
+            cast(User, MagicMock(spec=User)),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.FEATURE_DISABLED
+
+
+def test_authorize_allows_craft_flow_when_gateway_disabled() -> None:
+    """Craft sandbox traffic is governed by the Craft setting, not the
+    gateway switch."""
+    with (
+        patch.object(
+            gateway_api,
+            "load_settings",
+            MagicMock(return_value=Settings(llm_gateway_enabled=False)),
+        ),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.CRAFT_LLM_GENERATION),
+        ),
+    ):
+        flow = gateway_api._authorize_gateway_request(
+            cast(Request, MagicMock(spec=Request)),
+            cast(User, MagicMock(spec=User)),
+        )
+    assert flow is LLMFlow.CRAFT_LLM_GENERATION
+
+
+@pytest.mark.parametrize(
+    "endpoint,kwargs",
+    [
+        ("gateway_list_models", {}),
+        (
+            "gateway_chat_completions",
+            {
+                "request": ChatCompletionRequest(
+                    model="1/test",
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+            },
+        ),
+        (
+            "gateway_responses",
+            {
+                "request": ResponsesRequest(
+                    model="1/test",
+                    input=[{"type": "message", "role": "user", "content": "hi"}],
+                )
+            },
+        ),
+        (
+            "gateway_anthropic_messages",
+            {
+                "request": AnthropicMessagesRequest(
+                    model="1/test",
+                    max_tokens=1,
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+            },
+        ),
+        (
+            "gateway_anthropic_count_tokens",
+            {
+                "request": AnthropicCountTokensRequest(
+                    model="1/test",
+                    messages=[{"role": "user", "content": "hi"}],
+                )
+            },
+        ),
+    ],
+)
+def test_every_route_rejects_when_gateway_disabled(
+    endpoint: str, kwargs: dict[str, Any]
+) -> None:
+    with (
+        patch.object(
+            gateway_api,
+            "load_settings",
+            MagicMock(return_value=Settings(llm_gateway_enabled=False)),
+        ),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        getattr(  # ods: ignore[getattr] — parametrized endpoint dispatch
+            gateway_api, endpoint
+        )(
+            http_request=cast(Request, MagicMock(spec=Request)),
+            user=cast(User, MagicMock(spec=User)),
+            db_session=cast(Session, MagicMock(spec=Session)),
+            **kwargs,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.FEATURE_DISABLED
 
 
 def test_responses_input_instructions_become_system_message() -> None:

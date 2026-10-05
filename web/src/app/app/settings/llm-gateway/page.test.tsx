@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -62,5 +62,18 @@ describe("LLMGatewayPage", () => {
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith("/app/settings/general")
     );
+  });
+
+  it("shows the disabled notice instead of redirecting when an admin turned the gateway off", async () => {
+    mockUseSettings.mockReturnValue({
+      isLoading: false,
+      llm_gateway_enabled: false,
+    } as ReturnType<typeof useSettings>);
+
+    render(<LLMGatewayPage />);
+
+    expect(screen.queryByText("Gateway settings")).not.toBeInTheDocument();
+    expect(await screen.findByText("LLM Gateway is off")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
