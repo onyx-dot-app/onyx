@@ -1,12 +1,13 @@
 import hashlib
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
 from fastapi_users.jwt import generate_jwt
 
+from onyx.auth import users as users_module
 from onyx.auth.users import SingleTenantJWTStrategy
 from onyx.error_handling.exceptions import OnyxError
 
@@ -70,7 +71,17 @@ def _token_with_claims(
 
 
 @pytest.mark.asyncio
-async def test_write_token_adds_unique_session_id_even_in_same_second() -> None:
+async def test_write_token_adds_unique_session_id_even_in_same_second(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frozen = datetime.now(timezone.utc)
+
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> "_FrozenDatetime":  # noqa: ARG003
+            return cls.fromtimestamp(frozen.timestamp(), tz=timezone.utc)
+
+    monkeypatch.setattr(users_module, "datetime", _FrozenDatetime)
     strategy = _strategy()
     user = _user()
 
@@ -79,6 +90,7 @@ async def test_write_token_adds_unique_session_id_even_in_same_second() -> None:
 
     first_payload = _decode(first)
     second_payload = _decode(second)
+    assert first_payload["iat"] == second_payload["iat"]
     assert first_payload["sub"] == str(user.id)
     assert second_payload["sub"] == str(user.id)
     assert isinstance(first_payload["sid"], str)
