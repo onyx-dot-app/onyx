@@ -47,18 +47,19 @@ class _ScopeChange(BaseModel):
     removed_items: list[str] = []
 
 
-def _to_items(value: Any) -> list[str] | None:
-    """Normalizes a list, None, or comma-separated string into unique items,
-    in order. None for any other type.
+def _to_items(value: Any, split_on_commas: bool) -> list[str] | None:
+    """Normalizes a list, None, or string into unique items, in order. A
+    string is one item unless ``split_on_commas``. None for any other type.
 
     List entries are kept exactly, since connectors (e.g. Slack) match them
-    exactly. Only the pieces of a comma-separated string are stripped, and
-    blank pieces are dropped.
+    exactly. Only the pieces of a string are stripped, and blank pieces are
+    dropped.
     """
     if value is None:
         return []
     if isinstance(value, str):
-        pieces = (piece.strip() for piece in value.split(ITEM_SEPARATOR))
+        raw_pieces = value.split(ITEM_SEPARATOR) if split_on_commas else [value]
+        pieces = (piece.strip() for piece in raw_pieces)
         return list(dict.fromkeys(piece for piece in pieces if piece))
     if isinstance(value, list):
         return list(dict.fromkeys(str(item) for item in value))
@@ -110,8 +111,8 @@ def _scope_change(
             )
         )
 
-    old_items = _to_items(old_value)
-    new_items = _to_items(new_value)
+    old_items = _to_items(old_value, scope.split_on_commas)
+    new_items = _to_items(new_value, scope.split_on_commas)
     if old_items is None or new_items is None:
         logger.warning("Scope field %s is not a list, a string, or None", field_name)
         return _ScopeChange(direction=ScopeDirection.UNKNOWN)
@@ -276,11 +277,17 @@ def build_scoped_backfill_config(
         return None
 
     delta_config = dict(new_config)
-    delta_config[change.field_name] = (
-        ITEM_SEPARATOR.join(change.added_items)
-        if isinstance(new_config.get(change.field_name), str)
-        else change.added_items
-    )
+    new_value = new_config.get(change.field_name)
+    if isinstance(new_value, str):
+        # A one-item string keeps its exact value.
+        delta_config[change.field_name] = (
+            ITEM_SEPARATOR.join(change.added_items)
+            if policy.scope.split_on_commas
+            else new_value
+        )
+    else:
+        delta_config[change.field_name] = change.added_items
+
     if _validate(config_class, delta_config) is None:
         return None
     return delta_config

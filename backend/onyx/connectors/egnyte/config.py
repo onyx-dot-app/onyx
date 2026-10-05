@@ -9,6 +9,9 @@ class EgnyteConnectorConfig(ConnectorConfig):
     # Empty indexes from the root folder.
     folder_path: Annotated[
         str | None,
-        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=True, split_on_commas=False),
+        ),
     ] = None
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE

@@ -2,7 +2,6 @@ from typing import Annotated, Any, Self
 
 import pytest
 
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.config_diff import (
     ConfigFieldChange,
     build_field_policy_report,
@@ -437,8 +436,35 @@ def test_find_field_policy_gaps() -> None:
     assert gaps.scope_fields_without_descriptor == ["no_descriptor"]
 
 
-def test_worked_example_sources_have_complete_policies() -> None:
-    report = build_field_policy_report()
+def test_every_source_has_complete_policies() -> None:
+    # A new config field needs a FieldPolicy, and a SCOPE field a descriptor.
+    assert build_field_policy_report() == {}
 
-    assert DocumentSource.SLACK not in report
-    assert DocumentSource.GITHUB not in report
+
+class _PathConfig(ConnectorConfig):
+    folder_path: Annotated[
+        str | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=False, split_on_commas=False),
+        ),
+    ] = None
+
+
+def test_one_item_string_is_not_split_on_commas() -> None:
+    changes = classify_config_change(
+        _PathConfig, {"folder_path": "/a"}, {"folder_path": "/Q1, 2024"}
+    )
+
+    assert len(changes) == 1
+    assert changes[0].scope_direction == ScopeDirection.BOTH
+    assert changes[0].added_items == ["/Q1, 2024"]
+    assert changes[0].removed_items == ["/a"]
+
+
+def test_one_item_string_backfill_keeps_the_exact_value() -> None:
+    delta = build_scoped_backfill_config(
+        _PathConfig, {"folder_path": None}, {"folder_path": " /Q1, 2024"}
+    )
+
+    assert delta == {"folder_path": " /Q1, 2024"}

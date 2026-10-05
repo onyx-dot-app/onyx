@@ -12,5 +12,8 @@ class CodaConnectorConfig(ConnectorConfig):
     # A filter on the doc list; document ids do not hold it.
     workspace_id: Annotated[
         str | None,
-        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=True, split_on_commas=False),
+        ),
     ] = None

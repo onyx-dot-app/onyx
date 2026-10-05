@@ -41,11 +41,14 @@ class ScopeInclude:
 
     With ``empty_means_all``, an empty value fetches everything. With
     ``empty_list_means_none`` too, only None (or a blank string) fetches
-    everything, and an empty list fetches nothing.
+    everything, and an empty list fetches nothing. Set ``split_on_commas`` to
+    False for a string that holds one item which can contain commas (e.g. a
+    folder path).
     """
 
     empty_means_all: bool
     empty_list_means_none: bool = False
+    split_on_commas: bool = True
 
     def __post_init__(self) -> None:
         if self.empty_list_means_none and not self.empty_means_all:
@@ -54,7 +57,12 @@ class ScopeInclude:
 
 @dataclass(frozen=True)
 class ScopeExclude:
-    """Items to skip. Values are a list, None, or a comma-separated string."""
+    """Items to skip. Values are a list, None, or a comma-separated string.
+
+    ``split_on_commas`` works as on ``ScopeInclude``.
+    """
+
+    split_on_commas: bool = True
 
 
 @dataclass(frozen=True)
