@@ -280,6 +280,8 @@ def test_supported_reasoning_efforts(
         ("claude-opus-5-5", True),
         ("us.anthropic.claude-opus-5-5", True),
         ("claude-sonnet-5", False),
+        # Sonnet 5.5 rejects it too, Sonnet 5 does not.
+        ("us.anthropic.claude-sonnet-5-5", True),
         ("claude-opus-4-7", False),
         # Pre-adaptive Claude only thinks when the param asks for it.
         ("claude-3-7-sonnet", False),
@@ -312,7 +314,8 @@ def test_anthropic_identity_is_always_thinking(
 
 
 @pytest.mark.parametrize(
-    "model_name", ["claude-fable-5", "claude-mythos-5-1", "claude-opus-5-5"]
+    "model_name",
+    ["claude-fable-5", "claude-mythos-5-1", "claude-opus-5-5", "claude-sonnet-5-5"],
 )
 def test_always_thinking_models_offer_no_off(model_name: str) -> None:
     """Off would promise a saving these models never honor: they reject

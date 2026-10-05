@@ -658,7 +658,8 @@ def test_reasoning_off_disables_adaptive_thinking(
 
 
 @pytest.mark.parametrize(
-    "model_name", ["claude-fable-5", "claude-mythos-5-1", "claude-opus-5-5"]
+    "model_name",
+    ["claude-fable-5", "claude-mythos-5-1", "claude-opus-5-5", "claude-sonnet-5-5"],
 )
 def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> None:
     # These reject disabled thinking, so off lands on the least they accept

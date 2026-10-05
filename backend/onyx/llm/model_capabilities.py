@@ -590,8 +590,10 @@ _ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
 # "off" is not a level they can be asked for.
 _ANTHROPIC_ALWAYS_THINKING_TIERS = ("fable", "mythos")
 
-# Opus joins them from 5.5: it answers thinking.type=disabled with the same 400.
-_ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION = (5, 5)
+# Opus and Sonnet join them from 5.5: they answer thinking.type=disabled with
+# the same 400.
+_ANTHROPIC_ALWAYS_THINKING_FROM_VERSION_TIERS = ("opus", "sonnet")
+_ANTHROPIC_ALWAYS_THINKING_MIN_VERSION = (5, 5)
 
 
 def _normalize_anthropic_name(model_name: str) -> str | None:
@@ -683,10 +685,8 @@ def anthropic_thinking_is_always_on(model_name: str) -> bool:
         return False
     tier = _anthropic_tier(model_name)
     return tier in _ANTHROPIC_ALWAYS_THINKING_TIERS or (
-        tier == "opus"
-        and _anthropic_meets_version(
-            model_name, _ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION
-        )
+        tier in _ANTHROPIC_ALWAYS_THINKING_FROM_VERSION_TIERS
+        and _anthropic_meets_version(model_name, _ANTHROPIC_ALWAYS_THINKING_MIN_VERSION)
     )
 
 
