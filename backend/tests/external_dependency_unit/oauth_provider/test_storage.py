@@ -27,6 +27,7 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.oauth_provider import (
+    OAUTH_PROVIDER_ACCESS_LIFETIME,
     create_oauth_provider_grant__no_commit,
     get_oauth_provider_client,
     load_oauth_provider_refresh__no_commit,
@@ -228,6 +229,22 @@ def test_create_grant_stores_only_token_hashes(
     assert refresh_token not in token_hashes
     assert hash_pat(access_token) in token_hashes
     assert hash_pat(refresh_token) in token_hashes
+
+
+def test_access_only_grant_has_no_refresh_token(
+    db_session: Session, oauth_provider_rows: _OAuthProviderRows
+) -> None:
+    _, access_token, refresh_token, _ = oauth_provider_rows.create_grant(
+        issue_refresh=False
+    )
+
+    grant = _grant_for_access_token(db_session, access_token)
+    tokens = _tokens_for_grant(db_session, grant.id)
+    lifetime = grant.expires_at - grant.created_at
+
+    assert refresh_token is None
+    assert [token.kind for token in tokens] == ["access"]
+    assert lifetime == OAUTH_PROVIDER_ACCESS_LIFETIME
 
 
 def test_load_refresh_rejects_access_token(
@@ -644,7 +661,7 @@ def test_register_client_rejects_client_secret() -> None:
 
 
 def test_register_client_rejects_non_none_auth_method() -> None:
-    client_id = f"oauth-provider-storage-auth-method-{uuid4().hex}"
+    client_id = f"oauth-provider-auth-method-{uuid4().hex}"
 
     with pytest.raises(ValueError, match="Only public OAuth provider clients"):
         register_oauth_provider_client(
