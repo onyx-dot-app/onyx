@@ -10,7 +10,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.auth.mcp_oauth import hash_mcp_oauth_token
+from onyx.auth.pat import hash_pat
 from onyx.db.engine.async_sql_engine import (
     get_async_session_context_manager,
     reset_sqlalchemy_async_engine,
@@ -147,7 +147,7 @@ def _grant_for_access_token(db_session: Session, access_token: str) -> MCPOAuthG
     grant = db_session.scalar(
         select(MCPOAuthGrant)
         .join(MCPOAuthToken, MCPOAuthToken.grant_id == MCPOAuthGrant.id)
-        .where(MCPOAuthToken.token_hash == hash_mcp_oauth_token(access_token))
+        .where(MCPOAuthToken.token_hash == hash_pat(access_token))
     )
     assert grant is not None
     return grant
@@ -209,8 +209,8 @@ def test_create_grant_stores_only_token_hashes(
 
     assert access_token not in token_hashes
     assert refresh_token not in token_hashes
-    assert hash_mcp_oauth_token(access_token) in token_hashes
-    assert hash_mcp_oauth_token(refresh_token) in token_hashes
+    assert hash_pat(access_token) in token_hashes
+    assert hash_pat(refresh_token) in token_hashes
 
 
 def test_load_refresh_rejects_access_token(
@@ -420,7 +420,7 @@ async def test_expired_access_token_does_not_resolve(
     db_session: Session, mcp_oauth_rows: _MCPOAuthRows
 ) -> None:
     _, access_token, _, _ = mcp_oauth_rows.create_grant()
-    token = db_session.get(MCPOAuthToken, hash_mcp_oauth_token(access_token))
+    token = db_session.get(MCPOAuthToken, hash_pat(access_token))
     assert token is not None
     token.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
     db_session.commit()
@@ -455,7 +455,7 @@ def test_expired_refresh_token_does_not_rotate(
 ) -> None:
     _, _, refresh_token, client_id = mcp_oauth_rows.create_grant()
     assert refresh_token is not None
-    token = db_session.get(MCPOAuthToken, hash_mcp_oauth_token(refresh_token))
+    token = db_session.get(MCPOAuthToken, hash_pat(refresh_token))
     assert token is not None
     token.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
     db_session.commit()
@@ -652,9 +652,7 @@ def test_concurrent_refresh_rotation_revokes_family_after_double_use(
             load_session.commit()
         assert loaded is not None
         with get_session_with_current_tenant() as rotate_session:
-            preloaded_token = rotate_session.get(
-                MCPOAuthToken, hash_mcp_oauth_token(refresh_token)
-            )
+            preloaded_token = rotate_session.get(MCPOAuthToken, hash_pat(refresh_token))
             assert preloaded_token is not None
             barrier.wait()
             rotated = rotate_mcp_oauth_refresh__no_commit(

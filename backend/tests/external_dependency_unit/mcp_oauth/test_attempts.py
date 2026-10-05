@@ -8,7 +8,6 @@ from redis.asyncio import Redis
 
 from onyx.mcp_oauth import attempts
 from onyx.mcp_oauth.attempts import (
-    allow_mcp_oauth_request,
     bind_authorization_request,
     consume_authorization_code,
     consume_authorization_request,
@@ -413,7 +412,7 @@ async def test_random_handle_collision_fails_loudly(
     keys = attempts._request_keys(handle)
     assert keys is not None
     await redis_client.set(keys[0], "occupied", ex=60)
-    monkeypatch.setattr(attempts, "_new_handle", lambda: handle)
+    monkeypatch.setattr(attempts.secrets, "token_urlsafe", lambda _: handle)
     try:
         with pytest.raises(RuntimeError, match="collision"):
             await store_authorization_request(_authorization())
@@ -445,36 +444,3 @@ async def test_invalid_handles_do_not_touch_redis() -> None:
     )
     assert await get_authorization_code(bad_handle) is None
     assert await consume_authorization_code(bad_handle) is None
-
-
-async def test_rate_limit_counter_has_atomic_ttl(
-    redis_client: Redis, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    bucket = f"bucket-{uuid4().hex}"
-    window_seconds = 60
-    frozen_now = time.time()
-    monkeypatch.setattr(attempts.time, "time", lambda: frozen_now)
-    key = attempts._rate_key(bucket, window_seconds)
-    try:
-        assert await allow_mcp_oauth_request(
-            bucket, limit=2, window_seconds=window_seconds
-        )
-        assert await allow_mcp_oauth_request(
-            bucket, limit=2, window_seconds=window_seconds
-        )
-        assert not await allow_mcp_oauth_request(
-            bucket, limit=2, window_seconds=window_seconds
-        )
-
-        ttl = await redis_client.ttl(key)
-        assert 0 < ttl <= window_seconds
-    finally:
-        await redis_client.delete(key)
-
-
-async def test_rate_limit_rejects_invalid_limits() -> None:
-    bucket = f"bucket-{uuid4().hex}"
-    with pytest.raises(ValueError, match="positive"):
-        await allow_mcp_oauth_request(bucket, limit=0, window_seconds=60)
-    with pytest.raises(ValueError, match="positive"):
-        await allow_mcp_oauth_request(bucket, limit=1, window_seconds=0)

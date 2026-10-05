@@ -12,9 +12,9 @@ from onyx.auth.constants import (
 from onyx.auth.mcp_oauth import (
     MCPOAuthTokenKind,
     generate_mcp_oauth_token,
-    hash_mcp_oauth_token,
     parse_mcp_oauth_token,
 )
+from onyx.auth.pat import hash_pat
 
 _URLSAFE_SECRET_RE = re.compile(r"[A-Za-z0-9_-]{43}")
 
@@ -52,7 +52,7 @@ def test_generate_mcp_oauth_token_returns_unique_values() -> None:
 
 def test_hash_mcp_oauth_token_hashes_full_wire_token() -> None:
     token = generate_mcp_oauth_token("tenant", MCPOAuthTokenKind.ACCESS)
-    token_hash = hash_mcp_oauth_token(token)
+    token_hash = hash_pat(token)
 
     assert token_hash == hashlib.sha256(token.encode("utf-8")).hexdigest()
     assert token not in token_hash

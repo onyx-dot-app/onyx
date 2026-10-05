@@ -1,10 +1,9 @@
-from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from uuid import UUID
 
 from mcp.shared.auth import OAuthClientInformationFull
-from sqlalchemy import or_, select, tuple_, update
+from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,9 +12,9 @@ from sqlalchemy.orm import Session
 from onyx.auth.mcp_oauth import (
     MCPOAuthTokenKind,
     generate_mcp_oauth_token,
-    hash_mcp_oauth_token,
     parse_mcp_oauth_token,
 )
+from onyx.auth.pat import hash_pat
 from onyx.auth.permissions import has_global_permission
 from onyx.db.engine.shard_registry import ShardConfigurationError
 from onyx.db.engine.shard_routing import ShardLookupError
@@ -26,71 +25,17 @@ from onyx.db.models import (
     MCPOAuthGrant,
     MCPOAuthToken,
     User,
-    UserTenantMapping,
-    UserTenantMappingOAuthAccount,
 )
 from onyx.mcp_oauth.models import (
     MCPOAuthGrantInfo,
     MCPOAuthTokenInfo,
     MCPOAuthTokenPair,
 )
-from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 MCP_OAUTH_ACCESS_LIFETIME = timedelta(minutes=15)
 MCP_OAUTH_GRANT_LIFETIME = timedelta(days=30)
 MCP_OAUTH_STORAGE_ERRORS = (SQLAlchemyError, ShardConfigurationError, ShardLookupError)
-
-
-def mcp_oauth_tenant_has_members(tenant_id: str) -> bool:
-    if not MULTI_TENANT:
-        return tenant_id == POSTGRES_DEFAULT_SCHEMA
-    if tenant_id == POSTGRES_DEFAULT_SCHEMA:
-        return False
-    with get_catalog_session() as session:
-        return (
-            session.scalar(
-                select(UserTenantMapping.tenant_id)
-                .where(
-                    UserTenantMapping.tenant_id == tenant_id,
-                    UserTenantMapping.active.is_(True),
-                )
-                .limit(1)
-            )
-            is not None
-        )
-
-
-def mcp_oauth_owner_is_member(
-    tenant_id: str, email: str, identities: Sequence[tuple[str, str]]
-) -> bool:
-    if not MULTI_TENANT:
-        return tenant_id == POSTGRES_DEFAULT_SCHEMA
-    subject_membership = (
-        select(UserTenantMappingOAuthAccount.oauth_name)
-        .where(
-            UserTenantMappingOAuthAccount.tenant_id == UserTenantMapping.tenant_id,
-            UserTenantMappingOAuthAccount.email == UserTenantMapping.email,
-            tuple_(
-                UserTenantMappingOAuthAccount.oauth_name,
-                UserTenantMappingOAuthAccount.account_id,
-            ).in_(identities),
-        )
-        .exists()
-    )
-    with get_catalog_session() as session:
-        return (
-            session.scalar(
-                select(UserTenantMapping.tenant_id)
-                .where(
-                    UserTenantMapping.tenant_id == tenant_id,
-                    UserTenantMapping.active.is_(True),
-                    or_(UserTenantMapping.email == email.lower(), subject_membership),
-                )
-                .limit(1)
-            )
-            is not None
-        )
 
 
 def register_mcp_oauth_client(client: OAuthClientInformationFull) -> None:
@@ -152,7 +97,7 @@ def _issue_tokens(
     expires_at = min(now + MCP_OAUTH_ACCESS_LIFETIME, grant.expires_at)
     session.add(
         MCPOAuthToken(
-            token_hash=hash_mcp_oauth_token(access_token),
+            token_hash=hash_pat(access_token),
             grant_id=grant.id,
             kind="access",
             expires_at=expires_at,
@@ -165,7 +110,7 @@ def _issue_tokens(
         )
         session.add(
             MCPOAuthToken(
-                token_hash=hash_mcp_oauth_token(refresh_token),
+                token_hash=hash_pat(refresh_token),
                 grant_id=grant.id,
                 kind="refresh",
                 expires_at=grant.expires_at,
@@ -288,7 +233,7 @@ def rotate_mcp_oauth_refresh__no_commit(
     )
     if info is None:
         return None
-    token = session.get(MCPOAuthToken, hash_mcp_oauth_token(raw_token))
+    token = session.get(MCPOAuthToken, hash_pat(raw_token))
     grant = session.get(MCPOAuthGrant, info.grant.id)
     if token is None or grant is None:
         return None

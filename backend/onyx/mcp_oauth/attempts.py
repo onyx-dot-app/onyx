@@ -1,5 +1,4 @@
 import hashlib
-import json
 import math
 import re
 import secrets
@@ -25,7 +24,6 @@ _HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
 _KEY_PREFIX = f"{DEFAULT_REDIS_PREFIX}:mcp_oauth"
 _REQUEST_KEY_PREFIX = f"{_KEY_PREFIX}:request"
 _CODE_KEY_PREFIX = f"{_KEY_PREFIX}:code"
-_RATE_KEY_PREFIX = f"{_KEY_PREFIX}:rate"
 
 _CONSUME_REQUEST_SCRIPT = """
 if redis.call("GET", KEYS[2]) ~= ARGV[1] then
@@ -38,18 +36,6 @@ end
 redis.call("DEL", KEYS[1], KEYS[2])
 return pending
 """
-
-_RATE_LIMIT_SCRIPT = """
-local count = redis.call("INCR", KEYS[1])
-if count == 1 then
-  redis.call("EXPIRE", KEYS[1], ARGV[1])
-end
-return count <= tonumber(ARGV[2])
-"""
-
-
-def _new_handle() -> str:
-    return secrets.token_urlsafe(32)
 
 
 def _handle_digest(handle: str) -> str | None:
@@ -76,25 +62,19 @@ def _code_key(code: str) -> str | None:
     return f"{_CODE_KEY_PREFIX}:{{{digest}}}"
 
 
-def _rate_key(bucket: str, window_seconds: int) -> str:
-    digest = hashlib.sha256(bucket.encode("utf-8")).hexdigest()
-    window_id = int(time.time() // window_seconds)
-    return f"{_RATE_KEY_PREFIX}:{{{digest}}}:{window_id}"
-
-
 def _loads_model[T: BaseModel](raw: object, model_type: type[T]) -> T | None:
     if not isinstance(raw, (str, bytes, bytearray)):
         return None
     try:
-        return model_type.model_validate(json.loads(raw))
-    except (json.JSONDecodeError, TypeError, UnicodeDecodeError, ValidationError):
+        return model_type.model_validate_json(raw)
+    except ValidationError:
         return None
 
 
 async def store_authorization_request(
     authorization: PendingMCPOAuthAuthorization,
 ) -> str:
-    handle = _new_handle()
+    handle = secrets.token_urlsafe(32)
     pending_key, _ = _request_keys(handle) or (None, None)
     if pending_key is None:
         raise RuntimeError("Generated invalid MCP OAuth authorization handle")
@@ -143,7 +123,7 @@ async def bind_authorization_request(
         user_id=user_id,
         tenant_id=tenant_id,
         session_hash=session_hash,
-        csrf_token=_new_handle(),
+        csrf_token=secrets.token_urlsafe(32),
     )
     raw_binding = binding.model_dump_json()
     was_bound = await redis.set(
@@ -210,23 +190,13 @@ async def consume_authorization_request(
     return _loads_model(raw_pending, PendingMCPOAuthAuthorization)
 
 
-def _validate_code_expiry(expires_at: float) -> int:
-    now = time.time()
-    seconds_until_expiry = expires_at - now
+async def store_authorization_code(record: StoredMCPOAuthCode) -> str:
+    seconds_until_expiry = record.expires_at - time.time()
     if seconds_until_expiry <= 0:
         raise ValueError("MCP OAuth authorization code is already expired")
     if seconds_until_expiry > AUTHORIZATION_CODE_TTL_SECONDS:
         raise ValueError("MCP OAuth authorization code expiry exceeds maximum TTL")
-    return max(1, math.ceil(seconds_until_expiry))
-
-
-def _stored_code_is_active(record: StoredMCPOAuthCode) -> bool:
-    return record.expires_at > time.time()
-
-
-async def store_authorization_code(record: StoredMCPOAuthCode) -> str:
-    ttl_seconds = _validate_code_expiry(record.expires_at)
-    code = _new_handle()
+    code = secrets.token_urlsafe(32)
     key = _code_key(code)
     if key is None:
         raise RuntimeError("Generated invalid MCP OAuth authorization code")
@@ -235,7 +205,7 @@ async def store_authorization_code(record: StoredMCPOAuthCode) -> str:
     was_stored = await redis.set(
         key,
         record.model_dump_json(),
-        ex=ttl_seconds,
+        ex=max(1, math.ceil(seconds_until_expiry)),
         nx=True,
     )
     if not was_stored:
@@ -250,7 +220,7 @@ async def get_authorization_code(code: str) -> StoredMCPOAuthCode | None:
 
     redis = await get_async_redis_connection()
     record = _loads_model(await redis.get(key), StoredMCPOAuthCode)
-    if record is None or not _stored_code_is_active(record):
+    if record is None or record.expires_at <= time.time():
         return None
     return record
 
@@ -262,31 +232,6 @@ async def consume_authorization_code(code: str) -> StoredMCPOAuthCode | None:
 
     redis = await get_async_redis_connection()
     record = _loads_model(await redis.getdel(key), StoredMCPOAuthCode)
-    if record is None or not _stored_code_is_active(record):
+    if record is None or record.expires_at <= time.time():
         return None
     return record
-
-
-async def allow_mcp_oauth_request(
-    bucket: str,
-    *,
-    limit: int,
-    window_seconds: int,
-) -> bool:
-    if limit <= 0:
-        raise ValueError("MCP OAuth rate limit must be positive")
-    if window_seconds <= 0:
-        raise ValueError("MCP OAuth rate-limit window must be positive")
-
-    redis = await get_async_redis_connection()
-    allowed = await cast(
-        Awaitable[object],
-        redis.eval(
-            _RATE_LIMIT_SCRIPT,
-            1,
-            _rate_key(bucket, window_seconds),
-            str(window_seconds),
-            str(limit),
-        ),
-    )
-    return bool(allowed)

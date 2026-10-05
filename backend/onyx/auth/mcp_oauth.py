@@ -1,6 +1,5 @@
 """Pure helpers for MCP OAuth bearer token values."""
 
-import hashlib
 import re
 import secrets
 from enum import Enum
@@ -11,6 +10,7 @@ from onyx.auth.constants import (
     MCP_OAUTH_ACCESS_TOKEN_PREFIX,
     MCP_OAUTH_REFRESH_TOKEN_PREFIX,
 )
+from onyx.auth.pat import hash_pat
 
 _MCP_OAUTH_TENANT_PATTERN = r"[A-Za-z0-9_-]{1,63}"
 _MCP_OAUTH_SECRET_PATTERN = r"[A-Za-z0-9_-]{43}"
@@ -50,10 +50,6 @@ def generate_mcp_oauth_token(tenant_id: str, kind: MCPOAuthTokenKind) -> str:
     return f"{prefix}{tenant_id}.{secrets.token_urlsafe(32)}"
 
 
-def hash_mcp_oauth_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
 def parse_mcp_oauth_token(token: str) -> ParsedMCPOAuthToken | None:
     for kind, token_re in (
         (MCPOAuthTokenKind.ACCESS, _MCP_OAUTH_ACCESS_TOKEN_RE),
@@ -65,6 +61,6 @@ def parse_mcp_oauth_token(token: str) -> ParsedMCPOAuthToken | None:
         return ParsedMCPOAuthToken(
             tenant_id=match.group("tenant_id"),
             kind=kind,
-            token_hash=hash_mcp_oauth_token(token),
+            token_hash=hash_pat(token),
         )
     return None
