@@ -81,8 +81,6 @@ from shared_configs.model_server_models import (
     Embedding,
     EmbedRequest,
     EmbedResponse,
-    IntentRequest,
-    IntentResponse,
     RerankRequest,
     RerankResponse,
 )
@@ -1349,48 +1347,6 @@ class RerankingModel:
                 response.raise_for_status()
 
                 return RerankResponse(**response.json()).scores
-
-
-class QueryAnalysisModel:
-    def __init__(
-        self,
-        model_server_host: str = MODEL_SERVER_HOST,
-        model_server_port: int = MODEL_SERVER_PORT,
-        # Lean heavily towards not throwing out keywords
-        keyword_percent_threshold: float = 0.1,
-        # Lean towards semantic which is the default
-        semantic_percent_threshold: float = 0.4,
-    ) -> None:
-        model_server_url = build_model_server_url(model_server_host, model_server_port)
-        self.intent_server_endpoint = model_server_url + "/custom/query-analysis"
-        self.keyword_percent_threshold = keyword_percent_threshold
-        self.semantic_percent_threshold = semantic_percent_threshold
-
-    def predict(
-        self,
-        query: str,
-    ) -> tuple[bool, list[str]]:
-        intent_request = IntentRequest(
-            query=query,
-            keyword_percent_threshold=self.keyword_percent_threshold,
-            semantic_percent_threshold=self.semantic_percent_threshold,
-        )
-
-        with traced_llm_call(
-            flow=LLMFlow.INTENT_CLASSIFICATION,
-            model="query-analysis",
-            provider="model_server",
-        ):
-            response = requests.post(
-                self.intent_server_endpoint,
-                json=intent_request.model_dump(),
-                timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
-            )
-            response.raise_for_status()
-
-            response_model = IntentResponse(**response.json())
-
-        return response_model.is_keyword, response_model.keywords
 
 
 def warm_up_retry(
