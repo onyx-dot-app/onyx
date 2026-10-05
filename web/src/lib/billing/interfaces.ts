@@ -183,32 +183,3 @@ export function hasPaidSubscription(
 export function isLicenseValid(license: LicenseStatus): boolean {
   return license.has_license && license.status === "active";
 }
-
-// ----------------------------------------------------------------------------
-// Display Utilities
-// ----------------------------------------------------------------------------
-
-/**
- * Convert status string to human-readable display format.
- */
-export function statusToDisplay(status: string | null): string {
-  if (!status) return "Unknown";
-
-  switch (status) {
-    case "trialing":
-      return "Trialing";
-    case "active":
-      return "Active";
-    case "canceled":
-    case "cancelled":
-      return "Canceled";
-    case "past_due":
-      return "Past Due";
-    case "unpaid":
-      return "Unpaid";
-    case "expired":
-      return "Expired";
-    default:
-      return status.charAt(0).toUpperCase() + status.slice(1);
-  }
-}
