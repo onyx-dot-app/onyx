@@ -585,7 +585,7 @@ class MCPServerConnection(BaseModel):
     id: int
     name: str
     server_url: str
-    auth_type: MCPAuthenticationType
+    auth_type: MCPAuthenticationType | None
     transport: MCPTransport | None
     oauth_provider_mode: MCPOAuthProviderMode
     oauth_authorization_endpoint: str | None

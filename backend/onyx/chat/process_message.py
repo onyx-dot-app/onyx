@@ -1054,6 +1054,9 @@ def build_chat_turn(
         )
         simple_chat_history.insert(0, summary_simple)
 
+    # Capture before the processing fence so a failure here cannot leave it set.
+    tool_configuration = capture_persona_tool_configuration(persona)
+
     # ── Stop signal and processing status ────────────────────────────────────
     cache = get_cache_backend()
     reset_cancel_status(chat_session.id, cache)
@@ -1071,8 +1074,6 @@ def build_chat_turn(
         value=True,
         run_id=processing_run_id,
     )
-
-    tool_configuration = capture_persona_tool_configuration(persona)
 
     # Release any read transaction before the long-running LLM stream.
     # If commit fails here, reset the processing status before propagating —

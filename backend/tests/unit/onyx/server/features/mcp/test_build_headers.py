@@ -126,7 +126,6 @@ def test_no_auth_template_requires_user_substitutions() -> None:
     assert not disconnected.can_authenticate()
     assert connected.can_authenticate()
     assert connected.build_headers() == {"X-Gateway-Key": "gateway-secret"}
-    assert connected.build_headers() == {"X-Gateway-Key": "gateway-secret"}
 
 
 def test_api_token_template_without_placeholders_needs_no_user_config() -> None:

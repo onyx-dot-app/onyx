@@ -123,12 +123,13 @@ def _make_tool(
     input_schema: dict,
     tool_name: str = "aws___list_regions",
     server_name: str = "aws-knowledge",
+    auth_type: MCPAuthenticationType | None = MCPAuthenticationType.NONE,
 ) -> MCPTool:
     mcp_server = MCPServer(
         id=1,
         name=server_name,
         server_url="http://mcp.example",
-        auth_type=MCPAuthenticationType.NONE,
+        auth_type=auth_type,
         transport=None,
         oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
         oauth_authorization_endpoint=None,
@@ -142,6 +143,12 @@ def _make_tool(
         tool_description="List AWS regions",
         tool_definition=input_schema,
     )
+
+
+def test_server_without_auth_type_builds_tool() -> None:
+    tool = _make_tool({"type": "object"}, auth_type=None)
+
+    assert tool.mcp_server.auth_type is None
 
 
 class TestMCPToolDefinition:
