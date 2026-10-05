@@ -336,7 +336,17 @@ def test_contextual_rag_indexes_long_document_without_context_when_summary_fails
     assert all(chunk.chunk_context == "" for chunk in chunks)
 
 
-def _index_batch_with_handler(index_doc_batch_mock: Any, doc_ids: list[str]) -> Any:
+def _failed_ids(result: IndexingPipelineResult) -> list[str]:
+    ids: list[str] = []
+    for failure in result.failures:
+        assert failure.failed_document is not None
+        ids.append(failure.failed_document.document_id)
+    return ids
+
+
+def _index_batch_with_handler(
+    index_doc_batch_mock: Any, doc_ids: list[str]
+) -> IndexingPipelineResult:
     documents = [_make_doc(doc_id) for doc_id in doc_ids]
     with (
         patch(f"{_PATCH_PREFIX}.index_doc_batch", index_doc_batch_mock),
@@ -373,7 +383,7 @@ def test_batch_handler_fails_only_the_document_that_raises() -> None:
     assert result.new_docs == 2
     assert result.total_docs == 3
     assert result.total_chunks == 4
-    assert [f.failed_document.document_id for f in result.failures] == ["bad"]
+    assert _failed_ids(result) == ["bad"]
     assert result.failures[0].failure_message == "cannot index bad"
     # The batch once, then each document on its own.
     assert index_doc_batch_mock.call_count == 4
@@ -386,8 +396,60 @@ def test_batch_handler_does_not_retry_a_failed_document_push() -> None:
 
     result = _index_batch_with_handler(index_doc_batch_mock, ["a", "b"])
 
-    assert [f.failed_document.document_id for f in result.failures] == ["a", "b"]
+    assert _failed_ids(result) == ["a", "b"]
     assert index_doc_batch_mock.call_count == 1
+
+
+def test_index_batch_wraps_a_failed_document_push() -> None:
+    """A push that raises after the documents are written surfaces as a
+    DocumentPushFailure, so the handler does not retry per document."""
+    document = _make_doc("doc")
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[document],
+        id_to_boost_map={},
+    )
+    adapter.lock_context.return_value = _make_ctx()
+    adapter.prepare_enrichment.return_value = MagicMock(
+        doc_id_to_previous_chunk_cnt={}, doc_id_to_new_chunk_cnt={}
+    )
+    chunker = MagicMock()
+    chunker.chunk.return_value = []
+    embedding_result = MagicMock(successful_chunk_ids=[], connector_failures=[])
+    chunk_store = MagicMock()
+    chunk_store.stream.return_value = iter([])
+    embed_ctx = _make_ctx()
+    embed_ctx.__enter__ = MagicMock(return_value=(embedding_result, chunk_store))
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.embed_and_stream", return_value=embed_ctx),
+        patch(
+            f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
+            return_value=([MagicMock(document_id="doc", already_existed=False)], []),
+        ),
+        patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(
+            f"{_PATCH_PREFIX}._maybe_push_documents",
+            side_effect=RuntimeError("sink down"),
+        ),
+        pytest.raises(DocumentPushFailure, match="sink down"),
+    ):
+        index_doc_batch(
+            document_batch=[document],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+        )
 
 
 def test_batch_handler_does_not_retry_a_single_document_batch() -> None:
@@ -395,7 +457,7 @@ def test_batch_handler_does_not_retry_a_single_document_batch() -> None:
 
     result = _index_batch_with_handler(index_doc_batch_mock, ["bad"])
 
-    assert [f.failed_document.document_id for f in result.failures] == ["bad"]
+    assert _failed_ids(result) == ["bad"]
     assert index_doc_batch_mock.call_count == 1
 
 
