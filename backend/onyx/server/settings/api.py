@@ -124,6 +124,15 @@ def admin_patch_settings(
                 OnyxErrorCode.FEATURE_NOT_AVAILABLE,
                 "Chat history retention requires the Enterprise plan.",
             )
+        # The LLM gateway is Business+; keep the write gate aligned with the
+        # tier_gate middleware that rejects /api/gateway calls below it.
+        if merged.llm_gateway_enabled != existing.llm_gateway_enabled and (
+            not tier_at_least(current_tier, Tier.BUSINESS)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+                "The LLM gateway requires the Business or Enterprise plan.",
+            )
 
         store_settings(merged)
 
@@ -134,6 +143,15 @@ def admin_patch_settings(
                 actor=actor_from_user(current_user),
                 resource_type="settings",
                 extra={"craft_default_enabled": merged.craft_default_enabled},
+            )
+
+        if merged.llm_gateway_enabled != existing.llm_gateway_enabled:
+            emit_audit_event(
+                AuditAction.LLM_GATEWAY_ENABLED_CHANGE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(current_user),
+                resource_type="settings",
+                extra={"llm_gateway_enabled": merged.llm_gateway_enabled},
             )
 
         # Read back rather than returning `merged`, so the response matches what
