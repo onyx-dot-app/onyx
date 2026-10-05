@@ -51,7 +51,6 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
     DEFAULT_BOOST,
@@ -332,12 +331,6 @@ class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
 class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount", lazy="joined", cascade="all, delete-orphan"
-    )
-    # Legacy tombstone column: no longer read or written by application code.
-    # Kept nullable so a pure-code rollback keeps working.
-    role: Mapped[UserRole | None] = mapped_column(
-        Enum(UserRole, native_enum=False),
-        nullable=True,
     )
     account_type: Mapped[AccountType] = mapped_column(
         Enum(AccountType, native_enum=False),

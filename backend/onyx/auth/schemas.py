@@ -8,20 +8,6 @@ from typing_extensions import override
 from onyx.db.enums import AccountType
 
 
-class UserRole(str, Enum):
-    """Legacy tombstone: kept only as the column type for ``User.role``, which is never
-    read or written. Authorization lives in ``Permission``, classification in
-    ``AccountType``."""
-
-    LIMITED = "limited"
-    BASIC = "basic"
-    ADMIN = "admin"
-    CURATOR = "curator"
-    GLOBAL_CURATOR = "global_curator"
-    SLACK_USER = "slack_user"
-    EXT_PERM_USER = "ext_perm_user"
-
-
 class UserRead(schemas.BaseUser[uuid.UUID]):
     account_type: AccountType
 
