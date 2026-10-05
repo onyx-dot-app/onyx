@@ -97,7 +97,12 @@ def _allowlist() -> set[tuple[str, str]]:
 def _looks_like_path(token: str, top_dirs: set[str]) -> str | None:
     if any(c.isspace() for c in token):
         return None
-    path = token.split(":")[0].rstrip("/").rstrip(",").strip("()")
+    path = token.split(":")[0].rstrip("/").rstrip(",")
+    # Keep balanced parentheses: `(app)/index.tsx` is an Expo route group.
+    if path.startswith("(") and ")" not in path:
+        path = path[1:]
+    if path.endswith(")") and "(" not in path:
+        path = path[:-1]
     if path.startswith(("http", "/")):
         return None
     # A bare extension such as `.py` names a file type, not a file.
@@ -114,12 +119,22 @@ def _looks_like_path(token: str, top_dirs: set[str]) -> str | None:
 
 
 def _path_exists(
-    path: str, files: set[str], dirs: set[str], by_name: dict[str, list[str]]
+    path: str,
+    files: set[str],
+    dirs: set[str],
+    by_name: dict[str, list[str]],
+    top_dirs: set[str],
 ) -> bool:
     if any(root + path in files or root + path in dirs for root in PATH_ROOTS):
         return True
+    # A path from the repo root must match exactly; only short paths may match a suffix.
+    if path.split("/")[0] in top_dirs:
+        return False
     name = path.rsplit("/", 1)[-1]
-    return any(candidate.endswith(path) for candidate in by_name.get(name, []))
+    return any(
+        candidate == path or candidate.endswith("/" + path)
+        for candidate in by_name.get(name, [])
+    )
 
 
 def check() -> list[str]:
@@ -182,7 +197,7 @@ def check() -> list[str]:
                 path = _looks_like_path(token, top_dirs)
                 if path is None or (rel, token) in allowed:
                     continue
-                if not _path_exists(path, files, dirs, by_name):
+                if not _path_exists(path, files, dirs, by_name, top_dirs):
                     errors.append(
                         f"{rel}:{number}: `{token}` does not exist in the repo. "
                         "Update the reference, or add it to path-allowlist.txt if it is not a repo path."
