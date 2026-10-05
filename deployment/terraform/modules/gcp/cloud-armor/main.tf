@@ -12,7 +12,7 @@
 #   1000+  blocked ranges               deny(403)
 #   2000   outside the allowlist        deny(403)
 #   2100+  blocked countries            deny(403)
-#   3000+  preconfigured WAF rules      deny(403)
+#   3000+  preconfigured WAF rules      deny(403), except the license upload
 #   4000+  rate limit exempt ranges     allow, so they skip both limits
 #   5000   API path rate limit          throttle, deny(429)
 #   5100   global rate limit            throttle, deny(429)
@@ -28,6 +28,11 @@ locals {
   country_chunks = chunklist(var.geo_restriction_countries, 10)
 
   waf_rule_keys = sort(keys(var.preconfigured_rules))
+
+  # The WAF rules skip this path and the rate limits still count it. The body
+  # is a signed license in a multipart form, which the protocol attack
+  # signatures deny, and Onyx accepts it from an admin only.
+  license_upload_path = "/api/license/upload"
 
   waf_expressions = {
     for k, r in var.preconfigured_rules : k => format(
@@ -74,7 +79,7 @@ locals {
       description   = "OWASP CRS ${k}"
       preview       = coalesce(var.preconfigured_rules[k].preview, var.preview)
       src_ip_ranges = null
-      expression    = local.waf_expressions[k]
+      expression    = "request.path != '${local.license_upload_path}' && ${local.waf_expressions[k]}"
       rate_limit    = null
     }],
     [for i, chunk in local.exempt_chunks : {

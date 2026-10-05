@@ -285,7 +285,9 @@ object access and the narrow read that Onyx needs at startup.
 
 A backend security policy with the OWASP Core Rule Set at sensitivity 1, an API
 rate limit, a global rate limit and Adaptive Protection. It takes effect only on
-an L7 load balancer; see below.
+an L7 load balancer; see below. The WAF rules skip `/api/license/upload`,
+because its multipart body trips the protocol attack signatures. The rate
+limits still apply to it.
 
 ### `l7-ingress`
 
