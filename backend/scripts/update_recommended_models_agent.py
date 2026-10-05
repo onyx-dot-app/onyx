@@ -1,4 +1,4 @@
-"""Regenerate recommended-models.json with an OpenAI agent.
+"""Regenerate recommended-models.json with the OpenAI Responses API.
 
 Companion to update_recommended_models.py. That script applies hardcoded
 family regexes and keeps the newest match — so it happily recommends models a

@@ -1,5 +1,5 @@
 ### Regenerates backend/onyx/llm/well_known_providers/recommended-models.json
-### via an OpenAI agent (backend/scripts/update_recommended_models_agent.py)
+### via the OpenAI Responses API (backend/scripts/update_recommended_models_agent.py)
 ### and opens a reviewed PR when the model set changed. The file is live
 ### production config — deployments poll it from GitHub raw main — so changes
 ### always go through a human-reviewed PR, never a direct push.
@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       agent_model:
-        description: "OpenAI model for the agent call (default: gpt-6-luna)"
+        description: "OpenAI model for the Responses API call (default: gpt-6-luna)"
         required: false
         default: ""
   # Repair trigger: chat-test failure on the auto PR branch. Safe — the
