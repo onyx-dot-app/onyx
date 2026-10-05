@@ -671,9 +671,6 @@
       "webSearch": {
         "label": "웹 검색"
       },
-      "knowledgeGraph": {
-        "label": "지식 그래프 검색"
-      },
       "openUrl": {
         "label": "URL 열기"
       },

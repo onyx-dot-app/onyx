@@ -671,9 +671,6 @@
       "webSearch": {
         "label": "网络搜索"
       },
-      "knowledgeGraph": {
-        "label": "知识图谱搜索"
-      },
       "openUrl": {
         "label": "打开 URL"
       },

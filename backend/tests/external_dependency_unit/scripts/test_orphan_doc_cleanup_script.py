@@ -31,7 +31,6 @@ from onyx.document_index.opensearch.client import (
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.kg.models import KGStage
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.document_index.conftest import (
     EMBEDDING_DIM,
@@ -132,7 +131,6 @@ def _add_orphans(db_session: Session, doc_ids: list[str]) -> None:
             DBDocument(
                 id=doc_id,
                 semantic_id=doc_id,
-                kg_stage=KGStage.NOT_STARTED,
                 chunk_count=CHUNKS_PER_DOC,
             )
         )

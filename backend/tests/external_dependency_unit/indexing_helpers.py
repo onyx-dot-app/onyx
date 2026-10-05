@@ -32,7 +32,6 @@ from onyx.db.models import (
 from onyx.db.models import Document as DBDocument
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.file_store.file_store import get_default_file_store
-from onyx.kg.models import KGStage
 
 
 def make_doc(
@@ -260,7 +259,6 @@ def seed_cc_pair_documents(
             DBDocument(
                 id=doc_id,
                 semantic_id=doc_id,
-                kg_stage=KGStage.NOT_STARTED,
                 chunk_count=chunk_count,
             )
         )

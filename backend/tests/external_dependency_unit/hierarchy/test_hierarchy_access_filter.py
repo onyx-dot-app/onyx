@@ -29,7 +29,6 @@ from onyx.db.models import (
     UserGroup__CCPairDataAccess,
     UserGroup__ConnectorCredentialPair,
 )
-from onyx.kg.models import KGStage
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
@@ -174,7 +173,6 @@ def connector_access_seed(
         id=f"connector_private_document_{tag}",
         semantic_id=f"Connector Private Document {tag}",
         parent_hierarchy_node_id=None,
-        kg_stage=KGStage.NOT_STARTED,
     )
     group = UserGroup(name=f"hierarchy-access-group-{tag}")
     db_session.add_all([node, document, group])

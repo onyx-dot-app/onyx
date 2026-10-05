@@ -25,7 +25,6 @@ from onyx.connectors.models import HierarchyNode, SlimDocument
 from onyx.db.document import backfill_docs_created_at__no_commit
 from onyx.db.models import Document as DbDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.kg.models import KGStage
 
 _CREATED_AT = datetime(2021, 6, 1, tzinfo=timezone.utc)
 
@@ -74,7 +73,6 @@ def test_backfill_sets_created_at_and_bumps_last_modified(db_session: Session) -
         DbDocument(
             id=doc_id,
             semantic_id=doc_id,
-            kg_stage=KGStage.NOT_STARTED,
             chunk_count=2,
             doc_created_at=None,
             last_modified=old_modified,
@@ -102,7 +100,6 @@ def test_backfill_is_noop_when_value_unchanged(db_session: Session) -> None:
         DbDocument(
             id=doc_id,
             semantic_id=doc_id,
-            kg_stage=KGStage.NOT_STARTED,
             chunk_count=2,
             doc_created_at=_CREATED_AT,  # already set to the incoming value
         )
@@ -138,7 +135,6 @@ def test_backfill_skips_doc_without_chunk_count(db_session: Session) -> None:
         DbDocument(
             id=doc_id,
             semantic_id=doc_id,
-            kg_stage=KGStage.NOT_STARTED,
             chunk_count=None,
             doc_created_at=None,
             last_modified=old_modified,

@@ -30,7 +30,6 @@ from onyx.db.port_orphan_candidate import (
     port_target_settings_id,
     record_port_orphan_candidates_for_document,
 )
-from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import MetadataUpdateRequest
@@ -240,11 +239,6 @@ def document_by_cc_pair_cleanup_task(
         # Phase 3: write back to PG in a fresh transaction.
         if action == DocumentCleanupAction.DELETE:
             with get_session_with_current_tenant() as db_session:
-                delete_document_references_from_kg(
-                    db_session=db_session,
-                    document_id=document_id,
-                )
-
                 delete_documents_complete(
                     db_session=db_session,
                     document_ids=[document_id],

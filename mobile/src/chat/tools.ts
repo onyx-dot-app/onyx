@@ -8,7 +8,6 @@ import SvgImage from "@/icons/image";
 import SvgTerminalSmall from "@/icons/terminal-small";
 import SvgLink from "@/icons/link";
 import SvgCpu from "@/icons/cpu";
-import SvgServer from "@/icons/server";
 
 export interface ToolSnapshot {
   id: number;
@@ -30,7 +29,6 @@ export const IMAGE_GENERATION_TOOL_ID = "ImageGenerationTool";
 export const PYTHON_TOOL_ID = "PythonTool";
 export const OPEN_URL_TOOL_ID = "OpenURLTool";
 export const CODING_AGENT_TOOL_ID = "CodingAgentTool";
-export const KNOWLEDGE_GRAPH_TOOL_ID = "KnowledgeGraphTool";
 // Always hidden from the actions list (it isn't a user-selectable action).
 export const FILE_READER_TOOL_ID = "FileReaderTool";
 
@@ -41,7 +39,6 @@ const TOOL_ICONS: Record<string, IconFunctionComponent> = {
   [PYTHON_TOOL_ID]: SvgTerminalSmall,
   [OPEN_URL_TOOL_ID]: SvgLink,
   [CODING_AGENT_TOOL_ID]: SvgCpu,
-  [KNOWLEDGE_GRAPH_TOOL_ID]: SvgServer,
 };
 
 // Falls back to the cpu glyph for custom/unknown tools, matching web's getIconForAction catch-all

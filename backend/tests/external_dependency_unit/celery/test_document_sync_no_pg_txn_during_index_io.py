@@ -32,7 +32,6 @@ from onyx.document_index.interfaces import SecondaryIndexDocumentMissingError
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchIndexPair,
 )
-from onyx.kg.models import KGStage
 from shared_configs.configs import (
     POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE as TEST_TENANT_ID,
 )
@@ -51,7 +50,6 @@ def stale_document(
         DbDocument(
             id=doc_id,
             semantic_id=doc_id,
-            kg_stage=KGStage.NOT_STARTED,
             chunk_count=1,
             last_modified=_LAST_MODIFIED,
             last_synced=None,

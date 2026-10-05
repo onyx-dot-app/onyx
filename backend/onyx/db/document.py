@@ -36,10 +36,6 @@ from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document_access import apply_document_access_filter
-from onyx.db.entities import (
-    delete_from_kg_entities__no_commit,
-    delete_from_kg_entities_extraction_staging__no_commit,
-)
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
 from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
@@ -52,15 +48,10 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.models import Document as DbDocument
-from onyx.db.relationships import (
-    delete_from_kg_relationships__no_commit,
-    delete_from_kg_relationships_extraction_staging__no_commit,
-)
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.file_store.staging import delete_files_best_effort
-from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 
@@ -1031,7 +1022,6 @@ def upsert_documents(
                     last_modified=datetime.now(timezone.utc),
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
-                    kg_stage=KGStage.NOT_STARTED,
                     parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
                     **(
                         {
@@ -1493,29 +1483,7 @@ def delete_documents_complete__no_commit(
 ) -> None:
     """This completely deletes the documents from the db, including all foreign key relationships"""
 
-    # Start with the kg references
-
-    delete_from_kg_relationships__no_commit(
-        db_session=db_session,
-        document_ids=document_ids,
-    )
-
-    delete_from_kg_entities__no_commit(
-        db_session=db_session,
-        document_ids=document_ids,
-    )
-
-    delete_from_kg_relationships_extraction_staging__no_commit(
-        db_session=db_session,
-        document_ids=document_ids,
-    )
-
-    delete_from_kg_entities_extraction_staging__no_commit(
-        db_session=db_session,
-        document_ids=document_ids,
-    )
-
-    # Continue with deleting the chunk stats for the documents
+    # Delete the chunk stats for the documents
     delete_chunk_stats_by_connector_credential_pair__no_commit(
         db_session=db_session,
         document_ids=document_ids,
@@ -1832,31 +1800,6 @@ def fetch_chunk_count_for_document(
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def reset_all_document_kg_stages(db_session: Session) -> int:
-    """Reset the KG stage of all documents that are not in NOT_STARTED state to NOT_STARTED.
-
-    Args:
-        db_session (Session): The database session to use
-
-    Returns:
-        int: Number of documents that were reset
-    """
-    stmt = (
-        update(DbDocument)
-        .where(DbDocument.kg_stage != KGStage.NOT_STARTED)
-        .values(kg_stage=KGStage.NOT_STARTED)
-    )
-    result = db_session.execute(stmt)
-
-    # The hasattr check is needed for type checking, even though rowcount
-    # is guaranteed to exist at runtime for UPDATE operations
-    return (
-        result.rowcount  # ty: ignore[invalid-return-type]
-        if hasattr(result, "rowcount")
-        else 0
-    )
-
-
 def update_document_metadata__no_commit(
     db_session: Session,
     document_id: str,
@@ -1888,7 +1831,7 @@ def delete_document_by_id__no_commit(
     Note: Does not commit. Caller is responsible for committing.
 
     This uses delete_documents_complete__no_commit which handles
-    all foreign key relationships (KG entities, relationships, chunk stats,
-    cc pair associations, feedback, tags).
+    all foreign key relationships (chunk stats, cc pair associations,
+    feedback, tags).
     """
     delete_documents_complete__no_commit(db_session, [document_id])

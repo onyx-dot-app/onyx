@@ -7,14 +7,12 @@ import {
   FILE_READER_TOOL_ID,
   getIconForToolId,
   hasSearchToolsAvailable,
-  KNOWLEDGE_GRAPH_TOOL_ID,
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
   type ToolSnapshot,
 } from "@/chat/tools";
 import SvgCpu from "@/icons/cpu";
 import SvgSearch from "@/icons/search";
-import SvgServer from "@/icons/server";
 
 function tool(over: Partial<ToolSnapshot> & { id: number }): ToolSnapshot {
   return {
@@ -81,7 +79,6 @@ describe("displayableTools", () => {
 describe("getIconForToolId", () => {
   it("maps known in-code tools to their web-parity icons", () => {
     expect(getIconForToolId(SEARCH_TOOL_ID)).toBe(SvgSearch);
-    expect(getIconForToolId(KNOWLEDGE_GRAPH_TOOL_ID)).toBe(SvgServer);
   });
 
   it("falls back to the cpu glyph for custom/unknown tools (matches web)", () => {

@@ -671,9 +671,6 @@
       "webSearch": {
         "label": "البحث في الويب"
       },
-      "knowledgeGraph": {
-        "label": "البحث في مخطط المعرفة"
-      },
       "openUrl": {
         "label": "فتح رابط"
       },

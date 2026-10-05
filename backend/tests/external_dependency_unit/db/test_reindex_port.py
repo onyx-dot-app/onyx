@@ -104,7 +104,6 @@ from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
-from onyx.kg.models import KGStage
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -214,9 +213,7 @@ def test_mark_secondary_pending_then_synced_clears_it(
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     doc_id = "test-secondary-pending-doc"
-    db_session.add(
-        DbDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
-    )
+    db_session.add(DbDocument(id=doc_id, semantic_id=doc_id))
     db_session.commit()
     try:
         mark_document_as_modified(doc_id, db_session)  # needs-sync

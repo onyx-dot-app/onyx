@@ -187,8 +187,7 @@ def _persist_hierarchy_nodes(
     """Mirror the docfetching hierarchy upsert path for the targeted
     reindex flow. Without this, ancestor folders/spaces yielded by a
     Resolver during reindex would never land in Postgres or the redis
-    cache, so KG ancestor lookups for newly-reindexed docs would fall
-    back to "source-type root" until the next full crawl.
+    cache until the next full crawl.
     """
     sanitized = sanitize_hierarchy_nodes_for_postgres(nodes)
     upserted = persist_hierarchy_nodes_for_cc_pair(

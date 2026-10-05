@@ -155,32 +155,6 @@ def test_parity_catches_a_dropped_trigger(shard: str, clone: str) -> None:
     assert any(trigger.tgname in difference for difference in differences)
 
 
-def test_parity_ignores_the_migration_date_seed(shard: str, clone: str) -> None:
-    # The knowledge graph config is seeded with the migration's run date.
-    with get_engine_for_shard(shard).begin() as connection:
-        connection.execute(
-            text(
-                f'UPDATE "{clone}".key_value_store '
-                "SET value = jsonb_set(value, '{KG_COVERAGE_START}', '\"2000-01-01\"') "
-                "WHERE key = 'kg_config'"
-            )
-        )
-
-    assert tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA) == []
-
-    # Only the dated field is dropped: any other setting still has to match.
-    with get_engine_for_shard(shard).begin() as connection:
-        connection.execute(
-            text(
-                f'UPDATE "{clone}".key_value_store '
-                "SET value = jsonb_set(value, '{KG_ENABLED}', 'true') "
-                "WHERE key = 'kg_config'"
-            )
-        )
-    differences = tenant_snapshot.compare_schemas(shard, clone, TENANT_TEMPLATE_SCHEMA)
-    assert any(difference.startswith("key_value_store: ") for difference in differences)
-
-
 def test_parity_catches_a_missing_row(shard: str, clone: str) -> None:
     with get_engine_for_shard(shard).begin() as connection:
         connection.execute(

@@ -671,9 +671,6 @@
       "webSearch": {
         "label": "Pesquisa na web"
       },
-      "knowledgeGraph": {
-        "label": "Pesquisa no grafo de conhecimento"
-      },
       "openUrl": {
         "label": "Abrir URL"
       },

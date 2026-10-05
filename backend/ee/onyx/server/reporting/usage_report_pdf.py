@@ -593,8 +593,8 @@ def render_usage_report_pdf(data: UsageReportData, branding: ReportBranding) -> 
         story += _section(
             "System spend by flow",
             "System usage is LLM activity that Onyx runs in the background "
-            "rather than for a specific user. Examples include image summaries, "
-            "contextual RAG processing, and knowledge graph extraction.",
+            "rather than for a specific user. Examples include image summaries "
+            "and contextual RAG processing.",
             styles,
         )
         story += [_spend_table("Flow", data.system_by_flow)]

@@ -14,7 +14,6 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Document as DBDocument
-from onyx.kg.models import KGStage
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     _resolve_urls_to_document_ids,
 )
@@ -40,7 +39,6 @@ def _seed_doc(db_session: Session, tracker: list[str], doc_id: str) -> None:
     doc = DBDocument(
         id=doc_id,
         semantic_id=f"semantic-{doc_id}",
-        kg_stage=KGStage.NOT_STARTED,
     )
     db_session.add(doc)
     db_session.commit()

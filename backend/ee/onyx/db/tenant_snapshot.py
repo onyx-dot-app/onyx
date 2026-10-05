@@ -42,8 +42,6 @@ from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
-from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.sql.selectable import TableClause
 
 from onyx.configs.app_configs import AWS_REGION_NAME, DB_READONLY_USER, USE_IAM_AUTH
 from onyx.configs.constants import SSL_CERT_FILE
@@ -92,12 +90,6 @@ _LIBPQ_SSL_ENV = {
 # timestamps, encrypted blobs (a random salt per write) and generated ids.
 _UNCOMPARED_COLUMN_TYPES = (DateTime, LargeBinary, Uuid)
 _DIFF_LINES_REPORTED = 60
-# Seeded rows with one JSON field set to the migration's run date, so clone and
-# fresh schema differ by day. Only that field is dropped before comparing.
-# Table to (key column, key value, JSON column, dated field).
-_RUN_DATE_SEEDED_FIELDS = {
-    "key_value_store": ("key", "kg_config", "value", "KG_COVERAGE_START")
-}
 # Postgres deparses a varchar list in a CHECK or partial index either as an array
 # of casts or as a cast of an array, flipping form on every re-parse. Same
 # constraint, so both spellings compare as one.
@@ -675,7 +667,7 @@ def check_snapshot_parity(shard_name: str, dump: str) -> list[str]:
 def compare_schemas(shard_name: str, left: str, right: str) -> list[str]:
     """Structure must match catalog line for line after name and array-cast
     normalisation. Rows must match in count and, outside the excluded columns
-    and the dated seed field, in content."""
+    in content."""
     differences = _structure_differences(shard_name, left, right)
     with get_engine_for_shard(shard_name).connect() as connection:
         differences.extend(_row_differences(connection, left, right))
@@ -758,7 +750,7 @@ def _row_digest(
     # A row constructor keeps NULL positions, so a NULL moving between columns
     # still differs.
     row_text = cast(
-        tuple_(*(_compared_value(source, name) for name in columns)),
+        tuple_(*(source.c[name] for name in columns)),
         Text,
     ).label("row_text")
     rows = select(row_text).select_from(source).subquery()
@@ -772,17 +764,6 @@ def _row_digest(
     )
     row = connection.execute(select(func.count(), digest).select_from(rows)).one()
     return int(row[0]), str(row[1])
-
-
-def _compared_value(source: TableClause, name: str) -> ColumnElement:
-    seeded = _RUN_DATE_SEEDED_FIELDS.get(source.name)
-    if seeded is None or name != seeded[2]:
-        return source.c[name]
-    key_column, key_value, _, dated_field = seeded
-    return case(
-        (source.c[key_column] == key_value, source.c[name].op("-")(dated_field)),
-        else_=source.c[name],
-    )
 
 
 def _migrate_empty_schema(shard_name: str, schema: str) -> None:

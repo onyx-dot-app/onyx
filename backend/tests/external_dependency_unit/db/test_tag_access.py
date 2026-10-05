@@ -15,7 +15,6 @@ from onyx.db.models import (
     Tag,
     User,
 )
-from onyx.kg.models import KGStage
 from onyx.server.query_and_chat.query_backend import get_tags
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
@@ -48,7 +47,6 @@ def test_tags_require_document_access(
     document = Document(
         id=prefix,
         semantic_id=prefix,
-        kg_stage=KGStage.NOT_STARTED,
         is_public=access == "public",
         external_user_emails=[tag_user.email] if access == "email" else [],
         external_user_group_ids=[prefix] if access == "external_group" else [],
@@ -112,9 +110,7 @@ def test_tag_prefix_wildcards_are_literal(
 ) -> None:
     pair = make_cc_pair(db_session, commit=False)
     pair.access_type = AccessType.PUBLIC
-    document = Document(
-        id=uuid4().hex, semantic_id="prefix", kg_stage=KGStage.NOT_STARTED
-    )
+    document = Document(id=uuid4().hex, semantic_id="prefix")
     tag = Tag(tag_key="key", tag_value="value", source=DocumentSource.MOCK_CONNECTOR)
     db_session.add_all([document, tag])
     db_session.flush()
@@ -148,7 +144,7 @@ def test_valid_tags_limit_is_bounded(
     prefix = uuid4().hex
     pair = make_cc_pair(db_session, commit=False)
     pair.access_type = AccessType.PUBLIC
-    document = Document(id=prefix, semantic_id=prefix, kg_stage=KGStage.NOT_STARTED)
+    document = Document(id=prefix, semantic_id=prefix)
     tags = [
         Tag(tag_key=prefix, tag_value=str(i), source=DocumentSource.MOCK_CONNECTOR)
         for i in range(105)

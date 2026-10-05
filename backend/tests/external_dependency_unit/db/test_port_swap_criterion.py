@@ -72,7 +72,6 @@ from onyx.db.swap_index import (
     check_and_perform_index_swap,
 )
 from onyx.db.user_file import PortedUserScope, sample_ported_user_file_ids
-from onyx.kg.models import KGStage
 from onyx.redis.redis_pool import get_redis_client
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
@@ -222,9 +221,7 @@ def test_port_swap_blocks_on_pending_sync_backlog(
     # gate fails. The count JOINs through DocumentByConnectorCredentialPair, so the
     # doc must be linked to the cc_pair or it's invisible to the query.
     doc_id = f"{_PENDING_DOC_PREFIX}pending"
-    db_session.add(
-        DbDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
-    )
+    db_session.add(DbDocument(id=doc_id, semantic_id=doc_id))
     db_session.flush()
     db_session.add(
         DocumentByConnectorCredentialPair(

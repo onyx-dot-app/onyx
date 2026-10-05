@@ -30,7 +30,6 @@ from onyx.db.models import (
     DocumentByConnectorCredentialPair,
 )
 from onyx.indexing.indexing_pipeline import _upsert_documents_in_db
-from onyx.kg.models import KGStage
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 TEST_METADATA_KEY = "permission-owner"
@@ -182,7 +181,6 @@ def _add_document_with_onedrive_acl(
         Document(
             id=document_id,
             semantic_id=document_id,
-            kg_stage=KGStage.NOT_STARTED,
             external_user_emails=[],
             external_user_group_ids=[
                 build_ext_group_name_for_onyx("onedrive", DocumentSource.ONEDRIVE)
@@ -258,7 +256,6 @@ def test_document_sources_follow_relationship_rows_and_add_marks_stale(
     document = Document(
         id=document_id,
         semantic_id=document_id,
-        kg_stage=KGStage.NOT_STARTED,
         chunk_count=1,
         last_modified=old_modified,
     )
@@ -419,7 +416,6 @@ def test_sharepoint_never_overwrites_indexed_onedrive_permissions(
     document = Document(
         id=document_id,
         semantic_id=document_id,
-        kg_stage=KGStage.NOT_STARTED,
     )
     db_session.add(document)
     db_session.flush()
@@ -766,7 +762,6 @@ def test_document_lock_prevents_concurrent_sharepoint_final_write(
     document = Document(
         id=document_id,
         semantic_id=document_id,
-        kg_stage=KGStage.NOT_STARTED,
     )
     db_session.add(document)
     db_session.flush()

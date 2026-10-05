@@ -23,7 +23,6 @@ from onyx.context.search.models import InferenceChunk, InferenceSection
 from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.document import get_document_id_to_file_id_map
 from onyx.db.models import Document as DBDocument
-from onyx.kg.models import KGStage
 
 
 @pytest.fixture
@@ -56,7 +55,6 @@ def _seed_doc(
     doc = DBDocument(
         id=doc_id,
         semantic_id=f"semantic-{doc_id}",
-        kg_stage=KGStage.NOT_STARTED,
         file_id=file_id,
     )
     db_session.add(doc)

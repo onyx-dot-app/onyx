@@ -33,7 +33,6 @@ from onyx.db.port_attempt import (
     mark_port_in_progress,
     mark_port_succeeded,
 )
-from onyx.kg.models import KGStage
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair_and_future,
     make_cc_pair,
@@ -57,9 +56,7 @@ def cc_pair_and_future(
 
 
 def _make_doc(db_session: Session, doc_id: str) -> None:
-    db_session.add(
-        DbDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
-    )
+    db_session.add(DbDocument(id=doc_id, semantic_id=doc_id))
     db_session.commit()
     mark_document_as_modified(doc_id, db_session)  # needs_sync
 
