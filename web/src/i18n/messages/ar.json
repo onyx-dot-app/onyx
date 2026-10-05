@@ -8362,6 +8362,31 @@
           "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك."
         }
       }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM Gateway",
+        "description": "تحكّم في الوصول المباشر عبر API إلى نماذج اللغة الخاصة بمساحة العمل من الأدوات الخارجية."
+      },
+      "access": {
+        "title": "الوصول المباشر إلى واجهة API للنماذج",
+        "description": "اسمح للمستخدمين باستدعاء نماذج اللغة الخاصة بمساحة العمل من أدوات خارجية مثل Claude Code أو Cursor. تستخدم الاستدعاءات رموز وصول محددة النطاق، وتُحتسب تكلفتها على المزوّدين الذين أعددتهم.",
+        "toggle": {
+          "title": "تفعيل LLM Gateway",
+          "description": "عند الإيقاف، ترفض كل نقاط نهاية البوابة الطلبات، وتتوقف الرموز الحالية عن العمل، ويُخفى نطاق البوابة من أداة اختيار الرموز. تتحكم إعدادات Craft بحركة بيئة Craft المعزولة بشكل منفصل."
+        }
+      },
+      "businessPlanTag": {
+        "label": "خطة Business"
+      },
+      "tierTooltip": "تتطلب LLM Gateway خطة Business أو Enterprise.",
+      "scopeNote": {
+        "title": "يُعدّ كل مستخدم رمزه وتفاصيل الاتصال الخاصة به من الإعدادات ← LLM Gateway."
+      },
+      "toasts": {
+        "settingsUpdated": "تم تحديث الإعدادات",
+        "settingsUpdateFailed": "فشل تحديث الإعدادات"
+      }
     }
   },
   "agents": {
@@ -13162,6 +13187,10 @@
       "url": {
         "description": "استخدم عنوان URL الأساسي هذا مع عملاء OpenAI وAnthropic المتوافقين.",
         "title": "عنوان URL للبوابة"
+      },
+      "adminDisabled": {
+        "description": "أوقف أحد المسؤولين LLM Gateway لمساحة العمل هذه. تواصل مع مسؤول لإعادة تشغيلها.",
+        "title": "LLM Gateway متوقفة"
       }
     },
     "language": {
@@ -13490,6 +13519,9 @@
         },
         "webSearch": {
           "label": "البحث في الويب"
+        },
+        "llmGateway": {
+          "label": "LLM Gateway"
         }
       },
       "sections": {
