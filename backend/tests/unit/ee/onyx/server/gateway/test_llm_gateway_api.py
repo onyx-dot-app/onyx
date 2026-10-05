@@ -26,11 +26,11 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import (
     AssistantMessage,
     ChatCompletionMessage,
+    RequestFunctionCall,
     SystemMessage,
     ToolCall,
     UserMessage,
 )
-from onyx.llm.model_request import RequestFunctionCall as ToolFunctionCall
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     ChatCompletionMessageToolCall,
@@ -430,7 +430,7 @@ def test_prepare_messages_uses_no_cacheable_prefix_for_single_message() -> None:
 
 def test_drop_empty_text() -> None:
     tool_call = ToolCall(
-        id="call_1", function=ToolFunctionCall(name="bash", arguments="{}")
+        id="call_1", function=RequestFunctionCall(name="bash", arguments="{}")
     )
     image_part = ImageContentPart(image_url=ImageUrlDetail(url="https://x/y.png"))
     messages: list[ChatCompletionMessage] = [
@@ -1359,7 +1359,7 @@ def test_handle_responses_request_non_streaming_returns_completed_response() -> 
 
 def test_handle_responses_request_forwards_named_tool_choice() -> None:
     """The Responses request must survive the litellm tools transform plus
-    _require_named_tool and reach the LLM as a NamedToolChoice."""
+    _require_named_tool and reach the LitellmLLM as a NamedToolChoice."""
     request = ResponsesRequest(
         model="1/test",
         input="hi",

@@ -994,7 +994,7 @@ def _anthropic_reasoning_effort(
 ) -> ReasoningEffort:
     """Anthropic has two thinking APIs: legacy ``thinking.type=enabled`` with
     ``budget_tokens``, and adaptive ``thinking.type=adaptive`` where effort
-    lives in top-level ``output_config.effort``. The downstream LLM layer
+    lives in top-level ``output_config.effort``. The provider adapter
     re-derives the right API per model from the single ReasoningEffort, so
     both request shapes must map faithfully here."""
     if thinking is not None and thinking.get("type") == "disabled":
@@ -1382,7 +1382,7 @@ def handle_anthropic_messages(
     except ValueError as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            "The upstream LLM returned invalid tool arguments.",
+            "The upstream model returned invalid tool arguments.",
         ) from e
     content.extend(tool_blocks)
     return AnthropicMessageResponse.from_parts(

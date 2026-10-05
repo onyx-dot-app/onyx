@@ -278,7 +278,7 @@ def handle_openai_responses_passthrough(
     headers = _build_upstream_headers(provider)
     url = _responses_url(provider)
     # llm is built only for tracing config (model/provider metadata); the
-    # actual call goes straight over httpx, never through llm.invoke/stream.
+    # actual call goes straight over httpx, never through llm.invoke_raw/stream_raw.
     llm = llm_from_provider(model_name=model_config.name, llm_provider=provider)
 
     if request.stream:
@@ -363,7 +363,7 @@ def handle_openai_responses_passthrough(
         converted_usage = _usage_from_openai_wire(usage) if usage else None
         if converted_usage is not None:
             # Managed-key cost accounting normally happens inside
-            # LLM.invoke/stream, which this path bypasses.
+            # LitellmLLM.invoke_raw/stream_raw, which this path bypasses.
             llm._track_llm_cost(converted_usage)
         if span is not None:
             record_llm_span_output(
@@ -558,6 +558,6 @@ def _openai_passthrough_stream_worker(
                     if frame_next_sequence is not None:
                         next_sequence_number = frame_next_sequence
             # Managed-key cost accounting normally happens inside
-            # LLM.invoke/stream, which this path bypasses.
+            # LitellmLLM.invoke_raw/stream_raw, which this path bypasses.
             if state.usage is not None:
                 llm._track_llm_cost(state.usage)
