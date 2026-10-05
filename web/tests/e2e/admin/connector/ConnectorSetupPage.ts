@@ -64,7 +64,11 @@ export class ConnectorSetupPage {
 
   private async pick(select: Locator, title: string): Promise<void> {
     await select.click();
-    await this.page.getByRole("option", { name: title, exact: true }).click();
+    // An option's accessible name is its title followed by its description.
+    const startsWithTitle = new RegExp(
+      `^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`
+    );
+    await this.page.getByRole("option", { name: startsWithTitle }).click();
   }
 
   /** The row for a credential in the credential section, by its name. */
