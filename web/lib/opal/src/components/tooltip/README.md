@@ -10,14 +10,14 @@ off while keeping the trigger mounted.
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `tooltip` | `ReactNode \| RichStr` | — | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
-| `side` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on |
-| `align` | `"start" \| "center" \| "end"` | `"center"` | Alignment along the tooltip's side axis |
-| `suppressed` | `boolean` | `false` | Shows nothing on hover, but keeps the trigger mounted |
-| `delayDuration` | `number` | — | Delay in ms before the tooltip appears on hover |
-| `sideOffset` | `number` | `4` | Distance in pixels between the trigger and the tooltip |
+| Prop            | Type                                     | Default    | Description                                                                                                    |
+| --------------- | ---------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `tooltip`       | `ReactNode \| RichStr`                   | —          | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
+| `side`          | `"top" \| "bottom" \| "left" \| "right"` | `"right"`  | Which side the tooltip appears on                                                                              |
+| `align`         | `"start" \| "center" \| "end"`           | `"center"` | Alignment along the tooltip's side axis                                                                        |
+| `suppressed`    | `boolean`                                | `false`    | Shows nothing on hover, but keeps the trigger mounted                                                          |
+| `delayDuration` | `number`                                 | —          | Delay in ms before the tooltip appears on hover                                                                |
+| `sideOffset`    | `number`                                 | `4`        | Distance in pixels between the trigger and the tooltip                                                         |
 
 ## Usage
 
@@ -46,6 +46,9 @@ import { Tooltip } from "@opal/components";
 - `string` and `RichStr` content is rendered via `Text font="secondary-body" color="inherit"`.
 - `ReactNode` content is rendered as-is for custom tooltip layouts.
 - The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap.
+- The surface is dark in both themes, so content renders inside a `dark` theme scope. Adaptive
+  tokens (`text-03` and friends) resolve to their dark values; `text-inverted-*` resolves
+  backwards and is wrong here.
 - There is no controlled `open`. Radix drops any open change that already matches the value it
   was given, so a caller that gates `open` on something other than the hover state stops hearing
   about closes and holds a hover that ended.

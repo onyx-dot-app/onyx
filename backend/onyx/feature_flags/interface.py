@@ -50,6 +50,21 @@ class FeatureFlagProvider(abc.ABC):
             },
         )
 
+    def feature_variant_for_tenant(
+        self,
+        flag_key: str,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+    ) -> str | bool | None:
+        """
+        Get a multivariate flag's variant for a tenant/deployment as a whole,
+        rather than an individual user. Keys PostHog's distinct_id on
+        tenant_id directly, so every user in the tenant/deployment resolves
+        to the same variant and PostHog release conditions target tenant_id
+        instead of a per-user rollout. Returns None if unsupported, unset,
+        or on error.
+        """
+        return None
+
 
 class NoOpFeatureFlagProvider(FeatureFlagProvider):
     """

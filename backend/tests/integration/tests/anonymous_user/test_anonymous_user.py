@@ -105,7 +105,7 @@ def test_anonymous_user_reads_settings_when_enabled(
     reset: None,  # noqa: ARG001
 ) -> None:
     """Anonymous users must be able to read /settings so admin-controlled
-    preferences (e.g. disable_default_assistant / "Always Start with an Agent")
+    preferences (e.g. disable_default_assistant / "Disable Default Chat")
     actually take effect for them instead of silently falling back to FE
     defaults."""
     admin_user: DATestUser = UserManager.create(name="admin_user")

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
-import { getModelIcon } from "@/lib/languageModels";
+import { useTranslations } from "next-intl";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import {
   Button,
   SelectButton,
@@ -12,17 +13,14 @@ import {
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import {
-  LLMOption,
-  buildLlmOptions,
-  llmOptionKey,
-} from "@/lib/languageModels/options";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+import { buildLlmOptions, llmOptionKey } from "@/lib/languageModels/options";
+import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
   useModelDetailManagers,
 } from "@/sections/model-selector/ModelSelectorContent";
+import type { LLMOption } from "@/lib/languageModels/types";
 
 export const MAX_MODELS = 3;
 
@@ -53,6 +51,7 @@ export default function MultiModelSelector({
   temperatureManager,
   reasoningManager,
 }: MultiModelSelectorProps) {
+  const t = useTranslations("chat.modelSelector");
   const [open, setOpen] = useState(false);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -67,7 +66,7 @@ export default function MultiModelSelector({
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".
-  const { llmProviders, isLoading } = useCurrentAgentLLMProviders();
+  const { llmProviders, isLoading } = useLanguageModelsForCurrentAgent();
   const noModelsToSelect = useMemo(
     () => !isLoading && buildLlmOptions(llmProviders).length === 0,
     [isLoading, llmProviders]
@@ -79,7 +78,7 @@ export default function MultiModelSelector({
   // Container-level tooltip carries only the disabled reason. The add button
   // labels itself, so an enabled row shows no tooltip outside the button.
   const selectorTooltip = noModelsToSelect
-    ? "No models currently configured"
+    ? t("multiModel.noModels.tooltip")
     : undefined;
 
   const selectedKeys = useMemo(
@@ -114,14 +113,16 @@ export default function MultiModelSelector({
     return !selectedKeys.has(key) && atMax;
   };
 
+  const toSelectedModel = (option: LLMOption): SelectedModel => ({
+    name: option.name,
+    provider: option.provider,
+    modelName: option.modelName,
+    modelConfigurationId: option.modelConfigurationId ?? null,
+    displayName: option.displayName,
+  });
+
   const handleSelect = (option: LLMOption) => {
-    const model: SelectedModel = {
-      name: option.name,
-      provider: option.provider,
-      modelName: option.modelName,
-      modelConfigurationId: option.modelConfigurationId ?? null,
-      displayName: option.displayName,
-    };
+    const model = toSelectedModel(option);
 
     if (replacingIndex !== null) {
       onReplace(replacingIndex, model);
@@ -141,6 +142,20 @@ export default function MultiModelSelector({
       if (selectedModels.length + 1 >= MAX_MODELS) {
         setOpen(false);
       }
+    }
+  };
+
+  // The settings button selects its model but keeps the popover open for the
+  // pane, and it never deselects: opening settings must not remove a model.
+  const handleDetailSelect = (option: LLMOption) => {
+    if (replacingIndex !== null) {
+      onReplace(replacingIndex, toSelectedModel(option));
+      setReplacingIndex(null);
+      return;
+    }
+    const key = llmOptionKey(option);
+    if (!selectedModels.some((m) => llmOptionKey(m) === key) && !atMax) {
+      onAdd(toSelectedModel(option));
     }
   };
 
@@ -177,8 +192,8 @@ export default function MultiModelSelector({
               prominence="tertiary"
               icon={SvgPlusCircle}
               size="sm"
-              tooltip="Add Model"
-              aria-label="Add Model"
+              tooltip={t("multiModel.addModelButton.label")}
+              aria-label={t("multiModel.addModelButton.label")}
               onClick={(e: React.MouseEvent) => {
                 if (noModelsToSelect) return;
                 anchorRef.current = e.currentTarget as HTMLElement;
@@ -257,16 +272,19 @@ export default function MultiModelSelector({
         </div>
       </Tooltip>
 
-      {!(atMax && replacingIndex === null) && (
-        <Popover.Content side="top" align="end" width="xl">
-          <ModelSelectorContent
-            onSelect={handleSelect}
-            isSelected={isSelected}
-            isDisabled={isDisabled}
-            modelDetail={modelDetail}
-          />
-        </Popover.Content>
-      )}
+      {/* Always mounted while open: a settings click that adds the third
+          model (or completes a replacement at max) must not unmount the pane
+          it just opened. Opening at max is still blocked at the entry points:
+          the add button hides and pill clicks set replacingIndex. */}
+      <Popover.Content side="top" align="end" width="xl">
+        <ModelSelectorContent
+          onSelect={handleSelect}
+          isSelected={isSelected}
+          isDisabled={isDisabled}
+          modelDetail={modelDetail}
+          onDetailSelect={handleDetailSelect}
+        />
+      </Popover.Content>
     </Popover>
   );
 }

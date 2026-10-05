@@ -1,7 +1,7 @@
 package postgres
 
 import (
-	"fmt"
+	"net"
 	"net/url"
 	"os"
 )
@@ -45,8 +45,13 @@ func getEnvOrDefault(key, defaultValue string) string {
 
 // ConnectionString returns a PostgreSQL connection string.
 func (c *Config) ConnectionString() string {
-	return fmt.Sprintf("postgresql://%s:%s@%s:%s/%s",
-		url.QueryEscape(c.User), url.QueryEscape(c.Password), c.Host, c.Port, c.Database)
+	u := url.URL{
+		Scheme: "postgresql",
+		User:   url.UserPassword(c.User, c.Password),
+		Host:   net.JoinHostPort(c.Host, c.Port),
+		Path:   "/" + c.Database,
+	}
+	return u.String()
 }
 
 // PgDumpArgs returns common arguments for pg_dump.

@@ -1,6 +1,6 @@
 """Slack answer handling: references, access checks, and usage attribution."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -24,6 +24,15 @@ from onyx.onyxbot.slack.models import (
 from shared_configs.contextvars import get_current_user_id
 
 _HANDLE_REGULAR_ANSWER = "onyx.onyxbot.slack.handlers.handle_regular_answer"
+
+
+@pytest.fixture(autouse=True)
+def _no_token_budgets() -> Generator[None, None, None]:
+    """Budget enforcement reads the DB; it is covered in
+    tests/external_dependency_unit/server/test_llm_entrypoint_budgets.py."""
+    with patch(f"{_HANDLE_REGULAR_ANSWER}.check_token_rate_limits"):
+        yield
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -583,16 +592,18 @@ def test_private_channel_non_ephemeral_attributes_usage(
 
 
 @pytest.mark.parametrize(
-    "has_search_tool,search_available,expected_forced_id",
+    "has_search_tool,search_available,search_enabled,expected_forced_id",
     [
-        (True, True, 77),  # persona has SearchTool and it is usable -> forced
-        (True, False, None),  # SearchTool attached but unavailable -> not forced
-        (False, True, None),  # persona without SearchTool -> not forced
+        (True, True, True, 77),  # persona has SearchTool and it is usable -> forced
+        (True, False, True, None),  # SearchTool attached but unavailable -> not forced
+        (True, True, False, None),  # SearchTool attached but disabled -> not forced
+        (False, True, True, None),  # persona without SearchTool -> not forced
     ],
 )
 def test_search_tool_forced_only_when_usable(
     has_search_tool: bool,
     search_available: bool,
+    search_enabled: bool,
     expected_forced_id: int | None,
 ) -> None:
     """Slack answers force the persona's search tool on the first LLM cycle
@@ -604,6 +615,7 @@ def test_search_tool_forced_only_when_usable(
         search_tool = MagicMock()
         search_tool.id = 77
         search_tool.in_code_tool_id = "SearchTool"
+        search_tool.enabled = search_enabled
         persona.tools = [search_tool]
 
     user = MagicMock()

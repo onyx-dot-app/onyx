@@ -1,67 +1,59 @@
 import { useState } from "react";
-import { Button as OpalButton } from "@opal/components";
-import { ValidSources, AccessType } from "@/lib/types";
-import { submitCredential } from "@/components/admin/connectors/CredentialForm";
-import { TextFormField } from "@/components/Field";
+import { useTranslations } from "next-intl";
+import { Button, Divider } from "@opal/components";
+import { AccessType } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { submitCredential } from "@/lib/credentials/svc";
 import { Form, Formik, FormikHelpers } from "formik";
-import { toast } from "@opal/layouts";
-import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
-import { Connector } from "@/lib/connectors/connectors";
+import { Section, toast } from "@opal/layouts";
+import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
+import type { Connector } from "@/lib/connectors/types";
+import type { Credential } from "@/lib/credentials/types";
+import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
+import type { CredentialActionType } from "@/lib/credentials/types";
 import {
-  Credential,
-  CredentialTemplateWithAuth,
-  credentialTemplates,
-} from "@/lib/connectors/credentials";
-import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
-import type {
-  CredentialActionType,
-  CredentialFieldValues,
-} from "@/lib/credentials/types";
-import { createValidationSchema } from "@/lib/credentials/utils";
+  createValidationSchema,
+  getCredentialSpec,
+  initialCredentialValues,
+} from "@/lib/credentials/utils";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
-  IsPublicGroupSelectorFormType,
-  IsPublicGroupSelector,
-} from "@/components/IsPublicGroupSelector";
-import { useUser } from "@/providers/UserProvider";
-import CardSection from "@/components/admin/CardSection";
+  DEFAULT_SHARE_AUDIENCE,
+  ShareAccountField,
+  shareAccountPayload,
+  type ShareAccountFormValues,
+} from "@/lib/credentials/components/ShareAccountField";
+import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
-import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
 import { SvgPlusCircle } from "@opal/icons";
-const CreateButton = ({
-  onClick,
-  isSubmitting,
-  requiresGroup,
-  groups,
-}: {
+
+interface CreateButtonProps {
   onClick: () => void;
   isSubmitting: boolean;
-  // Only a scoped manager must land the credential in a group — GATE 2 requires
-  // it of them and of nobody else.
-  requiresGroup: boolean;
-  groups: number[];
-}) => (
-  <OpalButton
-    disabled={isSubmitting || (requiresGroup && groups.length === 0)}
-    onClick={onClick}
-    icon={SvgPlusCircle}
-  >
-    Create
-  </OpalButton>
-);
+  /** False while any required field is empty or malformed. */
+  isValid: boolean;
+}
 
-type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
-  name: string;
+function CreateButton({ onClick, isSubmitting, isValid }: CreateButtonProps) {
+  const t = useTranslations("admin");
+  return (
+    <Button
+      disabled={isSubmitting || !isValid}
+      onClick={onClick}
+      icon={SvgPlusCircle}
+    >
+      {t("credentials.create.createButton.label")}
+    </Button>
+  );
+}
+
+type CreateCredentialFormValues = ShareAccountFormValues & {
   [key: string]: unknown;
 };
 
 export default function CreateCredential({
-  hideSource,
   sourceType,
   accessType,
   close,
@@ -72,7 +64,6 @@ export default function CreateCredential({
   refresh = () => null,
 }: {
   // Source information
-  hideSource?: boolean; // hides docs link
   sourceType: ValidSources;
   accessType: AccessType;
 
@@ -96,13 +87,11 @@ export default function CreateCredential({
   // Mutating parent state
   refresh?: () => void;
 }) {
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const t = useTranslations("admin");
+  const tValidation = useTranslations("admin.credentials.validation");
+  const fieldCopy = useCredentialFieldCopy(sourceType);
   const [authMethod, setAuthMethod] = useState<string>();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-
-  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
-    Permission.MANAGE_CONNECTORS
-  );
 
   const handleSubmit = async (
     values: CreateCredentialFormValues,
@@ -120,7 +109,7 @@ export default function CreateCredential({
     setSubmitting(true);
     formikHelpers.setSubmitting(true);
 
-    const { name, is_public, groups, ...credentialValues } = values;
+    const { share, groups, ...credentialValues } = values;
 
     let privateKey: TypedFile | null = null;
     const filteredCredentialValues = Object.fromEntries(
@@ -136,10 +125,8 @@ export default function CreateCredential({
     try {
       const response = await submitCredential({
         credential_json: filteredCredentialValues,
-        admin_public: true,
-        curator_public: is_public,
-        groups: groups,
-        name: name,
+        ...shareAccountPayload({ share, groups }),
+        // No name: the credential list shows its "Untitled" fallback.
         source: sourceType,
         private_key: privateKey || undefined,
       });
@@ -154,7 +141,7 @@ export default function CreateCredential({
         if (action === "createAndSwap") {
           onSwap(credential, swapConnector.id, accessType);
         } else {
-          toast.success("Created new credential!");
+          toast.success(t("credentials.create.created.toast"));
         }
         onClose();
       } else {
@@ -175,7 +162,7 @@ export default function CreateCredential({
       }
     } catch (error) {
       console.error("Error submitting credential:", error);
-      toast.error("Error submitting credential");
+      toast.error(t("credentials.create.submitError.toast"));
     } finally {
       formikHelpers.setSubmitting(false);
     }
@@ -189,29 +176,35 @@ export default function CreateCredential({
     return <GDriveMain />;
   }
 
-  const credentialTemplate: CredentialFieldValues =
-    credentialTemplates[sourceType];
-  const validationSchema = createValidationSchema(credentialTemplate);
+  const spec = getCredentialSpec(sourceType);
+  if (!spec) {
+    return null;
+  }
+  const validationSchema = createValidationSchema(spec, {
+    fieldTitle: (key) => fieldCopy(key).title,
+    required: (field) => tValidation("required", { field }),
+    empty: (field) => tValidation("empty", { field }),
+    invalidEmail: (field) => tValidation("invalidEmail", { field }),
+    fileRequired: (field) => tValidation("fileRequired", { field }),
+    authMethodRequired: tValidation("authMethodRequired"),
+  });
 
-  // Set initial auth method for templates with multiple auth methods
-  const templateWithAuth =
-    credentialTemplate as CredentialTemplateWithAuth<CredentialFieldValues>;
-  const initialAuthMethod =
-    templateWithAuth?.authMethods?.[0]?.value || undefined;
+  // A spec with auth methods starts on its first one.
+  const initialAuthMethod = spec.methods?.[0]?.value;
 
   return (
-    <Formik
-      initialValues={
-        {
-          name: "",
-          is_public: isGlobalHolder || !businessTier,
-          groups: [],
-          ...(initialAuthMethod && {
-            authentication_method: initialAuthMethod,
-          }),
-        } as CreateCredentialFormValues
-      }
+    <Formik<CreateCredentialFormValues>
+      initialValues={{
+        ...initialCredentialValues(spec),
+        share: DEFAULT_SHARE_AUDIENCE,
+        groups: [],
+        ...(initialAuthMethod && {
+          authentication_method: initialAuthMethod,
+        }),
+      }}
       validationSchema={validationSchema}
+      // Validate the empty form too, so Create starts disabled.
+      validateOnMount
       onSubmit={() => {}} // This will be overridden by our custom submit handlers
     >
       {(formikProps) => {
@@ -224,41 +217,26 @@ export default function CreateCredential({
         }
 
         return (
-          <Form className="w-full flex items-stretch">
-            {!hideSource && <ConnectorDocsLink sourceType={sourceType} />}
-            <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
-              <TextFormField
-                name="name"
-                placeholder="(Optional) credential name.."
-                label="Name:"
-              />
-
+          // No card of its own: the form sits directly in its host (the
+          // credential step's create card, or a modal).
+          <Form className="w-full">
+            <Section alignItems="stretch" gap={4}>
               <CredentialFieldsRenderer
-                credentialTemplate={credentialTemplate}
+                source={sourceType}
+                spec={spec}
                 authMethod={authMethod || initialAuthMethod}
                 setAuthMethod={setAuthMethod}
               />
 
-              <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
-                <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
-                  {businessTier && (
-                    <div className="flex flex-col items-start">
-                      {isGlobalHolder && (
-                        <AdvancedOptionsToggle
-                          showAdvancedOptions={showAdvancedOptions}
-                          setShowAdvancedOptions={setShowAdvancedOptions}
-                        />
-                      )}
-                      {(showAdvancedOptions || !isGlobalHolder) && (
-                        <IsPublicGroupSelector
-                          formikProps={formikProps}
-                          objectName="credential"
-                          isGlobalHolder={isGlobalHolder}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
+              {/* Above: the fields the source needs. Below: optional sharing
+              and the Create button. */}
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+              {businessTier && (
+                <ShareAccountField disabled={!formikProps.isValid} />
+              )}
+
+              <Section flexDirection="row" justifyContent="end">
                 <CreateButton
                   onClick={() =>
                     handleSubmit(
@@ -268,11 +246,10 @@ export default function CreateCredential({
                     )
                   }
                   isSubmitting={formikProps.isSubmitting}
-                  requiresGroup={isScopedManager}
-                  groups={formikProps.values.groups}
+                  isValid={formikProps.isValid}
                 />
-              </div>
-            </CardSection>
+              </Section>
+            </Section>
           </Form>
         );
       }}

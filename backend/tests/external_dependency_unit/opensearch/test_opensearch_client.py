@@ -20,7 +20,8 @@ from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters, TimeRange
-from onyx.document_index.interfaces_new import TenantState
+from onyx.db.enums import VectorQuantization
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import (
     OpenSearchDocumentMissingError,
     OpenSearchIndexClient,
@@ -1594,7 +1595,7 @@ class TestOpenSearchClient:
                     expected = docs[chunk.document_chunk.document_id]
                     assert chunk.document_chunk == DocumentChunkWithoutVectors(
                         **{
-                            k: getattr(expected, k)
+                            k: getattr(expected, k)  # ods: ignore[getattr]
                             for k in DocumentChunkWithoutVectors.model_fields
                         }
                     )
@@ -1758,7 +1759,7 @@ class TestOpenSearchClient:
         # Make sure the chunk contents are preserved.
         assert results[0].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["public-doc"], k)
+                k: getattr(docs["public-doc"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -1771,7 +1772,7 @@ class TestOpenSearchClient:
         assert results[1].document_chunk.document_id == "private-doc-user-a"
         assert results[1].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["private-doc-user-a"], k)
+                k: getattr(docs["private-doc-user-a"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -1959,11 +1960,13 @@ class TestOpenSearchClient:
             f"excluding untagged content. Got: {result_ids}"
         )
 
+    @pytest.mark.parametrize("vector_quantization", list(VectorQuantization))
     def test_hybrid_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
         self,
         test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
+        vector_quantization: VectorQuantization,
     ) -> None:
         """
         Tests search with a normalization pipeline and filters returns chunks
@@ -1974,7 +1977,9 @@ class TestOpenSearchClient:
         _patch_opensearch_match_highlights_disabled(monkeypatch, False)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=tenant_x.multitenant
+            vector_dimension=128,
+            multitenant=tenant_x.multitenant,
+            vector_quantization=vector_quantization,
         )
         settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -2052,6 +2057,7 @@ class TestOpenSearchClient:
             # Explicitly pass in an empty list to enforce private doc filtering.
             index_filters=IndexFilters(access_control_list=[], tenant_id=None),
             include_hidden=False,
+            vector_quantization=vector_quantization,
         )
         pipeline_name, _ = get_normalization_pipeline_name_and_config()
 
@@ -2585,15 +2591,13 @@ class TestOpenSearchClient:
 
         # Postcondition.
         assert len(results) == 3
-        assert set(result.document_chunk.chunk_index for result in results) == set(
-            [0, 1, 2]
-        )
+        assert {result.document_chunk.chunk_index for result in results} == {0, 1, 2}
         for result in results:
             # Note each result must be from doc 1, which is not hidden.
             expected_result = doc1_chunks[result.document_chunk.chunk_index]
             assert result.document_chunk == DocumentChunkWithoutVectors(
                 **{
-                    k: getattr(expected_result, k)
+                    k: getattr(expected_result, k)  # ods: ignore[getattr]
                     for k in DocumentChunkWithoutVectors.model_fields
                 }
             )
@@ -2725,7 +2729,7 @@ class TestOpenSearchClient:
         # Make sure the chunk contents are preserved.
         assert results[0].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["public-doc"], k)
+                k: getattr(docs["public-doc"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -2738,7 +2742,7 @@ class TestOpenSearchClient:
         assert results[1].document_chunk.document_id == "private-doc-user-a"
         assert results[1].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["private-doc-user-a"], k)
+                k: getattr(docs["private-doc-user-a"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -2746,21 +2750,28 @@ class TestOpenSearchClient:
         assert results[1].match_highlights.get(CONTENT_FIELD_NAME, [])
         assert results[1].score < results[0].score
 
+    @pytest.mark.parametrize("vector_quantization", list(VectorQuantization))
     def test_semantic_search(
         self,
         test_client: OpenSearchIndexClient,
         monkeypatch: pytest.MonkeyPatch,
+        vector_quantization: VectorQuantization,
     ) -> None:
         """
         Tests semantic search with filters for ACL, hidden documents, and tenant
         isolation.
+
+        The exact score assertions also check that quantized fields are
+        rescored with the full-precision vectors.
         """
         # Precondition.
         _patch_global_tenant_state(monkeypatch, True)
         tenant_x = TenantState(tenant_id="tenant-x", multitenant=True)
         tenant_y = TenantState(tenant_id="tenant-y", multitenant=True)
         mappings = DocumentSchema.get_document_schema(
-            vector_dimension=128, multitenant=tenant_x.multitenant
+            vector_dimension=128,
+            multitenant=tenant_x.multitenant,
+            vector_quantization=vector_quantization,
         )
         settings = DocumentSchema.get_index_settings_based_on_environment()
         test_client.create_index(mappings=mappings, settings=settings)
@@ -2846,6 +2857,7 @@ class TestOpenSearchClient:
                 tenant_id=None,
             ),
             include_hidden=False,
+            vector_quantization=vector_quantization,
         )
 
         # Under test.
@@ -2860,7 +2872,7 @@ class TestOpenSearchClient:
         # Make sure the chunk contents are preserved.
         assert results[0].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["public-doc"], k)
+                k: getattr(docs["public-doc"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -2869,7 +2881,7 @@ class TestOpenSearchClient:
         assert results[1].document_chunk.document_id == "private-doc-user-a"
         assert results[1].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["private-doc-user-a"], k)
+                k: getattr(docs["private-doc-user-a"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -3036,7 +3048,11 @@ class TestSearchFailureMetrics:
         search_after: list[object] | None = None
         while True:
             chunks, search_after, pit_id = test_client.fetch_chunks_for_doc_ids(
-                pit_id, doc_ids, search_after=search_after, page_size=4
+                pit_id,
+                doc_ids,
+                tenant_state=tenant_state,
+                search_after=search_after,
+                page_size=4,
             )
             seen.extend((c.document_id, c.chunk_index) for c in chunks)
             if search_after is None:
@@ -3059,7 +3075,7 @@ class TestSearchFailureMetrics:
 
         stale_pit = test_client.open_pit()
         chunks, search_after, stale_pit = test_client.fetch_chunks_for_doc_ids(
-            stale_pit, doc_ids, page_size=4
+            stale_pit, doc_ids, tenant_state=tenant_state, page_size=4
         )
         seen: list[tuple[str, int]] = [(c.document_id, c.chunk_index) for c in chunks]
         assert search_after is not None
@@ -3070,7 +3086,11 @@ class TestSearchFailureMetrics:
         pit_id = stale_pit
         while True:
             chunks, search_after, pit_id = test_client.fetch_chunks_for_doc_ids(
-                pit_id, doc_ids, search_after=search_after, page_size=4
+                pit_id,
+                doc_ids,
+                tenant_state=tenant_state,
+                search_after=search_after,
+                page_size=4,
             )
             seen.extend((c.document_id, c.chunk_index) for c in chunks)
             if search_after is None:
@@ -3100,7 +3120,9 @@ class TestSearchFailureMetrics:
 
         seen = [
             (c.document_id, c.chunk_index)
-            for page in test_client.iter_chunks_for_doc_ids(doc_ids, page_size=4)
+            for page in test_client.iter_chunks_for_doc_ids(
+                doc_ids, tenant_state=tenant_state, page_size=4
+            )
             for c in page
         ]
 
@@ -3130,7 +3152,14 @@ class TestSearchFailureMetrics:
         monkeypatch.setattr(test_client._client, "search", mock_search)
 
         with pytest.raises(NotFoundError):
-            test_client.fetch_chunks_for_doc_ids(pit_id, ["doc-a"], page_size=4)
+            test_client.fetch_chunks_for_doc_ids(
+                pit_id,
+                ["doc-a"],
+                tenant_state=TenantState(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False
+                ),
+                page_size=4,
+            )
         assert mock_search.call_count == 2  # original attempt + one reopened retry
 
     def test_pit_scan_raises_on_server_timeout(
@@ -3152,7 +3181,14 @@ class TestSearchFailureMetrics:
         )
 
         with pytest.raises(OpenSearchServerSideTimeout):
-            test_client.fetch_chunks_for_doc_ids(pit_id, ["doc-a"], page_size=4)
+            test_client.fetch_chunks_for_doc_ids(
+                pit_id,
+                ["doc-a"],
+                tenant_state=TenantState(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False
+                ),
+                page_size=4,
+            )
 
 
 class TestIndexReclaimPrimitive:

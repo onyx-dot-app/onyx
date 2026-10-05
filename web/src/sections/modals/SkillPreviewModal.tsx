@@ -1,9 +1,11 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
-import { SvgBlocks, SvgSimpleLoader } from "@opal/icons";
+import { SvgBlocks } from "@opal/icons";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -21,18 +23,30 @@ interface SkillPreviewModalProps {
   onClose: () => void;
 }
 
-function metadataRows(
-  preview: SkillPreview
-): { label: string; value: string }[] {
-  const rows: { label: string; value: string }[] = [];
+// Message keys under `skills.modals`, not copy — the literal union keeps `t()`
+// statically checked while this stays a plain helper.
+type MetadataLabelKey =
+  | "preview.metadata.createdBy.label"
+  | "preview.metadata.externalApp.label";
+
+interface MetadataRow {
+  labelKey: MetadataLabelKey;
+  value: string;
+}
+
+function metadataRows(preview: SkillPreview): MetadataRow[] {
+  const rows: MetadataRow[] = [];
   if (preview.source === "builtin") {
-    rows.push({ label: "Created by", value: "Onyx" });
+    rows.push({ labelKey: "preview.metadata.createdBy.label", value: "Onyx" });
   } else if (preview.author_email) {
-    rows.push({ label: "Created by", value: preview.author_email });
+    rows.push({
+      labelKey: "preview.metadata.createdBy.label",
+      value: preview.author_email,
+    });
   }
   if (preview.external_app) {
     rows.push({
-      label: "External app",
+      labelKey: "preview.metadata.externalApp.label",
       value: preview.external_app.name,
     });
   }
@@ -42,10 +56,11 @@ function metadataRows(
 export default function SkillPreviewModal({
   open,
   skillId,
-  fallbackTitle = "Skill preview",
+  fallbackTitle,
   unavailableReason = null,
   onClose,
 }: SkillPreviewModalProps) {
+  const t = useTranslations("skills.modals");
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("rendered");
   const swrKey = open && skillId ? SWR_KEYS.userSkillPreview(skillId) : null;
@@ -55,13 +70,13 @@ export default function SkillPreviewModal({
     isLoading,
   } = useSWR<SkillPreview>(swrKey, errorHandlingFetcher);
   const instructionsMarkdown =
-    preview?.instructions_markdown || "No instructions found.";
+    preview?.instructions_markdown || t("preview.noInstructions.message");
   const dependency = preview?.external_app;
   const dependencyUnavailableReason =
     dependency && !dependency.ready
       ? dependency.enabled
-        ? `Connect app “${dependency.name}” from the Apps page to use this skill.`
-        : `App “${dependency.name}” is disabled by an administrator.`
+        ? t("preview.unavailable.appNotConnected", { appName: dependency.name })
+        : t("preview.unavailable.appDisabled", { appName: dependency.name })
       : null;
   const displayedUnavailableReason =
     unavailableReason ?? dependencyUnavailableReason;
@@ -77,22 +92,24 @@ export default function SkillPreviewModal({
       <Modal.Content width="lg" height="lg">
         <Modal.Header
           icon={SvgBlocks}
-          title={preview?.name ?? fallbackTitle}
+          title={preview?.name ?? fallbackTitle ?? t("preview.fallbackTitle")}
           description={preview?.description}
           onClose={onClose}
         />
         <Modal.Body>
           {isLoading && (
             <div className="flex items-center justify-center min-h-40">
-              <SvgSimpleLoader />
+              <IconLoader />
             </div>
           )}
 
           {error && !isLoading && (
             <MessageCard
+              outerPadding={1}
+              innerPadding={1}
               variant="error"
-              title="Failed to load skill"
-              description="Try closing and opening the preview again."
+              title={t("preview.loadError.title")}
+              description={t("preview.loadError.description")}
             />
           )}
 
@@ -100,17 +117,19 @@ export default function SkillPreviewModal({
             <Section gap={4} alignItems="stretch">
               {displayedUnavailableReason && (
                 <MessageCard
+                  outerPadding={1}
+                  innerPadding={1}
                   variant="warning"
-                  title="Skill unavailable"
+                  title={t("preview.unavailable.title")}
                   description={displayedUnavailableReason}
                 />
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {metadataRows(preview).map((row) => (
-                  <div key={row.label} className="flex flex-col gap-1">
+                  <div key={row.labelKey} className="flex flex-col gap-1">
                     <Text font="main-ui-action" color="text-05">
-                      {row.label}
+                      {t(row.labelKey)}
                     </Text>
                     <Text font="main-ui-body" color="text-04">
                       {row.value}
@@ -122,7 +141,7 @@ export default function SkillPreviewModal({
               <Section gap={1} alignItems="stretch">
                 <div className="flex items-center justify-between gap-2">
                   <Text font="main-ui-action" color="text-05">
-                    Instructions
+                    {t("preview.instructions.title")}
                   </Text>
                   <InstructionsDisplayModeToggle
                     value={instructionsDisplayMode}
@@ -143,7 +162,7 @@ export default function SkillPreviewModal({
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={onClose}>Close</Button>
+          <Button onClick={onClose}>{t("preview.closeButton.label")}</Button>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

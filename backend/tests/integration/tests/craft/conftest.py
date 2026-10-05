@@ -78,12 +78,6 @@ def _test_client() -> Generator[httpx.Client, None, None]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _install_playwright() -> None:
-    """No-op override: craft API-boundary tests don't use playwright."""
-    return None
-
-
-@pytest.fixture(scope="session", autouse=True)
 def _start_celery_workers() -> Generator[None, None, None]:
     """No-op override: the deployed ``background`` worker runs the celery tasks."""
     yield None

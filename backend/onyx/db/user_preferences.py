@@ -14,8 +14,10 @@ from onyx.db.models import (
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     is_limited_user,
+    release_personas_owned_by_user__no_commit,
     user_is_admin,
 )
+from onyx.llm.models import ReasoningEffort
 from onyx.server.manage.models import MemoryItem, UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
 
@@ -26,8 +28,9 @@ def deactivate_user(
     user: User,
     db_session: Session,
 ) -> None:
-    """Deactivate a user by setting is_active to False."""
+    """Deactivate a user and release the personas they own."""
     user.is_active = False
+    release_personas_owned_by_user__no_commit(db_session, user.id)
     db_session.add(user)
     db_session.commit()
 
@@ -100,6 +103,34 @@ def update_user_temperature_override_enabled(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(temperature_override_enabled=temperature_override_enabled)
+    )
+    db_session.commit()
+
+
+def update_user_temperature_default(
+    user_id: UUID,
+    temperature_default: float | None,
+    db_session: Session,
+) -> None:
+    """Update the user's own temperature default. Null clears it."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(temperature_default=temperature_default)
+    )
+    db_session.commit()
+
+
+def update_user_reasoning_effort_default(
+    user_id: UUID,
+    reasoning_effort_default: ReasoningEffort | None,
+    db_session: Session,
+) -> None:
+    """Update the user's own reasoning default. Null clears it."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(reasoning_effort_default=reasoning_effort_default)
     )
     db_session.commit()
 
@@ -279,20 +310,6 @@ def get_memories_for_user(
     return db_session.scalars(
         select(Memory).where(Memory.user_id == user_id).order_by(Memory.id.desc())
     ).all()
-
-
-def update_user_pinned_assistants(
-    user_id: UUID,
-    pinned_assistants: list[int],
-    db_session: Session,
-) -> None:
-    """Update user's pinned assistants list."""
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(pinned_assistants=pinned_assistants)
-    )
-    db_session.commit()
 
 
 def update_user_assistant_visibility(

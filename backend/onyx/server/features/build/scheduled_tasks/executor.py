@@ -468,7 +468,12 @@ def _drive_agent(
                     # Scheduled runs have no interrupt mechanism, so a cancelled
                     # terminal means opencode aborted the agent
                     # (MessageAbortedError) — record it as a failure, not success.
-                    if getattr(sandbox_event, "stop_reason", None) == "cancelled":
+                    if (
+                        getattr(  # ods: ignore[getattr]
+                            sandbox_event, "stop_reason", None
+                        )
+                        == "cancelled"
+                    ):
                         cancelled = True
                     got_prompt_response = True
                     break

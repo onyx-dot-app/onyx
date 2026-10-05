@@ -1,17 +1,18 @@
 import React, { JSX } from "react";
-import { DocumentSetSummary, Tag, ValidSources } from "@/lib/types";
-import { SourceMetadata } from "@/lib/search/interfaces";
+import { DocumentSetSummary, Tag } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { SourceMetadata } from "@/lib/search/types";
 import { FiBook, FiBookmark, FiMap, FiX } from "react-icons/fi";
 import { SearchDateRangeSelector } from "@/components/dateRangeSelectors/SearchDateRangeSelector";
-import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import { InputDateRangePickerValue } from "@opal/components";
 import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 
 export interface SourceSelectorProps {
-  timeRange: DateRangePickerValue | null;
+  timeRange: InputDateRangePickerValue | null;
   setTimeRange: React.Dispatch<
-    React.SetStateAction<DateRangePickerValue | null>
+    React.SetStateAction<InputDateRangePickerValue | null>
   >;
   showDocSidebar?: boolean;
   selectedSources: SourceMetadata[];
@@ -45,7 +46,7 @@ export function SelectedBubble({
       onClick={onClick}
     >
       {children}
-      <FiX className="ml-2" size={14} />
+      <FiX className="ms-2" size={14} />
     </button>
   );
 }
@@ -107,7 +108,7 @@ export function HorizontalFilters({
                     sourceType={source.baseSourceType || source.internalName}
                     iconSize={16}
                   />
-                  <span className="ml-2 text-sm">{source.displayName}</span>
+                  <span className="ms-2 text-sm">{source.displayName}</span>
                 </>
               ),
             };
@@ -119,7 +120,7 @@ export function HorizontalFilters({
             )
           }
           icon={
-            <div className="my-auto mr-2 w-[16px] h-[16px]">
+            <div className="my-auto me-2 w-[16px] h-[16px]">
               <FiMap size={16} />
             </div>
           }
@@ -136,7 +137,7 @@ export function HorizontalFilters({
                     <div className="my-auto">
                       <FiBookmark />
                     </div>
-                    <span className="ml-2 text-sm">{documentSet.name}</span>
+                    <span className="ms-2 text-sm">{documentSet.name}</span>
                   </>
                 ),
               };
@@ -144,7 +145,7 @@ export function HorizontalFilters({
             selected={selectedDocumentSets}
             handleSelect={(option) => handleDocumentSetSelect(option.key)}
             icon={
-              <div className="my-auto mr-2 w-[16px] h-[16px]">
+              <div className="my-auto me-2 w-[16px] h-[16px]">
                 <FiBook size={16} />
               </div>
             }
@@ -171,7 +172,7 @@ export function HorizontalFilters({
                     sourceType={source.baseSourceType || source.internalName}
                     iconSize={16}
                   />
-                  <span className="ml-2 text-sm">{source.displayName}</span>
+                  <span className="ms-2 text-sm">{source.displayName}</span>
                 </>
               </SelectedBubble>
             ))}
@@ -185,7 +186,7 @@ export function HorizontalFilters({
                   <div>
                     <FiBookmark />
                   </div>
-                  <span className="ml-2 text-sm">{documentSetName}</span>
+                  <span className="ms-2 text-sm">{documentSetName}</span>
                 </>
               </SelectedBubble>
             ))}

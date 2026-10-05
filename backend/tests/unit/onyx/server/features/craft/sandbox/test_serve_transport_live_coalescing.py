@@ -148,7 +148,7 @@ def test_subscribe_to_opencode_session_coalesces_adjacent_text_deltas(
 
     assert len(events) == 2
     assert isinstance(events[0], AgentMessageChunk)
-    assert getattr(events[0].content, "text", None) == "Hello"
+    assert getattr(events[0].content, "text", None) == "Hello"  # ods: ignore[getattr]
     assert isinstance(events[1], PromptResponse)
 
 
@@ -228,7 +228,10 @@ def test_subscribe_to_opencode_session_forwards_child_events(
     assert any(isinstance(event, SubagentStartedPacket) for event in events)
     child_chunks = [event for event in events if isinstance(event, AgentMessageChunk)]
     assert len(child_chunks) == 1
-    assert getattr(child_chunks[0].content, "text", None) == "child streamed text"
+    assert (
+        getattr(child_chunks[0].content, "text", None)  # ods: ignore[getattr]
+        == "child streamed text"
+    )
     assert child_chunks[0].field_meta == {
         "sessionId": child_session,
         "parentSessionId": _SESSION,

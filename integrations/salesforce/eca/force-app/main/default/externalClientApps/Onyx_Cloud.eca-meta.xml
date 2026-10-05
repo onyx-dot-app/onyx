@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExternalClientApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <contactEmail>founders@onyx.app</contactEmail>
+    <distributionState>Packaged</distributionState>
+    <isProtected>false</isProtected>
+    <label>Onyx Cloud</label>
+    <orgScopedExternalApp>00Dbm000004ELiD:Onyx_Cloud</orgScopedExternalApp>
+</ExternalClientApplication>

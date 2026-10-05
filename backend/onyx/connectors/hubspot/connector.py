@@ -30,6 +30,7 @@ from hubspot.crm.tickets.models import SimplePublicObjectId as TicketObjectId
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.hubspot.config import HubSpotObjectType
 from onyx.connectors.hubspot.rate_limit import HubSpotRateLimiter
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -49,7 +50,7 @@ from onyx.utils.logger import setup_logger
 HUBSPOT_BASE_URL = "https://app.hubspot.com"
 HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 
-AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
+AVAILABLE_OBJECT_TYPES = {object_type.value for object_type in HubSpotObjectType}
 
 HUBSPOT_PAGE_SIZE = 100
 # HubSpot Search API rejects cursors beyond this offset.
@@ -84,11 +85,10 @@ class HubSpotConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        access_token: str | None = None,
         object_types: list[str] | None = None,
     ) -> None:
         self.batch_size = batch_size
-        self._access_token = access_token
+        self._access_token: str | None = None
         self._portal_id: str | None = None
         self._rate_limiter = HubSpotRateLimiter()
 
@@ -131,6 +131,8 @@ class HubSpotConnector(LoadConnector, PollConnector):
         self._portal_id = value
 
     def _call_hubspot(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        # The SDK sends requests with no timeout unless one is passed per call.
+        kwargs.setdefault("_request_timeout", REQUEST_TIMEOUT_SECONDS)
         return self._rate_limiter.call(func, *args, **kwargs)
 
     def _batch_read(
@@ -180,16 +182,20 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 page_kwargs["after"] = after
 
             page = self._call_hubspot(fetch_page, **page_kwargs)
-            results = getattr(page, "results", [])
+            results = getattr(page, "results", [])  # ods: ignore[getattr]
             for result in results:
                 yield result
 
-            paging = getattr(page, "paging", None)
-            next_page = getattr(paging, "next", None) if paging else None
+            paging = getattr(page, "paging", None)  # ods: ignore[getattr]
+            next_page = (
+                getattr(paging, "next", None)  # ods: ignore[getattr]
+                if paging
+                else None
+            )
             if next_page is None:
                 break
 
-            after = getattr(next_page, "after", None)
+            after = getattr(next_page, "after", None)  # ods: ignore[getattr]
             if after is None:
                 break
 
@@ -235,15 +241,19 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 sorts=sorts,
             )
             page = self._call_hubspot(search_fn, public_object_search_request=request)
-            results = getattr(page, "results", [])
+            results = getattr(page, "results", [])  # ods: ignore[getattr]
             for result in results:
                 yield result
 
-            paging = getattr(page, "paging", None)
-            next_page = getattr(paging, "next", None) if paging else None
+            paging = getattr(page, "paging", None)  # ods: ignore[getattr]
+            next_page = (
+                getattr(paging, "next", None)  # ods: ignore[getattr]
+                if paging
+                else None
+            )
             if next_page is None:
                 break
-            after = getattr(next_page, "after", None)
+            after = getattr(next_page, "after", None)  # ods: ignore[getattr]
             if after is None:
                 break
 
@@ -295,7 +305,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         try:
             # Search API returns ISO 8601 strings; filter values use ms epoch.
-            next_start = datetime.fromisoformat(last_ts_ms.replace("Z", "+00:00"))
+            next_start = datetime.fromisoformat(last_ts_ms)
         except (ValueError, AttributeError):
             try:
                 next_start = datetime.fromtimestamp(
@@ -396,7 +406,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
         caller falls back to a dedicated v4 associations API call instead.
         Returns [] when the type simply has no associations.
         """
-        associations = getattr(obj, "associations", None)
+        associations = getattr(obj, "associations", None)  # ods: ignore[getattr]
         if not isinstance(associations, dict):
             return None
         assoc_collection = associations.get(assoc_type)

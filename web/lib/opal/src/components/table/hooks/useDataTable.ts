@@ -310,7 +310,7 @@ export default function useDataTable<TData extends RowData>(
       columnSizing,
       columnVisibility,
       pagination,
-      ...(isServerSide ? {} : { globalFilter }),
+      globalFilter: isServerSide ? undefined : globalFilter,
     },
     onSortingChange: isServerSide
       ? (updater) => {

@@ -4,11 +4,14 @@ from typing import Any
 import httpx
 import pytest
 
+from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
+    catalog_model_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
+    model_identity_names,
     model_is_reasoning_model,
+    supported_reasoning_efforts,
 )
 from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.well_known_providers.llm_provider_options import (
@@ -17,6 +20,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -71,10 +75,18 @@ def assert_response_is_equivalent(
         )
         return {
             **filled_with_max_input_tokens.model_dump(),
-            "supports_image_input": litellm_thinks_model_supports_image_input(
+            "supports_image_input": catalog_model_supports_image_input(
                 req.name, provider_name
             ),
             "supports_reasoning": model_is_reasoning_model(req.name, provider_name),
+            "supported_reasoning_efforts": [
+                effort.value
+                for effort in supported_reasoning_efforts(
+                    provider_name,
+                    model_identity_names(req.name, None),
+                    resolve_api_surface(provider_name, None),
+                )
+            ],
             "is_recommended_default": req.name
             == fetch_default_model_for_provider(provider_name),
             "display_name": display_name,
@@ -435,8 +447,8 @@ def test_delete_default_llm_provider_rejected(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
     )
-    assert delete_response.status_code == 400
-    assert "Cannot delete the default LLM provider" in delete_response.json()["detail"]
+    assert delete_response.status_code == 409
+    assert "chat default model" in delete_response.json()["detail"]
 
     # Verify provider still exists
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
@@ -557,7 +569,7 @@ def test_force_delete_default_llm_provider(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
     )
-    assert delete_response.status_code == 400
+    assert delete_response.status_code == 409
 
     # Force delete — should succeed
     force_delete_response = client.delete(
@@ -619,7 +631,7 @@ def test_delete_default_vision_provider_clears_vision_default(
     )
     assert vision_response.status_code == 200
     vision_provider = vision_response.json()
-    _set_default_vision_provider(admin_user, vision_provider["id"], "gpt-4o")
+    LLMProviderManager.set_default_vision(vision_provider["id"], admin_user, "gpt-4o")
 
     # Verify vision default is set
     data = _get_providers_admin(admin_user)
@@ -1364,21 +1376,6 @@ def _set_default_provider(
     assert response.status_code == 200
 
 
-def _set_default_vision_provider(
-    admin_user: DATestUser, provider_id: int, vision_model: str | None = None
-) -> None:
-    """Utility function to set a provider as the default vision provider."""
-    response = client.post(
-        f"{API_SERVER_URL}/admin/llm/default-vision",
-        json={
-            "provider_id": provider_id,
-            "model_name": vision_model,
-        },
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 200
-
-
 def test_multiple_providers_default_switching(
     reset: None,  # noqa: ARG001
 ) -> None:  # noqa: ARG001
@@ -1848,8 +1845,8 @@ def test_default_provider_and_vision_provider_selection(
     _set_default_provider(admin_user, provider_1["id"], provider_1_non_vision_model)
 
     # Step 4: Set provider 2 with a specific vision model as the default vision provider
-    _set_default_vision_provider(
-        admin_user, provider_2["id"], provider_2_vision_model_1
+    LLMProviderManager.set_default_vision(
+        provider_2["id"], admin_user, provider_2_vision_model_1
     )
 
     # Step 5: Verify via admin endpoint
@@ -2200,8 +2197,8 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     vision_provider = create_vision_response.json()
 
     # Set as default vision provider
-    _set_default_vision_provider(
-        admin_user, vision_provider["id"], "gpt-4-vision-preview"
+    LLMProviderManager.set_default_vision(
+        vision_provider["id"], admin_user, "gpt-4-vision-preview"
     )
 
     # Step 3: Create image generation config using clone mode from regular provider
@@ -2319,3 +2316,89 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
 
     # Clean up: Delete the image gen config (to clean up the internal LLM provider)
     _delete_image_gen_config(admin_user, image_gen_provider_id)
+
+
+def test_get_llm_provider_by_id(reset: None) -> None:  # noqa: ARG001
+    """Reading one provider no longer requires listing (and decrypting) them all."""
+    admin_user = UserManager.create(name="admin_user")
+
+    created = client.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": str(uuid.uuid4()),
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [{"name": "gpt-4", "is_visible": True}],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert created.status_code == 200
+    provider_id = created.json()["id"]
+
+    response = client.get(
+        f"{API_SERVER_URL}/admin/llm/provider/{provider_id}",
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+    fetched = response.json()
+    assert fetched["id"] == provider_id
+    # masked exactly as the listing masks it
+    assert fetched["api_key"] == "sk-0****0000"
+
+    missing = client.get(
+        f"{API_SERVER_URL}/admin/llm/provider/{provider_id + 10_000}",
+        headers=admin_user.headers,
+    )
+    assert missing.status_code == 404
+    assert missing.json()["error_code"] == "NOT_FOUND"
+
+
+def test_keep_existing_models_preserves_unsent_models(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Without the flag the model list is a full replace, which silently drops
+    rows the read hides (obsolete models, dated duplicates)."""
+    admin_user = UserManager.create(name="admin_user")
+    name = str(uuid.uuid4())
+
+    created = client.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": name,
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                {"name": "gpt-4", "is_visible": True},
+                {"name": "gpt-4o", "is_visible": True},
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert created.status_code == 200
+    provider_id = created.json()["id"]
+
+    def _update(keep: bool) -> list[str]:
+        response = client.put(
+            f"{API_SERVER_URL}/admin/llm/provider",
+            headers=admin_user.headers,
+            json={
+                "id": provider_id,
+                "name": name,
+                "provider": LlmProviderNames.OPENAI,
+                "model_configurations": [{"name": "gpt-4", "is_visible": True}],
+                "is_public": True,
+                "groups": [],
+                "keep_existing_models": keep,
+            },
+        )
+        assert response.status_code == 200
+        return sorted(mc["name"] for mc in response.json()["model_configurations"])
+
+    # Sending only gpt-4 keeps gpt-4o.
+    assert _update(keep=True) == ["gpt-4", "gpt-4o"]
+    # The default is still a full replace.
+    assert _update(keep=False) == ["gpt-4"]

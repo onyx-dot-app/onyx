@@ -219,6 +219,59 @@ def user_owns_a_tenant(email: str) -> bool:
         return result is not None
 
 
+def is_active_member(
+    tenant_id: str, email: str, oauth_name: str, account_id: str
+) -> bool:
+    """Whether this login is already an active member of tenant_id, by address
+    or by a subject linked to an active membership here. A retired (inactive)
+    membership does not count, so it cannot be reactivated on an unverified
+    domain."""
+    if not MULTI_TENANT:
+        return False
+
+    normalized_email = email.lower()
+    with get_catalog_session() as db_session:
+        by_email = db_session.scalar(
+            select(UserTenantMapping.tenant_id).where(
+                UserTenantMapping.email == normalized_email,
+                UserTenantMapping.tenant_id == tenant_id,
+                UserTenantMapping.active.is_(True),
+            )
+        )
+    if by_email is not None:
+        return True
+    return get_tenant_id_for_oauth_account(oauth_name, account_id) == tenant_id
+
+
+def ensure_tenant_membership(
+    email: str, tenant_id: str, oauth_name: str, account_id: str
+) -> None:
+    """Record an active workspace membership for someone the IdP just vouched for.
+
+    A first SSO login creates the user inside the workspace schema, but nothing
+    else writes the catalog row that makes them a member. Without it they are
+    unbilled, unresolvable by address, and cannot link an IdP subject.
+
+    `add_users_to_tenant` guarantees a row exists (active, with the seat enforced,
+    when they belong nowhere else). If it leaves the row inactive because they are
+    active in another workspace, or an invitation was already pending, the
+    vouching login is the acceptance: activate it, retire the rival, and move this
+    login's subject onto it.
+    """
+    if not MULTI_TENANT:
+        return
+
+    normalized_email = email.lower()
+    add_users_to_tenant([normalized_email], tenant_id)
+
+    with get_catalog_session() as db_session:
+        mapping = db_session.get(UserTenantMapping, (normalized_email, tenant_id))
+        needs_activation = mapping is not None and not mapping.active
+
+    if needs_activation:
+        accept_user_invite(normalized_email, tenant_id, [(oauth_name, account_id)])
+
+
 def record_oauth_identity(
     email: str, tenant_id: str, oauth_name: str, account_id: str
 ) -> None:
@@ -608,12 +661,14 @@ def approve_user_invite(email: str, tenant_id: str) -> None:
             destination.active = True
         db_session.commit()
 
-    # Also remove the user from pending users list
-    # Remove from pending users
+    # Consume the pending request. It is stored as the requester typed it, so an
+    # exact match would leave a stale entry behind to authorize a later move.
     pending_users = get_pending_users()
-    if email in pending_users:
-        pending_users.remove(email)
-        write_pending_users(pending_users)
+    remaining_pending = [
+        pending for pending in pending_users if pending.lower() != email
+    ]
+    if len(remaining_pending) != len(pending_users):
+        write_pending_users(remaining_pending)
 
     # Add to invited users
     invited_users = get_invited_users()

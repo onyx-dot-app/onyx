@@ -1,12 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelectField } from "@opal/form";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
@@ -60,6 +60,8 @@ function VertexAIModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: VertexAIModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
+  const tInputSelect = useTranslations("common.inputSelect");
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
   const settings = useSettings();
@@ -83,33 +85,39 @@ function VertexAIModalInternals({
           {showAuthMethodSelector && (
             <InputVertical
               withLabel={FIELD_VERTEX_AUTH_METHOD}
-              title="Authentication Method"
-              subDescription="Choose how Onyx should authenticate with Google Vertex AI."
+              title={t("vertexAi.authMethodField.title")}
+              subDescription={t("vertexAi.authMethodField.description", {
+                appName: settings.appName,
+              })}
             >
-              <InputSelectField name={FIELD_VERTEX_AUTH_METHOD}>
-                <InputSelect.Trigger />
-                <InputSelect.Content>
-                  <InputSelect.Item
-                    value={AUTH_METHOD_SERVICE_ACCOUNT}
-                    description="Upload a GCP service account key JSON file"
-                  >
-                    Service Account JSON
-                  </InputSelect.Item>
-                  <InputSelect.Item
-                    value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                    description="Use the pod's ambient GCP credentials (GKE Workload Identity)"
-                  >
-                    Workload Identity (GKE)
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelectField>
+              <InputSingleSelectField
+                name={FIELD_VERTEX_AUTH_METHOD}
+                defaultOption={AUTH_METHOD_SERVICE_ACCOUNT}
+                placeholder={tInputSelect("placeholder.fallback")}
+                options={[
+                  {
+                    value: AUTH_METHOD_SERVICE_ACCOUNT,
+                    title: t("vertexAi.authMethodField.serviceAccount.label"),
+                    description: t(
+                      "vertexAi.authMethodField.serviceAccount.description"
+                    ),
+                  },
+                  {
+                    value: AUTH_METHOD_WORKLOAD_IDENTITY,
+                    title: t("vertexAi.authMethodField.workloadIdentity.label"),
+                    description: t(
+                      "vertexAi.authMethodField.workloadIdentity.description"
+                    ),
+                  },
+                ]}
+              />
             </InputVertical>
           )}
 
           <InputVertical
             withLabel={FIELD_VERTEX_LOCATION}
-            title="Google Cloud Region Name"
-            subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
+            title={t("vertexAi.locationField.title")}
+            subDescription={t("vertexAi.locationField.description")}
           >
             <InputTypeInField
               name={FIELD_VERTEX_LOCATION}
@@ -123,8 +131,8 @@ function VertexAIModalInternals({
         <InputPadder>
           <InputVertical
             withLabel={FIELD_VERTEX_CREDENTIALS}
-            title="API Key"
-            subDescription="Attach your API key JSON from Google Cloud to access your models."
+            title={t("vertexAi.credentialsField.title")}
+            subDescription={t("vertexAi.credentialsField.description")}
           >
             <FileUploadFormField name={FIELD_VERTEX_CREDENTIALS} label="" />
           </InputVertical>
@@ -135,15 +143,19 @@ function VertexAIModalInternals({
         <>
           <InputPadder>
             <MessageCard
+              outerPadding={1}
+              innerPadding={1}
               variant="info"
-              title="Onyx will use the pod's ambient Google Cloud credentials (via google.auth.default). Ensure the Kubernetes ServiceAccount is bound to a GCP Service Account with access to Vertex AI."
+              title={t("vertexAi.workloadIdentityNotice.title", {
+                appName: settings.appName,
+              })}
             />
           </InputPadder>
-          <Card background="light" border="none" padding={2}>
+          <Card color="background-tint-00" border="none" padding={2}>
             <InputVertical
               withLabel={FIELD_VERTEX_PROJECT}
-              title="GCP Project ID"
-              subDescription="The GCP project where Vertex AI is enabled. Required because ADC cannot reliably infer the target project under service-account impersonation."
+              title={t("vertexAi.projectField.title")}
+              subDescription={t("vertexAi.projectField.description")}
             >
               <InputTypeInField
                 name={FIELD_VERTEX_PROJECT}
@@ -182,6 +194,7 @@ export default function VertexAIModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -206,23 +219,25 @@ export default function VertexAIModal({
       vertex_project:
         (existingLlmProvider?.custom_config?.vertex_project as string) ?? "",
     },
-  } as VertexAIModalValues;
+  };
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     extra: {
       custom_config: Yup.object({
         vertex_auth_method: Yup.string().required(
-          "Authentication method is required"
+          t("vertexAi.validation.authMethodRequired")
         ),
         vertex_location: Yup.string(),
         vertex_credentials: Yup.string().when("vertex_auth_method", {
           is: AUTH_METHOD_SERVICE_ACCOUNT,
-          then: (schema) => schema.required("Credentials file is required"),
+          then: (schema) =>
+            schema.required(t("vertexAi.validation.credentialsRequired")),
           otherwise: (schema) => schema.notRequired(),
         }),
         vertex_project: Yup.string().when("vertex_auth_method", {
           is: AUTH_METHOD_WORKLOAD_IDENTITY,
-          then: (schema) => schema.required("GCP Project ID is required"),
+          then: (schema) =>
+            schema.required(t("vertexAi.validation.projectRequired")),
           otherwise: (schema) => schema.notRequired(),
         }),
       }),
@@ -252,6 +267,7 @@ export default function VertexAIModal({
         };
 
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -272,8 +288,8 @@ export default function VertexAIModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

@@ -1,5 +1,8 @@
+import contextvars
 import json
-from collections.abc import Iterable
+import threading
+from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from opensearchpy.helpers.errors import BulkIndexError
@@ -16,17 +19,18 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.models import convert_metadata_list_of_strings_to_dict
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import (
+    CCPairAccessMode,
     IndexFilters,
     InferenceChunk,
     InferenceChunkUncleaned,
 )
-from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import VectorQuantization
 from onyx.db.models import DocumentSource
 from onyx.document_index.chunk_content_enrichment import (
     cleanup_content_for_chunks,
     generate_enriched_content_for_chunk_text,
 )
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     DocumentSectionRequest,
@@ -47,12 +51,15 @@ from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_S
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
+    CC_PAIR_IDS_FIELD_NAME,
     CONTENT_FIELD_NAME,
     CREATED_AT_FIELD_NAME,
     DOCUMENT_SETS_FIELD_NAME,
     GLOBAL_BOOST_FIELD_NAME,
     HIDDEN_FIELD_NAME,
     PERSONAS_FIELD_NAME,
+    PUBLIC_FIELD_NAME,
+    SOURCE_TYPE_FIELD_NAME,
     USER_PROJECTS_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
@@ -82,6 +89,38 @@ VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 # Batch size for the orphan sweep's delete-by-query terms filter — well under the
 # OpenSearch terms cap (65536) so a large mid-port purge can't build an oversized query.
 _PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
+
+# Chunk IDs logged per direction when the cc-pair access shadow comparison
+# finds a disagreement.
+CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE = 5
+CC_PAIR_ACCESS_SHADOW_QUERY_TIMEOUT_S = 2
+# Shadow comparisons run off the request thread. When all workers are busy, a
+# comparison is skipped rather than queued.
+_CC_PAIR_ACCESS_SHADOW_MAX_IN_FLIGHT = 4
+_cc_pair_access_shadow_executor = ThreadPoolExecutor(
+    max_workers=_CC_PAIR_ACCESS_SHADOW_MAX_IN_FLIGHT,
+    thread_name_prefix="cc_pair_access_shadow",
+)
+_cc_pair_access_shadow_slots = threading.BoundedSemaphore(
+    _CC_PAIR_ACCESS_SHADOW_MAX_IN_FLIGHT
+)
+
+
+def _submit_cc_pair_access_shadow_check(check: Callable[[], None]) -> None:
+    if not _cc_pair_access_shadow_slots.acquire(blocking=False):
+        return
+
+    def _run() -> None:
+        try:
+            check()
+        finally:
+            _cc_pair_access_shadow_slots.release()
+
+    try:
+        _cc_pair_access_shadow_executor.submit(contextvars.copy_context().run, _run)
+    except Exception:
+        _cc_pair_access_shadow_slots.release()
+        raise
 
 
 # Per-process cache of indices we've already verified/created/applied the
@@ -169,6 +208,7 @@ def convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
         section_continuation=False,
         document_id=chunk.document_id,
         source_type=DocumentSource(chunk.source_type),
+        source_types=tuple(DocumentSource(source) for source in chunk.source_types),
         semantic_identifier=chunk.semantic_identifier,
         title=chunk.title,
         boost=chunk.global_boost,
@@ -217,6 +257,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         if _metadata_list
         else None
     )
+    source_types = chunk.source_types or (chunk.source_document.source,)
     return DocumentChunk(
         document_id=chunk.source_document.id,
         chunk_index=chunk.chunk_id,
@@ -227,7 +268,8 @@ def _convert_onyx_chunk_to_opensearch_document(
         title_vector=chunk.title_embedding,
         content=filtered_content,
         content_vector=chunk.embeddings.full_embedding,
-        source_type=chunk.source_document.source.value,
+        source_type=source_types[0].value,
+        source_types=tuple(source.value for source in source_types),
         metadata_list=filtered_metadata_list,
         metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
@@ -236,6 +278,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         access_control_list=generate_opensearch_filtered_access_control_list(
             chunk.access
         ),
+        cc_pair_ids=chunk.cc_pair_ids or None,
         global_boost=chunk.boost,
         semantic_identifier=filtered_semantic_identifier,
         image_file_id=chunk.image_file_id,
@@ -291,7 +334,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         tenant_state: The tenant state of the caller.
         index_name: The name of the index to interact with.
         embedding_dim: The dimensionality of the embeddings used for the index.
-        embedding_precision: The precision of the embeddings used for the index.
+        vector_quantization: The scalar quantization of the index vector
+            fields. Used when the index is created and when it is searched.
     """
 
     def __init__(
@@ -299,10 +343,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
         tenant_state: TenantState,
         index_name: str,
         embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,
+        vector_quantization: VectorQuantization,
     ) -> None:
         self._index_name: str = index_name
         self._tenant_state: TenantState = tenant_state
+        self._vector_quantization: VectorQuantization = vector_quantization
         self._client = OpenSearchIndexClient(index_name=self._index_name)
 
         if (
@@ -311,9 +356,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             and index_name not in _verified_index_names_for_current_process
         ):
             try:
-                self.verify_and_create_index_if_necessary(
-                    embedding_dim=embedding_dim, embedding_precision=embedding_precision
-                )
+                self.verify_and_create_index_if_necessary(embedding_dim=embedding_dim)
             except OpenSearchIndexWriteBlockedError as e:
                 # Existing index, still readable — don't fail the caller. Not
                 # cached as verified, so a later init retries the mapping
@@ -329,11 +372,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             else:
                 _verified_index_names_for_current_process.add(index_name)
 
-    def verify_and_create_index_if_necessary(
-        self,
-        embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,  # noqa: ARG002
-    ) -> None:
+    def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
         """Verifies and creates the index if necessary.
 
         Also puts the desired cluster settings if not in a multitenant
@@ -349,8 +388,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
         Args:
             embedding_dim: Vector dimensionality for the vector similarity part
                 of the search.
-            embedding_precision: Precision of the values of the vectors for the
-                similarity part of the search.
 
         Raises:
             Exception: There was an error verifying or creating the index or
@@ -372,7 +409,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 set_cluster_state(self._client)
 
             expected_mappings = DocumentSchema.get_document_schema(
-                embedding_dim, self._tenant_state.multitenant
+                embedding_dim,
+                self._tenant_state.multitenant,
+                vector_quantization=self._vector_quantization,
             )
 
             if not self._client.index_exists():
@@ -569,6 +608,48 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return self._client.delete_by_query(query_body)
 
+    def get_documents_with_any_chunk(self, document_ids: list[str]) -> set[str]:
+        """Gets the IDs of the documents that have at least one chunk in this index.
+
+        Scans all chunks rather than probing chunk 0, so a document that lost only its
+        first chunk still counts as present. Refreshes the index first, because the
+        scan is a search and a search cannot see unrefreshed writes.
+        """
+        if not document_ids:
+            return set()
+        self._client.refresh_index()
+        found: set[str] = set()
+        for page in self._client.iter_chunks_for_doc_ids(
+            document_ids, tenant_state=self._tenant_state
+        ):
+            found.update(chunk.document_id for chunk in page)
+        return found
+
+    def get_documents_missing_chunks(self, document_ids: list[str]) -> list[str]:
+        """Gets the IDs of the documents whose chunk 0 is not in this index.
+
+        The result keeps the input order. Only chunk 0 is checked: comparing full
+        chunk counts against Postgres would flag a document re-indexed mid-port as
+        missing, because its count changed after the port copied it.
+        """
+        unique_ids = list(dict.fromkeys(document_ids))
+        if not unique_ids:
+            return []
+        chunk_id_to_doc_id = {
+            get_opensearch_doc_chunk_id(
+                tenant_state=self._tenant_state,
+                document_id=document_id,
+                chunk_index=0,
+            ): document_id
+            for document_id in unique_ids
+        }
+        found = self._client.get_existing_chunk_ids(list(chunk_id_to_doc_id.keys()))
+        return [
+            doc_id
+            for chunk_id, doc_id in chunk_id_to_doc_id.items()
+            if chunk_id not in found
+        ]
+
     def delete_port_written_chunks(self, document_ids: list[str]) -> int:
         """Delete only port-written chunks (written_by_port=true) for the given docs.
 
@@ -589,6 +670,18 @@ class OpenSearchDocumentIndex(DocumentIndex):
             )
             deleted += self._client.delete_by_query(query_body)
         return deleted
+
+    def set_cc_pair_ids(self, doc_id_to_cc_pair_ids: dict[str, list[int]]) -> int:
+        """Sets cc_pair_ids on every chunk of the given documents, without
+        needing chunk counts. Documents with no chunks are skipped. Returns the
+        number of chunks updated."""
+        if not doc_id_to_cc_pair_ids:
+            return 0
+        query_body = DocumentQuery.set_cc_pair_ids_query(
+            doc_id_to_cc_pair_ids=doc_id_to_cc_pair_ids,
+            tenant_state=self._tenant_state,
+        )
+        return self._client.update_by_query(query_body)
 
     def update(
         self,
@@ -628,15 +721,22 @@ class OpenSearchDocumentIndex(DocumentIndex):
         missing_chunk_ids: list[str] = []
         missing_document_ids: set[str] = set()
         for update_request in update_requests:
-            properties_to_update: dict[str, Any] = dict()
+            properties_to_update: dict[str, Any] = {}
             # TODO(andrei): Nit but consider if we can use DocumentChunk here so
             # we don't have to think about passing in the appropriate types into
             # this dict.
             if update_request.access is not None:
+                properties_to_update[PUBLIC_FIELD_NAME] = (
+                    update_request.access.is_public
+                )
                 properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = (
                     generate_opensearch_filtered_access_control_list(
                         update_request.access
                     )
+                )
+            if update_request.cc_pair_ids is not None:
+                properties_to_update[CC_PAIR_IDS_FIELD_NAME] = sorted(
+                    update_request.cc_pair_ids
                 )
             if update_request.document_sets is not None:
                 properties_to_update[DOCUMENT_SETS_FIELD_NAME] = list(
@@ -655,6 +755,17 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.persona_ids is not None:
                 properties_to_update[PERSONAS_FIELD_NAME] = list(
                     update_request.persona_ids
+                )
+            if update_request.source_types:
+                source_values = [
+                    source.value
+                    for source in sorted(
+                        set(update_request.source_types),
+                        key=lambda source: source.value,
+                    )
+                ]
+                properties_to_update[SOURCE_TYPE_FIELD_NAME] = (
+                    source_values[0] if len(source_values) == 1 else source_values
                 )
             if update_request.created_at is not None:
                 # Stored as epoch seconds
@@ -740,7 +851,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self,
         chunk_requests: list[DocumentSectionRequest],
         filters: IndexFilters,
-        # TODO(andrei): Remove this from the new interface at some point; we
+        # TODO(andrei): Remove this from the interface at some point; we
         # should not be exposing this.
         batch_retrieval: bool = False,  # noqa: ARG002
         # TODO(andrei): Add a param for whether to retrieve hidden docs.
@@ -754,6 +865,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
             len(chunk_requests),
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(
+            filters,
+            document_ids=sorted(
+                {chunk_request.document_id for chunk_request in chunk_requests}
+            ),
+        )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
             search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
@@ -763,7 +880,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 # NOTE: Index filters includes metadata tags which were filtered
                 # for invalid unicode at indexing time. In theory it would be
                 # ideal to do filtering here as well, in practice we never did
-                # that in the Vespa codepath and have not seen issues in
+                # that in the former Vespa codepath and have not seen issues in
                 # production, so we deliberately conform to the existing logic
                 # in order to not unknowningly introduce a possible bug.
                 index_filters=filters,
@@ -789,6 +906,54 @@ class OpenSearchDocumentIndex(DocumentIndex):
             results.extend(inference_chunks)
         return results
 
+    def _log_cc_pair_access_shadow_disagreement(
+        self, filters: IndexFilters, document_ids: list[str] | None = None
+    ) -> None:
+        """In shadow mode, logs sample chunks where the old ACL filter and the
+        cc-pair access filter disagree, within this retrieval's other filters
+        and, if given, its document IDs. It runs two filter-only ID queries in
+        the background, so the retrieval never waits for it. Results never
+        depend on it, so errors are logged and not raised."""
+        cc_pair_access = filters.cc_pair_access
+        if (
+            cc_pair_access is None
+            or cc_pair_access.mode != CCPairAccessMode.SHADOW
+            or filters.access_control_list is None
+        ):
+            return
+
+        def _check() -> None:
+            try:
+                for visible_to_old_filter_only in (True, False):
+                    chunk_ids = self._client.search_for_document_ids(
+                        body=DocumentQuery.get_cc_pair_access_shadow_query(
+                            tenant_state=self._tenant_state,
+                            index_filters=filters,
+                            cc_pair_access=cc_pair_access,
+                            visible_to_old_filter_only=visible_to_old_filter_only,
+                            num_hits=CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE,
+                            timeout_s=CC_PAIR_ACCESS_SHADOW_QUERY_TIMEOUT_S,
+                            document_ids=document_ids,
+                        ),
+                        search_type=OpenSearchSearchType.CC_PAIR_ACCESS_SHADOW,
+                    )
+                    if chunk_ids:
+                        logger.warning(
+                            "cc-pair access shadow: tenant=%s chunks visible only "
+                            "to the %s filter (sample of up to %d): %s",
+                            self._tenant_state.tenant_id,
+                            "old" if visible_to_old_filter_only else "cc-pair",
+                            CC_PAIR_ACCESS_SHADOW_SAMPLE_SIZE,
+                            chunk_ids,
+                        )
+            except Exception:
+                logger.exception("cc-pair access shadow comparison failed")
+
+        try:
+            _submit_cc_pair_access_shadow_check(_check)
+        except Exception:
+            logger.exception("cc-pair access shadow comparison could not start")
+
     def hybrid_retrieval(
         self,
         query: str,
@@ -806,6 +971,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_to_retrieve,
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(filters)
         # TODO(andrei): This could be better, the caller should just make this
         # decision when passing in the query param. See the above comment in the
         # function signature.
@@ -818,11 +984,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=False,
+            vector_quantization=self._vector_quantization,
         )
         normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
@@ -859,6 +1026,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_to_retrieve,
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(filters)
         query_body = DocumentQuery.get_keyword_search_query(
             query_text=query,
             num_hits=num_to_retrieve,
@@ -866,7 +1034,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -903,6 +1071,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_to_retrieve,
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(filters)
         query_body = DocumentQuery.get_semantic_search_query(
             query_embedding=query_embedding,
             num_hits=num_to_retrieve,
@@ -910,11 +1079,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that in the former Vespa codepath and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
             include_hidden=False,
+            vector_quantization=self._vector_quantization,
         )
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
@@ -945,6 +1115,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             num_to_retrieve,
             self._index_name,
         )
+        self._log_cc_pair_access_shadow_disagreement(filters)
         query_body = DocumentQuery.get_random_search_query(
             tenant_state=self._tenant_state,
             index_filters=filters,
@@ -972,7 +1143,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> None:
         """Indexes raw document chunks into OpenSearch.
 
-        Used by the Vespa migration task and the reindex port. The reindex port
+        Used by the reindex port. The reindex port
         passes use_create_only=True so its stale backlog snapshot can never
         overwrite a chunk a live/forward writer already owns in FUTURE (an
         existing chunk is a benign 409). The port is pure gap-fill backfill of
@@ -1016,46 +1187,33 @@ class OpenSearchIndexPair(DocumentIndex):
         # Embedding info needed at verify-and-create time per index.
         # TODO(andrei): This is dumb, fix this.
         secondary_embedding_dim: int | None = None,
-        secondary_embedding_precision: EmbeddingPrecision | None = None,
         # INSTANT reindex-port: primary is a promoted, still-backfilling index; see update().
         primary_backfill_in_progress: bool = False,
     ) -> None:
-        # All three secondary fields must be set together or all None — checked
-        # independently so a partially-set state surfaces here rather than
-        # deferring to a less informative assertion in verify_and_create.
+        # Both secondary fields must be set together or both None — checked
+        # here so a partially-set state surfaces early rather than deferring to
+        # a less informative assertion in verify_and_create.
         secondary_set = secondary is not None
         dim_set = secondary_embedding_dim is not None
-        precision_set = secondary_embedding_precision is not None
-        if not (secondary_set == dim_set == precision_set):
+        if secondary_set != dim_set:
             raise ValueError(
-                "Bug: Secondary OpenSearchDocumentIndex, secondary_embedding_dim, and "
-                "secondary_embedding_precision must all be set together or all be None. Got: "
-                f"secondary={secondary_set}, embedding_dim={dim_set}, "
-                f"embedding_precision={precision_set}."
+                "Bug: Secondary OpenSearchDocumentIndex and secondary_embedding_dim "
+                "must be set together or both be None. Got: "
+                f"secondary={secondary_set}, embedding_dim={dim_set}."
             )
         self._primary = primary
         self._secondary = secondary
         self._secondary_embedding_dim = secondary_embedding_dim
-        self._secondary_embedding_precision = secondary_embedding_precision
         self._primary_backfill_in_progress = primary_backfill_in_progress
 
-    def verify_and_create_index_if_necessary(
-        self,
-        embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,
-    ) -> None:
-        self._primary.verify_and_create_index_if_necessary(
-            embedding_dim, embedding_precision
-        )
+    def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
+        self._primary.verify_and_create_index_if_necessary(embedding_dim)
         if self._secondary is not None:
             assert self._secondary_embedding_dim is not None, (
                 "Bug: Secondary embedding dimension is not set."
             )
-            assert self._secondary_embedding_precision is not None, (
-                "Bug: Secondary embedding precision is not set."
-            )
             self._secondary.verify_and_create_index_if_necessary(
-                self._secondary_embedding_dim, self._secondary_embedding_precision
+                self._secondary_embedding_dim
             )
 
     def index(

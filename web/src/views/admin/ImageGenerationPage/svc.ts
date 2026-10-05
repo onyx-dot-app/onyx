@@ -3,6 +3,8 @@
  * API functions for managing image generation configurations
  */
 
+import type { ErrorResponseBody } from "@/lib/fetcher";
+
 // Types
 export interface ImageGenerationConfigView {
   image_provider_id: string; // Primary key
@@ -87,7 +89,7 @@ export async function testImageGenerationApiKey(
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error: ErrorResponseBody = await response.json();
       return {
         ok: false,
         errorMessage: error.detail || "API key validation failed",
@@ -159,7 +161,7 @@ export async function createImageGenerationConfig(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to create config");
   }
 
@@ -213,7 +215,7 @@ export async function updateImageGenerationConfig(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to update config");
   }
 
@@ -234,7 +236,7 @@ export async function setDefaultImageGenerationConfig(
   );
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to set default");
   }
 }
@@ -253,7 +255,7 @@ export async function unsetDefaultImageGenerationConfig(
   );
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to unset default");
   }
 }
@@ -269,7 +271,7 @@ export async function deleteImageGenerationConfig(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to delete config");
   }
 }

@@ -88,6 +88,7 @@ const APP: ExternalAppAdminResponse = {
   upstream_url_patterns: DESCRIPTOR.upstream_url_patterns,
   auth_template: DESCRIPTOR.auth_template,
   organization_credentials: { token: "masked-token" },
+  credential_placeholder_keys: ["token"],
   enabled: true,
   actions: [],
   associated_skills: [

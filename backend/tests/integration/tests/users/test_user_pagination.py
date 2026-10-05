@@ -191,9 +191,8 @@ def test_user_pagination_account_types_filter(reset: None) -> None:  # noqa: ARG
     users whose ``account_type`` is in the supplied list, while omitting the
     filter returns the full accepted-user set.
 
-    This guards against the silent filter removal that shipped in the
-    UserRole-cleanup PR: an endpoint tagged PUBLIC_API_TAGS must not drop
-    filter params without a replacement.
+    This guards against silent filter removal: an endpoint tagged
+    PUBLIC_API_TAGS must not drop filter params without a replacement.
     """
     admin: DATestUser = UserManager.create(name="admin_account_types")
 

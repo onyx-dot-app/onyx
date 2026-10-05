@@ -13,12 +13,14 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.document_set import (
     check_document_sets_are_public,
     fetch_all_document_sets_for_user,
     get_document_set_by_id,
+    get_document_set_by_id_for_user,
     get_group_ids_for_document_set,
     insert_document_set,
     mark_document_set_as_to_be_deleted,
@@ -84,20 +86,20 @@ def _assert_attachable_cc_pairs(
     user: User, db_session: Session, cc_pair_ids: list[int]
 ) -> None:
     """Bounds attachments to the connectors the caller can already reach: public and
-    sync pairs, pairs in a group they belong to or manage, and groupless pairs they
-    created. ``update_document_set`` checks connectors against the *requested* groups,
-    so it checks nothing once those are empty; only the editable query carries the
-    creator fallback."""
+    sync pairs, pairs in a group they belong to, pairs they may operate, and groupless
+    pairs they created. ``update_document_set`` checks connectors against the
+    *requested* groups, so it checks nothing once those are empty; only the operate
+    query carries the creator fallback."""
     if not cc_pair_ids:
         return
 
     attachable = {
         cc_pair.id
-        for editable in (False, True)
+        for access_level in (CCPairAccessLevel.READ, CCPairAccessLevel.OPERATE)
         for cc_pair in get_connector_credential_pairs_for_user(
             db_session=db_session,
             user=user,
-            get_editable=editable,
+            access_level=access_level,
             ids=cc_pair_ids,
             processing_mode=None,
         )
@@ -186,7 +188,8 @@ def delete_document_set(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
-    document_set = get_document_set_by_id(db_session, document_set_id)
+    # Serialize the delete marker with document-set and group-share updates.
+    document_set = get_document_set_by_id(db_session, document_set_id, for_update=True)
     if document_set is None:
         raise OnyxError(
             OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
@@ -225,12 +228,66 @@ def delete_document_set(
         )
 
 
+@router.get("/admin/document-set/{document_set_id}")
+def get_document_set(
+    document_set_id: int,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_DOCUMENT_SETS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> DocumentSetSummary:
+    """Read one document set.
+
+    The listing is scoped to the caller, so a client managing a single set had
+    to fetch every set and filter. This returns the same shape as the listing.
+    """
+    # The two scopes are not nested: the readable filter needs membership or a
+    # public set, while the editable one matches a managed scope and a creator's
+    # groupless set. The listing unions them, so this does too.
+    readable = get_document_set_by_id_for_user(
+        db_session=db_session,
+        document_set_id=document_set_id,
+        user=user,
+        get_editable=False,
+    )
+    editable = get_document_set_by_id_for_user(
+        db_session=db_session,
+        document_set_id=document_set_id,
+        user=user,
+        get_editable=True,
+    )
+    document_set = readable or editable
+    if document_set is None:
+        raise OnyxError(
+            OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
+            f"Document set {document_set_id} does not exist",
+        )
+
+    is_document_sets_admin = (
+        has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
+        is PermissionAuthority.GLOBAL
+    )
+    is_editable = is_document_sets_admin or editable is not None
+    return DocumentSetSummary.from_model(
+        document_set,
+        permissions=document_set_permissions(
+            is_editable=is_editable,
+            is_document_sets_admin=is_document_sets_admin,
+            owns_groupless=is_editable
+            and user_owns_groupless_document_set(document_set, user),
+        ),
+    )
+
+
 """Endpoints for non-admins"""
 
 
 @router.get("/document-set")
 def list_document_sets_for_user(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    # Search filter vocabulary. READ_DOCUMENT_SETS is deliberately not used: it
+    # means "see every document set", which this route must not grant — the
+    # results stay ACL-filtered below.
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
     get_editable: bool = Query(
         False, description="If true, return editable document sets"

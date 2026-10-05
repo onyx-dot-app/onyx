@@ -22,20 +22,17 @@ import {
   SEARCH_PARAM_NAMES,
   shouldSubmitOnLoad,
 } from "@/app/app/services/searchParams";
-import { FilterManager } from "@/lib/hooks";
-import { OnyxDocument } from "@/lib/search/interfaces";
+
+import { OnyxDocument } from "@/lib/search/types";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import type { ProjectFile } from "@/lib/projects/types";
-import {
-  getSessionProjectTokenCount,
-  getProjectFilesForSession,
-} from "@/lib/projects/svc";
+import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
 // strict mode) can't start a second tail for the same run.
@@ -44,11 +41,9 @@ const resumingRuns = new Set<number>();
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
   searchParams: ReadonlyURLSearchParams;
-  filterManager: FilterManager;
   firstMessage?: string;
 
   // UI state setters
-  setSelectedAgentFromId: (agentId: number | null) => void;
   setSelectedDocuments: (documents: OnyxDocument[]) => void;
   setCurrentMessageFiles: (
     files: ProjectFile[] | ((prev: ProjectFile[]) => ProjectFile[])
@@ -79,9 +74,7 @@ export type SessionFetchError = {
 export default function useChatSessionController({
   existingChatSessionId,
   searchParams,
-  filterManager,
   firstMessage,
-  setSelectedAgentFromId,
   setSelectedDocuments,
   setCurrentMessageFiles,
   chatSessionIdRef,
@@ -92,8 +85,6 @@ export default function useChatSessionController({
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
-  const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
-    useState<number>(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
     useState<SessionFetchError>(null);
@@ -125,7 +116,6 @@ export default function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
-  const { setForcedToolIds } = useForcedTools();
   const { setIncognitoEnabled, setIncognitoSessionId } = useIncognito();
 
   // Fetch chat messages for the chat session
@@ -148,12 +138,11 @@ export default function useChatSessionController({
       setCurrentMessageFiles([]);
     }
 
-    // Only reset filters/selections when switching between existing sessions
+    // Only reset selections when switching between existing sessions. The
+    // search filters need no reset: they live on the chat's tool
+    // configuration, so the next chat reads its own.
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
-      filterManager.setSelectedDocumentSets([]);
-      filterManager.setSelectedTags([]);
-      filterManager.setTimeRange(null);
 
       // Remove uploaded files
       setCurrentMessageFiles([]);
@@ -162,9 +151,6 @@ export default function useChatSessionController({
       // If we're creating a brand new chat, then don't need to scroll
       if (priorChatSessionId !== null) {
         setSelectedDocuments([]);
-
-        // Clear forced tool ids if and only if we're switching to a new chat session
-        setForcedToolIds([]);
       }
     }
 
@@ -175,8 +161,6 @@ export default function useChatSessionController({
         // Clear the current session in the store to show intro messages
         setCurrentSession(null);
 
-        // Reset the selected agent back to default
-        setSelectedAgentFromId(null);
         updateCurrentChatSessionSharedStatus(ChatSessionSharedStatus.Private);
 
         // If we're supposed to submit on initial load, then do that here
@@ -220,7 +204,7 @@ export default function useChatSessionController({
         setIsFetchingChatMessages(existingChatSessionId, false);
         let detail = "An unexpected error occurred.";
         try {
-          const errorBody = await response.json();
+          const errorBody: ErrorResponseBody = await response.json();
           detail = errorBody.detail || detail;
         } catch {
           // ignore parse errors
@@ -235,15 +219,14 @@ export default function useChatSessionController({
         return;
       }
 
-      const session = await response.json();
-      const chatSession = session as BackendChatSession;
+      const session: BackendChatSession = await response.json();
+      const chatSession = session;
       // Restore the incognito UI state on reload of a live incognito session.
       // The id must come back too, or a later upload would be sent with none
       // and land as an ordinary indexed file.
       const isIncognito = chatSession.incognito ?? false;
       setIncognitoEnabled(isIncognito);
       setIncognitoSessionId(isIncognito ? chatSession.chat_session_id : null);
-      setSelectedAgentFromId(chatSession.persona_id);
 
       // Ensure the current session is set to the actual session ID from the response
       setCurrentSession(chatSession.chat_session_id);
@@ -370,8 +353,8 @@ export default function useChatSessionController({
                 `/api/chat/get-chat-session/${sessionId}`
               );
               if (settledResponse.ok && stillCurrent()) {
-                const settled =
-                  (await settledResponse.json()) as BackendChatSession;
+                const settled: BackendChatSession =
+                  await settledResponse.json();
                 updateSessionAndMessageTree(
                   sessionId,
                   processRawChatHistory(settled.messages, settled.packets)
@@ -394,20 +377,6 @@ export default function useChatSessionController({
           currentRun.run_id,
           newMessageMap
         );
-      }
-
-      // Fetch token count for this chat session's project (if any)
-      try {
-        if (chatSession.chat_session_id) {
-          const total = await getSessionProjectTokenCount(
-            chatSession.chat_session_id
-          );
-          setCurrentSessionFileTokenCount(total || 0);
-        } else {
-          setCurrentSessionFileTokenCount(0);
-        }
-      } catch (e) {
-        setCurrentSessionFileTokenCount(0);
       }
 
       // Fetch project files for this chat session (if any)
@@ -492,7 +461,7 @@ export default function useChatSessionController({
     }
   }, [
     existingChatSessionId,
-    searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID),
+    searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID),
     // Note: We're intentionally not including all dependencies to avoid infinite loops
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);
@@ -529,7 +498,6 @@ export default function useChatSessionController({
   );
 
   return {
-    currentSessionFileTokenCount,
     onMessageSelection,
     projectFiles,
     sessionFetchError,

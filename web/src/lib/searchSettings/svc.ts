@@ -1,0 +1,255 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
+import type { Settings } from "@/lib/settings/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  EmbeddingModelSpec,
+  EmbeddingProviderName,
+  ReindexErrorRow,
+  SavedSearchSettings,
+  SwitchoverType,
+  VectorQuantization,
+  type VertexEmbeddingConfig,
+} from "@/lib/searchSettings/types";
+import { isCloudBased } from "@/lib/searchSettings";
+
+interface TestEmbeddingArgs {
+  provider_type: string;
+  modelName: string;
+  apiKey: string | null;
+  apiUrl: string | null;
+  apiVersion: string | null;
+  deploymentName: string | null;
+  vertexConfig?: VertexEmbeddingConfig | null;
+}
+
+export async function testEmbedding({
+  provider_type,
+  modelName,
+  apiKey,
+  apiUrl,
+  apiVersion,
+  deploymentName,
+  vertexConfig,
+}: TestEmbeddingArgs) {
+  const testModelName =
+    provider_type === "openai" ? "text-embedding-3-small" : modelName;
+
+  return await fetch("/api/admin/embedding/test-embedding", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_type: provider_type,
+      api_key: apiKey,
+      api_url: apiUrl,
+      model_name: testModelName,
+      api_version: apiVersion,
+      deployment_name: deploymentName,
+      vertex_config: vertexConfig,
+    }),
+  });
+}
+
+/**
+ * Tests and saves embedding provider credentials.
+ * Tests the connection first, then persists the credentials.
+ * Throws on failure with a user-facing error message.
+ *
+ * `apiVersion` and `deploymentName` are Azure-specific — backend's
+ * `CloudEmbeddingProviderCreationRequest` accepts them as optional, and
+ * non-Azure providers should pass `null`.
+ */
+export async function connectEmbeddingProvider({
+  providerType,
+  apiKey,
+  apiUrl,
+  modelName = "",
+  apiVersion,
+  deploymentName,
+  vertexConfig,
+}: {
+  providerType: string;
+  apiKey: string | null;
+  apiUrl: string;
+  modelName?: string;
+  apiVersion: string | null;
+  deploymentName: string | null;
+  vertexConfig?: VertexEmbeddingConfig | null;
+}): Promise<void> {
+  const useWorkloadIdentity = vertexConfig?.auth_method === "workload_identity";
+  if (apiKey !== null || vertexConfig != null) {
+    const testResponse = await testEmbedding({
+      provider_type: providerType,
+      modelName,
+      apiKey,
+      apiUrl,
+      apiVersion,
+      deploymentName,
+      vertexConfig,
+    });
+
+    if (!testResponse.ok) {
+      const err: ErrorResponseBody = await testResponse.json();
+      throw new Error(err.detail ?? "Embedding test failed");
+    }
+  }
+
+  // A null input preserves the stored key, except when switching to Workload
+  // Identity, which explicitly clears the credential.
+  const body = {
+    provider_type: providerType,
+    api_url: apiUrl,
+    api_version: apiVersion,
+    deployment_name: deploymentName,
+    is_default_provider: false,
+    is_configured: true,
+    vertex_config: vertexConfig,
+    api_key_changed: apiKey !== null || useWorkloadIdentity,
+    ...((apiKey !== null || useWorkloadIdentity) && {
+      api_key: useWorkloadIdentity ? null : apiKey,
+    }),
+  };
+
+  const saveResponse = await fetch(SWR_KEYS.embeddingProviders, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!saveResponse.ok) {
+    const err: ErrorResponseBody = await saveResponse.json();
+    throw new Error(err.detail ?? "Failed to save provider");
+  }
+}
+
+/**
+ * Disconnects an embedding provider by deleting its credentials.
+ * Throws on failure with a user-facing error message.
+ */
+export async function disconnectEmbeddingProvider(
+  providerType: string
+): Promise<void> {
+  const response = await fetch(
+    `${SWR_KEYS.embeddingProviders}/${providerType}`,
+    { method: "DELETE" }
+  );
+
+  if (!response.ok) {
+    const err: ErrorResponseBody = await response.json();
+    throw new Error(err.detail ?? "Failed to disconnect provider");
+  }
+}
+
+export async function saveAdminSettings(settings: Settings) {
+  const response = await fetch("/api/admin/settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Cancels an in-flight embedding-model switchover. Marks the FUTURE search
+ * settings row as PAST, expires its index attempts, and drops the secondary
+ * vector index.
+ */
+export async function cancelNewEmbedding(): Promise<Response> {
+  return await fetch("/api/search-settings/cancel-new-embedding", {
+    method: "POST",
+  });
+}
+
+/**
+ * Resume a paused re-index unit from its cursor. Throws on a hard failure; a 503
+ * (resumed but the queue is down) is treated as success — the scheduler re-dispatches it.
+ */
+export async function resumePausedPort(
+  row: Pick<ReindexErrorRow, "cc_pair_id" | "user_id">
+): Promise<void> {
+  const response = await fetch("/api/search-settings/reindex/port/resume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cc_pair_id: row.cc_pair_id, user_id: row.user_id }),
+  });
+  if (response.status === 503) {
+    return;
+  }
+  if (!response.ok) {
+    let detail: string | undefined;
+    try {
+      detail = ((await response.json()) as { detail?: string }).detail;
+    } catch (e) {
+      // non-JSON error body (e.g. a 502 HTML page): log so the failure is traceable
+      console.error(`resumePausedPort failed (${response.status}):`, e);
+    }
+    throw new Error(detail ?? "Failed to resume the paused unit.");
+  }
+}
+
+interface SetNewSearchSettingsArgs {
+  model: EmbeddingModelSpec;
+  providerName: EmbeddingProviderName;
+  switchoverType: SwitchoverType;
+  enableContextualRag: boolean;
+  contextualRagModelConfigurationId: number | null;
+  vectorQuantization: VectorQuantization;
+  // The server recomputes this set itself and rejects the reindex if its own set contains
+  // a cc_pair the admin never acknowledged.
+  acknowledgedWontPortCcPairIds: number[];
+}
+
+export async function setNewSearchSettings({
+  model,
+  providerName,
+  switchoverType,
+  enableContextualRag,
+  contextualRagModelConfigurationId,
+  vectorQuantization,
+  acknowledgedWontPortCcPairIds,
+}: SetNewSearchSettingsArgs): Promise<Response> {
+  // The backend's EmbeddingProvider enum only contains cloud providers
+  // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
+  // under the frontend's EmbeddingProviderName for UI grouping (icon,
+  // docs link), but the backend expects provider_type=null for them.
+  const providerType = isCloudBased(providerName) ? providerName : null;
+
+  return await fetch("/api/search-settings/set-new-search-settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model_name: model.modelName,
+      model_dim: model.modelDim,
+      normalize: model.normalize,
+      query_prefix: model.queryPrefix,
+      passage_prefix: model.passagePrefix,
+      provider_type: providerType,
+      api_key: null,
+      api_url: null,
+      index_name: null,
+      multipass_indexing: false,
+      enable_contextual_rag: enableContextualRag,
+      contextual_rag_model_configuration_id: contextualRagModelConfigurationId,
+      vector_quantization: vectorQuantization,
+      switchover_type: switchoverType,
+      acknowledged_wont_port_cc_pair_ids: acknowledgedWontPortCcPairIds,
+    }),
+  });
+}
+
+/**
+ * Switches the Contextual Retrieval LLM on the current index. Contextual
+ * Retrieval must already be enabled; all other settings must stay unchanged.
+ */
+export async function updateInferenceSettings(
+  settings: SavedSearchSettings
+): Promise<Response> {
+  return await fetch("/api/search-settings/update-inference-settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+}

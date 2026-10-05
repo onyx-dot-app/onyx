@@ -19,17 +19,19 @@ func newDevStopCommand() *cobra.Command {
 Examples:
   ods dev stop`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runDevStop()
+			if err := runDevStop(); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
 	return cmd
 }
 
-func runDevStop() {
+func runDevStop() error {
 	root, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find git root: %v", err)
+		return fatalErrorf("Failed to find git root: %w", err)
 	}
 
 	// Find the container by the devcontainer label
@@ -38,19 +40,20 @@ func runDevStop() {
 		"--filter", "label=devcontainer.local_folder="+root,
 	).Output()
 	if err != nil {
-		log.Fatalf("Failed to find devcontainer: %v", err)
+		return fatalErrorf("Failed to find devcontainer: %w", err)
 	}
 
 	containerID := strings.TrimSpace(string(out))
 	if containerID == "" {
 		log.Info("No running devcontainer found")
-		return
+		return nil
 	}
 
 	log.Infof("Stopping devcontainer %s...", containerID)
 	c := exec.Command("docker", "stop", containerID)
 	if err := c.Run(); err != nil {
-		log.Fatalf("Failed to stop devcontainer: %v", err)
+		return fatalErrorf("Failed to stop devcontainer: %w", err)
 	}
 	log.Info("Devcontainer stopped")
+	return nil
 }

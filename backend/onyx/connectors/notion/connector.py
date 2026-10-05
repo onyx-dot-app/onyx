@@ -529,7 +529,7 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                 if (
                     "name" in sub_inner_dict
                     and isinstance(sub_inner_dict["name"], str)
-                    and type_name not in ("title",)
+                    and type_name != "title"
                 ):
                     return sub_inner_dict["name"]
 

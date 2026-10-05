@@ -5,17 +5,26 @@ locks (acquire / release / contention), list operations (rpush / blpop),
 and the periodic cleanup function.
 """
 
+import math
 import time
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
-from sqlalchemy import select
+import pytest
+from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 
-from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY
+from onyx.cache import factory as cache_factory
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY, CacheBackendType
 from onyx.cache.postgres_backend import (
     PostgresCacheBackend,
+    PostgresCacheLock,
     cleanup_expired_cache_entries,
 )
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import CacheStore
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 def _key() -> str:
@@ -36,11 +45,42 @@ class TestKV:
     def test_get_missing(self, pg_cache: PostgresCacheBackend) -> None:
         assert pg_cache.get(_key()) is None
 
+    def test_getdel_is_one_time(self, pg_cache: PostgresCacheBackend) -> None:
+        k = _key()
+        pg_cache.set(k, b"one-time")
+
+        assert pg_cache.getdel(k) == b"one-time"
+        assert pg_cache.getdel(k) is None
+
+    def test_getdel_rejects_expired_value(self, pg_cache: PostgresCacheBackend) -> None:
+        k = _key()
+        pg_cache.set(k, b"expired", ex=0)
+
+        assert pg_cache.getdel(k) is None
+
     def test_set_overwrite(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()
         pg_cache.set(k, b"first")
         pg_cache.set(k, b"second")
         assert pg_cache.get(k) == b"second"
+
+    def test_set_if_absent_does_not_overwrite(
+        self, pg_cache: PostgresCacheBackend
+    ) -> None:
+        k = _key()
+
+        assert pg_cache.set_if_absent(k, b"first", ex=10)
+        assert not pg_cache.set_if_absent(k, b"second", ex=10)
+        assert pg_cache.get(k) == b"first"
+
+    def test_set_if_absent_replaces_expired_value(
+        self, pg_cache: PostgresCacheBackend
+    ) -> None:
+        k = _key()
+        pg_cache.set(k, b"expired", ex=0)
+
+        assert pg_cache.set_if_absent(k, b"replacement", ex=10)
+        assert pg_cache.get(k) == b"replacement"
 
     def test_set_string_value(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()
@@ -228,3 +268,91 @@ class TestCleanup:
         pg_cache.set(k, b"permanent")
         cleanup_expired_cache_entries()
         assert pg_cache.get(k) == b"permanent"
+
+
+def test_statement_timeout_bounds_wait_on_a_locked_cache_row(
+    pg_cache: PostgresCacheBackend,
+) -> None:
+    tenant_id = POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    bounded = PostgresCacheBackend(tenant_id, statement_timeout_ms=1000)
+    key = _key()
+    pg_cache.set(key, b"owner", ex=60)
+    try:
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            session.execute(
+                select(CacheStore).where(CacheStore.key == key).with_for_update()
+            )
+            with pytest.raises(OperationalError, match="timeout"):
+                bounded.expire(key, 120)
+        bounded.expire(key, 120)
+        assert bounded.ttl(key) > 60
+    finally:
+        pg_cache.delete(key)
+
+
+@pytest.mark.parametrize("timeout", [0, -1, math.inf, math.nan])
+def test_invalid_operation_timeout_is_rejected(timeout: float) -> None:
+    with pytest.raises(ValueError, match="finite and positive"):
+        get_cache_backend(operation_timeout_s=timeout)
+
+
+@pytest.mark.parametrize(
+    ("operation_timeout_s", "expected"),
+    # Sub-millisecond values round up: a 0 ms timeout would disable it.
+    [(1, "1s"), (0.0001, "1ms")],
+)
+def test_operation_timeout_applies_to_lock_session(
+    monkeypatch: pytest.MonkeyPatch, operation_timeout_s: float, expected: str
+) -> None:
+    monkeypatch.setattr(cache_factory, "CACHE_BACKEND", CacheBackendType.POSTGRES)
+    bounded = get_cache_backend(operation_timeout_s=operation_timeout_s)
+    lock = bounded.lock(_key())
+    assert isinstance(lock, PostgresCacheLock)
+    assert lock.acquire(blocking=False)
+    try:
+        assert lock._session is not None
+        for setting in ("statement_timeout", "lock_timeout"):
+            value = lock._session.execute(text(f"SHOW {setting}")).scalar()
+            assert value == expected
+    finally:
+        lock.release()
+
+
+def test_control_lease_renewal_does_not_wait_for_a_locked_cache_row(
+    pg_cache: PostgresCacheBackend,
+) -> None:
+    tenant_id = POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    control = PostgresCacheBackend(tenant_id, statement_timeout_ms=1000)
+    key = _key()
+    pg_cache.set(key, b"owner", ex=60)
+    try:
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            session.execute(
+                select(CacheStore).where(CacheStore.key == key).with_for_update()
+            )
+            with pytest.raises(OperationalError, match="timeout"):
+                control.renew_if_value(key, b"owner", 60)
+        assert control.renew_if_value(key, b"owner", 60)
+    finally:
+        pg_cache.delete(key)
+
+
+def test_lease_renewal_rejects_lease_that_expires_during_row_lock_wait(
+    pg_cache: PostgresCacheBackend,
+) -> None:
+    tenant_id = POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    key = _key()
+    pg_cache.set(key, b"owner", ex=2)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with get_session_with_tenant(tenant_id=tenant_id) as session:
+                session.execute(
+                    select(CacheStore).where(CacheStore.key == key).with_for_update()
+                )
+                renewal = executor.submit(pg_cache.renew_if_value, key, b"owner", 60)
+                time.sleep(3)
+                assert not renewal.done()
+            assert renewal.result(timeout=5) is False
+        assert pg_cache.ttl(key) == TTL_KEY_NOT_FOUND
+    finally:
+        pg_cache.delete(key)

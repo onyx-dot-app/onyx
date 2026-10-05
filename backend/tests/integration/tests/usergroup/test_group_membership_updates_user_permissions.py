@@ -1,5 +1,6 @@
 import os
 
+import httpx
 import pytest
 from sqlalchemy import update
 
@@ -11,10 +12,12 @@ from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
     recompute_user_permissions__no_commit,
 )
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.permission_state import is_group_manager
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 
 
 def _set_membership_is_manager(user_id: str, group_id: int, value: bool) -> None:
@@ -34,6 +37,16 @@ def _set_membership_is_manager(user_id: str, group_id: int, value: bool) -> None
         db_session.flush()
         recompute_user_permissions__no_commit(user_id, db_session)
         db_session.commit()
+
+
+def _set_members(
+    group_id: int, user_ids: list[str], admin_user: DATestUser
+) -> httpx.Response:
+    return client.patch(
+        f"{API_SERVER_URL}/manage/admin/user-group/{group_id}",
+        json={"user_ids": user_ids, "cc_pair_ids": []},
+        headers=admin_user.headers,
+    )
 
 
 @pytest.mark.skipif(
@@ -189,3 +202,101 @@ def test_is_group_manager_true_when_managing_any_group(
 
     _set_membership_is_manager(member.id, managed_group.id, False)
     assert is_group_manager(member.id) is False
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User group tests are enterprise only",
+)
+def test_removing_a_users_last_group_is_rejected(admin_user: DATestUser) -> None:
+    """A new user starts in Basic, so that membership has to go first."""
+    member: DATestUser = UserManager.create()
+    group: DATestUserGroup = UserGroupManager.create(
+        name="last-group",
+        user_ids=[member.id],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user, user_groups_to_check=[group]
+    )
+
+    basic = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Basic"
+    )
+    response = _set_members(
+        basic.id,
+        [other.id for other in basic.users if other.id != member.id],
+        admin_user,
+    )
+    assert response.status_code == 200, response.text
+
+    # the new group is now their only one
+    response = _set_members(group.id, [], admin_user)
+    assert response.status_code == 400, response.text
+    assert member.email in response.text
+
+    still_a_member = next(
+        fetched
+        for fetched in UserGroupManager.get_all(user_performing_action=admin_user)
+        if fetched.id == group.id
+    ).users
+    assert member.id in {user.id for user in still_a_member}
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User group tests are enterprise only",
+)
+def test_removal_allowed_while_another_group_survives(admin_user: DATestUser) -> None:
+    member: DATestUser = UserManager.create()
+    group: DATestUserGroup = UserGroupManager.create(
+        name="two-groups",
+        user_ids=[member.id],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user, user_groups_to_check=[group]
+    )
+
+    # basic still holds the member, so this group can let them go
+    response = _set_members(group.id, [], admin_user)
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User group tests are enterprise only",
+)
+def test_deleting_a_users_last_group_is_rejected(admin_user: DATestUser) -> None:
+    """Deletion drops every membership at once, so it answers to the same rule."""
+    member: DATestUser = UserManager.create()
+    group: DATestUserGroup = UserGroupManager.create(
+        name="last-group-delete",
+        user_ids=[member.id],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user, user_groups_to_check=[group]
+    )
+
+    basic = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Basic"
+    )
+    response = _set_members(
+        basic.id,
+        [other.id for other in basic.users if other.id != member.id],
+        admin_user,
+    )
+    assert response.status_code == 200, response.text
+
+    response = client.delete(
+        f"{API_SERVER_URL}/manage/admin/user-group/{group.id}",
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 400, response.text
+    assert member.email in response.text
+
+    assert group.id in {
+        fetched.id
+        for fetched in UserGroupManager.get_all(user_performing_action=admin_user)
+    }

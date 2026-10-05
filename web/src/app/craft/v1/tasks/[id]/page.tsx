@@ -1,6 +1,8 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { SettingsLayouts, toast } from "@opal/layouts";
@@ -12,7 +14,6 @@ import {
   SvgPauseCircle,
   SvgPlayCircle,
   SvgTrash,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   deleteScheduledTask,
@@ -32,6 +33,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export default function ScheduledTaskDetailPage() {
+  const t = useTranslations("craft.tasks.detailPage");
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const taskId = params?.id;
@@ -62,22 +64,24 @@ export default function ScheduledTaskDetailPage() {
     try {
       const updated = await updateScheduledTask(data.id, { status: next });
       await mutate(updated, { revalidate: false });
-      toast.success(next === "ACTIVE" ? "Task resumed." : "Task paused.");
+      toast.success(
+        next === "ACTIVE" ? t("toasts.resumed") : t("toasts.paused")
+      );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update status"
+        err instanceof Error ? err.message : t("toasts.statusUpdateFailed")
       );
     } finally {
       setBusy(false);
     }
-  }, [data, mutate]);
+  }, [data, mutate, t]);
 
   const handleRunNow = useCallback(async () => {
     if (!data) return;
     setBusy(true);
     try {
       await runScheduledTaskNow(data.id);
-      toast.success(`Queued run for "${data.name}".`);
+      toast.success(t("toasts.runQueued", { name: data.name }));
       void mutate();
       // The run history table owns paginated SWR keys under this prefix —
       // invalidate every variant so the new ``manual_run_now`` row appears.
@@ -86,36 +90,40 @@ export default function ScheduledTaskDetailPage() {
         (key) => typeof key === "string" && key.startsWith(runsPrefix)
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start run");
+      toast.error(
+        err instanceof Error ? err.message : t("toasts.runStartFailed")
+      );
     } finally {
       setBusy(false);
     }
-  }, [data, mutate, globalMutate]);
+  }, [data, mutate, globalMutate, t]);
 
   const handleDelete = useCallback(async () => {
     if (!data) return;
     setBusy(true);
     try {
       await deleteScheduledTask(data.id);
-      toast.success(`Deleted "${data.name}".`);
+      toast.success(t("toasts.deleted", { name: data.name }));
       router.push(TASKS_PATH);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete task");
+      toast.error(
+        err instanceof Error ? err.message : t("toasts.deleteFailed")
+      );
       setBusy(false);
     }
-  }, [data, router]);
+  }, [data, router, t]);
 
   if (!taskId) {
     return (
       <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header
           icon={SvgClock}
-          title="Scheduled task"
-          backButton={handleBack}
+          title={t("fallbackTitle")}
+          cancel={handleBack}
         />
         <SettingsLayouts.Body>
           <Text font="main-ui-body" color="text-03">
-            Missing task id.
+            {t("missingTaskId")}
           </Text>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -126,64 +134,72 @@ export default function ScheduledTaskDetailPage() {
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
         icon={SvgClock}
-        title={data?.name ?? "Scheduled task"}
+        title={data?.name ?? t("fallbackTitle")}
         description={scheduleDescription}
-        backButton={handleBack}
-        rightChildren={
-          data ? (
-            <div className="flex items-center gap-2">
-              <TaskStatusBadge status={data.status} />
-              <Button
-                icon={SvgPlayCircle}
-                variant="default"
-                prominence="secondary"
-                onClick={() => void handleRunNow()}
-                disabled={busy}
-                data-testid="run-now-button"
-              >
-                Run now
-              </Button>
-              <Button
-                icon={data.status === "ACTIVE" ? SvgPauseCircle : SvgPlayCircle}
-                variant="default"
-                prominence="secondary"
-                onClick={() => void handleToggleStatus()}
-                disabled={busy}
-                data-testid="status-toggle"
-              >
-                {data.status === "ACTIVE" ? "Pause" : "Resume"}
-              </Button>
-              <Button
-                icon={SvgEdit}
-                variant="default"
-                prominence="secondary"
-                href={taskEditPath(data.id)}
-                disabled={busy}
-              >
-                Edit
-              </Button>
-              <Button
-                icon={SvgTrash}
-                variant="danger"
-                prominence="secondary"
-                onClick={() => setConfirmDelete(true)}
-                disabled={busy}
-                data-testid="delete-button"
-              >
-                Delete
-              </Button>
-            </div>
-          ) : undefined
+        cancel={handleBack}
+        actions={
+          data
+            ? [
+                <TaskStatusBadge key="status" status={data.status} />,
+                <Button
+                  key="run"
+                  icon={SvgPlayCircle}
+                  variant="default"
+                  prominence="secondary"
+                  onClick={() => void handleRunNow()}
+                  disabled={busy}
+                  data-testid="run-now-button"
+                >
+                  {t("runNowButton")}
+                </Button>,
+                <Button
+                  key="toggle"
+                  icon={
+                    data.status === "ACTIVE" ? SvgPauseCircle : SvgPlayCircle
+                  }
+                  variant="default"
+                  prominence="secondary"
+                  onClick={() => void handleToggleStatus()}
+                  disabled={busy}
+                  data-testid="status-toggle"
+                >
+                  {data.status === "ACTIVE"
+                    ? t("pauseButton")
+                    : t("resumeButton")}
+                </Button>,
+                <Button
+                  key="edit"
+                  icon={SvgEdit}
+                  variant="default"
+                  prominence="secondary"
+                  href={taskEditPath(data.id)}
+                  disabled={busy}
+                >
+                  {t("editButton")}
+                </Button>,
+                <Button
+                  key="delete"
+                  icon={SvgTrash}
+                  variant="danger"
+                  prominence="secondary"
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={busy}
+                  data-testid="delete-button"
+                >
+                  {t("deleteButton")}
+                </Button>,
+              ]
+            : []
         }
       />
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SvgSimpleLoader className="h-6 w-6" />
+            <IconLoader className="h-6 w-6" />
           </div>
         ) : error || !data ? (
           <Text font="main-ui-body" color="text-03">
-            Failed to load scheduled task.
+            {t("loadFailed")}
           </Text>
         ) : (
           <div className="flex flex-col gap-6">
@@ -202,8 +218,8 @@ export default function ScheduledTaskDetailPage() {
       {confirmDelete && data && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={`Delete "${data.name}"?`}
-          description="This stops future runs and removes the task. Past run history (and the underlying sessions) will be preserved for audit."
+          title={t("confirmDelete.title", { name: data.name })}
+          description={t("confirmDelete.description")}
           onClose={() => setConfirmDelete(false)}
           submit={
             <Button
@@ -213,7 +229,9 @@ export default function ScheduledTaskDetailPage() {
               disabled={busy}
               data-testid="confirm-delete-task"
             >
-              {busy ? "Deleting..." : "Delete"}
+              {busy
+                ? t("confirmDelete.deletingButton")
+                : t("confirmDelete.deleteButton")}
             </Button>
           }
         />

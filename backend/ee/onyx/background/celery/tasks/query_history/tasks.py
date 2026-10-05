@@ -4,10 +4,6 @@ from datetime import datetime
 
 from celery import Task, shared_task
 
-from ee.onyx.server.query_history.api import (
-    ONYX_ANONYMIZED_EMAIL,
-    fetch_and_process_chat_session_history,
-)
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
@@ -47,6 +43,11 @@ def export_query_history_task(
     # Need to include the tenant_id since the TenantAwareTask needs this
     tenant_id: str,  # noqa: ARG001
 ) -> None:
+    from ee.onyx.server.query_history.api import (
+        ONYX_ANONYMIZED_EMAIL,
+        fetch_and_process_chat_session_history,
+    )
+
     if not self.request.id:
         raise RuntimeError("No task id defined for this task; cannot identify it")
 

@@ -12,8 +12,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/charlievieth/fastwalk"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -52,20 +54,7 @@ func runWebScript(args []string) {
 		log.Fatalf("Failed to find web directory: %v", err)
 	}
 
-	if needsInstall, reason := nodeModulesNeedsInstall(webDir); needsInstall {
-		log.Infof("%s, running bun install --frozen-lockfile...", reason)
-		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
-		installCmd.Dir = webDir
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		installCmd.Stdin = os.Stdin
-		if err := installCmd.Run(); err != nil {
-			log.Fatalf("Failed to run bun install: %v", err)
-		}
-		writeLockStamp(webDir)
-	}
-
-	ensureWorkspaceLibsBuilt(webDir)
+	prepareWebDir(webDir)
 
 	scriptName := args[0]
 	scriptArgs := args[1:]
@@ -98,6 +87,25 @@ func runWebScript(args []string) {
 		}
 		log.Fatalf("Failed to run bun: %v", err)
 	}
+}
+
+// prepareWebDir installs dependencies and builds the workspace libraries when
+// they are missing or stale, so a bun script can run.
+func prepareWebDir(webDir string) {
+	if needsInstall, reason := nodeModulesNeedsInstall(webDir); needsInstall {
+		log.Infof("%s, running bun install --frozen-lockfile...", reason)
+		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
+		installCmd.Dir = webDir
+		installCmd.Stdout = os.Stdout
+		installCmd.Stderr = os.Stderr
+		installCmd.Stdin = os.Stdin
+		if err := installCmd.Run(); err != nil {
+			log.Fatalf("Failed to run bun install: %v", err)
+		}
+		writeLockStamp(webDir)
+	}
+
+	ensureWorkspaceLibsBuilt(webDir)
 }
 
 // lockStampName is the file inside node_modules recording the sha256 of the
@@ -239,7 +247,9 @@ func libNeedsBuild(pkgDir string) (bool, string) {
 // directories named in excludeDirs and hidden entries.
 func newestMtime(root string, excludeDirs map[string]bool) (time.Time, error) {
 	var newest time.Time
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the running max.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -254,9 +264,11 @@ func newestMtime(root string, excludeDirs map[string]bool) (time.Time, error) {
 		if err != nil {
 			return err
 		}
+		mu.Lock()
 		if info.ModTime().After(newest) {
 			newest = info.ModTime()
 		}
+		mu.Unlock()
 		return nil
 	})
 	return newest, err

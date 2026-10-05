@@ -1,25 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ensureHrefProtocol, noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import { Popover } from "@opal/components";
-import { OpenButton } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Button } from "@opal/components";
+import { Button, LineItemButton, OpenButton, Popover } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useCustomFooterContent } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
-import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
+import { useTranslations } from "next-intl";
+
+const NRF_FOOTER_HEIGHT_VAR = "--nrf-footer-height";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
@@ -60,23 +60,48 @@ const footerMarkdownComponents = {
  * extension doesn't need.
  */
 export default function NRFChrome() {
+  const t = useTranslations("chat");
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
+  const footerRef = useRef<HTMLElement>(null);
+
+  // Publishes the footer height so NRFPage can keep scrollable content clear of it
+  useEffect(() => {
+    const footer = footerRef.current;
+    const host = footer?.parentElement;
+    if (!footer || !host) return;
+
+    const update = () =>
+      host.style.setProperty(
+        NRF_FOOTER_HEIGHT_VAR,
+        `${footer.getBoundingClientRect().height}px`
+      );
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(footer);
+    return () => {
+      observer.disconnect();
+      host.style.removeProperty(NRF_FOOTER_HEIGHT_VAR);
+    };
+  }, []);
 
   const effectiveMode: AppMode =
-    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
+    appPosition.isNewSession() && state.phase === "idle"
+      ? state.appMode
+      : "chat";
 
   const customFooterContent = useCustomFooterContent();
 
   const showModeToggle =
     businessTier &&
     isSearchModeAvailable &&
-    appFocus.isNewSession() &&
+    appPosition.isNewSession() &&
     state.phase === "idle";
 
   const showHeader = isMobile || showModeToggle;
@@ -85,12 +110,12 @@ export default function NRFChrome() {
     <>
       {/* Header chrome — top-left, mirrors position of settings button at top-right */}
       {showHeader && (
-        <div className="absolute top-0 left-0 p-4 z-10 flex flex-row items-center gap-2">
+        <div className="absolute top-0 start-0 p-4 z-10 flex flex-row items-center gap-2">
           {isMobile && (
             <Button
               prominence="internal"
               icon={SvgSidebar}
-              aria-label="Open Sidebar"
+              aria-label={t("appChrome.openSidebar.ariaLabel")}
               onClick={() => setFolded(false)}
             />
           )}
@@ -102,33 +127,37 @@ export default function NRFChrome() {
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                   }
                 >
-                  {effectiveMode === "search" ? "Search" : "Chat"}
+                  {effectiveMode === "search"
+                    ? t("appChrome.mode.search.label")
+                    : t("appChrome.mode.chat.label")}
                 </OpenButton>
               </Popover.Trigger>
               <Popover.Content align="start" width="lg">
                 <Popover.Menu>
-                  <LineItem
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding={2}
                     icon={SvgSearchMenu}
-                    selected={effectiveMode === "search"}
-                    description="Quick search for documents"
+                    state={effectiveMode === "search" ? "selected" : "empty"}
+                    description={t("appChrome.mode.search.description")}
                     onClick={noProp(() => {
                       setAppMode("search");
                       setModePopoverOpen(false);
                     })}
-                  >
-                    Search
-                  </LineItem>
-                  <LineItem
+                    title={t("appChrome.mode.search.label")}
+                  />
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding={2}
                     icon={SvgBubbleText}
-                    selected={effectiveMode === "chat"}
-                    description="Conversation and research"
+                    state={effectiveMode === "chat" ? "selected" : "empty"}
+                    description={t("appChrome.mode.chat.description")}
                     onClick={noProp(() => {
                       setAppMode("chat");
                       setModePopoverOpen(false);
                     })}
-                  >
-                    Chat
-                  </LineItem>
+                    title={t("appChrome.mode.chat.label")}
+                  />
                 </Popover.Menu>
               </Popover.Content>
             </Popover>
@@ -137,7 +166,10 @@ export default function NRFChrome() {
       )}
 
       {/* Footer — bottom-center, transparent background */}
-      <footer className="absolute bottom-0 left-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto">
+      <footer
+        ref={footerRef}
+        className="absolute bottom-0 start-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto"
+      >
         <MinimalMarkdown
           content={customFooterContent}
           className="max-w-full text-center"

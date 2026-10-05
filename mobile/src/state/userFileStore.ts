@@ -14,8 +14,7 @@ import { UserFileStatus, type ProjectFile } from "@/chat/contracts/projects";
 // Where an upload belongs. No "recent" variant: you never upload *to* the library — a recent file
 // enters the store via registerExisting(), not an upload task.
 export type UploadTarget =
-  | { kind: "draft"; draftKey: string }
-  | { kind: "project"; projectId: number };
+  { kind: "draft"; draftKey: string } | { kind: "project"; projectId: number };
 
 function sameTarget(a: UploadTarget, b: UploadTarget): boolean {
   if (a.kind === "draft" && b.kind === "draft")

@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
   useEffect,
@@ -9,6 +10,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
@@ -29,7 +31,6 @@ import {
   SvgNotificationBubble,
   SvgCheckSquare,
   SvgChevronLeft,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   Button,
@@ -63,6 +64,9 @@ function NotificationItem({
   onClick,
   dismiss,
 }: NotificationItemProps) {
+  const t = useTranslations("sidebar");
+  const locale = useLocale();
+
   return (
     <Hoverable.Root group="notifications-popover/NotificationItem">
       <LineItemButton
@@ -70,14 +74,14 @@ function NotificationItem({
         title={notification.title}
         description={notification.description ?? undefined}
         sizePreset="main-ui"
-        rounding="sm"
+        rounding={2}
         color={state === "new" ? undefined : "muted"}
         onClick={onClick}
         rightChildren={
           <Section justifyContent="start">
             <Section height="fit" gap={2} flexDirection="row">
               <Text font="secondary-body" color="text-02">
-                {timeAgo(notification.first_shown) ?? ""}
+                {timeAgo(notification.first_shown, locale) ?? ""}
               </Text>
               {state === "new" && (
                 <div className="w-4 flex flex-col items-center justify-center">
@@ -97,7 +101,7 @@ function NotificationItem({
                       size="xs"
                       prominence="tertiary"
                       onClick={noProp(dismiss)}
-                      tooltip="Mark as Read"
+                      tooltip={t("notifications.markAsReadButton.tooltip")}
                     />
                   </Hoverable.Item>
                 </div>
@@ -125,6 +129,7 @@ export default function NotificationsPopover({
   onNavigate,
   onShowBuildIntro,
 }: NotificationsPopoverProps) {
+  const t = useTranslations("sidebar");
   const router = useRouter();
   const {
     notifications,
@@ -303,13 +308,15 @@ export default function NotificationsPopover({
             prominence="tertiary"
             onClick={onClose}
           />
-          <Text color="text-02">Notifications</Text>
+          <Text color="text-02">{t("notifications.header.title")}</Text>
         </Section>
 
         <Section flexDirection="row" gap={1} justifyContent="end">
           {undismissedCount !== 0 && (
             <span className="text-action-selection-05 font-secondary-body">
-              {`${undismissedCount} unread`}
+              {t("notifications.unreadCount.label", {
+                count: undismissedCount,
+              })}
             </span>
           )}
           <Button
@@ -317,7 +324,7 @@ export default function NotificationsPopover({
             size="sm"
             prominence="tertiary"
             onClick={handleDismissAll}
-            tooltip="Mark All as Read"
+            tooltip={t("notifications.markAllAsReadButton.tooltip")}
             disabled={undismissedCount === 0}
           />
         </Section>
@@ -326,6 +333,8 @@ export default function NotificationsPopover({
       {pinnedAnnouncement && (
         <div className="px-1 pb-1">
           <MessageCard
+            outerPadding={1}
+            innerPadding={1}
             variant="info"
             icon={getNotificationIcon(pinnedAnnouncement.notif_type)}
             title={pinnedAnnouncement.title}
@@ -338,7 +347,7 @@ export default function NotificationsPopover({
       {isLoading ? (
         <div className="h-(--notifications-popover)">
           <Section>
-            <SvgSimpleLoader />
+            <IconLoader />
           </Section>
         </div>
       ) : newNotifications.length === 0 && olderNotifications.length === 0 ? (
@@ -348,7 +357,7 @@ export default function NotificationsPopover({
           <div className="h-(--notifications-popover)">
             <Section>
               <IllustrationContent
-                title="No notifications"
+                title={t("notifications.empty.title")}
                 illustration={SvgEmpty}
               />
             </Section>
@@ -361,7 +370,7 @@ export default function NotificationsPopover({
         >
           {newNotifications.length > 0 && (
             <>
-              <Divider title="New" />
+              <Divider title={t("notifications.newSection.title")} />
               <div className="flex flex-col gap-1">
                 {newNotifications.map((notification) => (
                   <NotificationItem
@@ -378,7 +387,7 @@ export default function NotificationsPopover({
 
           {olderNotifications.length > 0 && (
             <>
-              <Divider title="Older" />
+              <Divider title={t("notifications.olderSection.title")} />
               <div className="flex flex-col gap-1">
                 {olderNotifications.map((notification) => (
                   <NotificationItem
@@ -398,7 +407,8 @@ export default function NotificationsPopover({
               ref={sentinelRef}
               className="h-8 flex items-center justify-center transition-opacity duration-300"
             >
-              <SvgSimpleLoader
+              <IconLoader
+                size={16}
                 className={isLoadingMore ? "opacity-100" : "opacity-40"}
               />
             </div>

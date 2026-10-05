@@ -22,7 +22,7 @@ export const Default: Story = {
   render: () => (
     <Collapsible defaultOpen={false}>
       <CollapsibleTrigger asChild>
-        <button className="p-2 bg-background-tint-03 rounded-08 font-main-ui-action w-full text-left">
+        <button className="p-2 bg-background-tint-03 rounded-08 font-main-ui-action w-full text-start">
           Click to toggle
         </button>
       </CollapsibleTrigger>
@@ -39,7 +39,7 @@ export const DefaultOpen: Story = {
   render: () => (
     <Collapsible defaultOpen>
       <CollapsibleTrigger asChild>
-        <button className="p-2 bg-background-tint-03 rounded-08 font-main-ui-action w-full text-left">
+        <button className="p-2 bg-background-tint-03 rounded-08 font-main-ui-action w-full text-start">
           Already open — click to close
         </button>
       </CollapsibleTrigger>
@@ -58,7 +58,7 @@ function ControlledDemo() {
     <div style={{ width: 320 }}>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
-          <button className="p-2 bg-background-tint-03 rounded-08 font-main-ui-action w-full text-left">
+          <button className="p-2 bg-background-tint-03 rounded-08 font-main-ui-action w-full text-start">
             {open ? "Close" : "Open"} (controlled)
           </button>
         </CollapsibleTrigger>
@@ -83,7 +83,7 @@ export const MultipleCollapsibles: Story = {
       {["Section A", "Section B", "Section C"].map((title) => (
         <Collapsible key={title}>
           <CollapsibleTrigger asChild>
-            <button className="p-2 bg-background-tint-03 rounded-08 font-main-ui-action w-full text-left">
+            <button className="p-2 bg-background-tint-03 rounded-08 font-main-ui-action w-full text-start">
               {title}
             </button>
           </CollapsibleTrigger>

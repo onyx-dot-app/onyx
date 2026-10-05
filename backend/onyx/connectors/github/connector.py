@@ -27,10 +27,15 @@ from onyx.connectors.exceptions import (
     ValidationError,
 )
 from onyx.connectors.github.models import SerializedRepository
-from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
+from onyx.connectors.github.rate_limit_utils import (
+    BoundedGithubRetry,
+    sleep_after_rate_limit_exception,
+)
 from onyx.connectors.github.utils import (
     deserialize_repository,
     get_external_access_permission,
+    normalize_github_base_url,
+    validate_credential_base_url,
 )
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -172,7 +177,9 @@ def get_nextUrl_key(pag_list: PaginatedList[PullRequest | Issue]) -> str:
 def get_nextUrl(
     pag_list: PaginatedList[PullRequest | Issue], nextUrl_key: str
 ) -> str | None:
-    return getattr(pag_list, nextUrl_key) if nextUrl_key else None
+    return (
+        getattr(pag_list, nextUrl_key) if nextUrl_key else None  # ods: ignore[getattr]
+    )
 
 
 def set_nextUrl(
@@ -320,7 +327,7 @@ def _get_batch_rate_limited(
 def _get_userinfo(user: NamedUser) -> dict[str, str]:
     def _safe_get(attr_name: str) -> str | None:
         try:
-            return cast(str | None, getattr(user, attr_name))
+            return cast(str | None, getattr(user, attr_name))  # ods: ignore[getattr]
         except GithubException:
             logger.debug("Error getting %s for user", attr_name)
             return None
@@ -627,15 +634,34 @@ class GithubConnector(
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        # Prefer the per-credential URL so one deployment can index github.com
+        # and a GitHub Enterprise Server at once; the env var is the fallback.
+        # Normalize each side so a blank credential cannot shadow the env var.
+        credential_base_url: str | None = normalize_github_base_url(
+            credentials.get("github_base_url")
+        )
+        # Only the credential is user input, so only it needs the SSRF check.
+        if credential_base_url is not None:
+            validate_credential_base_url(credential_base_url)
+
+        base_url: str | None = credential_base_url or normalize_github_base_url(
+            GITHUB_CONNECTOR_BASE_URL
+        )
+
         # defaults to 30 items per page, can be set to as high as 100
         self.github_client = (
             Github(
                 credentials["github_access_token"],
-                base_url=GITHUB_CONNECTOR_BASE_URL,
+                base_url=base_url,
                 per_page=ITEMS_PER_PAGE,
+                retry=BoundedGithubRetry(),
             )
-            if GITHUB_CONNECTOR_BASE_URL
-            else Github(credentials["github_access_token"], per_page=ITEMS_PER_PAGE)
+            if base_url
+            else Github(
+                credentials["github_access_token"],
+                per_page=ITEMS_PER_PAGE,
+                retry=BoundedGithubRetry(),
+            )
         )
         return None
 
@@ -1037,7 +1063,7 @@ class GithubConnector(
                         logger.exception(error_msg)
                         yield ConnectorFailure(
                             failed_document=DocumentFailure(
-                                document_id=str(pr.id), document_link=pr.html_url
+                                document_id=pr.html_url, document_link=pr.html_url
                             ),
                             failure_message=error_msg,
                             exception=e,
@@ -1130,7 +1156,7 @@ class GithubConnector(
                         logger.exception(error_msg)
                         yield ConnectorFailure(
                             failed_document=DocumentFailure(
-                                document_id=str(issue.id),
+                                document_id=issue.html_url,
                                 document_link=issue.html_url,
                             ),
                             failure_message=error_msg,

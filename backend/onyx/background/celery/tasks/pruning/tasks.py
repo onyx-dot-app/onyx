@@ -56,12 +56,10 @@ from onyx.db.enums import (
     SyncType,
 )
 from onyx.db.hierarchy import (
-    delete_orphaned_hierarchy_nodes,
+    cleanup_unowned_hierarchy_nodes,
+    persist_hierarchy_nodes_for_cc_pair,
     remove_stale_hierarchy_node_cc_pair_entries,
-    reparent_orphaned_hierarchy_nodes,
     update_document_parent_hierarchy_nodes,
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
@@ -439,12 +437,12 @@ def try_creating_prune_generator_task(
 
         result = celery_app.send_task(
             OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
-            kwargs=dict(
-                cc_pair_id=cc_pair.id,
-                connector_id=cc_pair.connector_id,
-                credential_id=cc_pair.credential_id,
-                tenant_id=tenant_id,
-            ),
+            kwargs={
+                "cc_pair_id": cc_pair.id,
+                "connector_id": cc_pair.connector_id,
+                "credential_id": cc_pair.credential_id,
+                "tenant_id": tenant_id,
+            },
             queue=OnyxCeleryQueues.CONNECTOR_PRUNING,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.LOW,
@@ -568,6 +566,7 @@ def connector_pruning_generator_task(
         connector_type: str = ""
         is_connector_public: bool = False
         runnable_connector: BaseConnector | None = None
+        all_indexed_document_ids: set[str] = set()
 
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair(
@@ -609,6 +608,20 @@ def connector_pruning_generator_task(
                 cc_pair.connector.connector_specific_config,
                 cc_pair.credential,
             )
+
+            # Read the indexed ids before the crawl, not after it. Indexing runs
+            # alongside pruning, so a document the source created during the
+            # crawl is missing from the crawl's answer, and a read taken after
+            # the crawl would name it for deletion as soon as indexing commits
+            # it. Anything indexed from here on is left for the next prune.
+            all_indexed_document_ids = {
+                doc.id
+                for doc in get_documents_for_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                )
+            }
         # Session 1 closed here — connection released before enumeration.
 
         callback = PruneCallback(
@@ -634,24 +647,15 @@ def connector_pruning_generator_task(
 
             upserted_nodes: list[DBHierarchyNode] = []
             if extraction_result.hierarchy_nodes:
-                upserted_nodes = upsert_hierarchy_nodes_batch(
+                upserted_nodes = persist_hierarchy_nodes_for_cc_pair(
                     db_session=db_session,
                     nodes=extraction_result.hierarchy_nodes,
                     source=source,
-                    commit=False,
-                    is_connector_public=is_connector_public,
-                )
-
-                upsert_hierarchy_node_cc_pair_entries(
-                    db_session=db_session,
-                    hierarchy_node_ids=[n.id for n in upserted_nodes],
                     connector_id=connector_id,
                     credential_id=credential_id,
+                    is_connector_public=is_connector_public,
                     commit=False,
                 )
-
-                # Single commit so the FK reference in the join table can never
-                # outrun the parent hierarchy_node insert.
                 db_session.commit()
 
                 cache_entries = [
@@ -687,16 +691,6 @@ def connector_pruning_generator_task(
 
             diff_start = time.monotonic()
             try:
-                # a list of docs in our local index
-                all_indexed_document_ids = {
-                    doc.id
-                    for doc in get_documents_for_connector_credential_pair(
-                        db_session=db_session,
-                        connector_id=connector_id,
-                        credential_id=credential_id,
-                    )
-                }
-
                 # generate list of docs to remove (no longer in the source)
                 doc_ids_to_remove = list(
                     all_indexed_document_ids - all_connector_doc_ids.keys()
@@ -737,12 +731,7 @@ def connector_pruning_generator_task(
                 live_hierarchy_node_ids=live_node_ids,
                 commit=True,
             )
-            deleted_raw_ids = delete_orphaned_hierarchy_nodes(
-                db_session=db_session,
-                source=source,
-                commit=True,
-            )
-            reparented_nodes = reparent_orphaned_hierarchy_nodes(
+            deleted_raw_ids, reparented_nodes = cleanup_unowned_hierarchy_nodes(
                 db_session=db_session,
                 source=source,
                 commit=True,

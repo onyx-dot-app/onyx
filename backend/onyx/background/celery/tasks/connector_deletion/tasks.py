@@ -43,6 +43,7 @@ from onyx.db.enums import (
     SyncStatus,
     SyncType,
 )
+from onyx.db.hierarchy import cleanup_unowned_hierarchy_nodes
 from onyx.db.index_attempt import delete_index_attempts, get_recent_attempts_for_cc_pair
 from onyx.db.permission_sync_attempt import (
     delete_doc_permission_sync_attempts__no_commit,
@@ -61,6 +62,7 @@ from onyx.redis.redis_connector_delete import (
     RedisConnectorDelete,
     RedisConnectorDeletePayload,
 )
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -409,7 +411,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
 def monitor_connector_deletion_taskset(
     tenant_id: str,
     key_bytes: bytes,
-    r: TenantRedisClient,  # noqa: ARG001
+    r: TenantRedisClient,
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
@@ -523,6 +525,7 @@ def monitor_connector_deletion_taskset(
             # Store IDs before potentially expiring cc_pair
             connector_id_to_delete = cc_pair.connector_id
             credential_id_to_delete = cc_pair.credential_id
+            source = cc_pair.connector.source
 
             # Explicitly delete document by connector credential pair records before deleting the connector
             # This is needed because connector_id is a primary key in that table and cascading deletes won't work
@@ -545,6 +548,13 @@ def monitor_connector_deletion_taskset(
                 connector_id=connector_id_to_delete,
                 credential_id=credential_id_to_delete,
             )
+            # Join rows cascade off the cc_pair; drop nodes no other connector still owns.
+            db_session.flush()
+            deleted_raw_ids, reparented_nodes = cleanup_unowned_hierarchy_nodes(
+                db_session=db_session,
+                source=source,
+                commit=False,
+            )
             # if there are no credentials left, delete the connector
             connector = fetch_connector_by_id(
                 db_session=db_session,
@@ -560,6 +570,23 @@ def monitor_connector_deletion_taskset(
                 )
                 db_session.delete(connector)
             db_session.commit()
+
+            if deleted_raw_ids or reparented_nodes:
+                for attempt in range(3):
+                    try:
+                        invalidate_hierarchy_cache_for_source(r, source)
+                        break
+                    except Exception:
+                        if attempt == 2:
+                            task_logger.exception(
+                                "Connector deletion - failed to invalidate hierarchy node cache: "
+                                f"cc_pair={cc_pair_id}"
+                            )
+                task_logger.info(
+                    f"Connector deletion hierarchy cleanup: cc_pair={cc_pair_id} "
+                    f"nodes_deleted={len(deleted_raw_ids)} "
+                    f"nodes_reparented={len(reparented_nodes)}"
+                )
 
             update_sync_record_status(
                 db_session=db_session,

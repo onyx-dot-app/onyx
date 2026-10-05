@@ -9,6 +9,7 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,7 +27,6 @@ interface ContentXlPresetConfig {
   /** More-icon-1 width/height (CSS value). */
   moreIcon1Size: string;
   /** More-icon-2 width/height (CSS value). */
-  moreIcon2Size: string;
   /** Button `size` prop for the edit button. */
   editButtonSize: ContainerSizeVariants;
   /** Tailwind padding class for the edit button container. */
@@ -48,6 +48,9 @@ interface ContentXlProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -63,7 +66,7 @@ interface ContentXlProps {
   /** Optional secondary icon rendered in the icon row. */
   moreIcon1?: IconFunctionComponent;
 
-  /** Optional tertiary icon rendered in the icon row. */
+  /** Optional tertiary icon rendered in the icon row, boxed and sized like `icon`. */
   moreIcon2?: IconFunctionComponent;
 
   /** Ref forwarded to the root `<div>`. */
@@ -80,7 +83,6 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     lineHeight: "2.25rem",
     iconSize: "2rem",
     moreIcon1Size: "1rem",
-    moreIcon2Size: "2rem",
     editButtonSize: "md",
     editButtonPadding: "p-1",
     iconRowMarginBottom: "0rem",
@@ -90,7 +92,6 @@ const CONTENT_XL_PRESETS: Record<ContentXlSizePreset, ContentXlPresetConfig> = {
     lineHeight: "1.75rem",
     iconSize: "1.5rem",
     moreIcon1Size: "0.75rem",
-    moreIcon2Size: "1.5rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0.5",
     iconRowMarginBottom: "0.25rem",
@@ -108,6 +109,7 @@ function ContentXl({
   description,
   titleMaxLines,
   descriptionMaxLines,
+  strikethrough,
   editable,
   onTitleChange,
   moreIcon1: MoreIcon1,
@@ -117,6 +119,7 @@ function ContentXl({
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
+  const strings = useOpalStrings();
 
   const config = CONTENT_XL_PRESETS[sizePreset];
 
@@ -162,14 +165,16 @@ function ContentXl({
             </div>
           )}
 
+          {/* The tertiary icon is a peer of the primary one: same box, same
+              line-height floor, same size. */}
           {MoreIcon2 && (
-            <div className="opal-content-xl-more-icon-container shrink-0">
+            <div
+              className="opal-content-xl-icon-container shrink-0"
+              style={{ minHeight: config.lineHeight }}
+            >
               <MoreIcon2
                 className="opal-content-xl-icon"
-                style={{
-                  width: config.moreIcon2Size,
-                  height: config.moreIcon2Size,
-                }}
+                style={{ width: config.iconSize, height: config.iconSize }}
               />
             </div>
           )}
@@ -214,6 +219,7 @@ function ContentXl({
             font={config.titleFont}
             color="inherit"
             maxLines={titleMaxLines}
+            strikethrough={strikethrough}
             title={toPlainString(title)}
             onClick={editable ? startEditing : undefined}
           >
@@ -232,7 +238,7 @@ function ContentXl({
               icon={SvgEdit}
               prominence="internal"
               size={config.editButtonSize}
-              tooltip="Edit"
+              tooltip={strings.edit}
               tooltipSide="right"
               onClick={startEditing}
             />
@@ -244,7 +250,7 @@ function ContentXl({
         <div className="opal-content-xl-description">
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >

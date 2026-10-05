@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { cn } from "@opal/utils";
 import * as Dialog from "@radix-ui/react-dialog";
+import { useTranslations } from "next-intl";
 
 interface FullImageModalProps {
   fileId: string;
@@ -16,6 +17,8 @@ export function FullImageModal({
   open,
   onOpenChange,
 }: FullImageModalProps) {
+  const t = useTranslations("chat.files");
+
   // pre-fetch image
   useEffect(() => {
     const img = new Image();
@@ -35,7 +38,7 @@ export function FullImageModal({
         >
           <img
             src={buildImgUrl(fileId)}
-            alt="Uploaded attachment"
+            alt={t("fullImageModal.image.alt")}
             className="max-w-full max-h-full"
           />
         </Dialog.Content>

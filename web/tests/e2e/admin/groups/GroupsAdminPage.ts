@@ -160,6 +160,21 @@ export class GroupsAdminPage {
     return this.page.getByRole("button", { name: "Delete Group" });
   }
 
+  /** The banner shown on a default (Admin/Basic) group. */
+  get systemGroupNotice(): Locator {
+    return this.page.getByText("System group", { exact: true });
+  }
+
+  /** Header of the group-permissions section (full admin, custom groups only). */
+  get permissionsSectionHeader(): Locator {
+    return this.page.getByText("Group Permissions", { exact: true });
+  }
+
+  /** Header of the shared-resources section (custom groups only). */
+  get sharedResourcesSectionHeader(): Locator {
+    return this.page.getByText("Shared with This Group", { exact: true });
+  }
+
   /** Enter add-members mode on the edit page. */
   async startAddingMembers() {
     await this.addMembersButton.click();

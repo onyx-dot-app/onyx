@@ -192,7 +192,25 @@ class ScimPatchResourceValue(BaseModel):
     meta: ScimMeta | None = None
 
 
-ScimPatchValue = str | bool | list[ScimGroupMember] | ScimPatchResourceValue | None
+class ScimPatchEmailValue(ScimEmail):
+    """Email entry in an explicit-path PATCH value.
+
+    extra="forbid" keeps the union deterministic: member entries carry keys
+    this model rejects (display), so they fall through to ScimGroupMember,
+    while standard email entries parse losslessly here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+ScimPatchValue = (
+    str
+    | bool
+    | list[ScimPatchEmailValue]
+    | list[ScimGroupMember]
+    | ScimPatchResourceValue
+    | None
+)
 
 
 class ScimPatchOperation(BaseModel):

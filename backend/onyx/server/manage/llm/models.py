@@ -3,14 +3,27 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
 from onyx.llm.model_capabilities import (
+    anthropic_supports_thinking,
+    catalog_model_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
+    supported_reasoning_efforts,
+)
+from onyx.llm.model_capabilities import (
+    model_identity_names as resolve_model_identity_names,
+)
+from onyx.llm.models import (
+    ReasoningEffort,
+    parse_user_selectable_reasoning_effort,
+    reasoning_effort_exceeds,
 )
 from onyx.server.manage.llm.utils import (
     extract_vendor_from_model_name,
@@ -23,6 +36,24 @@ if TYPE_CHECKING:
     from onyx.db.models import ModelConfiguration as ModelConfigurationModel
 
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
+
+
+def ensure_default_within_max(
+    default: ReasoningEffort | None, maximum: ReasoningEffort | None
+) -> None:
+    """Reject a policy whose default the cap would immediately override.
+
+    Pass the values that end up STORED, not just those a request carried.
+    """
+    if (
+        default is not None
+        and maximum is not None
+        and reasoning_effort_exceeds(default, maximum)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "reasoning_effort_default cannot exceed reasoning_effort_max",
+        )
 
 
 class CustomProviderOption(BaseModel):
@@ -56,6 +87,30 @@ class TestLLMRequest(BaseModel):
         return value.strip().lower()
 
 
+def build_model_configuration_views(
+    llm_provider_model: "LLMProviderModel",
+    model_configurations: list["ModelConfigurationModel"],
+) -> list["ModelConfigurationView"]:
+    """Views over one page of a provider's rows, dated duplicates dropped and
+    the provider's recommended default marked."""
+    from onyx.llm.well_known_providers.llm_provider_options import (
+        fetch_default_model_for_provider,
+    )
+
+    provider = llm_provider_model.provider
+    views = filter_model_configurations(
+        model_configurations,
+        provider,
+        use_stored_display_name=llm_provider_model.custom_config is not None,
+        custom_config=llm_provider_model.custom_config,
+        deployment_name=llm_provider_model.deployment_name,
+    )
+    default_model = fetch_default_model_for_provider(provider)
+    for view in views:
+        view.is_recommended_default = view.name == default_model
+    return views
+
+
 class LLMProviderDescriptor(BaseModel):
     """A descriptor for an LLM provider that can be safely viewed by
     non-admin users. Used when giving a list of available LLMs."""
@@ -65,36 +120,34 @@ class LLMProviderDescriptor(BaseModel):
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
     model_configurations: list["ModelConfigurationView"]
+    # First stored row the listing left out, None when every row is included.
+    # Required (no default) so pre-paging cache entries fail validation and
+    # rebuild instead of hiding the rest of a large provider.
+    next_model_configuration_offset: int | None
 
     @classmethod
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
+        model_configurations: list["ModelConfigurationModel"],
+        next_model_configuration_offset: int | None,
     ) -> "LLMProviderDescriptor":
+        """`model_configurations` is one page of the provider's rows, passed
+        explicitly so a provider loaded without them never lazy-loads all."""
         from onyx.llm.well_known_providers.llm_provider_options import (
-            fetch_default_model_for_provider,
             get_provider_display_name,
         )
 
         provider = llm_provider_model.provider
-
-        model_configurations = filter_model_configurations(
-            llm_provider_model.model_configurations,
-            provider,
-            use_stored_display_name=llm_provider_model.custom_config is not None,
-        )
-        default_model = fetch_default_model_for_provider(provider)
-        for model_configuration in model_configurations:
-            model_configuration.is_recommended_default = (
-                model_configuration.name == default_model
-            )
-
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            model_configurations=model_configurations,
+            model_configurations=build_model_configuration_views(
+                llm_provider_model, model_configurations
+            ),
+            next_model_configuration_offset=next_model_configuration_offset,
         )
 
 
@@ -118,6 +171,11 @@ class LLMProviderUpsertRequest(LLMProvider):
     id: int | None = None
     api_key_changed: bool = False
     custom_config_changed: bool = False
+    # The write replaces model_configurations, and the read hides obsolete and
+    # dated-duplicate models, so a read-modify-write drops the hidden rows. With
+    # this set, models absent from the request are left alone and the request
+    # only adds or updates.
+    keep_existing_models: bool = False
     model_configurations: list["ModelConfigurationUpsertRequest"] = []
 
     @field_validator("provider", mode="before")
@@ -132,13 +190,21 @@ class LLMProviderView(LLMProvider):
 
     id: int
     model_configurations: list["ModelConfigurationView"]
+    # Set when the response holds only a page of the models (the admin
+    # listing with page_models). None means every model is included.
+    next_model_configuration_offset: int | None = None
 
     @classmethod
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
         include_api_key: bool = True,
+        model_configurations: list["ModelConfigurationModel"] | None = None,
+        next_model_configuration_offset: int | None = None,
     ) -> "LLMProviderView":
+        # ``model_configurations`` is one page of the provider's rows when the
+        # caller paged them, otherwise the loaded relationship is used.
+
         # ``include_api_key=False`` skips the decrypt + credential-access audit
         # for callers that only need catalog metadata (e.g. the Craft gateway
         # model list, which never uses the real key — the proxy injects it).
@@ -186,10 +252,17 @@ class LLMProviderView(LLMProvider):
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations,
+                (
+                    llm_provider_model.model_configurations
+                    if model_configurations is None
+                    else model_configurations
+                ),
                 provider,
                 use_stored_display_name=llm_provider_model.custom_config is not None,
+                custom_config=llm_provider_model.custom_config,
+                deployment_name=llm_provider_model.deployment_name,
             ),
+            next_model_configuration_offset=next_model_configuration_offset,
         )
 
 
@@ -201,6 +274,53 @@ class ModelConfigurationUpsertRequest(BaseModel):
     supports_reasoning: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
     custom_display_name: str | None = None  # Admin-specified override
+    reasoning_effort_max: ReasoningEffort | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
+    temperature_default: float | None = None
+
+    @field_validator("reasoning_effort_max", "reasoning_effort_default", mode="before")
+    @classmethod
+    def _validate_reasoning_effort(cls, value: Any) -> Any:
+        # AUTO has no rank and an unset column already means it. Enums too.
+        if value is None:
+            return value
+        try:
+            return parse_user_selectable_reasoning_effort(
+                value.value if isinstance(value, ReasoningEffort) else value
+            )
+        except ValueError as e:
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+
+    @field_validator("temperature_default")
+    @classmethod
+    def _validate_temperature(cls, value: float | None) -> float | None:
+        if value is not None and not 0 <= value <= 2:
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"temperature_default must be between 0 and 2, got {value}",
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_default_within_max(self) -> "ModelConfigurationUpsertRequest":
+        ensure_default_within_max(
+            self.reasoning_effort_default, self.reasoning_effort_max
+        )
+        return self
+
+    # Provided distinguishes an omitted field from an explicit null, so an
+    # older client that omits the settings cannot clear an admin's cap.
+    @property
+    def reasoning_effort_max_provided(self) -> bool:
+        return "reasoning_effort_max" in self.model_fields_set
+
+    @property
+    def reasoning_effort_default_provided(self) -> bool:
+        return "reasoning_effort_default" in self.model_fields_set
+
+    @property
+    def temperature_default_provided(self) -> bool:
+        return "temperature_default" in self.model_fields_set
 
     @classmethod
     def from_model(
@@ -217,6 +337,9 @@ class ModelConfigurationUpsertRequest(BaseModel):
             ),
             display_name=model_configuration_model.display_name,
             custom_display_name=model_configuration_model.custom_display_name,
+            reasoning_effort_max=model_configuration_model.reasoning_effort_max,
+            reasoning_effort_default=model_configuration_model.reasoning_effort_default,
+            temperature_default=model_configuration_model.temperature_default,
         )
 
 
@@ -231,6 +354,15 @@ class ModelConfigurationView(BaseModel):
     configured_max_input_tokens: int | None = Field(default=None, exclude=True)
     supports_image_input: bool
     supports_reasoning: bool = False
+    # Effort levels this model tells apart, ascending. Read alongside
+    # supports_reasoning: an empty list on a reasoning model means the model
+    # takes no effort parameter. The model picker offers exactly these.
+    supported_reasoning_efforts: list[ReasoningEffort] = Field(default_factory=list)
+    # supported_reasoning_efforts is what the model can do, these are what the
+    # admin permits of it. Null means unset.
+    reasoning_effort_max: ReasoningEffort | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
+    temperature_default: float | None = None
     # True when this is the provider's recommended default model.
     is_recommended_default: bool = False
     display_name: str | None = None
@@ -246,7 +378,20 @@ class ModelConfigurationView(BaseModel):
         model_configuration_model: "ModelConfigurationModel",
         provider_name: str,
         use_stored_display_name: bool = False,
+        custom_config: dict[str, str] | None = None,
+        deployment_name: str | None = None,
     ) -> "ModelConfigurationView":
+        model_identity_names = resolve_model_identity_names(
+            model_configuration_model.name, deployment_name
+        )
+        # The admin's chosen wire protocol decides which reasoning parameters
+        # reach the model, so it decides which effort levels are selectable.
+        reasoning_efforts = supported_reasoning_efforts(
+            provider_name,
+            model_identity_names,
+            resolve_api_surface(provider_name, custom_config),
+        )
+
         # For dynamic providers (OpenRouter, Bedrock, Ollama) and custom-config
         # providers, use the display_name stored in DB. Skip LiteLLM parsing.
         if (
@@ -264,28 +409,40 @@ class ModelConfigurationView(BaseModel):
                 max_input_tokens=model_configuration_model.max_input_tokens,
                 configured_max_input_tokens=model_configuration_model.max_input_tokens,
                 # Dynamic/custom-config providers under-report vision; fall back
-                # to the LiteLLM cost map when no VISION flow is stored.
+                # to the model catalog when no VISION flow is stored.
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
-                    or litellm_thinks_model_supports_image_input(
-                        model_configuration_model.name, provider_name
+                    or any(
+                        catalog_model_supports_image_input(name, provider_name)
+                        for name in model_identity_names
                     )
                 ),
-                # Prefer the stored REASONING flow; fall back to the LiteLLM
-                # cost map, then a substring heuristic on model name/display
-                # name for models LiteLLM doesn't know.
+                # Prefer the stored flow, then the Claude version parse, then
+                # the model catalog, then a name/display-name substring
+                # heuristic. Mirrors multi_llm.py's is_reasoning.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
                     in model_configuration_model.llm_model_flow_types
-                    or model_is_reasoning_model(
-                        model_configuration_model.name, provider_name
+                    or any(
+                        anthropic_supports_thinking(name)
+                        for name in model_identity_names
                     )
-                    or is_reasoning_model(
-                        model_configuration_model.name,
-                        model_configuration_model.display_name or "",
+                    or any(
+                        model_is_reasoning_model(name, provider_name)
+                        for name in model_identity_names
+                    )
+                    or any(
+                        is_reasoning_model(
+                            name, model_configuration_model.display_name or ""
+                        )
+                        for name in model_identity_names
                     )
                 ),
+                supported_reasoning_efforts=reasoning_efforts,
+                reasoning_effort_max=model_configuration_model.reasoning_effort_max,
+                reasoning_effort_default=model_configuration_model.reasoning_effort_default,
+                temperature_default=model_configuration_model.temperature_default,
                 display_name=model_configuration_model.display_name,
                 custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
@@ -327,19 +484,29 @@ class ModelConfigurationView(BaseModel):
                 True
                 if LLMModelFlowType.VISION
                 in model_configuration_model.llm_model_flow_types
-                else litellm_thinks_model_supports_image_input(
-                    model_configuration_model.name, provider_name
+                else any(
+                    catalog_model_supports_image_input(name, provider_name)
+                    for name in model_identity_names
                 )
             ),
-            # Prefer the stored REASONING flow; fall back to LiteLLM-based
-            # detection for legacy rows that were saved before the flow existed.
+            # Prefer the stored flow, then the Claude version parse, then
+            # LiteLLM-based detection for legacy rows saved before the flow
+            # existed. Mirrors multi_llm.py's is_reasoning.
             supports_reasoning=(
                 LLMModelFlowType.REASONING
                 in model_configuration_model.llm_model_flow_types
-                or model_is_reasoning_model(
-                    model_configuration_model.name, provider_name
+                or any(
+                    anthropic_supports_thinking(name) for name in model_identity_names
+                )
+                or any(
+                    model_is_reasoning_model(name, provider_name)
+                    for name in model_identity_names
                 )
             ),
+            supported_reasoning_efforts=reasoning_efforts,
+            reasoning_effort_max=model_configuration_model.reasoning_effort_max,
+            reasoning_effort_default=model_configuration_model.reasoning_effort_default,
+            temperature_default=model_configuration_model.temperature_default,
             # Populate display fields from parsed model name
             display_name=display_name,
             custom_display_name=model_configuration_model.custom_display_name,
@@ -507,6 +674,7 @@ class LLMProviderResponse(BaseModel, Generic[T]):
     default_text: DefaultModel | None = None
     default_vision: DefaultModel | None = None
     default_chat_naming: DefaultModel | None = None
+    default_craft: DefaultModel | None = None
 
     @classmethod
     def from_models(
@@ -515,12 +683,37 @@ class LLMProviderResponse(BaseModel, Generic[T]):
         default_text: DefaultModel | None = None,
         default_vision: DefaultModel | None = None,
         default_chat_naming: DefaultModel | None = None,
+        default_craft: DefaultModel | None = None,
     ) -> LLMProviderResponse[T]:
         return cls(
             providers=providers,
             default_text=default_text,
             default_vision=default_vision,
             default_chat_naming=default_chat_naming,
+            default_craft=default_craft,
+        )
+
+
+class ModelConfigurationPage(BaseModel):
+    """One window of a provider's models, past what the listing returned."""
+
+    model_configurations: list[ModelConfigurationView]
+    # Offset of the next stored row, None at the end of the list or, for a
+    # name search, of the matches.
+    next_offset: int | None
+
+    @classmethod
+    def from_model(
+        cls,
+        llm_provider_model: "LLMProviderModel",
+        model_configurations: list["ModelConfigurationModel"],
+        next_offset: int | None,
+    ) -> "ModelConfigurationPage":
+        return cls(
+            model_configurations=build_model_configuration_views(
+                llm_provider_model, model_configurations
+            ),
+            next_offset=next_offset,
         )
 
 
@@ -665,6 +858,23 @@ class OpenAICompatibleModelsRequest(BaseModel):
 class OpenAICompatibleFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g. "meta-llama/Llama-3-8B-Instruct")
     display_name: str  # Human-readable name from API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
+# Vercel AI Gateway dynamic models fetch
+class VercelAIGatewayModelsRequest(BaseModel):
+    # The catalog is public, so api_base alone is enough to list models.
+    api_base: str | None = None
+    api_key: str | None = None
+    # Existing provider id; syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class VercelAIGatewayFinalModelResponse(BaseModel):
+    name: str  # Namespaced model id (e.g. "anthropic/claude-sonnet-4.5")
+    display_name: str
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool

@@ -21,6 +21,7 @@ function renderRow(
     tool,
     isForced: false,
     isDisabled: false,
+    isUnavailable: false,
     sourceCounts: null,
     onForceToggle: jest.fn(),
     onToggleEnabled: jest.fn(),

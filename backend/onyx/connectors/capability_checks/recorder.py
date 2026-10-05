@@ -3,7 +3,8 @@
 The blocking paths (cc-pair validation, indexing-run start) already probe the
 source; this module records what they found as a fallback-shaped capability
 report, so reports accumulate before any check-running infrastructure exists. It
-runs no checks of its own.
+runs no checks of its own. Pairing validation for a source with named checks
+stores the full named report instead (``creation.py``).
 
 Deliberately import-light: the hook sites live in ``factory.py`` and the
 docfetching hot path, so this module must not pull in the check registry (which
@@ -11,8 +12,6 @@ eagerly imports every migrated connector's check module) or the runner (which
 imports ``factory``).
 """
 
-import hashlib
-import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,6 +25,7 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapability,
     CredentialCapabilityReport,
     compute_capability_verdicts,
+    compute_connector_config_hash,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.credential_capability import (
@@ -94,14 +94,6 @@ def _synthesize_results(
     return results
 
 
-def _connector_config_hash(config: dict[str, Any] | None) -> str | None:
-    """sha256 of the canonical config JSON; the staleness signal."""
-    if config is None:
-        return None
-    canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode()).hexdigest()
-
-
 def record_blocking_validation_outcome(
     *,
     credential_id: int,
@@ -139,7 +131,9 @@ def record_blocking_validation_outcome(
                 source=source,
                 trigger=trigger,
                 report=report,
-                connector_config_hash=_connector_config_hash(connector_specific_config),
+                connector_config_hash=compute_connector_config_hash(
+                    connector_specific_config
+                ),
             )
             # The accessors leave the transaction to the caller, and the session
             # context manager closes without committing.

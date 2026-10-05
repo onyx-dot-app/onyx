@@ -129,7 +129,7 @@ class TestOktaProvider:
         assert result.displayName is None
 
     def test_build_user_resource_scim_username_preserves_case(self) -> None:
-        """When scim_username is set, userName and emails use original case."""
+        """userName keeps the IdP's case, emails reports the login email."""
         provider = OktaProvider()
         user = _make_mock_user(email="alice@example.com")
         result = provider.build_user_resource(
@@ -137,7 +137,7 @@ class TestOktaProvider:
         )
 
         assert result.userName == "Alice@Example.com"
-        assert result.emails[0].value == "Alice@Example.com"
+        assert result.emails[0].value == "alice@example.com"
 
     def test_build_user_resource_scim_username_none_falls_back(self) -> None:
         """When scim_username is None, userName falls back to user.email."""

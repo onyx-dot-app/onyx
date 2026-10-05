@@ -11,11 +11,7 @@ import type { IconFunctionComponent } from "@/icons/types";
 // editing, tag/aux, responsive grid) throw rather than render wrong.
 
 type ContentSizePreset =
-  | "headline"
-  | "section"
-  | "main-content"
-  | "main-ui"
-  | "secondary";
+  "headline" | "section" | "main-content" | "main-ui" | "secondary";
 type ContentVariant = "heading" | "section" | "body";
 type ContentColor = "default" | "muted" | "danger";
 

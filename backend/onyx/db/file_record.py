@@ -69,6 +69,22 @@ def get_filerecords_by_file_ids(
     )
 
 
+def get_object_keys_with_records(
+    bucket_name: str, object_keys: list[str], db_session: Session
+) -> set[str]:
+    """The given keys that a file record in this bucket points at."""
+    if not object_keys:
+        return set()
+    return set(
+        db_session.scalars(
+            select(FileRecord.object_key).where(
+                FileRecord.bucket_name == bucket_name,
+                FileRecord.object_key.in_(object_keys),
+            )
+        )
+    )
+
+
 def update_filerecord_file_sizes(
     file_sizes: dict[str, int],
     db_session: Session,
@@ -258,5 +274,7 @@ def get_session_ids_with_incognito_files(
         .where(FileRecord.file_metadata.has_key(INCOGNITO_SESSION_METADATA_KEY))
     )
     if limit is not None:
-        stmt = stmt.order_by(func.random()).limit(limit)
+        # Postgres rejects ORDER BY random() on a DISTINCT select, so the
+        # sample draws from a subquery.
+        stmt = select(stmt.subquery()).order_by(func.random()).limit(limit)
     return list(db_session.scalars(stmt))

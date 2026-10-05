@@ -30,6 +30,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.tool.models import (
     CustomToolCreate,
     CustomToolUpdate,
+    Header,
     ToolSnapshot,
 )
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
@@ -39,6 +40,7 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
     validate_openapi_schema,
 )
+from onyx.utils.encryption import is_masked_credential
 
 router = APIRouter(prefix="/tool")
 admin_router = APIRouter(prefix="/admin/tool")
@@ -59,6 +61,41 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                     status_code=400,
                     detail="Cannot use passthrough auth with custom authorization headers",
                 )
+
+
+def _resolve_masked_headers(
+    headers: list[Header] | None, stored: list[Any] | None
+) -> list[Header] | None:
+    """Restore header values the caller echoed back masked.
+
+    Reads mask header values, and the admin UI round-trips whatever it read, so
+    a masked value means "keep the stored one". A caller rotating to a value
+    that equals the stored mask exactly is read as an unchanged echo; only a
+    changed-flag on the request could separate the two.
+    """
+    if not headers:
+        return headers
+
+    stored_by_key = {
+        item["key"]: item["value"]
+        for item in (stored or [])
+        if isinstance(item, dict) and isinstance(item.get("value"), str)
+    }
+
+    resolved: list[Header] = []
+    for header in headers:
+        if not is_masked_credential(header.value):
+            resolved.append(header)
+            continue
+        stored_value = stored_by_key.get(header.key)
+        if stored_value is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Header '{header.key}' was sent as a masked placeholder but has "
+                "no stored value to keep. Send the actual header value.",
+            )
+        resolved.append(Header(key=header.key, value=stored_value))
+    return resolved
 
 
 def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
@@ -119,11 +156,12 @@ def create_custom_tool(
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
     _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
+    custom_headers = _resolve_masked_headers(tool_data.custom_headers, None)
     tool = create_tool__no_commit(
         name=tool_data.name,
         description=tool_data.description,
         openapi_schema=tool_data.definition,
-        custom_headers=tool_data.custom_headers,
+        custom_headers=custom_headers,
         user_id=user.id,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
@@ -158,7 +196,9 @@ def update_custom_tool(
         name=tool_data.name,
         description=tool_data.description,
         openapi_schema=tool_data.definition,
-        custom_headers=tool_data.custom_headers,
+        custom_headers=_resolve_masked_headers(
+            tool_data.custom_headers, existing_tool.custom_headers
+        ),
         user_id=existing_tool.user_id,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,

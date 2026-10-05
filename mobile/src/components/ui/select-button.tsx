@@ -48,7 +48,7 @@ function SelectButton({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? children}
       accessibilityState={{ disabled, selected: state === "selected" }}
-      className="self-start"
+      className="self-center"
     >
       {({ pressed }) => {
         const colors =

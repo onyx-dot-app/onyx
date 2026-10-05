@@ -7,7 +7,7 @@ import {
   Placement,
   StopReason,
 } from "@/app/app/services/streamingModels";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 
 // Core packet factory
 export function createPacket(
@@ -36,18 +36,6 @@ export function createStopPacket(
   return createPacket(PacketType.STOP, placement, {
     stop_reason: stopReason,
   });
-}
-
-// Branching packet
-export function createBranchingPacket(
-  numBranches: number,
-  turnIndex: number
-): Packet {
-  return createPacket(
-    PacketType.TOP_LEVEL_BRANCHING,
-    { turn_index: turnIndex },
-    { num_parallel_branches: numBranches }
-  );
 }
 
 // Message packet

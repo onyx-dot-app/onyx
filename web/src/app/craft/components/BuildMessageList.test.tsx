@@ -1,12 +1,13 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { render } from "@tests/setup/test-utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import type { BuildMessage } from "@/app/craft/types/streamingTypes";
 import type { StreamItem } from "@/app/craft/types/displayTypes";
 
 jest.mock("@/lib/app/components", () => ({
-  Logo: () => <div data-testid="onyx-logo" />,
+  FoldableLogo: () => <div data-testid="onyx-logo" />,
 }));
 
 jest.mock("@/components/chat/MinimalMarkdown", () => ({

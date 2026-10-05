@@ -338,7 +338,7 @@ def require_permission(
     base_user = current_chat_accessible_user if allow_anonymous else current_user
 
     async def dependency(request: Request, user: User = Depends(base_user)) -> User:
-        token_scopes: list[Permission] | None = getattr(
+        token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
             request.state, "token_scopes", None
         )
         authority = has_permission(user, required)

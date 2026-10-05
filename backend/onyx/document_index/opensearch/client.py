@@ -7,7 +7,6 @@ from contextlib import AbstractContextManager, nullcontext
 from http import HTTPStatus
 from typing import Any, Generic, TypeVar
 
-import boto3
 from opensearchpy import (
     NotFoundError,
     OpenSearch,
@@ -33,7 +32,7 @@ from onyx.configs.app_configs import (
     OPENSEARCH_VERIFY_CERTS,
     PIT_KEEP_ALIVE,
 )
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     OpenSearchAuthMethod,
@@ -44,6 +43,7 @@ from onyx.document_index.opensearch.schema import (
     CONTENT_VECTOR_FIELD_NAME,
     DOCUMENT_ID_FIELD_NAME,
     MAX_CHUNK_SIZE_FIELD_NAME,
+    TENANT_ID_FIELD_NAME,
     TITLE_VECTOR_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
@@ -68,6 +68,10 @@ _RETRYABLE_UPDATE_ERROR_TYPES = (
 
 
 logger = setup_logger(__name__)
+
+# One update-by-query can touch thousands of chunks, so it gets longer than the
+# client's default request timeout.
+_UPDATE_BY_QUERY_TIMEOUT_S = 5 * 60
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from
 # opensearch. By default it emits INFO-level logs for every request.
 # The opensearch-py library uses "opensearch" as the logger name for HTTP
@@ -166,6 +170,8 @@ _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
+# Ids per mget request, so the body stays under the cluster's http.max_content_length.
+_MGET_BATCH_SIZE = 500
 
 
 def is_cluster_block_error(e: Exception) -> bool:
@@ -294,6 +300,8 @@ class OpenSearchClient(AbstractContextManager):
             # SigV4 signing for an AWS managed domain whose FGAC master is an
             # IAM ARN. Credentials come from the default boto3 chain (env, IRSA,
             # instance/task role); the signer refreshes them per request.
+            import boto3
+
             credentials = boto3.Session().get_credentials()
             if credentials is None:
                 raise ValueError(
@@ -521,6 +529,20 @@ class OpenSearchClient(AbstractContextManager):
             True if OpenSearch could be reached, False if it could not.
         """
         return self._client.ping()
+
+    @log_function_time(print_only=True, debug_only=True)
+    def get_opensearch_version(self) -> tuple[int, int] | None:
+        """Returns the (major, minor) OpenSearch version of the cluster.
+
+        Returns:
+            None if the cluster does not report an OpenSearch version, for
+                example an AWS domain in Elasticsearch compatibility mode.
+        """
+        version_info: dict[str, Any] = self._client.info()["version"]
+        if version_info.get("distribution") != "opensearch":
+            return None
+        major, minor = version_info["number"].split(".")[:2]
+        return int(major), int(minor)
 
     def close(self) -> None:
         """Closes the client.
@@ -1228,6 +1250,38 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         return num_deleted
 
+    def update_by_query(self, query_body: dict[str, Any]) -> int:
+        """Runs a scripted update on every document matching a query.
+
+        A chunk rewritten while the update runs (a version conflict) is
+        skipped, not retried: the caller must only use this for values that
+        every other writer of the chunk also sets. The index is refreshed
+        afterwards, so a following update-by-query sees this one's writes.
+
+        Raises:
+            Exception: There was an error updating the documents.
+
+        Returns:
+            The number of documents updated.
+        """
+        result = self._client.update_by_query(
+            index=self._index_name,
+            body=query_body,
+            refresh=True,
+            conflicts="proceed",
+            request_timeout=_UPDATE_BY_QUERY_TIMEOUT_S,
+        )
+        if result.get("timed_out", False):
+            raise RuntimeError(
+                f"Update by query timed out for index {self._index_name}."
+            )
+        if result.get("failures"):
+            raise RuntimeError(
+                f"Failed to update some or all of the documents for index {self._index_name}: "
+                f"{result['failures']}"
+            )
+        return int(result.get("updated", 0))
+
     def count_by_query(self, query_body: dict[str, Any]) -> int:
         """Counts documents matching a query for this index (the _count API).
 
@@ -1798,6 +1852,8 @@ class OpenSearchIndexClient(OpenSearchClient):
         self,
         pit_id: str,
         doc_ids: list[str],
+        *,
+        tenant_state: TenantState,
         search_after: list[object] | None = None,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
@@ -1812,6 +1868,8 @@ class OpenSearchIndexClient(OpenSearchClient):
         Args:
             pit_id: The point-in-time id from open_pit.
             doc_ids: The document ids whose chunks to fetch.
+            tenant_state: The tenant state of the caller. Scopes the scan to one
+                tenant when multitenant.
             search_after: The sort cursor from the previous page; None for the
                 first page.
             page_size: Max chunks per page.
@@ -1836,7 +1894,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         try:
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive
+                    pit_id, doc_ids, search_after, page_size, keep_alive, tenant_state
                 )
             )
         except NotFoundError as e:
@@ -1850,7 +1908,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             pit_id = self.open_pit(keep_alive)
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive
+                    pit_id, doc_ids, search_after, page_size, keep_alive, tenant_state
                 )
             )
 
@@ -1881,6 +1939,8 @@ class OpenSearchIndexClient(OpenSearchClient):
     def iter_chunks_for_doc_ids(
         self,
         doc_ids: list[str],
+        *,
+        tenant_state: TenantState,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
     ) -> Iterator[list[DocumentChunkWithoutVectors]]:
@@ -1892,6 +1952,8 @@ class OpenSearchIndexClient(OpenSearchClient):
 
         Args:
             doc_ids: The document ids whose chunks to scan.
+            tenant_state: The tenant state of the caller. Scopes the scan to one
+                tenant when multitenant.
             page_size: Max chunks per page.
             keep_alive: PIT lease extension applied on each search.
 
@@ -1907,6 +1969,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 chunks, search_after, pit_id = self.fetch_chunks_for_doc_ids(
                     pit_id,
                     doc_ids,
+                    tenant_state=tenant_state,
                     search_after=search_after,
                     page_size=page_size,
                     keep_alive=keep_alive,
@@ -1925,28 +1988,32 @@ class OpenSearchIndexClient(OpenSearchClient):
         search_after: list[object] | None,
         page_size: int,
         keep_alive: str,
+        tenant_state: TenantState,
     ) -> dict[str, Any]:
         """Builds the PIT search body for one page.
 
         No index= is sent — the PIT pins the index; keep_alive in the pit block
         extends the lease on every page.
         """
+        filter_clauses: list[dict[str, Any]] = [
+            {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
+            # OpenSearch holds no large/mini chunks today, so this
+            # matches everything; kept as a guard if that changes
+            {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
+        ]
+        # Only the _id carries a tenant prefix, so the document_id filter alone would
+        # match other tenants' chunks.
+        if tenant_state.multitenant:
+            filter_clauses.append(
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            )
         body: dict[str, Any] = {
             "pit": {"id": pit_id, "keep_alive": keep_alive},
             "size": page_size,
             "_source": {
                 "excludes": [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]
             },
-            "query": {
-                "bool": {
-                    "filter": [
-                        {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
-                        # OpenSearch holds no large/mini chunks today, so this
-                        # matches everything; kept as a guard if that changes
-                        {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
-                    ]
-                }
-            },
+            "query": {"bool": {"filter": filter_clauses}},
             "sort": [
                 {DOCUMENT_ID_FIELD_NAME: "asc"},
                 {CHUNK_INDEX_FIELD_NAME: "asc"},
@@ -1963,8 +2030,31 @@ class OpenSearchIndexClient(OpenSearchClient):
         The type can be nested under root_cause, so match the stringified body.
         """
         return _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(
-            getattr(error, "info", "")
+            getattr(error, "info", "")  # ods: ignore[getattr]
         ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
+
+    def get_existing_chunk_ids(self, chunk_ids: list[str]) -> set[str]:
+        """Returns the subset of `chunk_ids` that exist in the index.
+
+        Uses the OpenSearch mget API, which fetches documents by _id in one request
+        and, unlike a search, sees writes that have not been refreshed yet. Raises on
+        transport errors rather than returning an empty set.
+        """
+        if not chunk_ids:
+            return set()
+
+        found: set[str] = set()
+        for start in range(0, len(chunk_ids), _MGET_BATCH_SIZE):
+            batch = chunk_ids[start : start + _MGET_BATCH_SIZE]
+            response = self._client.mget(
+                index=self._index_name,
+                body={"ids": batch},
+                _source=False,
+            )
+            found.update(
+                doc["_id"] for doc in response.get("docs", []) if doc.get("found")
+            )
+        return found
 
     @log_function_time(print_only=True, debug_only=True)
     def refresh_index(self) -> None:

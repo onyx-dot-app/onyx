@@ -3,6 +3,8 @@ import { render, RenderOptions } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SWRConfig } from "swr";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { NextIntlClientProvider } from "next-intl";
+import englishMessages from "@/i18n/messages/en.json";
 export { makeProvider } from "./llmProviderTestUtils";
 
 /**
@@ -33,7 +35,10 @@ function AllTheProviders({ children, swrConfig = {} }: AllProvidersProps) {
         ...swrConfig,
       }}
     >
-      <TooltipPrimitive.Provider>{children}</TooltipPrimitive.Provider>
+      {/* Tests always render the English catalog, matching the app default. */}
+      <NextIntlClientProvider locale="en" messages={englishMessages}>
+        <TooltipPrimitive.Provider>{children}</TooltipPrimitive.Provider>
+      </NextIntlClientProvider>
     </SWRConfig>
   );
 }

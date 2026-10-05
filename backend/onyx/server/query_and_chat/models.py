@@ -109,8 +109,6 @@ class SendMessageRequest(BaseModel):
     # For multi-model mode: up to 3 LLM overrides to run in parallel.
     # When provided with >1 entry, triggers multi-model streaming.
     llm_overrides: list[LLMOverride] | None = None
-    # Test-only override for deterministic LiteLLM mock responses.
-    mock_llm_response: str | None = None
 
     allowed_tool_ids: list[int] | None = None
     forced_tool_id: int | None = None
@@ -238,6 +236,8 @@ class ChatMessageDetail(BaseModel):
     processing_duration_seconds: float | None = None
     preferred_response_id: int | None = None
     model_display_name: str | None = None
+    # Absent on messages written before this was captured.
+    request_params: dict[str, Any] | None = None
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]

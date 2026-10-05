@@ -233,10 +233,10 @@ def _extract_text_from_content(content: Any) -> str:
     if content is None:
         return ""
     if hasattr(content, "type") and content.type == "text":
-        return getattr(content, "text", "") or ""
+        return getattr(content, "text", "") or ""  # ods: ignore[getattr]
     if isinstance(content, list):
         texts = [
-            getattr(block, "text", "") or ""
+            getattr(block, "text", "") or ""  # ods: ignore[getattr]
             for block in content
             if hasattr(block, "type") and block.type == "text"
         ]
@@ -319,10 +319,15 @@ def merge_events_with_announces(
         )
         try:
             for evt in event_iter:
+                if stop.is_set():
+                    break
                 output.put(evt)
         except Exception as e:
             output.put(e)
         finally:
+            # Close on this thread: it owns the generator, and close() runs the
+            # subscription teardown (bus unsubscribe, client close).
+            event_iter.close()
             output.put(done_sentinel)
 
     def drive_announces() -> None:
@@ -437,7 +442,7 @@ def _save_pending_chunks(
 
 
 def _routing_meta_from_event(sandbox_event: Any) -> dict[str, Any] | None:
-    field_meta = getattr(sandbox_event, "field_meta", None)
+    field_meta = getattr(sandbox_event, "field_meta", None)  # ods: ignore[getattr]
     if not isinstance(field_meta, dict):
         return None
 

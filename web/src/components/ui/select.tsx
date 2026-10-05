@@ -115,19 +115,19 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-xs py-1.5 pl-8 pr-2 outline-hidden focus:bg-background-tint-02 data-disabled:pointer-events-none data-disabled:opacity-50",
+      "relative flex w-full cursor-default select-none items-center rounded-xs py-1.5 ps-8 pe-2 outline-hidden focus:bg-background-tint-02 data-disabled:pointer-events-none data-disabled:opacity-50",
       className
     )}
     {...props}
   >
     {icon ? (
-      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <span className="absolute start-2 flex h-3.5 w-3.5 items-center justify-center">
         {typeof icon === "function" ? icon({ size: 16, className: "" }) : icon}
       </span>
     ) : (
       !hideCheck &&
       selected && (
-        <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+        <span className="absolute start-2 flex h-3.5 w-3.5 items-center justify-center">
           <SelectPrimitive.ItemIndicator>
             <Check className="h-4 w-4" />
           </SelectPrimitive.ItemIndicator>

@@ -2,31 +2,12 @@
 
 import useSWR from "swr";
 import type { ScopedMutator } from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, type ErrorResponseBody } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-
-/**
- * Admin-set negotiated per-model rate, overriding the built-in price book.
- * Rates are USD per MILLION tokens. Keyed on (provider, model); provider is ""
- * for a provider-agnostic override.
- */
-export interface CostOverride {
-  model: string;
-  provider: string;
-  input_cost_per_mtok: number;
-  output_cost_per_mtok: number;
-  cache_read_cost_per_mtok: number | null; // null = bill cache at the input rate
-  updated_at: string | null;
-}
-
-/** PUT body — an idempotent upsert keyed on (provider, model). */
-export interface CostOverrideUpsert {
-  model: string;
-  provider?: string; // "" / omitted = provider-agnostic
-  input_cost_per_mtok: number;
-  output_cost_per_mtok: number;
-  cache_read_cost_per_mtok: number | null;
-}
+import type {
+  CostOverride,
+  CostOverrideUpsert,
+} from "@/lib/languageModels/types";
 
 /**
  * Lists existing cost overrides via `GET /api/admin/cost-overrides` (admin).
@@ -106,7 +87,7 @@ export async function refreshCostOverrides(
 /** Pull the backend's `detail`/`error_code`, falling back to the status text. */
 async function extractError(response: Response): Promise<string> {
   try {
-    const data = await response.json();
+    const data: ErrorResponseBody = await response.json();
     return data.detail || data.error_code || response.statusText;
   } catch {
     return response.statusText;

@@ -1,17 +1,13 @@
 import { Agent } from "@/lib/agents/types";
-import { Credential } from "./connectors/credentials";
-import { Connector } from "./connectors/connectors";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
+import type { Locale } from "@/i18n/config";
+import type { Credential } from "@/lib/credentials/types";
+import type { Connector } from "@/lib/connectors/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
-
-export interface UserSpecificAgentPreference {
-  disabled_tool_ids?: number[];
-}
-
-export type UserSpecificAgentPreferences = Record<
-  number,
-  UserSpecificAgentPreference
->;
+// Imported from the module itself, not the barrel: the barrel re-exports
+// shapes that import from here, and the enum is a runtime value.
+import { ValidSources } from "@/lib/connectors/types/source";
 
 export enum ThemePreference {
   LIGHT = "light",
@@ -30,7 +26,11 @@ interface UserPreferences {
   auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
+  temperature_default?: number | null;
+  reasoning_effort_default?: ReasoningEffortOverride | null;
   theme_preference: ThemePreference | null;
+  // UI language, mirrors the backend SupportedLanguage enum
+  language: Locale | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
   // Input preferences
@@ -187,7 +187,7 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync";
+export type AccessType = "public" | "private" | "sync" | "sync_restricted";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -576,14 +576,16 @@ export type SSRFProtectionLevel =
   | "allow_private_network"
   | "disabled";
 
-// Read shape of GET /admin/security: effective, env-merged settings. Every
-// field is concrete, the backend never returns null here (see
-// `SecuritySettings` in backend/onyx/server/security/models.py).
+// Read shape of GET /admin/security: effective, env-merged settings (see
+// `SecuritySettings` in backend/onyx/server/security/models.py). Only the
+// jwt_* fields are nullable, null meaning that check is off.
 export interface SecuritySettings {
   user_directory_admin_only: boolean;
   incognito_availability: IncognitoAvailability;
   incognito_record_mode: IncognitoRecordMode;
+  allow_connector_group_restrictions: boolean;
   track_external_idp_expiry: boolean;
+  allow_same_provider_subject_relink: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
   llm_custom_config_env_injection: boolean;
@@ -595,128 +597,12 @@ export interface SecuritySettings {
   password_require_digit: boolean;
   password_require_special_char: boolean;
   password_auth_enabled: boolean;
+  jwt_public_key_url: string | null;
+  jwt_expected_audience: string | null;
+  jwt_expected_issuer: string | null;
 }
-
-export enum ValidSources {
-  Web = "web",
-  GitHub = "github",
-  GitLab = "gitlab",
-  Slack = "slack",
-  GoogleDrive = "google_drive",
-  Gmail = "gmail",
-  Bookstack = "bookstack",
-  Outline = "outline",
-  Confluence = "confluence",
-  Jira = "jira",
-  Productboard = "productboard",
-  Slab = "slab",
-  Coda = "coda",
-  Notion = "notion",
-  Guru = "guru",
-  Gong = "gong",
-  Zulip = "zulip",
-  Linear = "linear",
-  Hubspot = "hubspot",
-  Document360 = "document360",
-  File = "file",
-  UserFile = "user_file",
-  GoogleSites = "google_sites",
-  Loopio = "loopio",
-  Box = "box",
-  Dropbox = "dropbox",
-  Discord = "discord",
-  Salesforce = "salesforce",
-  Sharepoint = "sharepoint",
-  Teams = "teams",
-  Zendesk = "zendesk",
-  Discourse = "discourse",
-  Axero = "axero",
-  Clickup = "clickup",
-  Wikipedia = "wikipedia",
-  Mediawiki = "mediawiki",
-  Asana = "asana",
-  S3 = "s3",
-  R2 = "r2",
-  GoogleCloudStorage = "google_cloud_storage",
-  Xenforo = "xenforo",
-  OciStorage = "oci_storage",
-  NotApplicable = "not_applicable",
-  IngestionApi = "ingestion_api",
-  Freshdesk = "freshdesk",
-  Fireflies = "fireflies",
-  Egnyte = "egnyte",
-  Airtable = "airtable",
-  Gitbook = "gitbook",
-  Highspot = "highspot",
-  DrupalWiki = "drupal_wiki",
-  Imap = "imap",
-  Bitbucket = "bitbucket",
-  TestRail = "testrail",
-  Braintrust = "braintrust",
-  Lumapps = "lumapps",
-  Canvas = "canvas",
-
-  // Craft-specific sources
-  CraftFile = "craft_file",
-
-  // Federated Connectors
-  FederatedSlack = "federated_slack",
-}
-
-export const federatedSourceToRegularSource = (
-  maybeFederatedSource: ValidSources
-): ValidSources => {
-  if (maybeFederatedSource === ValidSources.FederatedSlack) {
-    return ValidSources.Slack;
-  }
-  return maybeFederatedSource;
-};
-
-export const validAutoSyncSources = [
-  ValidSources.Confluence,
-  ValidSources.Jira,
-  ValidSources.GoogleDrive,
-  ValidSources.Gmail,
-  ValidSources.Slack,
-  ValidSources.Salesforce,
-  ValidSources.GitHub,
-  ValidSources.Sharepoint,
-  ValidSources.Teams,
-  ValidSources.Canvas,
-  ValidSources.Box,
-] as const;
-
-// Create a type from the array elements
-export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
-
-export type ConfigurableSources = Exclude<
-  ValidSources,
-  | ValidSources.NotApplicable
-  | ValidSources.IngestionApi
-  | ValidSources.FederatedSlack // is part of ValiedSources.Slack
-  | ValidSources.UserFile
-  | ValidSources.CraftFile // User Library - managed through dedicated UI
->;
-
-export const oauthSupportedSources: ConfigurableSources[] = [
-  ValidSources.Slack,
-  // NOTE: temporarily disabled until our GDrive App is approved
-  // ValidSources.GoogleDrive,
-  ValidSources.Confluence,
-];
-
-export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
 
 // Federated Connector Types
-export interface CredentialFieldSpec {
-  type: string;
-  description: string;
-  required: boolean;
-  default?: any;
-  example?: any;
-  secret: boolean;
-}
-
 export interface ConfigurationFieldSpec {
   type: string;
   description: string;
@@ -725,10 +611,6 @@ export interface ConfigurationFieldSpec {
   example?: any;
   secret: boolean;
   hidden_when?: Record<string, any>;
-}
-
-export interface CredentialSchemaResponse {
-  credentials: Record<string, CredentialFieldSpec>;
 }
 
 export interface ConfigurationSchemaResponse {

@@ -42,18 +42,18 @@ export const SELECT_COLORS: SelectColorMatrix = {
     selected: {
       rest: {
         bg: "bg-transparent",
-        fg: "text-action-link-05",
-        icon: "text-action-link-05",
+        fg: "text-action-selection-05",
+        icon: "text-action-selection-05",
       },
       active: {
         bg: "bg-background-tint-00",
-        fg: "text-action-link-05",
-        icon: "text-action-link-05",
+        fg: "text-action-selection-05",
+        icon: "text-action-selection-05",
       },
       disabled: {
         bg: "bg-transparent",
-        fg: "text-action-link-03",
-        icon: "text-action-link-03",
+        fg: "text-action-selection-03",
+        icon: "text-action-selection-03",
       },
     },
   },

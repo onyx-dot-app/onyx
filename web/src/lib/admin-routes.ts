@@ -8,11 +8,9 @@ import {
   SvgAudio,
   SvgShareWebhook,
   SvgBarChart,
-  SvgBookOpen,
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
-  SvgDevKit,
   SvgDownload,
   SvgEmpty,
   SvgFileText,
@@ -20,16 +18,18 @@ import {
   SvgGlobe,
   SvgHistory,
   SvgImage,
+  SvgLinkedDots,
   SvgMcp,
   SvgOnyxOctagon,
   SvgPaintBrush,
+  SvgProgressBars,
   SvgPieChart,
   SvgPlug,
   SvgSearchMenu,
   SvgShield,
+  SvgSliders,
   SvgTerminal,
   SvgThumbsUp,
-  SvgUploadCloud,
   SvgUser,
   SvgUserCheck,
   SvgUserKey,
@@ -48,7 +48,6 @@ export interface FeatureFlags {
   customAnalyticsEnabled: boolean;
   hasSubscription: boolean;
   hooksEnabled: boolean;
-  opensearchEnabled: boolean;
   queryHistoryEnabled: boolean;
   craftAvailable: boolean;
 }
@@ -96,7 +95,7 @@ export interface AdminRouteEntry {
 export const ADMIN_ROUTES = {
   // ── System Configuration (unlabeled section) ──────────────────────
   LLM_MODELS: {
-    path: "/admin/configuration/language-models",
+    path: "/admin/language-models",
     icon: SvgCpu,
     title: "Language Models",
     sidebarLabel: "Language Models",
@@ -106,7 +105,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   WEB_SEARCH: {
-    path: "/admin/configuration/web-search",
+    path: "/admin/web-search",
     icon: SvgGlobe,
     title: "Web Search",
     sidebarLabel: "Web Search",
@@ -116,7 +115,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   IMAGE_GENERATION: {
-    path: "/admin/configuration/image-generation",
+    path: "/admin/image-generation",
     icon: SvgImage,
     title: "Image Generation",
     sidebarLabel: "Image Generation",
@@ -126,7 +125,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   VOICE: {
-    path: "/admin/configuration/voice",
+    path: "/admin/voice",
     icon: SvgAudio,
     title: "Voice",
     sidebarLabel: "Voice",
@@ -136,7 +135,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   CODE_INTERPRETER: {
-    path: "/admin/configuration/code-interpreter",
+    path: "/admin/code-interpreter",
     icon: SvgTerminal,
     title: "Code Interpreter",
     sidebarLabel: "Code Interpreter",
@@ -146,7 +145,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   CHAT_PREFERENCES: {
-    path: "/admin/configuration/chat-preferences",
+    path: "/admin/chat-preferences",
     icon: SvgBubbleText,
     title: "Chat Preferences",
     sidebarLabel: "Chat Preferences",
@@ -176,11 +175,11 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: (f: FeatureFlags) => f.craftAvailable,
   },
-  CRAFT_INSTRUCTIONS: {
-    path: "/admin/craft/instructions",
-    icon: SvgDevKit,
-    title: "Instructions",
-    sidebarLabel: "Instructions",
+  CRAFT_PREFERENCES: {
+    path: "/admin/craft/preferences",
+    icon: SvgSliders,
+    title: "Preferences",
+    sidebarLabel: "Preferences",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Craft",
     requiredTier: null,
@@ -210,7 +209,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   MCP_ACTIONS: {
-    path: "/admin/actions/mcp",
+    path: "/admin/mcp-actions",
     icon: SvgMcp,
     title: "MCP Actions",
     sidebarLabel: "MCP Actions",
@@ -220,7 +219,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   OPENAPI_ACTIONS: {
-    path: "/admin/actions/open-api",
+    path: "/admin/openapi-actions",
     icon: SvgActions,
     title: "OpenAPI Actions",
     sidebarLabel: "OpenAPI Actions",
@@ -231,21 +230,11 @@ export const ADMIN_ROUTES = {
   },
 
   // ── Documents & Knowledge ─────────────────────────────────────────
-  INDEXING_STATUS: {
-    path: "/admin/indexing/status",
-    icon: SvgBookOpen,
-    title: "Existing Connectors",
-    sidebarLabel: "Existing Connectors",
-    requiredPermission: Permission.MANAGE_CONNECTORS,
-    section: "Documents & Knowledge",
-    requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
-  },
-  ADD_CONNECTOR: {
-    path: "/admin/add-connector",
-    icon: SvgUploadCloud,
-    title: "Add Connector",
-    sidebarLabel: "Add Connector",
+  CONNECTORS: {
+    path: "/admin/connectors",
+    icon: SvgLinkedDots,
+    title: "Connectors",
+    sidebarLabel: "Connectors",
     requiredPermission: Permission.MANAGE_CONNECTORS,
     section: "Documents & Knowledge",
     requiredTier: null,
@@ -282,7 +271,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
   },
   INDEX_SETTINGS: {
-    path: "/admin/configuration/index-settings",
+    path: "/admin/index-settings",
     icon: SvgSearchMenu,
     title: "Index Settings",
     sidebarLabel: "Index Settings",
@@ -292,11 +281,21 @@ export const ADMIN_ROUTES = {
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled && !f.enableCloud,
   },
   DOCUMENT_PROCESSING: {
-    path: "/admin/configuration/document-processing",
+    path: "/admin/document-processing",
     icon: SvgFileText,
     title: "Document Processing",
     sidebarLabel: "",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Documents & Knowledge",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
+  },
+  INDEXING_STATUS: {
+    path: "/admin/indexing-status",
+    icon: SvgProgressBars,
+    title: "Indexing Status",
+    sidebarLabel: "Indexing Status",
+    requiredPermission: Permission.MANAGE_CONNECTORS,
     section: "Documents & Knowledge",
     requiredTier: null,
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
@@ -417,8 +416,8 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
-  // Hidden on cloud until cloud login can use these providers. Business tier gates
-  // having *multiple* providers, inside the page itself, not reaching it.
+  // Business tier gates having *multiple* providers, inside the page itself,
+  // not reaching it.
   SSO_PROVIDERS: {
     path: "/admin/sso-providers",
     icon: SvgUserKey,
@@ -427,7 +426,7 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Organization",
     requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => !f.enableCloud,
+    visibleWhen: null,
   },
 
   // ── Usage ─────────────────────────────────────────────────────────
@@ -533,7 +532,7 @@ export function sidebarItem(route: AdminRouteEntry) {
  */
 export const VECTOR_DB_REQUIRED_ROUTE_PREFIXES: readonly string[] = [
   ADMIN_ROUTES.INDEXING_STATUS.path,
-  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.CONNECTORS.path,
   // Covers /sets, /explorer, and /feedback — all require a vector DB.
   ADMIN_ROUTES.DOCUMENTS.path,
   ADMIN_ROUTES.INDEX_SETTINGS.path,

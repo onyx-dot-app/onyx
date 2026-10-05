@@ -10,7 +10,7 @@ from onyx.context.search.models import (
     SavedSearchSettings,
     SearchSettingsCreationRequest,
 )
-from onyx.db.enums import ConnectorCredentialPairStatus, EmbeddingPrecision
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.llm import (
     fetch_default_contextual_rag_model,
     update_default_contextual_model,
@@ -87,6 +87,7 @@ def _create_llm_provider_and_model(
 def _make_creation_request(
     model_configuration_id: int | None = None,
     enable_contextual_rag: bool = True,
+    acknowledged_wont_port_cc_pair_ids: list[int] | None = None,
 ) -> SearchSettingsCreationRequest:
     return SearchSettingsCreationRequest(
         model_name="test-embedding-model",
@@ -97,10 +98,10 @@ def _make_creation_request(
         provider_type=None,
         index_name=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=model_configuration_id,
+        acknowledged_wont_port_cc_pair_ids=acknowledged_wont_port_cc_pair_ids,
     )
 
 
@@ -117,7 +118,6 @@ def _make_saved_search_settings(
         provider_type=None,
         index_name="test_index",
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=model_configuration_id,
@@ -142,7 +142,7 @@ def _run_indexing_pipeline_with_mocks(
         document_batch=[],
         request_id=None,
         embedder=MagicMock(),
-        document_indices=[],
+        document_index=MagicMock(),
         db_session=db_session,
         tenant_id="public",
         adapter=MagicMock(),
@@ -157,6 +157,15 @@ def baseline_search_settings(
 ) -> None:
     """Ensure a baseline PRESENT search settings row exists in the DB,
     which is required before set_new_search_settings can be called."""
+    # A freshly migrated database still holds the bootstrap FUTURE row, and
+    # set_new_search_settings refuses to re-index while any FUTURE row exists.
+    while (stale_future := get_secondary_search_settings(db_session)) is not None:
+        update_search_settings_status(
+            search_settings=stale_future,
+            new_status=IndexModelStatus.PAST,
+            db_session=db_session,
+        )
+
     baseline = _make_saved_search_settings(enable_contextual_rag=False)
     create_search_settings(
         search_settings=baseline,
@@ -293,11 +302,9 @@ def test_contextual_model_update_rejects_unknown_model(
     assert str(unknown_model_configuration_id) in exc.value.detail
 
 
-@patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 def test_port_seed_excludes_invalid_cc_pair(
     mock_get_default_doc_index: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices: MagicMock,
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
@@ -305,7 +312,6 @@ def test_port_seed_excludes_invalid_cc_pair(
     INVALID cc_pair (excluded by the port's indexable_statuses scope) must NOT get a
     synthetic seed — otherwise its backlog is never ported while the seed cursor
     claims "already done", so its docs vanish from the live index once it's fixed."""
-    mock_get_all_doc_indices.return_value = []
 
     active_pair = make_cc_pair(db_session)
     invalid_pair = make_cc_pair(db_session)
@@ -316,7 +322,10 @@ def test_port_seed_excludes_invalid_cc_pair(
     future_id: int | None = None
     try:
         future_id = set_new_search_settings(
-            search_settings_new=_make_creation_request(enable_contextual_rag=False),
+            search_settings_new=_make_creation_request(
+                enable_contextual_rag=False,
+                acknowledged_wont_port_cc_pair_ids=[invalid_pair.id],
+            ),
             _=MagicMock(),
             db_session=db_session,
         ).id
@@ -352,8 +361,7 @@ def test_port_seed_excludes_invalid_cc_pair(
     "onyx.db.swap_index.fetch_indexable_standard_connector_credential_pair_ids",
     new=lambda *_a, **_k: [],
 )
-@patch("onyx.db.swap_index.get_all_document_indices")
-@patch("onyx.server.manage.search_settings.get_all_document_indices")
+@patch("onyx.db.swap_index.get_default_document_index")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
@@ -361,8 +369,7 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
     mock_get_doc_index: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices: MagicMock,
+    mock_get_swap_doc_index: MagicMock,  # noqa: ARG001
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
@@ -388,7 +395,6 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
     # for each portable cc_pair's port; none require porting here (patched empty),
     # so the swap proceeds immediately.
-    mock_get_all_doc_indices.return_value = []
     old_settings = check_and_perform_index_swap(db_session)
     assert old_settings is not None, "Swap should have occurred"
 
@@ -410,8 +416,7 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     "onyx.db.swap_index.fetch_indexable_standard_connector_credential_pair_ids",
     new=lambda *_a, **_k: [],
 )
-@patch("onyx.db.swap_index.get_all_document_indices")
-@patch("onyx.server.manage.search_settings.get_all_document_indices")
+@patch("onyx.db.swap_index.get_default_document_index")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
@@ -419,8 +424,7 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
     mock_get_doc_index: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices: MagicMock,
+    mock_get_swap_doc_index: MagicMock,  # noqa: ARG001
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
@@ -452,7 +456,6 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
     # for each portable cc_pair's port; none require porting here (patched empty),
     # so the swap proceeds immediately.
-    mock_get_all_doc_indices.return_value = []
     old_settings = check_and_perform_index_swap(db_session)
     assert old_settings is not None, "Swap should have occurred"
 
@@ -504,7 +507,6 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     assert called_settings.contextual_rag_model_configuration_id == updated_mc_id
 
 
-@patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
 @patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
@@ -512,7 +514,6 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     mock_index_handler: MagicMock,
     mock_get_llm: MagicMock,
     mock_get_doc_index: MagicMock,  # noqa: ARG001
-    mock_get_all_doc_indices_search_settings: MagicMock,  # noqa: ARG001
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
@@ -606,7 +607,6 @@ def test_creation_request_defaults_blank_prefixes() -> None:
         provider_type=None,
         index_name=None,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=False,
         contextual_rag_model_configuration_id=None,

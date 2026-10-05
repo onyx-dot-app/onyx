@@ -723,7 +723,7 @@ class TenantRedisClient:
             prefixed_keys = _prefix_key(self._prefix, keys)
         else:
             prefixed_keys = [_prefix_key(self._prefix, k) for k in keys]
-        method = getattr(self._r, method_name)
+        method = getattr(self._r, method_name)  # ods: ignore[getattr]
         result = method(prefixed_keys, timeout=timeout)
         if result is None:
             return None
@@ -809,6 +809,20 @@ class TenantRedisClient:
                 ``-2`` if the key does not exist.
         """
         return cast(int, self._r.pttl(_prefix_key(self._prefix, name)))
+
+    def renew_if_value(self, name: KeyArg, expected: bytes, seconds: int) -> bool:
+        """Renew only the current tenant's matching lease, without a lock wait."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.expire(key, seconds)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
 
     def expire(
         self,

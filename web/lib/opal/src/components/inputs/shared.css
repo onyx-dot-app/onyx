@@ -17,7 +17,7 @@
 
 .opal-input {
   /* `--interactive-duration` (150ms) felt too laggy, so we're using 100ms instead. */
-  @apply flex flex-row items-center justify-between h-fit p-[5px] rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
+  @apply flex flex-row items-center justify-between h-fit p-1.5 rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
 }
 
 .opal-input[data-variant="primary"] {
@@ -80,7 +80,18 @@
 }
 
 .opal-input-segmented-content {
-  @apply flex min-h-6 flex-1 items-center p-0.5;
+  @apply relative flex min-h-6 flex-1 items-center p-0.5;
+}
+
+/* Placeholder over an empty, unfocused field. The segments under it stay
+   focusable but invisible. */
+.opal-input-segmented-placeholder {
+  @apply pointer-events-none absolute inset-0 flex items-center ps-1;
+}
+
+.opal-input-segmented-content[data-placeholder-shown]
+  > :not(.opal-input-segmented-placeholder) {
+  opacity: 0;
 }
 
 .opal-input-segmented-actions {
@@ -103,7 +114,7 @@
 }
 
 .opal-input-segment:first-child {
-  @apply pl-0.5;
+  @apply ps-0.5;
 }
 
 .opal-input[data-variant="disabled"] .opal-input-segment {

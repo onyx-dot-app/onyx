@@ -20,6 +20,7 @@ from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
+from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
 from onyx.server.models import FullUserSnapshot, InvitedUserSnapshot
@@ -98,12 +99,16 @@ class UserPreferences(BaseModel):
     hidden_assistants: list[int] = []
     visible_assistants: list[int] = []
     default_model: str | None = None
-    pinned_assistants: list[int] | None = None
+    # Always a list. A user with no pins has an empty one; there is no
+    # meaningful null here, and the frontend used to branch on it.
+    pinned_assistants: list[int] = []
     shortcut_enabled: bool | None = None
 
     # These will default to workspace settings on the frontend if not set
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
+    temperature_default: float | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
     theme_preference: ThemePreference | None = None
     language: str | None = None
     chat_background: str | None = None
@@ -207,10 +212,14 @@ class UserInfo(BaseModel):
                     chosen_assistants=user.chosen_assistants,
                     default_model=user.default_model,
                     hidden_assistants=user.hidden_assistants,
-                    pinned_assistants=user.pinned_assistants,
+                    pinned_assistants=[
+                        pinned.persona_id for pinned in user.pinned_personas
+                    ],
                     visible_assistants=user.visible_assistants,
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
+                    temperature_default=user.temperature_default,
+                    reasoning_effort_default=user.reasoning_effort_default,
                     theme_preference=user.theme_preference,
                     language=user.language,
                     chat_background=user.chat_background,
@@ -245,6 +254,11 @@ class UserInfo(BaseModel):
 
 class UserByEmail(BaseModel):
     user_email: str
+
+
+class UserAdminAccessUpdateRequest(BaseModel):
+    user_email: str
+    is_admin: bool
 
 
 class UserCraftAccessUpdateRequest(BaseModel):
@@ -586,3 +600,7 @@ class AllVersions(BaseModel):
     stable: ContainerVersions
     dev: ContainerVersions
     migration: ContainerVersions
+
+
+class UnstructuredApiKeyRequest(BaseModel):
+    unstructured_api_key: str = Field(min_length=1, pattern=r"\S")

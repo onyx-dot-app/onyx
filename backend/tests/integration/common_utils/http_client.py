@@ -95,7 +95,7 @@ class _TestClientProxy:
     """Forwards every attribute access to the active TestClient."""
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(_require_client(), name)
+        return getattr(_require_client(), name)  # ods: ignore[getattr]
 
 
 client = _TestClientProxy()

@@ -160,6 +160,9 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 			craftNote += ", Dev overlay: true"
 		}
 		in.plainf("  • Mode: %s%s", in.modeName(), craftNote)
+		if name := in.composeOverrideName(); name != "" {
+			in.plainf("  • Compose override: %s (yours, applied last)", name)
+		}
 		if in.project != dockercmd.DefaultProjectName {
 			in.plainf("  • Compose project: %s", in.project)
 		}
@@ -198,6 +201,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
 		return err
 	}
+	in.noteComposeOverride()
 
 	if in.craft {
 		in.ensureCraftResources(ctx)
@@ -239,7 +243,11 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return fmt.Errorf("failed to write .env: %w", err)
 	}
-	in.successf("Updated IMAGE_TAG to %s in .env file (all other settings preserved)", targetTag)
+	in.successf("Updated IMAGE_TAG to %s in .env file", targetTag)
+	if err := in.alignObjectStoreEndpoint(envPath); err != nil {
+		in.rollbackEnv(envPath, envBytes)
+		return err
+	}
 
 	if err := in.pullImages(ctx, targetTag, hostPort); err != nil {
 		in.rollbackEnv(envPath, envBytes)

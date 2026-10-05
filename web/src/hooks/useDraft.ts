@@ -28,7 +28,7 @@ export function clearDraft(key: string) {
   }
 }
 
-function defaultIsEmpty(value: unknown): boolean {
+function defaultIsEmpty<T>(value: T): boolean {
   if (value == null) return true;
   if (typeof value === "string") return value.trim().length === 0;
   return false;

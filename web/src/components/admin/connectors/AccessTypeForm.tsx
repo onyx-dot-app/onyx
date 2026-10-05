@@ -1,19 +1,23 @@
 import { DefaultDropdown } from "@/components/Dropdown";
+import { AccessType } from "@/lib/types";
 import {
-  AccessType,
   ValidAutoSyncSource,
   ConfigurableSources,
   validAutoSyncSources,
-} from "@/lib/types";
+} from "@/lib/connectors/types/source";
 import { useField } from "formik";
+import { useTranslations } from "next-intl";
 import { AutoSyncOptions } from "./AutoSyncOptions";
+import { ConnectorGroupRestrictionPicker } from "@/sections/connectors/ConnectorGroupRestrictionPicker";
+import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
-import { Credential } from "@/lib/connectors/credentials";
-import { credentialTemplates } from "@/lib/connectors/credentials";
+import type { Credential } from "@/lib/credentials/types";
+import { getCredentialSpec } from "@/lib/credentials/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
+import { useSettings } from "@/lib/settings/hooks";
 
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -28,6 +32,8 @@ export function AccessTypeForm({
   connector: ConfigurableSources;
   currentCredential?: Credential<any> | null;
 }) {
+  const t = useTranslations("admin.connector.accessType");
+  const { appName } = useSettings();
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
@@ -38,6 +44,7 @@ export function AccessTypeForm({
   // both are Business+ features.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const showAutoSync = businessTier && isValidAutoSyncSource(connector);
+  const groupRestrictionsEnabled = useConnectorGroupRestrictionsEnabled();
 
   const selectedAuthMethod = currentCredential?.credential_json?.[
     "authentication_method"
@@ -45,10 +52,7 @@ export function AccessTypeForm({
 
   // If the selected auth method is one that disables sync, return true
   const isSyncDisabledByAuth = useMemo(() => {
-    const template = (credentialTemplates as any)[connector];
-    const authMethods = template?.authMethods as
-      | { value: string; disablePermSync?: boolean }[]
-      | undefined; // auth methods are returned as an array of objects with a value and disablePermSync property
+    const authMethods = getCredentialSpec(connector)?.methods;
     if (!authMethods || !selectedAuthMethod) return false;
     const method = authMethods.find((m) => m.value === selectedAuthMethod);
     return method?.disablePermSync === true;
@@ -74,10 +78,9 @@ export function AccessTypeForm({
 
     if (businessTier) {
       built.push({
-        name: "Private",
+        name: t("privateOption.name"),
         value: "private",
-        description:
-          "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
+        description: t("privateOption.description"),
         disabled: false,
         disabledReason: "",
       });
@@ -88,10 +91,9 @@ export function AccessTypeForm({
     // Offering the option would only produce a 403 on submit.
     if (!isScopedManager) {
       built.push({
-        name: "Public",
+        name: t("publicOption.name"),
         value: "public",
-        description:
-          "Everyone with an account on Onyx can access the documents pulled in by this connector",
+        description: t("publicOption.description", { appName }),
         disabled: false,
         disabledReason: "",
       });
@@ -99,18 +101,23 @@ export function AccessTypeForm({
 
     if (showAutoSync) {
       built.push({
-        name: "Auto Sync Permissions",
+        name: t("autoSyncOption.name"),
         value: "sync",
-        description:
-          "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
+        description: t("autoSyncOption.description", { appName }),
         disabled: isSyncDisabledByAuth,
-        disabledReason:
-          "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
+        disabledReason: t("autoSyncOption.disabledReason"),
       });
     }
 
     return built;
-  }, [businessTier, isScopedManager, showAutoSync, isSyncDisabledByAuth]);
+  }, [
+    businessTier,
+    isScopedManager,
+    showAutoSync,
+    isSyncDisabledByAuth,
+    t,
+    appName,
+  ]);
 
   useEffect(() => {
     if (!businessTier || !options.length) return;
@@ -133,10 +140,8 @@ export function AccessTypeForm({
   return (
     <>
       <div>
-        <p className="text-text-950 font-medium">Document Access</p>
-        <p className="text-sm text-text-500">
-          Control who has access to the documents indexed by this connector.
-        </p>
+        <p className="text-text-950 font-medium">{t("heading.title")}</p>
+        <p className="text-sm text-text-500">{t("heading.description")}</p>
       </div>
       <DefaultDropdown
         options={options}
@@ -146,6 +151,9 @@ export function AccessTypeForm({
         }
         includeDefault={false}
       />
+      {access_type.value === "sync" &&
+        showAutoSync &&
+        groupRestrictionsEnabled && <ConnectorGroupRestrictionPicker />}
       {access_type.value === "sync" && showAutoSync && (
         <AutoSyncOptions connectorType={connector as ValidAutoSyncSource} />
       )}

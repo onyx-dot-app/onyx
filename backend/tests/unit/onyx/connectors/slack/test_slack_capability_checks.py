@@ -780,6 +780,23 @@ def test_configured_channels_regex_mode_skips_probe() -> None:
     gateway.list_channels.assert_not_called()
 
 
+def test_channel_patterns_rejects_a_malformed_exclude_regex() -> None:
+    # Precondition.
+    context = _context(
+        _gateway(),
+        connector_specific_config={
+            "channels": ["[unclosed"],
+            "exclude_channels": ["(open"],
+            "exclude_channel_regex_enabled": True,
+        },
+    )
+
+    # Under test and postcondition.
+    # Include patterns are plain names here, so only the exclude regex fails.
+    with pytest.raises(ConnectorValidationError, match="excluded channel regex"):
+        _run("slack_channel_patterns", context)
+
+
 def test_check_metadata_is_pinned() -> None:
     """Verifies builder metadata: ids, requiredness, and execution needs."""
     # Precondition.
@@ -794,7 +811,10 @@ def test_check_metadata_is_pinned() -> None:
     config_requiring = {
         check.check_id for check in checks if check.requires_connector_config
     }
-    assert config_requiring == {"slack_configured_channels_visible"}
+    assert config_requiring == {
+        "slack_channel_patterns",
+        "slack_configured_channels_visible",
+    }
     optional = {check.check_id for check in checks if not check.required}
     assert optional == {
         "slack_private_channel_listing",
@@ -896,9 +916,9 @@ def test_full_slack_check_run_happy_path() -> None:
 def test_configless_run_gates_indexing_on_the_required_config_check() -> None:
     """
     Verifies the credential-time verdict semantics: every runnable check passes,
-    but ``slack_configured_channels_visible`` is required and needs a config, so
-    its skip keeps INDEXING at SKIPPED (no pass-ish claim on a partially
-    verified capability) until connector binding re-runs the checks.
+    but the required config-reading checks skip, which keeps INDEXING at SKIPPED
+    (no pass-ish claim on a partially verified capability) until connector
+    binding re-runs the checks.
     """
     # Precondition.
     checks = build_slack_indexing_checks() + build_slack_doc_permission_sync_checks()
@@ -909,10 +929,11 @@ def test_configless_run_gates_indexing_on_the_required_config_check() -> None:
 
     # Postcondition.
     status_by_id = {result.check_id: result.status for result in results}
-    assert (
-        status_by_id.pop("slack_configured_channels_visible")
-        == CapabilityCheckStatus.SKIPPED
-    )
+    for config_check_id in (
+        "slack_channel_patterns",
+        "slack_configured_channels_visible",
+    ):
+        assert status_by_id.pop(config_check_id) == CapabilityCheckStatus.SKIPPED
     assert all(
         status == CapabilityCheckStatus.PASSED for status in status_by_id.values()
     ), f"Expected all non-config checks to pass, got {status_by_id}."

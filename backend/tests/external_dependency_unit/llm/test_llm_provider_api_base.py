@@ -25,6 +25,7 @@ from onyx.db.llm import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.interfaces import LLM
 from onyx.server.manage.llm.api import _mask_string, put_llm_provider
 from onyx.server.manage.llm.api import test_llm_configuration as run_llm_config_test
 from onyx.server.manage.llm.models import (
@@ -33,7 +34,6 @@ from onyx.server.manage.llm.models import (
     ModelConfigurationUpsertRequest,
 )
 from onyx.server.manage.llm.models import TestLLMRequest as LLMTestRequest
-from tests.external_dependency_unit.mock_llm import LLM
 
 
 def _create_test_provider(
@@ -820,7 +820,9 @@ def test_vertex_workload_identity_provider_create(
             )
 
         assert len(captured_llms) == 1
-        model_kwargs = getattr(captured_llms[0], "_model_kwargs", {})
+        model_kwargs = getattr(  # ods: ignore[getattr]
+            captured_llms[0], "_model_kwargs", {}
+        )
         assert "vertex_credentials" not in model_kwargs
         assert model_kwargs.get("vertex_project") == "my-gcp-project"
         assert model_kwargs.get("vertex_location") == "us-central1"
@@ -918,7 +920,9 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
             )
 
         assert len(captured_llms) == 1
-        model_kwargs = getattr(captured_llms[0], "_model_kwargs", {})
+        model_kwargs = getattr(  # ods: ignore[getattr]
+            captured_llms[0], "_model_kwargs", {}
+        )
         assert (
             model_kwargs.get("vertex_credentials")
             == original_custom_config["vertex_credentials"]

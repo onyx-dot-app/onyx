@@ -101,7 +101,9 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
 
     module_full = f"ee.{module}" if is_ee else module
     try:
-        return getattr(importlib.import_module(module_full), attribute)
+        return getattr(  # ods: ignore[getattr]
+            importlib.import_module(module_full), attribute
+        )
     except ModuleNotFoundError as e:
         logger.warning(
             "Failed to fetch versioned implementation for %s.%s: %s",
@@ -120,7 +122,9 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
             # Use the MIT version as a fallback, this allows us to develop MIT
             # versions independently and later add additional EE functionality
             # similar to feature flagging
-            return getattr(importlib.import_module(module), attribute)
+            return getattr(  # ods: ignore[getattr]
+                importlib.import_module(module), attribute
+            )
 
         raise
 

@@ -134,7 +134,7 @@ class CustomTool(Tool[None]):
     def _parse_csv(self, csv_text: str) -> List[Dict[str, Any]]:
         csv_file = StringIO(csv_text)
         reader = csv.DictReader(csv_file)
-        return [row for row in reader]
+        return list(reader)
 
     """Actual execution of the tool"""
 

@@ -38,7 +38,9 @@ class TestFederatedConnectorMappingValidation:
                 module = importlib.import_module(mapping.module_path)
 
                 # Try to get the class
-                connector_class = getattr(module, mapping.class_name)
+                connector_class = getattr(  # ods: ignore[getattr]
+                    module, mapping.class_name
+                )
 
                 # Verify it's a subclass of FederatedConnector
                 if not issubclass(connector_class, FederatedConnector):

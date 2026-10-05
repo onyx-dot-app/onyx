@@ -250,6 +250,15 @@ def _sentinel_policy_fn(_provider: str) -> LlmRequestPolicy:
     return LlmRequestPolicy()
 
 
+def _mock_user() -> MagicMock:
+    """get_llm_for_persona reads the user's chat-default attributes, which
+    must be concrete values for UserChatDefaults validation."""
+    user = MagicMock()
+    user.temperature_default = None
+    user.reasoning_effort_default = None
+    return user
+
+
 class TestPolicyFnForwarding:
     """Every exit of the persona chain must forward the policy function.
 
@@ -261,7 +270,7 @@ class TestPolicyFnForwarding:
         with patch("onyx.llm.factory.get_default_llm") as mock_default:
             get_llm_for_persona(
                 persona=None,
-                user=MagicMock(),
+                user=_mock_user(),
                 policy_fn=_sentinel_policy_fn,
             )
             assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
@@ -272,7 +281,7 @@ class TestPolicyFnForwarding:
         with patch("onyx.llm.factory.get_default_llm") as mock_default:
             get_llm_for_persona(
                 persona=persona,
-                user=MagicMock(),
+                user=_mock_user(),
                 policy_fn=_sentinel_policy_fn,
             )
             assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
@@ -287,7 +296,7 @@ class TestPolicyFnForwarding:
         ):
             get_llm_for_persona(
                 persona=persona,
-                user=MagicMock(),
+                user=_mock_user(),
                 policy_fn=_sentinel_policy_fn,
             )
             assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
@@ -307,7 +316,7 @@ class TestPolicyFnForwarding:
         ):
             get_llm_for_persona(
                 persona=persona,
-                user=MagicMock(),
+                user=_mock_user(),
                 policy_fn=_sentinel_policy_fn,
             )
             assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
@@ -328,7 +337,7 @@ class TestPolicyFnForwarding:
         ):
             get_llm_for_persona(
                 persona=persona,
-                user=MagicMock(),
+                user=_mock_user(),
                 policy_fn=_sentinel_policy_fn,
             )
             assert (

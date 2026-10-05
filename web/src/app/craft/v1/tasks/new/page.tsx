@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import ScheduleTaskForm, {
   defaultFormInitial,
@@ -18,6 +19,7 @@ const VALID_MODES: ReadonlySet<EditorMode> = new Set<EditorMode>([
 ]);
 
 export default function NewScheduledTaskPage() {
+  const t = useTranslations("craft.tasks.newPage");
   const router = useRouter();
   const searchParams = useSearchParams();
   const handleBack = useCallback(() => {
@@ -59,8 +61,8 @@ export default function NewScheduledTaskPage() {
     <ScheduleTaskForm
       initial={initial}
       isEdit={false}
-      title="New Scheduled Task"
-      description="Save a prompt + schedule. Craft will run it on a timer."
+      title={t("title")}
+      description={t("description")}
       onBack={handleBack}
     />
   );

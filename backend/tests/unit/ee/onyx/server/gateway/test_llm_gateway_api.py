@@ -21,35 +21,37 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.interfaces import LLM, LLMConfig
+from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_request import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    SystemMessage,
+    ToolCall,
+    UserMessage,
+)
+from onyx.llm.model_request import RequestFunctionCall as ToolFunctionCall
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     ChatCompletionMessageToolCall,
     Choice,
     Delta,
-    FunctionCall,
     Message,
     ModelResponse,
     ModelResponseStream,
+    ResponseFunctionCall,
     StreamingChoice,
-    Usage,
 )
 from onyx.llm.models import (
-    AssistantMessage,
-    ChatCompletionMessage,
     ImageContentPart,
     ImageUrlDetail,
     NamedToolChoice,
     ReasoningEffort,
-    SystemMessage,
     TextContentPart,
-    ToolCall,
     ToolChoice,
     ToolChoiceOptions,
-    UserMessage,
+    Usage,
 )
-from onyx.llm.models import FunctionCall as ToolFunctionCall
-from onyx.llm.multi_llm import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
@@ -81,13 +83,14 @@ def _route_permission_dependency(path: str) -> Callable[..., Awaitable[User]]:
         next(
             route
             for route in application.routes
-            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}{path}"
+            if getattr(route, "path", None)  # ods: ignore[getattr]
+            == f"{GATEWAY_PATH_PREFIX}{path}"
         ),
     )
     dependency = next(
         dep.call
         for dep in route.dependant.dependencies
-        if getattr(dep.call, "_is_require_permission", False)
+        if getattr(dep.call, "_is_require_permission", False)  # ods: ignore[getattr]
     )
     return cast("Callable[..., Awaitable[User]]", dependency)
 
@@ -126,8 +129,15 @@ def _provider(
     )
 
 
-class _ConfigOnlyLLM(LLM):
+class _ConfigOnlyLLM(LitellmLLM):
     def __init__(self, config: LLMConfig) -> None:
+        super().__init__(
+            model_provider=config.model_provider,
+            model_name=config.model_name,
+            api_key=config.api_key,
+            max_input_tokens=config.max_input_tokens,
+            custom_config=config.custom_config,
+        )
         self._config = config
 
     @property
@@ -149,7 +159,7 @@ class _ChunkStreamLLM(_ConfigOnlyLLM):
         )
         self._chunks = chunks
 
-    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream_raw(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
         del args, kwargs
         yield from self._chunks
 
@@ -221,7 +231,7 @@ class _StreamingLLM(_ConfigOnlyLLM):
         self._fail = fail
         self._exc = exc or RuntimeError("secret-provider-response")
 
-    def stream(self, *args: object, **kwargs: object):
+    def stream_raw(self, *args: object, **kwargs: object):
         del args, kwargs
         try:
             if self._fail:
@@ -258,12 +268,12 @@ class _RaisingCloseStream:
 
 
 class _RaisingCloseLLM(_ConfigOnlyLLM):
-    def stream(self, *args: object, **kwargs: object) -> _RaisingCloseStream:
+    def stream_raw(self, *args: object, **kwargs: object) -> _RaisingCloseStream:
         del args, kwargs
         return _RaisingCloseStream()
 
 
-def _gateway_stream(llm: LLM):
+def _gateway_stream(llm: LitellmLLM):
     return stream_bridge._run_bridged_stream(
         gateway_api._stream_worker,
         {
@@ -495,7 +505,9 @@ def test_completion_payload_serializes_openai_shape() -> None:
                 tool_calls=[
                     ChatCompletionMessageToolCall(
                         id="call_1",
-                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(
+                            name="bash", arguments='{"cmd":"ls"}'
+                        ),
                     )
                 ],
             ),
@@ -539,7 +551,7 @@ _TOOL_CALL_STREAM_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_1",
                         index=0,
-                        function=FunctionCall(name="bash", arguments=""),
+                        function=ResponseFunctionCall(name="bash", arguments=""),
                     )
                 ]
             )
@@ -553,7 +565,7 @@ _TOOL_CALL_STREAM_CHUNKS = [
                 tool_calls=[
                     ChatCompletionDeltaToolCall(
                         index=0,
-                        function=FunctionCall(arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(arguments='{"cmd":"ls"}'),
                     )
                 ]
             )
@@ -673,7 +685,7 @@ class _RaisingInvokeLLM(_ConfigOnlyLLM):
         )
         self._exc = exc
 
-    def invoke(self, *args: object, **kwargs: object):
+    def invoke_raw(self, *args: object, **kwargs: object):
         del args, kwargs
         raise self._exc
 
@@ -690,7 +702,7 @@ class _InvokeLLM(_ConfigOnlyLLM):
         )
         self._response = response
 
-    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
         del args, kwargs
         return self._response
 
@@ -700,9 +712,9 @@ class _RecordingInvokeLLM(_InvokeLLM):
         super().__init__(response)
         self.received_tool_choice: ToolChoice | None = None
 
-    def invoke(self, *args: object, **kwargs: object) -> ModelResponse:
+    def invoke_raw(self, *args: object, **kwargs: object) -> ModelResponse:
         self.received_tool_choice = cast("ToolChoice | None", kwargs.get("tool_choice"))
-        return super().invoke(*args, **kwargs)
+        return super().invoke_raw(*args, **kwargs)
 
 
 def _handle_completion_call(request: ChatCompletionRequest) -> Any:
@@ -935,14 +947,16 @@ def test_gateway_route_has_single_permission_dependency() -> None:
         next(
             route
             for route in application.routes
-            if getattr(route, "path", None)
+            if getattr(route, "path", None)  # ods: ignore[getattr]
             == f"{GATEWAY_PATH_PREFIX}/v1/chat/completions"
         ),
     )
     auth_dependencies = [
         dependency.call
         for dependency in gateway_route.dependant.dependencies
-        if getattr(dependency.call, "_is_require_permission", False)
+        if getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
     ]
     assert len(auth_dependencies) == 1
 
@@ -1414,7 +1428,9 @@ _TOOL_CALL_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_1",
                         index=0,
-                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(
+                            name="bash", arguments='{"cmd":"ls"}'
+                        ),
                     )
                 ]
             )
@@ -1429,7 +1445,7 @@ _TOOL_CALL_CHUNKS = [
 
 
 def _responses_stream_events(
-    llm: LLM,
+    llm: LitellmLLM,
     *,
     tools: list[dict[str, Any]] | None = None,
     model: str = "1/test",
@@ -1553,7 +1569,9 @@ _TEXT_AND_TOOL_CALL_CHUNKS = [
                     ChatCompletionDeltaToolCall(
                         id="call_9",
                         index=0,
-                        function=FunctionCall(name="bash", arguments='{"cmd":"ls"}'),
+                        function=ResponseFunctionCall(
+                            name="bash", arguments='{"cmd":"ls"}'
+                        ),
                     )
                 ]
             )
@@ -1632,7 +1650,7 @@ class _FailAfterTextLLM(_ConfigOnlyLLM):
         )
         self._exc = exc
 
-    def stream(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
+    def stream_raw(self, *args: object, **kwargs: object):  # type: ignore[no-untyped-def,override]
         del args, kwargs
         yield ModelResponseStream(
             id="p1", created="0", choice=StreamingChoice(delta=Delta(content="partial"))
@@ -1845,13 +1863,16 @@ def test_responses_gateway_route_carries_same_permission_dependency() -> None:
         next(
             route
             for route in application.routes
-            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}/v1/responses"
+            if getattr(route, "path", None)  # ods: ignore[getattr]
+            == f"{GATEWAY_PATH_PREFIX}/v1/responses"
         ),
     )
     auth_dependencies = [
         dependency.call
         for dependency in responses_route.dependant.dependencies
-        if getattr(dependency.call, "_is_require_permission", False)
+        if getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
     ]
     assert len(auth_dependencies) == 1
 
@@ -1988,13 +2009,16 @@ def test_models_route_has_single_permission_dependency() -> None:
         next(
             route
             for route in application.routes
-            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}/v1/models"
+            if getattr(route, "path", None)  # ods: ignore[getattr]
+            == f"{GATEWAY_PATH_PREFIX}/v1/models"
         ),
     )
     auth_dependencies = [
         dependency.call
         for dependency in models_route.dependant.dependencies
-        if getattr(dependency.call, "_is_require_permission", False)
+        if getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
     ]
     assert len(auth_dependencies) == 1
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "../interfaces";
@@ -44,6 +45,7 @@ export function ParallelTimelineTabs({
   isLastTurnGroup,
   isFirstTurnGroup,
 }: ParallelTimelineTabsProps) {
+  const t = useTranslations("chat.messages.timeline");
   const [activeTab, setActiveTab] = useState(turnGroup.steps[0]?.key ?? "");
   const [isExpanded, setIsExpanded] = useState(true);
   const [isHover, setIsHover] = useState(false);
@@ -120,7 +122,7 @@ export function ParallelTimelineTabs({
 
             <div
               className={cn(
-                "flex items-center min-h-(--timeline-step-header-height) pl-(--timeline-header-padding-left) pr-(--timeline-header-padding-right) transition-colors duration-200",
+                "flex items-center min-h-(--timeline-step-header-height) ps-(--timeline-header-padding-left) pe-(--timeline-header-padding-right) transition-colors duration-200",
                 isHover && "bg-background-tint-02"
               )}
               onMouseEnter={handleHeaderEnter}
@@ -145,7 +147,7 @@ export function ParallelTimelineTabs({
                   >
                     <span className="flex items-center gap-1.5">
                       {getToolIcon(step.packets)}
-                      {getToolName(step.packets)}
+                      {getToolName(step.packets, t)}
                     </span>
                   </Tabs.Trigger>
                 ))}

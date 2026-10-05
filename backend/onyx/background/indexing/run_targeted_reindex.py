@@ -33,22 +33,18 @@ from onyx.connectors.models import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
-from onyx.db.hierarchy import (
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
-)
+from onyx.db.hierarchy import persist_hierarchy_nodes_for_cc_pair
 from onyx.db.models import (
     ConnectorCredentialPair,
     IndexAttempt,
     TargetedReindexJobTarget,
 )
 from onyx.db.targeted_reindex import targets_to_connector_failures
-from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.staging import (
     build_tracking_raw_file_callback,
     delete_files_best_effort,
 )
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
@@ -134,11 +130,7 @@ def _flush_batch(
         search_settings=search_settings,
         callback=None,
     )
-    document_indices = get_all_document_indices(
-        search_settings,
-        None,
-        httpx_client=HttpxPool.get("vespa"),
-    )
+    document_index = get_default_document_index(search_settings, None)
     metadata = IndexAttemptMetadata(
         attempt_id=attempt.id,
         connector_id=attempt.connector_credential_pair.connector.id,
@@ -157,7 +149,7 @@ def _flush_batch(
 
     result = run_indexing_pipeline(
         embedder=embedder,
-        document_indices=document_indices,
+        document_index=document_index,
         ignore_time_skip=True,
         # FUTURE/secondary build: skip the PRESENT-only content_hash dedup.
         index_to_secondary=search_settings.status.is_future(),
@@ -199,19 +191,13 @@ def _persist_hierarchy_nodes(
     back to "source-type root" until the next full crawl.
     """
     sanitized = sanitize_hierarchy_nodes_for_postgres(nodes)
-    upserted = upsert_hierarchy_nodes_batch(
+    upserted = persist_hierarchy_nodes_for_cc_pair(
         db_session=db_session,
         nodes=sanitized,
         source=cc_pair.connector.source,
-        commit=True,
-        is_connector_public=cc_pair.access_type == AccessType.PUBLIC,
-    )
-    upsert_hierarchy_node_cc_pair_entries(
-        db_session=db_session,
-        hierarchy_node_ids=[n.id for n in upserted],
         connector_id=cc_pair.connector.id,
         credential_id=cc_pair.credential.id,
-        commit=True,
+        is_connector_public=cc_pair.access_type == AccessType.PUBLIC,
     )
     cache_hierarchy_nodes_batch(
         redis_client=get_redis_client(tenant_id=tenant_id),
@@ -274,7 +260,7 @@ def process_targets_for_cc_pair(
         )
         return CCPairReindexResult(set(), target_doc_ids, unsupported=True)
 
-    include_permissions = cc_pair.access_type == AccessType.SYNC
+    include_permissions = cc_pair.access_type.is_perm_synced()
     failures = targets_to_connector_failures(targets, db_session)
 
     # Tabular sections stage their CSV via this callback; this path has no
@@ -320,7 +306,7 @@ def process_targets_for_cc_pair(
             )
 
         # Per-attempt pipeline run. Each attempt commits to its own
-        # search_settings's document_indices.
+        # search_settings.s document index.
         for attempt in cc_pair_attempts:
             for batch_num, batch in enumerate(chunked(docs, INDEX_BATCH_SIZE)):
                 landed, failed = _flush_batch(

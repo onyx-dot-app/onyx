@@ -115,10 +115,14 @@ export interface ScopedWorld {
   manager: ScopedManagerContext;
   /** in the managed group — editable, not deletable */
   managedCcPairId: number;
+  managedCcPairName: string;
   /** manager-created, in no group — editable and deletable */
   grouplessCcPairId: number;
   /** in an unmanaged group — invisible */
   foreignCcPairId: number;
+  /** admin's, public — visible to the manager but read-only */
+  publicCcPairId: number;
+  publicCcPairName: string;
   managedDocSetId: number;
   managedDocSetName: string;
   grouplessDocSetId: number;
@@ -152,6 +156,13 @@ export const worldTest = test.extend<{}, { world: ScopedWorld }>({
         "private",
         [foreignGroupId]
       );
+      // a manager can't create a public pair, so the admin seeds the read-only twin
+      const publicCcPairName = `public-conn-${stamp}`;
+      const publicCcPairId = await adminClient.createFileConnector(
+        publicCcPairName,
+        "public",
+        []
+      );
       // an agent in the managed group is the only path from that group to an action
       const bridgeAgentId = await adminClient.createAgent(
         `bridge-agent-${stamp}`,
@@ -180,8 +191,9 @@ export const worldTest = test.extend<{}, { world: ScopedWorld }>({
       const ownActionId = await managerClient.createCustomTool(
         `own-action-${stamp}`
       );
+      const managedCcPairName = `managed-conn-${stamp}`;
       const managedCcPairId = await managerClient.createFileConnector(
-        `managed-conn-${stamp}`,
+        managedCcPairName,
         "private",
         [scopedManager.groupId]
       );
@@ -219,8 +231,11 @@ export const worldTest = test.extend<{}, { world: ScopedWorld }>({
         await use({
           manager: scopedManager,
           managedCcPairId,
+          managedCcPairName,
           grouplessCcPairId,
           foreignCcPairId,
+          publicCcPairId,
+          publicCcPairName,
           managedDocSetId,
           managedDocSetName,
           grouplessDocSetId,
@@ -242,6 +257,7 @@ export const worldTest = test.extend<{}, { world: ScopedWorld }>({
           managedCcPairId,
           grouplessCcPairId,
           foreignCcPairId,
+          publicCcPairId,
         ]) {
           await softCleanup(() => adminClient.deleteCCPair(id));
         }

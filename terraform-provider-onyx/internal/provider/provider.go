@@ -54,8 +54,9 @@ func (p *onyxProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 			"api_key": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
-				MarkdownDescription: "Admin-role Onyx API key (`on_...`) or unrestricted personal access token " +
-					"(`onyx_pat_...`). May also be set via the `ONYX_API_KEY` environment variable.",
+				MarkdownDescription: "Onyx API key (`on_...`) in the seeded `Admin` group, or unrestricted " +
+					"personal access token (`onyx_pat_...`). May also be set via the `ONYX_API_KEY` " +
+					"environment variable.",
 			},
 			"api_prefix": schema.StringAttribute{
 				Optional: true,
@@ -120,14 +121,20 @@ func (p *onyxProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 		resp.Diagnostics.AddError(
 			"Missing Onyx API key",
 			"Set the provider's api_key attribute or the ONYX_API_KEY environment variable. "+
-				"Create an admin-role API key in the Onyx admin panel (or via POST /admin/api-key).",
+				"Create an API key in the Onyx admin panel, assigned to the Admin group "+
+				"(or via POST /admin/api-key with group_ids set to the Admin group's id).",
 		)
 	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	c := client.NewClient(endpoint, apiPrefix, apiKey)
+	c := client.NewClient(client.Config{
+		ServerURL: endpoint,
+		APIPrefix: apiPrefix,
+		APIKey:    apiKey,
+		Version:   p.version,
+	})
 	resp.ResourceData = c
 	resp.DataSourceData = c
 }
@@ -139,6 +146,14 @@ func (p *onyxProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewLLMProviderDefaultResource,
 		NewSettingsResource,
 		NewEmbeddingProviderResource,
+		NewCredentialResource,
+		NewConnectorResource,
+		NewCCPairResource,
+		NewDocumentSetResource,
+		NewCustomToolResource,
+		NewAgentResource,
+		NewMCPServerResource,
+		NewUserGroupResource,
 	}
 }
 
@@ -147,6 +162,7 @@ func (p *onyxProvider) DataSources(_ context.Context) []func() datasource.DataSo
 		NewLLMProvidersDataSource,
 		NewEmbeddingProvidersDataSource,
 		NewSettingsDataSource,
+		NewConnectorsDataSource,
 	}
 }
 

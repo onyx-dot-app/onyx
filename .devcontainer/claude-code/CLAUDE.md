@@ -16,7 +16,6 @@ Each is also exported as an env var:
 
 - Postgres: `relational_db` (`POSTGRES_HOST`)
 - Redis: `cache` (`REDIS_HOST`)
-- Vespa: `index` (`VESPA_HOST`)
 - Model server: `inference_model_server` (`MODEL_SERVER_HOST`)
 - OpenSearch: `opensearch` (`OPENSEARCH_HOST`)
 - MinIO / S3: `minio:9000` (`S3_ENDPOINT_URL=http://minio:9000`)

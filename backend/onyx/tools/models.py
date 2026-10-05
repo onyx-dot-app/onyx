@@ -122,7 +122,11 @@ class ToolRunnerResponse(BaseModel):
     @model_validator(mode="after")
     def validate_tool_runner_response(self) -> "ToolRunnerResponse":
         fields = ["tool_response", "tool_message_content", "tool_run_kickoff"]
-        provided = sum(1 for field in fields if getattr(self, field) is not None)
+        provided = sum(
+            1
+            for field in fields
+            if getattr(self, field) is not None  # ods: ignore[getattr]
+        )
 
         if provided != 1:
             raise ValueError(

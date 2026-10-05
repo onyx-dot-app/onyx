@@ -113,3 +113,60 @@ it("names the tab for assistive technology in both states", () => {
   // The label is hidden by CSS while folded, so the name comes from the link.
   expect(screen.getByLabelText("Settings")).toBeInTheDocument();
 });
+
+it("keeps the same DOM node when children switch from a label to an element", () => {
+  // An inline rename swaps the string label for an input and drops `href`.
+  // A remount here would unmount that input before it could take focus.
+  const { rerender } = render(
+    <SidebarTab href="/app?chatId=1" onClick={() => {}}>
+      My chat
+    </SidebarTab>
+  );
+  const before = screen.getByText("My chat").closest(".opal-sidebar-tab");
+  expect(before).not.toBeNull();
+
+  rerender(
+    <SidebarTab>
+      <input aria-label="Rename chat" defaultValue="My chat" />
+    </SidebarTab>
+  );
+  const after = screen
+    .getByRole("textbox", { name: "Rename chat" })
+    .closest(".opal-sidebar-tab");
+  expect(after).toBe(before);
+});
+
+it("shows the folded label tooltip from the tab's control", async () => {
+  const user = userEvent.setup();
+  render(
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <FoldedSidebar foldable />
+    </TooltipPrimitive.Provider>
+  );
+  await user.hover(screen.getByLabelText("Settings"));
+  await waitFor(() => {
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Settings");
+  });
+});
+
+it("shows an explicit tooltip on a disabled tab", async () => {
+  // A disabled tab has no control, so an inert overlay is the trigger.
+  const user = userEvent.setup();
+  render(
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <SidebarTab disabled tooltip="Enterprise only">
+        Groups
+      </SidebarTab>
+    </TooltipPrimitive.Provider>
+  );
+  const tab = screen.getByText("Groups").closest(".opal-sidebar-tab")!;
+  const overlay = tab.querySelector('[aria-hidden="true"].inset-0');
+  expect(overlay).not.toBeNull();
+  // Disabled is `aria-disabled` on a div, never a native disabled control:
+  // browsers drop pointer events inside one, which would mute the trigger.
+  expect(tab.querySelector("button[disabled]")).toBeNull();
+  await user.hover(overlay!);
+  await waitFor(() => {
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Enterprise only");
+  });
+});

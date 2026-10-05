@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import useShareableGroups, {
   type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
@@ -12,8 +13,8 @@ import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
 import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
 import {
-  PERMISSION_OPTIONS,
-  SCOPE_OPTIONS,
+  useSharePermissionOptions,
+  useShareScopeOptions,
 } from "@/sections/modals/shareAccessConstants";
 import {
   applyStagedShares,
@@ -61,6 +62,9 @@ export default function ShareSkillModal({
   onClose,
   onSaved,
 }: ShareSkillModalProps) {
+  const t = useTranslations("skills.modals");
+  const permissionOptions = useSharePermissionOptions();
+  const scopeOptions = useShareScopeOptions();
   const { data: shareableUsersData } = useShareableUsers({
     includeApiKeys: true,
   });
@@ -285,13 +289,13 @@ export default function ShareSkillModal({
             user_id: share.user.id,
           })),
       });
-      toast.success("Sharing updated.");
+      toast.success(t("share.savedToast.message"));
       onSaved();
       closeModal();
     } catch (err) {
       console.error("Failed to update skill sharing", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to update sharing"
+        err instanceof Error ? err.message : t("share.saveErrorToast.message")
       );
     } finally {
       setSaving(false);
@@ -306,13 +310,15 @@ export default function ShareSkillModal({
       await transferSkillOwnership(skill.id, {
         new_owner_user_id: transferTarget.value.replace("user-", ""),
       });
-      toast.success("Ownership transferred.");
+      toast.success(t("share.transferredToast.message"));
       onSaved();
       closeModal();
     } catch (err) {
       console.error("Failed to transfer skill ownership", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to transfer ownership"
+        err instanceof Error
+          ? err.message
+          : t("share.transferErrorToast.message")
       );
     } finally {
       setSaving(false);
@@ -366,7 +372,7 @@ export default function ShareSkillModal({
           icon={scopeIcon}
           titleSlot={
             <SharePermissionMenu
-              ariaLabel="Change sharing scope"
+              ariaLabel={t("share.scopeMenu.ariaLabel")}
               disabled={!canEditOrgVisibility}
               menuWidth="2xl"
               onChange={(scope) => {
@@ -376,14 +382,14 @@ export default function ShareSkillModal({
                     : currentDraftState
                 );
               }}
-              options={SCOPE_OPTIONS}
+              options={scopeOptions}
               showTriggerIcon={false}
               value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
             />
           }
           rightChildren={
             <SharePermissionMenu
-              ariaLabel="Change organization permission"
+              ariaLabel={t("share.organizationPermissionMenu.ariaLabel")}
               disabled={!canEditOrgVisibility}
               onChange={(permission) => {
                 setDraftState((currentDraftState) =>
@@ -392,7 +398,7 @@ export default function ShareSkillModal({
                     : currentDraftState
                 );
               }}
-              options={PERMISSION_OPTIONS}
+              options={permissionOptions}
               value={effectiveState.publicPermission}
             />
           }
@@ -400,7 +406,9 @@ export default function ShareSkillModal({
 
         {skill.external_app && (
           <Text color="text-03" font="secondary-body">
-            {`Organization-wide viewer access is required while this skill is associated with app “${skill.external_app.name}”.`}
+            {t("share.externalAppNotice", {
+              appName: skill.external_app.name,
+            })}
           </Text>
         )}
 
@@ -413,13 +421,13 @@ export default function ShareSkillModal({
             rightChildren={
               <StaticPermissionLabel
                 icon={SvgUserManage}
-                label="Owner"
+                label={t("share.ownerLabel")}
                 muted={!canTransfer}
               />
             }
             title={
               currentUser && skill.owner.id === currentUser.id
-                ? `${skill.owner.email} (you)`
+                ? t("share.currentUserLabel", { email: skill.owner.email })
                 : skill.owner.email
             }
             trailing={
@@ -434,9 +442,12 @@ export default function ShareSkillModal({
           <ShareAccessRow
             icon={SvgUserManage}
             rightChildren={
-              <StaticPermissionLabel icon={SvgUserManage} label="Owner" />
+              <StaticPermissionLabel
+                icon={SvgUserManage}
+                label={t("share.ownerLabel")}
+              />
             }
-            title="No active owner"
+            title={t("share.noOwnerTitle")}
             trailing={
               canTransfer ? (
                 <TransferTrailingButton
@@ -456,18 +467,22 @@ export default function ShareSkillModal({
               key={share.user.id}
               rightChildren={
                 <SharePermissionMenu
-                  ariaLabel={`Update access for ${share.user.email}`}
+                  ariaLabel={t("share.permissionMenu.ariaLabel", {
+                    name: share.user.email,
+                  })}
                   disabled={!canEditShares}
                   onChange={(permission) =>
                     updateUserSharePermission(share.user.id, permission)
                   }
                   onRemove={() => removeUserShare(share.user.id)}
-                  options={PERMISSION_OPTIONS}
+                  options={permissionOptions}
                   value={share.permission}
                 />
               }
               title={
-                isCurrentUser ? `${share.user.email} (you)` : share.user.email
+                isCurrentUser
+                  ? t("share.currentUserLabel", { email: share.user.email })
+                  : share.user.email
               }
             />
           );
@@ -480,13 +495,15 @@ export default function ShareSkillModal({
             key={share.group_id}
             rightChildren={
               <SharePermissionMenu
-                ariaLabel={`Update access for ${share.group_name}`}
+                ariaLabel={t("share.permissionMenu.ariaLabel", {
+                  name: share.group_name,
+                })}
                 disabled={!canEditShares}
                 onChange={(permission) =>
                   updateGroupSharePermission(share.group_id, permission)
                 }
                 onRemove={() => removeGroupShare(share.group_id)}
-                options={PERMISSION_OPTIONS}
+                options={permissionOptions}
                 value={share.permission}
               />
             }
@@ -506,8 +523,8 @@ export default function ShareSkillModal({
           icon={view === "transfer" ? SvgArrowExchange : SvgShare}
           title={
             view === "transfer"
-              ? markdown(`Transfer *${skill.name}*`)
-              : markdown(`Share *${skill.name}*`)
+              ? markdown(t("share.header.transferTitle", { name: skill.name }))
+              : markdown(t("share.header.title", { name: skill.name }))
           }
           onClose={closeModal}
         />
@@ -523,7 +540,7 @@ export default function ShareSkillModal({
           ) : !draftState ? (
             <div className="flex w-full items-center justify-center py-6">
               <Text color="text-03" font="secondary-body">
-                Loading sharing details...
+                {t("share.loading.message")}
               </Text>
             </div>
           ) : (
@@ -541,7 +558,7 @@ export default function ShareSkillModal({
               }}
               prominence="secondary"
             >
-              Back
+              {t("share.backButton.label")}
             </Button>
           ) : (
             <span aria-hidden />
@@ -553,7 +570,9 @@ export default function ShareSkillModal({
               onClick={closeModal}
               prominence="secondary"
             >
-              {canEditShares || view === "transfer" ? "Cancel" : "Done"}
+              {canEditShares || view === "transfer"
+                ? t("share.cancelButton.label")
+                : t("share.doneButton.label")}
             </Button>
             {view === "transfer" ? (
               <Button
@@ -562,11 +581,11 @@ export default function ShareSkillModal({
                 }
                 onClick={handleTransfer}
               >
-                Transfer
+                {t("share.transferButton.label")}
               </Button>
             ) : canEditShares ? (
               <Button disabled={!isDirty || saving} onClick={handleSave}>
-                Save
+                {t("share.saveButton.label")}
               </Button>
             ) : null}
           </div>

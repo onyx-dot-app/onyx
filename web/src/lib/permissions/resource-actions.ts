@@ -13,7 +13,7 @@ export interface WithPermissions<
 // resource, not the DTO carrying it: CCPair covers both the list row and the detail DTO,
 // and Action covers OpenAPI + MCP tools — each group shares a single backend projection.
 export const RESOURCE_ACTIONS = {
-  CCPair: ["edit", "delete", "publish"],
+  CCPair: ["operate", "edit", "delete", "publish"],
   Agent: [
     "edit",
     "share",
@@ -28,7 +28,13 @@ export const RESOURCE_ACTIONS = {
   Action: ["edit", "delete", "toggle", "authenticate"],
   MCPServer: ["edit", "delete", "authenticate", "manage_status"],
   CustomSkill: ["edit", "manage_access", "delete", "publish"],
-  UserGroup: ["manage", "delete", "edit_permissions", "edit_token_limits"],
+  UserGroup: [
+    "manage",
+    "manage_members",
+    "delete",
+    "edit_permissions",
+    "edit_token_limits",
+  ],
 } as const;
 
 export type ResourceName = keyof typeof RESOURCE_ACTIONS;

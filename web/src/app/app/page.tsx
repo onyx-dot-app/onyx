@@ -1,4 +1,6 @@
 import AppPage from "@/views/AppPage";
+import { defaultAgentRedirectTarget } from "@/lib/app/utils";
+import { redirect } from "next/navigation";
 
 export interface PageProps {
   searchParams: Promise<{ [key: string]: string }>;
@@ -6,6 +8,10 @@ export interface PageProps {
 
 export default async function Page(props: PageProps) {
   const searchParams = await props.searchParams;
+
+  const redirectTarget = defaultAgentRedirectTarget(searchParams);
+  if (redirectTarget) redirect(redirectTarget);
+
   const firstMessage = searchParams.firstMessage;
 
   // Other pages in `web/src/app/chat` are wrapped with `<AppPageLayout>`.

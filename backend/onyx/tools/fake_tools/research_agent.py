@@ -18,6 +18,7 @@ from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
+from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
@@ -29,6 +30,7 @@ from onyx.deep_research.dr_mock_tools import (
 )
 from onyx.deep_research.models import (
     CombinedResearchAgentCallResult,
+    ResearchAgentCallFailure,
     ResearchAgentCallResult,
 )
 from onyx.deep_research.utils import (
@@ -67,7 +69,11 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo, ToolCallKickoff, ToolResponse
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -86,7 +92,14 @@ logger = setup_logger()
 
 # 30 minute timeout per research agent
 RESEARCH_AGENT_TIMEOUT_SECONDS = 30 * 60
-RESEARCH_AGENT_TIMEOUT_MESSAGE = "Research Agent timed out after 30 minutes"
+RESEARCH_AGENT_TIMEOUT_MESSAGE = (
+    "Research agent timed out after 30 minutes. "
+    "Try a different approach or continue without this result."
+)
+RESEARCH_AGENT_FAILURE_MESSAGE = (
+    "Research agent call failed. "
+    "Try a different approach or continue without this result."
+)
 # 12 minute timeout before forcing intermediate report generation
 RESEARCH_AGENT_FORCE_REPORT_SECONDS = 12 * 60
 # May be good to experiment with this, empirically reports of around 5,000 tokens are pretty good.
@@ -102,6 +115,7 @@ def generate_intermediate_report(
     user_identity: LLMUserIdentity | None,
     emitter: Emitter,
     placement: Placement,
+    language_section: str,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> str:
     # NOTE: This step outputs a lot of tokens and has been observed to run for more than 10 minutes in a nontrivial percentage of
@@ -113,9 +127,11 @@ def generate_intermediate_report(
         # Having the state container here to handle the tokens and not passed through means there is no way to
         # get partial saves of the report. Arguably this is not useful anyway so not going to implement partial saves.
         state_container = ChatStateContainer()
+        # The report streams to the UI, so it carries the reply-language line.
+        report_prompt = with_language_section(RESEARCH_REPORT_PROMPT, language_section)
         system_prompt = ChatMessageSimple(
-            message=RESEARCH_REPORT_PROMPT,
-            token_count=token_counter(RESEARCH_REPORT_PROMPT),
+            message=report_prompt,
+            token_count=token_counter(report_prompt),
             message_type=MessageType.SYSTEM,
         )
 
@@ -149,7 +165,7 @@ def generate_intermediate_report(
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
             is_deep_research=True,
-            timeout_override=DR_REPORT_LLM_TIMEOUT_S,
+            stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S,
         )
 
         while True:
@@ -204,7 +220,7 @@ def generate_intermediate_report(
         llm_step_result = cast(LlmStepResult, llm_step_result)
 
         final_report = llm_step_result.answer
-        span.span_data.output = final_report if final_report else None
+        span.span_data.output = final_report or None
         if final_report is None:
             raise ValueError(
                 f"LLM failed to generate a report for research task: {research_topic}"
@@ -215,7 +231,6 @@ def generate_intermediate_report(
 
 def run_research_agent_call(
     research_agent_call: ToolCallKickoff,
-    parent_tool_call_id: str,
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -223,6 +238,7 @@ def run_research_agent_call(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
+    language_section: str,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> ResearchAgentCallResult | None:
     turn_index = research_agent_call.placement.turn_index
@@ -414,13 +430,14 @@ def run_research_agent_call(
                         citation_processor=citation_processor,
                         user_identity=user_identity,
                         emitter=emitter,
+                        language_section=language_section,
                         reasoning_effort=reasoning_effort,
                         placement=Placement(
                             turn_index=turn_index,
                             tab_index=tab_index,
                         ),
                     )
-                    span.span_data.output = final_report if final_report else None
+                    span.span_data.output = final_report or None
                     return ResearchAgentCallResult(
                         intermediate_report=final_report,
                         citation_mapping=citation_processor.get_seen_citations(),
@@ -458,7 +475,8 @@ def run_research_agent_call(
                         )
                         msg_history.append(think_tool_response_msg)
                         think_span.span_data.output = THINK_TOOL_RESPONSE_MESSAGE
-                    reasoning_cycles += 1
+                    # The think tool token processor streams the arguments as reasoning,
+                    # so run_llm_step already counted this step in has_reasoned.
                     most_recent_reasoning = llm_step_result.reasoning
                     continue
                 else:
@@ -571,7 +589,7 @@ def run_research_agent_call(
                         # Research Agent is a top level tool call but the tools called by the research
                         # agent are sub-tool calls.
                         tool_call_info = ToolCallInfo(
-                            parent_tool_call_id=parent_tool_call_id,
+                            parent_tool_call_id=research_agent_call.tool_call_id,
                             # At the DB save level, there is only a turn index, no sub-turn etc.
                             # This is implied by the parent tool call's turn index and the depth
                             # of the tree traversal.
@@ -615,13 +633,14 @@ def run_research_agent_call(
                 citation_processor=citation_processor,
                 user_identity=user_identity,
                 emitter=emitter,
+                language_section=language_section,
                 reasoning_effort=reasoning_effort,
                 placement=Placement(
                     turn_index=turn_index,
                     tab_index=tab_index,
                 ),
             )
-            span.span_data.output = final_report if final_report else None
+            span.span_data.output = final_report or None
             return ResearchAgentCallResult(
                 intermediate_report=final_report,
                 citation_mapping=citation_processor.get_seen_citations(),
@@ -642,12 +661,7 @@ def _on_research_agent_timeout(
     index: int,  # noqa: ARG001
     func: Callable[..., Any],  # noqa: ARG001
     args: tuple[Any, ...],
-) -> ResearchAgentCallResult:
-    """Callback for handling research agent timeouts.
-
-    Returns a ResearchAgentCallResult with the timeout message so the research
-    can continue with other agents.
-    """
+) -> ResearchAgentCallFailure:
     research_agent_call: ToolCallKickoff = args[0]  # First arg
     research_task = research_agent_call.tool_args.get(
         RESEARCH_AGENT_TASK_KEY, "unknown"
@@ -657,15 +671,11 @@ def _on_research_agent_timeout(
         RESEARCH_AGENT_TIMEOUT_SECONDS,
         research_task,
     )
-    return ResearchAgentCallResult(
-        intermediate_report=RESEARCH_AGENT_TIMEOUT_MESSAGE,
-        citation_mapping={},
-    )
+    return ResearchAgentCallFailure(message=RESEARCH_AGENT_TIMEOUT_MESSAGE)
 
 
 def run_research_agent_calls(
     research_agent_calls: list[ToolCallKickoff],
-    parent_tool_call_ids: list[str],
     tools: list[Tool],
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -673,6 +683,7 @@ def run_research_agent_calls(
     is_reasoning_model: bool,
     token_counter: Callable[[str], int],
     citation_mapping: CitationMapping,
+    language_section: str,
     user_identity: LLMUserIdentity | None = None,
     reasoning_effort: ReasoningEffort = ReasoningEffort.LOW,
 ) -> CombinedResearchAgentCallResult:
@@ -682,7 +693,6 @@ def run_research_agent_calls(
             run_research_agent_call,
             (
                 research_agent_call,
-                parent_tool_call_id,
                 tools,
                 emitter,
                 state_container,
@@ -690,12 +700,11 @@ def run_research_agent_calls(
                 is_reasoning_model,
                 token_counter,
                 user_identity,
+                language_section,
                 reasoning_effort,
             ),
         )
-        for research_agent_call, parent_tool_call_id in zip(
-            research_agent_calls, parent_tool_call_ids, strict=False
-        )
+        for research_agent_call in research_agent_calls
     ]
 
     research_agent_call_results = run_functions_tuples_in_parallel(
@@ -709,11 +718,16 @@ def run_research_agent_calls(
     )
 
     updated_citation_mapping = citation_mapping
-    updated_answers: list[str | None] = []
+    updated_answers: list[str | ResearchAgentCallFailure] = []
 
     for result in research_agent_call_results:
         if result is None:
-            updated_answers.append(None)
+            updated_answers.append(
+                ResearchAgentCallFailure(message=RESEARCH_AGENT_FAILURE_MESSAGE)
+            )
+            continue
+        if isinstance(result, ResearchAgentCallFailure):
+            updated_answers.append(result)
             continue
 
         # Use collapse_citations to renumber citations in the text and merge mappings.
@@ -770,19 +784,22 @@ if __name__ == "__main__":
         emitter = Emitter(merged_queue=emitter_queue)
         state_container = ChatStateContainer()
 
+        # No chat session exists here, so skip the tools that write
+        # session-scoped generated files.
         tool_dict = construct_tools(
             persona=persona,
             db_session=db_session,
             emitter=emitter,
             user=user,
             llm=llm,
+            allowed_tool_ids=[
+                tool.id
+                for tool in persona.tools
+                if tool.in_code_tool_id
+                not in (ImageGenerationTool.__name__, PythonTool.__name__)
+            ],
         )
-        tools = [
-            tool
-            for tool_list in tool_dict.values()
-            for tool in tool_list
-            if tool.name != "generate_image"
-        ]
+        tools = [tool for tool_list in tool_dict.values() for tool in tool_list]
 
         logger.info("Running research agent with prompt: %s", RESEARCH_PROMPT)
         logger.info("LLM: %s/%s", llm.config.model_provider, llm.config.model_name)
@@ -795,7 +812,6 @@ if __name__ == "__main__":
                 tool_call_id=str(uuid4()),
                 placement=Placement(turn_index=0, tab_index=0),
             ),
-            parent_tool_call_id=str(uuid4()),
             tools=tools,
             emitter=emitter,
             state_container=state_container,
@@ -803,6 +819,7 @@ if __name__ == "__main__":
             is_reasoning_model=is_reasoning,
             token_counter=token_counter,
             user_identity=None,
+            language_section=build_language_section(None),
         )
 
         if result is None:

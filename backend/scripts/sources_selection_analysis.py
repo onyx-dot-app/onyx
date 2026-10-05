@@ -449,14 +449,13 @@ class SelectionAnalysis:
         Returns:
             dict: Data regarding the selected sources document
         """
-        return {
-            pos: doc
-            for pos, doc in enumerate(
+        return dict(
+            enumerate(
                 sorted(
                     contents["top_ranked_docs"], key=lambda d: d["score"], reverse=True
                 )[:5]
             )
-        }
+        )
 
     def save_analysisfile(self, content: list[dict]) -> Optional[str]:
         """Save the extracted content

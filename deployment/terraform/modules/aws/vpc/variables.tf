@@ -27,3 +27,15 @@ variable "tags" {
   description = "Tags to apply to all VPC-related resources"
   default     = {}
 }
+
+variable "create_s3_vpc_endpoint" {
+  type        = bool
+  description = "Whether to create a gateway VPC endpoint for S3"
+  default     = true
+}
+
+variable "single_nat_gateway" {
+  type        = bool
+  description = "Route all private subnets through one NAT gateway. Cheaper, but the NAT becomes a single-AZ dependency. False provisions one per AZ."
+  default     = false
+}

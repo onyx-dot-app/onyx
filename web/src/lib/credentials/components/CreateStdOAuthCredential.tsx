@@ -1,18 +1,17 @@
 import * as Yup from "yup";
-
-import { Button, InputTypeIn, MessageCard } from "@opal/components";
+import { InputTypeIn, MessageCard } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import { Form, Formik, FormikHelpers } from "formik";
 import { useState } from "react";
-
-import { OAuthAdditionalKwargDescription } from "@/lib/connectors/credentials";
-import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
-import { ValidSources } from "@/lib/types";
+import { useTranslations } from "next-intl";
+import type { OAuthAdditionalKwargDescription } from "@/lib/credentials/types";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { FormikField } from "@/refresh-components/form/FormikField";
+import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
+import { getSourceDisplayName } from "@/lib/sources";
 
 type OAuthFormValues = Record<string, string>;
-
-const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
 
 interface CreateStdOAuthCredentialProps {
   sourceType: ValidSources;
@@ -23,6 +22,7 @@ export function CreateStdOAuthCredential({
   sourceType,
   additionalFields,
 }: CreateStdOAuthCredentialProps) {
+  const t = useTranslations("admin");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSubmit(
@@ -45,7 +45,9 @@ export function CreateStdOAuthCredential({
       window.location.href = redirectUrl;
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : OAUTH_REDIRECT_ERROR
+        error instanceof Error
+          ? error.message
+          : t("credentials.oauth.startError.message")
       );
       formikHelpers.setSubmitting(false);
     }
@@ -78,6 +80,7 @@ export function CreateStdOAuthCredential({
                   render={(formikField, _helper, _meta, status) => (
                     <InputTypeIn
                       {...formikField}
+                      id={field.name}
                       variant={status === "error" ? "error" : "primary"}
                     />
                   )}
@@ -87,15 +90,14 @@ export function CreateStdOAuthCredential({
             {errorMessage && (
               <MessageCard
                 variant="error"
-                title="Could not connect"
+                title={t("credentials.oauth.connectError.title")}
                 description={errorMessage}
               />
             )}
-            <Section flexDirection="row" justifyContent="start">
-              <Button disabled={isSubmitting} type="submit">
-                Connect
-              </Button>
-            </Section>
+            <OAuthSignInRow
+              source={getSourceDisplayName(sourceType) || sourceType}
+              disabled={isSubmitting}
+            />
           </Section>
         </Form>
       )}

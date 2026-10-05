@@ -1,5 +1,4 @@
 import copy
-import re
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -16,17 +15,24 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import LLMProvider, ModelConfiguration
 from onyx.llm.exceptions import ClassifiedLLMError
-from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import (
+    catalog_model_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
+    model_identity_names,
 )
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.models import LLMErrorInfo, UserMessage
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    LLMErrorInfo,
+    UserMessage,
+)
 from onyx.prompts.contextual_retrieval import (
     CONTEXTUAL_RAG_TOKEN_ESTIMATE,
     DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
 )
+from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 from onyx.utils.redaction import scrub_sensitive_values
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
@@ -36,6 +42,9 @@ if TYPE_CHECKING:
 
 
 logger = setup_logger()
+
+# An admin watches a spinner while this runs, and test_llm makes two attempts.
+LLM_PROBE_TIMEOUT_S = 10
 
 MAX_CONTEXT_TOKENS = 100
 ONE_MILLION = 1_000_000
@@ -99,7 +108,7 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
     for _ in range(100):
         visited.add(id(current))
         candidate: Exception | None = None
-        cause = getattr(current, "__cause__", None)
+        cause = getattr(current, "__cause__", None)  # ods: ignore[getattr]
         if isinstance(cause, Exception):
             candidate = cause
         elif (
@@ -218,7 +227,7 @@ def litellm_exception_to_error_msg(
             else "The LLM provider"
         )
         upstream_detail: str | None = None
-        message_attr = getattr(core_exception, "message", None)
+        message_attr = getattr(core_exception, "message", None)  # ods: ignore[getattr]
         if message_attr:
             upstream_detail = str(message_attr)
         elif hasattr(core_exception, "api_error"):
@@ -291,7 +300,9 @@ def litellm_exception_to_error_msg(
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
         error_code = "CONNECTION_ERROR"
         is_retryable = True
-    elif str(getattr(core_exception, "status_code", "")) == "413" or (
+    elif str(
+        getattr(core_exception, "status_code", "")  # ods: ignore[getattr]
+    ) == "413" or (
         "413" in error_msg and "request entity too large" in error_msg.lower()
     ):
         # Upstream proxy/gateway (e.g. nginx) rejected the request body as too large.
@@ -407,7 +418,7 @@ def litellm_exception_to_safe_error(
     )
 
 
-def test_llm(llm: LLM) -> str | None:
+def test_llm(llm: LLM, total_timeout_s: float = LLM_PROBE_TIMEOUT_S) -> str | None:
     """Probe an LLM and return either `None` (success) or a sanitized error.
 
     The returned message is intended to be safe to surface to admin callers:
@@ -420,10 +431,18 @@ def test_llm(llm: LLM) -> str | None:
     The full raw error is still logged at WARNING for ops debugging.
     """
     error_msg: str | None = None
-    # try for up to 2 timeouts (e.g. 10 seconds in total)
+    # Two attempts, so the caller waits at most 2 * total_timeout_s.
     for _ in range(2):
         try:
-            llm.invoke(UserMessage(content="Do not respond"), max_tokens=50)
+            llm.invoke(
+                GenerationRequest(
+                    messages=[UserMessage(content="Do not respond")],
+                    options=GenerationOptions(max_tokens=50),
+                ),
+                context=GenerationContext(
+                    flow=LLMFlow.MODEL_VALIDATION, total_timeout_s=total_timeout_s
+                ),
+            )
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
@@ -518,7 +537,7 @@ def get_max_input_tokens_from_llm_provider(
     Fallback order:
     1. Use max_input_tokens from model_configuration (populated from source APIs
        like OpenRouter, Ollama, or our Bedrock mapping)
-    2. Look up in litellm.model_cost dictionary
+    2. Look up in the vendored model catalog
     3. Fall back to GEN_AI_MODEL_FALLBACK_MAX_TOKENS (32000)
 
     Most dynamic providers (OpenRouter, Ollama) provide context_length via their
@@ -530,18 +549,19 @@ def get_max_input_tokens_from_llm_provider(
     for model_configuration in llm_provider.model_configurations:
         if model_configuration.name == model_name:
             max_input_tokens = model_configuration.max_input_tokens
-    return (
-        max_input_tokens
-        if max_input_tokens
-        else get_max_input_tokens(
-            model_provider=llm_provider.provider,
-            model_name=model_name,
-        )
+    return max_input_tokens or get_max_input_tokens(
+        model_provider=llm_provider.provider,
+        model_name=model_name,
     )
 
 
-def model_supports_image_input(model_name: str, model_provider: str) -> bool:
-    # First, try to read an explicit configuration from the model_configuration table
+def model_supports_image_input(
+    model_name: str,
+    model_provider: str,
+    deployment_name: str | None = None,
+) -> bool:
+    # First, try to read an explicit configuration from the model_configuration
+    # table, keyed by the admin's configured row name (not the deployment alias).
     try:
         with get_session_with_current_tenant() as db_session:
             model_config = db_session.scalar(
@@ -568,26 +588,10 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
             e,
         )
 
-    # Fallback to looking up the model in the litellm model_cost dict
-    return litellm_thinks_model_supports_image_input(model_name, model_provider)
-
-
-def model_needs_formatting_reenabled(model_name: str) -> bool:
-    # See https://simonwillison.net/tags/markdown/ for context on why this is needed
-    # for OpenAI reasoning models to have correct markdown generation
-
-    # Models that need formatting re-enabled
-    model_names = ["gpt-5.1", "gpt-5", "o3", "o1"]
-
-    # Pattern matches if any of these model names appear with word boundaries
-    # Word boundaries include: start/end of string, space, hyphen, or forward slash
-    pattern = (
-        r"(?:^|[\s\-/])("
-        + "|".join(re.escape(name) for name in model_names)
-        + r")(?:$|[\s\-/])"
+    # Fallback to looking up the model in the model catalog. A
+    # custom provider (e.g. Azure AI Foundry) may carry the real model
+    # identity only in the deployment alias.
+    return any(
+        catalog_model_supports_image_input(name, model_provider)
+        for name in model_identity_names(model_name, deployment_name)
     )
-
-    if re.search(pattern, model_name):
-        return True
-
-    return False

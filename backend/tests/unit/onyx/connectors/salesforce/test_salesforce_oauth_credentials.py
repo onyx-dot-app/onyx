@@ -101,6 +101,7 @@ def test_salesforce_my_domain_url_accepts_canonical_hosts(
 @pytest.mark.parametrize(
     "url",
     [
+        "acme.my.salesforce.com",
         "http://acme.my.salesforce.com",
         "https://my.salesforce.com",
         "https://salesforce.com",
@@ -530,6 +531,30 @@ def test_onyx_salesforce_routes_malformed_unauthorized_response(
         text="unauthorized",
     )
     unauthorized.json.return_value = payload
+    session = MagicMock()
+    session.proxies = {}
+    session.request.return_value = unauthorized
+    refresh_callback = MagicMock()
+    client = OnyxSalesforce(
+        session_id="expired-access-token",
+        instance_url=INSTANCE_URL,
+        session=session,
+        refresh_callback=refresh_callback,
+    )
+
+    with pytest.raises(SalesforceExpiredSession):
+        client._call_salesforce("GET", unauthorized.url)
+
+    refresh_callback.assert_not_called()
+
+
+def test_onyx_salesforce_routes_non_json_unauthorized_response() -> None:
+    unauthorized = MagicMock(
+        status_code=401,
+        url=f"{INSTANCE_URL}/services/data/v59.0/sobjects",
+        text="unauthorized",
+    )
+    unauthorized.json.side_effect = ValueError()
     session = MagicMock()
     session.proxies = {}
     session.request.return_value = unauthorized

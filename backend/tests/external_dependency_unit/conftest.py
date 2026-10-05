@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Generator
 from uuid import uuid4
 
@@ -23,6 +24,20 @@ from tests.utils.pytest_secrets import pytest_configure as pytest_configure
 from tests.utils.pytest_secrets import test_secrets as test_secrets
 
 
+@pytest.fixture
+def audit_stream(caplog: pytest.LogCaptureFixture) -> Generator[None, None, None]:
+    """``onyx.audit`` sets ``propagate=False``, so caplog's root handler never sees
+    its records; hang caplog's handler below that barrier instead. Not autouse — it
+    would feed audit records to tests that capture logs for other reasons.
+    """
+    audit_logger = logging.getLogger("onyx.audit")
+    audit_logger.addHandler(caplog.handler)
+    try:
+        yield
+    finally:
+        audit_logger.removeHandler(caplog.handler)
+
+
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
     """Create a database session for testing using the actual PostgreSQL database"""
@@ -39,8 +54,8 @@ def db_session() -> Generator[Session, None, None]:
 def full_deployment_setup() -> Generator[None, None, None]:
     """Optional fixture to perform full deployment-like setup on demand.
 
-    Import and call tests.external_dependency_unit.startup.full_setup.ensure_full_deployment_setup
-    to initialize Postgres defaults, Vespa indices, and seed initial docs.
+    Import and call tests.external_dependency_unit.full_setup.ensure_full_deployment_setup
+    to initialize Postgres defaults and the document index.
     """
     ensure_full_deployment_setup()
     yield

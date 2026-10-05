@@ -3,7 +3,7 @@
  *
  * @deprecated Use `Card` from `@opal/components`. Opal's Card is the styled box
  * alone, so a migrated call site wraps its children in the `<Section>` this one
- * supplies implicitly, and passes `rounding="lg"` to keep the 16px corner.
+ * supplies implicitly, and passes `rounding={4}` to keep the 16px corner.
  * `variant` becomes Opal's `background` / `border` pair.
  *
  * TODO(@raunakab): retire this component. Eight call sites remain, in three

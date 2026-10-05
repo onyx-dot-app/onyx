@@ -1,6 +1,7 @@
 "use client";
 
 import React, { FunctionComponent, useMemo, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "../interfaces";
 import { TurnGroup, TransformedStep } from "./transformers";
@@ -116,6 +117,8 @@ export const ExpandedTimelineContent = React.memo(
     showStoppedStep,
     hasDoneIndicator,
   }: ExpandedTimelineContentProps) {
+    const t = useTranslations("chat.messages.timeline");
+
     return (
       <div className="w-full">
         {turnGroups.map((turnGroup, turnIdx) => {
@@ -169,7 +172,7 @@ export const ExpandedTimelineContent = React.memo(
         {showDoneStep && (
           <StepContainer
             stepIcon={SvgCheckCircle}
-            header="Done"
+            header={t("doneStep.header")}
             isLastStep={true}
             isFirstStep={false}
           >
@@ -181,7 +184,7 @@ export const ExpandedTimelineContent = React.memo(
         {showStoppedStep && (
           <StepContainer
             stepIcon={SvgStopCircle}
-            header="Stopped"
+            header={t("stoppedStep.header")}
             isLastStep={true}
             isFirstStep={false}
           >

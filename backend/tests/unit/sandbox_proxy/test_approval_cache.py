@@ -22,6 +22,9 @@ class _MemoryCache(CacheBackend):
     def get(self, key: str) -> bytes | None:
         return self.values.get(key)
 
+    def getdel(self, key: str) -> bytes | None:
+        return self.values.pop(key, None)
+
     def set(
         self,
         key: str,
@@ -32,6 +35,17 @@ class _MemoryCache(CacheBackend):
         if ex is not None:
             self.expire(key, ex)
 
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if key in self.values:
+            return False
+        self.set(key, value, ex=ex)
+        return True
+
     def expire(self, key: str, seconds: int) -> None:
         self.expirations.append((key, seconds))
 
@@ -40,6 +54,12 @@ class _MemoryCache(CacheBackend):
 
     def exists(self, key: str) -> bool:
         return key in self.values
+
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        if self.get(key) != expected:
+            return False
+        self.expire(key, seconds)
+        return True
 
     def ttl(self, key: str) -> int:  # noqa: ARG002
         raise NotImplementedError

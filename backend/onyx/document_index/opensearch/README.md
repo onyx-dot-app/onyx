@@ -1,5 +1,9 @@
 # Opensearch Idiosyncrasies
 
+## Benchmarks
+
+- [OpenSearch quantization benchmark](QUANTIZATION_BENCHMARK.md): 500-question comparison of float32, 7-bit, and 1-bit vectors.
+
 ## How it works at a high level
 Opensearch has 2 phases, a `Search` phase and a `Fetch` phase. The `Search` phase works by getting the document scores on each
 shard separately, then typically a fetch phase grabs all of the relevant fields/data for returning to the user. There is also

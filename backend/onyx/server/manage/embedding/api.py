@@ -5,6 +5,7 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import (
+    fetch_embedding_provider,
     fetch_existing_embedding_providers,
     remove_embedding_provider,
     upsert_cloud_embedding_provider,
@@ -17,6 +18,10 @@ from onyx.db.search_settings import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.indexing.models import EmbeddingModelDetail
+from onyx.natural_language_processing.embedding_auth import (
+    CloudEmbeddingAuth,
+    build_embedding_auth,
+)
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider,
@@ -34,21 +39,43 @@ admin_router = APIRouter(prefix="/admin/embedding")
 basic_router = APIRouter(prefix="/embedding")
 
 
+def _build_request_auth(
+    request: TestEmbeddingRequest | CloudEmbeddingProviderCreationRequest,
+) -> CloudEmbeddingAuth:
+    try:
+        return build_embedding_auth(
+            request.provider_type, request.api_key, request.vertex_config
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+
+
 @admin_router.post("/test-embedding")
 def test_embedding_configuration(
     test_llm_request: TestEmbeddingRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> None:
+    auth = _build_request_auth(test_llm_request)
+    api_key = test_llm_request.api_key
+    if api_key is None and auth.requires_api_key:
+        existing = fetch_embedding_provider(db_session, test_llm_request.provider_type)
+        if existing is not None and existing.api_key is not None:
+            api_key = existing.api_key.get_value(apply_mask=False)
+            auth = build_embedding_auth(
+                test_llm_request.provider_type, api_key, test_llm_request.vertex_config
+            )
     try:
         test_model = EmbeddingModel(
             server_host=MODEL_SERVER_HOST,
             server_port=MODEL_SERVER_PORT,
-            api_key=test_llm_request.api_key,
+            api_key=api_key,
             api_url=test_llm_request.api_url,
             provider_type=test_llm_request.provider_type,
             model_name=test_llm_request.model_name,
             api_version=test_llm_request.api_version,
             deployment_name=test_llm_request.deployment_name,
+            auth=auth,
             normalize=False,
             query_prefix=None,
             passage_prefix=None,
@@ -58,7 +85,7 @@ def test_embedding_configuration(
     except ValueError as e:
         error_msg = f"Not a valid embedding model. Exception thrown: {e}"
         logger.error(error_msg)
-        raise ValueError(error_msg)
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg) from e
 
     except Exception as e:
         error_msg = "An error occurred while testing your embedding model. Please check your configuration."
@@ -86,6 +113,21 @@ def list_embedding_providers(
     ]
 
 
+@admin_router.get("/embedding-provider/{provider_type}")
+def get_embedding_provider(
+    provider_type: EmbeddingProvider,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CloudEmbeddingProvider:
+    embedding_provider = fetch_embedding_provider(db_session, provider_type)
+    if embedding_provider is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Embedding provider '{provider_type.value}' is not configured",
+        )
+    return CloudEmbeddingProvider.from_request(embedding_provider)
+
+
 @admin_router.delete("/embedding-provider/{provider_type}")
 def delete_embedding_provider(
     provider_type: EmbeddingProvider,
@@ -98,8 +140,9 @@ def delete_embedding_provider(
         and provider_type == embedding_provider.provider_type
     ):
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "You can't delete a currently active model",
+            OnyxErrorCode.RESOURCE_IN_USE,
+            "You can't delete the embedding provider the current search settings "
+            "use. Point search settings at another provider first.",
         )
 
     remove_embedding_provider(db_session, provider_type=provider_type)
@@ -111,4 +154,9 @@ def put_cloud_embedding_provider(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CloudEmbeddingProvider:
+    auth = _build_request_auth(provider)
+    if not auth.requires_api_key:
+        provider = provider.model_copy(
+            update={"api_key": None, "api_key_changed": True}
+        )
     return upsert_cloud_embedding_provider(db_session, provider)

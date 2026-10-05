@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
 import {
   createCustomerPortalSession,
@@ -20,6 +21,7 @@ import { SubscriptionSummary } from "./SubscriptionSummary";
 import { BillingAlerts } from "./BillingAlerts";
 import { SvgClipboard, SvgWallet } from "@opal/icons";
 export default function BillingInformationPage() {
+  const t = useTranslations("admin.billing.info");
   const {
     data: billingInformation,
     error,
@@ -29,31 +31,27 @@ export default function BillingInformationPage() {
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.has("session_id")) {
-      toast.success(
-        "Congratulations! Your subscription has been updated successfully."
-      );
+      toast.success(t("updatedToast.message"));
       url.searchParams.delete("session_id");
       window.history.replaceState({}, "", url.toString());
     }
-  }, []);
+  }, [t]);
 
   if (isLoading) {
-    return <div className="text-center py-8">Loading...</div>;
+    return <div className="text-center py-8">{t("loading.label")}</div>;
   }
 
   if (error) {
     console.error("Failed to fetch billing information:", error);
     return (
       <div className="text-center py-8 text-red-500">
-        Error loading billing information. Please try again later.
+        {t("loadError.message")}
       </div>
     );
   }
 
   if (!billingInformation || !hasActiveSubscription(billingInformation)) {
-    return (
-      <div className="text-center py-8">No billing information available.</div>
-    );
+    return <div className="text-center py-8">{t("empty.message")}</div>;
   }
 
   const handleManageSubscription = async () => {
@@ -66,7 +64,7 @@ export default function BillingInformationPage() {
       window.location.href = response.stripe_customer_portal_url;
     } catch (error) {
       console.error("Error creating customer portal session:", error);
-      toast.error("Error creating customer portal session");
+      toast.error(t("portalError.message"));
     }
   };
 
@@ -75,8 +73,8 @@ export default function BillingInformationPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center">
-            <SvgWallet className="mr-4 text-muted-foreground h-6 w-6" />
-            Subscription Details
+            <SvgWallet className="me-4 text-muted-foreground h-6 w-6" />
+            {t("subscriptionDetails.title")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -88,10 +86,10 @@ export default function BillingInformationPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-xl font-semibold">
-            Manage Subscription
+            {t("manageSubscription.title")}
           </CardTitle>
           <CardDescription>
-            View your plan, update payment, or change subscription
+            {t("manageSubscription.description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -100,7 +98,7 @@ export default function BillingInformationPage() {
             width="full"
             icon={SvgClipboard}
           >
-            Manage Subscription
+            {t("manageSubscription.title")}
           </Button>
         </CardContent>
       </Card>

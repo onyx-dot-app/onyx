@@ -177,6 +177,11 @@ class SourceOperations(ABC):
     # SDK-less connector.
     sdk_modules: ClassVar[tuple[str, ...]]
 
+    # The connector config keys the gateway reads. A draft run keys the cached
+    # result of a check that reads no config on these values. None: the gateway
+    # can read any key.
+    config_keys: ClassVar[frozenset[str] | None] = None
+
     _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType({})
 
     def __init__(
@@ -267,7 +272,7 @@ class SourceOperations(ABC):
                 )
             if not callable(member):
                 continue
-            spec = getattr(member, _SPEC_ATTR, None)
+            spec = getattr(member, _SPEC_ATTR, None)  # ods: ignore[getattr]
             if spec is None:
                 unstamped.append(name)
             elif spec.name != name:

@@ -1,16 +1,15 @@
 import ast
 import os
-import platform
-import shutil
 import subprocess
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 
-# Integration tests rely on this mode to enable mock_llm_response paths.
+# Enables test-only server behavior, e.g. ToolCallDebug packets.
 os.environ["INTEGRATION_TESTS_MODE"] = "true"
 
 # Backend directory (`/workspace/backend`) — root for alembic / craft / etc.
@@ -58,7 +57,6 @@ from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
     get_session_with_current_tenant,
 )
-from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
     fetch_versioned_implementation,
 )
@@ -67,6 +65,9 @@ from tests.integration.common_utils import http_client  # noqa: E402
 from tests.integration.common_utils.constants import (  # noqa: E402
     ADMIN_USER_NAME,
     GENERAL_HEADERS,
+)
+from tests.integration.common_utils.document_index import (  # noqa: E402
+    DocumentIndexClient,
 )
 from tests.integration.common_utils.managers.api_key import APIKeyManager  # noqa: E402
 from tests.integration.common_utils.managers.document import (  # noqa: E402
@@ -77,6 +78,10 @@ from tests.integration.common_utils.managers.image_generation import (  # noqa: 
 )
 from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
     LLMProviderManager,
+)
+from tests.integration.common_utils.managers.mock_llm import (  # noqa: E402
+    MockLLMManager,
+    MockLLMScript,
 )
 from tests.integration.common_utils.managers.user import (  # noqa: E402
     DEFAULT_PASSWORD,
@@ -98,7 +103,9 @@ from tests.integration.common_utils.test_models import (  # noqa: E402
     DATestUser,
     SimpleTestDocument,
 )
-from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
+from tests.integration.mock_services.mock_llm_server.server import (  # noqa: E402
+    run_in_thread,
+)
 
 BASIC_USER_NAME = "basic_user"
 
@@ -129,26 +136,6 @@ def _run_migrations() -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _install_playwright(_run_migrations: None) -> None:  # noqa: ARG001
-    # web_search tests exercise OnyxWebCrawler's Playwright fallback. The
-    # devcontainer ships the apt deps; download the chromium binary here so
-    # the version tracks the lockfile's playwright-python. Playwright has no
-    # ubuntu26.04 build yet, so pin to the binary-compatible 24.04 build.
-    # Skipped in onyx-lite (no web_search) and where Playwright isn't on PATH.
-    if os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true":
-        return
-
-    if shutil.which("playwright") is None:
-        return
-
-    machine = platform.machine().lower()
-    pw_arch = "x64" if machine in ("x86_64", "amd64") else "arm64"
-    env = os.environ.copy()
-    env["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = f"ubuntu24.04-{pw_arch}"
-    subprocess.run(["playwright", "install", "chromium"], env=env, check=True)
-
-
-@pytest.fixture(scope="session", autouse=True)
 def initialize_db(_run_migrations: None) -> None:  # noqa: ARG001
     # Make sure that the db engine is initialized before any tests are run
     SqlEngine.init_engine(
@@ -163,12 +150,12 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     (
         "light",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
-        "checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
+        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim",
     ),
     (
         "heavy",
         "connector_pruning,connector_doc_permissions_sync,"
-        "connector_external_group_sync,csv_generation,sandbox",
+        "connector_external_group_sync,csv_generation,sandbox,capability_checks",
     ),
     ("docprocessing", "docprocessing,port"),
     (
@@ -317,7 +304,6 @@ def _start_celery_workers(
 def _test_client(
     initialize_db: None,  # noqa: ARG001
     _start_celery_workers: None,  # noqa: ARG001
-    _install_playwright: None,  # noqa: ARG001
 ) -> Generator[TestClient, None, None]:
     # In-process api_server. Use the versioned dispatcher so MT / EE
     # builds get ee.onyx.main.get_application — that's the one that
@@ -367,10 +353,8 @@ instantiate the session directly within the test.
 
 
 @pytest.fixture
-def vespa_client() -> vespa_fixture:
-    with get_session_with_current_tenant() as db_session:
-        search_settings = get_current_search_settings(db_session)
-        return vespa_fixture(index_name=search_settings.index_name)
+def document_index_client() -> DocumentIndexClient:
+    return DocumentIndexClient()
 
 
 @pytest.fixture
@@ -474,6 +458,36 @@ def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
     return LLMProviderManager.create(user_performing_action=admin_user)
 
 
+@pytest.fixture(scope="session")
+def mock_llm_server() -> Generator[str, None, None]:
+    with run_in_thread() as base_url:
+        yield base_url
+
+
+@pytest.fixture
+def mock_llm(
+    mock_llm_server: str, admin_user: DATestUser
+) -> Generator[MockLLMScript, None, None]:
+    """Make a new script on the mock LLM server the default LLM for one test.
+    Teardown restores the previous default provider and fails on unmatched
+    requests or unused required replies."""
+    handle = MockLLMScript(mock_llm_server, uuid4().hex)
+    try:
+        previous_default = LLMProviderManager.get_default_model(admin_user)
+        provider = MockLLMManager.create(handle.api_base, admin_user)
+    except Exception:
+        handle.close()
+        raise
+
+    yield handle
+
+    try:
+        MockLLMManager.delete(provider, previous_default, admin_user)
+        handle.verify()
+    finally:
+        handle.close()
+
+
 @pytest.fixture
 def api_key(admin_user: DATestUser) -> DATestAPIKey:
     return APIKeyManager.create(user_performing_action=admin_user)
@@ -568,7 +582,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     checked: set[Path] = set()
 
     for item in items:
-        path = getattr(item, "path", None)
+        path = getattr(item, "path", None)  # ods: ignore[getattr]
         if path is None or path in checked:
             continue
         checked.add(path)

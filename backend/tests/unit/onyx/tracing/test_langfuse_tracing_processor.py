@@ -1,8 +1,9 @@
 """Unit tests for LangfuseTracingProcessor metadata handling."""
 
 from collections.abc import Mapping
+from contextlib import nullcontext
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,11 +28,20 @@ def _make_client_with_observation() -> tuple[MagicMock, MagicMock]:
     return client, observation
 
 
+def _make_span(trace_id: str, span_id: str) -> MagicMock:
+    span = MagicMock()
+    span.trace_id = trace_id
+    span.span_id = span_id
+    span.parent_id = None
+    span.span_data = GenerationSpanData(model="gpt-4")
+    return span
+
+
 def test_on_trace_start_promotes_user_id_and_session_id() -> None:
-    """user_id and chat_session_id in metadata must be passed as first-class
-    fields on update_trace so Langfuse populates the Users and Sessions views.
+    """user_id and chat_session_id must ride on the observation as first-class
+    correlating attributes so Langfuse populates the Users and Sessions views.
     """
-    client, observation = _make_client_with_observation()
+    client, _ = _make_client_with_observation()
     processor = LangfuseTracingProcessor(client=client)
 
     metadata = {
@@ -39,39 +49,70 @@ def test_on_trace_start_promotes_user_id_and_session_id() -> None:
         "chat_session_id": "session-xyz",
         "user_id": "user-42",
     }
-    processor.on_trace_start(_make_trace(metadata))
+    with patch(
+        "onyx.tracing.langfuse_tracing_processor.propagate_attributes"
+    ) as propagate:
+        propagate.return_value = nullcontext()
+        processor.on_trace_start(_make_trace(metadata))
 
-    observation.update_trace.assert_called_once()
-    kwargs = observation.update_trace.call_args.kwargs
+    propagate.assert_called_once()
+    kwargs = propagate.call_args.kwargs
     assert kwargs["user_id"] == "user-42"
     assert kwargs["session_id"] == "session-xyz"
-    assert kwargs["name"] == "run_llm_loop"
+    assert kwargs["trace_name"] == "run_llm_loop"
     assert kwargs["metadata"] == metadata
 
 
-def test_on_trace_start_user_id_missing_passes_none() -> None:
-    """Anonymous / unattributed traces still update successfully with user_id=None."""
-    client, observation = _make_client_with_observation()
+def test_on_trace_start_omits_missing_user_id() -> None:
+    """Anonymous / unattributed traces still start, just without a user."""
+    client, _ = _make_client_with_observation()
     processor = LangfuseTracingProcessor(client=client)
 
     metadata = {"tenant_id": "tenant-abc", "chat_session_id": "session-xyz"}
-    processor.on_trace_start(_make_trace(metadata))
+    with patch(
+        "onyx.tracing.langfuse_tracing_processor.propagate_attributes"
+    ) as propagate:
+        propagate.return_value = nullcontext()
+        processor.on_trace_start(_make_trace(metadata))
 
-    kwargs = observation.update_trace.call_args.kwargs
-    assert kwargs["user_id"] is None
+    kwargs = propagate.call_args.kwargs
+    assert "user_id" not in kwargs
     assert kwargs["session_id"] == "session-xyz"
 
 
 def test_on_trace_start_coerces_non_string_user_id() -> None:
     """User ids that arrive as ints (e.g. from User.id) are coerced to strings."""
-    client, observation = _make_client_with_observation()
+    client, _ = _make_client_with_observation()
     processor = LangfuseTracingProcessor(client=client)
 
     metadata = {"chat_session_id": "session-xyz", "user_id": 7}
-    processor.on_trace_start(_make_trace(metadata))
+    with patch(
+        "onyx.tracing.langfuse_tracing_processor.propagate_attributes"
+    ) as propagate:
+        propagate.return_value = nullcontext()
+        processor.on_trace_start(_make_trace(metadata))
 
-    kwargs = observation.update_trace.call_args.kwargs
-    assert kwargs["user_id"] == "7"
+    assert propagate.call_args.kwargs["user_id"] == "7"
+
+
+def test_child_spans_repeat_the_trace_attributes() -> None:
+    """Correlating attributes only reach observations created inside the
+    propagation block, so every child observation must re-apply them.
+    """
+    client, _ = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+
+    metadata = {"chat_session_id": "session-xyz", "user_id": "user-42"}
+    with patch(
+        "onyx.tracing.langfuse_tracing_processor.propagate_attributes"
+    ) as propagate:
+        propagate.return_value = nullcontext()
+        processor.on_trace_start(_make_trace(metadata))
+        processor.on_span_start(_make_span("trace-123", "span-1"))
+
+    assert propagate.call_count == 2
+    assert propagate.call_args.kwargs["session_id"] == "session-xyz"
+    assert propagate.call_args.kwargs["user_id"] == "user-42"
 
 
 def test_calculate_cost_prices_cache_creation_at_write_rate() -> None:

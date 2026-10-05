@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgArrowRight } from "@opal/icons";
 
@@ -24,6 +25,7 @@ function PasteTilePopover({
   onTextChange,
   onExpand,
 }: PasteTilePopoverProps) {
+  const t = useTranslations("chat.input");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [rect, setRect] = useState(() => tileElement.getBoundingClientRect());
   const rafId = useRef<number | null>(null);
@@ -82,7 +84,7 @@ function PasteTilePopover({
       />
       <div
         role="dialog"
-        aria-label="Edit pasted text"
+        aria-label={t("pasteTilePopover.dialog.ariaLabel")}
         className="fixed z-50 bg-background-neutral-00 border border-border-01 rounded-08 shadow-box-02 p-1 max-w-[400px]"
         style={{
           left: Math.max(GAP, left),
@@ -111,9 +113,9 @@ function PasteTilePopover({
             size="xs"
             rightIcon={SvgArrowRight}
             onClick={onExpand}
-            tooltip="Replace this tile with its full text inline"
+            tooltip={t("pasteTilePopover.expandButton.tooltip")}
           >
-            Expand into input bar
+            {t("pasteTilePopover.expandButton.label")}
           </Button>
         </div>
       </div>

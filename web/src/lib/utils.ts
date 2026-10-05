@@ -7,6 +7,7 @@ import {
   SvgFileText,
 } from "@opal/icons";
 import { ALLOWED_URL_PROTOCOLS } from "./constants";
+import { DEFAULT_LOCALE } from "@/i18n/config";
 
 const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 const BARE_EMAIL_REGEX = /^[^\s@/]+@[^\s@/:]+\.[^\s@/:]+$/;
@@ -288,13 +289,19 @@ export function mergeRefs<T>(
   };
 }
 
-export function formatCost(cents: number): string {
-  return new Intl.NumberFormat("en-US", {
+export function formatCost(
+  cents: number,
+  locale: string = DEFAULT_LOCALE
+): string {
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
   }).format(cents / 100);
 }
 
-export function formatTokens(value: number): string {
-  return value.toLocaleString("en-US");
+export function formatTokens(
+  value: number,
+  locale: string = DEFAULT_LOCALE
+): string {
+  return value.toLocaleString(locale);
 }

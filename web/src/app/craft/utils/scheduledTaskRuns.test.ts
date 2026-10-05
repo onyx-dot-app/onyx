@@ -1,3 +1,4 @@
+import { type RunReasonTranslate } from "@/app/craft/v1/tasks/utils";
 import {
   getNonClickableReason,
   isScheduledRunContextInFlight,
@@ -36,24 +37,24 @@ function context(status: ScheduledTaskRunStatus): ScheduledRunContextResponse {
   };
 }
 
+const tStub = ((key: string) => key) as RunReasonTranslate;
+
 describe("scheduled task run utils", () => {
   it.each(["RUNNING", "AWAITING_APPROVAL", "SUCCEEDED", "FAILED"] as const)(
     "allows opening %s runs with linked sessions",
     (status) => {
-      expect(getNonClickableReason(run(status, "session-1"))).toBeNull();
+      expect(getNonClickableReason(run(status, "session-1"), tStub)).toBeNull();
     }
   );
 
   it("keeps queued and skipped runs blocked", () => {
-    expect(getNonClickableReason(run("QUEUED", null))).toContain(
-      "hasn't started"
-    );
-    expect(getNonClickableReason(run("SKIPPED", null))).toContain("skipped");
+    expect(getNonClickableReason(run("QUEUED", null), tStub)).toBe("queued");
+    expect(getNonClickableReason(run("SKIPPED", null), tStub)).toBe("skipped");
   });
 
   it("blocks openable statuses until a session exists", () => {
-    expect(getNonClickableReason(run("RUNNING", null))).toContain(
-      "has not created a session"
+    expect(getNonClickableReason(run("RUNNING", null), tStub)).toBe(
+      "noSession"
     );
   });
 

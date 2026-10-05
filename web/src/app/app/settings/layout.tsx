@@ -2,16 +2,16 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
+import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
-import { SidebarTab, Text } from "@opal/components";
+import { InputSingleSelect, SidebarTab } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 
 interface LayoutProps {
@@ -24,40 +24,56 @@ interface SettingsTab {
 }
 
 export default function Layout({ children }: LayoutProps) {
+  const t = useTranslations("settings.layout");
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useUser();
   const isMultiTenant = useIsMultiTenant();
-  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
-  const { llmProviders } = useLLMProviders();
+  const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
+  const { llmProviders } = useLanguageModels();
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = isMultiTenant !== null;
   const showAccountsAccessTab = showPasswordSection || showTokensSection;
-  const showGatewayTab = enterpriseTier && hasVisibleLLMModel(llmProviders);
+  const showGatewayTab = gatewayTier && hasVisibleLLMModel(llmProviders);
 
   const tabs: SettingsTab[] = [
-    { href: "/app/settings/general", label: "General" },
-    { href: "/app/settings/chat-preferences", label: "Chat Preferences" },
+    { href: "/app/settings/general", label: t("tabs.general.label") },
+    {
+      href: "/app/settings/chat-preferences",
+      label: t("tabs.chatPreferences.label"),
+    },
     ...(showAccountsAccessTab
-      ? [{ href: "/app/settings/accounts-access", label: "Accounts & Access" }]
+      ? [
+          {
+            href: "/app/settings/accounts-access",
+            label: t("tabs.accountsAccess.label"),
+          },
+        ]
       : []),
     ...(showGatewayTab
-      ? [{ href: "/app/settings/llm-gateway", label: "LLM Gateway" }]
+      ? [
+          {
+            href: "/app/settings/llm-gateway",
+            label: t("tabs.llmGateway.label"),
+          },
+        ]
       : []),
-    { href: "/app/settings/connectors", label: "Connectors" },
-    { href: "/app/settings/usage", label: "Usage" },
+    { href: "/app/settings/connectors", label: t("tabs.connectors.label") },
+    { href: "/app/settings/usage", label: t("tabs.usage.label") },
   ];
 
-  // Derive the trigger label from the pathname directly. InputSelect normally
-  // surfaces the selected label via item registration, but its items are
-  // unmounted while the dropdown is closed, so the label would otherwise be
-  // missing on initial load.
+  // A route outside `tabs` selects nothing, so the select shows its
+  // placeholder instead of the raw path.
   const activeTab = tabs.find((tab) => tab.href === pathname);
 
   return (
     <SettingsLayouts.Root width="lg">
-      <SettingsLayouts.Header icon={SvgSliders} title="Settings" divider />
+      <SettingsLayouts.Header
+        icon={SvgSliders}
+        title={t("header.title")}
+        divider
+      />
 
       <SettingsLayouts.Body>
         <Section
@@ -72,27 +88,19 @@ export default function Layout({ children }: LayoutProps) {
             data-testid="settings-tab-navigation-dropdown"
             className="sm:hidden"
           >
-            <InputSelect
-              value={pathname}
+            <InputSingleSelect
+              // A route outside `tabs` shows the placeholder, not the raw path.
+              value={activeTab?.href ?? ""}
               onValueChange={(href) =>
+                // SAFETY: the options are the static hrefs in `tabs`.
                 router.push(href as Route, { scroll: false })
               }
-            >
-              <InputSelect.Trigger placeholder="Select a section">
-                {activeTab && (
-                  <Text font="main-ui-body" color="text-04" nowrap>
-                    {activeTab.label}
-                  </Text>
-                )}
-              </InputSelect.Trigger>
-              <InputSelect.Content>
-                {tabs.map((tab) => (
-                  <InputSelect.Item key={tab.href} value={tab.href}>
-                    {tab.label}
-                  </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelect>
+              placeholder={t("sectionSelect.placeholder")}
+              options={tabs.map((tab) => ({
+                value: tab.href,
+                title: tab.label,
+              }))}
+            />
           </div>
 
           {/* Wide screens: left tab navigation */}

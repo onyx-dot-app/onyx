@@ -1,6 +1,6 @@
 import { JSX } from "react";
 import type { IconProps } from "@opal/types";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot } from "@/lib/tools/types";
 import {
   SvgCpu,
   SvgGlobe,

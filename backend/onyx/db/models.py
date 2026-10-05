@@ -76,8 +76,8 @@ from onyx.db.enums import (
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     DefaultAppMode,
-    EmbeddingPrecision,
     EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
@@ -97,14 +97,13 @@ from onyx.db.enums import (
     MCPServerStatus,
     MCPTransport,
     NotificationSeverity,
-    OpenSearchDocumentMigrationStatus,
-    OpenSearchTenantMigrationStatus,
     PatType,
     Permission,
     PermissionSyncStatus,
     PersonaSharePermission,
     PortAttemptStatus,
     ProcessingMode,
+    ReceiptStatus,
     SandboxStatus,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
@@ -116,9 +115,12 @@ from onyx.db.enums import (
     SwitchoverType,
     SyncStatus,
     SyncType,
+    SystemUsageAttribution,
     TaskStatus,
     ThemePreference,
+    UsageActorKind,
     UserFileStatus,
+    VectorQuantization,
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
@@ -127,6 +129,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride, PromptOverride
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
@@ -270,7 +273,7 @@ def _register_sensitive_value_set_events(
         for col in prop.columns:
             if isinstance(col.type, _EncryptedBase):
                 col_type = col.type
-                attr = getattr(class_, prop.key)
+                attr = getattr(class_, prop.key)  # ods: ignore[getattr]
 
                 # Guard against double-registration (e.g. if mapper is
                 # re-configured in test setups)
@@ -364,6 +367,18 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     temperature_override_enabled: Mapped[bool | None] = mapped_column(
         Boolean, default=None
     )
+    # Per-user chat defaults. An admin's per-model settings outrank them, see
+    # resolve_reasoning_effort and the factory temperature chain.
+    temperature_default: Mapped[float | None] = mapped_column(Float, default=None)
+    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
     auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     theme_preference: Mapped[ThemePreference | None] = mapped_column(
@@ -402,8 +417,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         postgresql.JSONB(), nullable=False, default=[]
     )
 
-    pinned_assistants: Mapped[list[int] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True, default=None
+    # Eagerly loaded: `UserInfo.from_model` reads this without a session, and a
+    # lazy load would fail outright under async.
+    pinned_personas: Mapped[list["User__PinnedPersona"]] = relationship(
+        "User__PinnedPersona",
+        order_by="User__PinnedPersona.display_order",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     effective_permissions: Mapped[list[str]] = mapped_column(
@@ -502,6 +522,22 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     def is_anonymous(self) -> bool:
         """Returns True if this is the anonymous user."""
         return str(self.id) == ANONYMOUS_USER_UUID
+
+    @property
+    def live_oauth_token(self) -> str | None:
+        """Access token of the link with the latest expiry, across providers.
+
+        A row can hold several links for one provider, one per re-issued
+        subject. The relationship has no order, so row position cannot pick
+        the live one. A link with no expiry ranks lowest. Ties keep row order.
+        Needs fully loaded links: a `load_only` collection lazy-loads each row.
+        """
+        if not self.oauth_accounts:
+            return None
+        live: OAuthAccount = max(
+            self.oauth_accounts, key=lambda link: link.expires_at or 0
+        )
+        return live.access_token
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -656,6 +692,25 @@ class Persona__DocumentSet(Base):
     document_set_id: Mapped[int] = mapped_column(
         ForeignKey("document_set.id"), primary_key=True
     )
+
+
+class User__PinnedPersona(Base):
+    """An agent a user has pinned to their sidebar, and where it sits.
+
+    `display_order` carries the ordering that a JSONB array used to carry by
+    position. It is only meaningful within one user, and it is dense: every
+    write path replaces the user's whole set and numbers it 0..n-1.
+    """
+
+    __tablename__ = "user__pinned_persona"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class Persona__User(Base):
@@ -928,7 +983,7 @@ class ConnectorCredentialPair(Base):
     )
 
     # Determines how documents are processed after fetching:
-    # REGULAR: Full pipeline (chunk → embed → Vespa)
+    # REGULAR: Full pipeline (chunk → embed → document index)
     # FILE_SYSTEM: Write to file system only (for CLI agent sandbox)
     processing_mode: Mapped[ProcessingMode] = mapped_column(
         Enum(ProcessingMode, native_enum=False),
@@ -1103,7 +1158,7 @@ class Document(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Number of chunks in the document (in Vespa)
+    # Number of chunks in the document (in the document index)
     # Only null for documents indexed prior to this change
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -1112,13 +1167,13 @@ class Document(Base):
     # Null for documents indexed before this column was added.
     content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # last time any vespa relevant row metadata or the doc changed.
+    # last time any document-index-relevant row metadata or the doc changed.
     # does not include last_synced
     last_modified: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True, default=func.now()
     )
 
-    # last successful sync to vespa
+    # last successful sync to the document index
     last_synced: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
@@ -1215,121 +1270,6 @@ class Document(Base):
             "id",
             postgresql_where=text("secondary_only_sync_pending IS TRUE"),
         ),
-    )
-
-
-class OpenSearchDocumentMigrationRecord(Base):
-    """Tracks the migration status of documents from Vespa to OpenSearch.
-
-    This table can be dropped when the migration is complete for all Onyx
-    instances.
-    """
-
-    __tablename__ = "opensearch_document_migration_record"
-
-    document_id: Mapped[str] = mapped_column(
-        String,
-        ForeignKey("document.id", ondelete="CASCADE"),
-        primary_key=True,
-        nullable=False,
-        index=True,
-    )
-    status: Mapped[OpenSearchDocumentMigrationStatus] = mapped_column(
-        Enum(OpenSearchDocumentMigrationStatus, native_enum=False),
-        default=OpenSearchDocumentMigrationStatus.PENDING,
-        nullable=False,
-        index=True,
-    )
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    attempts_count: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False, index=True
-    )
-    last_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-        index=True,
-    )
-
-    document: Mapped["Document"] = relationship("Document")
-
-
-class OpenSearchTenantMigrationRecord(Base):
-    """Tracks the state of the OpenSearch migration for a tenant.
-
-    Should only contain one row.
-
-    This table can be dropped when the migration is complete for all Onyx
-    instances.
-    """
-
-    __tablename__ = "opensearch_tenant_migration_record"
-    __table_args__ = (
-        # Singleton pattern - unique index on constant ensures only one row.
-        Index("idx_opensearch_tenant_migration_singleton", text("(true)"), unique=True),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
-    document_migration_record_table_population_status: Mapped[
-        OpenSearchTenantMigrationStatus
-    ] = mapped_column(
-        Enum(OpenSearchTenantMigrationStatus, native_enum=False),
-        default=OpenSearchTenantMigrationStatus.PENDING,
-        nullable=False,
-    )
-    num_times_observed_no_additional_docs_to_populate_migration_table: Mapped[int] = (
-        mapped_column(Integer, default=0, nullable=False)
-    )
-    overall_document_migration_status: Mapped[OpenSearchTenantMigrationStatus] = (
-        mapped_column(
-            Enum(OpenSearchTenantMigrationStatus, native_enum=False),
-            default=OpenSearchTenantMigrationStatus.PENDING,
-            nullable=False,
-        )
-    )
-    num_times_observed_no_additional_docs_to_migrate: Mapped[int] = mapped_column(
-        Integer,
-        default=0,
-        nullable=False,
-    )
-    last_updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-    # Opaque continuation token from Vespa's Visit API.
-    # NULL means "not started".
-    # Otherwise contains a serialized mapping between slice ID and continuation
-    # token for that slice.
-    vespa_visit_continuation_token: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    total_chunks_migrated: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    total_chunks_errored: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    total_chunks_in_vespa: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    migration_completed_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    enable_opensearch_retrieval: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    approx_chunk_count_in_vespa: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
     )
 
 
@@ -2104,6 +2044,10 @@ class CredentialCapabilityReportRow(Base):
     run_started_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # The run attempt owning the lifecycle mark; the task's terminal writes are
+    # fenced on it. NULL: no attempt owns the row (recorder writes, legacy
+    # rows), which no fenced write can match. Never searched on, so no index.
+    run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -2266,12 +2210,13 @@ class SearchSettings(Base):
         postgresql.ARRAY(Integer), nullable=True
     )
 
-    # allows for quantization -> less memory usage for a small performance hit.
-    # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
-    # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
-    embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
-        Enum(EmbeddingPrecision, native_enum=False),
-        default=EmbeddingPrecision.FLOAT,
+    # OpenSearch scalar quantization of the vector fields. Part of the index
+    # mapping, so it is fixed for the life of this row's index.
+    vector_quantization: Mapped[VectorQuantization] = mapped_column(
+        Enum(VectorQuantization, native_enum=False),
+        nullable=False,
+        default=VectorQuantization.NONE,
+        server_default=VectorQuantization.NONE.name,
     )
 
     # can be used to reduce dimensionality of vectors and save memory with
@@ -3276,6 +3221,11 @@ class ChatMessage(Base):
     # The display name of the model that generated this assistant message
     model_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Requested reasoning effort plus the kwargs actually sent to the provider.
+    request_params: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
     # What does this message contain
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
@@ -3648,6 +3598,25 @@ class ModelConfiguration(Base):
     # over both display_name and the LiteLLM-derived name everywhere in the UI.
     custom_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Never store AUTO in either column, an unset value already means AUTO.
+    reasoning_effort_max: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
@@ -3731,8 +3700,11 @@ class VoiceProvider(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
     provider_type: Mapped[str] = mapped_column(
         String
-    )  # "openai", "azure", "elevenlabs"
+    )  # "openai", "azure", "elevenlabs", "zoom"
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    api_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
     api_base: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -3789,6 +3761,9 @@ class CloudEmbeddingProvider(Base):
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(EncryptedString())
     api_version: Mapped[str | None] = mapped_column(String, nullable=True)
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    vertex_config: Mapped[VertexEmbeddingConfigDict | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",
@@ -4109,9 +4084,8 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Owner user. SET NULL (not CASCADE) so deleting a user orphans shared
-    # personas instead of destroying them; the delete flow soft-deletes the
-    # private ones first.
+    # Owner user. SET NULL (not CASCADE) so deleting a user orphans their
+    # personas for the admins instead of destroying them.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
@@ -4725,6 +4699,10 @@ class SecuritySettings(Base):
     llm_custom_config_env_injection: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # Lets synced connectors narrow document access to chosen user groups.
+    allow_connector_group_restrictions: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )
@@ -4745,6 +4723,15 @@ class SecuritySettings(Base):
     )
     password_require_special_char: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
+    )
+    jwt_public_key_url: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
+    jwt_expected_audience: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
+    jwt_expected_issuer: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
     )
     __table_args__ = (
         CheckConstraint("id = true", name="ck_security_settings_singleton"),
@@ -4786,6 +4773,11 @@ class FileRecord(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # The legacy copy looks records up by object, once per copied file.
+    __table_args__ = (
+        Index("ix_file_record_bucket_name_object_key", "bucket_name", "object_key"),
     )
 
 
@@ -5011,9 +5003,32 @@ class UserGroup__ConnectorCredentialPair(Base):
         default=True,
         primary_key=True,
     )
+    role: Mapped[ConnectorManageRole] = mapped_column(
+        Enum(ConnectorManageRole, native_enum=False), nullable=False
+    )
 
     cc_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair",
+    )
+
+
+class UserGroup__CCPairDataAccess(Base):
+    """Data-access groups of a cc-pair: groups whose members may read its
+    documents. For a PRIVATE pair, members see every document. For a
+    SYNC_RESTRICTED pair, members see only what the source's own permissions
+    allow. Separate from UserGroup__ConnectorCredentialPair, which scopes who
+    may manage the pair."""
+
+    __tablename__ = "user_group__cc_pair_data_access"
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
     )
 
 
@@ -5088,7 +5103,7 @@ class DocumentSet__UserGroup(Base):
     __tablename__ = "document_set__user_group"
 
     document_set_id: Mapped[int] = mapped_column(
-        ForeignKey("document_set.id"), primary_key=True
+        ForeignKey("document_set.id", ondelete="CASCADE"), primary_key=True
     )
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
@@ -5111,7 +5126,8 @@ class UserGroup(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
-    # whether or not changes to the UserGroup have been propagated to Vespa
+    # whether or not changes to the UserGroup have been propagated to the
+    # document index
     is_up_to_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # tell the sync job to clean up the group
     is_up_for_deletion: Mapped[bool] = mapped_column(
@@ -5653,6 +5669,27 @@ class AvailableTenant(PublicBase):
     shard_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class TenantSchemaSnapshot(PublicBase):
+    """SQL dump of a shard's template schema at one head revision, written by the
+    rollout job. apply_snapshot builds a tenant schema from it instead of replaying
+    the migration chain. The newest two per shard are kept so the image being
+    replaced keeps its own snapshot until the rollout completes."""
+
+    __tablename__ = "tenant_schema_snapshot"
+    __table_args__ = (
+        UniqueConstraint("shard_name", "alembic_revision"),
+        {"schema": "public"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shard_name: Mapped[str] = mapped_column(String, nullable=False)
+    alembic_revision: Mapped[str] = mapped_column(String, nullable=False)
+    dump: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 # This is a mapping from tenant IDs to anonymous user paths
 class TenantAnonymousUserPath(PublicBase):
     __tablename__ = "tenant_anonymous_user_path"
@@ -5661,6 +5698,37 @@ class TenantAnonymousUserPath(PublicBase):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
+    )
+
+
+class TenantSSODomain(PublicBase):
+    """Email domain to workspace, so the cloud login page can route someone who
+    has no account yet. Projected from each provider's allowed_email_domains,
+    which is per-tenant and therefore unreadable before a workspace is known.
+
+    A row only routes once `verified_at` is set: a workspace proves control of
+    the domain by publishing a DNS TXT record for it before strangers on the
+    domain are routed in and auto-provisioned.
+    """
+
+    __tablename__ = "tenant_sso_domain"
+    __table_args__ = (
+        # Only one workspace can hold a domain as VERIFIED. Several may hold it
+        # pending (unverified), so a squatter's pending claim cannot block the
+        # real owner from verifying and taking it.
+        Index(
+            "uq_tenant_sso_domain_verified",
+            "domain",
+            unique=True,
+            postgresql_where=text("verified_at IS NOT NULL"),
+        ),
+        {"schema": "public"},
+    )
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    domain: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    verified_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 
@@ -6078,11 +6146,9 @@ class TenantUsage(Base):
 
 
 class UserUsage(Base):
-    """
-    Daily per-user LLM usage rollup for cost/token attribution and budget checks.
-
-    One accumulating row per (user, window, model, flow, provider, incognito),
-    not per call.
+    """Daily user and system LLM usage rollup. ``user_usage`` is a legacy
+    physical name retained for deployment compatibility; partial indexes
+    provide each actor kind's accumulation key.
     """
 
     __tablename__ = "user_usage"
@@ -6092,6 +6158,15 @@ class UserUsage(Base):
     # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    actor_kind: Mapped[UsageActorKind] = mapped_column(
+        Enum(UsageActorKind, native_enum=False),
+        nullable=False,
+        default=UsageActorKind.USER,
+        server_default=UsageActorKind.USER.value,
+    )
+    system_attribution: Mapped[SystemUsageAttribution | None] = mapped_column(
+        Enum(SystemUsageAttribution, native_enum=False), nullable=True
     )
 
     window_start: Mapped[datetime.datetime] = mapped_column(
@@ -6133,9 +6208,14 @@ class UserUsage(Base):
     )
 
     __table_args__ = (
-        # Upsert key: accumulate into one row per dimension tuple per window.
-        # provider is non-null ('' when absent), so a plain unique index dedups
-        # correctly on every Postgres version (no NULLS NOT DISTINCT needed).
+        CheckConstraint(
+            "(actor_kind = 'USER' AND system_attribution IS NULL) OR "
+            "(actor_kind = 'SYSTEM' AND user_id IS NULL "
+            f"AND system_attribution IN ('{SystemUsageAttribution.ATTRIBUTED.value}', "
+            f"'{SystemUsageAttribution.UNATTRIBUTED.value}') "
+            "AND incognito = false)",
+            name="ck_user_usage_actor",
+        ),
         Index(
             "uq_user_usage_dims",
             "user_id",
@@ -6145,6 +6225,17 @@ class UserUsage(Base):
             "provider",
             "incognito",
             unique=True,
+            postgresql_where=text("actor_kind = 'USER'"),
+        ),
+        Index(
+            "uq_system_usage_dims",
+            "system_attribution",
+            "window_start",
+            "model",
+            "flow",
+            "provider",
+            unique=True,
+            postgresql_where=text("actor_kind = 'SYSTEM'"),
         ),
     )
 
@@ -6257,6 +6348,9 @@ class BuildSession(Base):
     artifacts: Mapped[list["Artifact"]] = relationship(
         "Artifact", back_populates="session", cascade="all, delete-orphan"
     )
+    receipts: Mapped[list["ActionReceipt"]] = relationship(
+        "ActionReceipt", back_populates="session", cascade="all, delete-orphan"
+    )
     messages: Mapped[list["BuildMessage"]] = relationship(
         "BuildMessage", back_populates="session", cascade="all, delete-orphan"
     )
@@ -6367,6 +6461,23 @@ class Artifact(Base):
     # path of artifact in sandbox relative to outputs/
     path: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    # Turn that last produced or changed this artifact. NULL when the
+    # producing turn is unknown.
+    turn_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Content hash from the sandbox manifest. Drives change detection: an
+    # upsert with a different hash bumps version and invalidates the archive.
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Bumped on every content change so a consumer holding an earlier
+    # version can detect that it was superseded.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    # Deleted artifacts keep their row so stale cards grey out instead of 404ing.
+    deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    # Reserved for archived bytes served without the sandbox. NULL until an
+    # archive exists.
+    archive_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -6385,6 +6496,82 @@ class Artifact(Base):
     __table_args__ = (
         Index("ix_artifact_session_created", "session_id", desc("created_at")),
         Index("ix_artifact_type", "type"),
+        # Upsert key: one row per file, edits update in place instead of
+        # duplicating.
+        Index("uq_artifact_session_path", "session_id", "path", unique=True),
+    )
+
+
+class ActionReceipt(Base):
+    """Record of one external action a session performed, covering
+    write-effect actions and anything that went through an approval.
+
+    Written PENDING before the action executes, finalized CONFIRMED or FAILED
+    by the recorder's response and error handling, swept to UNKNOWN when
+    orphaned. Only CONFIRMED rows are presented as proof.
+    """
+
+    __tablename__ = "action_receipt"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The gated target this action hit, via the polymorphic ``gated_app``
+    # identity row. Goes NULL when that target is deleted, the receipt stays
+    # as a record of what happened.
+    gated_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("gated_app.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # The approval that authorized this action, when it went through one.
+    approval_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("action_approval.approval_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Typed action id, e.g. ``slack.messages.write`` or an MCP tool name.
+    action_type: Mapped[str] = mapped_column(String, nullable=False)
+    # Catalog effect kind (read/write) captured at record time, so the row is
+    # self-contained even if the catalog reclassifies later.
+    effect: Mapped[str] = mapped_column(String, nullable=False)
+    # Human-readable destination, e.g. ``#exec-team`` or ``Google Drive``.
+    destination: Mapped[str] = mapped_column(String, nullable=False)
+    # Deep link into the destination, when a provider extractor could read one
+    # from the response.
+    link: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Coalescing key so multi-request provider flows (a Slack upload spans
+    # several matched requests) collapse into one receipt.
+    operation_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[ReceiptStatus] = mapped_column(
+        Enum(ReceiptStatus, native_enum=False, name="receiptstatus"),
+        nullable=False,
+        # Non-native enums store the member NAME, so the default must match it.
+        server_default=ReceiptStatus.PENDING.name,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    session: Mapped[BuildSession] = relationship(
+        "BuildSession", back_populates="receipts"
+    )
+
+    __table_args__ = (
+        Index("ix_action_receipt_session_created", "session_id", desc("created_at")),
+        # One receipt per logical operation. NULL keys stay independent rows.
+        Index(
+            "uq_action_receipt_session_operation",
+            "session_id",
+            "operation_key",
+            unique=True,
+            postgresql_where=text("operation_key IS NOT NULL"),
+        ),
     )
 
 
@@ -6771,6 +6958,13 @@ class ScimUserMapping(Base):
     """Maps SCIM externalId from the IdP to an Onyx User."""
 
     __tablename__ = "scim_user_mapping"
+    __table_args__ = (
+        Index(
+            "uq_scim_user_mapping_scim_username_lower",
+            text("lower(scim_username)"),
+            unique=True,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     external_id: Mapped[str | None] = mapped_column(
@@ -7159,7 +7353,8 @@ class GatedApp(Base):
             if self.external_app_id is not None
             else self.mcp_server_id
         )
-        assert tid is not None  # guaranteed by ck_gated_app_single_target
+        if tid is None:
+            raise ValueError("Gated app must have a target")
         return tid
 
     @property

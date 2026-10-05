@@ -1,5 +1,5 @@
 /**
- * Page Object Model for the admin "MCP Actions" page (/admin/actions/mcp).
+ * Page Object Model for the admin "MCP Actions" page (/admin/mcp-actions).
  *
  * Drives the Add-Server modal and the auth-configuration modal (OAuth / API Key
  * shared / API Key per-user). Used by the UI "create-flow" tests we deliberately
@@ -7,6 +7,7 @@
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 export class AdminMcpServersPage {
   readonly page: Page;
@@ -61,8 +62,8 @@ export class AdminMcpServersPage {
   // ---------------------------------------------------------------------------
 
   async goto(): Promise<void> {
-    await this.page.goto("/admin/actions/mcp");
-    await this.page.waitForURL("**/admin/actions/mcp**");
+    await this.page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
+    await this.page.waitForURL(`**${ADMIN_ROUTES.MCP_ACTIONS.path}**`);
   }
 
   // ---------------------------------------------------------------------------

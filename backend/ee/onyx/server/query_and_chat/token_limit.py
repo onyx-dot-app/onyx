@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.token_limit import (
     fetch_all_user_token_rate_limits,
@@ -13,7 +14,8 @@ from onyx.db.token_limit import (
 )
 from onyx.db.user_usage import (
     TokenUsageBucket,
-    get_cost_window_start,
+    cost_budget_fetch_cutoff,
+    cost_budget_limits,
     get_group_cost_cents_buckets_since,
     get_group_token_buckets_since,
     get_user_cost_cents_buckets_since,
@@ -36,8 +38,9 @@ def _check_token_rate_limits(user: User) -> None:
     if user.is_anonymous:
         _user_is_rate_limited_by_global()
 
-    elif is_api_key_email_address(user.email):
-        # API keys are only rate limited by global settings
+    elif user.account_type == AccountType.SERVICE_ACCOUNT or is_api_key_email_address(
+        user.email
+    ):
         _user_is_rate_limited_by_global()
 
     else:
@@ -75,13 +78,10 @@ def _user_is_rate_limited(user_id: UUID) -> None:
             token_reset = _token_budget_reset(user_rate_limits, user_usage)
 
         cost_reset: datetime | None = None
-        cost_limits = [
-            limit for limit in user_rate_limits if limit.cost_budget_cents is not None
-        ]
+        cost_limits = cost_budget_limits(user_rate_limits)
         if cost_limits:
-            cost_cutoff = get_cost_window_start(
-                datetime.now(timezone.utc),
-                max(limit.period_hours for limit in cost_limits),
+            cost_cutoff = cost_budget_fetch_cutoff(
+                datetime.now(timezone.utc), cost_limits
             )
             cost_buckets = get_user_cost_cents_buckets_since(
                 db_session, str(user_id), cost_cutoff
@@ -126,13 +126,10 @@ def _user_is_rate_limited_by_group(user_id: UUID) -> None:
             )
 
         group_cost_usage: dict[int, list[tuple[datetime, float]]] = {}
-        cost_limits = [
-            limit for limit in all_rate_limits if limit.cost_budget_cents is not None
-        ]
+        cost_limits = cost_budget_limits(all_rate_limits)
         if cost_limits:
-            cost_cutoff = get_cost_window_start(
-                datetime.now(timezone.utc),
-                max(limit.period_hours for limit in cost_limits),
+            cost_cutoff = cost_budget_fetch_cutoff(
+                datetime.now(timezone.utc), cost_limits
             )
             group_cost_usage = get_group_cost_cents_buckets_since(
                 db_session, user_group_ids, cost_cutoff

@@ -26,6 +26,8 @@ from onyx.db.users import (
     get_user_groups,
     set_user_groups__no_commit,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
@@ -73,6 +75,28 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
         )
         for api_key in api_keys
     ]
+
+
+def fetch_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor | None:
+    api_key = db_session.scalar(
+        select(ApiKey).options(joinedload(ApiKey.user)).where(ApiKey.id == api_key_id)
+    )
+    if api_key is None:
+        return None
+
+    groups_by_user = batch_get_user_groups(
+        db_session, [api_key.user_id], include_default=True
+    )
+    return ApiKeyDescriptor(
+        api_key_id=api_key.id,
+        api_key_display=api_key.api_key_display,
+        api_key_name=api_key.name,
+        user_id=api_key.user_id,
+        groups=[
+            UserGroupInfo(id=gid, name=gname)
+            for gid, gname in groups_by_user.get(api_key.user_id, [])
+        ],
+    )
 
 
 async def fetch_user_for_api_key(
@@ -174,7 +198,9 @@ def update_api_key(
 ) -> ApiKeyDescriptor:
     existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
     if existing_api_key is None:
-        raise ValueError(f"API key with id {api_key_id} does not exist")
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"API key with id {api_key_id} does not exist"
+        )
 
     existing_api_key.name = api_key_args.name
     api_key_user = db_session.scalar(

@@ -12,6 +12,7 @@ Metrics are collected via two mechanisms:
    counters, histograms, and attribution
 """
 
+import threading
 import time
 
 from fastapi import Request
@@ -25,6 +26,8 @@ from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.pool import ConnectionPoolEntry, PoolProxiedConnection, QueuePool
 
+from onyx.db.engine.async_sql_engine import async_engine_hooks
+from onyx.db.engine.shard_registry import is_default_shard, shard_engine_hooks
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
     CURRENT_ENDPOINT_CONTEXTVAR,
@@ -105,9 +108,14 @@ class PoolStateCollector(Collector):
 
     def __init__(self) -> None:
         self._pools: list[tuple[str, QueuePool]] = []
+        self._lock = threading.Lock()
 
     def add_pool(self, label: str, pool: QueuePool) -> None:
-        self._pools.append((label, pool))
+        # Shard engines register from request threads while scrapes iterate.
+        # Upsert by label: a rebuilt engine replaces its disposed pool.
+        with self._lock:
+            self._pools = [(lb, pl) for lb, pl in self._pools if lb != label]
+            self._pools.append((label, pool))
 
     def collect(self) -> list[GaugeMetricFamily]:
         checked_out = GaugeMetricFamily(
@@ -131,7 +139,9 @@ class PoolStateCollector(Collector):
             labels=["engine"],
         )
 
-        for label, pool in self._pools:
+        with self._lock:
+            pools = list(self._pools)
+        for label, pool in pools:
             checked_out.add_metric([label], pool.checkedout())
             checked_in.add_metric([label], pool.checkedin())
             overflow.add_metric([label], pool.overflow())
@@ -175,15 +185,19 @@ def _register_pool_events(engine: Engine, label: str) -> None:
         dbapi_conn: DBAPIConnection,  # noqa: ARG001
         conn_record: ConnectionPoolEntry,
     ) -> None:
-        handler = conn_record.info.pop("_metrics_endpoint", "unknown")
+        handler = conn_record.info.pop("_metrics_endpoint", None)
         tenant_id = conn_record.info.pop("_metrics_tenant_id", "unknown")
         start = conn_record.info.pop("_metrics_checkout_time", None)
         _checkin_total.labels(engine=label).inc()
-        _connections_held.labels(
-            handler=handler, engine=label, tenant_id=tenant_id
-        ).dec()
+        # A connection checked out before the listeners attached (engine built
+        # while registration raced) carries no marker; decrementing would leave
+        # the gauge negative forever.
+        if handler is not None:
+            _connections_held.labels(
+                handler=handler, engine=label, tenant_id=tenant_id
+            ).dec()
         if start is not None:
-            _hold_seconds.labels(handler=handler, engine=label).observe(
+            _hold_seconds.labels(handler=handler or "unknown", engine=label).observe(
                 time.monotonic() - start
             )
 
@@ -216,35 +230,75 @@ def _register_pool_events(engine: Engine, label: str) -> None:
             )
 
 
+_collector = PoolStateCollector()
+# Label -> the engine registered under it. Holding the Engine (not just an id)
+# makes the identity check safe against id reuse after garbage collection, and
+# lets a rebuilt engine (reset flows) replace its predecessor's registration.
+_registered_engines: dict[str, Engine] = {}
+_registration_lock = threading.Lock()
+_collector_registered = False
+
+
+def _register_engine_pool(label: str, engine: Engine | AsyncEngine) -> None:
+    """Register one engine's pool with the shared collector.
+
+    Repeated calls for the same engine are no-ops (the hooks deliver
+    at-least-once); a different engine under a known label replaces the stale
+    registration. Engines using NullPool report lifecycle events only.
+    For AsyncEngine, events are registered on the underlying sync_engine.
+    """
+    sync_engine_for_identity = (
+        engine.sync_engine if isinstance(engine, AsyncEngine) else engine
+    )
+    with _registration_lock:
+        if _registered_engines.get(label) is sync_engine_for_identity:
+            return
+        _registered_engines[label] = sync_engine_for_identity
+
+    sync_engine = sync_engine_for_identity
+    pool = sync_engine.pool
+
+    # Lifecycle events fire for every pool class. Under NullPool (external
+    # pooler deployments) they are the only app-side connection metrics.
+    _register_pool_events(sync_engine, label)
+
+    if isinstance(pool, QueuePool):
+        _collector.add_pool(label, pool)
+        logger.info("Registered pool metrics for engine '%s'", label)
+    else:
+        logger.info(
+            "Registered pool lifecycle metrics for engine '%s' (%s has no pool state)",
+            label,
+            type(pool).__name__,
+        )
+
+
 def setup_postgres_connection_pool_metrics(
     engines: dict[str, Engine | AsyncEngine],
 ) -> None:
-    """Register pool metrics for all provided engines.
+    """Register pool metrics for the provided engines and all shard engines.
 
-    Args:
-        engines: Mapping of engine label to Engine or AsyncEngine.
-            Example: {"sync": sync_engine, "async": async_engine, "readonly": ro_engine}
-
-    Engines using NullPool are skipped (no pool state to monitor).
-    For AsyncEngine, events are registered on the underlying sync_engine.
+    ``engines`` maps labels to the default shard's engines (e.g. ``sync``,
+    ``async``, ``readonly``). Lazily-created shard engines register through the
+    engine-creation hooks under ``sync_<shard>`` / ``async_<shard>``.
     """
-    collector = PoolStateCollector()
+
+    def register_async_shard(shard: str, engine: AsyncEngine) -> None:
+        # The default async engine registers above under its historical label.
+        if not is_default_shard(shard):
+            _register_engine_pool(f"async_{shard}", engine)
 
     for label, engine in engines.items():
-        # Resolve async engines to their underlying sync engine
-        sync_engine = engine.sync_engine if isinstance(engine, AsyncEngine) else engine
+        _register_engine_pool(label, engine)
 
-        pool = sync_engine.pool
-        if not isinstance(pool, QueuePool):
-            logger.info(
-                "Skipping pool metrics for engine '%s' (%s — no pool state)",
-                label,
-                type(pool).__name__,
-            )
-            continue
+    shard_engine_hooks.subscribe(
+        lambda shard, engine: _register_engine_pool(f"sync_{shard}", engine)
+    )
+    async_engine_hooks.subscribe(register_async_shard)
 
-        collector.add_pool(label, pool)
-        _register_pool_events(sync_engine, label)
-        logger.info("Registered pool metrics for engine '%s'", label)
-
-    REGISTRY.register(collector)
+    global _collector_registered
+    with _registration_lock:
+        first_setup = not _collector_registered
+        _collector_registered = True
+    if first_setup:
+        REGISTRY.register(_collector)

@@ -39,7 +39,9 @@ This command will:
 
 WARNING: This is a destructive operation. All data will be lost.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runDBDrop(opts)
+			if err := runDBDrop(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -49,11 +51,11 @@ WARNING: This is a destructive operation. All data will be lost.`,
 	return cmd
 }
 
-func runDBDrop(opts *DBDropOptions) {
+func runDBDrop(opts *DBDropOptions) error {
 	// Find PostgreSQL container.
 	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
-		log.Fatalf("Failed to find PostgreSQL container: %v", err)
+		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
 	}
 	log.Infof("Found PostgreSQL container: %s", container)
 
@@ -72,7 +74,7 @@ func runDBDrop(opts *DBDropOptions) {
 
 		if !prompt.Confirm(msg) {
 			log.Info("Aborted.")
-			return
+			return nil
 		}
 	}
 
@@ -81,7 +83,7 @@ func runDBDrop(opts *DBDropOptions) {
 	if opts.Schema != "" {
 		// Validate schema name to prevent SQL injection.
 		if !validIdentifier.MatchString(opts.Schema) {
-			log.Fatalf("Invalid schema name: %s", opts.Schema)
+			return fatalErrorf("Invalid schema name: %s", opts.Schema)
 		}
 
 		// Drop and recreate schema.
@@ -91,12 +93,12 @@ func runDBDrop(opts *DBDropOptions) {
 
 		args := append(config.PsqlArgs(), "-c", dropSchemaSQL)
 		if err := docker.ExecWithEnv(container, env, append([]string{"psql"}, args...)...); err != nil {
-			log.Fatalf("Failed to drop schema: %v", err)
+			return fatalErrorf("Failed to drop schema: %w", err)
 		}
 
 		args = append(config.PsqlArgs(), "-c", createSchemaSQL)
 		if err := docker.ExecWithEnv(container, env, append([]string{"psql"}, args...)...); err != nil {
-			log.Fatalf("Failed to create schema: %v", err)
+			return fatalErrorf("Failed to create schema: %w", err)
 		}
 
 		log.Infof("Schema '%s' dropped and recreated successfully", opts.Schema)
@@ -111,7 +113,7 @@ func runDBDrop(opts *DBDropOptions) {
 		// Terminate existing connections.
 		// Validate database name to prevent SQL injection.
 		if !validIdentifier.MatchString(config.Database) {
-			log.Fatalf("Invalid database name: %s", config.Database)
+			return fatalErrorf("Invalid database name: %s", config.Database)
 		}
 
 		// Terminate existing connections.
@@ -128,17 +130,18 @@ func runDBDrop(opts *DBDropOptions) {
 		dropSQL := fmt.Sprintf("DROP DATABASE IF EXISTS %s;", config.Database)
 		args = []string{"psql", "-U", config.User, "-d", maintenanceDB, "-c", dropSQL}
 		if err := docker.ExecWithEnv(container, env, args...); err != nil {
-			log.Fatalf("Failed to drop database: %v", err)
+			return fatalErrorf("Failed to drop database: %w", err)
 		}
 
 		// Create database.
 		createSQL := fmt.Sprintf("CREATE DATABASE %s;", config.Database)
 		args = []string{"psql", "-U", config.User, "-d", maintenanceDB, "-c", createSQL}
 		if err := docker.ExecWithEnv(container, env, args...); err != nil {
-			log.Fatalf("Failed to create database: %v", err)
+			return fatalErrorf("Failed to create database: %w", err)
 		}
 
 		log.Infof("Database '%s' dropped and recreated successfully", config.Database)
 		log.Info("Run 'ods db upgrade' to apply migrations")
 	}
+	return nil
 }

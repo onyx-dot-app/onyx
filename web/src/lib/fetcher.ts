@@ -1,7 +1,16 @@
+/** JSON body of a backend error response. `OnyxError` and the request
+ * validation handler both send `error_code` and a string `detail`; the
+ * validation and `ValueError` handlers also send `message`. */
+export interface ErrorResponseBody {
+  detail?: string;
+  error_code?: string;
+  message?: string;
+}
+
 export class FetchError extends Error {
   status: number;
-  info: any;
-  constructor(message: string, status: number, info: any) {
+  info: ErrorResponseBody | null;
+  constructor(message: string, status: number, info: ErrorResponseBody | null) {
     super(message);
     this.status = status;
     this.info = info;
@@ -9,7 +18,7 @@ export class FetchError extends Error {
 }
 
 export class RedirectError extends FetchError {
-  constructor(message: string, status: number, info: any) {
+  constructor(message: string, status: number, info: ErrorResponseBody | null) {
     super(message, status, info);
   }
 }
@@ -38,6 +47,10 @@ export function isAuthStatusError(error: unknown): boolean {
     error instanceof FetchError &&
     (error.status === 401 || error.status === 402 || error.status === 403)
   );
+}
+
+export function isNotFoundError(error: unknown): boolean {
+  return error instanceof FetchError && error.status === 404;
 }
 
 /**

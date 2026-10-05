@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { useDropzone, type FileWithPath } from "react-dropzone";
+import { useDropzone } from "react-dropzone";
 import {
   prepareSkillBundleUpload,
   type PreparedSkillBundle,
+  type SkillUploadFile,
 } from "@/lib/skills/bundleUpload";
 
 interface SkillBundlePickerProps {
@@ -29,10 +31,11 @@ export default function SkillBundlePicker({
   onError,
   onPreparingChange,
 }: SkillBundlePickerProps) {
+  const t = useTranslations("skills.sections");
   const [preparing, setPreparing] = useState(false);
 
   const handleDrop = useCallback(
-    async (files: FileWithPath[]) => {
+    async (files: SkillUploadFile[]) => {
       if (files.length === 0) return;
       setPreparing(true);
       onPreparingChange?.(true);
@@ -42,14 +45,14 @@ export default function SkillBundlePicker({
       } catch (error) {
         console.error("Failed to prepare skill bundle", error);
         onError(
-          error instanceof Error ? error.message : "Could not read the upload."
+          error instanceof Error ? error.message : t("upload.error.readFailed")
         );
       } finally {
         setPreparing(false);
         onPreparingChange?.(false);
       }
     },
-    [onChange, onError, onPreparingChange]
+    [onChange, onError, onPreparingChange, t]
   );
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
@@ -96,18 +99,18 @@ export default function SkillBundlePicker({
           onClick={open}
         >
           {preparing
-            ? "Preparing upload..."
+            ? t("bundlePicker.preparing.label")
             : busyLabel
               ? busyLabel
               : value
-                ? "Choose a different file"
-                : "Drag and drop or click to upload"}
+                ? t("bundlePicker.chooseDifferent.label")
+                : t("bundlePicker.upload.label")}
         </Button>
         {(value || compact) && (
           <Text font="main-ui-body" color="text-03">
             {value
               ? `${value.displayName}${value.source === "folder" ? "/" : ""}`
-              : "No file selected"}
+              : t("bundlePicker.noFile.description")}
           </Text>
         )}
       </div>

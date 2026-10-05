@@ -52,7 +52,6 @@ def _sdk_partition_request(
 
 
 def unstructured_to_text(file: IO[Any], file_name: str) -> str:
-    from unstructured.staging.base import dict_to_elements
     from unstructured_client import UnstructuredClient
 
     logger.debug("Starting to read file: %s", file_name)
@@ -67,5 +66,5 @@ def unstructured_to_text(file: IO[Any], file_name: str) -> str:
         logger.error(err)
         raise ValueError(err)
 
-    elements = dict_to_elements(response.elements or [])
-    return "\n\n".join(str(el) for el in elements)
+    # The API returns one dict per document element; only its text is needed.
+    return "\n\n".join(el.get("text", "") for el in response.elements or [])

@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { useField } from "formik";
+import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
-import { Divider, Text } from "@opal/components";
+import { Divider, InputFile } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
-import type { EmbeddingProvider } from "@/lib/indexing/types";
+import type {
+  EmbeddingProvider,
+  IndexSettingsTranslator,
+} from "@/lib/searchSettings/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -26,14 +30,17 @@ interface ApiKeyFieldProps {
 }
 
 export function ApiKeyField({ provider }: ApiKeyFieldProps) {
+  const t = useTranslations("admin.indexSettings");
+
   return (
     <InputVertical
-      title="API Key"
+      title={t("fields.apiKey.title")}
       withLabel="apiKey"
       subDescription={markdown(
-        `Paste your [API key](${provider.apiLink ?? ""}) from ${
-          provider.displayName
-        } to access your models.`
+        t("fields.apiKey.description", {
+          link: provider.apiLink ?? "",
+          provider: provider.displayName,
+        })
       )}
     >
       <PasswordInputTypeInField name="apiKey" />
@@ -64,40 +71,28 @@ export function ApiUrlField({
 }
 
 export function GoogleCredentialsField() {
-  const [, , helpers] = useField<string>("apiKey");
-  const [fileName, setFileName] = useState("");
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    setFileName("");
-    if (!file) {
-      void helpers.setValue("");
-      void helpers.setTouched(true);
-      return;
-    }
-    setFileName(file.name);
-    try {
-      const content = JSON.parse(await file.text());
-      void helpers.setValue(JSON.stringify(content));
-    } catch {
-      void helpers.setValue("");
-    }
-    void helpers.setTouched(true);
-  };
-
+  const t = useTranslations("admin.indexSettings");
+  const [, meta, helpers] = useField<string>("apiKey");
   return (
-    <InputVertical title="Upload JSON credentials file" withLabel="apiKey">
-      <input
+    <InputVertical
+      title={t("fields.googleCredentials.title")}
+      withLabel="apiKey"
+    >
+      <InputFile
         id="apiKey"
-        type="file"
+        name="apiKey"
+        error={meta.touched && !!meta.error}
+        setValue={(value) => {
+          void helpers.setValue(value);
+        }}
+        onValueSet={() => {
+          void helpers.setTouched(true);
+        }}
+        onBlur={() => {
+          void helpers.setTouched(true);
+        }}
         accept=".json"
-        onChange={handleFileUpload}
       />
-      {fileName && (
-        <Text font="secondary-body" color="text-03">
-          {fileName}
-        </Text>
-      )}
     </InputVertical>
   );
 }
@@ -141,64 +136,72 @@ export function TextField({
 // subDescription differs.
 // ---------------------------------------------------------------------------
 
-export const modelSpecSchemaShape = {
-  modelName: Yup.string().trim().required("Model name is required"),
-  modelDim: Yup.number()
-    .required("Model dimension is required")
-    .test("positive-int", "Must be a positive integer", (value) => {
-      const parsed = Number(value);
-      return Number.isInteger(parsed) && parsed > 0 && parsed <= 10000;
-    }),
-  queryPrefix: Yup.string().defined().default(""),
-  passagePrefix: Yup.string().defined().default(""),
-  normalize: Yup.boolean().defined().default(false),
-};
+export function modelSpecSchemaShape(t: IndexSettingsTranslator) {
+  return {
+    modelName: Yup.string().trim().required(t("validation.modelNameRequired")),
+    modelDim: Yup.number()
+      .required(t("validation.modelDimRequired"))
+      .test("positive-int", t("validation.modelDimPositive"), (value) => {
+        const parsed = Number(value);
+        return Number.isInteger(parsed) && parsed > 0 && parsed <= 10000;
+      }),
+    queryPrefix: Yup.string().defined().default(""),
+    passagePrefix: Yup.string().defined().default(""),
+    normalize: Yup.boolean().defined().default(false),
+  };
+}
 
 interface ModelSpecFieldsProps {
   modelNameSubDescription?: string;
 }
 
 export function ModelSpecFields({
-  modelNameSubDescription = "Onyx will connect to this model on your self-hosted endpoint.",
+  modelNameSubDescription,
 }: ModelSpecFieldsProps) {
+  const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
+
   return (
     <>
       <TextField
         name="modelName"
-        title="Model Name"
-        placeholder="model-name"
-        subDescription={modelNameSubDescription}
+        title={t("fields.modelName.title")}
+        placeholder={t("fields.modelName.placeholder")}
+        subDescription={
+          modelNameSubDescription ??
+          t("fields.modelName.selfHostedDescription", { appName })
+        }
       />
 
       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
       <TextField
         name="modelDim"
-        title="Model Dimension"
-        placeholder="e.g., 768"
+        title={t("fields.modelDim.title")}
+        placeholder={t("fields.modelDim.placeholder")}
         inputMode="numeric"
-        subDescription="Number of dimensions in the embeddings generated by this model."
+        subDescription={t("fields.modelDim.description")}
       />
 
       <TextField
         name="queryPrefix"
-        title="Query Prefix"
-        suffix="optional"
-        placeholder="e.g., 'query: '"
-        subDescription="This is prepended to search queries before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
+        title={t("fields.queryPrefix.title")}
+        suffix={t("fields.optional.suffix")}
+        placeholder={t("fields.queryPrefix.placeholder")}
+        subDescription={t("fields.queryPrefix.description")}
       />
 
       <TextField
         name="passagePrefix"
-        title="Passage Prefix"
-        suffix="optional"
-        placeholder="e.g., 'passage: '"
-        subDescription="This is prepended to indexed document chunks before passing to the model, if required by your embedding model. Incorrect or missing prefixes will degrade embedding quality."
+        title={t("fields.passagePrefix.title")}
+        suffix={t("fields.optional.suffix")}
+        placeholder={t("fields.passagePrefix.placeholder")}
+        subDescription={t("fields.passagePrefix.description")}
       />
 
       <InputHorizontal
-        title="Normalize Embeddings"
-        description="Normalize the embeddings generated by the model. Recommended for most models unless your embedding model documentation specifies otherwise."
+        title={t("fields.normalize.title")}
+        description={t("fields.normalize.description")}
         withLabel="normalize"
       >
         <SwitchField name="normalize" />

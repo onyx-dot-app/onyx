@@ -6,14 +6,12 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches: [main]
     paths:
       - "backend/**"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
-      - ".github/actions/setup-playwright/**"
       - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
@@ -32,8 +30,9 @@ env:
   S3_AWS_ACCESS_KEY_ID_FOR_TEST: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
   S3_AWS_SECRET_ACCESS_KEY_FOR_TEST: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
 
-  # MinIO
+  # Object store (dev overlay publishes it on 9004) and the legacy MinIO (9005)
   S3_ENDPOINT_URL: "http://localhost:9004"
+  S3_LEGACY_ENDPOINT_URL: "http://localhost:9005"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
@@ -46,8 +45,8 @@ env:
   CONFLUENCE_ACCESS_TOKEN_SCOPED: ${{ secrets.CONFLUENCE_ACCESS_TOKEN_SCOPED }}
 
   # Jira
-  JIRA_ADMIN_USER_EMAIL: ${{ vars.JIRA_ADMIN_USER_EMAIL }}
-  JIRA_ADMIN_API_TOKEN: ${{ secrets.JIRA_ADMIN_API_TOKEN }}
+  JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
   # LLMs
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -68,7 +67,7 @@ jobs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -81,7 +80,7 @@ jobs:
 
   external-dependency-unit-tests:
     needs: discover-test-dirs
-    # Use larger runner with more resources for Vespa
+    # Use larger runner with more resources for OpenSearch
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -102,7 +101,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -113,9 +112,6 @@ jobs:
             backend/requirements/default.txt
             backend/requirements/dev.txt
             backend/requirements/ee.txt
-
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
 
       - name: Setup Helm
         if: matrix.test-dir == 'craft_helm'
@@ -155,6 +151,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
             up -d \
+            object-store \
             minio \
             relational_db \
             cache \
@@ -162,11 +159,9 @@ jobs:
             code-interpreter
 
       - name: Run migrations
+        working-directory: backend
         run: |
-          cd backend
-          # Run migrations to head
           alembic upgrade head
-          alembic heads --verbose
 
       # A real OIDC server for the live multi-provider login test. Auth leg only.
       # Fail if it never becomes ready, otherwise the live tests would silently skip.

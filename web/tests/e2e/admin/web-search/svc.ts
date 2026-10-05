@@ -1,6 +1,7 @@
 import type { Page, Locator } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-export const WEB_SEARCH_URL = "/admin/configuration/web-search";
+export const WEB_SEARCH_URL = ADMIN_ROUTES.WEB_SEARCH.path;
 
 export const FAKE_SEARCH_PROVIDERS = {
   exa: {
@@ -41,10 +42,7 @@ export const FAKE_CONTENT_PROVIDERS = {
 };
 
 export function findProviderCard(page: Page, providerLabel: string): Locator {
-  return page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerLabel })
-    .first();
+  return page.getByLabel(providerLabel, { exact: true }).first();
 }
 
 export function mainContainer(page: Page): Locator {

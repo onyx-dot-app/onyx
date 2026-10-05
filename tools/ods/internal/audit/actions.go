@@ -31,8 +31,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/charlievieth/fastwalk"
 	cpb "github.com/google/osv-scalibr/binary/proto/config_go_proto"
 	"github.com/google/osv-scalibr/extractor/filesystem"
 	"github.com/google/osv-scalibr/extractor/filesystem/misc/githubactions"
@@ -60,14 +62,16 @@ type actionRef struct {
 }
 
 // scanActions discovers the actions used across the repo's workflows and
-// composite actions and matches them against OSV.dev advisories. Returns nil when
-// nothing is referenced or no advisories affect any used action.
-func scanActions() ([]Finding, error) {
+// composite actions and matches them against the advisories served at queryURL
+// (OSV.dev in production). Returns nil when nothing is referenced or no
+// advisories affect any used action. With strict, a failed advisory query or
+// tag lookup fails the scan instead of leaving that action out.
+func scanActions(queryURL string, strict bool) ([]Finding, error) {
 	root, err := paths.GitRoot()
 	if err != nil {
 		return nil, err
 	}
-	refs, err := extractActions(root)
+	refs, err := extractActions(root, strict)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +87,10 @@ func scanActions() ([]Finding, error) {
 	names := uniqueActionNames(refs)
 	failed := 0
 	for _, name := range names {
-		vulns, err := queryActionAdvisories(client, name)
+		vulns, err := queryActionAdvisories(client, queryURL, name)
+		if err != nil && strict {
+			return nil, fmt.Errorf("OSV query failed for action %s: %w", name, err)
+		}
 		if err != nil {
 			// A single flaky query shouldn't sink the whole audit; the lockfile
 			// scan is the primary gate. Warn and treat the action as clean.
@@ -107,6 +114,20 @@ func scanActions() ([]Finding, error) {
 	// Only actions with advisories need version resolution, so tag lookups (the
 	// expensive part) run for a handful of actions at most.
 	tagCache := make(map[string][]ghTag)
+	if strict {
+		// Resolve up front, since actionVersion only warns on a failed lookup
+		// and demotes the action's findings to unverified.
+		for _, ref := range refs {
+			if _, ok := tagCache[ref.Name]; ok || !ref.IsSHA || len(advisories[ref.Name]) == 0 {
+				continue
+			}
+			tags, err := resolveActionTags(ref.Name)
+			if err != nil {
+				return nil, fmt.Errorf("could not resolve tags for %s: %w", ref.Name, err)
+			}
+			tagCache[ref.Name] = tags
+		}
+	}
 	var findings []Finding
 	for _, ref := range refs {
 		vulns := advisories[ref.Name]
@@ -129,18 +150,19 @@ func scanActions() ([]Finding, error) {
 
 // extractActions discovers the actions referenced across the repo's reusable
 // workflows (.github/workflows) and composite actions (.github/actions). Returns
-// nil when neither exists.
-func extractActions(root string) ([]actionRef, error) {
+// nil when neither exists. A file the extractor rejects is skipped with a
+// warning, or fails the extraction when strict.
+func extractActions(root string, strict bool) ([]actionRef, error) {
 	ext, err := githubactions.New(&cpb.PluginConfig{})
 	if err != nil {
 		return nil, err
 	}
 
-	workflowRefs, err := extractWorkflowActions(ext, root)
+	workflowRefs, err := extractWorkflowActions(ext, root, strict)
 	if err != nil {
 		return nil, err
 	}
-	compositeRefs, err := extractCompositeActions(ext, root)
+	compositeRefs, err := extractCompositeActions(ext, root, strict)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +171,7 @@ func extractActions(root string) ([]actionRef, error) {
 
 // extractWorkflowActions runs the github/actions extractor over each
 // .github/workflows/*.{yml,yaml} file.
-func extractWorkflowActions(ext filesystem.Extractor, root string) ([]actionRef, error) {
+func extractWorkflowActions(ext filesystem.Extractor, root string, strict bool) ([]actionRef, error) {
 	dir := filepath.Join(root, ".github", "workflows")
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
@@ -175,6 +197,9 @@ func extractWorkflowActions(ext filesystem.Extractor, root string) ([]actionRef,
 		manifest := filepath.ToSlash(filepath.Join(".github", "workflows", e.Name()))
 		rs, err := usesFromReader(ext, path, f, manifest)
 		_ = f.Close()
+		if err != nil && strict {
+			return nil, fmt.Errorf("unparseable workflow %s: %w", manifest, err)
+		}
 		if err != nil {
 			log.Warnf("Skipping workflow %s: %v", e.Name(), err)
 			continue
@@ -190,14 +215,16 @@ func extractWorkflowActions(ext filesystem.Extractor, root string) ([]actionRef,
 // reshaped into a synthetic single-job workflow before extraction — reusing the
 // extractor's uses parsing (subpaths, docker/local skips, SHA detection) rather
 // than reimplementing it.
-func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef, error) {
+func extractCompositeActions(ext filesystem.Extractor, root string, strict bool) ([]actionRef, error) {
 	dir := filepath.Join(root, ".github", "actions")
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil, nil
 	}
 
 	var refs []actionRef
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the slice.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -214,6 +241,9 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 		}
 		manifest = filepath.ToSlash(manifest)
 		steps, err := compositeSteps(data)
+		if err != nil && strict {
+			return fmt.Errorf("unparseable composite action %s: %w", manifest, err)
+		}
 		if err != nil {
 			// A broken action.yml would otherwise drop its nested uses from the
 			// audit silently; warn so the skipped coverage is visible.
@@ -230,16 +260,29 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 			return err
 		}
 		rs, err := usesFromReader(ext, path, bytes.NewReader(wrapped), manifest)
+		if err != nil && strict {
+			return fmt.Errorf("unparseable composite action %s: %w", manifest, err)
+		}
 		if err != nil {
 			log.Warnf("Skipping composite action %s: %v", manifest, err)
 			return nil
 		}
+		mu.Lock()
 		refs = append(refs, rs...)
+		mu.Unlock()
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	// Walk order is non-deterministic; sort so dedupeRefs always keeps the same
+	// manifest for an action used by more than one composite.
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].Manifest != refs[j].Manifest {
+			return refs[i].Manifest < refs[j].Manifest
+		}
+		return refs[i].Name+"@"+refs[i].Ref < refs[j].Name+"@"+refs[j].Ref
+	})
 	return refs, nil
 }
 
@@ -369,14 +412,14 @@ type osvRange struct {
 // queryActionAdvisories asks OSV.dev for advisories affecting an action, querying
 // by name only. GitHub Actions advisories use ECOSYSTEM ranges OSV cannot match
 // against a supplied version, so we fetch all of them and evaluate ranges locally.
-func queryActionAdvisories(client *http.Client, name string) ([]osvVuln, error) {
+func queryActionAdvisories(client *http.Client, queryURL, name string) ([]osvVuln, error) {
 	payload, err := json.Marshal(map[string]any{
 		"package": osvPackage{Ecosystem: actionsEcosystem, Name: name},
 	})
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest(http.MethodPost, osvQueryURL, bytes.NewReader(payload))
+	req, err := http.NewRequest(http.MethodPost, queryURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}

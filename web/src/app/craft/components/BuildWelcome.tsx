@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
 import Text from "@/refresh-components/texts/Text";
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
@@ -37,6 +38,7 @@ export default function BuildWelcome({
   isRunning,
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
+  const t = useTranslations("craft.welcome");
   const inputBarRef = useRef<CraftInputBarHandle>(null);
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
@@ -71,7 +73,11 @@ export default function BuildWelcome({
               className="flex flex-row items-baseline gap-2 select-none"
               onClick={handleWordmarkClick}
             >
-              <Logo onyxBranded size={28} className="translate-y-[6px]" />
+              <FoldableLogo
+                onyxBranded
+                size={28}
+                className="translate-y-[6px]"
+              />
               <Text
                 text05
                 style={{
@@ -104,7 +110,7 @@ export default function BuildWelcome({
               onSubmit(message, files, selectedModel)
             }
             isRunning={isRunning}
-            placeholder="Analyze my data and create a dashboard..."
+            placeholder={t("input.placeholder")}
             sandboxInitializing={sandboxInitializing}
             disabled={!hasAnyProvider}
           />

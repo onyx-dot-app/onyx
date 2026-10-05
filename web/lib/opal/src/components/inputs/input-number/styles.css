@@ -1,0 +1,42 @@
+@reference "#reference.css";
+
+/* The input chrome per variant, kept in step with inputs/shared.css.
+   InputNumber keeps its own wrapper (horizontal padding only, stepper
+   column inside) rather than .opal-input's field layout. */
+.opal-input-number[data-variant="primary"] {
+  background-color: var(--background-neutral-00);
+  border: 1px solid var(--border-01);
+}
+.opal-input-number[data-variant="primary"]:hover {
+  border-color: var(--border-02);
+}
+.opal-input-number[data-variant="primary"]:active {
+  border-color: var(--border-05);
+}
+.opal-input-number[data-variant="primary"]:focus-within:not(:active) {
+  border-color: var(--border-05);
+  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
+}
+
+.opal-input-number[data-variant="internal"] {
+  background-color: transparent;
+  border: 1px solid transparent;
+}
+
+.opal-input-number[data-variant="error"] {
+  background-color: var(--background-neutral-00);
+  border: 1px solid var(--status-error-05);
+}
+.opal-input-number[data-variant="error"]:focus-within:not(:active) {
+  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
+}
+
+.opal-input-number[data-variant="disabled"] {
+  background-color: var(--background-neutral-03);
+  border: 1px solid transparent;
+  cursor: not-allowed;
+}
+
+.opal-input-number[data-variant="readOnly"] {
+  @apply bg-transparent border rounded-08;
+}

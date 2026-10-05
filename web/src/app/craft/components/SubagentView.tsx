@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { useSubagent } from "@/app/craft/hooks/useBuildSessionStore";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
@@ -23,6 +24,7 @@ interface SubagentViewProps {
  * styling, etc. all mirror the main conversation.
  */
 export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
+  const t = useTranslations("craft.subagentView");
   const subagent = useSubagent(subagentSessionId);
   // Static transcript (autoScroll off) — ref only satisfies the prop contract.
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -70,7 +72,7 @@ export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
     return (
       <div className="flex h-full items-center justify-center">
         <Text font="main-ui-body" color="text-02">
-          Subagent not found.
+          {t("notFound.label")}
         </Text>
       </div>
     );

@@ -175,7 +175,7 @@ def _is_rotated(shape) -> bool:
 
 
 def _shape_text(shape) -> str:
-    if getattr(shape, "has_text_frame", False):
+    if getattr(shape, "has_text_frame", False):  # ods: ignore[getattr]
         return shape.text_frame.text
     return ""
 
@@ -552,7 +552,7 @@ def check_margins(
 def check_overflow(slide_no: int, shapes: list[tuple[BaseShape, Box]]) -> list[Finding]:
     findings: list[Finding] = []
     for shape, box in shapes:
-        if not getattr(shape, "has_text_frame", False):
+        if not getattr(shape, "has_text_frame", False):  # ods: ignore[getattr]
             continue
         tf = shape.text_frame
         if not tf.text.strip():
@@ -611,7 +611,7 @@ def check_overlap(
     def _box_is_authoritative(shape) -> bool:
         # spAutoFit boxes get resized by PowerPoint at render time; the stored
         # bbox routinely overhangs the actual text and yields false overlaps.
-        if not getattr(shape, "has_text_frame", False):
+        if not getattr(shape, "has_text_frame", False):  # ods: ignore[getattr]
             return True
         return shape.text_frame.auto_size != MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT
 
@@ -703,7 +703,7 @@ def check_contrast(
     slide_bg = _slide_background_rgb(slide)
 
     for idx, (shape, box) in enumerate(shapes):
-        if not getattr(shape, "has_text_frame", False):
+        if not getattr(shape, "has_text_frame", False):  # ods: ignore[getattr]
             continue
         if not shape.text_frame.text.strip():
             continue
@@ -780,7 +780,7 @@ def check_fonts(prs) -> list[Finding]:
     seen: set[str] = set()
     for slide_no, slide in enumerate(prs.slides, start=1):
         for shape in slide.shapes:
-            if not getattr(shape, "has_text_frame", False):
+            if not getattr(shape, "has_text_frame", False):  # ods: ignore[getattr]
                 continue
             for para in shape.text_frame.paragraphs:
                 names = [para.font.name] + [run.font.name for run in para.runs]

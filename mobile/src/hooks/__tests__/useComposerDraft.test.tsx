@@ -137,13 +137,41 @@ describe("useComposerDraft", () => {
     ]);
   });
 
-  it("blocks send while an attachment is still indexing, and removing it unblocks", () => {
+  it("does not block send while an attachment is still processing/indexing on the server", () => {
     const { result } = renderHook(() => useComposerDraft("chat-1:"), {
       wrapper,
     });
     act(() =>
       result.current.addRecent(
         recent({ id: "r1", status: UserFileStatus.INDEXING }),
+      ),
+    );
+    expect(result.current.hasBlockingFiles).toBe(false);
+  });
+
+  it("blocks send while an attachment is still uploading, and removing it unblocks", () => {
+    const { result } = renderHook(() => useComposerDraft("chat-1:"), {
+      wrapper,
+    });
+    act(() =>
+      result.current.addRecent(
+        recent({ id: "r1", status: UserFileStatus.UPLOADING }),
+      ),
+    );
+    expect(result.current.hasBlockingFiles).toBe(true);
+
+    act(() => result.current.removeFile("r1"));
+    expect(result.current.files).toEqual([]);
+    expect(result.current.hasBlockingFiles).toBe(false);
+  });
+
+  it("blocks send while an attachment failed, and removing it unblocks", () => {
+    const { result } = renderHook(() => useComposerDraft("chat-1:"), {
+      wrapper,
+    });
+    act(() =>
+      result.current.addRecent(
+        recent({ id: "r1", status: UserFileStatus.FAILED }),
       ),
     );
     expect(result.current.hasBlockingFiles).toBe(true);

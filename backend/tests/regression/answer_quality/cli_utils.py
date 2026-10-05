@@ -3,7 +3,6 @@ import os
 import socket
 import subprocess
 import sys
-import time
 from datetime import datetime
 from threading import Thread
 from typing import IO
@@ -101,7 +100,6 @@ def manage_data_directories(env_name: str, base_path: str, use_cloud_gpu: bool) 
     target_path = os.path.join(os.path.expanduser(base_path), env_name)
     directories = {
         "DANSWER_POSTGRES_DATA_DIR": os.path.join(target_path, "postgres/"),
-        "DANSWER_VESPA_DATA_DIR": os.path.join(target_path, "vespa/"),
     }
     if not use_cloud_gpu:
         directories["DANSWER_INDEX_MODEL_CACHE_DIR"] = os.path.join(
@@ -157,7 +155,7 @@ def start_docker_compose(
     command += " --force-recreate"
 
     if only_state:
-        command += " index relational_db"
+        command += " opensearch relational_db"
     else:
         if use_cloud_gpu:
             command += " --scale indexing_model_server=0"
@@ -287,33 +285,11 @@ def get_api_server_host_port(env_name: str) -> str:
     return matching_ports[0]
 
 
-# Added function to restart Vespa container
-def restart_vespa_container(env_name: str) -> None:
-    print(f"Restarting Vespa container for env_name: {env_name}")
-
-    # Find the Vespa container
-    stdout, _ = _run_command(
-        f"docker ps -a --format '{{{{.Names}}}}' | awk '/index-1/ && /{env_name}/'"
-    )
-    container_name = stdout.strip()
-
-    if not container_name:
-        raise RuntimeError(f"No Vespa container found with env_name: {env_name}")
-
-    # Restart the container
-    _run_command(f"docker restart {container_name}")
-
-    print(f"Vespa container '{container_name}' has begun restarting")
-
-    time.sleep(30)
-    print(f"Vespa container '{container_name}' has been restarted")
-
-
 if __name__ == "__main__":
     """
     Running this just cleans up the docker environment for the container indicated by environment_name
     If no environment_name is indicated, will just clean up all onyx docker containers/volumes/networks
-    Note: vespa/postgres mounts are not deleted
+    Note: postgres mounts are not deleted
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(current_dir, "search_test_config.yaml")
