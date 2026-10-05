@@ -7,6 +7,7 @@ test and passes it as an override.
 import base64
 import hashlib
 from datetime import datetime, timezone
+from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -238,3 +239,32 @@ def attachment(**overrides: Any) -> OutlookAttachment:
         "is_file": True,
     }
     return OutlookAttachment(**(fields | overrides))
+
+
+def memory_file_store() -> MagicMock:
+    """A file store kept in a dict, with the records the thread table lists."""
+    files: dict[str, bytes] = {}
+    store = MagicMock()
+
+    def save_file(*, content: BytesIO, file_id: str, **_: object) -> None:
+        files[file_id] = content.read()
+
+    def read_file(file_id: str, mode: str = "b") -> BytesIO:  # noqa: ARG001
+        return BytesIO(files[file_id])
+
+    def list_files_by_prefix(prefix: str) -> list[MagicMock]:
+        return [
+            MagicMock(file_id=f, created_at=datetime.now(timezone.utc))
+            for f in files
+            if f.startswith(prefix)
+        ]
+
+    def delete_file(file_id: str, error_on_missing: bool = True) -> None:  # noqa: ARG001
+        files.pop(file_id, None)
+
+    store.save_file.side_effect = save_file
+    store.read_file.side_effect = read_file
+    store.list_files_by_prefix.side_effect = list_files_by_prefix
+    store.delete_file.side_effect = delete_file
+    store.files = files
+    return store

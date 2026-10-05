@@ -3,8 +3,7 @@ store round trip of the attempt's thread table."""
 
 import base64
 import json
-from io import BytesIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from onyx.connectors.outlook.models import OutlookMailbox
 from onyx.connectors.outlook.threads import (
@@ -14,6 +13,7 @@ from onyx.connectors.outlook.threads import (
     thread_document_id,
     thread_key,
 )
+from tests.unit.onyx.connectors.outlook.outlook_api_shapes import memory_file_store
 
 ROOT = bytes(range(22))
 ROOT_INDEX = base64.b64encode(ROOT).decode()
@@ -29,7 +29,6 @@ def _listing(key: str, mailbox_n: int, conversation_id: str = "conv") -> ThreadL
         key=key,
         mailbox=_mailbox(mailbox_n),
         conversation_id=conversation_id,
-        folder_id="f",
     )
 
 
@@ -68,40 +67,17 @@ def test_merge_keeps_the_first_listing_and_every_holder_once() -> None:
     assert [h.id for h in by_key["b"].holders] == ["user-1"]
 
 
-def _memory_file_store() -> MagicMock:
-    files: dict[str, bytes] = {}
-    store = MagicMock()
-
-    def save_file(*, content: BytesIO, file_id: str, **_: object) -> None:
-        files[file_id] = content.read()
-
-    def read_file(file_id: str, mode: str = "b") -> BytesIO:  # noqa: ARG001
-        return BytesIO(files[file_id])
-
-    def list_files_by_prefix(prefix: str) -> list[MagicMock]:
-        return [MagicMock(file_id=f) for f in files if f.startswith(prefix)]
-
-    def delete_file(file_id: str, error_on_missing: bool = True) -> None:  # noqa: ARG001
-        files.pop(file_id, None)
-
-    store.save_file.side_effect = save_file
-    store.read_file.side_effect = read_file
-    store.list_files_by_prefix.side_effect = list_files_by_prefix
-    store.delete_file.side_effect = delete_file
-    store.files = files
-    return store
-
-
 def test_thread_table_round_trips_pages_into_shards_and_cleans_up() -> None:
-    store = _memory_file_store()
+    store = memory_file_store()
     with patch(
         "onyx.connectors.outlook.threads.get_default_file_store", return_value=store
     ):
         table = ThreadTable("run")
         table.write_page(0, [_listing("a", 1), _listing("b", 1)])
         table.write_page(1, [_listing("a", 2), _listing("c", 2)])
+        table.write_mailbox_exclusions("user-1", ["junk"])
 
-        entries = merge_listings(table.read_pages(2))
+        entries = merge_listings(table.iter_pages(2))
         shards = table.write_shards(entries, per_shard=2)
         assert shards == 2
         assert [e.key for e in table.read_shard(0)] == ["a", "b"]
@@ -111,6 +87,8 @@ def test_thread_table_round_trips_pages_into_shards_and_cleans_up() -> None:
         assert (
             json.loads(store.files["outlook-threads/run/shard-1.json"])[0]["key"] == "c"
         )
+
+        assert table.read_mailbox_exclusions("user-1") == {"junk"}
 
         table.delete_all()
 

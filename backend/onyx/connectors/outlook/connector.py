@@ -119,6 +119,7 @@ from onyx.connectors.outlook.threads import (
     ThreadEntry,
     ThreadListing,
     ThreadTable,
+    delete_abandoned_tables,
     merge_listings,
     thread_document_id,
     thread_key,
@@ -150,9 +151,9 @@ MAX_MESSAGES_PER_CONVERSATION = 100
 # thread that is mostly drafts or trashed replies stays bounded.
 CONVERSATION_FETCH_LIMIT = 500
 
-# Threads built at a time in a build step. Each is its own Graph read, and
-# Exchange throttles concurrent requests per app and mailbox, so a shard mixes
-# mailboxes.
+# Threads built at a time in a build step. Each is its own Graph read.
+# Exchange throttles concurrent requests per app and mailbox, and a shard
+# usually spans several mailboxes since it follows listing order.
 THREAD_BUILD_WORKERS = 16
 # Threads per build step, so a step stays short and its checkpoint cheap.
 THREADS_PER_BUILD_STEP = 200
@@ -222,9 +223,6 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     mailboxes: list[OutlookMailbox] | None = None
     # The mailboxes being listed, at most MAILBOX_WORKERS of them.
     active: list[MailboxCursor] = []
-    # Per mailbox id, every folder id whose messages are dropped, kept for the
-    # build phase after the mailbox's cursor is gone.
-    excluded_folder_ids_by_mailbox: dict[str, list[str]] = {}
     # Listing pages written so far, one per listing step.
     listing_pages: int = 0
     # None until the listings are merged into build shards.
@@ -400,25 +398,12 @@ def owner_access(mailbox: OutlookMailbox) -> ExternalAccess:
     return _user_access({mailbox.address.lower()})
 
 
-def holders_access(holders: list[OutlookMailbox]) -> ExternalAccess:
-    """Everyone whose mailbox holds a copy of the thread."""
+def holders_access(holders: Iterable[OutlookMailbox]) -> ExternalAccess:
+    """Everyone whose mailbox holds a copy of the thread. Indexing and the
+    permission sync both grant exactly this, so neither widens the other. A
+    poll window lists only the mailboxes that gained a message, and the next
+    permission sync, minutes later, restores the full holder list."""
     return _user_access({holder.address.lower() for holder in holders})
-
-
-def thread_access(
-    holders: list[OutlookMailbox], messages: list[OutlookMessage]
-) -> ExternalAccess:
-    """The holders plus everyone a kept message was sent by or to. A poll
-    window lists only the mailboxes that gained a message, so the people on
-    the thread keep access until the next permission sync restores the full
-    holder list."""
-    emails = {holder.address.lower() for holder in holders}
-    for message in messages:
-        if message.sender is not None:
-            emails.add(message.sender.address.lower())
-        for recipient in message.to_recipients + message.cc_recipients:
-            emails.add(recipient.address.lower())
-    return _user_access(emails)
 
 
 def event_access(mailbox: OutlookMailbox, event: OutlookEvent) -> ExternalAccess:
@@ -595,13 +580,14 @@ def build_thread_document(
         primary_owners=primary_owners,
         secondary_owners=secondary_owners,
         metadata={
-            "mailboxes": [holder.address for holder in entry.holders],
+            "mailbox": entry.first.mailbox.address,
+            "mailbox_count": str(len(entry.holders)),
             "message_count": str(len(kept)),
         },
         parent_hierarchy_raw_node_id=newest.parent_folder_id
         or mailbox_node_id(entry.first.mailbox),
         external_access=(
-            thread_access(entry.holders, kept) if include_permissions else None
+            holders_access(entry.holders) if include_permissions else None
         ),
     )
 
@@ -709,8 +695,10 @@ class OutlookConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: OutlookCheckpoint,
     ) -> CheckpointOutput[OutlookCheckpoint]:
-        """One unit of work per call in each active mailbox: enumerate, open
-        it, or read one delta page. The checkpoint records where to resume."""
+        """One unit of work per call: enumerate the mailboxes, advance each
+        active mailbox (open it, list one delta page, or read one calendar
+        page), merge the listings into shards, build one shard, or clean up.
+        The checkpoint records where to resume."""
         return self._load_from_checkpoint(
             start, end, checkpoint, include_permissions=False
         )
@@ -751,6 +739,7 @@ class OutlookConnector(
         include_permissions: bool,
     ) -> CheckpointOutput[OutlookCheckpoint]:
         if checkpoint.mailboxes is None:
+            delete_abandoned_tables()
             yield from self._enumerate_mailboxes(checkpoint)
             return checkpoint
         table = ThreadTable(checkpoint.run_id)
@@ -760,7 +749,7 @@ class OutlookConnector(
             )
             return checkpoint
         if checkpoint.build_shards is None:
-            entries = merge_listings(table.read_pages(checkpoint.listing_pages))
+            entries = merge_listings(table.iter_pages(checkpoint.listing_pages))
             checkpoint.build_shards = table.write_shards(
                 entries, THREADS_PER_BUILD_STEP
             )
@@ -819,10 +808,13 @@ class OutlookConnector(
             for item in items:
                 if not isinstance(item, ThreadListing):
                     yield item
+        # The build phase drops messages in excluded folders long after the
+        # mailbox's cursor is gone, so each finished mailbox leaves its list.
         for cursor in cursors:
-            checkpoint.excluded_folder_ids_by_mailbox[cursor.mailbox.id] = (
-                cursor.excluded_folder_ids
-            )
+            if cursor.finished:
+                table.write_mailbox_exclusions(
+                    cursor.mailbox.id, cursor.excluded_folder_ids
+                )
         checkpoint.mailboxes = queued
         checkpoint.active = [cursor for cursor in cursors if not cursor.finished]
 
@@ -834,6 +826,10 @@ class OutlookConnector(
     ) -> Generator[Document | ConnectorFailure, None, None]:
         """Builds every thread of the next shard, side by side."""
         entries = table.read_shard(checkpoint.next_shard)
+        exclusions = {
+            mailbox_id: table.read_mailbox_exclusions(mailbox_id)
+            for mailbox_id in {entry.first.mailbox.id for entry in entries}
+        }
         results: list[Document | ConnectorFailure | None] = (
             run_functions_tuples_in_parallel(
                 [
@@ -841,11 +837,7 @@ class OutlookConnector(
                         self._build_thread,
                         (
                             entry,
-                            set(
-                                checkpoint.excluded_folder_ids_by_mailbox.get(
-                                    entry.first.mailbox.id, []
-                                )
-                            ),
+                            exclusions[entry.first.mailbox.id],
                             include_permissions,
                         ),
                     )
@@ -1009,8 +1001,8 @@ class OutlookConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """Every conversation and event document id the walk would produce
-        today, so pruning drops the ones that vanished.
+        """Every thread and event document id the walk would produce today,
+        so pruning drops the ones that vanished.
 
         Reads folder and delta metadata only, never a body. A mailbox whose
         probe answers 404 is gone and contributes nothing, so its documents go
@@ -1026,8 +1018,9 @@ class OutlookConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """The pruning walk with each document's readers attached: the owner on
-        every node and conversation, plus the organizer and attendees on an event."""
+        """The pruning walk with each document's readers attached: the owner
+        on every node, every holder on a thread, and the owner plus the
+        organizer and attendees on an event."""
         del start, end
         yield from self._slim_docs(callback, include_permissions=True)
 
@@ -1048,7 +1041,8 @@ class OutlookConnector(
                 f"These mailboxes or groups cannot be resolved: {names}. Fix or "
                 "remove them from the connector before pruning or permission sync."
             )
-        listings: list[ThreadListing] = []
+        # Holders by thread key, keyed by mailbox id so a mailbox counts once.
+        holders_by_key: dict[str, dict[str, OutlookMailbox]] = {}
         for mailbox in mailboxes:
             try:
                 self.ops.probe_mailbox(mailbox_id=mailbox.id)
@@ -1066,7 +1060,8 @@ class OutlookConnector(
             access = owner_access(mailbox) if include_permissions else None
             yield list(self._hierarchy_nodes(mailbox, tree, access))
             for page in self._thread_listing_pages(mailbox, tree):
-                listings.extend(page)
+                for listing in page:
+                    holders_by_key.setdefault(listing.key, {})[mailbox.id] = mailbox
                 if callback is not None:
                     callback.progress("outlook_slim_docs", len(page))
             if self.include_calendar:
@@ -1079,14 +1074,14 @@ class OutlookConnector(
             (
                 [
                     SlimDocument(
-                        id=thread_document_id(entry.key),
+                        id=thread_document_id(key),
                         external_access=(
-                            holders_access(entry.holders)
+                            holders_access(holders.values())
                             if include_permissions
                             else None
                         ),
                     )
-                    for entry in merge_listings(listings)
+                    for key, holders in holders_by_key.items()
                 ],
             ),
             callback=None,
@@ -1129,10 +1124,7 @@ class OutlookConnector(
                 # so mail older than the cutoff is dropped here and pruned.
                 yield [
                     ThreadListing(
-                        key=key,
-                        mailbox=mailbox,
-                        conversation_id=change.conversation_id,
-                        folder_id=folder.id,
+                        key=key, mailbox=mailbox, conversation_id=change.conversation_id
                     )
                     for change in page.changes
                     if not change.removed
@@ -1405,10 +1397,7 @@ class OutlookConnector(
             listings.setdefault(
                 key,
                 ThreadListing(
-                    key=key,
-                    mailbox=mailbox,
-                    conversation_id=change.conversation_id,
-                    folder_id=folder.id,
+                    key=key, mailbox=mailbox, conversation_id=change.conversation_id
                 ),
             )
         yield from listings.values()
