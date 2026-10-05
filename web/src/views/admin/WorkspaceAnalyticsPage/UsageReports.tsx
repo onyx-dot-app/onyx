@@ -195,6 +195,7 @@ function GenerateReportMenu({
         render: ({ props }) => (
           <div
             {...props}
+            role={props.role}
             ref={calendarRef}
             // Escape from a focused day closes the list.
             onKeyDown={(e) => {

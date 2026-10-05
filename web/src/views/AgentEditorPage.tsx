@@ -271,6 +271,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                   render: ({ props }) => (
                     <div
                       {...props}
+                      role={props.role}
                       ref={iconGridRef}
                       className="grid grid-cols-4 gap-1"
                       // Escape from a focused icon closes the list.
