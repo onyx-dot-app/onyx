@@ -216,6 +216,14 @@ def system_prompt(prompt: list[ChatCompletionMessage]) -> str:
     return first.content
 
 
+def prompt_has_cycle(prompt: list[ChatCompletionMessage], cycle: int) -> bool:
+    """Cycle counters ride in a tail reminder message, not the system prompt."""
+    needle = f"you are on cycle {cycle}"
+    return any(
+        isinstance(msg.content, str) and needle in msg.content.lower() for msg in prompt
+    )
+
+
 def thinking_sub_turns(packets: list[Packet]) -> list[int | None]:
     return [
         p.placement.sub_turn_index
@@ -248,7 +256,7 @@ class TestThinkPlacement:
         )
         assert reasoning_text.startswith("I should look at the repo")
         assert thinking_sub_turns(run.packets) == [1]
-        assert "you are on cycle 1" in system_prompt(run.llm.prompts[1])
+        assert prompt_has_cycle(run.llm.prompts[1], 1)
 
         tool_msgs = [m for m in run.llm.prompts[1] if isinstance(m, ToolMessage)]
         assert [(m.tool_call_id, m.content) for m in tool_msgs] == [
@@ -267,10 +275,10 @@ class TestThinkPlacement:
             is_reasoning_model=True,
         )
 
-        prompts = [system_prompt(r) for r in run.llm.prompts[:3]]
-        assert "you are on cycle 0" in prompts[0]
-        assert "you are on cycle 1" in prompts[1]
-        assert "you are on cycle 2" in prompts[2]
+        prompts = run.llm.prompts[:3]
+        assert prompt_has_cycle(prompts[0], 0)
+        assert prompt_has_cycle(prompts[1], 1)
+        assert prompt_has_cycle(prompts[2], 2)
         assert thinking_sub_turns(run.packets) == [0, 1]
 
     def test_think_with_narration_advances_sub_turn(self) -> None:
