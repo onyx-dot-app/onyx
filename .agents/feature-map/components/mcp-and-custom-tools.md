@@ -137,7 +137,7 @@ documented there. This component only ever writes the latter two shapes.
 
 | Column | Meaning |
 |---|---|
-| `server_url`, `transport` (`MCPTransport`) | Connection target; `transport` is `SSE` or `STREAMABLE_HTTP` (the only members of `db/enums.py:MCPTransport`). |
+| `server_url`, `transport` (`MCPTransport`) | Connection target; `transport` is `SSE` or `STREAMABLE_HTTP` in practice. `STDIO` is also a member of `db/enums.py:MCPTransport`: planned, not supported yet, and not offered in the UI, but the create/update API accepts it, so a stored row can hold it. |
 | `auth_type` (`MCPAuthenticationType`) | `NONE`, `API_TOKEN`, `OAUTH`, or `PT_OAUTH` (pass-through OAuth using the caller's own Onyx-login OAuth token). |
 | `auth_performer` (`MCPAuthenticationPerformer`) | `ADMIN` or `PER_USER`. **The field that decides credential scope; see §5.** |
 | `admin_connection_config_id` | FK to the server's shared `MCPConnectionConfig` (holds the OAuth client registration and/or a shared API token). |
@@ -226,8 +226,10 @@ Tool (openapi_schema set) --tool_constructor.py--> build_custom_tools_from_...
 
 ### 4.2 Transport selection
 
-`MCPTransport` has two values (`db/enums.py`): `SSE` (legacy, still
-supported) and `STREAMABLE_HTTP` (current default). The admin picks the transport explicitly in the create
+`MCPTransport` has three values (`db/enums.py`): `SSE` (legacy, still
+supported), `STREAMABLE_HTTP` (current default), and `STDIO` (planned, not
+supported yet). Do not remove `STDIO`: the column is a non-native enum, so a
+stored `STDIO` row would fail to load and break the server list. The admin picks the transport explicitly in the create
 form; there is no auto-negotiation. `create_mcp_server_simple` defaults to
 `MCPTransport.STREAMABLE_HTTP` when the request omits it
 (`mcp/api.py:_upsert_mcp_server`, the `else` branch). The chosen transport
