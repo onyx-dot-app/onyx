@@ -14,9 +14,9 @@ only move on real changes, and writes the file. Like the deterministic script
 it never pushes — the workflow opens a reviewed PR and PR CI (provider chat
 tests against every recommended model) is the gate.
 
-Still standard-library-only on purpose: the Responses API call is one POST,
-so any python3 with OPENAI_API_KEY can run it. Set OPENAI_MODEL (or --model)
-to change the reasoning model.
+Still standard-library-only on purpose (the Responses plumbing lives in the
+shared openai_agent.py helper), so any python3 with OPENAI_API_KEY can run
+it. Set OPENAI_MODEL (or --model) to change the reasoning model.
 
 Usage:
     python backend/scripts/update_recommended_models_agent.py            # dry-run
@@ -28,8 +28,6 @@ import json
 import os
 import re
 import sys
-import time
-import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -37,6 +35,10 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+from openai_agent import (  # ty: ignore[unresolved-import]  # noqa: E402
+    call_responses_api,
+    extract_output_text,
+)
 from update_recommended_models import (  # ty: ignore[unresolved-import]  # noqa: E402
     OPENROUTER_MODELS_URL,
     CatalogModel,
@@ -61,10 +63,7 @@ DEFAULT_OUTPUT = (
 )
 DEFAULT_RULES = SCRIPT_DIR / "update_recommended_models_rules.json"
 
-OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_AGENT_MODEL = "gpt-6-luna"
-# Built-in web search tool on the Responses API.
-WEB_SEARCH_TOOL = {"type": "web_search"}
 # Cap per vendor section so the prompt stays small enough to leave room for
 # web search results; catalogs list every variant ever released.
 MAX_MODELS_PER_VENDOR = 50
@@ -233,101 +232,6 @@ def build_catalog_digest(
             )
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
-
-
-def _api_request(
-    path: str, api_key: str, timeout: float, body: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    request: urllib.request.Request = urllib.request.Request(  # noqa: S310
-        f"{OPENAI_RESPONSES_URL}{path}",
-        data=json.dumps(body).encode() if body is not None else None,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
-        return json.loads(response.read())
-
-
-def call_responses_api(
-    prompt: str,
-    model: str,
-    api_key: str,
-    schema: dict[str, Any],
-    timeout: float,
-    reasoning_effort: str = "medium",
-    response_id: str | None = None,
-    poll_interval: float = 15.0,
-) -> dict[str, Any]:
-    """Submit in background mode and poll — research runs with web search
-    regularly exceed what a single synchronous request tolerates. Pass
-    response_id to resume polling an existing background response."""
-    if response_id is None:
-        body = {
-            "model": model,
-            "background": True,
-            "reasoning": {"effort": reasoning_effort},
-            "input": [
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": prompt}],
-                }
-            ],
-            "tools": [WEB_SEARCH_TOOL],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "recommended_models",
-                    "schema": schema,
-                    "strict": True,
-                }
-            },
-        }
-        submitted: dict[str, Any] = _api_request("", api_key, 60.0, body)
-        response_id = submitted.get("id")
-        if not response_id:
-            raise ValueError(f"No response id in submission: {submitted}")
-    else:
-        submitted = {}
-
-    deadline: float = time.monotonic() + timeout
-    while True:
-        status: str | None = submitted.get("status")
-        if status in ("completed", "failed", "cancelled", "incomplete"):
-            return submitted
-        if time.monotonic() > deadline:
-            raise TimeoutError(
-                f"Response {response_id} still {status} after {timeout}s"
-            )
-        time.sleep(poll_interval)
-        submitted = _api_request(f"/{response_id}", api_key, 60.0)
-        status = submitted.get("status")
-        print(f"  response {response_id}: {status}", flush=True)
-
-
-def extract_output_text(response: dict[str, Any]) -> str:
-    if response.get("status") == "incomplete":
-        details = response.get("incomplete_details") or {}
-        raise ValueError(f"Response incomplete: {details.get('reason', 'unknown')}")
-    if response.get("status") not in (None, "completed"):
-        raise ValueError(
-            f"Response status {response.get('status')!r}: "
-            f"{json.dumps(response.get('error'))[:500]}"
-        )
-    texts: list[str] = []
-    for item in response.get("output") or []:
-        if item.get("type") != "message":
-            continue
-        texts.extend(
-            content.get("text") or ""
-            for content in item.get("content") or []
-            if content.get("type") == "output_text"
-        )
-    text = "".join(texts).strip()
-    if not text:
-        raise ValueError("No output_text in response")
-    return text
 
 
 def _section_vendors(section_rules: SectionRules) -> set[str]:
