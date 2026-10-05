@@ -192,3 +192,19 @@ def test_find_summary_for_branch_uses_nearest_ancestor_on_branch(
         db_session, [root, user_message, answer, other_branch]
     )
     assert off_branch is not None and off_branch.id == first_summary.id
+
+    # A later summary on the same ancestor replaces the earlier one.
+    replacement = ChatMessage(
+        chat_session_id=chat_session.id,
+        message_type=MessageType.SUMMARY,
+        message="replacement summary",
+        token_count=2,
+        parent_message_id=user_message.id,
+        last_summarized_message_id=f"chat:{user_message.id}",
+    )
+    db_session.add(replacement)
+    db_session.commit()
+    replaced = find_summary_for_branch(
+        db_session, [root, user_message, answer, other_branch]
+    )
+    assert replaced is not None and replaced.id == replacement.id
