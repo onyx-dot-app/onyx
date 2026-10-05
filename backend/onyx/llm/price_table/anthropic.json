@@ -495,6 +495,39 @@
       "structured_output": true,
       "temperature": false,
       "tool_call": true
+    },
+    "claude-sonnet-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "cache_write_above_1hr": 4.0,
+        "input": 2,
+        "output": 10
+      },
+      "family": "claude-sonnet",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Sonnet 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-28",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
     }
   },
   "models_dev_providers": [
