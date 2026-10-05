@@ -354,7 +354,7 @@ _LITELLM_CHAT_MODES = {"chat", "responses", "completion"}
 
 # litellm_provider tags whose litellm-only chat models are added to the catalog.
 _LITELLM_CHAT_GAP_FILL_TAGS = frozenset(
-    {"openai", "anthropic", "gemini", "xai", "mistral", "deepseek"}
+    {"openai", "anthropic", "gemini", "xai", "mistral", "deepseek", "zai", "moonshot"}
 )
 
 
