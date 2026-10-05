@@ -331,6 +331,9 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
       </Dropdown.Trigger>
       <Dropdown.Data
         label={userDisplayName}
+        // The notifications page scrolls itself at its own height; the
+        // list must not add a second cap around it.
+        maxHeight="none"
         items={items}
         views={{ notifications: notificationsView }}
       />

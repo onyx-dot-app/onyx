@@ -467,6 +467,7 @@ export function useDropdownOverlay({
     }
   }, [isOpen]);
 
+  const widthRef = useRef(width);
   const { refs, floatingStyles, isPositioned, update } =
     useFloating<ReferenceType>({
       open: isOpen,
@@ -491,11 +492,14 @@ export function useDropdownOverlay({
         shift({ padding: 8 }),
         size({
           apply({ rects, elements }) {
+            // Read through a ref: floating-ui compares middleware by source
+            // text, so a closure over `width` would never be seen to change.
             // Inline, so a fixed width also beats the stylesheet's floor.
+            const fixed = widthRef.current;
             Object.assign(
               elements.floating.style,
-              width !== undefined
-                ? { width: `${width}rem`, minWidth: `${width}rem` }
+              fixed !== undefined
+                ? { width: `${fixed}rem`, minWidth: `${fixed}rem` }
                 : { width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px` }
             );
           },
@@ -505,6 +509,7 @@ export function useDropdownOverlay({
     });
   // A view can change the width while the list is open: measure again.
   useLayoutEffect(() => {
+    widthRef.current = width;
     update();
   }, [width, update]);
 
