@@ -273,32 +273,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "magistral-small": {
-      "attachment": false,
-      "cost": {
-        "input": 0.5,
-        "output": 1.5
-      },
-      "family": "magistral-small",
-      "limit": {
-        "context": 128000,
-        "output": 128000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Magistral Small",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-03-17",
-      "temperature": true,
-      "tool_call": true
-    },
     "ministral-3b-latest": {
       "attachment": false,
       "cost": {
@@ -421,7 +395,7 @@
     "mistral-large-2512": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.049999999999999996,
+        "cache_read": 0.05,
         "input": 0.5,
         "output": 1.5
       },
@@ -450,7 +424,7 @@
     "mistral-large-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.049999999999999996,
+        "cache_read": 0.05,
         "input": 0.5,
         "output": 1.5
       },
@@ -996,8 +970,7 @@
       "cost": {
         "cache_read": 0.01,
         "input": 0.1,
-        "output": 0.3,
-        "second_input": 6.666666666666667e-05
+        "output": 0.3
       },
       "family": "voxtral",
       "limit": {

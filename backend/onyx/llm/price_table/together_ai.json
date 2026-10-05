@@ -75,7 +75,7 @@
       },
       "family": "minimax",
       "limit": {
-        "context": 202752,
+        "context": 196608,
         "output": 131072
       },
       "modalities": {
@@ -199,6 +199,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3 Coder 480B A35B Instruct",
       "open_weights": true,
       "reasoning": false,
@@ -226,6 +227,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3 Coder Next FP8",
       "open_weights": true,
       "reasoning": false,
@@ -255,6 +257,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Qwen3.5 397B A17B",
       "open_weights": true,
       "reasoning": true,
@@ -347,6 +350,17 @@
       "temperature": true,
       "tool_call": true
     },
+    "Salesforce/Llama-Rank-V1": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "rerank",
+      "name": "Salesforce/Llama-Rank-V1"
+    },
     "baai/bge-base-en-v1.5": {
       "cost": {
         "input": 0.008,
@@ -357,32 +371,6 @@
       },
       "mode": "embedding",
       "name": "baai/bge-base-en-v1.5"
-    },
-    "deepcogito/cogito-v2-1-671b": {
-      "attachment": false,
-      "cost": {
-        "input": 1.25,
-        "output": 1.25
-      },
-      "family": "cogito",
-      "limit": {
-        "context": 163840,
-        "output": 163840
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Cogito v2.1 671B",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2025-11-13",
-      "temperature": true,
-      "tool_call": false
     },
     "deepseek-ai/DeepSeek-R1": {
       "attachment": false,
@@ -475,7 +463,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 384000
       },
       "modalities": {
@@ -491,34 +479,6 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-31",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "deepseek-ai/DeepSeek-V4-Pro": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.2,
-        "input": 1.74,
-        "output": 3.48
-      },
-      "family": "deepseek",
-      "limit": {
-        "context": 512000,
-        "output": 384000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "DeepSeek V4 Pro",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-04-24",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -609,61 +569,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "google/gemma-3n-E4B-it": {
-      "attachment": false,
-      "cost": {
-        "input": 0.06,
-        "output": 0.12
-      },
-      "family": "gemma",
-      "limit": {
-        "context": 32768,
-        "output": 32768
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Gemma 3N E4B Instruct",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-05-20",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": false
-    },
-    "google/gemma-4-31B-it": {
-      "attachment": true,
-      "cost": {
-        "input": 0.39,
-        "output": 0.97
-      },
-      "family": "gemma",
-      "limit": {
-        "context": 262144,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Gemma 4 31B Instruct",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-04-07",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
       "attachment": false,
       "cost": {
@@ -688,118 +593,6 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-12-06",
-      "temperature": true,
-      "tool_call": true
-    },
-    "meta-llama/Meta-Llama-3-8B-Instruct-Lite": {
-      "attachment": false,
-      "cost": {
-        "input": 0.14,
-        "output": 0.14
-      },
-      "family": "llama",
-      "limit": {
-        "context": 8192,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Meta Llama 3 8B Instruct Lite",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2024-04-18",
-      "temperature": true,
-      "tool_call": false
-    },
-    "moonshotai/Kimi-K2.5": {
-      "attachment": false,
-      "cost": {
-        "input": 0.5,
-        "output": 2.8
-      },
-      "family": "kimi-k2",
-      "limit": {
-        "context": 262144,
-        "output": 262144
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Kimi K2.5",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-01-27",
-      "status": "deprecated",
-      "temperature": true,
-      "tool_call": true
-    },
-    "moonshotai/Kimi-K2.6": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.2,
-        "input": 1.2,
-        "output": 4.5
-      },
-      "family": "kimi-k2",
-      "limit": {
-        "context": 262144,
-        "output": 131000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "video"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Kimi K2.6",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-04-21",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "moonshotai/Kimi-K2.7-Code": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.19,
-        "input": 0.95,
-        "output": 4
-      },
-      "family": "kimi-k2",
-      "limit": {
-        "context": 262144,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Kimi K2.7 Code",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-06-14",
-      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -854,6 +647,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Nemotron 3 Ultra 550B A55B",
       "open_weights": true,
       "reasoning": true,
@@ -888,59 +682,6 @@
       "release_date": "2025-08-05",
       "temperature": true,
       "tool_call": true
-    },
-    "openai/gpt-oss-20b": {
-      "attachment": false,
-      "cost": {
-        "input": 0.05,
-        "output": 0.2
-      },
-      "family": "gpt-oss",
-      "limit": {
-        "context": 131072,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "GPT OSS 20B",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2025-08-05",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "pearl-ai/gemma-4-31b-it": {
-      "attachment": false,
-      "cost": {
-        "input": 0.28,
-        "output": 0.86
-      },
-      "family": "gemma",
-      "limit": {
-        "context": 32000,
-        "output": 32000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Pearl AI Gemma 4 31B Instruct",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-04-07",
-      "temperature": true,
-      "tool_call": false
     },
     "thinkingmachines/Inkling": {
       "attachment": true,
@@ -1008,6 +749,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM-5",
       "open_weights": true,
       "reasoning": true,
@@ -1037,6 +779,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM-5.1",
       "open_weights": true,
       "reasoning": true,
@@ -1055,7 +798,7 @@
       },
       "family": "glm",
       "limit": {
-        "context": 512000,
+        "context": 1048575,
         "output": 164000
       },
       "modalities": {

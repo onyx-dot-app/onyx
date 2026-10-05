@@ -25,132 +25,12 @@
       "mode": "image_generation",
       "name": "accounts/fireworks/models/SSD-1B"
     },
-    "accounts/fireworks/models/deepseek-v4-flash-0731": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.007,
-        "input": 0.22,
-        "output": 0.66
-      },
-      "family": "deepseek-flash",
-      "limit": {
-        "context": 1000000,
-        "output": 384000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "DeepSeek V4 Flash 0731",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-07-31",
-      "status": "deprecated",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "accounts/fireworks/models/deepseek-v4-flash-vision-exp": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.007,
-        "input": 0.22,
-        "output": 0.66
-      },
-      "family": "deepseek-flash",
-      "limit": {
-        "context": 1000000,
-        "output": 384000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "DeepSeek V4 Flash Vision Exp",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-08-21",
-      "status": "deprecated",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "accounts/fireworks/models/deepseek-v4-pro": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.6,
-        "input": 1.2,
-        "output": 1.2
-      },
-      "family": "deepseek-thinking",
-      "limit": {
-        "context": 1000000,
-        "output": 384000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "DeepSeek V4 Pro",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-04-24",
-      "status": "deprecated",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "accounts/fireworks/models/deepseek-v4-pro-0813": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.044,
-        "input": 1.32,
-        "output": 3.96
-      },
-      "family": "deepseek-thinking",
-      "limit": {
-        "context": 1000000,
-        "output": 384000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "DeepSeek V4 Pro 0813",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-08-12",
-      "status": "deprecated",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "accounts/fireworks/models/deepseek-v4p1-flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.007,
-        "input": 0.22,
-        "output": 0.66
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
       },
       "family": "deepseek-flash",
       "limit": {
@@ -173,6 +53,33 @@
       "release_date": "2026-09-10",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "accounts/fireworks/models/ember-1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.3,
+        "input": 3,
+        "output": 15
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Ember-1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-22",
       "tool_call": true
     },
     "accounts/fireworks/models/fireworks-asr-large": {
@@ -246,35 +153,6 @@
       },
       "mode": "image_generation",
       "name": "accounts/fireworks/models/flux-kontext-pro"
-    },
-    "accounts/fireworks/models/glm-5p2": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.14,
-        "input": 1.4,
-        "output": 4.4
-      },
-      "family": "glm",
-      "limit": {
-        "context": 1048575,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "GLM 5.2",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-06-16",
-      "status": "deprecated",
-      "temperature": true,
-      "tool_call": true
     },
     "accounts/fireworks/models/glm-5p3": {
       "attachment": false,
@@ -378,8 +256,7 @@
       "modalities": {
         "input": [
           "text",
-          "image",
-          "audio"
+          "image"
         ],
         "output": [
           "text"
@@ -404,66 +281,6 @@
       },
       "mode": "image_generation",
       "name": "accounts/fireworks/models/japanese-stable-diffusion-xl"
-    },
-    "accounts/fireworks/models/kimi-k2p6": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.16,
-        "input": 0.95,
-        "output": 4
-      },
-      "family": "kimi-thinking",
-      "limit": {
-        "context": 262000,
-        "output": 262000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Kimi K2.6",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-04-17",
-      "status": "deprecated",
-      "temperature": true,
-      "tool_call": true
-    },
-    "accounts/fireworks/models/kimi-k2p7-code": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.19,
-        "input": 0.95,
-        "output": 4
-      },
-      "family": "kimi-k2",
-      "limit": {
-        "context": 262000,
-        "output": 262000
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Kimi K2.7 Code",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-06-12",
-      "status": "deprecated",
-      "temperature": true,
-      "tool_call": true
     },
     "accounts/fireworks/models/kimi-k3": {
       "attachment": true,
@@ -495,34 +312,6 @@
       "temperature": false,
       "tool_call": true
     },
-    "accounts/fireworks/models/minimax-m2p7": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.6,
-        "input": 1.2,
-        "output": 1.2
-      },
-      "family": "minimax",
-      "limit": {
-        "context": 196608,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "MiniMax-M2.7",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-03-18",
-      "status": "deprecated",
-      "temperature": true,
-      "tool_call": true
-    },
     "accounts/fireworks/models/minimax-m3": {
       "attachment": false,
       "cost": {
@@ -548,37 +337,6 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
-      "temperature": true,
-      "tool_call": true
-    },
-    "accounts/fireworks/models/muse-glimmer-30b": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.04,
-        "input": 0.35,
-        "output": 1.5
-      },
-      "family": "muse",
-      "limit": {
-        "context": 131072,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Muse Glimmer 30B",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-08-10",
-      "status": "deprecated",
-      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -735,35 +493,6 @@
       "mode": "rerank",
       "name": "accounts/fireworks/models/qwen3-reranker-8b"
     },
-    "accounts/fireworks/models/qwen3p7-plus": {
-      "attachment": true,
-      "cost": {
-        "cache_read": 0.08,
-        "input": 0.4,
-        "output": 1.6
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 262144,
-        "output": 65536
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen 3.7 Plus",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-06-12",
-      "temperature": true,
-      "tool_call": true
-    },
     "accounts/fireworks/models/qwen3p8-2p4t-a95b": {
       "attachment": false,
       "cost": {
@@ -836,9 +565,9 @@
     "accounts/fireworks/routers/deepseek-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.007,
-        "input": 0.22,
-        "output": 0.66
+        "cache_read": 0.006,
+        "input": 0.3,
+        "output": 1.2
       },
       "family": "deepseek-flash",
       "limit": {
@@ -859,62 +588,6 @@
       "reasoning": true,
       "release_date": "2026-09-10",
       "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "accounts/fireworks/routers/deepseek-pro-latest": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.044,
-        "input": 1.32,
-        "output": 3.96
-      },
-      "family": "deepseek-thinking",
-      "limit": {
-        "context": 1000000,
-        "output": 384000
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "DeepSeek Pro Latest",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-08-12",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
-    "accounts/fireworks/routers/glm-5p2-fast": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.21,
-        "input": 2.1,
-        "output": 6.6
-      },
-      "family": "glm",
-      "limit": {
-        "context": 1048575,
-        "output": 131072
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "GLM 5.2 Fast",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-06-26",
       "temperature": true,
       "tool_call": true
     },

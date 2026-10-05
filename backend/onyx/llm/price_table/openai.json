@@ -469,6 +469,15 @@
       "mode": "audio_speech",
       "name": "gpt-4o-mini-tts"
     },
+    "gpt-4o-mini-tts-2025-03-20": {
+      "cost": {
+        "input": 0.6,
+        "output": 10.0,
+        "second": 0.00025
+      },
+      "mode": "audio_speech",
+      "name": "gpt-4o-mini-tts-2025-03-20"
+    },
     "gpt-4o-mini-tts-2025-12-15": {
       "cost": {
         "input": 0.6,
@@ -712,6 +721,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.2 Chat",
       "open_weights": false,
       "reasoning": true,
@@ -772,6 +782,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GPT-5.3 Chat (latest)",
       "open_weights": false,
       "reasoning": false,
@@ -1455,6 +1466,140 @@
       "release_date": "2026-09-22",
       "structured_output": true,
       "supports_none_reasoning_effort": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6.1-sol": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "cache_write": 2.5,
+        "context_over_200k": {
+          "cache_read": 0.2,
+          "cache_write": 5,
+          "input": 4,
+          "output": 15
+        },
+        "input": 2,
+        "output": 10,
+        "tiers": [
+          {
+            "cache_read": 0.2,
+            "cache_write": 5,
+            "input": 4,
+            "output": 15,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "GPT-6.1 Sol",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-29",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-daybreak-blue-latest": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.4,
+        "cache_write": 5,
+        "context_over_200k": {
+          "cache_read": 0.8,
+          "cache_write": 10,
+          "input": 8,
+          "output": 30
+        },
+        "input": 4,
+        "output": 20,
+        "tiers": [
+          {
+            "cache_read": 0.8,
+            "cache_write": 10,
+            "input": 8,
+            "output": 30,
+            "tier": {
+              "size": 272000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "gpt-sol",
+      "limit": {
+        "context": 1050000,
+        "input": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "Daybreak Blue",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-07",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
+    "gpt-daybreak-red-latest": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 1.25,
+        "cache_write": 15.625,
+        "input": 12.5,
+        "output": 75
+      },
+      "family": "gpt",
+      "limit": {
+        "context": 400000,
+        "input": 272000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "Daybreak Red",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-08-07",
+      "structured_output": true,
       "temperature": false,
       "tool_call": true
     },

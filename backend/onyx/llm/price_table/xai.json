@@ -420,6 +420,13 @@
       "mode": "image_generation",
       "name": "grok-imagine-image-2026-03-02"
     },
+    "grok-imagine-image-pro": {
+      "cost": {
+        "image_input": 0.05
+      },
+      "mode": "image_generation",
+      "name": "grok-imagine-image-pro"
+    },
     "grok-imagine-image-quality": {
       "attachment": true,
       "cost": {
@@ -530,6 +537,35 @@
       },
       "mode": "video_generation",
       "name": "grok-imagine-video-1.5-2026-05-30"
+    },
+    "grok-imagine-video-1.5-lite": {
+      "attachment": true,
+      "cost": {
+        "image_input": 0.01,
+        "second": 0.02
+      },
+      "family": "grok",
+      "limit": {
+        "context": 1024,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "video"
+        ]
+      },
+      "mode": "video_generation",
+      "name": "Grok Imagine Video 1.5 Lite",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-10-01",
+      "temperature": false,
+      "tool_call": false
     },
     "grok-imagine-video-1.5-preview": {
       "cost": {

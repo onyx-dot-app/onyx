@@ -32,13 +32,14 @@
     "qwen-3.8-27b": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.99,
         "input": 0.99,
         "output": 1.49
       },
       "family": "qwen",
       "limit": {
-        "context": 65536,
-        "output": 32768
+        "context": 131072,
+        "output": 40960
       },
       "modalities": {
         "input": [
