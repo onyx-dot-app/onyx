@@ -86,6 +86,7 @@ class AuditAction(str, Enum):
     CRAFT_DEFAULT_CHANGE = "settings.craft_default_change"
     SECURITY_SETTINGS_CHANGE = "settings.security_settings_change"
     CONTEXTUAL_RAG_MODEL_UPDATE = "search_settings.contextual_rag_model_update"
+    CONTEXTUAL_RAG_DISABLE = "search_settings.contextual_rag_disable"
     LLM_PROVIDER_CREATE = "llm_provider.create"
     LLM_PROVIDER_UPDATE = "llm_provider.update"
     LLM_PROVIDER_DELETE = "llm_provider.delete"
@@ -132,6 +133,7 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.CRAFT_DEFAULT_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.SECURITY_SETTINGS_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.CONTEXTUAL_RAG_DISABLE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_CREATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_UPDATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_DELETE: OCSFEventClass.API_ACTIVITY,

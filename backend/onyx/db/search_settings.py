@@ -258,6 +258,14 @@ def update_current_search_settings(
     logger.info("Current search settings updated successfully")
 
 
+def disable_contextual_rag__no_commit(current_settings: SearchSettings) -> None:
+    """Turns Contextual Retrieval off on the given settings in place. The
+    index is untouched, and the model id stays as the sign that it still
+    holds generated context, which the next re-index port strips. The caller
+    holds the row lock and commits."""
+    current_settings.enable_contextual_rag = False
+
+
 def update_secondary_search_settings(
     db_session: Session,
     search_settings: SavedSearchSettings,

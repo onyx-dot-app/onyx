@@ -5055,6 +5055,10 @@
         "title": "LLM de legendagem"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "Pare agora de gerar contexto para documentos novos e atualizados ou reconstrua todos os documentos para remover também o contexto já gerado.",
+          "title": "Escolha como desativar a recuperação contextual"
+        },
         "contextualModelMissing": {
           "description": "A recuperação contextual está ativada, mas nenhum modelo foi selecionado. Escolha um LLM de recuperação contextual abaixo antes de reindexar — sem ele, a reindexação não pode ser executada.",
           "title": "Selecione um LLM de recuperação contextual"
@@ -5171,6 +5175,10 @@
       "forwardOnlyModal": {
         "description": "Os documentos existentes mantêm o contexto gerado pelo modelo anterior. O novo modelo se aplica apenas quando documentos são adicionados ou atualizados. O enriquecimento contextual pode variar entre os documentos.",
         "title": "Aplicar o LLM de recuperação contextual daqui em diante"
+      },
+      "disableForwardModal": {
+        "description": "A recuperação contextual é interrompida para documentos adicionados ou atualizados a partir de agora. Os documentos existentes mantêm o contexto já gerado até serem atualizados ou até que você reindexe.",
+        "title": "Desativar a recuperação contextual daqui em diante"
       },
       "header": {
         "description": "Configure como os documentos são indexados, transformados em embeddings e preparados para pesquisa e recuperação."
@@ -5390,6 +5398,8 @@
         "contextualModelRequired": "Selecione um LLM de recuperação contextual antes de reindexar.",
         "contextualModelUpdateFailed": "Falha ao atualizar o LLM de recuperação contextual",
         "contextualModelUpdated": "LLM de recuperação contextual atualizado",
+        "contextualRetrievalDisableFailed": "Falha ao desativar a recuperação contextual",
+        "contextualRetrievalDisabled": "Recuperação contextual desativada",
         "modelNotFound": "Não foi possível encontrar o modelo selecionado",
         "providerResolveFailed": "Não foi possível resolver o provedor",
         "reindexCanceled": "Reindexação cancelada",

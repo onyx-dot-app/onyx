@@ -163,12 +163,36 @@ def test_select_reembed_strategy() -> None:
         )
         is ReembedStrategy.MODEL_ONLY
     )
-    # RAG OFF in both: a stale model-id difference is irrelevant (no enrichment in
-    # either index) -> MODEL_ONLY, not a spurious AUGMENTATION.
+    # RAG off in both but PRESENT kept a model id: Contextual Retrieval was
+    # turned off without a re-index, so the index still holds context that a
+    # rebuild must strip -> AUGMENTATION (no LLM, future is off).
     assert (
         select_reembed_strategy(
             _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=1),
-            _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=2),
+            _ss(
+                enable_contextual_rag=False, contextual_rag_model_configuration_id=None
+            ),
+        )
+        is ReembedStrategy.AUGMENTATION
+    )
+    # Re-enabled with the same model after a forward-only disable: the index
+    # mixes chunks with and without context, so every chunk is re-glued.
+    assert (
+        select_reembed_strategy(
+            _ss(enable_contextual_rag=False, contextual_rag_model_configuration_id=1),
+            _ss(enable_contextual_rag=True, contextual_rag_model_configuration_id=1),
+        )
+        is ReembedStrategy.AUGMENTATION
+    )
+    # RAG off in both with no model id anywhere: nothing to strip -> MODEL_ONLY.
+    assert (
+        select_reembed_strategy(
+            _ss(
+                enable_contextual_rag=False, contextual_rag_model_configuration_id=None
+            ),
+            _ss(
+                enable_contextual_rag=False, contextual_rag_model_configuration_id=None
+            ),
         )
         is ReembedStrategy.MODEL_ONLY
     )

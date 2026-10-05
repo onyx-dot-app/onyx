@@ -5055,6 +5055,10 @@
         "title": "キャプション生成 LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "新規および更新されたドキュメントのコンテキスト生成を今すぐ停止するか、すべてのドキュメントを再構築して生成済みのコンテキストも削除します。",
+          "title": "コンテキスト検索をオフにする方法を選択してください"
+        },
         "contextualModelMissing": {
           "description": "コンテキスト検索は有効ですが、モデルが選択されていません。再インデックスの前に、下でコンテキスト検索 LLM を選択してください。選択しないと再インデックスは実行できません。",
           "title": "コンテキスト検索 LLM を選択してください"
@@ -5171,6 +5175,10 @@
       "forwardOnlyModal": {
         "description": "既存のドキュメントは以前のモデルが生成したコンテキストを保持します。新しいモデルは、ドキュメントの追加時または更新時にのみ適用されます。コンテキストの内容がドキュメントによって異なる場合があります。",
         "title": "コンテキスト検索 LLM を以降のドキュメントに適用"
+      },
+      "disableForwardModal": {
+        "description": "今後追加または更新されるドキュメントではコンテキスト検索が停止します。既存のドキュメントは、更新されるか再インデックスするまで生成済みのコンテキストを保持します。",
+        "title": "コンテキスト検索を以降のドキュメントでオフにする"
       },
       "header": {
         "description": "ドキュメントのインデックス作成、embedding の生成、検索と取得に向けた準備の方法を設定します。"
@@ -5390,6 +5398,8 @@
         "contextualModelRequired": "再インデックスの前にコンテキスト検索 LLM を選択してください。",
         "contextualModelUpdateFailed": "コンテキスト検索 LLM を更新できませんでした",
         "contextualModelUpdated": "コンテキスト検索 LLM を更新しました",
+        "contextualRetrievalDisableFailed": "コンテキスト検索をオフにできませんでした",
+        "contextualRetrievalDisabled": "コンテキスト検索をオフにしました",
         "modelNotFound": "選択したモデルが見つかりませんでした",
         "providerResolveFailed": "プロバイダーを特定できませんでした",
         "reindexCanceled": "再インデックスをキャンセルしました",

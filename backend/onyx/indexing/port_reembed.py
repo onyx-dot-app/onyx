@@ -97,16 +97,23 @@ def select_reembed_strategy(
     present_ss: SearchSettings, future_ss: SearchSettings
 ) -> ReembedStrategy:
     """AUGMENTATION when the contextual-RAG *enrichment* differs (the embedded
-    text changes), otherwise MODEL_ONLY. A change in
-    `contextual_rag_model_configuration_id` only matters when contextual RAG is
-    on in present or future — if it is off in both, no enrichment exists in
-    either index, so a stale model-id difference must not force AUGMENTATION.
-    Model/prefix/normalize/dimension and multipass changes only alter the vectors
-    (or large/mini chunks the port doesn't read), so they fall through to
+    text changes), otherwise MODEL_ONLY. PRESENT may hold generated context
+    with the flag off: turning Contextual Retrieval off without a re-index
+    clears the flag and keeps the model id as the sign of that, so a model id
+    on PRESENT counts as context to strip or re-generate. Model/prefix/
+    normalize/dimension and multipass changes only alter the vectors (or
+    large/mini chunks the port doesn't read), so they fall through to
     MODEL_ONLY."""
-    rag_relevant = present_ss.enable_contextual_rag or future_ss.enable_contextual_rag
+    present_holds_context = (
+        present_ss.enable_contextual_rag
+        or present_ss.contextual_rag_model_configuration_id is not None
+    )
+    rag_relevant = present_holds_context or future_ss.enable_contextual_rag
+    # Flag flips always re-glue: after a forward-only disable the index mixes
+    # chunks with and without context, so a re-enable must generate for all.
     augmentation_changed = (
         present_ss.enable_contextual_rag != future_ss.enable_contextual_rag
+        or present_holds_context != future_ss.enable_contextual_rag
         or (
             rag_relevant
             and present_ss.contextual_rag_model_configuration_id
