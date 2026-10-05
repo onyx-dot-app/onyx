@@ -72,8 +72,8 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
     """Pairs whose documents the user may see with no document ACL match
     ("open" pairs): PUBLIC pairs, and non-perm-synced pairs where the user owns
     the credential or is in a data-access group of the pair. Perm-synced pairs are
-    never open; their documents need an ACL match. Does not exclude DELETING
-    pairs."""
+    never open; their documents need an ACL match. Does not exclude non-granting
+    pairs (see _granting_cc_pair_clause)."""
     credential_owner = (
         select(1)
         .select_from(Credential)
@@ -100,7 +100,7 @@ def build_user_acl_cc_pair_filter(user_id: UUID | None) -> ColumnElement[bool]:
     """Pairs whose documents the user may see on a document ACL match ("ACL"
     pairs): SYNC pairs, and SYNC_RESTRICTED pairs where the user is in a
     data-access group of the pair. Anonymous users (None) get only SYNC pairs.
-    Does not exclude DELETING pairs."""
+    Does not exclude non-granting pairs (see _granting_cc_pair_clause)."""
     is_sync = ConnectorCredentialPair.access_type == AccessType.SYNC
     if user_id is None:
         return is_sync
@@ -116,46 +116,61 @@ def build_user_acl_cc_pair_filter(user_id: UUID | None) -> ColumnElement[bool]:
     )
 
 
+def _granting_cc_pair_clause() -> ColumnElement[bool]:
+    """Pairs that may grant access at query time. A DELETING pair grants
+    nothing, and neither does a pair awaiting its first permission sync: its
+    chunks can still carry the access of its previous access type."""
+    return and_(
+        ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        ConnectorCredentialPair.perm_sync_pending_since.is_(None),
+    )
+
+
+def _guarded_cc_pair_clause() -> ColumnElement[bool]:
+    """Pairs whose documents the document ACL alone must not expose:
+    SYNC_RESTRICTED pairs, and pairs awaiting their first permission sync."""
+    return or_(
+        ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
+        ConnectorCredentialPair.perm_sync_pending_since.is_not(None),
+    )
+
+
 def build_restricted_acl_guard(
     user_id: UUID | None,
     has_cc_pair: Callable[[ColumnElement[bool]], ColumnElement[bool]],
 ) -> ColumnElement[bool]:
     """For readers that match a document ACL without knowing which pair grants
-    it. The match must not count for an item of a SYNC_RESTRICTED pair the user
-    can't see, unless another pair of the item grants ACL access.
+    it. The match must not count for an item of a guarded pair that grants the
+    user nothing, unless another pair of the item grants ACL access.
 
     has_cc_pair(clause) is an EXISTS over the item's pairs that match clause."""
     visible_acl_pair = and_(
-        ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
-        build_user_acl_cc_pair_filter(user_id),
+        _granting_cc_pair_clause(), build_user_acl_cc_pair_filter(user_id)
     )
-    hidden_restricted_pair = and_(
-        ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
-        ~visible_acl_pair,
-    )
-    return or_(~has_cc_pair(hidden_restricted_pair), has_cc_pair(visible_acl_pair))
+    hidden_pair = and_(_guarded_cc_pair_clause(), ~visible_acl_pair)
+    return or_(~has_cc_pair(hidden_pair), has_cc_pair(visible_acl_pair))
 
 
-def _has_cc_pair_with_access_type(
-    db_session: Session, access_types: list[AccessType]
+def _has_cc_pair_matching(
+    db_session: Session, clause: ColumnElement[bool]
 ) -> bool:
     return bool(
         db_session.scalar(
-            select(
-                select(ConnectorCredentialPair.id)
-                .where(ConnectorCredentialPair.access_type.in_(access_types))
-                .exists()
-            )
+            select(select(ConnectorCredentialPair.id).where(clause).exists())
         )
     )
 
 
 def has_perm_synced_cc_pairs(db_session: Session) -> bool:
-    return _has_cc_pair_with_access_type(db_session, AccessType.perm_synced_types())
+    return _has_cc_pair_matching(
+        db_session,
+        ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
+    )
 
 
-def has_sync_restricted_cc_pairs(db_session: Session) -> bool:
-    return _has_cc_pair_with_access_type(db_session, [AccessType.SYNC_RESTRICTED])
+def has_guarded_cc_pairs(db_session: Session) -> bool:
+    """False when the restricted guard can hide nothing, so readers skip it."""
+    return _has_cc_pair_matching(db_session, _guarded_cc_pair_clause())
 
 
 class CCPairAccessSets(BaseModel):
@@ -163,7 +178,8 @@ class CCPairAccessSets(BaseModel):
     open_cc_pair_ids: set[int]
     # Documents of these pairs are visible if public or matching the user's ACL.
     acl_cc_pair_ids: set[int]
-    # SYNC_RESTRICTED pairs that grant the user nothing, DELETING ones included.
+    # Guarded pairs that grant the user nothing: SYNC_RESTRICTED pairs (DELETING
+    # ones included) and pairs awaiting their first permission sync.
     hidden_restricted_cc_pair_ids: set[int]
 
 
@@ -174,21 +190,26 @@ def get_cc_pair_access_sets_for_user(
 
     Open pairs follow build_user_cc_pair_access_filter and ACL pairs follow
     build_user_acl_cc_pair_filter; anonymous users get only PUBLIC open pairs
-    and SYNC ACL pairs. DELETING pairs are in neither set."""
+    and SYNC ACL pairs. DELETING pairs and pairs awaiting their first
+    permission sync are in neither set."""
     open_clause = (
         ConnectorCredentialPair.access_type == AccessType.PUBLIC
         if user.is_anonymous
         else build_user_cc_pair_access_filter(user.id)
     )
     acl_clause = build_user_acl_cc_pair_filter(None if user.is_anonymous else user.id)
-    is_live = ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
-    is_restricted = ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED
+    is_granting = _granting_cc_pair_clause()
     rows = db_session.execute(
         select(
             ConnectorCredentialPair.id,
-            and_(is_live, acl_clause).label("is_acl"),
-            and_(is_live, open_clause).label("is_open"),
-        ).where(or_(and_(is_live, or_(open_clause, acl_clause)), is_restricted))
+            and_(is_granting, acl_clause).label("is_acl"),
+            and_(is_granting, open_clause).label("is_open"),
+        ).where(
+            or_(
+                and_(is_granting, or_(open_clause, acl_clause)),
+                _guarded_cc_pair_clause(),
+            )
+        )
     ).tuples()
     access_sets = CCPairAccessSets(
         open_cc_pair_ids=set(),

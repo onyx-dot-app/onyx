@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
@@ -1290,6 +1291,29 @@ def mark_cc_pair_documents_for_sync__no_commit(
             DbDocument.chunk_count.is_not(None),
         )
         .values(last_modified=datetime.now(timezone.utc))
+    )
+
+
+def build_cc_pair_has_unsynced_documents_clause() -> ColumnElement[bool]:
+    """EXISTS over the indexed documents of the enclosing query's
+    ConnectorCredentialPair row that wait for metadata sync: the documents
+    mark_cc_pair_documents_for_sync__no_commit marks, not yet synced."""
+    return (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id
+            == ConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id
+            == ConnectorCredentialPair.credential_id,
+            DbDocument.chunk_count.is_not(None),
+            or_(
+                DbDocument.last_modified > DbDocument.last_synced,
+                DbDocument.last_synced.is_(None),
+            ),
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
     )
 
 

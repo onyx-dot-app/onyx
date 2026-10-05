@@ -1046,6 +1046,12 @@ class ConnectorCredentialPair(Base):
     prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Set when the pair enters a perm-synced access type. While set, the pair
+    # grants no access at query time and the restricted guard hides its
+    # documents. Cleared once its permissions are in the document index.
+    perm_sync_pending_since: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Determines how documents are processed after fetching:
     # REGULAR: Full pipeline (chunk → embed → document index)

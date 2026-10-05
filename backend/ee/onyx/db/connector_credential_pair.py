@@ -1,11 +1,12 @@
 from uuid import UUID
 
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, delete, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair
+from onyx.db.document import build_cc_pair_has_unsynced_documents_clause
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import (
     Connector,
@@ -99,3 +100,47 @@ def get_all_auto_sync_cc_pairs(
         )
         .all()
     )
+
+
+def get_perm_sync_pending_cc_pair_sources(
+    db_session: Session,
+) -> dict[int, DocumentSource]:
+    """The pairs awaiting their first permission sync, with their sources."""
+    return dict(
+        db_session.execute(
+            select(ConnectorCredentialPair.id, Connector.source)
+            .join(ConnectorCredentialPair.connector)
+            .where(ConnectorCredentialPair.perm_sync_pending_since.is_not(None))
+        )
+        .tuples()
+        .all()
+    )
+
+
+def clear_perm_sync_pending__no_commit(
+    db_session: Session, cc_pair_id: int, needs_group_sync: bool
+) -> bool:
+    """Clears the pair's perm_sync_pending_since once its permissions are in
+    the document index: a doc permission sync that started after the mark
+    succeeded, an external group sync after the mark succeeded when
+    needs_group_sync, and no indexed document of the pair waits for metadata
+    sync. Returns True if it cleared the mark."""
+    pending_since = ConnectorCredentialPair.perm_sync_pending_since
+    conditions = [
+        ConnectorCredentialPair.id == cc_pair_id,
+        pending_since.is_not(None),
+        # Set to the start time of the last successful doc permission sync.
+        ConnectorCredentialPair.last_time_perm_sync >= pending_since,
+        ~build_cc_pair_has_unsynced_documents_clause(),
+    ]
+    if needs_group_sync:
+        conditions.append(
+            ConnectorCredentialPair.last_time_external_group_sync >= pending_since
+        )
+    cleared_id = db_session.execute(
+        update(ConnectorCredentialPair)
+        .where(*conditions)
+        .values(perm_sync_pending_since=None)
+        .returning(ConnectorCredentialPair.id)
+    ).scalar_one_or_none()
+    return cleared_id is not None

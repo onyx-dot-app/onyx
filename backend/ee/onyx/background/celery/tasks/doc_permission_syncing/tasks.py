@@ -19,7 +19,11 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
+from ee.onyx.db.connector_credential_pair import (
+    clear_perm_sync_pending__no_commit,
+    get_all_auto_sync_cc_pairs,
+    get_perm_sync_pending_cc_pair_sources,
+)
 from ee.onyx.db.document import upsert_document_external_perms
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.models import DocExternalAccess, ElementExternalAccess
@@ -292,6 +296,9 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                     monitor_ccpair_permissions_taskset(
                         tenant_id, key_bytes, r, db_session
                     )
+
+        lock_beat.reacquire()
+        _clear_caught_up_perm_sync_pending_marks(tenant_id)
         task_logger.info(f"check_for_doc_permissions_sync finished: tenant={tenant_id}")
     except SoftTimeLimitExceeded:
         task_logger.info(
@@ -310,6 +317,31 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             lock_beat.release()
 
     return True
+
+
+def _clear_caught_up_perm_sync_pending_marks(tenant_id: str) -> None:
+    """Clears the mark of each pair awaiting its first permission sync whose
+    permissions are now in the document index. Group ACL entries are only as
+    current as the group memberships, so a source with group sync also waits
+    for one."""
+    with get_session_with_current_tenant() as db_session:
+        pending_cc_pair_sources = get_perm_sync_pending_cc_pair_sources(db_session)
+        if not pending_cc_pair_sources:
+            return
+        # Keeps this beat running for the tenant until the marks clear.
+        maybe_mark_tenant_active(tenant_id, caller="doc_permission_sync")
+        for cc_pair_id, source in pending_cc_pair_sources.items():
+            sync_config = get_source_perm_sync_config(source)
+            needs_group_sync = (
+                sync_config is not None and sync_config.group_sync_config is not None
+            )
+            if clear_perm_sync_pending__no_commit(
+                db_session, cc_pair_id, needs_group_sync
+            ):
+                task_logger.info(
+                    f"Cleared perm sync pending mark: cc_pair={cc_pair_id}"
+                )
+        db_session.commit()
 
 
 def try_creating_permissions_sync_task(
