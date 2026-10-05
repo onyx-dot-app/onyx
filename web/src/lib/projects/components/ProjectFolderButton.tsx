@@ -233,7 +233,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
 
       {/* Project Folder */}
       <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
-        <Dropdown onOpenChange={setMenuOpen}>
+        <Dropdown width={15} onOpenChange={setMenuOpen}>
           <SidebarTab
             icon={FolderIcon}
             // Folded, the project's chats are hidden — and a project chat

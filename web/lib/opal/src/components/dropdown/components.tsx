@@ -23,8 +23,10 @@ import {
   useDropdownKeyboard,
   useDropdownOverlay,
   useFoldedGroups,
+  type DropdownAlign,
   type DropdownTabKey,
   type DropdownVirtualAnchor,
+  type DropdownWidth,
   type ListModel,
 } from "@opal/components/dropdown/hooks";
 import {
@@ -76,6 +78,17 @@ interface DropdownProps {
   /** Where the list portals to, for a dropdown inside a modal. */
   container?: HTMLElement | null;
   /**
+   * A fixed width in rem, punch-out included. Left out, the list matches
+   * its anchor's width and reaches 6px past it on each side, never
+   * narrower than 17.5rem.
+   */
+  width?: DropdownWidth;
+  /**
+   * The anchor edge the list lines up with. It reaches 6px past that edge.
+   * @default "start"
+   */
+  align?: DropdownAlign;
+  /**
    * What Tab does while the list is open. By default a type-in trigger
    * walks the rows and any other trigger closes the list and lets focus
    * move on; set it to make every trigger behave one way.
@@ -105,6 +118,8 @@ function Dropdown({
   id: idProp,
   virtualAnchor,
   container,
+  width,
+  align = "start",
   tabKey,
   children,
 }: DropdownProps) {
@@ -115,6 +130,8 @@ function Dropdown({
     onOpenChange,
     disabled,
     virtualAnchor,
+    width,
+    align,
   });
   const {
     isOpen,
@@ -942,4 +959,6 @@ export {
   type DropdownDataProps,
   type DropdownTabKey,
   type DropdownVirtualAnchor,
+  type DropdownWidth,
+  type DropdownAlign,
 };

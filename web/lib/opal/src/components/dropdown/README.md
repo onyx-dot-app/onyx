@@ -83,7 +83,7 @@ A picker on a type-in:
 
 ### `Dropdown`
 
-The list is always its anchor's width, 6px wider on each side so the rows line up under the anchor's content, and never narrower than `--block-width-dropdown-min` (17.5rem), so a narrow button trigger still gets a usable list.
+Left to itself the list is its anchor's width, 6px wider on each side so the rows line up under the anchor's content, and never narrower than `--block-width-dropdown-min` (17.5rem). `width` fixes it instead, in rem steps that include the 6px reach; `align` picks which anchor edge it lines up with, and it reaches 6px past that edge.
 
 | Prop            | Type                                         | Default    | Description                                                                                                 |
 | --------------- | -------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------- |
@@ -94,6 +94,8 @@ The list is always its anchor's width, 6px wider on each side so the rows line u
 | `virtualAnchor` | `{ getBoundingClientRect, contextElement? }` | —          | A rectangle to position against instead of an element, like a text caret                                    |
 | `container`     | `HTMLElement \| null`                        | body       | Where the list portals to, for a dropdown inside a modal                                                    |
 | `tabKey`        | `"walk" \| "leave"`                          | by trigger | What Tab does while open: walk the rows, or close and move on. Default: walk for a type-in, leave otherwise |
+| `width`         | `15 \| 17.5 \| 20 \| 22.5 \| 25`             | —          | A fixed width in rem, punch-out included; left out, the list matches its anchor                             |
+| `align`         | `"start" \| "end"`                           | `"start"`  | The anchor edge the list lines up with                                                                      |
 
 ### `Dropdown.Trigger`
 

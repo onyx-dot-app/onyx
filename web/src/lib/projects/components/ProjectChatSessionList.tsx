@@ -243,7 +243,7 @@ function ProjectChatItem({
           interaction={menuOpen ? "active" : undefined}
           rightChildren={
             <Hoverable.Item group={chat.id} variant="appear-on-hover">
-              <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
+              <Dropdown width={15} open={menuOpen} onOpenChange={setMenuOpen}>
                 {/* The row is a link: the click toggles the menu and goes no
                     further, so the row does not navigate. The trigger's own
                     handler runs first, on the button itself. */}
