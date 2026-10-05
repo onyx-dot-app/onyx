@@ -34,7 +34,6 @@ import {
 import { Content, toast, useSidebarFolded } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { useAppPosition } from "@/lib/position/hooks";
-import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
@@ -112,25 +111,11 @@ function useSettingsItems({
       kind: "group",
       items: [
         {
-          // A real link, under the id the tests know it by.
-          kind: "custom",
+          kind: "action",
           id: "user-settings",
-          keywords: [t("settings.label")],
-          render: ({ highlighted, props }) => (
-            <div data-testid="Settings/user-settings">
-              <LineItemButton
-                selectVariant="select-heavy"
-                interaction={highlighted ? "hover" : "rest"}
-                sizePreset="main-ui"
-                variant="section"
-                rounding={2}
-                icon={SvgSliders}
-                title={t("settings.label")}
-                href="/app/settings"
-                {...props}
-              />
-            </div>
-          ),
+          icon: SvgSliders,
+          title: t("settings.label"),
+          href: "/app/settings",
         },
         {
           kind: "custom",
@@ -281,7 +266,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   };
   const items = useSettingsItems({ undismissedCount });
   const notificationsView: DropdownView = {
-    width: 22.5,
+    width: 90,
     items: [
       {
         kind: "custom",
@@ -301,7 +286,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
 
   return (
     <Dropdown
-      width={15}
+      width={60}
       side="right"
       align="end"
       open={menuOpen}

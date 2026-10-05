@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ensureHrefProtocol, noProp } from "@/lib/utils";
+import { ensureHrefProtocol } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";

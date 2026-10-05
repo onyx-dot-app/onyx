@@ -11879,7 +11879,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "{name} 연결",
         "associateButton": "기존 스킬 연결",
         "create": {
           "github": {

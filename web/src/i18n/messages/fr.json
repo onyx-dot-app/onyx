@@ -11879,7 +11879,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "Associer {name}",
         "associateButton": "Associer une existante",
         "create": {
           "github": {

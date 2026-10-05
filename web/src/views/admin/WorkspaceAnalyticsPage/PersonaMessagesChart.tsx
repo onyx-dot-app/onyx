@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Dropdown, SelectButton } from "@opal/components";
 import { SvgOnyxOctagon } from "@opal/icons";

@@ -79,8 +79,9 @@ interface DropdownProps {
   /** Where the list portals to, for a dropdown inside a modal. */
   container?: HTMLElement | null;
   /**
-   * A fixed width in rem, punch-out included. Left out, the list matches
-   * its anchor's width and reaches 6px past it on each side, never
+   * A fixed width on the Tailwind scale, one of the contextual-menu steps
+   * in sizes.css (60 is 15rem), punch-out included. Left out, the list
+   * matches its anchor's width and reaches 6px past it on each side, never
    * narrower than 17.5rem.
    */
   width?: DropdownWidth;
@@ -166,6 +167,8 @@ function Dropdown({
     setHighlightedIndex,
     setIsKeyboardNav,
     listRef,
+    floatingRef: overlay.floatingRef,
+    focusTrigger: overlay.focusTrigger,
     tabKey,
   });
 

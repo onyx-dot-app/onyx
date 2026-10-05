@@ -947,8 +947,6 @@ interface SelectorFormFieldProps {
   options: StringOrNumberOption[];
   subtext?: string | JSX.Element;
   includeDefault?: boolean;
-  side?: "top" | "right" | "bottom" | "left";
-  maxHeight?: string;
   onSelect?: (selected: string | number | null) => void;
   defaultValue?: string;
   tooltip?: string;

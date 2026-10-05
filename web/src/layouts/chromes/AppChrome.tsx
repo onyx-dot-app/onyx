@@ -548,7 +548,7 @@ function Header() {
                         {t("share.label")}
                       </Button>
                       <Dropdown
-                        width={15}
+                        width={60}
                         open={menuOpen}
                         onOpenChange={setMenuOpen}
                       >

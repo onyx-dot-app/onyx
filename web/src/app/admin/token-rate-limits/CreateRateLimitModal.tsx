@@ -66,6 +66,8 @@ function handleRadioOptionKeyDown(
   ) {
     return;
   }
+  // A dropdown trigger on the card may have taken the arrow for its list.
+  if (event.defaultPrevented) return;
   event.preventDefault();
   const group = event.currentTarget.closest('[role="radiogroup"]');
   const options = Array.from(
@@ -106,12 +108,13 @@ function ScopeOption({
       state={selected ? "selected" : "empty"}
       padding={2}
       rounding={2}
+      ref={ref}
+      {...rest}
+      // The card is a radio whatever a dropdown trigger spreads onto it.
       role="radio"
       aria-checked={selected}
       aria-label={option.title}
       tabIndex={selected ? 0 : -1}
-      ref={ref}
-      {...rest}
       onClick={(event) => {
         rest.onClick?.(event);
         onSelect();

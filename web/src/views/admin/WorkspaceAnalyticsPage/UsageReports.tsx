@@ -26,7 +26,6 @@ import {
   SvgX,
 } from "@opal/icons";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UsageReport } from "@/app/ee/admin/performance/usage/types";
@@ -278,7 +277,7 @@ function GenerateReportMenu({
 
   return (
     <Dropdown
-      width={20}
+      width={80}
       align="end"
       open={open}
       onOpenChange={(nextOpen) => {

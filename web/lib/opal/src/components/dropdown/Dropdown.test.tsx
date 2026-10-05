@@ -203,6 +203,31 @@ describe("Dropdown picker", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
+  test("an open list takes Escape before a dialog's document listener", async () => {
+    const user = setupUser();
+    render(<Harness />);
+    // A dialog listens for Escape on the document in the capture phase.
+    const dialogEscape = jest.fn();
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") dialogEscape();
+    };
+    document.addEventListener("keydown", onDocumentKeyDown, true);
+    try {
+      const trigger = screen.getByRole("combobox", { name: "Fruit" });
+      await user.click(trigger);
+      await user.keyboard("{ArrowDown}");
+      expect(trigger).toHaveAttribute("aria-expanded", "true");
+      await user.keyboard("{Escape}");
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+      expect(dialogEscape).not.toHaveBeenCalled();
+      // Closed, the key is the dialog's.
+      await user.keyboard("{Escape}");
+      expect(dialogEscape).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("keydown", onDocumentKeyDown, true);
+    }
+  });
+
   test("the query filters the rows and opens folded groups to show matches", async () => {
     const user = setupUser();
     render(<Harness />);

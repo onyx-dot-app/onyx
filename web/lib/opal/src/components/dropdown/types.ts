@@ -134,8 +134,12 @@ export type DropdownMenuItem = DropdownMenuRow | DropdownGroup<DropdownMenuRow>;
 /** Picker (`listbox`, something is selected) or menu (`menu`, commands). */
 export type DropdownMode = "picker" | "menu";
 
-/** A fixed list width in rem, from the contextual-menu steps. */
-export type DropdownWidth = 15 | 17.5 | 20 | 22.5 | 25;
+/**
+ * A fixed list width on the Tailwind scale (units of 0.25rem), one of the
+ * `--block-width-contextual-menu-*` steps in sizes.css: 30 is 7.5rem, 90 is
+ * 22.5rem. `DROPDOWN_WIDTH_TOKENS` in model.ts maps each to its token.
+ */
+export type DropdownWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90;
 /** Which edge of the anchor the list lines up with. */
 export type DropdownAlign = "start" | "end";
 /** Below the anchor, or a flyout beside it. */

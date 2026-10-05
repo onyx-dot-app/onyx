@@ -11879,7 +11879,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "关联 {name}",
         "associateButton": "关联现有技能",
         "create": {
           "github": {

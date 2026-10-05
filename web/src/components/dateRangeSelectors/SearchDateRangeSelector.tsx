@@ -11,7 +11,6 @@ export function SearchDateRangeSelector({
   value: InputDateRangePickerValue | null;
   onValueChange: (value: InputDateRangePickerValue | null) => void;
   isHorizontal?: boolean;
-  className?: string;
 }) {
   const t = useTranslations("common.dateRange");
   return (

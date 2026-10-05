@@ -234,7 +234,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
 
       {/* Project Folder */}
       <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
-        <Dropdown width={15} onOpenChange={setMenuOpen}>
+        <Dropdown width={60} onOpenChange={setMenuOpen}>
           <Hoverable.Root
             group="ProjectFolderButton"
             interaction={menuOpen ? "hover" : "rest"}

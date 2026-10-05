@@ -15,6 +15,7 @@ import {
   useFloating,
   type ReferenceType,
 } from "@floating-ui/react-dom";
+import { DROPDOWN_WIDTH_TOKENS } from "@opal/components/dropdown/model";
 import type {
   DropdownAlign,
   DropdownRow,
@@ -160,6 +161,9 @@ interface UseDropdownKeyboardProps {
   setHighlightedIndex: (index: number | ((prev: number) => number)) => void;
   setIsKeyboardNav: (isKeyboard: boolean) => void;
   listRef: React.RefObject<ListModel>;
+  /** The list's element: focus inside it returns to the trigger on close. */
+  floatingRef: React.RefObject<HTMLElement | null>;
+  focusTrigger: () => void;
   /** Overrides what Tab does, for every trigger of this dropdown. */
   tabKey?: DropdownTabKey;
 }
@@ -190,6 +194,8 @@ export function useDropdownKeyboard({
   setHighlightedIndex,
   setIsKeyboardNav,
   listRef,
+  floatingRef,
+  focusTrigger,
   tabKey,
 }: UseDropdownKeyboardProps) {
   // The letters typed in quick succession; they clear after a pause, so
@@ -203,6 +209,28 @@ export function useDropdownKeyboard({
     window.clearTimeout(typeAheadTimer.current);
     typeAheadRef.current = "";
   }, [isOpen]);
+
+  // Escape belongs to an open list before anything around it: a dialog
+  // listens for Escape on the document in the capture phase and would
+  // otherwise take the key, leaving the list open and dismissing itself.
+  // A listener on the window runs earlier still, so the list leaves a
+  // view or closes and the key goes no further.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (listRef.current.back()) return;
+      setIsOpen(false);
+      setIsKeyboardNav(false);
+      // Focus in the list (its search field, a control in a row) has
+      // nowhere to go once the list leaves: back to the trigger.
+      if (floatingRef.current?.contains(document.activeElement)) focusTrigger();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [isOpen, listRef, floatingRef, focusTrigger, setIsOpen, setIsKeyboardNav]);
 
   // A disabled row is not a stop: the walk passes over it.
   const isStop = useCallback(
@@ -402,7 +430,7 @@ interface UseDropdownOverlayProps {
   /** A disabled dropdown never opens, from a click or a key alike. */
   disabled: boolean;
   virtualAnchor?: DropdownVirtualAnchor;
-  /** A fixed width; left out, the list matches its anchor. */
+  /** A fixed contextual-menu width; left out, the list matches its anchor. */
   width?: DropdownWidth;
   align: DropdownAlign;
   side: DropdownSide;
@@ -495,11 +523,14 @@ export function useDropdownOverlay({
             // Read through a ref: floating-ui compares middleware by source
             // text, so a closure over `width` would never be seen to change.
             // Inline, so a fixed width also beats the stylesheet's floor.
-            const fixed = widthRef.current;
+            const fixed =
+              widthRef.current === undefined
+                ? undefined
+                : `var(${DROPDOWN_WIDTH_TOKENS[widthRef.current]})`;
             Object.assign(
               elements.floating.style,
               fixed !== undefined
-                ? { width: `${fixed}rem`, minWidth: `${fixed}rem` }
+                ? { width: fixed, minWidth: fixed }
                 : {
                     width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px`,
                     // Back from a fixed width: the stylesheet's floor again.

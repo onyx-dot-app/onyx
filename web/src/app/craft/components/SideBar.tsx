@@ -213,7 +213,7 @@ function BuildSessionButton({
 
   return (
     <>
-      <Dropdown width={15} onOpenChange={setMenuOpen}>
+      <Dropdown width={60} onOpenChange={setMenuOpen}>
         <Hoverable.Root
           group="CraftSessionTab"
           interaction={menuOpen ? "hover" : "rest"}

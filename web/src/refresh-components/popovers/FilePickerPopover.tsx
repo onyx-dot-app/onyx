@@ -313,7 +313,7 @@ export default function FilePickerPopover({
         />
       </recentFilesModal.Provider>
 
-      <Dropdown width={20} open={open} onOpenChange={setOpen}>
+      <Dropdown width={60} open={open} onOpenChange={setOpen}>
         <Dropdown.Trigger asChild>
           {typeof trigger === "function" ? trigger(open) : trigger}
         </Dropdown.Trigger>

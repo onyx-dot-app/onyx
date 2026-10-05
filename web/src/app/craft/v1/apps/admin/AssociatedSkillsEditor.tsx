@@ -217,7 +217,7 @@ export default function AssociatedSkillsEditor({
         </div>
         <div className="flex shrink-0 gap-2">
           <Dropdown
-            width={22.5}
+            width={90}
             align="end"
             // Inside a modal, so the list portals into it: outside, the
             // modal would block clicks on it.
@@ -260,7 +260,7 @@ export default function AssociatedSkillsEditor({
                   icon: SvgEdit,
                   title: t("create.scratch.label"),
                   description: t("create.scratch.description"),
-                  onSelect: onCreateSkill,
+                  onSelect: () => onCreateSkill(),
                 },
                 {
                   kind: "action",
@@ -268,7 +268,7 @@ export default function AssociatedSkillsEditor({
                   icon: SvgUploadCloud,
                   title: t("create.upload.label"),
                   description: t("create.upload.description"),
-                  onSelect: onUploadSkill,
+                  onSelect: () => onUploadSkill(),
                 },
                 {
                   kind: "action",

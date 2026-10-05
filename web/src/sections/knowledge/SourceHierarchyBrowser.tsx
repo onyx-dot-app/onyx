@@ -894,7 +894,7 @@ export default function SourceHierarchyBrowser({
         </TableLayouts.TableCell>
         <TableLayouts.TableCell width={8}>
           <Dropdown
-            width={20}
+            width={80}
             align="end"
             open={sortDropdownOpen}
             onOpenChange={setSortDropdownOpen}

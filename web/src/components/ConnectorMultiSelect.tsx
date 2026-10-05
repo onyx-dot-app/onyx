@@ -157,6 +157,7 @@ export const ConnectorMultiSelect = ({
           label={effectivePlaceholder}
           query={searchQuery}
           items={items}
+          noMatchText={t("noMatches.text")}
         />
       </Dropdown>
 

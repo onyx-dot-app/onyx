@@ -256,14 +256,7 @@ export class UsersAdminPage {
   // Edit groups modal
   // ---------------------------------------------------------------------------
 
-  /**
-   * Stable locator for the edit-groups modal.
-   *
-   * We can't use the generic `dialog` getter (`.last()`) here because the
-   * groups search opens a Radix Popover (also `role="dialog"`) inside the
-   * modal, which shifts what `.last()` resolves to.  Targeting by accessible
-   * name keeps the reference pinned to the modal itself.
-   */
+  /** Stable locator for the edit-groups modal, pinned by accessible name. */
   get editGroupsDialog(): Locator {
     return this.page.getByRole("dialog", { name: /Edit User/ });
   }
@@ -282,18 +275,18 @@ export class UsersAdminPage {
   }
 
   async searchGroupsInModal(term: string) {
-    // Click the input first to open the popover (Radix Popover.Trigger
-    // wraps the input — fill() alone bypasses the trigger's click handler).
+    // Click the input first: the dropdown opens on a click or typing, and
+    // fill() alone does not type.
     await this.groupSearchInput.click();
     await this.groupSearchInput.fill(term);
-    // The group name appears in the popover dropdown (nested dialog).
-    // Use page-level search since the popover may be portaled.
+    // The group name appears in the dropdown list, which portals into the
+    // modal, so search page-wide.
     await expect(this.page.getByText(term).first()).toBeVisible();
   }
 
   async toggleGroupInModal(groupName: string) {
-    // LineItem renders as a <div>, not <button>.
-    // The popover dropdown is a nested dialog inside the modal.
+    // The dropdown list portals into the modal, so the modal's text holds
+    // the option row (add) or the joined-group row (remove).
     await this.page
       .getByRole("dialog")
       .last()

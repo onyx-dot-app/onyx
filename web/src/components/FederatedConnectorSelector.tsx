@@ -158,6 +158,7 @@ export const FederatedConnectorSelector = ({
           label={effectivePlaceholder}
           query={searchQuery}
           items={items}
+          noMatchText={t("noMatches.text")}
         />
       </Dropdown>
 
