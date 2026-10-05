@@ -360,11 +360,13 @@ async def test_code_store_rejects_expired_or_overlong_records() -> None:
 
 
 async def test_expired_code_cannot_be_read_or_consumed(redis_client: Redis) -> None:
-    code = await store_authorization_code(_code_record(expires_in=1))
+    code = await store_authorization_code(_code_record())
     try:
         key = attempts._code_key(code)
         assert key is not None
-        await redis_client.expire(key, 0)
+        await redis_client.set(
+            key, _code_record(expires_in=-1).model_dump_json(), ex=60
+        )
         assert await get_authorization_code(code) is None
         assert await consume_authorization_code(code) is None
     finally:
