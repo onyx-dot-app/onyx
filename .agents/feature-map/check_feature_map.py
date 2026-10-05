@@ -94,7 +94,7 @@ def _allowlist() -> set[tuple[str, str]]:
     return entries
 
 
-def _looks_like_path(token: str) -> str | None:
+def _looks_like_path(token: str, top_dirs: set[str]) -> str | None:
     if any(c.isspace() for c in token):
         return None
     path = token.split(":")[0].rstrip("/").rstrip(",").strip("()")
@@ -105,9 +105,12 @@ def _looks_like_path(token: str) -> str | None:
         return None
     if any(c in path for c in "{*<$[") or "..." in path:
         return None
-    if not PATH_SUFFIX.search(path) and not token.endswith("/"):
-        return None
-    return path
+    if PATH_SUFFIX.search(path) or token.endswith("/"):
+        return path
+    # Log files are runtime output, never tracked.
+    if path.split("/")[0] in top_dirs and not path.endswith(".log"):
+        return path
+    return None
 
 
 def _path_exists(
@@ -166,6 +169,7 @@ def check() -> list[str]:
 
     files, dirs, by_name = _repo_paths()
     allowed = _allowlist()
+    top_dirs = {d for d in dirs if "/" not in d}
     for doc in sorted(MAP_DIR.rglob("*.md")):
         rel = doc.relative_to(MAP_DIR).as_posix()
         for number, line in enumerate(doc.read_text().splitlines(), start=1):
@@ -175,7 +179,7 @@ def check() -> list[str]:
                 if link not in names
             )
             for token in CODE_SPAN.findall(line):
-                path = _looks_like_path(token)
+                path = _looks_like_path(token, top_dirs)
                 if path is None or (rel, token) in allowed:
                     continue
                 if not _path_exists(path, files, dirs, by_name):
