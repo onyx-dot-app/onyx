@@ -40,7 +40,7 @@ import { ConfirmationModalLayout } from "@opal/layouts";
 import { escapeMarkdown, markdown } from "@opal/utils";
 
 import { useBillingInformation } from "@/hooks/useBillingInformation";
-import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
+import { BillingStatus, hasActiveSubscription } from "@/lib/billing/types";
 import {
   deleteApiKey,
   regenerateApiKey,

@@ -25,7 +25,7 @@ import {
   PaymentMethodRequiredError,
   SeatUpdateRequest,
   SeatUpdateResponse,
-} from "@/lib/billing/interfaces";
+} from "@/lib/billing/types";
 
 function getBillingBaseUrl(): string {
   return NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants" : "/api/admin/billing";
