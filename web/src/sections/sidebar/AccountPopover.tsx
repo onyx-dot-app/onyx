@@ -299,7 +299,12 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   }
 
   return (
-    <Dropdown width={25} open={menuOpen} onOpenChange={handlePopoverOpen}>
+    <Dropdown
+      width={25}
+      align="end"
+      open={menuOpen}
+      onOpenChange={handlePopoverOpen}
+    >
       <Dropdown.Trigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
