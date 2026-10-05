@@ -23,7 +23,7 @@ from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.models import ChatFile, ToolCallInfo
+from onyx.tools.models import ChatFile, PersonaToolConfiguration, ToolCallInfo
 
 # Type alias for search doc deduplication key
 # Simple key: just document_id (str)
@@ -214,6 +214,7 @@ class ChatTurnSetup:
     # The session's pinned recording policy. None is an ordinary chat.
     incognito_record_mode: IncognitoRecordMode | None
     persona: Persona
+    tool_configuration: PersonaToolConfiguration
     user_message_id: int
     user_identity: LLMUserIdentity
     llms: list[LLM]  # length 1 for single-model, N for multi-model

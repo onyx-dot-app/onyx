@@ -90,7 +90,7 @@ from onyx.db.enums import HookPoint, record_mode_persists_content
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.projects import get_user_files_from_project
-from onyx.db.tools import get_tools
+from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, log_onyx_error
@@ -1053,6 +1053,10 @@ def build_chat_turn(
     cache = get_cache_backend()
     clear_stop(chat_session.id, cache, stream_id=processing_stream_id)
 
+    # Capture after clearing stale stops and before the processing fence, so a
+    # failure here cannot leave the fence set.
+    tool_configuration = capture_persona_tool_configuration(persona)
+
     # Bind the id, not the row: this closure is stored on ChatTurnSetup and
     # would otherwise keep a detached ChatSession reachable for the whole turn.
     chat_session_id = chat_session.id
@@ -1084,6 +1088,7 @@ def build_chat_turn(
         chat_session_project_id=chat_session.project_id,
         incognito_record_mode=chat_session.incognito_record_mode,
         persona=persona,
+        tool_configuration=tool_configuration,
         user_message_id=user_message.id,
         user_identity=user_identity,
         llms=llms,
@@ -1340,7 +1345,7 @@ def _run_models(
             # connection for the entire LLM loop (minutes), and cloud
             # infrastructure may drop idle connections.
             thread_tool_dict = construct_tools(
-                persona=setup.persona,
+                configuration=setup.tool_configuration,
                 emitter=model_emitter,
                 user=user,
                 llm=model_llm,

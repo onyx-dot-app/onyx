@@ -30,14 +30,16 @@ def test_build_headers_strips_denylisted_stored_headers(wrap) -> None:
             {"headers": {"Authorization": "Bearer stored", "Host": "internal.evil"}}
         )
     )
-    creds = ResolvedMCPCredentials(connection_config=config, user_oauth_token=None)
+    creds = ResolvedMCPCredentials.from_connection_config(
+        connection_config=config, user_oauth_token=None
+    )
 
     assert creds.build_headers() == {"Authorization": "Bearer stored"}
 
 
 def test_build_headers_pt_oauth_token_takes_precedence() -> None:
     config = MCPConnectionConfig(config={"headers": {"Authorization": "Bearer old"}})
-    creds = ResolvedMCPCredentials(
+    creds = ResolvedMCPCredentials.from_connection_config(
         connection_config=config, user_oauth_token="login-token"
     )
 
@@ -45,7 +47,9 @@ def test_build_headers_pt_oauth_token_takes_precedence() -> None:
 
 
 def test_build_headers_empty_without_credentials() -> None:
-    creds = ResolvedMCPCredentials(connection_config=None, user_oauth_token=None)
+    creds = ResolvedMCPCredentials.from_connection_config(
+        connection_config=None, user_oauth_token=None
+    )
 
     assert creds.build_headers() == {}
 
@@ -57,7 +61,7 @@ def test_pt_oauth_merges_template_headers_and_overrides_authorization() -> None:
             "header_substitutions": {"gateway_key": "gateway-secret"},
         }
     )
-    creds = ResolvedMCPCredentials(
+    creds = ResolvedMCPCredentials.from_connection_config(
         connection_config=config,
         user_oauth_token="login-token",
         auth_type=MCPAuthenticationType.PT_OAUTH,
@@ -86,7 +90,7 @@ def test_oauth_merges_template_headers_with_token_auth() -> None:
             "tokens": {"token_type": "Bearer", "access_token": "oauth-token"},
         }
     )
-    creds = ResolvedMCPCredentials(
+    creds = ResolvedMCPCredentials.from_connection_config(
         connection_config=config,
         user_oauth_token=None,
         auth_type=MCPAuthenticationType.OAUTH,
@@ -103,22 +107,24 @@ def test_oauth_merges_template_headers_with_token_auth() -> None:
 
 def test_no_auth_template_requires_user_substitutions() -> None:
     template = MCPAuthTemplate(headers={"X-Gateway-Key": "{gateway_key}"})
-    disconnected = ResolvedMCPCredentials(
+    disconnected = ResolvedMCPCredentials.from_connection_config(
         connection_config=None,
         user_oauth_token=None,
         auth_type=MCPAuthenticationType.NONE,
         auth_template=template,
         user_email="alice@example.com",
     )
-    connected = disconnected.model_copy(
-        update={
-            "connection_config": MCPConnectionConfig(
-                config={
-                    "headers": {},
-                    "header_substitutions": {"gateway_key": "gateway-secret"},
-                }
-            )
-        }
+    connected = ResolvedMCPCredentials.from_connection_config(
+        connection_config=MCPConnectionConfig(
+            config={
+                "headers": {},
+                "header_substitutions": {"gateway_key": "gateway-secret"},
+            }
+        ),
+        user_oauth_token=None,
+        auth_type=MCPAuthenticationType.NONE,
+        auth_template=template,
+        user_email="alice@example.com",
     )
 
     assert not disconnected.can_authenticate()
@@ -127,7 +133,7 @@ def test_no_auth_template_requires_user_substitutions() -> None:
 
 
 def test_api_token_template_without_placeholders_needs_no_user_config() -> None:
-    creds = ResolvedMCPCredentials(
+    creds = ResolvedMCPCredentials.from_connection_config(
         connection_config=None,
         user_oauth_token=None,
         auth_type=MCPAuthenticationType.API_TOKEN,
@@ -140,7 +146,7 @@ def test_api_token_template_without_placeholders_needs_no_user_config() -> None:
 
 
 def test_fresh_template_rendering_overrides_persisted_auto_substitution() -> None:
-    creds = ResolvedMCPCredentials(
+    creds = ResolvedMCPCredentials.from_connection_config(
         connection_config=MCPConnectionConfig(
             config={"headers": {"X-User": "admin@example.com"}}
         ),
