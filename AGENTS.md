@@ -67,9 +67,10 @@ Claude Code and Codex also run pre-commit on your uncommitted files when you end
 turn (`.agents/hooks/pre_commit_on_stop.py`, wired as a Stop hook in
 `.claude/settings.json` and `.codex/hooks.json`). Codex runs the hook only after you
 trust the project `.codex/` layer. If it fails, fix the reported problems before
-you finish. The same hook names any feature-map component whose code your branch
-changed but whose document it did not (see `.agents/feature-map/README.md`). Update
-the document if your change alters what it states.
+you finish. When the repo has the feature map (`.agents/feature-map/stale_docs.py`),
+the same hook also names any feature-map component whose code your branch changed
+but whose document it did not. Update the document if your change alters what it
+states.
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 
