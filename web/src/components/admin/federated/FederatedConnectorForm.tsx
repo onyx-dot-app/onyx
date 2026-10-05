@@ -839,8 +839,8 @@ export function FederatedConnectorForm({
                     title: isDeleting
                       ? t("deleteItem.deleting")
                       : t("deleteItem.label"),
-                    // The reason a row is disabled reads as its description.
-                    description: isDeleting
+                    // The reason a row is disabled is its tooltip.
+                    tooltip: isDeleting
                       ? t("deleteItem.inProgressTooltip")
                       : undefined,
                     onSelect: handleDeleteConnector,

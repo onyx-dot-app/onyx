@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { LOGOUT_DISABLED } from "@/lib/constants";
 import { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -34,6 +34,7 @@ import {
 import { Content, toast, useSidebarFolded } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { useAppPosition } from "@/lib/position/hooks";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
@@ -243,7 +244,9 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user, userResolution } = useUser();
   const appPosition = useAppPosition();
+  const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
+  const notificationsPageRef = useRef<HTMLDivElement>(null);
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
   const userDisplayName =
@@ -265,6 +268,12 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
     setMenuOpen(state);
   };
   const items = useSettingsItems({ undismissedCount });
+  // Enter or ArrowRight on the page row moves focus into it; Tab then walks
+  // its controls.
+  const focusNotificationsPage = () =>
+    notificationsPageRef.current
+      ?.querySelector<HTMLElement>("button, a, [tabindex='0']")
+      ?.focus();
   const notificationsView: DropdownView = {
     width: 90,
     items: [
@@ -272,8 +281,10 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
         kind: "custom",
         id: "notifications-page",
         keepOpen: true,
+        onActivate: focusNotificationsPage,
+        onSecondary: focusNotificationsPage,
         render: ({ props }) => (
-          <div {...props}>
+          <div {...props} ref={notificationsPageRef}>
             <NotificationsPage onShowBuildIntro={onShowBuildIntro} />
           </div>
         ),
@@ -287,8 +298,11 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   return (
     <Dropdown
       width={60}
-      side="right"
-      align="end"
+      // On a phone the sidebar is the whole screen: the menu opens above
+      // the tab rather than beside it.
+      side={isMobile ? "top" : "right"}
+      align={isMobile ? "start" : "end"}
+      tabKey="walk"
       open={menuOpen}
       onOpenChange={handlePopoverOpen}
     >

@@ -376,7 +376,7 @@ const ChatButton = memo(
     );
 
     const popover = (
-      <Dropdown width={60} onOpenChange={setMenuOpen}>
+      <Dropdown width={60} side="right" onOpenChange={setMenuOpen}>
         <Hoverable.Root
           group="ChatButton"
           data-testid="ChatButton"

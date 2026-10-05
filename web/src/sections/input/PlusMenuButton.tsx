@@ -66,7 +66,7 @@ function flyoutRow(sub: PlusMenuFlyoutItem): DropdownMenuRow {
 
 /**
  * A flyout row leads to a view of its own, in place of the menu; the view's
- * first row leads back. Views open on a click, Enter or ArrowRight.
+ * first row leads back. Views open on a click or Enter.
  */
 export function PlusMenuButton({
   items,

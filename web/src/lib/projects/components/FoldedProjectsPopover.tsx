@@ -175,8 +175,9 @@ export function FoldedProjectsPopover() {
             setOpen(false);
             appPosition.openProject(match.project.id);
           },
-          // ArrowRight moves focus to the project's first chat; Tab walks
-          // the rest and Enter follows one.
+          // ArrowRight, with the search caret at the end of its text, moves
+          // focus to the project's first chat; Tab walks the rest and Enter
+          // follows one.
           onSecondary: () => {
             rowElements.current
               .get(match.project.id)
@@ -204,7 +205,13 @@ export function FoldedProjectsPopover() {
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      <Dropdown width={60} side="right" open={open} onOpenChange={setOpen}>
+      <Dropdown
+        width={60}
+        side="right"
+        tabKey="walk"
+        open={open}
+        onOpenChange={setOpen}
+      >
         <Dropdown.Trigger asChild>
           <div data-testid="AppSidebar/projects" tabIndex={-1}>
             <SidebarTab

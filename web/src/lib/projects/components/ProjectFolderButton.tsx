@@ -234,57 +234,67 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
 
       {/* Project Folder */}
       <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
-        <Dropdown width={60} onOpenChange={setMenuOpen}>
-          <Hoverable.Root
-            group="ProjectFolderButton"
-            interaction={menuOpen ? "hover" : "rest"}
-          >
-            <SidebarTab
-              icon={FolderIcon}
-              // Folded, the project's chats are hidden — and a project chat
-              // appears nowhere else in the sidebar (Recents excludes them), so
-              // the folder itself has to carry the "you are here" mark.
-              selected={isActiveProject && (activeSidebar.isProject() || !open)}
-              /* While renaming, drop the click target so the input stays usable. */
-              onClick={isEditing ? undefined : noProp(handleTextClick)}
-              rightChildren={
-                <>
-                  {/* The click stays here: the tab underneath opens the project. */}
-                  <div role="presentation" onClick={noProp()}>
-                    {/* While renaming the row is an input, so the menu stays
-                        away unless its own list is already open. */}
-                    {(!isEditing || menuOpen) && (
-                      <Hoverable.Item group="ProjectFolderButton">
-                        <Dropdown.Trigger asChild>
-                          <Button
-                            icon={SvgMoreHorizontal}
-                            prominence="internal"
-                            size="sm"
-                            interaction={menuOpen ? "hover" : "rest"}
-                            aria-label={t("projects.folder.options.label")}
-                          />
-                        </Dropdown.Trigger>
-                      </Hoverable.Item>
-                    )}
-                  </div>
-                  <Dropdown.Data
-                    label={t("projects.folder.options.label")}
-                    items={menuItems}
-                  />
-                </>
-              }
+        <Dropdown
+          width={60}
+          side="right"
+          align="end"
+          onOpenChange={setMenuOpen}
+        >
+          {/* The menu flies out beside the whole row, not the button. */}
+          <Dropdown.Anchor asChild>
+            <Hoverable.Root
+              group="ProjectFolderButton"
+              interaction={menuOpen ? "hover" : "rest"}
             >
-              {isEditing ? (
-                <ButtonRenaming
-                  initialName={project.name}
-                  onRename={handleRename}
-                  onClose={() => setIsEditing(false)}
-                />
-              ) : (
-                project.name
-              )}
-            </SidebarTab>
-          </Hoverable.Root>
+              <SidebarTab
+                icon={FolderIcon}
+                // Folded, the project's chats are hidden — and a project chat
+                // appears nowhere else in the sidebar (Recents excludes them), so
+                // the folder itself has to carry the "you are here" mark.
+                selected={
+                  isActiveProject && (activeSidebar.isProject() || !open)
+                }
+                /* While renaming, drop the click target so the input stays usable. */
+                onClick={isEditing ? undefined : noProp(handleTextClick)}
+                rightChildren={
+                  <>
+                    {/* The click stays here: the tab underneath opens the project. */}
+                    <div role="presentation" onClick={noProp()}>
+                      {/* While renaming the row is an input, so the menu stays
+                        away unless its own list is already open. */}
+                      {(!isEditing || menuOpen) && (
+                        <Hoverable.Item group="ProjectFolderButton">
+                          <Dropdown.Trigger asChild>
+                            <Button
+                              icon={SvgMoreHorizontal}
+                              prominence="internal"
+                              size="sm"
+                              interaction={menuOpen ? "hover" : "rest"}
+                              aria-label={t("projects.folder.options.label")}
+                            />
+                          </Dropdown.Trigger>
+                        </Hoverable.Item>
+                      )}
+                    </div>
+                    <Dropdown.Data
+                      label={t("projects.folder.options.label")}
+                      items={menuItems}
+                    />
+                  </>
+                }
+              >
+                {isEditing ? (
+                  <ButtonRenaming
+                    initialName={project.name}
+                    onRename={handleRename}
+                    onClose={() => setIsEditing(false)}
+                  />
+                ) : (
+                  project.name
+                )}
+              </SidebarTab>
+            </Hoverable.Root>
+          </Dropdown.Anchor>
         </Dropdown>
       </FolderIconProvider>
 

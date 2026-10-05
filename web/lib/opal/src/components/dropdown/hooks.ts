@@ -176,6 +176,18 @@ function rowLabel(row: DropdownRow): string {
 
 const TYPE_AHEAD_RESET_MS = 500;
 
+/** The caret sits at the end of a text field's value, with nothing selected. */
+function caretAtEnd(field: HTMLElement): boolean {
+  if (
+    !(field instanceof HTMLInputElement) &&
+    !(field instanceof HTMLTextAreaElement)
+  ) {
+    return true;
+  }
+  const end = field.value.length;
+  return field.selectionStart === end && field.selectionEnd === end;
+}
+
 /**
  * Keyboard navigation for the list, the same for every trigger: Enter or
  * ArrowDown opens a closed list; open, the arrows and Tab walk the stops
@@ -333,9 +345,10 @@ export function useDropdownKeyboard({
             }
             break;
           }
-          // Otherwise only a row with a secondary control takes the key; a
-          // text field keeps it for its caret.
-          if (options.textField) break;
+          // Otherwise only a row with a secondary control takes the key. A
+          // text field keeps it for its caret, until the caret reaches the
+          // end of the text.
+          if (options.textField && !caretAtEnd(e.currentTarget)) break;
           if (listRef.current.secondary(item)) e.preventDefault();
           break;
         }
@@ -501,7 +514,7 @@ export function useDropdownOverlay({
       open: isOpen,
       placement: `${side}-${align}`,
       middleware: [
-        // Below the anchor, the list reaches 6px past it on its aligned side:
+        // Below or above the anchor, the list reaches 6px past it on its aligned side:
         // with its 4px inset and 1px border, the rows' bounding boxes then
         // align flush with the anchor's content, inside its own border.
         // Matched to the anchor it reaches 6px past both sides; a fixed width

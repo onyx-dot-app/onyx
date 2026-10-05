@@ -213,43 +213,46 @@ function BuildSessionButton({
 
   return (
     <>
-      <Dropdown width={60} onOpenChange={setMenuOpen}>
-        <Hoverable.Root
-          group="CraftSessionTab"
-          interaction={menuOpen ? "hover" : "rest"}
-        >
-          <SidebarTab
-            /* While renaming, drop the click target so the input stays usable. */
-            onClick={renaming ? undefined : onLoad}
-            selected={isActive}
-            rightChildren={rightMenu}
+      <Dropdown width={60} side="right" onOpenChange={setMenuOpen}>
+        {/* The menu flies out beside the whole row, not the button. */}
+        <Dropdown.Anchor asChild>
+          <Hoverable.Root
+            group="CraftSessionTab"
+            interaction={menuOpen ? "hover" : "rest"}
           >
-            {renaming ? (
-              <ButtonRenaming
-                initialName={historyItem.title}
-                onRename={onRename}
-                onClose={() => setRenaming(false)}
-              />
-            ) : shouldAnimate ? (
-              // Opal Text takes string children only; this wraps <TypewriterText>.
-              <RefreshText
-                as="p"
-                data-state={isActive ? "active" : "inactive"}
-                className="line-clamp-1 break-all text-start"
-                mainUiBody
-              >
-                <TypewriterText
-                  text={historyItem.title}
-                  charSpeed={25}
-                  animateOnMount={true}
-                  onAnimationComplete={() => setShouldAnimate(false)}
+            <SidebarTab
+              /* While renaming, drop the click target so the input stays usable. */
+              onClick={renaming ? undefined : onLoad}
+              selected={isActive}
+              rightChildren={rightMenu}
+            >
+              {renaming ? (
+                <ButtonRenaming
+                  initialName={historyItem.title}
+                  onRename={onRename}
+                  onClose={() => setRenaming(false)}
                 />
-              </RefreshText>
-            ) : (
-              historyItem.title
-            )}
-          </SidebarTab>
-        </Hoverable.Root>
+              ) : shouldAnimate ? (
+                // Opal Text takes string children only; this wraps <TypewriterText>.
+                <RefreshText
+                  as="p"
+                  data-state={isActive ? "active" : "inactive"}
+                  className="line-clamp-1 break-all text-start"
+                  mainUiBody
+                >
+                  <TypewriterText
+                    text={historyItem.title}
+                    charSpeed={25}
+                    animateOnMount={true}
+                    onAnimationComplete={() => setShouldAnimate(false)}
+                  />
+                </RefreshText>
+              ) : (
+                historyItem.title
+              )}
+            </SidebarTab>
+          </Hoverable.Root>
+        </Dropdown.Anchor>
       </Dropdown>
       {isDeleteModalOpen && (
         <CraftSessionDeleteModal

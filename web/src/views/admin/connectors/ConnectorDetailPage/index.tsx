@@ -363,7 +363,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     indexing_start: indexingStart,
   } = ccPair.connector;
 
-  // The reason a row is disabled reads as its description.
+  // The reason a row is disabled is its tooltip.
   const reIndexBlocked = ccPair.indexing
     ? t("manageMenu.reIndex.tooltip.indexing")
     : ccPair.status === ConnectorCredentialPairStatus.PAUSED
@@ -377,7 +377,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       id: "re-index",
       icon: SvgRefreshCw,
       title: t("manageMenu.reIndex.label"),
-      description: reIndexBlocked,
+      tooltip: reIndexBlocked,
       disabled: reIndexBlocked !== undefined,
       onSelect: showReIndexModal,
     },
@@ -392,7 +392,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             title: statusIsNotCurrentlyActive(ccPair.status)
               ? t("manageMenu.toggleStatus.resume.label")
               : t("manageMenu.toggleStatus.pause.label"),
-            description: isStatusUpdating
+            tooltip: isStatusUpdating
               ? t("manageMenu.toggleStatus.tooltip.updating")
               : undefined,
             disabled: isStatusUpdating,
@@ -413,7 +413,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             icon: SvgTrash,
             danger: true,
             title: t("manageMenu.delete.label"),
-            description: !statusIsNotCurrentlyActive(ccPair.status)
+            tooltip: !statusIsNotCurrentlyActive(ccPair.status)
               ? t("manageMenu.delete.tooltip.active")
               : undefined,
             disabled: !statusIsNotCurrentlyActive(ccPair.status),

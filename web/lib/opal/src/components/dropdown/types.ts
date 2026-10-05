@@ -40,6 +40,8 @@ export type DropdownAction = DropdownRowBase & {
   icon?: IconFunctionComponent;
   /** A destructive command: the row reads in the danger colour. */
   danger?: boolean;
+  /** Hover text on the row, for the reason it is disabled. */
+  tooltip?: string;
   keepOpen?: boolean;
 } & (
     | {
@@ -142,8 +144,8 @@ export type DropdownMode = "picker" | "menu";
 export type DropdownWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90;
 /** Which edge of the anchor the list lines up with. */
 export type DropdownAlign = "start" | "end";
-/** Below the anchor, or a flyout beside it. */
-export type DropdownSide = "bottom" | "right";
+/** Below the anchor, above it, or a flyout beside it. */
+export type DropdownSide = "bottom" | "top" | "right";
 
 // ---------------------------------------------------------------------------
 // Views

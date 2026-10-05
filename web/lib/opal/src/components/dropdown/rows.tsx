@@ -123,6 +123,7 @@ export const Row = React.memo(function Row({
     descriptionMaxLines:
       row.kind === "option" ? row.descriptionMaxLines : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,
+    tooltip: row.kind === "action" ? row.tooltip : undefined,
     sizePreset: "main-ui",
     // `body` resolves to `ContentSm`, which has no description or suffix
     // slot; a row with either takes the `heading` layout.

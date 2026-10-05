@@ -163,8 +163,8 @@ export default function UserFilters({
   ];
   const picked = (selected: string[]): ReadonlySet<string> =>
     new Set(selected.length > 0 ? selected : [ALL]);
-  const count = (n: number | undefined) =>
-    n === undefined ? undefined : String(n);
+  // A missing count reads as 0, so every row shows one.
+  const count = (n: number | undefined) => String(n ?? 0);
 
   const accountTypeItems = withAll(
     t("filters.accountType.allOption.label"),

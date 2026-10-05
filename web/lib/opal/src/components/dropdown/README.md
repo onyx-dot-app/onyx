@@ -96,7 +96,7 @@ Left to itself the list sizes from its anchor: the anchor's width plus 6px on ea
 | `tabKey`        | `"walk" \| "leave"`                          | by trigger | What Tab does while open: walk the rows, or close and move on. Default: walk for a type-in, leave otherwise          |
 | `width`         | `30 \| 40 \| 50 \| 60 \| 70 \| 80 \| 90`     | —          | A fixed width on the Tailwind scale, the contextual-menu steps (30 is 7.5rem, 90 is 22.5rem), punch-out included; left out, the list matches its anchor |
 | `align`         | `"start" \| "end"`                           | `"start"`  | The anchor edge the list lines up with                                                                               |
-| `side`          | `"bottom" \| "right"`                        | `"bottom"` | Below the anchor, or a flyout to its right (left when there is no room), its `align` edge lined up with the anchor's |
+| `side`          | `"bottom" \| "top" \| "right"`               | `"bottom"` | Below the anchor, above it, or a flyout to its right (the opposite side when there is no room), its `align` edge lined up with the anchor's |
 
 ### `Dropdown.Trigger`
 
@@ -138,7 +138,7 @@ The element the list positions against and matches in width, when that is not th
 | Kind     | Fields                                                                                                            | Enter                                                                                                                |
 | -------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `option` | `value`, `title`, `description?`, `descriptionMaxLines?`, `suffix?`, `icon?`                                      | `onSelect(option)`; closes (single)                                                                                  |
-| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `keepOpen?`, and `onSelect(views)` and/or `href` (+ `target?`) | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen` or the handler moved the stack |
+| `action` | `id`, `title`, `description?`, `icon?`, `danger?`, `tooltip?`, `keepOpen?`, and `onSelect(views)` and/or `href` (+ `target?`) | runs `onSelect`; an `href` row is a real link and navigates; closes unless `keepOpen` or the handler moved the stack |
 | `toggle` | `id`, `title`, `description?`, `icon?`, `checked`, `onCheckedChange`                                              | flips `checked`; stays open                                                                                          |
 | `custom` | `id`, `render(row)`, `onActivate?(views)`, `onSecondary?(views)`, `keepOpen?`                                     | `onActivate`; closes unless `keepOpen` or the handler moved the stack                                                |
 | `group`  | `title?`, `foldable?` (titled only), `items`                                                                      | a foldable title folds and unfolds                                                                                   |
@@ -147,7 +147,7 @@ Every row takes `keywords?` (what a search matches beyond the title), `pinned?` 
 
 ### Custom rows
 
-`render` gets `{ highlighted, props }`. Spread `props` onto the row's root: they carry the id, role, `data-index`, `tabIndex` and click handling that keep the row in the keyboard walk and under `aria-activedescendant`. Render `highlighted` as hover. Controls inside the row stop propagation themselves; the keyboard reaches one of them through `onSecondary` (ArrowRight). A custom row is searchable only by its `keywords`.
+`render` gets `{ highlighted, props }`. Spread `props` onto the row's root: they carry the id, role, `data-index`, `tabIndex` and click handling that keep the row in the keyboard walk and under `aria-activedescendant`. Render `highlighted` as hover. Controls inside the row stop propagation themselves; the keyboard reaches one of them through `onSecondary` (ArrowRight; from a text field, once the caret is at the end of its text). A custom row is searchable only by its `keywords`.
 
 ```tsx
 {
@@ -215,7 +215,7 @@ Focus stays on the trigger (or the search field); the dropdown moves a highlight
 
 **Tab** depends on the trigger: from a type-in it walks the rows like the arrows, since the field must keep focus; from any other trigger it closes the list and lets focus move on, as a native menu does. `tabKey` on `Dropdown` fixes it one way for every trigger.
 
-**Groups, from a trigger with nothing to type into:** ArrowRight on a folded title unfolds it; on an open title it moves to the first row inside. A text field (a type-in, or the search field) keeps the key for its caret.
+**Groups, from a trigger with nothing to type into:** ArrowRight on a folded title unfolds it; on an open title it moves to the first row inside. A text field (a type-in, or the search field) keeps the key for its caret; a row's secondary control gets it once the caret is at the end of the text.
 
 **Type-ahead:** on a trigger with nothing to type into, letters jump the highlight to the next row whose title starts with them; the letters clear after half a second. A custom row matches on its first keyword. A type-in's letters are its filter instead, and a search field's go to the field.
 

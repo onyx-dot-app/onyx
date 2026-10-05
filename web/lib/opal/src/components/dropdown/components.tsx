@@ -92,8 +92,9 @@ interface DropdownProps {
    */
   align?: DropdownAlign;
   /**
-   * Below the anchor, or a flyout to its right (left when there is no
-   * room). A flyout lines up its `align` edge with the anchor's.
+   * Below the anchor, above it, or a flyout to its right (the opposite
+   * side when there is no room). A flyout lines up its `align` edge with
+   * the anchor's.
    * @default "bottom"
    */
   side?: DropdownSide;

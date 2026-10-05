@@ -228,6 +228,33 @@ describe("Dropdown picker", () => {
     }
   });
 
+  test("ArrowRight from a text field reaches a row's secondary control once the caret is at the end", async () => {
+    const user = setupUser();
+    const onSecondary = jest.fn();
+    const items: DropdownItem[] = [
+      {
+        kind: "custom",
+        id: "folder",
+        pinned: true,
+        onSecondary,
+        render: ({ props }) => <div {...props}>Folder</div>,
+      },
+      ...ITEMS,
+    ];
+    render(<Harness items={items} />);
+    const field = screen.getByRole("combobox", { name: "Fruit" });
+    await user.click(field);
+    // An empty field: the caret is at its end.
+    await user.keyboard("{ArrowDown}{ArrowRight}");
+    expect(onSecondary).toHaveBeenCalledTimes(1);
+
+    // Text behind the caret: ArrowRight is the caret's.
+    await user.type(field, "ab");
+    (field as HTMLInputElement).setSelectionRange(1, 1);
+    await user.keyboard("{ArrowRight}");
+    expect(onSecondary).toHaveBeenCalledTimes(1);
+  });
+
   test("the query filters the rows and opens folded groups to show matches", async () => {
     const user = setupUser();
     render(<Harness />);
