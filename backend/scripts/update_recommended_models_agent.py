@@ -11,8 +11,8 @@ The agent returns strict JSON (per-provider default + visible models + a
 rationale). The script validates every pick against the catalog, reuses the
 deterministic script's serialization and semantic-diff so version/updated_at
 only move on real changes, and writes the file. Like the deterministic script
-it never pushes — the workflow opens a reviewed PR and PR CI (schema/Craft
-unit tests, provider chat tests) is the gate.
+it never pushes — the workflow opens a reviewed PR and PR CI (provider chat
+tests against every recommended model) is the gate.
 
 Still standard-library-only on purpose: the Responses API call is one POST,
 so any python3 with OPENAI_API_KEY can run it. Set OPENAI_MODEL (or --model)
@@ -44,15 +44,15 @@ from update_recommended_models import (  # ty: ignore[unresolved-import]  # noqa
     RecommendedModel,
     RecommendedModelsFile,
     SectionRules,
-    _bump_version,
-    _sections_equal,
-    _visible_models,
+    bump_version,
     derive_native_name,
     fetch_catalog,
     load_catalog_file,
     load_previous,
     load_rules,
+    sections_equal,
     serialize,
+    visible_models,
 )
 
 BACKEND_DIR = SCRIPT_DIR.parent
@@ -215,7 +215,11 @@ def build_catalog_digest(
                 flags.append("expired")
             elif model.expiration_date:
                 flags.append(f"expires {model.expiration_date}")
-            prompt_price = model.pricing.get("prompt", "?")
+            # OpenRouter prices are USD per token; report per million tokens.
+            try:
+                prompt_price = f"{float(model.pricing.get('prompt', 0)) * 1e6:.4g}"
+            except (TypeError, ValueError):
+                prompt_price = "?"
             lines.append(
                 f"- {model.id} | {model.name} | created {_created_date(model)}"
                 f" | prompt ${prompt_price}/Mtok"
@@ -396,7 +400,7 @@ def _build_provider_section(
     warnings: list[str],
 ) -> ProviderSection:
     aliases = _alias_to_native(section_rules, catalog)
-    previous_names = {m.name for m in _visible_models(previous_section)}
+    previous_names = {m.name for m in visible_models(previous_section)}
     strict_catalog = section_rules.id_transform == "keep_full_id"
     emit_display = section_rules.emit_display_name
 
@@ -505,14 +509,14 @@ def validate_and_build(
         )
 
     changed = any(
-        not _sections_equal(new, previous.providers[name])
+        not sections_equal(new, previous.providers[name])
         for name, new in providers.items()
     )
     if not changed:
         return previous, rationales, warnings
     return (
         RecommendedModelsFile(
-            version=_bump_version(previous.version),
+            version=bump_version(previous.version),
             updated_at=f"{today.isoformat()}T00:00:00Z",
             providers=providers,
         ),

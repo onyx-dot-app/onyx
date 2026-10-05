@@ -318,7 +318,7 @@ def derive_display_name(
     return _strip_vendor_prefix(model.name, model.id)
 
 
-def _visible_models(section: ProviderSection | None) -> list[RecommendedModel]:
+def visible_models(section: ProviderSection | None) -> list[RecommendedModel]:
     if section is None:
         return []
     by_name: dict[str, RecommendedModel] = {}
@@ -389,7 +389,7 @@ def build_section(
         display_name: str | None = None
         if section.emit_display_name:
             previous_display = {
-                model.name: model.display_name for model in _visible_models(previous)
+                model.name: model.display_name for model in visible_models(previous)
             }
             display_name = section.display_name_overrides.get(
                 default_name
@@ -404,7 +404,7 @@ def build_section(
     )
 
 
-def _sections_equal(a: ProviderSection, b: ProviderSection) -> bool:
+def sections_equal(a: ProviderSection, b: ProviderSection) -> bool:
     # Compare the runtime-visible view (the runtime normalizes to default-first
     # and dedupes), not raw file order: a hand-reordered but semantically
     # identical section must not bump version/updated_at.
@@ -412,14 +412,14 @@ def _sections_equal(a: ProviderSection, b: ProviderSection) -> bool:
         return (
             section.default_model,
             tuple(
-                (model.name, model.display_name) for model in _visible_models(section)
+                (model.name, model.display_name) for model in visible_models(section)
             ),
         )
 
     return key(a) == key(b)
 
 
-def _bump_version(version: str) -> str:
+def bump_version(version: str) -> str:
     parts = version.split(".")
     if not parts[-1].isdigit():
         raise ValueError(f"Cannot bump non-numeric version {version!r}")
@@ -448,7 +448,7 @@ def build_recommendations(
     }
 
     models_changed = set(providers) != set(previous.providers) or any(
-        not _sections_equal(new_section, previous.providers[section_name])
+        not sections_equal(new_section, previous.providers[section_name])
         for section_name, new_section in providers.items()
         if section_name in previous.providers
     )
@@ -459,7 +459,7 @@ def build_recommendations(
 
     return (
         RecommendedModelsFile(
-            version=_bump_version(previous.version),
+            version=bump_version(previous.version),
             updated_at=f"{today.isoformat()}T00:00:00Z",
             providers=providers,
         ),
