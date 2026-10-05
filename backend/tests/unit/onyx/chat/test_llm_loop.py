@@ -25,14 +25,15 @@ from onyx.chat.models import (
     LlmStepResult,
     ToolCallSimple,
 )
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import ToolChoiceOptions
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME
-from onyx.tools.models import ToolCallKickoff
+from onyx.tools.models import ParallelToolCallResponse, ToolCallKickoff, ToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
@@ -1724,3 +1725,97 @@ class TestSelectReminderText:
             ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
         )
         assert result == IMAGE_GEN_REMINDER
+
+
+@pytest.mark.parametrize("select_none", [False, True])
+def test_saved_search_docs_follow_the_search_selection(select_none: bool) -> None:
+    doc = SearchDoc(
+        document_id="retrieved",
+        chunk_ind=0,
+        semantic_identifier="Retrieved document",
+        blurb="content",
+        source_type=DocumentSource.FILE,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    tool_call = ToolCallKickoff(
+        tool_call_id="search-1",
+        tool_name=SearchTool.NAME,
+        tool_args={"queries": ["ticket"]},
+        placement=Placement(turn_index=0),
+    )
+    search_tool = Mock()
+    search_tool.name = SearchTool.NAME
+    search_tool.id = 1
+    llm = Mock()
+    llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-5.2",
+        temperature=0,
+        max_input_tokens=100000,
+    )
+    state_container = Mock()
+    with (
+        patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+        patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+        patch(
+            "onyx.chat.llm_loop.get_session_with_current_tenant",
+            return_value=nullcontext(),
+        ),
+        patch("onyx.chat.llm_loop.get_default_base_system_prompt", return_value=""),
+        patch("onyx.chat.llm_loop.select_reminder_text", return_value=""),
+        patch("onyx.chat.llm_loop.compute_all_tool_tokens", return_value=0),
+        patch(
+            "onyx.chat.llm_loop.run_llm_step",
+            side_effect=[
+                (
+                    LlmStepResult(answer=None, tool_calls=[tool_call], reasoning=None),
+                    False,
+                ),
+                (
+                    LlmStepResult(answer="Done", tool_calls=None, reasoning=None),
+                    False,
+                ),
+            ],
+        ),
+        patch(
+            "onyx.chat.llm_loop.run_tool_calls",
+            side_effect=[
+                ParallelToolCallResponse(
+                    tool_responses=[
+                        ToolResponse(
+                            rich_response=SearchDocsResponse(
+                                search_docs=[doc],
+                                citation_mapping={},
+                                displayed_docs=[] if select_none else None,
+                            ),
+                            llm_facing_response="",
+                            tool_call=tool_call,
+                        )
+                    ],
+                    updated_citation_mapping={},
+                ),
+                ParallelToolCallResponse(
+                    tool_responses=[], updated_citation_mapping={}
+                ),
+            ],
+        ),
+    ):
+        run_llm_loop(
+            emitter=Mock(),
+            state_container=state_container,
+            simple_chat_history=[create_message("Find it", MessageType.USER, 5)],
+            tools=[search_tool],
+            custom_agent_prompt=None,
+            context_files=create_context_files(),
+            persona=None,
+            user_memory_context=None,
+            llm=llm,
+            token_counter=lambda _: 10,
+        )
+
+    state_container.add_tool_call.assert_called_once()
+    saved_call = state_container.add_tool_call.call_args.args[0]
+    assert saved_call.search_docs == ([] if select_none else [doc])
