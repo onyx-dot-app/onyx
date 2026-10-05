@@ -141,7 +141,6 @@ def connector_page(
           lower(p.status) AS state, p.total_docs_indexed AS doc_count,
           p.last_successful_index_time AS last_success_at,
           c.time_updated, c.refresh_freq AS refresh_seconds, c.prune_freq AS prune_seconds,
-          c.kg_processing_enabled AS kg_enabled, c.kg_coverage_days,
           (p.auto_sync_options IS NOT NULL) AS auto_sync_enabled,
           (p.access_type = 'SYNC') AS permission_sync_enabled,
           {_safe_configuration_expression()} AS metadata

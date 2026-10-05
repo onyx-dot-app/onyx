@@ -102,8 +102,6 @@ _METADATA = frozenset(
     {
         "refresh_seconds",
         "prune_seconds",
-        "kg_enabled",
-        "kg_coverage_days",
         "auto_sync_enabled",
         "permission_sync_enabled",
         "selection_count",

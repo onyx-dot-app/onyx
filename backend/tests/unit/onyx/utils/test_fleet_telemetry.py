@@ -82,6 +82,8 @@ def test_hot_emission_sheds_without_io_threads_or_wait(
         {"scope_hashes": ["folder/Private"]},
         {"connector_type": "customer-private-custom-name"},
         {"metadata": {"batch_size": float("inf")}},
+        {"metadata": {"kg_enabled": True}},
+        {"metadata": {"kg_coverage_days": 30}},
     ],
 )
 def test_privacy_boundary_rejects_unreviewed_fields(data: dict[str, Any]) -> None:

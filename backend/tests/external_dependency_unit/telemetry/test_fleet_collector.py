@@ -44,12 +44,18 @@ def source_schema() -> Generator[tuple[str, str], None, None]:
                     f'CREATE TABLE "{schema}".{table} (LIKE public.{table} INCLUDING DEFAULTS)'
                 )
             )  # noqa: S608 - Fixed table allowlist and generated schema.
+        # Collection must not depend on obsolete connector columns.
+        connection.execute(
+            text(
+                f'ALTER TABLE "{schema}".connector DROP COLUMN kg_processing_enabled, DROP COLUMN kg_coverage_days'
+            )
+        )  # noqa: S608 - Generated schema uses hex only.
         for number in range(1, 251):
             connection.execute(
                 text(f"""INSERT INTO "{schema}".connector
-              (id,name,source,input_type,connector_specific_config,kg_processing_enabled,refresh_freq)
+              (id,name,source,input_type,connector_specific_config,refresh_freq)
               VALUES (:id,'PRIVATE CONNECTOR','GOOGLE_DRIVE','LOAD_STATE',
-              CAST(:config AS jsonb),false,600)"""),
+              CAST(:config AS jsonb),600)"""),
                 {
                     "id": number,
                     "config": json.dumps(
