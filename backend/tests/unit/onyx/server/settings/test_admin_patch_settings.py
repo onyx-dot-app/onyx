@@ -6,8 +6,14 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings import api as settings_api
-from onyx.server.settings.models import CRAFT_INSTRUCTIONS_MAX_LENGTH, Settings
+from onyx.server.settings.models import (
+    CRAFT_INSTRUCTIONS_MAX_LENGTH,
+    Settings,
+    Tier,
+)
 
 
 @contextmanager
@@ -19,6 +25,8 @@ def _patch_settings(
     payload: dict[str, Any],
     existing: Settings,
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    tier: Tier = Tier.COMMUNITY,
 ) -> Settings:
     stored: list[Settings] = []
     monkeypatch.setattr(
@@ -30,6 +38,7 @@ def _patch_settings(
     monkeypatch.setattr(settings_api, "emit_audit_event", lambda *_a, **_k: None)
     monkeypatch.setattr(settings_api, "settings_write_lock", _noop_lock)
     monkeypatch.setattr(settings_api.global_version, "is_ee_version", lambda: False)
+    monkeypatch.setattr(settings_api, "get_current_tier", lambda: tier)
     settings_api.admin_patch_settings(
         Settings.model_validate(payload), current_user=MagicMock()
     )
@@ -77,3 +86,33 @@ def test_over_length_craft_instructions_rejected() -> None:
         Settings.model_validate(
             {"craft_instructions": "x" * (CRAFT_INSTRUCTIONS_MAX_LENGTH + 1)}
         )
+
+
+def test_omitted_llm_gateway_enabled_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A disabled gateway must not flip back on when an admin patches an
+    unrelated field."""
+    existing = Settings(llm_gateway_enabled=False)
+    result = _patch_settings({"company_name": "x"}, existing, monkeypatch)
+    assert result.llm_gateway_enabled is False
+
+
+def test_llm_gateway_enabled_rejected_below_business_tier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        _patch_settings({"llm_gateway_enabled": False}, Settings(), monkeypatch)
+    assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
+
+
+def test_llm_gateway_enabled_updates_on_business_tier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _patch_settings(
+        {"llm_gateway_enabled": False},
+        Settings(),
+        monkeypatch,
+        tier=Tier.BUSINESS,
+    )
+    assert result.llm_gateway_enabled is False
