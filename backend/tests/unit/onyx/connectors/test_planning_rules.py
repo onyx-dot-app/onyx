@@ -1,0 +1,282 @@
+from typing import Any
+
+import pytest
+
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.config_diff import (
+    build_source_scoped_backfill_config,
+    classify_source_config_change,
+)
+from onyx.connectors.field_policy import ScopeDirection
+from onyx.connectors.github.config import GithubConnectorConfig
+from onyx.connectors.planning_rule_registry import PLANNING_RULES
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+
+_CONFLUENCE_SITE = {"wiki_base": "https://example.atlassian.net", "is_cloud": True}
+_BITBUCKET_WORKSPACE = {"workspace": "onyx"}
+_DRUPAL_SITE = {"base_url": "https://wiki.example.com"}
+
+
+def test_every_rule_reads_the_config_class_of_its_source() -> None:
+    for source, rule in PLANNING_RULES.items():
+        assert rule.config_class is CONNECTOR_CLASS_MAP[source].config_class, source
+
+
+@pytest.mark.parametrize(
+    "source, old, new, expected",
+    [
+        # Slack
+        (
+            DocumentSource.SLACK,
+            {"include_bot_messages": False},
+            {"include_bot_messages": True},
+            {"include_bot_messages": ScopeDirection.WIDEN},
+        ),
+        (
+            DocumentSource.SLACK,
+            {"include_bot_messages": True},
+            {"include_bot_messages": False},
+            {"include_bot_messages": ScopeDirection.BOTH},
+        ),
+        (
+            DocumentSource.SLACK,
+            {"channels": ["general"]},
+            {"channels": ["gen.*"], "channel_regex_enabled": True},
+            {
+                "channels": ScopeDirection.UNKNOWN,
+                "channel_regex_enabled": ScopeDirection.UNKNOWN,
+            },
+        ),
+        # Confluence
+        (
+            DocumentSource.CONFLUENCE,
+            _CONFLUENCE_SITE,
+            _CONFLUENCE_SITE | {"space": "A"},
+            {"space": ScopeDirection.NARROW},
+        ),
+        (
+            DocumentSource.CONFLUENCE,
+            _CONFLUENCE_SITE | {"space": "A"},
+            _CONFLUENCE_SITE | {"space": "A", "page_id": "1"},
+            {"page_id": ScopeDirection.UNKNOWN},
+        ),
+        (
+            DocumentSource.CONFLUENCE,
+            _CONFLUENCE_SITE | {"page_id": "1"},
+            _CONFLUENCE_SITE | {"page_id": "1", "index_recursively": True},
+            {"index_recursively": ScopeDirection.WIDEN},
+        ),
+        # A space change has no effect while a CQL query is set.
+        (
+            DocumentSource.CONFLUENCE,
+            _CONFLUENCE_SITE | {"cql_query": "a", "space": "X"},
+            _CONFLUENCE_SITE | {"cql_query": "a", "space": "Y"},
+            {},
+        ),
+        (
+            DocumentSource.CONFLUENCE,
+            _CONFLUENCE_SITE | {"labels_to_skip": ["a"]},
+            _CONFLUENCE_SITE | {"labels_to_skip": ["a", "b"]},
+            {"labels_to_skip": ScopeDirection.BOTH},
+        ),
+        (
+            DocumentSource.CONFLUENCE,
+            _CONFLUENCE_SITE | {"labels_to_skip": ["a", "b"]},
+            _CONFLUENCE_SITE | {"labels_to_skip": ["a"]},
+            {"labels_to_skip": ScopeDirection.WIDEN},
+        ),
+        # Google Drive
+        (
+            DocumentSource.GOOGLE_DRIVE,
+            {"include_shared_drives": True},
+            {"shared_drive_urls": "u"},
+            {
+                "include_shared_drives": ScopeDirection.UNKNOWN,
+                "shared_drive_urls": ScopeDirection.UNKNOWN,
+            },
+        ),
+        (
+            DocumentSource.GOOGLE_DRIVE,
+            {"shared_drive_urls": "u"},
+            {"shared_drive_urls": "u", "include_my_drives": True},
+            {},
+        ),
+        (
+            DocumentSource.GOOGLE_DRIVE,
+            {"include_shared_drives": True},
+            {"include_shared_drives": True, "include_my_drives": True},
+            {"include_my_drives": ScopeDirection.WIDEN},
+        ),
+        # Bitbucket
+        (
+            DocumentSource.BITBUCKET,
+            _BITBUCKET_WORKSPACE | {"repositories": "a", "projects": "p"},
+            _BITBUCKET_WORKSPACE | {"repositories": "a", "projects": "q"},
+            {},
+        ),
+        (
+            DocumentSource.BITBUCKET,
+            _BITBUCKET_WORKSPACE | {"repositories": "a", "projects": "p"},
+            _BITBUCKET_WORKSPACE | {"projects": "p"},
+            {"repositories": ScopeDirection.UNKNOWN},
+        ),
+        (
+            DocumentSource.BITBUCKET,
+            _BITBUCKET_WORKSPACE | {"repositories": "a"},
+            _BITBUCKET_WORKSPACE | {"repositories": "a,b"},
+            {"repositories": ScopeDirection.WIDEN},
+        ),
+        # Teams
+        (
+            DocumentSource.TEAMS,
+            {"meeting_organizers": ["a"], "transcript_organizers": ["x"]},
+            {"meeting_organizers": ["a", "b"], "transcript_organizers": ["x"]},
+            {"meeting_organizers": ScopeDirection.UNKNOWN},
+        ),
+        (
+            DocumentSource.TEAMS,
+            {"meeting_organizers": ["a"]},
+            {"meeting_organizers": ["a", "b"]},
+            {"meeting_organizers": ScopeDirection.WIDEN},
+        ),
+        # Outlook
+        (
+            DocumentSource.OUTLOOK,
+            {"include_calendar": True},
+            {"include_calendar": True, "calendar_past_days": 400},
+            {"calendar_past_days": ScopeDirection.WIDEN},
+        ),
+        (
+            DocumentSource.OUTLOOK,
+            {"include_calendar": True},
+            {"include_calendar": True, "calendar_future_days": 10},
+            {"calendar_future_days": ScopeDirection.NARROW},
+        ),
+        (DocumentSource.OUTLOOK, {}, {"calendar_past_days": 400}, {}),
+        # Salesforce
+        (
+            DocumentSource.SALESFORCE,
+            {"requested_objects": ["Account"]},
+            {"requested_objects": ["Account", "Contact"]},
+            {"requested_objects": ScopeDirection.WIDEN},
+        ),
+        (
+            DocumentSource.SALESFORCE,
+            {"requested_objects": ["Account"]},
+            {"requested_objects": ["account"]},
+            {},
+        ),
+        (
+            DocumentSource.SALESFORCE,
+            {"custom_query_config": "{}"},
+            {"custom_query_config": "{}", "requested_objects": ["X"]},
+            {},
+        ),
+        (
+            DocumentSource.SALESFORCE,
+            {},
+            {"custom_query_config": "{}", "requested_objects": ["X"]},
+            {
+                "requested_objects": ScopeDirection.UNKNOWN,
+                "custom_query_config": ScopeDirection.UNKNOWN,
+            },
+        ),
+        # Zoom
+        (
+            DocumentSource.ZOOM,
+            {},
+            {"include_meetings": False},
+            {"include_meetings": ScopeDirection.NARROW},
+        ),
+        (
+            DocumentSource.ZOOM,
+            {"include_meetings": None},
+            {"include_meetings": True},
+            {},
+        ),
+        (
+            DocumentSource.ZOOM,
+            {"include_webinars": False},
+            {},
+            {"include_webinars": ScopeDirection.WIDEN},
+        ),
+        # Drupal Wiki
+        (
+            DocumentSource.DRUPAL_WIKI,
+            _DRUPAL_SITE,
+            _DRUPAL_SITE | {"spaces": ["1"]},
+            {"spaces": ScopeDirection.NARROW},
+        ),
+        (
+            DocumentSource.DRUPAL_WIKI,
+            _DRUPAL_SITE | {"spaces": ["1"], "pages": ["p"]},
+            _DRUPAL_SITE | {"pages": ["p"]},
+            {"spaces": ScopeDirection.NARROW},
+        ),
+        (
+            DocumentSource.DRUPAL_WIKI,
+            _DRUPAL_SITE | {"pages": ["p"]},
+            _DRUPAL_SITE | {"spaces": ["1"]},
+            {"spaces": ScopeDirection.WIDEN, "pages": ScopeDirection.NARROW},
+        ),
+    ],
+)
+def test_source_rule_directions(
+    source: DocumentSource,
+    old: dict[str, Any],
+    new: dict[str, Any],
+    expected: dict[str, ScopeDirection],
+) -> None:
+    changes = classify_source_config_change(source, old, new)
+
+    assert {change.field_name: change.scope_direction for change in changes} == (
+        expected
+    )
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [(None, None), ("", None), ("  ", None), (" main ", "main")],
+)
+def test_github_branch_and_repositories_are_stripped(
+    raw: str | None, expected: str | None
+) -> None:
+    config = GithubConnectorConfig.model_validate(
+        {"repo_owner": "onyx", "repositories": raw, "branch": raw}
+    )
+
+    assert config.repositories == expected
+    assert config.branch == expected
+
+
+def test_github_whitespace_is_not_a_change() -> None:
+    assert (
+        classify_source_config_change(
+            DocumentSource.GITHUB,
+            {"repo_owner": "onyx", "repositories": "a", "branch": "main"},
+            {"repo_owner": "onyx", "repositories": " a ", "branch": " main "},
+        )
+        == []
+    )
+
+
+def test_github_scoped_backfill_for_added_repositories() -> None:
+    delta = build_source_scoped_backfill_config(
+        DocumentSource.GITHUB,
+        {"repo_owner": "onyx", "repositories": "a", "include_issues": True},
+        {"repo_owner": "onyx", "repositories": "a,b", "include_issues": True},
+    )
+
+    assert delta == {"repo_owner": "onyx", "repositories": "b", "include_issues": True}
+
+
+def test_rule_direction_blocks_scoped_backfill() -> None:
+    # The default rules would widen meeting_organizers by one item.
+    assert (
+        build_source_scoped_backfill_config(
+            DocumentSource.TEAMS,
+            {"meeting_organizers": ["a"], "transcript_organizers": ["x"]},
+            {"meeting_organizers": ["a", "b"], "transcript_organizers": ["x"]},
+        )
+        is None
+    )

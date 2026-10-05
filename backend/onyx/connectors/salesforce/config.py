@@ -1,4 +1,4 @@
-from typing import Annotated, Self
+from typing import Annotated
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
@@ -9,6 +9,7 @@ from onyx.connectors.field_policy import (
     ScopeInclude,
     ScopeOpaque,
 )
+from onyx.connectors.planning_rule import ConnectorChangeOverride
 from onyx.connectors.salesforce.utils import resolve_parent_object_types
 
 _REQUESTED_OBJECTS = "requested_objects"
@@ -30,27 +31,29 @@ class SalesforceConnectorConfig(ConnectorConfig):
         str | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
     ] = None
 
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls, old: Self, new: Self
-    ) -> dict[str, ScopeDirection]:
-        if old.custom_query_config and new.custom_query_config:
-            # The connector ignores requested_objects while a custom query is set.
-            return {_REQUESTED_OBJECTS: ScopeDirection.NONE}
-        if old.custom_query_config or new.custom_query_config:
-            return {}
-        # An empty list means the default types, and the connector
-        # normalizes the case of each type.
-        old_types = set(resolve_parent_object_types(old.requested_objects))
-        new_types = set(resolve_parent_object_types(new.requested_objects))
-        widens = bool(new_types - old_types)
-        narrows = bool(old_types - new_types)
-        if widens and narrows:
-            direction = ScopeDirection.BOTH
-        elif widens:
-            direction = ScopeDirection.WIDEN
-        elif narrows:
-            direction = ScopeDirection.NARROW
-        else:
-            direction = ScopeDirection.NONE
-        return {_REQUESTED_OBJECTS: direction}
+
+def salesforce_planning_rule(
+    old: SalesforceConnectorConfig, new: SalesforceConnectorConfig
+) -> ConnectorChangeOverride | None:
+    if old.custom_query_config and new.custom_query_config:
+        # The connector ignores requested_objects while a custom query is set.
+        return ConnectorChangeOverride(
+            scope_directions={_REQUESTED_OBJECTS: ScopeDirection.NONE}
+        )
+    if old.custom_query_config or new.custom_query_config:
+        return None
+    # An empty list means the default types, and the connector
+    # normalizes the case of each type.
+    old_types = set(resolve_parent_object_types(old.requested_objects))
+    new_types = set(resolve_parent_object_types(new.requested_objects))
+    widens = bool(new_types - old_types)
+    narrows = bool(old_types - new_types)
+    if widens and narrows:
+        direction = ScopeDirection.BOTH
+    elif widens:
+        direction = ScopeDirection.WIDEN
+    elif narrows:
+        direction = ScopeDirection.NARROW
+    else:
+        direction = ScopeDirection.NONE
+    return ConnectorChangeOverride(scope_directions={_REQUESTED_OBJECTS: direction})

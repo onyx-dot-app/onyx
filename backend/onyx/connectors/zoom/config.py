@@ -1,4 +1,4 @@
-from typing import Annotated, Self
+from typing import Annotated
 
 from pydantic import StrictFloat, StrictInt
 
@@ -10,10 +10,11 @@ from onyx.connectors.field_policy import (
     ScopeInclude,
     ScopeOpaque,
 )
+from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 # Discovery mechanisms are a union, and an empty one adds nothing.
 _DISCOVERY = FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=False))
-# None means included, which ScopeToggle cannot read: classify_scope_change
+# None means included, which ScopeToggle cannot read: zoom_planning_rule
 # gives the direction.
 _SESSION_TYPE = FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
 _INCLUDE_MEETINGS = "include_meetings"
@@ -42,22 +43,22 @@ class ZoomConnectorConfig(ZoomCredentialBinding, ConnectorConfig):
         bool | None, FieldPolicy(FieldClass.BEHAVIOR)
     ] = None
 
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls, old: Self, new: Self
-    ) -> dict[str, ScopeDirection]:
-        values = {
-            _INCLUDE_MEETINGS: (old.include_meetings, new.include_meetings),
-            _INCLUDE_WEBINARS: (old.include_webinars, new.include_webinars),
-        }
-        directions: dict[str, ScopeDirection] = {}
-        for name, (old_value, new_value) in values.items():
-            was_included = old_value is not False
-            is_included = new_value is not False
-            if was_included == is_included:
-                directions[name] = ScopeDirection.NONE
-            elif is_included:
-                directions[name] = ScopeDirection.WIDEN
-            else:
-                directions[name] = ScopeDirection.NARROW
-        return directions
+
+def zoom_planning_rule(
+    old: ZoomConnectorConfig, new: ZoomConnectorConfig
+) -> ConnectorChangeOverride:
+    values = {
+        _INCLUDE_MEETINGS: (old.include_meetings, new.include_meetings),
+        _INCLUDE_WEBINARS: (old.include_webinars, new.include_webinars),
+    }
+    directions: dict[str, ScopeDirection] = {}
+    for name, (old_value, new_value) in values.items():
+        was_included = old_value is not False
+        is_included = new_value is not False
+        if was_included == is_included:
+            directions[name] = ScopeDirection.NONE
+        elif is_included:
+            directions[name] = ScopeDirection.WIDEN
+        else:
+            directions[name] = ScopeDirection.NARROW
+    return ConnectorChangeOverride(scope_directions=directions)

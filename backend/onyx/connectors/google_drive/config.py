@@ -1,4 +1,4 @@
-from typing import Annotated, Self
+from typing import Annotated
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
@@ -9,6 +9,7 @@ from onyx.connectors.field_policy import (
     ScopeInclude,
     ScopeToggle,
 )
+from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 _COSMETIC = FieldPolicy(FieldClass.COSMETIC)
 _SPECIFIC_REQUEST_FIELDS = (
@@ -56,25 +57,30 @@ class GoogleDriveConnectorConfig(ConnectorConfig):
     only_org_public: Annotated[bool | None, _COSMETIC] = None
     continue_on_failure: Annotated[bool | None, _COSMETIC] = None
 
-    def _has_specific_requests(self) -> bool:
-        return bool(
-            self.shared_drive_urls or self.my_drive_emails or self.shared_folder_urls
-        )
 
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls, old: Self, new: Self
-    ) -> dict[str, ScopeDirection]:
-        # A specific request turns the general toggles off. A change between
-        # the general and the specific mode replaces one set of files with
-        # another; inside the specific mode the toggles have no effect.
-        old_specific = old._has_specific_requests()
-        new_specific = new._has_specific_requests()
-        if old_specific != new_specific:
-            return dict.fromkeys(
+def _has_specific_requests(config: GoogleDriveConnectorConfig) -> bool:
+    return bool(
+        config.shared_drive_urls or config.my_drive_emails or config.shared_folder_urls
+    )
+
+
+def google_drive_planning_rule(
+    old: GoogleDriveConnectorConfig, new: GoogleDriveConnectorConfig
+) -> ConnectorChangeOverride | None:
+    # A specific request turns the general toggles off. A change between
+    # the general and the specific mode replaces one set of files with
+    # another; inside the specific mode the toggles have no effect.
+    old_specific = _has_specific_requests(old)
+    new_specific = _has_specific_requests(new)
+    if old_specific != new_specific:
+        return ConnectorChangeOverride(
+            scope_directions=dict.fromkeys(
                 (*_SPECIFIC_REQUEST_FIELDS, *_GENERAL_TOGGLE_FIELDS),
                 ScopeDirection.UNKNOWN,
             )
-        if new_specific:
-            return dict.fromkeys(_GENERAL_TOGGLE_FIELDS, ScopeDirection.NONE)
-        return {}
+        )
+    if new_specific:
+        return ConnectorChangeOverride(
+            scope_directions=dict.fromkeys(_GENERAL_TOGGLE_FIELDS, ScopeDirection.NONE)
+        )
+    return None

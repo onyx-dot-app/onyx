@@ -1,4 +1,4 @@
-from typing import Annotated, Self
+from typing import Annotated
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
@@ -12,6 +12,7 @@ from onyx.connectors.field_policy import (
     ScopeToggle,
 )
 from onyx.connectors.microsoft_utils.config import MicrosoftCloudBinding
+from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 # The calendar view needs explicit bounds. Past meetings hold the decisions
 # people search for, so the window reaches further back than ahead. Pruning
@@ -23,7 +24,7 @@ _CALENDAR_PAST_DAYS = "calendar_past_days"
 _CALENDAR_FUTURE_DAYS = "calendar_future_days"
 _MAILBOXES = "mailboxes"
 _MAILBOX_GROUPS = "mailbox_groups"
-# Directions come from classify_scope_change: a larger window widens.
+# Directions come from outlook_planning_rule: a larger window widens.
 _CALENDAR_WINDOW = FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
 
 
@@ -73,7 +74,7 @@ class OutlookConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
         FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
     ] = None
     # Entra groups whose members' mailboxes are walked, with the mailboxes
-    # above. Directions come from classify_scope_change.
+    # above. Directions come from outlook_planning_rule.
     mailbox_groups: Annotated[
         list[str] | None,
         FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
@@ -92,23 +93,25 @@ class OutlookConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
     )
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
 
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls, old: Self, new: Self
-    ) -> dict[str, ScopeDirection]:
-        # The window has no effect while the calendar is off on either side:
-        # include_calendar carries that change.
-        calendar_on = old.include_calendar and new.include_calendar
-        mailbox_direction = _mailbox_direction(old, new)
-        mailbox_fields = {
-            field_name: mailbox_direction
-            for field_name, old_value, new_value in (
-                (_MAILBOXES, old.mailboxes, new.mailboxes),
-                (_MAILBOX_GROUPS, old.mailbox_groups, new.mailbox_groups),
-            )
-            if old_value != new_value
-        }
-        return mailbox_fields | {
+
+def outlook_planning_rule(
+    old: OutlookConnectorConfig, new: OutlookConnectorConfig
+) -> ConnectorChangeOverride:
+    # The window has no effect while the calendar is off on either side:
+    # include_calendar carries that change.
+    calendar_on = old.include_calendar and new.include_calendar
+    mailbox_direction = _mailbox_direction(old, new)
+    mailbox_fields = {
+        field_name: mailbox_direction
+        for field_name, old_value, new_value in (
+            (_MAILBOXES, old.mailboxes, new.mailboxes),
+            (_MAILBOX_GROUPS, old.mailbox_groups, new.mailbox_groups),
+        )
+        if old_value != new_value
+    }
+    return ConnectorChangeOverride(
+        scope_directions=mailbox_fields
+        | {
             _CALENDAR_PAST_DAYS: _window_direction(
                 old.calendar_past_days, new.calendar_past_days, calendar_on
             ),
@@ -116,3 +119,4 @@ class OutlookConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
                 old.calendar_future_days, new.calendar_future_days, calendar_on
             ),
         }
+    )

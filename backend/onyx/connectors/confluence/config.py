@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Annotated, Any, Self
+from typing import Annotated, Any
 from urllib.parse import urlparse
 
 from onyx.configs.app_configs import (
@@ -19,6 +19,7 @@ from onyx.connectors.field_policy import (
     ScopeOpaque,
     ScopeToggle,
 )
+from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 # Set by the Confluence Cloud OAuth finalize step to the site the user authorized.
 _OAUTH_WIKI_BASE_KEY = "wiki_base"
@@ -81,7 +82,7 @@ class ConfluenceCredentialBinding(CredentialBinding):
 
 
 class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
-    # The indexing scope fields get their directions from classify_scope_change.
+    # The indexing scope fields get their directions from confluence_planning_rule.
     # The descriptors apply only when a stored config does not validate.
     space: Annotated[
         str,
@@ -130,19 +131,6 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
             space=self.space, page_id=self.page_id, cql_query=self.cql_query
         )
 
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls, old: Self, new: Self
-    ) -> dict[str, ScopeDirection]:
-        directions = {
-            name: _indexing_scope_direction(old, new) for name in _INDEXING_SCOPE_FIELDS
-        }
-        # The label filter also drops labeled comments from the page text,
-        # which only a from-beginning run rewrites.
-        if set(new.labels_to_skip) - set(old.labels_to_skip):
-            directions[_LABELS_TO_SKIP] = ScopeDirection.BOTH
-        return directions
-
 
 def _indexing_scope_direction(
     old: ConfluenceConnectorConfig, new: ConfluenceConnectorConfig
@@ -177,3 +165,16 @@ def _indexing_scope_direction(
             if (old.cql_query or "").strip() == (new.cql_query or "").strip():
                 return ScopeDirection.NONE
             return ScopeDirection.UNKNOWN
+
+
+def confluence_planning_rule(
+    old: ConfluenceConnectorConfig, new: ConfluenceConnectorConfig
+) -> ConnectorChangeOverride:
+    directions = {
+        name: _indexing_scope_direction(old, new) for name in _INDEXING_SCOPE_FIELDS
+    }
+    # The label filter also drops labeled comments from the page text,
+    # which only a from-beginning run rewrites.
+    if set(new.labels_to_skip) - set(old.labels_to_skip):
+        directions[_LABELS_TO_SKIP] = ScopeDirection.BOTH
+    return ConnectorChangeOverride(scope_directions=directions)

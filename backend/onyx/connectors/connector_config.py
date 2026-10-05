@@ -1,8 +1,8 @@
-from typing import Annotated, Any, Self
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.connectors.field_policy import FieldClass, FieldPolicy, ScopeDirection
+from onyx.connectors.field_policy import FieldClass, FieldPolicy
 
 
 class CredentialBinding(BaseModel):
@@ -52,20 +52,3 @@ class ConnectorConfig(BaseModel):
             ),
             None,
         )
-
-    @classmethod
-    def classify_scope_change(
-        cls,
-        old: Self,  # noqa: ARG003
-        new: Self,  # noqa: ARG003
-    ) -> dict[str, ScopeDirection]:
-        """Scope directions for changes the field descriptors cannot express.
-
-        Returns a direction per changed SCOPE field. A returned direction
-        replaces the one derived from that field's descriptor. Overrides keep
-        the ``Self`` parameters and add
-        ``# ty: ignore[invalid-method-override]``: ty rejects ``Self`` in an
-        override's parameters, but ``classify_config_change`` only passes
-        instances of the overriding class.
-        """
-        return {}

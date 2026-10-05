@@ -1,5 +1,6 @@
 """Classifies a connector config edit field by field, using the field policies
-declared on the typed config models (see ``field_policy``)."""
+declared on the typed config models (see ``field_policy``) and the source's
+planning rule, if it has one (see ``planning_rule``)."""
 
 from typing import Any
 
@@ -19,6 +20,8 @@ from onyx.connectors.field_policy import (
     ScopeToggle,
     get_field_policy,
 )
+from onyx.connectors.planning_rule import PlanningRule
+from onyx.connectors.planning_rule_registry import PLANNING_RULES
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.utils.logger import setup_logger
 
@@ -201,34 +204,53 @@ def _validate(
         return None
 
 
+def classify_source_config_change(
+    source: DocumentSource,
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+) -> list[ConfigFieldChange]:
+    """``classify_config_change`` with the source's config class and planning
+    rule."""
+    return classify_config_change(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old_config,
+        new_config,
+        PLANNING_RULES.get(source),
+    )
+
+
 def classify_config_change(
     config_class: type[ConnectorConfig],
     old_config: dict[str, Any],
     new_config: dict[str, Any],
+    rule: PlanningRule | None = None,
 ) -> list[ConfigFieldChange]:
     """One entry per field whose value differs between the two configs.
 
     Configs are compared as validated models, so defaults and coercion do not
     show as changes. If either config fails validation, raw values (with field
-    defaults filled in) are compared and the ``classify_scope_change`` hook is
-    skipped. A field with no policy counts as BEHAVIOR. A SCOPE change with no
-    effect on scope (e.g. reordered items) is left out.
+    defaults filled in) are compared and ``rule`` is skipped. A field with no
+    policy counts as BEHAVIOR. A SCOPE change with no effect on scope (e.g.
+    reordered items) is left out. A direction from ``rule`` replaces the one
+    derived from the field's descriptor.
     """
     old_model = _validate(config_class, old_config)
     new_model = _validate(config_class, new_config)
+    override = None
     if old_model and new_model:
         old_values = old_model.model_dump(mode="json")
         new_values = new_model.model_dump(mode="json")
-        hook_directions = config_class.classify_scope_change(old_model, new_model)
+        if rule:
+            override = rule.apply(old_model, new_model)
     else:
         old_values = _with_defaults(config_class, old_config)
         new_values = _with_defaults(config_class, new_config)
-        hook_directions = {}
-    for name in hook_directions:
+    rule_directions = override.scope_directions if override else {}
+    for name in rule_directions:
         policy = _policy_for(config_class, name)
         if policy is None or policy.field_class != FieldClass.SCOPE:
             raise ValueError(
-                f"{config_class.__name__}.classify_scope_change returned {name}, which is not a SCOPE field"
+                f"The planning rule for {config_class.__name__} returned a direction for {name}, which is not a SCOPE field"
             )
 
     changed_names = [
@@ -259,7 +281,7 @@ def classify_config_change(
             dependency in changed_name_set for dependency in policy.depends_on
         ):
             direction = ScopeDirection.UNKNOWN
-        direction = hook_directions.get(name, direction)
+        direction = rule_directions.get(name, direction)
         if direction == ScopeDirection.NONE:
             continue
         changes.append(
@@ -275,10 +297,26 @@ def classify_config_change(
     return changes
 
 
+def build_source_scoped_backfill_config(
+    source: DocumentSource,
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """``build_scoped_backfill_config`` with the source's config class and
+    planning rule."""
+    return build_scoped_backfill_config(
+        CONNECTOR_CLASS_MAP[source].config_class,
+        old_config,
+        new_config,
+        PLANNING_RULES.get(source),
+    )
+
+
 def build_scoped_backfill_config(
     config_class: type[ConnectorConfig],
     old_config: dict[str, Any],
     new_config: dict[str, Any],
+    rule: PlanningRule | None = None,
 ) -> dict[str, Any] | None:
     """The new config limited to the items a widening added, for a one-off
     backfill of just those items.
@@ -291,7 +329,7 @@ def build_scoped_backfill_config(
     """
     changes = [
         change
-        for change in classify_config_change(config_class, old_config, new_config)
+        for change in classify_config_change(config_class, old_config, new_config, rule)
         if change.field_class != FieldClass.COSMETIC
     ]
     if len(changes) != 1:

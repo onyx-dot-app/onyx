@@ -1,4 +1,4 @@
-from typing import Annotated, Self
+from typing import Annotated
 
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import (
@@ -10,6 +10,7 @@ from onyx.connectors.field_policy import (
     ScopeToggle,
 )
 from onyx.connectors.microsoft_utils.config import MicrosoftCloudBinding
+from onyx.connectors.planning_rule import ConnectorChangeOverride
 
 MAX_WORKERS = 10
 # Export pages answer in about a quarter second and the per-tenant cap sits
@@ -49,12 +50,14 @@ class TeamsConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
     ] = None
     include_meeting_chats: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = False
 
-    @classmethod
-    def classify_scope_change(  # ty: ignore[invalid-method-override]
-        cls, old: Self, new: Self
-    ) -> dict[str, ScopeDirection]:
-        # With the legacy key set, an empty meeting_organizers falls back to it
-        # instead of meaning every organizer.
-        if old.transcript_organizers or new.transcript_organizers:
-            return {_MEETING_ORGANIZERS: ScopeDirection.UNKNOWN}
-        return {}
+
+def teams_planning_rule(
+    old: TeamsConnectorConfig, new: TeamsConnectorConfig
+) -> ConnectorChangeOverride | None:
+    # With the legacy key set, an empty meeting_organizers falls back to it
+    # instead of meaning every organizer.
+    if old.transcript_organizers or new.transcript_organizers:
+        return ConnectorChangeOverride(
+            scope_directions={_MEETING_ORGANIZERS: ScopeDirection.UNKNOWN}
+        )
+    return None
