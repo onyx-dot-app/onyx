@@ -268,8 +268,9 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
     setMenuOpen(state);
   };
   const items = useSettingsItems({ undismissedCount });
-  // Enter or ArrowRight on the page row moves focus into it; Tab then walks
-  // its controls.
+  // ArrowRight on the page row moves focus into it; Tab then walks its
+  // controls. Not on activation: a click on a control inside the page
+  // bubbles to the row, and must not pull focus off that control.
   const focusNotificationsPage = () =>
     notificationsPageRef.current
       ?.querySelector<HTMLElement>("button, a, [tabindex='0']")
@@ -281,7 +282,6 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
         kind: "custom",
         id: "notifications-page",
         keepOpen: true,
-        onActivate: focusNotificationsPage,
         onSecondary: focusNotificationsPage,
         render: ({ props }) => (
           <div {...props} ref={notificationsPageRef}>
