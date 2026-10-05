@@ -2867,9 +2867,7 @@ def test_prompt_contains_unsigned_tool_call_history_signed_blocks() -> None:
             tool_calls=[
                 ToolCall(
                     id="tc_1",
-                    function=RequestFunctionCall(
-                        name="get_weather", arguments="{}"
-                    ),
+                    function=RequestFunctionCall(name="get_weather", arguments="{}"),
                 )
             ],
             thinking_blocks=[
