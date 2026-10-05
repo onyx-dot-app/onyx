@@ -281,6 +281,13 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
           // that needs focus keeps the default.
           if (!targetTakesFocus(e)) e.preventDefault();
         }}
+        onKeyDown={(e) => {
+          // Keys typed into the list (its search field, a control in a
+          // custom row) are the list's. React bubbles them through the
+          // portal to the trigger's ancestors, where a row's drag handle or
+          // link would otherwise claim Space and Enter.
+          e.stopPropagation();
+        }}
         onWheel={(e) => {
           // Scroll here, not in whatever sits behind the portal.
           e.stopPropagation();
