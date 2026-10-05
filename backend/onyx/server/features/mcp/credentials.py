@@ -27,6 +27,7 @@ from copy import deepcopy
 from typing import cast
 
 from mcp.shared.auth import OAuthClientInformationFull
+from pydantic import BaseModel, ConfigDict, SkipValidation
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import MCPAuthenticationPerformer, MCPAuthenticationType
@@ -129,27 +130,41 @@ def get_mcp_auth_template(mcp_server: MCPServer) -> MCPAuthTemplate | None:
     return MCPAuthTemplate(headers=headers)
 
 
-class ResolvedMCPCredentials:
+class ResolvedMCPCredentials(BaseModel):
     """Effective credential values captured for one MCP server and user."""
 
-    def __init__(
-        self,
+    model_config = ConfigDict(frozen=True)
+
+    connection_config_id: int | None
+    # Stored JSON is read as-is, without validation, as before capture.
+    connection_data: SkipValidation[MCPConnectionData]
+    user_oauth_token: str | None
+    auth_type: MCPAuthenticationType | None = None
+    auth_template: MCPAuthTemplate | None = None
+    user_email: str = ""
+
+    @classmethod
+    def from_connection_config(
+        cls,
         connection_config: MCPConnectionConfig | None,
         user_oauth_token: str | None,
         auth_type: MCPAuthenticationType | None = None,
         auth_template: MCPAuthTemplate | None = None,
         user_email: str = "",
-    ) -> None:
-        self.connection_config_id = connection_config.id if connection_config else None
-        self.connection_data = deepcopy(
-            extract_connection_data(connection_config, apply_mask=False)
+    ) -> "ResolvedMCPCredentials":
+        """Copy the connection row's values so no ORM object outlives the session."""
+        return cls(
+            connection_config_id=connection_config.id if connection_config else None,
+            connection_data=deepcopy(
+                extract_connection_data(connection_config, apply_mask=False)
+            ),
+            user_oauth_token=user_oauth_token,
+            auth_type=auth_type,
+            auth_template=(
+                auth_template.model_copy(deep=True) if auth_template else None
+            ),
+            user_email=user_email,
         )
-        self.user_oauth_token = user_oauth_token
-        self.auth_type = auth_type
-        self.auth_template = (
-            auth_template.model_copy(deep=True) if auth_template else None
-        )
-        self.user_email = user_email
 
     def _template_substitutions(self) -> dict[str, str]:
         data = self.connection_data
@@ -261,7 +276,7 @@ def resolve_mcp_credentials(
             raise MCPCredentialsError(
                 f"Anonymous user cannot use PT_OAUTH MCP server {mcp_server.id}"
             )
-        return ResolvedMCPCredentials(
+        return ResolvedMCPCredentials.from_connection_config(
             connection_config=user_connection_config,
             user_oauth_token=user.live_oauth_token,
             auth_type=mcp_server.auth_type,
@@ -277,7 +292,7 @@ def resolve_mcp_credentials(
             connection_config = user_connection_config
         else:
             connection_config = mcp_server.admin_connection_config
-        return ResolvedMCPCredentials(
+        return ResolvedMCPCredentials.from_connection_config(
             connection_config=connection_config,
             user_oauth_token=None,
             auth_type=mcp_server.auth_type,
@@ -285,7 +300,7 @@ def resolve_mcp_credentials(
             user_email=user.email,
         )
 
-    return ResolvedMCPCredentials(
+    return ResolvedMCPCredentials.from_connection_config(
         connection_config=user_connection_config,
         user_oauth_token=None,
         auth_type=mcp_server.auth_type,

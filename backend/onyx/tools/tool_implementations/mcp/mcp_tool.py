@@ -91,11 +91,14 @@ class MCPTool(Tool[None]):
         self.mcp_server = MCPServerConnection.model_validate(mcp_server)
         self._user_id = user_id
         self._additional_headers = additional_headers or {}
-        self._resolved_credentials = resolved_credentials or ResolvedMCPCredentials(
-            connection_config=connection_config,
-            user_oauth_token=user_oauth_token,
-            auth_type=self.mcp_server.auth_type,
-            user_email=user_email,
+        self._resolved_credentials = (
+            resolved_credentials
+            or ResolvedMCPCredentials.from_connection_config(
+                connection_config=connection_config,
+                user_oauth_token=user_oauth_token,
+                auth_type=self.mcp_server.auth_type,
+                user_email=user_email,
+            )
         )
 
         self._mcp_tool_name = tool_name
