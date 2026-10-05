@@ -5,6 +5,7 @@
 > and `open_url` tools, their admin configuration, and the standalone `/web-search`
 > API used outside the chat loop.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:**
@@ -54,7 +55,9 @@ new is fetched from the live internet.
 | GET | `/admin/web-search/search-providers` | `list_search_providers` | Lists configured search providers, API key returned masked. |
 | POST | `/admin/web-search/search-providers` | `upsert_search_provider_endpoint` | Create or update a search provider row. |
 | POST | `/admin/web-search/search-providers/test` | `test_search_provider` | Runs a live probe call against the provider before saving. |
-| POST | `/admin/web-search/content-providers/{id}/deactivate` | `deactivate_content_provider` | |
+| POST | `/admin/web-search/search-providers/{id}/activate`, `/deactivate` | `activate_search_provider`, `deactivate_search_provider` | Activation makes the provider the single active row. |
+| POST | `/admin/web-search/content-providers/{id}/activate`, `/deactivate` | `activate_content_provider`, `deactivate_content_provider` | |
+| POST | `/admin/web-search/content-providers/reset-default` | `reset_content_provider_default` | Returns to the built-in crawler. |
 | POST | `/admin/web-search/content-providers/test` | `test_content_provider` | Same idea for content (page-fetch) providers. On `MULTI_TENANT`, this refuses to reuse a stored API key with a different `base_url` than the one already saved for that provider type (`api.py:411-419`). |
 | POST/GET/DELETE | analogous endpoints for `content-providers` | `upsert_content_provider_endpoint`, etc. | |
 
@@ -76,7 +79,7 @@ It gates on `Permission.READ_SEARCH`, not the chat endpoint's permission set.
 |---|---|---|---|
 | POST | `/web-search/search` | `execute_web_search` | Search, then immediately fetch full content for every unique result URL. |
 | POST | `/web-search/search-lite` | `execute_web_search_lite` | Search only, snippets and URLs, no page fetch. |
-| POST | `/web-search/open-urls` | `execute_open_urls` | Fetch content for a specific list of URLs via the active content provider. |
+| POST | `/web-search/open-urls` | `execute_open_urls` | Fetch content for a specific list of URLs via the active content provider. The request accepts at most `OPEN_URLS_MAX_URLS_PER_REQUEST` URLs (default 20). The MCP `open_urls` tool applies the same cap. |
 
 These endpoints build a provider directly from the active DB row
 (`_get_active_search_provider`, `_get_active_content_provider` in
@@ -85,6 +88,15 @@ so `is_available` gating does not apply here: an unconfigured search provider ra
 `OnyxError(OnyxErrorCode.INVALID_INPUT, ...)` instead of the tool being silently
 absent (`api.py:_get_active_search_provider`). An unconfigured content provider falls
 back to the built-in `OnyxWebCrawler` (`api.py:_get_active_content_provider`).
+
+### Environment configuration (`backend/onyx/configs/app_configs.py`)
+
+| Variable | Default | Effect |
+|---|---|---|
+| `OPEN_URL_MAX_HTML_SIZE_BYTES` | 20 MiB | Size cap for an HTML body the built-in crawler reads. |
+| `OPEN_URL_MAX_PDF_SIZE_BYTES` | 50 MiB | Size cap for a PDF body. |
+| `OPEN_URL_BODY_DEADLINE_SECONDS` | 120 | Wall-clock limit to read one response body. |
+| `OPEN_URLS_MAX_URLS_PER_REQUEST` | 20 | URL cap for `/web-search/open-urls` and the MCP tool. |
 
 ### Data model surface
 
@@ -243,8 +255,8 @@ Citation numbering does not collide with a parallel internal search or another
 web-search call in the same turn: `tool_runner.py` assigns each search-like tool
 call (`SearchTool`, `WebSearchTool`, `OpenURLTool`) a `starting_citation_num`, then
 advances a shared counter by 100 before constructing the next tool's override
-kwargs (`tool_runner.py:_construct_tool_override_kwargs`, `starting_citation_num +=
-100` at each of the three branches). See [[internal-search]] for the internal side
+kwargs (`tool_runner.py:run_tool_calls`, `starting_citation_num += 100` at each of the
+three branches). See [[internal-search]] for the internal side
 of the same mechanism.
 
 ---

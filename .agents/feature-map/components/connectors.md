@@ -5,6 +5,7 @@
 > plain `Document` objects to indexing. It never chunks, embeds, or writes to
 > the index, and it never touches credential encryption directly.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** ingestion
 **Edition:** CE for the connector interfaces, the registry, and indexing
 (`CredentialCapability.INDEXING`). EE adds the two permission-sync capabilities
@@ -81,7 +82,10 @@ frontend changes a new connector requires.
 | GET | `/admin/connector/status`, `/admin/connector/indexing-status` (POST) | Status and index-attempt history for the admin UI. |
 | GET | `/admin/connector/failed-indexing-status` | |
 | POST | `/admin/connector/file/upload`, GET/POST `/admin/connector/{id}/files*` | File-connector-specific upload and file-list management. |
-| GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | OAuth flows for the two `OAuthConnector` implementations wired up here. |
+| GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
+| GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
+| POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). |
+| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`). |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
 Every call that runs a connector goes through
@@ -90,7 +94,7 @@ source; see §4.
 
 ### The `DocumentSource` enum: the canonical list
 
-`backend/onyx/configs/constants.py:DocumentSource` has 61 members and is the
+`backend/onyx/configs/constants.py:DocumentSource` has 62 members and is the
 single source of truth for "what is a valid source in Onyx". It is **not** 1:1
 with `backend/onyx/connectors/registry.py:CONNECTOR_CLASS_MAP`. Four members
 have no connector class and are handled by other components instead:
@@ -109,7 +113,7 @@ tests. A separate `FederatedConnectorSource` enum
 federated-only source like `FEDERATED_SLACK` back to the `DocumentSource` it
 shadows; see [[federated-search]].
 
-Do not enumerate all ~69 registered connectors here. `DocumentSource` plus
+Do not enumerate all 58 registered connectors here. `DocumentSource` plus
 `registry.py:CONNECTOR_CLASS_MAP` is the authoritative list. The handful of
 architecturally distinct *shapes* those connectors take are in §4 and §6.
 
@@ -186,7 +190,7 @@ set in `backend/onyx/connectors/interfaces.py` is larger:
 | `Resolver` | `reindex` | Yes, but on demand, not beat-scheduled: `backend/onyx/background/indexing/run_targeted_reindex.py:process_targets_for_cc_pair`, reached from the admin-triggered `backend/onyx/background/celery/tasks/docprocessing/targeted_reindex_task.py`. Re-fetches specific documents named by stored `ConnectorFailure` rows. |
 | `HierarchyConnector` | `load_hierarchy` | Yes, beat-scheduled: `backend/onyx/background/celery/tasks/hierarchyfetching/tasks.py:_run_hierarchy_extraction`, gated by `_is_hierarchy_fetching_due`. |
 | `CredentialsConnector` | `set_credentials_provider` | Not a fetch flow; a marker interface `factory.py:instantiate_connector` checks to decide whether to call `load_credentials` or hand over a `CredentialsProviderInterface` (§4.3). |
-| `OAuthConnector` | `oauth_*` classmethods | Backs the OAuth authorize/callback endpoints in §2. Only Google Drive and Gmail implement it today. |
+| `OAuthConnector` | `oauth_*` classmethods | Backs the generic `/connector/oauth/*` endpoints in §2. Egnyte, Linear, and Salesforce implement it. Google Drive and Gmail use their own endpoints. |
 
 **`CheckpointedConnector` is the modern path.** `PollConnector`/`LoadConnector`
 are legacy for the main index loop; new connectors should implement
@@ -206,6 +210,9 @@ does the same enumeration as the full connector without downloading bodies.
 1. `backend/onyx/connectors/registry.py:CONNECTOR_CLASS_MAP` maps each
    `DocumentSource` to a `ConnectorMapping(module_path, class_name)`, never the
    class object itself, so importing the registry never imports every SDK.
+`ConnectorMapping` also carries a `config_class`, a `ConnectorConfig` subclass from
+   `<source>/config.py` (`connector_config.py`). It types `connector_specific_config` and
+   forbids unknown keys.
 2. `factory.py:_load_connector_class` imports the module lazily on first use
    and caches the class in `_connector_cache`. A missing map entry raises
    `ConnectorMissingException` (only at first instantiation, not at import
@@ -213,7 +220,7 @@ does the same enumeration as the full connector without downloading bodies.
 3. `factory.py:identify_connector_class` additionally validates the class
    against a requested `InputType` via `_validate_connector_supports_input_type`.
 4. `factory.py:instantiate_connector` builds the instance:
-   `connector_class(**connector_specific_config)`, then branches on
+   `connector_class(**build_connector_kwargs(source, config))`, then branches on
    `isinstance(connector, CredentialsConnector)`:
    - **True**: builds an `OnyxDBCredentialsProvider` via
      `credentials_provider.py:build_db_credentials_provider` and calls
@@ -221,10 +228,14 @@ does the same enumeration as the full connector without downloading bodies.
      the raw credential dict; it pulls through the provider under a Redis lock
      (`OnyxDBCredentialsProvider.LOCK_TTL = 900`), which matters for
      credentials that rotate mid-run.
-   - **False**: decrypts `credential.credential_json` once, calls
+   - **False**: decrypts `credential.credential_json` once, converts it with
+     `credential_families.py:to_source_credential_json`, calls
      `connector.load_credentials(credential_json)`, and if the connector
      returns a refreshed dict, writes it back via
      `backend_update_credential_json`.
+   `build_connector_kwargs` validates the stored config against `config_class`. If
+   validation fails, it logs a warning and passes the stored config through as is, because
+   old rows may not conform.
    Either way, `connector.set_allow_images(...)` and, if a raw-file callback
    was supplied, `connector.set_raw_file_callback(...)` run afterward.
 
@@ -272,12 +283,12 @@ See §5 for the invariant this depends on.
 
 ### 4.6 Three representative shapes
 
-Do not read all ~69 connectors. These three (chosen for the README) span the
+Do not read all 58 connectors. These three (chosen for the README) span the
 range:
 
 | Connector | Base classes | Checkpoint | Notable |
 |---|---|---|---|
-| Confluence (`confluence/connector.py:ConfluenceConnector`) | `CheckpointedConnector`, `SlimConnector`, `SlimConnectorWithPermSync`, `CredentialsConnector`, `Resolver` | `ConfluenceCheckpoint` (`next_page_url`) | No `LoadConnector`/`PollConnector`; checkpointing is mandatory, not optional. `load_credentials` deliberately raises `NotImplementedError("Use set_credentials_provider with this connector.")`. Has no `source_operations.py`; API access goes through `onyx_confluence.py`. |
+| Confluence (`confluence/connector.py:ConfluenceConnector`) | `CheckpointedConnector`, `SlimConnector`, `SlimConnectorWithPermSync`, `CredentialsConnector`, `Resolver` | `ConfluenceCheckpoint` (`next_page_url`) | No `LoadConnector`/`PollConnector`; checkpointing is mandatory, not optional. `load_credentials` deliberately raises `NotImplementedError("Use set_credentials_provider with this connector.")`. Has a `source_operations.py` gateway (`ConfluenceSourceOperations`) and registers named capability checks. |
 | Google Drive (`google_drive/connector.py:GoogleDriveConnector`) | `SlimConnector`, `SlimConnectorWithPermSync`, `CheckpointedConnectorWithPermSync`, `Resolver` | `GoogleDriveCheckpoint` (`google_drive/models.py`): a multi-stage state machine (`DriveRetrievalStage`: `START → OAUTH_FILES → USER_EMAILS → MY_DRIVE_FILES → DRIVE_IDS → SHARED_DRIVE_FILES → DONE`) plus a per-impersonated-user completion map. Not a simple cursor. | Splits source-API logic across `file_retrieval.py`, `doc_conversion.py`, `section_extraction.py` rather than a single `source_operations.py`. |
 | Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. `external_access` is assigned inline on yielded documents, not in a separate pass. |
 
@@ -292,9 +303,8 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack and Outlook have a gateway today
-(`slack/source_operations.py`, `outlook/source_operations.py`); most
-connectors still call their SDK directly.
+calls outside any wrapper. Only Slack, Confluence, OneDrive, and Outlook have a gateway today
+(`<source>/source_operations.py`); most connectors still call their SDK directly.
 
 ### 4.8 Capabilities and capability checks
 
@@ -302,9 +312,10 @@ connectors still call their SDK directly.
 `EXTERNAL_GROUP_SYNC`) is the vocabulary. `capability_checks/applicability.py`
 decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
-source to named `CapabilityCheck`s (only Slack and Outlook register real ones
+source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, and Outlook register real ones
 today; every other source gets a synthesized fallback wrapping
-`validate_connector_settings`). `capability_checks/runner.py:generate_capability_report`
+`validate_connector_settings`). A source with named checks must have a
+`SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
 instantiates the connector in isolation with a timeout guard, builds the
 source's `SourceOperations` gateway if one is registered, and runs checks
 sequentially (source APIs rate-limit) via `run_capability_checks`, mapping
@@ -318,6 +329,37 @@ separately feeds a coarse pass/fail report into the same
 `credential_capability_report` table via
 `capability_checks/recorder.py:record_blocking_validation_outcome`, which
 never clobbers a richer report the check-runner already wrote.
+
+For a source with named checks, a pairing at creation or credential swap
+(`CapabilityCheckTrigger.CC_PAIR_VALIDATION`) skips the legacy
+`validate_connector_settings`/`validate_perm_sync` calls.
+`capability_checks/creation.py:validate_pairing_with_named_checks` runs the named
+checks instead and stores the full report. Only a required check that `FAILED`
+within the blocking budget blocks the pairing. Indexing and perm-sync attempts keep
+the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
+on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
+retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
+reuse their result at creation when the form is unchanged.
+
+With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
+run is in flight or fails to run, or while a required check has `FAILED`
+(`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
+[[indexing-pipeline]] §4.2.
+
+### 4.9 Typed configs and credential families
+
+Every registry entry has a `ConnectorConfig` (`connector_config.py`). Each field
+mirrors one `__init__` kwarg of the connector. A config may inherit a
+`CredentialBinding` model for fields whose valid values depend on the account behind
+the credential, such as a site URL. `factory.py:validate_credential_binding` checks
+those fields at pairing and on config edit.
+
+`credential_families.py` lets related sources share one stored credential: Atlassian
+(Confluence, Jira), Google (Gmail, Drive), and Microsoft (SharePoint, OneDrive,
+Outlook, Teams). Each source has a `FamilyCredentialCodec`.
+`to_source_credential_json` converts the family shape back to the source's own keys,
+so a connector reads only its own keys. Credentials created before a source joined a
+family keep the source's shape and stay usable by that source only.
 
 ---
 
@@ -411,7 +453,7 @@ never clobbers a richer report the check-runner already wrote.
 | changes `interfaces.py` (adds/renames a base class or method) | `factory.py:_validate_connector_supports_input_type` and `identify_connector_class`; `connector_runner.py`'s `isinstance` branches; every connector implementing the affected interface |
 | changes checkpoint serialization (`ConnectorCheckpoint` or a subclass) | `validate_checkpoint_json` for that connector; any in-flight, persisted checkpoint from a prior run becomes unreadable, which [[indexing-pipeline]]'s resume logic must handle |
 | changes `capabilities.py` or the `CredentialCapability` enum | `capability_checks/applicability.py`, `registry.py`, `runner.py`, and the `credential_capability_report` schema; the admin UI surface that reads capability reports |
-| changes `source_operations.py`'s decorator or `SourceOperations` base | both existing gateways (`slack/source_operations.py`, `outlook/source_operations.py`) and the import-fence test guarding SDK imports |
+| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook` `source_operations.py`) and the import-fence test guarding SDK imports |
 | changes pruning's diff logic | the invariant in §5.5; verify a connector auth failure still raises rather than producing an empty slim result |
 | touches `credentials_provider.py` | the Redis lock TTL and rotation semantics for every `CredentialsConnector`; static-credential paths used by daily tests |
 
@@ -500,8 +542,8 @@ lack of a key, ask instead. The shared helper
   multi-stage state machine with a per-user completion map, not a cursor. Do
   not assume a checkpoint is small or simple when reasoning about serialization
   changes.
-- **`SourceOperations` is opt-in and mostly unused.** Only Slack and Outlook
-  have a gateway; most connectors still make source-API calls inline, so the
+- **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
+  OneDrive, and Outlook have a gateway; most connectors still make source-API calls inline, so the
   "one file that talks to the source" guarantee only holds for those two today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`

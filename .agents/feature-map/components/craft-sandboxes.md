@@ -6,6 +6,7 @@
 > webapp preview, or admin policy; it covers the runtime the agent executes
 > inside.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
 **Edition:** CE (Craft ships in both editions; no EE-specific code in this path)
 **Owns:**
@@ -62,7 +63,7 @@ visible seams:
 
 - `POST /api/build/sessions/{session_id}/snapshot` and
   `POST /api/build/sessions/{session_id}/opencode-history-snapshot`
-  (`backend/onyx/server/features/build/session/api.py:440,470`): manual snapshot
+  (`backend/onyx/server/features/build/session/api.py:create_session_snapshot`, `create_session_opencode_history_snapshot`): manual snapshot
   triggers for the owned session. The history one is a manual capture hook used
   by tests and operators (`backend/tests/integration/common_utils/managers/build_session.py:BuildSessionManager.create_opencode_history_snapshot`). No frontend code calls it.
 - The sandbox's own preview/dev-server surface is owned by `[[craft-webapp-proxy]]`.
@@ -90,17 +91,17 @@ scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS`
 
 ## 3. Data model
 
-- `Sandbox` (`backend/onyx/db/models.py:6443`): one row per user
+- `Sandbox` (`backend/onyx/db/models.py:Sandbox`): one row per user
   (`user_id` unique). Carries `status: SandboxStatus`
   (`PROVISIONING`/`RUNNING`/`SLEEPING`/`TERMINATED`/`FAILED`,
-  `backend/onyx/db/enums.py:471`), `last_heartbeat`, `provisioning_attempt_number`
+  `backend/onyx/db/enums.py:SandboxStatus`), `last_heartbeat`, `provisioning_attempt_number`
   (fencing token for concurrent provisioners, see §4.1), `skills_hash` and
   `mcp_config_hash` (last-pushed managed-content fingerprints), and
   `encrypted_pat` (the Craft-scoped PAT injected into the sandbox).
-- `Snapshot` (`backend/onyx/db/models.py:6636`): one row per **session** output
+- `Snapshot` (`backend/onyx/db/models.py:Snapshot`): one row per **session** output
   snapshot, `storage_path` + `size_bytes`, FK to `BuildSession`. Only one row is
   kept per session (`get_latest_snapshot_for_session`,
-  `backend/onyx/server/features/build/db/sandbox.py:306`); see §4.4 for
+  `backend/onyx/server/features/build/db/sandbox.py`); see §4.4 for
   prune-on-write.
 - Labels (`backend/onyx/server/features/build/sandbox/labels.py`):
   `LABEL_SANDBOX_ID` / `LABEL_TENANT_ID` (stamped onto the K8s Pod/Service, and
@@ -157,10 +158,10 @@ Where they diverge, by design (`docker_sandbox_manager.py` module docstring,
   Docker's `create_snapshot`/`restore_snapshot` run `tar` via `docker exec` and
   pipe bytes through the same `SnapshotManager` (`docker_sandbox_manager.py`
   module docstring, "Snapshots").
-- Docker has no `opencode_history` sidecar restore step gated behind a
-  `startupProbe`; `KubernetesSandboxManager.supports_opencode_history_persistence
-  = True` while the base class defaults it `False` (`base.py:125`). Verify per
-  backend before assuming opencode-history persistence exists.
+- Both managers set `supports_opencode_history_persistence = True` (the base
+  class defaults it `False`, `base.py`). On Docker, `_maybe_restore_opencode_history`
+  restores the archive before the sandbox serves, with no sidecar
+  `startupProbe` gate. A new backend must set the flag itself.
 - Only the dedicated sandbox bridge network is used on Docker; Postgres, Redis,
   MinIO, and the model server stay unreachable by service name
   (`docker_sandbox_manager.py` module docstring, "Security model").
@@ -306,12 +307,15 @@ create/download (`request_and_stream_new_snapshot`).
 
 **Current state versus the sidecar-migration doc:** as of this code, snapshot
 create/restore and file push already go through the sidecar HTTP API (confirmed
-above). `setup_session_workspace`, `cleanup_session_workspace`,
-`session_workspace_exists`, and `list_session_workspaces` still use
+above). `list_directory` and `get_outputs_manifest` also use the sidecar.
+`setup_session_workspace`, `cleanup_session_workspace`,
+`session_workspace_exists`, `list_session_workspaces`, `read_file`,
+`upload_file`, `delete_file`, `write_sandbox_file`, `get_upload_stats`, and
+`regenerate_session_config` still use
 `k8s_stream`/`connect_get_namespaced_pod_exec` shell scripts today.
 `docs/craft/sandbox/sandbox-exec-sidecar.md` is a **plan** to move those
 remaining filesystem operations onto the sidecar too, leaving `kubectl exec`
-only for the three Next.js dev-server process-control call sites. Do not assume
+only for the Next.js dev-server process-control call sites. Do not assume
 that migration is complete; verify against the manager methods you're touching.
 
 ### 4.4 The workspace volume
@@ -485,8 +489,8 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    guaranteed no-ops, never a stale overwrite of a newer attempt's outcome.
 9. **`supports_opencode_history_persistence` must be checked before calling
    the opencode-history methods.** The base class implementation raises
-   `NotImplementedError` (`base.py:322`); only `KubernetesSandboxManager` sets
-   the flag `True`.
+   `NotImplementedError` (`base.py:create_opencode_history_snapshot`); `KubernetesSandboxManager` and
+   `DockerSandboxManager` set the flag `True`.
 
 ---
 
@@ -541,7 +545,7 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
 | changes the pod template (`sandbox-podtemplate.yaml`) | `_overlay_dynamic_fields`/`_require_container` (version-skew handling); the four fields Python still owns; resource requests vs the CI/localdev values overlays; the Service's port range staying in sync with the template's container ports |
 | changes the snapshot format (what's included/excluded, archive layout) | `sandbox_daemon/snapshot.py`'s `_SNAPSHOT_ROOTS`/`_SNAPSHOT_GENERATED_*` sets; `restore_snapshot`'s webapp-restore path; existing snapshots in FileStore become unreadable by a format change unless restore stays backward-compatible |
 | changes the sidecar contract (`contract.py`, `server.py` routes) | both `sidecar_client.py` (api-server side) and every route in `sandbox_daemon/server.py`; the image must ship the updated daemon in the same release as the api-server that calls it (version skew is a real risk, no negotiation exists) |
-| changes RBAC (`sandbox-rbac.yaml`) | `_wait_for_pod_ready`'s `watch.Watch()` usage needs `pods:watch`, silently and without a Python-side error if removed (see §9); `pods/exec` is still needed for the three residual exec call sites; `_create_sandbox_pod`'s `podtemplates:get` |
+| changes RBAC (`sandbox-rbac.yaml`) | `_wait_for_pod_ready`'s `watch.Watch()` usage needs `pods:watch`, silently and without a Python-side error if removed (see §9); `pods/exec` is still needed for the many residual exec call sites; `_create_sandbox_pod`'s `podtemplates:get` |
 | changes network policy (`network-policy-sandbox-*.yaml`) | the in-pod iptables lockdown (`firewall-init.sh`) stays authoritative regardless of CNI enforcement; keep the allow-list in sync with whichever worker consumes the `sandbox` Celery queue (currently `celery-worker-heavy`) |
 | changes idle timeout or snapshot cadence | the `SNAPSHOT_INTERVAL_DIVISOR` relationship between idle timeout and background-snapshot freshness bound; opencode-history durability exposure scales with this gap |
 | adds a new sandbox-wide (not per-session) persisted artifact | it needs its own capture point like opencode history's, since only `outputs/`+`attachments/` ride the per-session snapshot |
@@ -652,8 +656,9 @@ set.
   "the sandbox can reach `example.com`" with "the org didn't approve that."
 - **Docker has no sidecar.** Anything in this document keyed on "the sidecar"
   is Kubernetes-only; the Docker backend execs directly into the single
-  sandbox container for the same operations, and does not support opencode
-  history persistence (`supports_opencode_history_persistence` stays `False`).
+  sandbox container for the same operations. It does support opencode history
+  persistence (`supports_opencode_history_persistence = True`), through
+  `docker exec` instead of the sidecar.
 - **`emptyDir` volumes vanish with the pod, full stop.** `workspace` and
   `opencode-data` are not persistent volumes; anything not captured by a
   snapshot before `terminate()` is gone, including on a crash the reaper never

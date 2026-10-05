@@ -5,6 +5,7 @@
 > client, packet-to-component rendering, state, message actions, uploads, and
 > the agent/model pickers.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:**
@@ -76,7 +77,7 @@ example nginx); this file is not on that path.
 |---|---|
 | `POST /api/chat/send-chat-message` | `services/lib.tsx:sendMessage` |
 | `GET /api/chat/chat-session/{id}/resume-stream?cursor=N` | `services/lib.tsx:resumeStream`, from `useChatSessionController.ts` |
-| `POST /api/chat/stop-chat-session/{id}` | `hooks/useChatController.ts:stopChatSession` |
+| `POST /api/chat/stop-chat-session/{id}?stream_id=N` | `hooks/useChatController.ts:stopChatSession`. `stream_id` is the session store's `streamId`, which the controller sets from the assistant message ID, or the user message ID in multi-model mode. |
 | `POST /api/chat/create-chat-session` | `services/lib.tsx:createChatSession` |
 | `PUT /api/chat/rename-chat-session` | `services/lib.tsx:renameChatSession`, `nameChatSession` |
 | `DELETE /api/chat/delete-chat-session/{id}`, `/api/chat/delete-all-chat-sessions` | `services/lib.tsx` |
@@ -86,7 +87,7 @@ example nginx); this file is not on that path.
 | `PATCH /api/chat/chat-session/{id}` (`sharing_status`) | `sections/modals/ShareChatSessionModal.tsx` |
 | `POST /api/chat/end-incognito-session/{id}` | `services/lib.tsx:endIncognitoSession`, from `views/AppPage.tsx` |
 | `POST /api/chat/seed-chat-session-from-slack` | `hooks/useChatController.ts` |
-| `POST /api/user/projects/file/upload` | `lib/projects/providers.tsx:beginUpload`, see [[file-store-and-user-files]] |
+| `POST /api/user/projects/file/upload` | `lib/projects/providers.tsx:beginUpload` via `lib/projects/svc.ts`, see [[file-store-and-user-files]] |
 
 ---
 
@@ -273,7 +274,7 @@ all, because the mode is pinned at session creation and cannot be changed mid-se
   assistant node (`useChatController.ts`, the `onSubmit` branches on
   `regenerationRequest`).
 - **Stop** calls `stopChatSession` (`useChatController.ts:stopChatSession`, `POST
-  /api/chat/stop-chat-session/{id}`) **and** aborts the session's local
+  /api/chat/stop-chat-session/{id}`) (with the session's `streamId`, so the stop hits only that stream) **and** aborts the session's local
   `AbortController` (`abortController.abort()` in the store). Both must fire: the server
   call stops the backend turn (see [[core-chat-loop]] §4.6); the local abort stops the
   fetch reader so the UI does not keep waiting on a connection the server may not close
@@ -301,9 +302,9 @@ all, because the mode is pinned at session creation and cannot be changed mid-se
 `noClick noPaste` (`views/AppPage.tsx`, around the main content grid). `onDrop` calls
 `handleMessageSpecificFileUpload` (`hooks/useChatController.ts`), which checks the
 dropped files against the current model's image support
-(`modelSupportsImageInput`, `lib/llm/utils`) before uploading, rejecting image files with
+(`modelSupportsImageInput`, `lib/languageModels/utils.ts`) before uploading, rejecting image files with
 a toast if the active model has no vision support. It then calls `beginUpload`
-(`lib/projects/providers.tsx:beginUpload`, `POST /api/user/projects/file/upload`, see
+(`lib/projects/providers.tsx:beginUpload`, which calls `lib/projects/svc.ts` for `POST /api/user/projects/file/upload`, see
 [[file-store-and-user-files]]) and appends the results to `currentMessageFiles` via
 `ProjectsProvider`.
 

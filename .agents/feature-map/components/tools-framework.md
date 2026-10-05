@@ -4,6 +4,7 @@
 > implements, the built-in tool catalogue, per-turn tool assembly, and parallel
 > tool execution.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE, with EE additions in MCP credential resolution
 **Owns:**
@@ -171,7 +172,9 @@ For each `db_tool_model` in `persona.tools`, in order:
    `try/except` that treats a raised exception as `False`
    (`tool_constructor.py:_construct_tools_impl`), then dispatch to a class-specific
    constructor branch (`SearchTool`, `ImageGenerationTool`, `WebSearchTool`,
-   `OpenURLTool`, `PythonTool`, `CodingAgentTool`, `FileReaderTool`).
+   `OpenURLTool`, `PythonTool`, `CodingAgentTool`, `FileReaderTool`). The
+   `SearchTool` branch skips the tool when `search_usage_forcing_setting` is
+   `SearchToolUsage.DISABLED`.
 4. For a custom tool (`openapi_schema` set), resolve OAuth (per-tool OAuth config,
    then passthrough auth using the user's own login token) and build one `Tool`
    per operation via `build_custom_tools_from_openapi_schema_and_headers`.
@@ -208,7 +211,9 @@ tool calls the LLM just made and the constructed `Tool` instances.
    `queries` list; `OpenURLTool.NAME` merges its `urls` list. A merged call keeps
    the first call's `tool_call_id` and `placement`.
 2. **Filter.** Calls naming a tool not in `tools_by_name` are dropped with a
-   warning; they do not count against `max_concurrent_tools`.
+   warning; they do not count against `max_concurrent_tools`. `run_llm_loop` then
+   records each dropped call in history with a failure response
+   (`chat_utils.py:create_tool_call_failure_response`), so every call keeps its pair.
 3. **Cap.** If `max_concurrent_tools` is set, calls beyond the cap are dropped
    outright (not queued for a later cycle).
 4. **Prepare overrides.** For each surviving call, `tool.emit_start(placement)`
@@ -288,7 +293,7 @@ tool calls the LLM just made and the constructed `Tool` instances.
 - `[[streaming-protocol]]`: every tool's `emit_start`, argument-delta, and
   `SectionEnd` packets use the shared `Placement`/`Packet` vocabulary.
 - `[[chat-persistence]]`: `ToolResponse.rich_response` is what `save_chat_turn`
-  persists as `SearchDoc` rows, `ToolCall.tool_result`, and generated file records.
+  persists as `SearchDoc` rows, `ToolCall.tool_call_response`, and generated file records.
 - `[[agents-personas]]`: `persona.tools` is the input to `construct_tools`; persona
   fields (document sets, attached documents, hierarchy nodes) shape `SearchTool`'s
   scope.

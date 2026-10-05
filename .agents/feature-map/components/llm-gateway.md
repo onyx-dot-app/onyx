@@ -6,10 +6,11 @@
 > The gateway sits in front of [[llm-providers]]; it does not duplicate the
 > provider factory, the LiteLLM wrapper, or tracing, it calls into them.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform (EE surface, consumed by Craft and by external tools)
 **Edition:** EE only. The router only exists when EE code loads
-(`backend/ee/onyx/main.py:19,146`), and the path prefix is gated at
-`Tier.BUSINESS` (`backend/onyx/server/gateway/configs.py:6`).
+(`backend/ee/onyx/main.py`), and the path prefix is gated at
+`Tier.BUSINESS` (`backend/onyx/server/gateway/configs.py`).
 **Owns:**
 `backend/ee/onyx/server/gateway/api.py`, `openai_passthrough.py`,
 `anthropic_passthrough.py`, `stream_bridge.py`,
@@ -58,7 +59,7 @@ the Craft-specific setting (§4.2).
 
 ## 2. Surfaces
 
-### HTTP endpoints (router prefix `/gateway`, `backend/ee/onyx/server/gateway/api.py:133`)
+### HTTP endpoints (router prefix `/gateway`, `backend/ee/onyx/server/gateway/api.py`, `router`)
 
 | Method | Path | Handler | Dialect | Notes |
 |---|---|---|---|---|
@@ -69,8 +70,8 @@ the Craft-specific setting (§4.2).
 | POST | `/gateway/v1/messages/count_tokens` | `gateway_anthropic_count_tokens` | Anthropic | No token-rate-limit check; nothing is generated. Prefers the Anthropic passthrough, falls back to a local `litellm.token_counter` estimate. |
 
 Every endpoint depends on `require_permission(Permission.USE_LLM_GATEWAY)`
-(`api.py:1395` etc.) as GATE 1, then calls
-`_authorize_gateway_request` (`api.py:144`), which checks the workspace
+(every endpoint in `api.py`) as GATE 1, then calls
+`_authorize_gateway_request` (`api.py`), which checks the workspace
 `llm_gateway_enabled` setting for non-Craft traffic before delegating to
 `craft_gateway.py:gateway_request_flow` as GATE 2. See §4.2 for why both
 gates, plus the workspace setting, exist.
@@ -78,11 +79,11 @@ gates, plus the workspace setting, exist.
 ### PAT scope
 
 `Permission.USE_LLM_GATEWAY` (`"use:llm_gateway"`,
-`backend/onyx/db/enums.py:672`) is a selectable PAT scope
-(`backend/onyx/server/pat/models.py:53-59`, `SELECTABLE_PAT_SCOPES`), gated
+`backend/onyx/db/enums.py`) is a selectable PAT scope
+(`backend/onyx/server/pat/models.py`, `SELECTABLE_PAT_SCOPES`), gated
 in the UI at `min_tier=LLM_GATEWAY_MIN_TIER` (Business). It is also implied
 by `Permission.BASIC_ACCESS` and by `Permission.CRAFT_SANDBOX`
-(`backend/onyx/auth/permissions.py:73,78-81`, `IMPLIED_PERMISSIONS`), so any
+(`backend/onyx/auth/permissions.py`, `IMPLIED_PERMISSIONS`), so any
 ordinary logged-in user's unscoped PAT, and every Craft sandbox's PAT, both
 carry it implicitly. See §4.2 and [[auth-and-identity]] for what `PAT scope`
 means mechanically.
@@ -97,6 +98,7 @@ means mechanically.
 | `OPENAI_GATEWAY_PASSTHROUGH_ENABLED` | on (`!= "false"`) | Same kill switch for true-OpenAI models on `/v1/responses`. |
 | `ANTHROPIC_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS` / `_READ_TIMEOUT_SECONDS` | 10 / 600 | httpx timeouts for the Anthropic passthrough. |
 | `OPENAI_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS` / `_READ_TIMEOUT_SECONDS` | 10 / 600 | Same, OpenAI passthrough. |
+| `GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS` | 600 (constant, not env) | Total budget for one non-streaming translated call (`invoke_raw(total_timeout_s=...)`). |
 
 **Not env, admin-configured:** `Settings.llm_gateway_enabled`
 (`server/settings/models.py`, default `True`) is the workspace on/off switch
@@ -112,7 +114,7 @@ The gateway introduces no new tables. It reads the same rows
 [[llm-providers]] owns:
 
 - `LLMProvider` / `ModelConfiguration` (`db/models.py`), resolved through
-  `resolve_gateway_model` (`api.py:154`) and
+  `resolve_gateway_model` (`api.py`) and
   `db/llm.py:fetch_accessible_llm_provider_by_id` /
   `fetch_all_accessible_llm_providers`.
 - `PersonalAccessToken` (`db/models.py`, via `db/pat.py`), whose `scopes`
@@ -136,25 +138,25 @@ POST /gateway/v1/chat/completions               ee/onyx/server/gateway/api.py
   ├─ require_permission(Permission.USE_LLM_GATEWAY)   GATE 1 (FastAPI Depends)
   ├─ tier_gate middleware                             ee/onyx/server/middleware/tier_gate.py
   │    PATH_PREFIX_MIN_TIER["/gateway"] = Tier.BUSINESS
-  ├─ _authorize_gateway_request                       api.py:144
+  ├─ _authorize_gateway_request                       api.py
   │    └─ gateway_request_flow                         onyx/server/features/build/craft_gateway.py
   │         GATE 2: resolves the LLMFlow tag, or rejects
   ├─ check_token_rate_limits(user)                     onyx/server/query_and_chat/token_limit.py
-  ├─ resolve_gateway_model                              api.py:154
+  ├─ resolve_gateway_model                              api.py
   │    └─ fetch_accessible_llm_provider_by_id           db/llm.py
   ├─ handle_chat_completion / handle_responses_request / handle_anthropic_messages
   │    └─ llm_from_provider                             onyx/llm/factory.py  (see [[llm-providers]])
-  │    └─ llm.invoke / llm.stream                        onyx/llm/multi_llm.py:LitellmLLM
+  │    └─ llm.invoke_raw / llm.stream_raw                onyx/llm/multi_llm.py:LitellmLLM
   │         (or the native passthrough: openai_passthrough.py / anthropic_passthrough.py)
   └─ llm_generation_span(flow=...)                      tracing → user_usage rollup
 ```
 
 The tier check runs as ASGI middleware before the route body executes
-(`ee/onyx/server/middleware/tier_gate.py:64-97`), so an under-tier tenant
+(`ee/onyx/server/middleware/tier_gate.py`), so an under-tier tenant
 never reaches GATE 1 or GATE 2. `PATH_PREFIX_MIN_TIER[GATEWAY_PATH_PREFIX] =
-LLM_GATEWAY_MIN_TIER` (`ee/onyx/configs/license_enforcement_config.py:83`)
+LLM_GATEWAY_MIN_TIER` (`ee/onyx/configs/license_enforcement_config.py`)
 is the entry that ties `/gateway` to Business. On tier-resolution failure the
-middleware fails closed to `Tier.COMMUNITY` (`tier_gate.py:92-94`), which
+middleware fails closed to `Tier.COMMUNITY` (`tier_gate.py`), which
 denies the gateway rather than allowing it.
 
 ### 4.2 Authentication and scope: two gates and a workspace switch
@@ -178,7 +180,7 @@ in `api.py`) is the ordinary PAT-scope cap described in
 [[auth-and-identity]]: a token's own `scopes` (or the owning user's full
 `effective_permissions`, if unscoped) must imply `USE_LLM_GATEWAY`. Because
 `USE_LLM_GATEWAY` is implied by both `BASIC_ACCESS` and `CRAFT_SANDBOX`
-(`auth/permissions.py:73-81`), GATE 1 alone passes for almost any logged-in
+(`auth/permissions.py`), GATE 1 alone passes for almost any logged-in
 user's PAT and for every Craft sandbox PAT.
 
 **GATE 2** (`craft_gateway.py:gateway_request_flow`) is what actually decides
@@ -195,12 +197,12 @@ asymmetrically:
   API key can satisfy GATE 1 through the owning user's `effective_permissions`
   but carries no `token_scopes` object at all, so it can never reach a
   gateway response. `request.state.token_scopes` is only ever set from a PAT
-  resolution (`onyx/auth/users.py:2243`).
+  resolution (`onyx/auth/users.py`).
 - If the token's raw scopes include `Permission.CRAFT_SANDBOX`, the request
   **must** also pass `is_craft_gateway_request`, which requires both that the
   scope set implies `USE_LLM_GATEWAY` (true by the implication above) *and*
   `is_craft_enabled_for_user(user)`
-  (`onyx/server/features/build/utils.py:156`). Only then does it return
+  (`onyx/server/features/build/utils.py`). Only then does it return
   `LLMFlow.CRAFT_LLM_GENERATION`; otherwise it returns `None` and the call is
   rejected, even though GATE 1 already passed.
 - If `CRAFT_SANDBOX` is absent but the scopes imply `USE_LLM_GATEWAY`
@@ -209,7 +211,7 @@ asymmetrically:
 
 This asymmetry matters because a Craft sandbox's PAT is minted with exactly
 `scopes=[Permission.CRAFT_SANDBOX]`
-(`onyx/server/features/build/db/sandbox.py:55`), which implies
+(`onyx/server/features/build/db/sandbox.py`), which implies
 `USE_LLM_GATEWAY` mechanically. Without GATE 2's extra
 `is_craft_enabled_for_user` check, a sandbox whose owning user has since had
 Craft disabled (or whose deployment has Craft turned off) would still be able
@@ -222,11 +224,11 @@ attribution (§4.6).
 ### 4.3 Tier gating
 
 Enforced by `add_tier_gate_middleware`
-(`ee/onyx/server/middleware/tier_gate.py:61-111`) against the
+(`ee/onyx/server/middleware/tier_gate.py`) against the
 longest-matching-prefix entry in `PATH_PREFIX_MIN_TIER`
-(`ee/onyx/configs/license_enforcement_config.py:73-94`), where
+(`ee/onyx/configs/license_enforcement_config.py`), where
 `GATEWAY_PATH_PREFIX` maps to `LLM_GATEWAY_MIN_TIER = Tier.BUSINESS`
-(`onyx/server/gateway/configs.py:6`). The current tier is resolved by
+(`onyx/server/gateway/configs.py`). The current tier is resolved by
 `ee/onyx/utils/tier.py:get_tier`, cloud tenants from a Redis-cached
 control-plane value, self-hosted from the license payload's `customer_tier`.
 See [[editions-and-gating]] for `Tier`/`tier_at_least` mechanics and
@@ -235,7 +237,7 @@ See [[editions-and-gating]] for `Tier`/`tier_at_least` mechanics and
 ### 4.4 Model resolution
 
 A caller-supplied model string has the wire form `"<provider_id>/<model_name>"`
-(`api.py:resolve_gateway_model:154-190`). `resolve_gateway_model` parses the
+(`api.py:resolve_gateway_model`). `resolve_gateway_model` parses the
 id, loads that `LLMProviderModel` through
 `db/llm.py:fetch_accessible_llm_provider_by_id` (is_public / group rules,
 same access check [[llm-providers]] documents; no persona context, so a
@@ -270,9 +272,9 @@ provider's own API key. Two paths attach the real credential differently:
   `_build_upstream_headers` sets `Authorization: Bearer <provider.api_key>`
   (OpenAI) or `x-api-key: <provider.api_key>` (Anthropic) fresh on every
   call, and both explicitly **never forward the caller's inbound headers**
-  (`openai_passthrough.py:197-214`: *"Never forward inbound headers:
+  (`openai_passthrough.py`: *"Never forward inbound headers:
   OpenAI-Organization/OpenAI-Project would select a billing scope in the
-  caller's OpenAI account, not ours"*; `anthropic_passthrough.py:163-176`:
+  caller's OpenAI account, not ours"*; `anthropic_passthrough.py`:
   *"the inbound Authorization header is an Onyx PAT, not an Anthropic key"*).
 
 On credential leakage back to the caller: I can confirm the response bodies
@@ -283,10 +285,10 @@ upstream headers). Errors are explicitly sanitized: a 401/403 from the
 provider is never forwarded verbatim (`_FORWARDABLE_STATUSES` in both
 passthrough modules excludes 401/403, with the comment *"401/403 describe
 OUR credential, not the caller's request, so they are sanitized"*,
-`openai_passthrough.py:54-56`), and transport-error logging deliberately logs
+`openai_passthrough.py`), and transport-error logging deliberately logs
 only `type(e).__name__`, not the exception's string form, because *"for
 custom `api_base` values [it] can embed query credentials"*
-(`openai_passthrough.py:319-325`, `anthropic_passthrough.py:314-320`). I did
+(`openai_passthrough.py`, `anthropic_passthrough.py`). I did
 not find a code path that logs or returns `provider.api_key` itself; I have
 not exhaustively audited every logger call in `onyx/llm/` for an unrelated
 leak, so treat "never leaks" as verified for the gateway's own code, not for
@@ -297,16 +299,16 @@ the whole LLM stack.
 **Yes, `store` is forced to `false`**, unconditionally, on every OpenAI
 Responses passthrough call: `_build_upstream_request` sets
 `body["store"] = False` regardless of what the caller sent
-(`openai_passthrough.py:187`), with the comment *"OpenAI defaults this to
+(`openai_passthrough.py`), with the comment *"OpenAI defaults this to
 true, which would persist state under our shared key where any other
 gateway caller could read it back"*. The gateway also refuses
 `previous_response_id` and a `conversation` field outright
-(`_NO_STORAGE_MESSAGE`, `openai_passthrough.py:111-120`), so a caller cannot
+(`_NO_STORAGE_MESSAGE`, `openai_passthrough.py`), so a caller cannot
 even attempt to read back a stored response through this endpoint. The
 non-passthrough `ResponsesRequest.store` field is separately documented as
-"tolerated-and-ignored" (`onyx/server/gateway/models.py:230-238`) because
+"tolerated-and-ignored" (`onyx/server/gateway/models.py`) because
 that path never talks to OpenAI's own stateful Responses surface at all, it
-goes through `LitellmLLM.invoke`/`.stream`, which has no storage concept to
+goes through `LitellmLLM.invoke_raw`/`.stream_raw`, which has no storage concept to
 force off.
 
 ### 4.7 Cost and usage
@@ -316,17 +318,17 @@ Every handler opens `_gateway_trace(flow, model)` (a `trace("llm_gateway",
 (`api.py:_gateway_trace`, repeated in both passthrough modules). `flow` is
 the `LLMFlow` GATE 2 resolved: `LLMFlow.LLM_GATEWAY` for a directly-scoped
 caller, `LLMFlow.CRAFT_LLM_GENERATION` for a Craft sandbox
-(`onyx/tracing/flows.py:33,36`). The span records usage on completion;
+(`onyx/tracing/flows.py`). The span records usage on completion;
 `user_usage` rows are still written asynchronously by the shared tracing
 drain thread, not synchronously by the gateway request (see
 [[rate-and-usage-limits]] §9 and [[llm-providers]] §4.7).
 
-The native passthrough paths bypass `LitellmLLM.invoke`/`.stream` entirely
+The native passthrough paths bypass `LitellmLLM.invoke_raw`/`.stream_raw` entirely
 (they call the provider directly over `httpx`), so they also bypass that
 class's normal cost-tracking hook. Both modules compensate by calling
 `llm._track_llm_cost(usage)` manually once they have parsed the upstream
-usage payload (`openai_passthrough.py:365-368,563-564`,
-`anthropic_passthrough.py:342-345,498-501`), converting OpenAI's or
+usage payload (`openai_passthrough.py`,
+`anthropic_passthrough.py`), converting OpenAI's or
 Anthropic's own usage shape into the shared `Usage` model first
 (`_usage_from_openai_wire`, `_usage_from_anthropic_wire`). A reasoning-token
 or per-server-tool-use count that has no `Usage` field yet is attached to
@@ -339,10 +341,10 @@ See [[observability]] for the tracing pipeline and dashboard side of this.
 
 `gateway_chat_completions`, `gateway_responses`, and
 `gateway_anthropic_messages` each call `check_token_rate_limits(user)`
-(`onyx/server/query_and_chat/token_limit.py`, `api.py:1412,1436,1466`)
+(`onyx/server/query_and_chat/token_limit.py`, `api.py`)
 **after** GATE 2 but before resolving the model, exactly as
 [[rate-and-usage-limits]] already documents. `count_tokens` does not call it
-(`api.py:1498`, comment: *"No token rate limit check: nothing is generated by
+(`api.py`, comment: *"No token rate limit check: nothing is generated by
 this endpoint"*), which is correct since it never invokes a model.
 
 The same three endpoints resolve the model through
@@ -371,18 +373,18 @@ own `_gateway_trace` and `llm_generation_span` **inside that thread**, with
 an explicit comment repeated at every call site: *"Runs on its own thread
 after the endpoint has returned the StreamingResponse, so the trace must be
 opened here rather than in the endpoint for the generation span to see an
-active trace"* (e.g. `api.py:318-320`). This sidesteps the known bug class
+active trace"* (e.g. `api.py:_stream_worker`). This sidesteps the known bug class
 where a `contextvars`-backed span context is lost across an SSE generator
 that Starlette resumes on a different thread each time it is pumped: instead
 of relying on generator-resumption context (which is what breaks), the
 gateway hands the worker a snapshotted context up front and does all tracing
 work inside that one thread, communicating results back to the ASGI layer
 only through a plain `queue.Queue`
-(`stream_bridge.py:_run_bridged_stream:183-216`). The main coroutine that
+(`stream_bridge.py:_run_bridged_stream`). The main coroutine that
 yields SSE frames to the client never touches the span or trace context at
 all; it only drains the queue.
 
-Each dialect's stream worker converts `LLM.stream`'s
+Each dialect's stream worker converts `LitellmLLM.stream_raw`'s
 `Iterator[ModelResponseStream]` (or, for native passthrough, raw upstream SSE
 lines) into its own wire format: OpenAI chat-completion chunks
 (`ChatCompletionChunk.from_stream_chunk`), OpenAI Responses events
@@ -391,7 +393,7 @@ lines) into its own wire format: OpenAI chat-completion chunks
 `stream_bridge.py:merge_tool_call_delta` /
 `finalize_tool_calls` for tool-call-delta accumulation, per
 [[llm-providers]] §4.5's contract. `_stream_worker_guard`
-(`stream_bridge.py:117-180`) is the single teardown point: on any exception
+(`stream_bridge.py`) is the single teardown point: on any exception
 it emits a sanitized, dialect-appropriate in-band error frame (the HTTP
 status is already 200 by the time a worker runs, so failures cannot surface
 as a different status code), then always drains for trailing usage
@@ -584,13 +586,13 @@ See `backend/AGENTS.md` for required env and secrets.
   availability.** Turning a passthrough off does not disable the model; it
   routes the same request through the OpenAI-shaped translation layer
   instead, which cannot carry server-side tools, thinking-block signatures,
-  `pause_turn`, or fine-grained streaming (`anthropic_passthrough.py:1-9`).
+  `pause_turn`, or fine-grained streaming (`anthropic_passthrough.py`).
   A test that only checks "the call still succeeds" will not catch this
   degradation.
 - **`count_tokens` degrades to a rough local estimate on failure**, not an
   error: if the Anthropic passthrough is unavailable or fails, or
   `litellm.token_counter` itself raises, the endpoint falls back to
-  `len(json.dumps(...)) // 4` (`api.py:1519-1534`). A caller relying on
+  `len(json.dumps(...)) // 4` (`gateway_anthropic_count_tokens` in `api.py`). A caller relying on
   exact token counts (e.g. Claude Code's context-window tracking) can get a
   materially wrong number without any error surfacing.
 - **A stream worker's trace must be opened inside the worker thread, not the

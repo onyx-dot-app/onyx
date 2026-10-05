@@ -6,6 +6,7 @@
 > counter-intuitive: in a standard deployment, Enterprise code is the default,
 > not the exception.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform
 **Edition:** CE dispatcher, EE implementations and license/billing server
 **Owns:**
@@ -61,7 +62,7 @@ tables, independent of CE/EE at all.
 separate reads of the same env var with the same `"true"` default. The
 duplication is deliberate: `variable_functionality.py` cannot import `ee`
 configs, since doing so would force-load the `ee` package before EE-ness has
-been decided (comment at `variable_functionality.py:37`).
+been decided (comment at `variable_functionality.py`).
 
 ### License endpoints (`backend/ee/onyx/server/license/api.py`, router prefix `/license`, self-hosted only)
 
@@ -200,7 +201,10 @@ merely reaching that function already implies EE.
   attempting to import `ee.<module>`. If EE, it delegates to
   `fetch_versioned_implementation` and re-raises on failure (an EE process
   that cannot load an EE-only symbol is a real error, not a fallback case).
-  Used at `backend/onyx/context/search/pipeline.py:340` for
+  Also used for the tier guards in `backend/ee/onyx/utils/tier.py`
+  (`require_business_tier_for_sync_access`, `require_business_tier_for_connector_group_restrictions`,
+  `require_business_tier_for_multi_sso`), which are no-ops in CE. Used at
+  `backend/onyx/context/search/pipeline.py` for
   `onyx.external_permissions.post_query_censoring._post_query_chunk_censoring`,
   where there is **no CE module at that path at all**
   (`backend/onyx/external_permissions/` does not exist; only

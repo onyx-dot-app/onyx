@@ -5,6 +5,7 @@
 > only. The match runs before retrieval, so the answer text is never subject to
 > document-level ACL.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** integrations
 **Edition:** EE
 **Owns:**
@@ -37,7 +38,7 @@ and `/admin/standard-answer/[id]`.
 | `POST/GET /manage/admin/standard-answer` | `ee/onyx/server/manage/standard_answer.py` |
 | `PATCH/DELETE /manage/admin/standard-answer/{id}` | `ee/onyx/server/manage/standard_answer.py` |
 | `POST/GET/PATCH/DELETE /manage/admin/standard-answer/category[/{id}]` | `ee/onyx/server/manage/standard_answer.py` |
-| Slack channel config field `standard_answer_categories` | `backend/onyx/db/models.py:4479` |
+| Slack channel config field `standard_answer_categories` | `backend/onyx/db/models.py:SlackChannelConfig` |
 
 All admin endpoints require `Permission.FULL_ADMIN_PANEL_ACCESS`
 (`ee/onyx/server/manage/standard_answer.py`), not a Slack-specific permission.
@@ -46,26 +47,25 @@ All admin endpoints require `Permission.FULL_ADMIN_PANEL_ACCESS`
 
 ## 3. Data model
 
-`StandardAnswer` (`backend/onyx/db/models.py:5336`): `keyword` (a literal phrase
+`StandardAnswer` (`backend/onyx/db/models.py:StandardAnswer`): `keyword` (a literal phrase
 or a regex pattern, depending on `match_regex`), `answer` text, `active`
 (soft-delete flag), `match_regex`, `match_any_keywords`. A partial unique index
-enforces one active answer per `keyword` (`unique_keyword_active`,
-`models.py:5336`, `postgresql_where=(active == True)`), so a deactivated keyword
+enforces one active answer per `keyword` (`unique_keyword_active`, `postgresql_where=(active == True)`), so a deactivated keyword
 can be reused by a new answer.
 
-`StandardAnswerCategory` (`models.py:5319`): just an `id` and unique `name`.
+`StandardAnswerCategory` (`models.py:StandardAnswerCategory`): just an `id` and unique `name`.
 
-`StandardAnswer__StandardAnswerCategory` (`models.py:874`): many-to-many join,
+`StandardAnswer__StandardAnswerCategory` (`models.py:StandardAnswer__StandardAnswerCategory`): many-to-many join,
 which answers belong to which categories.
 
-`SlackChannelConfig__StandardAnswerCategory` (`models.py:886`) and
-`SlackChannelConfig.standard_answer_categories` (`models.py:4479`): which
+`SlackChannelConfig__StandardAnswerCategory` (`models.py:SlackChannelConfig__StandardAnswerCategory`) and
+`SlackChannelConfig.standard_answer_categories`: which
 categories are active for a given Slack channel. This is the scoping mechanism:
 an answer only fires in a channel if one of its categories is assigned to that
 channel's config.
 
-`ChatMessage__StandardAnswer` (`models.py:896`) and
-`ChatMessage.standard_answers` (`models.py:3423`): records which standard
+`ChatMessage__StandardAnswer` (`models.py:ChatMessage__StandardAnswer`) and
+`ChatMessage.standard_answers`: records which standard
 answers were attached to a given assistant `ChatMessage`, added by
 `backend/alembic/versions/c5eae4a75a1b_add_chat_message__standard_answer_table.py`.
 `match_regex` was added later by
@@ -158,7 +158,7 @@ else: handle_regular_answer(...)        # normal retrieval + LLM turn
 5. **Only active answers can match or be listed.** `find_matching_standard_answers`
    and `fetch_standard_answers` both filter `StandardAnswer.active.is_(True)`
    (`ee/onyx/db/standard_answer.py`); the partial unique index on
-   `(keyword, active)` (`models.py:5336`) lets a new active answer reuse a
+   `(keyword, active)` (`unique_keyword_active`) lets a new active answer reuse a
    deactivated keyword.
 6. **A category in use cannot be deleted.** `remove_standard_answer_category`
    refuses deletion if any active answer or Slack channel config still

@@ -5,6 +5,7 @@
 > hand-mirrored copy of the NDJSON parser and packet enum, and a much smaller slice of
 > the packet vocabulary actually wired to a renderer.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:**
@@ -28,7 +29,8 @@ The user installs a development build (not Expo Go), connects it to an Onyx inst
 and signs in with email/password or a browser SSO flow. They land on a chat surface that
 morphs between an empty state, an existing conversation, and a project view without a
 screen transition. They can pick an agent, pick a project, type a message, attach a
-document or a photo-library image, and watch the answer stream in with citations that
+document or a photo-library image, turn on deep research, force a tool, pick a model
+for the turn, and watch the answer stream in with citations that
 resolve to a sources sheet. They can stop generation and reopen a past session from the
 sidebar.
 
@@ -72,9 +74,13 @@ redirects imperatively based on `resolveAuthGate` (`components/auth/authRoute.ts
 | `POST /auth/register` | `api/auth/sessionManager.ts:register` (shared web/mobile route; mints no token) |
 | `GET /me` | `hooks/useCurrentUser.ts` |
 | `POST /chat/send-chat-message` | `api/chat/stream.ts:streamChatMessage` |
-| `GET /chat/chat-session/{id}/resume-stream` | `api/chat/stream.ts:resumeChatMessage` |
+| `GET /chat/chat-session/{id}/resume-stream?cursor=` | `api/chat/stream.ts:resumeChatMessage` |
 | `GET /chat/get-chat-session/{id}` | `api/chat/sessions.ts` |
-| `POST /chat/stop-chat-session/{id}` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop` |
+| `POST /chat/stop-chat-session/{id}?stream_id=` | `api/chat/sessions.ts:stopChatSession`, called from `hooks/useChatController.ts:stop`. `stream_id` is the reserved assistant message id; the app omits it before the id packet arrives, and the backend then stops the stream in flight. |
+| `POST /chat/create-chat-session`, `GET /chat/get-user-chat-sessions` | `api/chat/sessions.ts` |
+| `GET /auth/type` | `api/auth/useAuthConfig.ts` |
+| `GET /llm/persona/{id}/providers`, `GET /tool`, `GET/PUT /user/assistant/preferences` | `api/chat/llm.ts`, `api/tools.ts`, `api/chat/agentPreferences.ts` |
+| `/user/projects/file/statuses`, `/user/projects/{id}/files/{fileId}` | `api/chat/projects.ts` |
 | `PUT /chat/rename-chat-session` | `api/chat/sessions.ts` |
 | `GET /persona` | `api/chat/agents.ts` |
 | `POST /user/pinned-assistants` | `api/chat/agents.ts` |
@@ -187,7 +193,7 @@ strategies, and a self-contained non-revocable JWT under `AUTH_BACKEND=jwt`
 (`onyx/auth/mobile_sso/tokens.py:issue_session_credential`).
 
 SSO: `backend/onyx/auth/mobile_sso/sso_completion.py:complete_mobile_sso` runs after the
-existing IdP callback (Google today) when the OAuth state carries a mobile marker
+existing IdP callback (Google today, through the dedicated `/auth/mobile/oauth` router mounted in `main.py`) when the OAuth state carries a mobile marker
 (`apply_mobile_state`). It mints the session token, stores it behind a single-use,
 PKCE-bound code in Redis (`code_store.py:store_sso_code`, TTL
 `MOBILE_SSO_CODE_TTL_SECONDS`, default 60 s), and 302-redirects to the app's custom-scheme
@@ -441,7 +447,8 @@ folders, wired in `jest.setup.ts`.
   does not currently emit at all (no `MessageEnd`/`"message_end"` anywhere in
   `streaming_models.py`); the answer stream instead closes via `OverallStop`/`stop`, per
   [[streaming-protocol]] §5.8. This is vestigial in both clients, not a mobile-specific
-  gap. Backend's `IMAGE_GENERATION_HEARTBEAT` ("image_generation_heartbeat") has no
+  gap. Mobile also still declares `top_level_branching`, which the backend stopped
+  sending (#15099) and web no longer declares. Backend's `IMAGE_GENERATION_HEARTBEAT` ("image_generation_heartbeat") has no
   matching type in **either** client's enum; it degrades harmlessly since image-generation
   packets are entirely unwired on mobile and web filters only `chat_heartbeat`, not this
   one. `TOOL_CALL_DEBUG` is absent from both clients too (it is `INTEGRATION_TESTS_MODE`-

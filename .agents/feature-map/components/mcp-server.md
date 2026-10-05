@@ -4,6 +4,7 @@
 > MCP Inspector, any MCP-speaking agent) connects over HTTP and gets one search
 > tool plus three read-only resources backed by Onyx's own retrieval pipeline.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform
 **Edition:** CE
 **Owns:**
@@ -59,16 +60,15 @@ onyx.mcp_server.api:mcp_app --reload --port 8090`), or directly via
 
 ### Tools
 
-One callable tool, defined and registered via `@mcp_server.tool()` in
-`backend/onyx/mcp_server/tools/search.py`:
+Three callable tools, registered via `@mcp_server.tool()` in
+`backend/onyx/mcp_server/tools/search.py`. The first is the main one:
 
 | Tool | Function | What it does |
 |---|---|---|
 | `search_indexed_documents` | `search.py:search_indexed_documents` | Runs the full Onyx search pipeline against the company knowledge base. Filters by `source_types`, `document_set_names`, `time_cutoff`, or a named `agent`; `agent` and `document_set_names` are mutually exclusive (`search.py:_resolve_filters`). |
 
-The README (`backend/onyx/mcp_server/README.md`) also documents `search_web`
-and `open_urls`, and both are registered in the same file
-(`search.py:search_web`, `search.py:open_urls`). They proxy to
+The other two are `search_web` and `open_urls`
+(`search.py:search_web`, `search.py:open_urls`; the README documents both). They proxy to
 `/web-search/search-lite` and `/web-search/open-urls` on the API server and do
 not touch the internal document index or `SearchTool`. This document covers
 all three tools, since they share one auth path and one process, but
@@ -205,6 +205,8 @@ Claude Desktop -> POST /  (MCP tool call, bearer token)      mcp_server/api.py (
   -> search_indexed_documents(...)                           mcp_server/tools/search.py
        -> _resolve_filters (agent / source_types / document_set_names)
        -> POST /search  (bearer token, SearchRequest)         API server, port 8080
+            -> require_vector_db, check_token_rate_limits,
+               check_api_key_usage (route dependencies)
             -> require_permission(Permission.READ_SEARCH)     onyx/server/features/search/api.py:search
             -> SearchTool(user=<resolved user>, emitter=NullEmitter(), ...)
             -> search_tool.run(...)                            tools/tool_implementations/search/search_tool.py
@@ -402,6 +404,9 @@ to `[[mcp-and-custom-tools]]`, not this component.
   `check_llm_cost_limit_for_provider` (the cloud cost cap on Onyx-managed
   keys). Do not remove these on the grounds that MCP "never drives a chat
   turn"; see [[rate-and-usage-limits]] §9.
+- **`/search` returns 501 when `DISABLE_VECTOR_DB` is set.** The route depends on
+  `require_vector_db` (`server/utils_vector_db.py`). `search_indexed_documents` then
+  returns an error on a deployment without a vector database.
 - **The MCP server's own token check is a liveness check, not a scope
   check.** `auth.py:verify_token` only confirms the token is accepted by
   `/me`; it does not know or enforce `read:search` vs `read:chat` vs

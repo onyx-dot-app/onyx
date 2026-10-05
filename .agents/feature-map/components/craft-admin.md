@@ -5,6 +5,7 @@
 > model it runs with. This document does not cover sandboxes, snapshots,
 > streaming, or the webapp proxy; it maps into `docs/craft/` for those.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
 **Edition:** CE, with a Cloud-only lockdown on built-in external-app credential editing (EE)
 **Owns:**
@@ -33,8 +34,8 @@ everyone) and can override that default for individual users, one at a time or
 in bulk, in a searchable table.
 
 On **Apps**, the admin sees every external service and MCP server the Craft
-agent can reach: built-in apps (Slack, Gmail, Google Calendar, Linear, HubSpot,
-Notion, GitHub), any custom app the admin has registered, and connected MCP
+agent can reach: built-in apps (Slack, Gmail, Google Calendar, Google Drive, Linear,
+HubSpot, Notion, GitHub), any custom app the admin has registered, and connected MCP
 servers. For each, the admin can enable or disable it, edit its per-action
 policy (auto-approve, ask, or deny each kind of action), and, for
 self-hosted deployments, configure its credentials. On Onyx Cloud, built-in
@@ -70,7 +71,7 @@ permission. See §5 for why the flag alone is not the real gate.
 | GET/PUT | `/api/manage/admin/settings` | `backend/onyx/server/settings/api.py` | Reads/writes `craft_default_enabled` and `craft_instructions` as part of the general `Settings` blob. |
 | GET | `/api/build/admin/base-instructions` | `get_base_instructions` (`backend/onyx/server/features/build/api.py:56`) | Returns the raw `AGENTS.template.md`, for the Preferences page's read-only preview. |
 | GET/PATCH/POST/DELETE | `/api/build/admin/apps*` | `backend/onyx/server/features/build/external_apps/api.py` (`admin_router`) | Built-in create/patch (`/apps/built-in`, `/apps/{id}`), custom create (`/apps/custom`), list, catalog options, delete. Gated by `Permission.FULL_ADMIN_PANEL_ACCESS` only, **not** by `require_onyx_craft_enabled` (see §9). |
-| GET/PATCH | `/api/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` (see `[[llm-providers]]`) | The Craft default-model picker on the Preferences page. |
+| POST/DELETE | `/api/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` (`backend/onyx/server/manage/llm/api.py`, `Permission.MANAGE_LLMS`; see `[[llm-providers]]`) | The Craft default-model picker on the Preferences page. |
 
 `GET /api/manage/users` (`useAdminUsers` hook) returns each `UserRow` with
 `craft_enabled: bool | None`, the per-user override the Access table renders.
@@ -81,7 +82,7 @@ permission. See §5 for why the flag alone is not the real gate.
 |---|---|---|
 | `ENABLE_CRAFT` | `backend/onyx/server/features/build/configs.py:72` | Deployment-level Craft switch when no PostHog provider is configured. |
 | `onyx-craft-enabled` (PostHog flag) | `build/utils.py:ONYX_CRAFT_ENABLED_FLAG` | Deployment-level switch when PostHog is configured; evaluated per user/tenant. |
-| `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` | `docs/craft/features/external-apps/cloud-managed-app-credentials.md` | Seeds Onyx-managed built-in apps (disabled) on tenant creation; `true` on Cloud. |
+| `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` | `backend/onyx/configs/app_configs.py:AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` (default `false`) | Seeds Onyx-managed built-in apps (disabled) on tenant creation; `true` on Cloud. |
 
 ---
 
@@ -108,12 +109,12 @@ permission. See §5 for why the flag alone is not the real gate.
   (`{gated_app_id, action_id, policy}`, `policy` one of
   `EndpointPolicy.ALWAYS | ASK | DENY`), written by
   `replace_action_policies__no_commit` (`backend/onyx/db/gated_app.py:80`).
-  Unset actions resolve to the catalog's `default_state`, not a stored row.
+  Unset actions resolve to the catalog's `default_policy`, not a stored row.
 - `ExternalApp.default_policy`: the fallback for off-catalog built-in requests
   and the entire blanket policy for a custom app
   (`docs/craft/features/external-apps/action-policies.md`).
 - `LLMModelFlow` row with `llm_model_flow_type = LLMModelFlowType.CRAFT`
-  (`backend/onyx/db/llm.py:1013`, `fetch_default_craft_model`): the Preferences
+  (`backend/onyx/db/llm.py`, `fetch_default_craft_model`): the Preferences
   page's default-model selection. See `[[llm-providers]]`.
 
 ---
@@ -210,9 +211,9 @@ renders nothing (no empty heading).
 
 **Default model.** The picker calls `setDefaultCraftModel` /
 `deleteDefaultCraftModel` (`web/src/lib/languageModels/svc.ts`), which hit
-`PUT` / `DELETE /api/admin/llm/default-craft`. That endpoint writes the
+`POST` / `DELETE /api/admin/llm/default-craft`. That endpoint writes the
 `LLMModelFlow` row for `LLMModelFlowType.CRAFT`
-(`backend/onyx/db/llm.py:update_default_craft_provider`, called `db/llm.py:1219`).
+(`backend/onyx/db/llm.py:update_default_craft_provider`).
 Per `[[llm-providers]]`, `CRAFT` is a **pointer flow, not a capability check**:
 nothing populates this row automatically, and Craft falls back to the
 workspace chat default (`defaultText` in the page) when no explicit Craft

@@ -6,6 +6,7 @@
 > [[context-assembly]] owns how its prompt fields reach the LLM, and
 > [[tools-framework]] owns how its tool set becomes a live tool.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** agents-personas
 **Edition:** CE for the row, tools, document sets, and the default assistant.
 EE for group sharing (`Persona__UserGroup`), scoped-manager permissions, and
@@ -142,7 +143,7 @@ Persona (persona)
 
 ### `Persona` columns that change behaviour
 
-Verified against `backend/onyx/db/models.py:Persona` (line 4194) and the
+Verified against `backend/onyx/db/models.py:Persona` and the
 parameter list of `db/persona.py:upsert_persona`.
 
 | Column | Effect |
@@ -195,7 +196,7 @@ temperature or chunk-count field.
 | `user__pinned_persona` | `User__PinnedPersona` | `display_order` is dense per-user; every write replaces the whole set. |
 | `persona_label` | `PersonaLabel` | The label rows themselves. |
 
-`StarterMessage` (`onyx/db/models.py:4178`) is a Pydantic model stored inline
+`StarterMessage` (`onyx/db/models.py:StarterMessage`) is a Pydantic model stored inline
 via `PydanticListType`, not a separate table.
 
 ---

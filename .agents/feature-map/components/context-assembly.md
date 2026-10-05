@@ -5,6 +5,7 @@
 > truncation rules that decide what survives a long conversation. Core-chat-loop
 > owns the machinery that runs a turn; this component owns what gets fed into it.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE, with query-expansion and search-flow prompt variants in EE
 **Owns:**
@@ -67,7 +68,7 @@ its token math to the frontend:
 | `GEN_AI_INPUT_TOKEN_SAFETY_MARGIN` | `configs/model_configs.py` | Fraction of the model's input window held back as safety margin. Shrinks `ChatTokenBudget.input_tokens`. |
 | `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` | `configs/model_configs.py` | Minimum output allowance `ChatTokenBudget.output_allowance` will reserve before it gives up on a cycle. |
 | `COMPRESSION_TRIGGER_RATIO` | `configs/chat_configs.py` | Default 0.75. Compress when chat-history tokens exceed this fraction of available space (`compression.py:get_compression_params`). |
-| `RECENT_MESSAGES_RATIO` | `compression.py` | Default 0.2. Fraction of history token budget kept verbatim (never summarized) when compressing. |
+| `RECENT_MESSAGES_RATIO` | `compression.py` | Default 0.2. Fraction of the current history tokens kept verbatim (never summarized) when compressing. |
 | `DISABLE_VECTOR_DB` | referenced in `process_message.py:extract_context_files` | Changes whether oversized files fall back to search or to `FileReaderTool` metadata. |
 
 No admin-configured setting overrides prompt text directly; the base system
@@ -139,8 +140,9 @@ once per turn. A turn that runs three tool cycles calls
    Information, Organization Profile, Team/company context
    (`prompts/prompt_utils.py:get_company_context`), Language, User Preferences,
    Memories.
-3. Citation guidance (`prompts/chat_prompts.py:REQUIRE_CITATION_GUIDANCE`), only
-   appended if the placeholder wasn't already present in the base prompt.
+3. Citation guidance (`prompts/chat_prompts.py:REQUIRE_CITATION_GUIDANCE`, then
+   `ANSWER_COVERAGE_GUIDANCE`), only appended if the placeholder wasn't already
+   present in the base prompt.
 4. Per-tool guidance sections, each gated on that tool actually being offered
    this cycle: search, internal-search, web-search, open-URL, Python, image
    generation, memory (`prompts/tool_prompts.py`). `include_all_guidance=True`
@@ -248,17 +250,17 @@ one turn collapse into a single message rather than one message per document.
 
 `llm_loop.py:select_reminder_text` picks the trailing reminder each cycle, in
 priority order: an image-generation reminder if this cycle just ran image gen,
-an open-URL nudge if a web search just ran and the open-URL tool is actually
-available this cycle, otherwise `prompt_utils.py:build_reminder_message`, which
+an open-URL nudge if a web search just ran, the open-URL tool is actually
+available this cycle, and this is not the last cycle, otherwise `prompt_utils.py:build_reminder_message`, which
 merges:
 
 - The user-configured persona task prompt (`persona.task_prompt`), if any.
 - `prompts/chat_prompts.py:LAST_CYCLE_CITATION_REMINDER`, appended only on the
   final cycle (`out_of_cycles`).
-- `prompts/chat_prompts.py:CITATION_REMINDER`, appended whenever a search-like
-  tool has run this turn (`should_cite_documents or always_cite_documents`) and
-  kept on every subsequent cycle until the turn ends, not just the cycle the
-  search ran in.
+- `prompts/chat_prompts.py:CITATION_REMINDER` followed by
+  `ANSWER_COMPLETENESS_REMINDER`, appended whenever a search-like tool has run
+  this turn (`should_cite_documents or always_cite_documents`) and kept on every
+  subsequent cycle until the turn ends, not just the cycle the search ran in.
 - `prompts/chat_prompts.py:FILE_REMINDER`, appended when the Python tool
   generated a file this turn.
 
@@ -336,8 +338,8 @@ multi-model turn) "claims" compression via a `compression_claimed` flag
 1. Finds an existing summary for this branch (`find_summary_for_branch`,
    walking `parent_message_id` membership).
 2. Splits history at a token boundary via `get_messages_to_summarize`, keeping
-   the most recent `RECENT_MESSAGES_RATIO` (default 0.2) of the token budget
-   verbatim.
+   the most recent `RECENT_MESSAGES_RATIO` (default 0.2) of the current history
+   tokens verbatim.
 3. Summarizes everything older, folding in any prior summary text so
    information does not disappear across repeated compressions
    (`COMPRESSION.md`, "Progressive Summarization").

@@ -3,6 +3,7 @@
 > The turn engine. It takes one user message, assembles context, runs an LLM with
 > tools until the LLM stops calling them, streams packets out, and saves the result.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE, with EE additions in prompt and search layers
 **Owns:**
@@ -37,7 +38,7 @@ answers side by side, then mark one as preferred.
 |---|---|---|---|
 | POST | `/chat/send-chat-message` | `handle_send_chat_message` | **The turn endpoint.** Returns NDJSON `text/event-stream` when `stream=true`, else a single `ChatFullResponse`. |
 | GET | `/chat/chat-session/{id}/resume-stream` | `resume_chat_stream` | Replays the durable buffer, then tails the live stream. |
-| POST | `/chat/stop-chat-session/{id}` | `stop_chat_session` | Sets the stop fence. |
+| POST | `/chat/stop-chat-session/{id}` | `stop_chat_session` | Sets the stop fence for one stream. Optional `stream_id` query parameter. Without it, the endpoint stops the stream in the processing fence. |
 | POST | `/chat/create-chat-session` |  | |
 | GET | `/chat/get-chat-session/{id}` |  | Replays saved packets for a loaded session. |
 | GET | `/chat/get-user-chat-sessions` |  | |
@@ -69,7 +70,7 @@ answers side by side, then mark one as preferred.
 | `HARD_DELETE_CHATS` |  | Session delete is a hard delete. |
 | `GEN_AI_INPUT_TOKEN_SAFETY_MARGIN` |  | (`configs/model_configs.py`) Shrinks the usable input window. |
 | `GEN_AI_NUM_RESERVED_OUTPUT_TOKENS` |  | (`configs/model_configs.py`) Output allowance. |
-| `INTEGRATION_TESTS_MODE` |  | Enables `mock_llm_response` and `ToolCallDebug` packets. |
+| `INTEGRATION_TESTS_MODE` |  | Makes `llm_loop.py` emit `ToolCallDebug` packets. |
 | `DEV_MODE` |  | Includes stack traces in `StreamingError`. |
 
 Admin-configured, not env: workspace setting `auto_detect_search_filters`
@@ -94,8 +95,8 @@ Redis / cache keys:
 
 | Key | TTL | Owner | Meaning |
 |---|---|---|---|
-| `chatsessionstop_fence_{session_id}` | 10 min | `stop_signal_checker.py` | User pressed stop. |
-| `chatprocessing_fence_{session_id}` | 30 min | `chat_processing_checker.py` | A turn is live; holds the `processing_run_id`. |
+| `chatsessionstop_fence_{session_id}_{stream_id}` | 10 min | `stop_signal_checker.py` | User pressed stop for that stream. A later request in the same session is not affected. |
+| `chatprocessing_fence_{session_id}` | 30 min | `chat_processing_checker.py` | A turn is live; holds the stream ID of the active stream buffer (0 means unknown). |
 
 Both are tenant-scoped through `CacheBackend`.
 
@@ -206,7 +207,8 @@ After the save, one model's completion "claims" history compression via a
 
 ### 4.6 Stop, resume, heartbeat
 
-- Stop: `POST /chat/stop-chat-session/{id}` sets the stop fence.
+- Stop: `POST /chat/stop-chat-session/{id}` sets the stop fence for the stream ID
+  (from the `stream_id` query parameter, or else from the processing fence).
 - The writer thread polls `check_is_connected()` every **50 ms**, on each
   `merged_queue.get` timeout.
 - On stop it persists every model's partial output, emits
@@ -300,14 +302,13 @@ cd backend && uv run pytest tests/integration -k chat
 # Unit tests for the loop internals
 cd backend && uv run pytest tests/unit -k "chat or llm_loop or prompt"
 # Frontend end-to-end
-cd web && bunx playwright test tests/e2e/chat
+cd web && bun run playwright chat_message_rendering
 ```
 
 See `backend/AGENTS.md` for the authoritative commands and required env.
 
-`INTEGRATION_TESTS_MODE=true` enables `mock_llm_response`, which lets an integration
-test drive a deterministic turn without a real provider, and emits `ToolCallDebug`
-packets so the test can assert which tools ran.
+`INTEGRATION_TESTS_MODE=true` makes the loop emit `ToolCallDebug` packets, so a test
+can assert which tools ran. The `mock_llm_response` hook no longer exists.
 
 ### Manual reproduction
 

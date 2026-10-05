@@ -4,6 +4,7 @@
 > message, running an interactive turn against the sandbox's opencode agent,
 > interrupting it, approvals, artifacts, and history.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
 **Edition:** CE, with the Craft feature gate itself sitting outside this
 document (see [[craft-admin]])
@@ -82,9 +83,9 @@ protects.
 | POST | `/build/sessions/{id}/restore` | `restore_session` (`session/api.py:357`) | Wakes a sleeping sandbox and rebuilds the workspace; 409s under concurrent restore. |
 | POST | `/build/sessions/{id}/snapshot` | `create_session_snapshot` (`session/api.py:436`) | Per-session workspace snapshot. |
 | POST | `/build/sessions/{id}/opencode-history-snapshot` | `create_session_opencode_history_snapshot` (`session/api.py:471`) | Sandbox-global opencode history capture; see §4.5. Manual capture hook for tests and operators; no frontend caller (see §9). |
-| GET | `/build/sessions/{id}/artifacts` | `list_artifacts` (`session/api.py:504`) | |
+| GET | `/build/sessions/{id}/artifacts` | `list_artifacts` (`session/api.py:505`) | |
 | GET | `/build/sessions/{id}/artifacts/{path}` | `download_artifact` (`session/api.py:559`) | |
-| GET | `/build/sessions/{id}/export-docx/{path}` | `export_docx` (`session/api.py:610`) | Uses `session/md_to_docx.py`. |
+| GET | `/build/sessions/{id}/export-docx/{path}` | `export_docx` (`session/api.py:598`) | Uses `session/md_to_docx.py`. |
 | DELETE | `/build/sessions/{id}` | `delete_session` (`session/api.py:321`) | |
 | GET | `/build/sessions/{id}/messages` | `list_messages` (`session/messages.py:62`) | |
 | POST | `/build/sessions/{id}/send-message` | `send_message` (`session/messages.py:81`) | **The turn endpoint.** Returns `InteractiveTurnResponse`, not a stream; see §4.2. |
@@ -92,11 +93,12 @@ protects.
 | POST | `/build/sessions/{id}/interrupt` | `interrupt_message` (`session/messages.py:290`) | See §4.4. |
 | GET | `/build/sessions/{id}/turns/active` | `get_active_interactive_turn` (`interactive_turns/api.py`) | Poll for the current turn's id/status. |
 | GET | `/build/sessions/{id}/turns/{turn_id}/events` | `get_interactive_turn_events` (`interactive_turns/api.py`) | SSE attach/resume to a running turn; also (re)starts the runner if it stalled. |
+| GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
 | GET | `/build/approvals/sessions/{id}/live` | `list_live_approvals` (`approvals/api.py:121`) | |
 | POST | `/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py:145`) | |
 | POST | `/build/approvals/{approval_id}/session-grant` | `submit_session_grant` (`approvals/api.py:202`) | Pre-approval; see §4.6. |
 | GET/POST | `/build/library/tree`, `/library/upload`, `/library/upload-zip`, `/library/directories` | `user_library/api.py` | User library CRUD. |
-| DELETE | `/build/library/files/{document_id}` | `delete_file` (`user_library/api.py:483`) | |
+| DELETE | `/build/library/files/{document_id}` | `delete_file` (`user_library/api.py:490`) | |
 | GET | `/build/admin/base-instructions` | `get_base_instructions` (`api.py:57`) | Owned by `[[craft-admin]]`. |
 
 ### Environment / timeouts (`backend/onyx/server/features/build/configs.py`,
@@ -172,7 +174,7 @@ receipt), `status` (`PENDING` → `CONFIRMED`/`FAILED`, swept to `UNKNOWN` after
 One agent-initiated gated request: `actions` (a non-empty JSONB list,
 sorted strictest-policy-first so `actions[0]` drove the gating decision),
 `payload`, `decision` (`NULL` = pending), `decided_via`
-(`ApprovalDecidedVia.USER` or `SESSION_GRANT`), `gated_app_id` (the shared
+(`ApprovalDecidedVia.USER`, `SESSION_GRANT`, or `PRE_APPROVAL`; the last is written by the proxy for scheduled-task grants, see `[[craft-scheduled-tasks]]`), `gated_app_id` (the shared
 `GatedApp` identity row from `[[craft-admin]]`, `SET NULL` on delete so the
 row survives as an audit record).
 

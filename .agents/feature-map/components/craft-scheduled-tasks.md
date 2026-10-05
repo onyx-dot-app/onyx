@@ -4,6 +4,7 @@
 > by hand. Each fire creates a brand-new headless session, runs the agent
 > without anyone watching, and records what happened for later review.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
 **Edition:** CE
 **Owns:**
@@ -61,7 +62,7 @@ except the executor)
 |---|---|---|---|
 | `dispatch_due_scheduled_tasks` | `OnyxCeleryQueues.PRIMARY` | every 30 s, per tenant | Claims due tasks with `FOR UPDATE SKIP LOCKED`, inserts a run row, advances `next_run_at`, enqueues the executor. |
 | `run_scheduled_task` | `scheduled_tasks` | on demand | Thin wrapper around `run_scheduled_task_logic` (`executor.py`); the actual agent-driving work. |
-| `cleanup_stuck_scheduled_runs` | `OnyxCeleryQueues.PRIMARY` | hourly | Marks runs stuck past a budget as failed. |
+| `cleanup_stuck_scheduled_runs` | `OnyxCeleryQueues.PRIMARY` | hourly | Marks runs stuck past a budget as failed. A `queued` run is stuck after `QUEUE_RESIDENCY_SECONDS` (15 min). A `running` run is stuck after the hard cap plus `TURN_RECLAIM_SLACK_SECONDS` (`build/timeouts.py`). |
 
 Both beat entries are defined in
 `backend/onyx/background/celery/tasks/beat_schedule.py:beat_task_templates`
@@ -105,7 +106,9 @@ run could saturate would stall dispatch for every tenant
   `error_detail`, `started_at`/`finished_at`, `summary` (short text pulled
   from the final agent message).
 - `ScheduledTaskPreApprovedTarget`: one row per `(task, gated_app)` grant.
-  `UNIQUE(scheduled_task_id, gated_app_id)`. See §4.4.
+  `UNIQUE(scheduled_task_id, gated_app_id)`. The `gated_app` row is an
+  external app or an MCP server. The table name is `scheduled_task_pre_approved_app`
+  and predates MCP support. See §4.4.
 - `BuildSession.origin` (`SessionOrigin`: `INTERACTIVE`/`SCHEDULED`): set by
   the executor at session-create time. The normal Craft sidebar query
   filters to `INTERACTIVE`, which is how scheduled runs stay out of it. A
@@ -114,8 +117,8 @@ run could saturate would stall dispatch for every tenant
   executor creates the session, and a join-based filter would briefly leak
   the not-yet-linked session into the sidebar
   (`docs/craft/features/scheduled-tasks/overview.md`).
-- `action_approval.decided_via` (nullable: `user`/`pre_approval`) and
-  `action_approval.external_app_id` (nullable FK): audit fields distinguishing
+- `action_approval.decided_via` (nullable: `USER`/`PRE_APPROVAL`/`SESSION_GRANT`) and
+  `action_approval.gated_app_id` (nullable FK): audit fields distinguishing
   a pre-approved forward from a human click, kept separate from `decision`
   so pre-approvals don't change what `decision == APPROVED` means elsewhere.
 
@@ -139,12 +142,15 @@ per tenant every 30 s):
 
 1. Selects due `ScheduledTask` rows with `FOR UPDATE SKIP LOCKED`, so
    concurrent Beat ticks across replicas cannot double-claim the same task.
-2. For each claimed task: if a prior run for that task is still in flight,
+2. For each claimed task: if the task owner no longer has Craft enabled
+   (`is_craft_enabled_for_user`), insert a `skipped` run row with
+   `ScheduledTaskSkipReason.OWNER_CRAFT_DISABLED` and still advance
+   `next_run_at`. Otherwise, if a prior run for that task is still in flight,
    insert a `skipped` run row (`ScheduledTaskSkipReason`) and still advance
    `next_run_at`; the schedule keeps moving even when a run overruns.
    Otherwise insert a `queued` run, advance `next_run_at`, and enqueue
    `run_scheduled_task(run_id)` on the `scheduled_tasks` queue with
-   `expires=900`.
+   `expires=QUEUE_RESIDENCY_SECONDS` (15 min).
 3. `run-now` (`api.py:run_now`) takes the same path but inserts a
    `manual_run_now`-sourced run directly, independent of `next_run_at`, and
    works even on a paused task.
@@ -154,31 +160,34 @@ per tenant every 30 s):
 `run_scheduled_task_logic` (`executor.py`):
 
 1. Re-checks the run is still `queued` (idempotency against a redelivered
-   Celery task) and marks it `running`.
-2. Creates a fresh session via the same `SessionManager.create_session__no_commit`
-   path the interactive UI uses, with `user_id=task.user_id` and
-   `origin=SessionOrigin.SCHEDULED`. Because it is the same path, sandbox
-   provisioning, workspace setup, skills materialization, and AGENTS.md
-   generation all run unchanged; nothing about the environment differs from
+   Celery task). Calls `SessionManager.ensure_sandbox_running` to create or
+   wake the owner's sandbox (a failure marks the run `failed` with
+   `sandbox_wake_failed`). Then marks the run `running`.
+2. Creates a fresh session with `SessionManager.create_session`, under the
+   per-user session creation lock, with `user_id=task.user_id` and
+   `origin=SessionOrigin.SCHEDULED`. Because it is the same manager the
+   interactive UI uses, workspace setup, skills materialization, and
+   AGENTS.md generation run unchanged; nothing about the environment differs from
    an interactive session except the origin tag and headless driving.
    Since the session is headless, `nextjs_port` is not allocated for it,
    so it never provisions a webapp dev server; see
    `[[craft-webapp-proxy]]` §4.5.
-3. Links `run.session_id` and commits, before any agent turn or egress can
-   occur. This ordering is load-bearing for §4.4's pre-approval boundary.
-4. `_drive_agent` runs the prompt through the same ACP event path the
-   interactive streaming endpoint uses, split so the executor can reuse the
-   persistence half: `_yield_acp_events` is the pure event generator,
-   `_persist_acp_events` is the `BuildStreamingState` consumer that writes
-   `BuildMessage` rows. The interactive SSE endpoint composes the same pair
-   with an SSE formatter; the executor instead drains it to completion. This
-   guarantees a scheduled run's transcript looks identical to an interactive
-   one when replayed.
+3. Writes the user prompt as turn 0, links `run.session_id` (status
+   `RUNNING`), and commits, before any agent turn or egress can occur. This ordering is load-bearing for §4.4's pre-approval boundary.
+4. `_drive_agent` takes the per-session prompt slot, stamps the turn
+   deadline (soft budget plus hard cap), and runs the prompt through
+   `SessionManager.yield_sandbox_events`. It writes each event with
+   `SessionManager.persist_sandbox_event` into a `BuildStreamingState`,
+   then calls `finalize_persist`. The interactive path uses the same
+   manager methods with an SSE formatter; the executor drains the events
+   to completion. A scheduled run's transcript looks the same as an
+   interactive one when replayed. The run budget is
+   `SCHEDULED_RUN_HARD_CAP_SECONDS` (60 min, `build/timeouts.py`).
 5. On success, marks `succeeded` with a summary
-   (`_summary_from_state`/`_summary_from_session_messages`). On an ACP
-   permission request the agent can't resolve alone, marks
+   (`_summary_from_state`/`_summary_from_session_messages`). On a
+   `RequestPermissionRequest` the agent can't resolve alone, marks
    `awaiting_approval` and notifies (`NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL`).
-   On any executor-level failure (crash, budget exceeded, ACP error), marks
+   On any executor-level failure (crash, budget exceeded, terminal agent error, a cancelled turn), marks
    `failed` and notifies (`NotificationType.SCHEDULED_TASK_FAILED`). There
    are no retries in this version: a failed run is one row, and the user
    re-runs by hand or waits for the next fire.
@@ -204,10 +213,10 @@ by default.
 
 **How a pre-approval is bounded, precisely:**
 
-- **Granted per external app, per task**, never per individual action and
-  never globally. The gated-action catalog resolves a request to exactly
-  one app first (`resolve_app_for_url`), so an app-level grant covers every
-  action that app's catalog exposes by construction. `ScheduledTaskPreApprovedTarget`
+- **Granted per external app or MCP server, per task**, never per individual
+  action and never globally. The gate resolves a request to exactly
+  one target first, so a target-level grant covers every
+  action that target exposes by construction. `ScheduledTaskPreApprovedTarget`
   is the row that encodes this: `(scheduled_task_id, gated_app_id)`.
 - **The grant is only live while the specific run it applies to is
   actually running.** The gate's lookup (`_scheduled_task_grant` in
@@ -218,8 +227,8 @@ by default.
   `origin=SCHEDULED` forever, and the session view leaves the chat input
   open once a run finishes, so without the `RUNNING` check a follow-up
   message typed into a *finished* scheduled session would silently inherit
-  the task's grants. The executor writes `session_id` and `RUNNING` in the
-  same commit before any agent egress can occur (§4.3 step 3), so there is
+  the task's grants. The executor commits `session_id` with `RUNNING` in the
+  same write before any agent egress can occur (§4.3 step 3), so there is
   no window where a grant could apply before the run row says so.
 - **Admin `DENY` always wins, before a grant is ever consulted.** The
   gate's verdict order is `DENY` (403, no row) then `ALWAYS` (forward, no
@@ -234,9 +243,9 @@ by default.
   `action_approval` row is inserted already `APPROVED`, tagged
   `decided_via=pre_approval`, and a
   `NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION` notification fires
-  on the first such forward per `(run, app)` (deduped via
+  on the first such forward per `(run, target)` (deduped via
   `create_notification`'s `additional_data` key, which must stay to exactly
-  `(run_id, external_app_id)` or the dedup breaks).
+  `(run_id, target_kind, target_id)` or the dedup breaks).
 - **Fail-closed on the forwarding path.** mitmproxy's default behavior on an
   unhandled addon exception is to forward the original request, bypassing
   the gate. The auto-approved dispatch path is wrapped so any unhandled
@@ -244,7 +253,7 @@ by default.
   row can never be followed by an unguarded forward.
 
 Grants are managed as checkboxes in the task editor (`pre_approved_app_ids`
-on create/patch); only the task's author can see or change them, since
+and `pre_approved_mcp_server_ids` on create/patch); only the task's author can see or change them, since
 tasks and their runs are user-scoped. Editing a task's prompt does not
 silently reset its grants: they are shown and edited as an explicit,
 separate choice.
@@ -313,7 +322,7 @@ separate choice.
 | changes the pre-approval grant lookup or its scope | re-read §4.4 in full; this is the part of the feature where a widened match is a real security regression, not just a UX bug |
 | adds a new gated-app-request path in the egress proxy | whether it should be reachable by a pre-approval grant at all, and whether `DENY` still short-circuits before the grant check |
 | changes `BuildSession.origin` handling | the sidebar filter query, and any other place that assumes `INTERACTIVE` is the only origin |
-| changes the executor's session-creation call | verify `origin=SCHEDULED` and `session_id`/`RUNNING` are still committed together (no window for a grant to apply before the run is actually running) |
+| changes the executor's session-creation call | verify `origin=SCHEDULED` and `session_id` are still committed with `RUNNING` before any agent turn (no window for a grant to apply before the run is actually running) |
 | adds a new Celery task to this feature | which worker's `-Q` list includes its queue (see `[[background-jobs]]`'s table); whether it belongs on `scheduled_tasks` or on `primary`, per the reasoning in §2 |
 
 ---

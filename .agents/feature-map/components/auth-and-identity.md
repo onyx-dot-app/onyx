@@ -5,6 +5,7 @@
 > PAT, SCIM), how a session is held and expired, and the permission model that
 > decides what an authenticated identity may do once inside.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** auth-and-identity
 **Edition:** CE for password/OAuth/OIDC/SAML login, sessions, API keys, PATs, and
 the `Permission`/`PermissionGrant` model. EE for multi-provider SSO rows,
@@ -48,7 +49,7 @@ Onyx Cloud, a single login page serves every workspace: the user types their
 email first, and the page discovers which SSO buttons (if any) that
 workspace exposes before showing them (`server/sso_discovery.py`). The first
 person to register in a fresh deployment becomes an implicit admin (seeded
-via `get_default_admin_user_emails_`, `backend/onyx/auth/users.py:2642` and
+via `get_default_admin_user_emails_`, `backend/onyx/auth/users.py` and
 `backend/ee/onyx/auth/users.py:get_default_admin_user_emails_`); after that,
 new signups are ordinary users unless an admin invites them or a domain is
 configured to auto-provision.
@@ -56,7 +57,7 @@ configured to auto-provision.
 Once signed in, the session persists across page loads via a cookie, and
 "log out" invalidates it immediately rather than waiting for expiry.
 Native mobile clients get the same session in a header instead of a cookie
-(`bearer_transport`, `backend/onyx/auth/users.py:1662`). A signed-out
+(`bearer_transport`, `backend/onyx/auth/users.py`). A signed-out
 anonymous visitor can still use chat if an admin turned that on, with public
 documents only.
 
@@ -90,7 +91,7 @@ the coding-agent sandbox).
 | GET | `/auth/type` | | Public. Tells the frontend which login flow to render before any session exists. |
 | POST | `/auth/mobile/login`, `/auth/mobile/refresh`, `/auth/mobile/logout` | `server/auth/mobile.py` | Bearer-token mirror of the cookie flow for native clients. |
 | POST | `/auth/mobile/sso/exchange` | `mobile_sso/sso_completion.py` via `server/auth/mobile.py` | Exchanges a one-time PKCE-bound code (minted after an OAuth/SAML callback) for the session token; declared public because the code itself is the credential. |
-| GET | `/auth/oauth/authorize`, `/auth/oauth/callback` | fastapi-users OAuth router (`create_onyx_oauth_router`, `auth/users.py:2842`) | Legacy single-provider Google OAuth. Still active; multi-provider is the newer path (below). |
+| GET | `/auth/oauth/authorize`, `/auth/oauth/callback` | fastapi-users OAuth router (`create_onyx_oauth_router`, `auth/users.py`) | Legacy single-provider Google OAuth. Still active; multi-provider is the newer path (below). |
 | GET | `/auth/oidc/authorize`, `/auth/oidc/callback` | legacy single-provider OIDC router | Same relationship to the multi-provider router as OAuth above. |
 | GET | `/auth/oidc/{provider_name}/authorize`, `/auth/oidc/{provider_name}/callback` | `server/oidc_multi.py` | DB-backed multi-provider OIDC/Google; resolves an `SSOProvider` row per request, so adding a provider needs no restart. |
 | GET/POST | `/auth/saml/authorize`, `/auth/saml/{provider_name}/authorize`, `/auth/saml/callback`, `/auth/saml/logout` | `server/saml.py`, `server/saml_multi.py` | One issuer-resolved callback serves every configured SAML provider (`_resolve_saml_provider_by_issuer`). |
@@ -105,6 +106,7 @@ the coding-agent sandbox).
 | CRUD | `/admin/api-key*` | `server/api_key/api.py` | `Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS`. Creating or updating a key is **admin-equivalent by design**: `group_ids` is uncapped, so a holder can add a key to the Admin group (`api.py:create_api_key` comment). |
 | GET | `/user/pats/scopes` | `server/pat/api.py:list_selectable_scopes` | `Permission.BASIC_ACCESS`. Drops `use:llm_gateway` from the list while the workspace `llm_gateway_enabled` setting is off. |
 | GET/POST/DELETE | `/user/pats` | `server/pat/api.py` | List/create needs `CREATE_USER_API_KEYS` (create) or `BASIC_ACCESS` (list/delete); a user only ever sees/revokes their own. Minting a PAT with `use:llm_gateway` while the setting is off is rejected with `INVALID_INPUT` (`server/pat/api.py:_validate_assignable_scopes`). |
+| GET/PUT | `/admin/security`, GET `/admin/security/pinned-fields` | `server/security/api.py` | `FULL_ADMIN_PANEL_ACCESS`. Workspace security overrides: password policy, `password_auth_enabled`, `valid_email_domains`, JWT validation fields, SSRF level, incognito availability, and `allow_connector_group_restrictions`. Env-pinned fields win over stored values. Turning on `allow_connector_group_restrictions` needs the Business tier. |
 | CRUD | `/admin/user-group*` | `ee/onyx/server/user_group/api.py` | See [[access-control]] §2; this is where group membership, and thus `PermissionGrant`-derived capability, is actually assigned. |
 | GET/POST/PATCH | `/admin/sso-providers*`, `/admin/sso-providers/{id}/domains` | `server/manage/sso/api.py` | `FULL_ADMIN_PANEL_ACCESS` (exact gating per route). Domain-routing SSO providers beyond the first require business tier (`_require_business_tier_for_additional_enabled_provider`). |
 | POST | `/admin/sso-providers/{id}/domains/{domain}/verify` | same file | Triggers `ee/onyx/auth/sso_domain_verification.py:verify_domain_via_dns`. |
@@ -115,9 +117,9 @@ the coding-agent sandbox).
 
 | Variable | File | Default | Effect |
 |---|---|---|---|
-| `USER_AUTH_SECRET` | `configs/app_configs.py:366` | `""` | Signs password-reset/verification tokens, OAuth state, captcha cookies, the SSO tenant-pin token, and anonymous-user JWTs. `verify_user_auth_secret` (`auth/users.py:222`) refuses to start a real deployment with it empty; `DEV_MODE`/`INTEGRATION_TESTS_MODE` downgrade the refusal to a warning. |
-| `SESSION_EXPIRE_TIME_SECONDS` | `configs/app_configs.py:172` | 7 days (`86400 * 7`) | Redis/JWT session lifetime; also read from the legacy `REDIS_AUTH_EXPIRE_TIME_SECONDS` name. |
-| `AUTH_BACKEND` | `configs/app_configs.py` | `redis` | `redis` \| `postgres` \| `jwt`; selects `TenantAwareRedisStrategy` / `RefreshableDatabaseStrategy` / `SingleTenantJWTStrategy` (`auth/users.py:1684,1794,1826`). |
+| `USER_AUTH_SECRET` | `configs/app_configs.py` | `""` | Signs password-reset/verification tokens, OAuth state, captcha cookies, the SSO tenant-pin token, and anonymous-user JWTs. `verify_user_auth_secret` (`auth/users.py`) refuses to start a real deployment with it empty; `DEV_MODE`/`INTEGRATION_TESTS_MODE` downgrade the refusal to a warning. |
+| `SESSION_EXPIRE_TIME_SECONDS` | `configs/app_configs.py` | 7 days (`86400 * 7`) | Redis/JWT session lifetime; also read from the legacy `REDIS_AUTH_EXPIRE_TIME_SECONDS` name. |
+| `AUTH_BACKEND` | `configs/app_configs.py` | `redis` | `redis` \| `postgres` \| `jwt`; selects `TenantAwareRedisStrategy` / `RefreshableDatabaseStrategy` / `SingleTenantJWTStrategy` (`auth/users.py`). |
 | `SIGNUP_RATE_LIMIT_ENABLED` | `configs/app_configs.py` | | Gates `signup_rate_limit.py`; only enforced under `MULTI_TENANT`. |
 | `CAPTCHA_ENABLED`, `RECAPTCHA_*` | `configs/app_configs.py` | | reCAPTCHA Enterprise on signup and pre-OAuth. |
 | `DISPOSABLE_EMAIL_DOMAINS_URL` | `configs/app_configs.py` | | Remote disposable-domain blocklist, refreshed stale-while-revalidate. |
@@ -128,7 +130,7 @@ the coding-agent sandbox).
 (`db/sso_provider.py`) hold the OAuth/OIDC/SAML settings the legacy
 single-provider env vars (`OAUTH_CLIENT_ID`, `OPENID_CONFIG_URL`, and the
 removed `AUTH_TYPE=google_oauth|oidc|saml`) used to. `verify_auth_setting`
-(`auth/users.py:200`) only warns on the stale env values; it does not read
+(`auth/users.py`) only warns on the stale env values; it does not read
 them.
 
 ---
@@ -147,28 +149,28 @@ SSOProvider ── encrypted `config` blob (protocol-specific) + allowed_email_d
 ScimToken   ── hashed bearer token for IdP-driven provisioning
 ```
 
-### `User` (`backend/onyx/db/models.py:332`)
+### `User` (`backend/onyx/db/models.py`)
 
 | Column | Meaning |
 |---|---|
 | `role` | **Legacy tombstone.** Type is `UserRole` (`auth/schemas.py`), column comment: "Legacy tombstone column: no longer read or written by application code. Kept nullable so a pure-code rollback keeps working." See §9. |
-| `account_type` | `AccountType`: `STANDARD`, `SERVICE_ACCOUNT`, `BOT`, `EXT_PERM_USER`, `ANONYMOUS` (`db/enums.py:7`). `is_web_login()` excludes `BOT`/`EXT_PERM_USER`. Classifies *what kind of identity this is*, independent of `Permission`. |
+| `account_type` | `AccountType`: `STANDARD`, `SERVICE_ACCOUNT`, `BOT`, `EXT_PERM_USER`, `ANONYMOUS` (`db/enums.py`). `is_web_login()` excludes `BOT`/`EXT_PERM_USER`. `allows_password_login()` also excludes `SERVICE_ACCOUNT` and `ANONYMOUS`: password login and password reset refuse a service account, and a service account signs in only with its API key. Classifies *what kind of identity this is*, independent of `Permission`. |
 | `effective_permissions` | JSONB list of granted `Permission` values, recomputed by `db/permissions.py:recompute_user_permissions__no_commit` whenever group membership or grants change. Expanded with implied permissions only at read time (`auth/permissions.py:get_effective_permissions`), never persisted expanded. |
 | `is_group_manager` | Cached bool: does this user manage at least one non-default group. Refreshed in the same write as `effective_permissions`. The live equivalent of "curator." |
 | `prior_emails` | Addresses this user was renamed away from; still match indexed document ACLs, so kept for [[access-control]]. |
-| `oidc_expiry` | OIDC token expiry; `double_check_user` rejects an expired-and-not-explicitly-allowed session (`auth/users.py:2346`). |
+| `oidc_expiry` | OIDC token expiry; `double_check_user` rejects an expired-and-not-explicitly-allowed session (`auth/users.py`). |
 
-### `PermissionGrant` (`models.py:5043`)
+### `PermissionGrant` (`models.py`)
 
 `(group_id, permission)` unique pair, `grant_source: GrantSource` (`USER` \|
 `SCIM` \| `SYSTEM`), `granted_by`, `is_deleted`. The only place a `Permission`
 is durably attached to anything; a user's `effective_permissions` is the
 union of every non-deleted grant across every group they belong to, plus
-`account_derived_permissions` (`db/permissions.py:40`, currently only:
+`account_derived_permissions` (`db/permissions.py`, currently only:
 a `SERVICE_ACCOUNT` in no group gets `WRITE_CHAT` directly, since it has no
 group to draw chat scope from).
 
-### `ApiKey` (`models.py:572`) and `PersonalAccessToken` (`models.py:591`)
+### `ApiKey` (`models.py`) and `PersonalAccessToken` (`models.py`)
 
 | Column | ApiKey | PersonalAccessToken |
 |---|---|---|
@@ -183,7 +185,7 @@ Both `hashed_api_key` and `hashed_token` are unique-constrained and are the
 the caller exactly once, at creation (`server/pat/api.py:create_token`
 comment: `"# ONLY time we return the raw token!"`).
 
-### `SSOProvider` (`models.py:7468`)
+### `SSOProvider` (`models.py`)
 
 `name` (URL path segment, also stored as `oauth_name` on linked accounts:
 renaming a provider orphans those links), `provider_type: SSOProviderType`,
@@ -191,19 +193,19 @@ renaming a provider orphans those links), `provider_type: SSOProviderType`,
 discovery URL, or SAML IdP metadata), `allowed_email_domains`, `enabled`.
 Rows, not startup wiring: login routes resolve the row at request time.
 
-### `SamlAccount` (`models.py:5008`)
+### `SamlAccount` (`models.py`)
 
 One-to-one with `User`. `encrypted_cookie` + `expires_at`: the SAML session
 artifact, separate from the fastapi-users session token.
 
-### `ScimToken` (`models.py:6984`)
+### `ScimToken` (`models.py`)
 
 `hashed_token` (SHA-256), `token_display`. Authenticates the IdP's SCIM
 client, not a `User`; `verify_scim_token` returns the `ScimToken` row itself,
 and `ee/onyx/server/scim/auth.py` is explicit that it does not carry a
 `User` dependency.
 
-### `OAuthConfig` / `OAuthUserToken` (`models.py:4086`, `4130`)
+### `OAuthConfig` / `OAuthUserToken` (`models.py`)
 
 Per-tool/MCP OAuth (for custom actions calling third-party APIs), unrelated
 to login SSO. `client_id`/`client_secret` and the token blob are
@@ -239,7 +241,7 @@ GET /auth/oidc/{provider}/authorize   server/oidc_multi.py
   └─ redirect to the IdP with signed state (fastapi-users OAuth2 state)
 
 GET /auth/oidc/callback (or /{provider}/callback)
-  └─ complete_login_flow (auth/users.py:2721)
+  └─ complete_login_flow (auth/users.py)
        ├─ verify state, exchange code (+ PKCE verifier) for tokens
        ├─ login_claims_capture.py: capture id_token/userinfo claims,
        │   best-effort, swallows all failures
@@ -303,6 +305,8 @@ Login  → strategy issues a token; Redis backend stores
 Cookie → cookie_max_age = SESSION_EXPIRE_TIME_SECONDS + grace(1h)
          (outlives the logical expiry so a dead token is still presented
          and can be *classified*, not silently dropped by the browser)
+Refresh → on `AUTH_BACKEND=jwt`, `SingleTenantJWTStrategy.refresh_token` reissues the
+         token with the same `sid` claim, so the session identity survives a refresh
 Logout → build_session_tombstone_value writes {..., logged_out_at: now}
          over the same key instead of deleting it
 Request → classify_session_token_value: EXPIRED / TERMINATED / NOT_FOUND /
@@ -315,7 +319,7 @@ Request → classify_session_token_value: EXPIRED / TERMINATED / NOT_FOUND /
 
 ```
 Authorization: Bearer <token>  or raw key (API keys only, historically)
-  optional_user → _resolve_optional_user (auth/users.py:2220)
+  optional_user → _resolve_optional_user (auth/users.py)
     ├─ SAML/JWT check
     ├─ get_hashed_pat_from_request → resolve_pat → sets request.state.token_scopes
     │    (Bearer-only; api_key.py additionally accepts a raw, non-Bearer key)
@@ -335,7 +339,7 @@ requesting `User` at all (the SCIM actor is the token, audited as such).
 require_permission(Permission.X, allow_anonymous=, allow_scope=)
   (auth/permissions.py)
   └─ base dependency = current_chat_accessible_user | current_user
-       (auth/users.py:2394, 2408)
+       (auth/users.py, 2408)
   └─ authority = has_permission(user, X)
        ├─ GLOBAL  if X ∈ get_effective_permissions(user)
        │            (granted ∪ implied ∪ CE_UNGATED_PERMISSIONS in CE,
@@ -371,7 +375,7 @@ is marked as such.
    nothing and written by nothing outside its own column definition and the
    `UserRole` enum. `grep -rn "UserRole" backend/onyx backend/ee` outside
    tests returns only the enum definition (`auth/schemas.py`), its import,
-   and the `role` column (`db/models.py:338`). Any PR that starts reading or
+   and the `role` column (`db/models.py`). Any PR that starts reading or
    writing `user.role`, or that branches on `UserRole.ADMIN`/`CURATOR`, is
    reintroducing a mechanism the rest of the system has moved off of; it
    will not compose with `Permission`/`effective_permissions`.
@@ -399,14 +403,14 @@ is marked as such.
 4. **A scoped PAT is capped to its own scopes, never wider.**
    `require_permission`'s `permitted_by_token` check
    (`auth/permissions.py:require_permission`) and
-   `_scoped_pat_permitted_on_route` (`auth/users.py:2203`) both fail closed:
+   `_scoped_pat_permitted_on_route` (`auth/users.py`) both fail closed:
    a PAT with `scopes` set can only reach routes whose required permission is
    implied by those scopes, or that are marked `scope_exempt()`. Adding a new
    sensitive route without a `require_permission` guard silently makes it
    reachable by *every* scoped PAT (the fail-closed check has nothing to
    check against).
 5. **Anonymous access must stay limited to the routes and documents intended
-   for it.** `get_anonymous_user()` (`auth/users.py:2329`) grants only
+   for it.** `get_anonymous_user()` (`auth/users.py`) grants only
    `Permission.BASIC_ACCESS` and is only reachable through
    `current_chat_accessible_user`, never `current_user`; CE's ungated
    permission auto-grant (`CE_UNGATED_PERMISSIONS`) explicitly excludes
@@ -434,6 +438,9 @@ is marked as such.
    document fields) are SSRF-guarded before every fetch.**
    `sso_url_guard.py:validate_idp_url`/`validate_discovered_endpoints` and
    `jwt.py:verify_jwt_token`'s `operator_pinned` branch are the two paths;
+   `jwt.py` also rate-limits public-key refetches per URL (60 seconds after a
+   success, 5 seconds after a failure), because a caller-supplied token can
+   force a refetch;
    an admin-configured URL always goes through validation, an
    environment-pinned one is treated as trusted operator config-as-code. A
    new admin-configurable URL that skips this guard is a fetch an attacker
@@ -472,7 +479,7 @@ is marked as such.
 - [[onyx-api]]: the public API authenticates the same way (API key / PAT)
   through the same `optional_user` resolution.
 - [[llm-gateway]]: the `use:llm_gateway` PAT scope (`Permission.
-  USE_LLM_GATEWAY`, `db/enums.py:672`) is a `SELECTABLE_PAT_SCOPES` entry
+  USE_LLM_GATEWAY`, `db/enums.py`) is a `SELECTABLE_PAT_SCOPES` entry
   (`server/pat/models.py`) minted and checked entirely by this component's
   PAT machinery. The workspace `llm_gateway_enabled` setting hides the scope
   in `list_selectable_scopes` and blocks minting it, but only for third-party

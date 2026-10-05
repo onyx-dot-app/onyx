@@ -5,6 +5,7 @@
 > text extraction, token counting, the two ways a file reaches the model
 > (inlined text or RAG over an index), and how a file gets served back.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:**
@@ -50,12 +51,12 @@ that the file's row is stripped of content once the session ends.
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | POST | `/user/projects/file/upload` | `api.py:upload_user_files` | The upload endpoint. Accepts a project id, an incognito session id, and a temp-id map for optimistic UI. |
-| GET | `/user/files/recent` | | Files not attached to any project. |
+| GET | `/user/files/recent` | | Files not attached to any project (`server/manage/users.py`). |
 | GET | `/user/projects/files/{project_id}` | `api.py:get_files_in_project` | |
 | DELETE | `/user/projects/file/{file_id}` | `api.py:delete_user_file` | Refuses when the file has project or persona associations. |
 | GET | `/user/projects/file/{file_id}` | `api.py:get_user_file` | Metadata (`UserFileSnapshot`), not bytes. |
 | POST | `/user/projects/file/statuses` | `api.py:get_user_file_statuses` | Poll target while a file is `PROCESSING`. |
-| DELETE/POST | `/user/projects/{project_id}/files/{file_id}`, `/user/projects/{project_id}/link` | `unlink_user_file_from_project`, `link_user_file_to_project` | |
+| DELETE/POST | `/user/projects/{project_id}/files/{file_id}` | `unlink_user_file_from_project`, `link_user_file_to_project` | |
 | GET | `/user/projects/{project_id}/token-count`, `/user/projects/session/{id}/token-count` | | Aggregate token counts for the file-budget UI. |
 | GET | `/chat/file/{file_id:path}` | `chat_backend.py:fetch_chat_file` | **The serving endpoint.** Accepts either a storage `file_id` or a `UserFile.id`; see §4.5. |
 
@@ -64,7 +65,8 @@ that the file's row is stripped of content once the session ends.
 | Variable | File | Effect |
 |---|---|---|
 | `FILE_STORE_BACKEND` | `configs/app_configs.py` | `s3` (default), `gcs`, `azure`, or `postgres`. Selects the `FileStore` implementation (§3, §4.1). |
-| `S3_FILE_STORE_BUCKET_NAME`, `S3_ENDPOINT_URL`, `S3_AWS_ACCESS_KEY_ID`/`SECRET`, `AWS_REGION_NAME`, `S3_FILE_STORE_PREFIX`, `S3_VERIFY_SSL` | | S3-compatible backend config (also covers MinIO, DO Spaces). |
+| `S3_FILE_STORE_BUCKET_NAME`, `S3_ENDPOINT_URL`, `S3_AWS_ACCESS_KEY_ID`/`SECRET`, `AWS_REGION_NAME`, `S3_FILE_STORE_PREFIX`, `S3_VERIFY_SSL` | | S3-compatible backend config (also covers the bundled object store and DO Spaces). Onyx logs a warning when the endpoint uses the default `minioadmin` credentials. |
+| `S3_LEGACY_ENDPOINT_URL`, `S3_LEGACY_AWS_ACCESS_KEY_ID`/`SECRET`, `LEGACY_COPY_SETTLE_SECONDS`, `LEGACY_COPY_WORKERS`, `LEGACY_COPY_ALL_OBJECTS` | `configs/app_configs.py` | The old MinIO store that earlier releases wrote to. See §4.1. |
 | `GCS_FILE_STORE_BUCKET_NAME`, `GCS_PROJECT_ID`, `GCS_SERVICE_ACCOUNT_KEY_PATH`/`JSON` | | GCS backend config. |
 | `AZURE_FILE_STORE_CONTAINER_NAME`, `AZURE_STORAGE_ACCOUNT_NAME`/`URL`, `AZURE_STORAGE_CONNECTION_STRING`/`ACCOUNT_KEY` | | Azure Blob backend config. |
 | `DISABLE_VECTOR_DB` | `configs/app_configs.py` | Skips the vector-DB indexing path entirely; project files fall back to `FileReaderTool` metadata instead of RAG (§4.4). Also switches upload/delete/project-sync from Celery tasks to in-request `BackgroundTasks`. |
@@ -89,7 +91,7 @@ FileRecord (file_record)              FileContent (file_content, postgres backen
                                 │                             not a DB foreign key)
                                 │        name, file_type, content_type, link_url
                                 │        token_count, chunk_count
-                                │        status (PROCESSING/INDEXING/COMPLETED/FAILED/SKIPPED/DELETING)
+                                │        status (PROCESSING/INDEXING/COMPLETED/SKIPPED/FAILED/CANCELED/DELETING)
                                 │        incognito, incognito_session_id
                                 │        needs_project_sync, needs_persona_sync
                                 │        secondary_reconcile_pending
@@ -143,6 +145,14 @@ differs. Callers never branch on backend; they always go through
 `FileStore`'s abstract interface (`initialize`, `has_file`, `save_file`,
 `read_file`, `delete_file`, `get_file_with_mime_type`, `change_file_id`,
 `list_files_by_prefix`).
+
+**Legacy MinIO store.** While `S3_LEGACY_ENDPOINT_URL` is set (and differs from
+`S3_ENDPOINT_URL`), `S3BackedFileStore` writes and deletes in both stores. A read that
+misses the main store falls back to the legacy store. The copy tool
+`python -m onyx.file_store.legacy_copy [--retire | --replay]` (`legacy_copy.py`) copies the
+objects that file records point at into the main store. After `--retire`, a marker object
+(`LEGACY_RETIRED_MARKER_KEY`) makes writes and deletes skip the legacy store. Reads still fall
+back to it.
 
 `file_store.py:content_byte_size` computes the stored size at save time;
 `FILE_SIZE_MISSING_SENTINEL` (-1) marks a row whose backing object was
@@ -509,8 +519,9 @@ tests over unit tests for anything touching the upload-to-index pipeline.
    `GET /chat/file/{file_id}` for it succeeds for the generating user.
 7. As a second user, attempt `GET /chat/file/{file_id}` for the first user's
    plain uploaded `UserFile`: expect 404. Attempt the same for the
-   first user's generated image `file_id`: current behavior succeeds (§5, §9)
-   confirm this matches what you expect before shipping a change here.
+   first user's generated image `file_id`: expect 404 when the image carries its
+   chat-session stamp and the session is not public (§5, §9). An image written before stamping
+   still succeeds.
 
 ---
 

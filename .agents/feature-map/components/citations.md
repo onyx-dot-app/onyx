@@ -5,6 +5,7 @@
 > crosses the prompt, the search tools, the stream parser, the database, and the
 > renderer, so it breaks silently at any single point.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:**
@@ -53,7 +54,7 @@ Citations have no HTTP endpoints of their own. They ride the same turn described
 | Surface | Where | Notes |
 |---|---|---|
 | `include_citations` | `SendMessageRequest.include_citations` (`server/query_and_chat/models.py`), default `True` | Per-request switch. `llm_loop.py:run_llm_loop` maps it to `CitationMode.HYPERLINK` (default) or `CitationMode.REMOVE`. Callers that must not expose links to the end surface (for example a public bot) set it `False`. |
-| `CitationMode` | `chat/citation_processor.py:CitationMode` | `HYPERLINK` (format and emit `CitationInfo`), `KEEP_MARKERS` (preserve `[1]` verbatim, used by the research agent's intermediate reports, `tools/fake_tools/research_agent.py`, ahead of `collapse_citations`), `REMOVE` (strip markers entirely, driven by `include_citations=False`). All three still track every citation seen via `get_seen_citations`. |
+| `CitationMode` | `chat/citation_processor.py:CitationMode` | `HYPERLINK` (format and emit `CitationInfo`), `KEEP_MARKERS` (preserve `[1]` verbatim, emit no `CitationInfo`, used by the research agent's intermediate reports, `tools/fake_tools/research_agent.py`, ahead of `collapse_citations`), `REMOVE` (strip markers entirely, emit no `CitationInfo`, driven by `include_citations=False`). All three still track every citation seen via `get_seen_citations`. |
 | `CitationInfo` packet | `server/query_and_chat/streaming_models.py:CitationInfo` | The only wire-visible citation surface. Carries `citation_number` and `document_id`. See [[streaming-protocol]] §4.1. |
 
 ---
@@ -152,9 +153,9 @@ on, regardless of how many documents any one call actually returns.
 `should_cite_documents` is set and the persona's prompt template did not already
 include the placeholder (`apply_prompt_placeholders`,
 `append_citation_if_missing=True`). Separately, `llm_loop.py:select_reminder_text`
-appends `CITATION_REMINDER` (or `LAST_CYCLE_CITATION_REMINDER` on the final cycle) to
-the reminder message whenever `should_cite_documents or always_cite_documents` is
-true, via `prompt_utils.py:build_reminder_message`. Both reminder strings tell the
+appends `CITATION_REMINDER` plus `ANSWER_COMPLETENESS_REMINDER` (and
+`LAST_CYCLE_CITATION_REMINDER` on the final cycle) to the reminder message whenever `should_cite_documents or always_cite_documents` is
+true, via `prompt_utils.py:build_reminder_message`. The citation reminder strings tell the
 model to cite the `"document"` field using `[1]`, `[2]`, `[3]` syntax.
 
 Per [[core-chat-loop]] §4.4, the reminder is always the **last** message in the
@@ -174,7 +175,9 @@ document id) into a `dict[int, SearchDoc]` by matching against
 
 `llm_step.py:run_llm_step` feeds every answer token to
 `citation_processor.process_token` (`_emit_citation_results`). The processor holds
-back text that might be a partial citation (`possible_citation_pattern`), and once a
+back text that might be a partial citation (`possible_citation_pattern`). It skips
+markers inside fenced code blocks, which `CodeFenceTracker` tracks line by line.
+Once a
 complete match is found (`citation_pattern`, which also accepts `[1, 2]`, `[[1]]`,
 and the unicode bracket variants `【1】`/`［1］`), it looks up each number in
 `citation_to_doc`, rewrites the marker to `[[n]](link)`, and yields a `CitationInfo`

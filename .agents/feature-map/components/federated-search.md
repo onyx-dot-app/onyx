@@ -4,6 +4,7 @@
 > no chunks in the index. Results are fetched from the source's own API during a
 > search call and merged into the same ranked set as indexed documents.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** search
 **Edition:** CE
 **Owns:**
@@ -51,16 +52,17 @@ everyone without per-user connection).
 |---|---|---|---|
 | POST | `/federated` | `create_federated_connector` | Admin only (`MANAGE_CONNECTORS`). Creates the workspace-level connector row (app credentials + entity config). |
 | GET | `/federated` | `get_federated_connectors` | `BASIC_ACCESS`. Status table: every configured connector, by source. |
-| GET | `/federated/{id}` | `get_federated_connector_detail` | Connector detail for the admin edit form. |
+| GET | `/federated/{id}` | `get_federated_connector_detail` | `READ_CONNECTORS`. Connector detail for the admin edit form. |
 | PUT | `/federated/{id}` | `update_federated_connector_endpoint` | Admin only. Updates credentials or entity config. |
 | DELETE | `/federated/{id}` | `delete_federated_connector_endpoint` | Admin only. |
-| GET | `/federated/{id}/entities`, `/federated/sources/{source}/configuration/schema` | `get_entities`, `get_configuration_schema_by_source` | Entity/config field specs for the setup form. |
-| GET | `/federated/{id}/credentials/schema`, `/federated/sources/{source}/credentials/schema` | | Credential field specs. |
+| GET | `/federated/{id}/entities`, `/federated/sources/{source}/configuration/schema` | `get_entities`, `get_configuration_schema_by_source` | `READ_CONNECTORS`. Entity/config field specs for the setup form. |
+| HEAD | `/federated/{id}/entities/validate` | `validate_entities` | `MANAGE_CONNECTORS`. Checks an entity config for the connector. |
+| GET | `/federated/{id}/credentials/schema`, `/federated/sources/{source}/credentials/schema` | | `READ_CONNECTORS`. Credential field specs. |
 | POST | `/federated/sources/{source}/credentials/validate` | `validate_credentials` | Admin only; instantiates the connector to check credentials. |
 | GET | `/federated/{id}/authorize` | `get_authorize_url` | **Any authenticated user** (`BASIC_ACCESS`). Returns the per-user OAuth URL. |
 | POST | `/federated/callback` | `handle_oauth_callback_generic` | Any authenticated user. State-verified OAuth callback; stores the per-user token. Returns only `source`, `expires_at`, `token_type`, `scope`, never a token. |
 | GET | `/federated/oauth-status` | `get_user_oauth_status` | Any authenticated user. Per-connector: does *this* user have a token, and if not, an authorize URL. Polled by `AccountPopover.tsx` in the account menu. |
-| DELETE | `/federated/{id}/oauth-token` | `disconnect_oauth_token` | Any authenticated user. Disconnects their own token. |
+| DELETE | `/federated/{id}/oauth` | `disconnect_oauth_token` | Any authenticated user. Disconnects their own token. |
 
 Per-user Slack connection is reached from the account popover
 (`web/src/sections/sidebar/AccountPopover.tsx`), not from an admin page. The
@@ -72,8 +74,7 @@ already has a federated connector,
 `web/src/app/admin/documents/sets/page.tsx` links to it from a document set's
 linked federated connector, and `CCPairIndexingStatusTable.tsx` links to it
 alongside regular cc-pairs. `web/src/lib/admin-routes.ts` lists `/admin/federated`
-only inside `VECTOR_DB_REQUIRED_ROUTE_PREFIXES` (line 541,
-`web/src/lib/admin-routes.ts`), not as a registered `ADMIN_ROUTES` entry: there is
+only inside `VECTOR_DB_REQUIRED_ROUTE_PREFIXES`, not as a registered `ADMIN_ROUTES` entry: there is
 no admin sidebar item and no `/admin/federated` index page, only the `[id]`
 detail page reached by the links above.
 
@@ -124,12 +125,12 @@ own those.
                                           │
         called from TWO sites:           │
                                           │
- (A) SearchTool.run(), search_tool.py:838 │  (B) search_chunks, search_runner.py:111
+ (A) SearchTool.run(), search_tool.py     │  (B) search_chunks, search_runner.py
      takes no slack_context               │      only when NOT pre-fetched by (A)
      prefetches once per run(), passes    │      (only the EE Search UI path,
      result into every non-Slack lane     │      ee/onyx/search/process_search_query.py,
      via prefetched_federated_retrieval_  │      calls search_pipeline with no
-     infos (search_tool.py:587)           │      prefetched_federated_retrieval_infos)
+     infos                                │      prefetched_federated_retrieval_infos)
                                           │      also takes no slack_context
                                           ▼
                    Inside get_federated_retrieval_functions:
@@ -139,21 +140,21 @@ own those.
                      source == FEDERATED_SLACK ("Slack is handled separately
                      inside SearchTool", federated_retrieval.py).
                    - FederatedConnectorSource has exactly one member
-                     (FEDERATED_SLACK, configs/constants.py:318), and it is
+                     (FEDERATED_SLACK, configs/constants.py), and it is
                      always skipped here.
                    => get_federated_retrieval_functions returns [] on every
                       call site that exists in the codebase today.
 
                           ┌─────────────────────────────────────────┐
                           │   SearchTool._run_slack_search            │
-                          │   search_tool.py:493, added as its own    │
-                          │   parallel lane at search_tool.py:1108    │
+                          │   search_tool.py, added as its own    │
+                          │   parallel lane at search_tool.py    │
                           │   (slack_lane_ran gate)                   │
                           └───────────────┬───────────────────────────┘
                                           │
                        Only path that ever actually returns Slack results.
                        Token pre-fetched once in run() by
-                       _prefetch_slack_data (search_tool.py:355), before the
+                       _prefetch_slack_data (search_tool.py), before the
                        parallel lanes start.
 ```
 
@@ -180,7 +181,7 @@ sections than be deduplicated. See §9.
 
 ### 4.2 Per-user token resolution
 
-`SearchTool._prefetch_slack_data` (`search_tool.py:355`) runs once inside the
+`SearchTool._prefetch_slack_data` (`search_tool.py`) runs once inside the
 single DB session opened at the top of `run()`, before any parallel lane starts:
 
 1. **Bot context** (`self.slack_context` set, i.e. `SearchTool` was constructed
@@ -196,9 +197,12 @@ single DB session opened at the top of `run()`, before any parallel lane starts:
 3. If neither yields a token, returns `(None, None, {})`. `_prefetch_slack_data`
    swallows every exception in each branch and logs a warning; it never raises.
 
-The result feeds `slack_lane_ran = bool(slack_access_token and
-override_kwargs.original_query)` (`search_tool.py:1108`), the sole gate on
-whether `_run_slack_search` is added to the parallel lane list.
+The prefetch runs only when `SearchTool.enable_slack_search` is true or the call has a
+`slack_context`. In chat, `process_message._should_enable_slack_search` sets the flag. It is
+true for the default persona with no source filter, or when the source filter includes
+Slack. The `/search` API always sets it true. The lane also drops when the resolved search
+scope excludes `DocumentSource.SLACK`. The sole gate on `_run_slack_search` is then
+`slack_access_token and override_kwargs.original_query`.
 
 ### 4.3 The document-set gate
 
@@ -211,7 +215,7 @@ sets, via `FederatedConnector__DocumentSet`.**
 (`db/federated.py:get_federated_connector_document_set_mappings_by_document_set_names`)
 looks up that join by document-set name. If `self.persona_search_info.document_set_names`
 is empty, or none of the mappings resolve to a `FEDERATED_SLACK` connector,
-Slack federated search is skipped outright (`search_tool.py:375-403`), before any
+Slack federated search is skipped outright (``search_tool.py``), before any
 token is even fetched. **A persona or chat session with no document sets, or with
 document sets not linked to the Slack connector, never gets Slack results, even
 if the bot token exists.** This gate applies only to the bot-context branch; the
@@ -221,7 +225,7 @@ in scope for that search.
 
 ### 4.4 Merging into the ranked set
 
-`_run_slack_search` (`search_tool.py:493`) builds a `ChunkIndexRequest` with
+`_run_slack_search` (`search_tool.py`) builds a `ChunkIndexRequest` with
 `IndexFilters(access_control_list=None)` (see §5) and calls `slack_retrieval`
 (`context/search/federated/slack_search.py:slack_retrieval`), which:
 
@@ -229,7 +233,7 @@ in scope for that search.
    `search_all_channels`, `include_dm`, `include_group_dm`,
    `include_private_channels`, `default_search_days`) from the connector's
    `config` (`federated_connectors/slack/federated_connector.py:entities_schema`).
-2. Calls the Slack API (`query_slack`, `slack_search.py:535`), fetches thread
+2. Calls the Slack API (`query_slack`, `slack_search.py`), fetches thread
    context, and scores messages.
 3. Converts matched messages into `IndexingDocument`/`TextSection`
    (`connectors/models.py`), the **same shape connector indexing uses**.
@@ -237,7 +241,7 @@ in scope for that search.
    `DefaultIndexingEmbedder` (`indexing/embedder.py`), the same chunker used by
    the indexing pipeline, so Slack messages are chunked identically to indexed
    documents even though nothing is written to the index.
-5. Builds `InferenceChunk` objects (`slack_search.py:1331`) with
+5. Builds `InferenceChunk` objects (`slack_search.py`) with
    `source_type=DocumentSource.SLACK`, a synthetic per-message `document_id`, and
    `is_federated=True`.
 
@@ -261,7 +265,7 @@ future source makes it non-empty) merge the same way, but arrive through
 
 1. **A federated result must never exceed what the user's own token can see.**
    Verified for Slack: `_run_slack_search` builds `IndexFilters(access_control_list=None)`
-   (`search_tool.py:518`), and access is enforced entirely by what the Slack API
+   (`search_tool.py`), and access is enforced entirely by what the Slack API
    returns for the given `access_token`, which is scoped by Slack's own OAuth
    consent (the `SCOPES` list in `federated_connector.py`, all `*.read`/`*.history`
    scopes, none admin-level). **I cannot independently verify, from this
@@ -271,7 +275,7 @@ future source makes it non-empty) merge the same way, but arrive through
 2. **A missing or expired token must degrade to no results, not an error that
    kills the turn.** `_prefetch_slack_data` and `_run_slack_search` both wrap
    their bodies in `try/except`, logging and returning empty/`None` rather than
-   raising (`search_tool.py:355`, `search_tool.py:537`). There is no explicit
+   raising (`search_tool.py`, `search_tool.py`). There is no explicit
    `expires_at` check before use; an expired token is discovered only when the
    Slack API call itself fails, which the `except` in `_run_slack_search`
    catches.
@@ -284,7 +288,7 @@ future source makes it non-empty) merge the same way, but arrive through
 4. **The document-set gate for the bot-context Slack path must hold.**
    `_prefetch_slack_data` must return `(None, None, {})` whenever the persona's
    document sets are empty or unlinked to a `FEDERATED_SLACK` connector
-   (`search_tool.py:373-403`). A change that fetches a Slack token before this
+   (``search_tool.py``). A change that fetches a Slack token before this
    check would let Slack federated search fire outside its intended scope.
 5. **The web-user OAuth path has no document-set gate**, unlike the bot-context
    path. Do not assume symmetry between the two branches of
@@ -314,8 +318,7 @@ future source makes it non-empty) merge the same way, but arrive through
 - [[document-index]]: not used for Slack results at all; this is the point of
   the component. Indexed sources still go through `document_index.hybrid_retrieval`/
   `keyword_retrieval` in the same search call.
-- [[connectors]] / [[cc-pairs-and-credentials]]: `FederatedConnectorSource`
-  (`configs/constants.py:318`) and `to_non_federated_source()` map a federated
+- [[connectors]] / [[cc-pairs-and-credentials]]: `FederatedConnectorSource` and `to_non_federated_source()` map a federated
   source to the `DocumentSource` enum connectors also use, so scope filters
   (`source_type`) apply uniformly across indexed and federated sources.
 - [[auth-and-identity]]: per-user OAuth tokens are keyed to `User.id`; the
@@ -336,11 +339,12 @@ future source makes it non-empty) merge the same way, but arrive through
   than through the registry, but it does not state that the registry path is
   empty in practice for every call site that exists today; that fact belongs
   here.
-- The onyx-cli/programmatic `/search` endpoint and the EE Search UI backend
-  (`ee/onyx/search/process_search_query.py`) reuse `search_pipeline`, so they
-  reach `get_federated_retrieval_functions` through call site (B) in §4.1, but
-  never reach `_run_slack_search` (that lane lives only inside `SearchTool`),
-  so **neither of those surfaces ever returns Slack federated results.**
+- The EE Search UI backend (`ee/onyx/search/process_search_query.py`) calls
+  `search_pipeline` directly. It reaches `get_federated_retrieval_functions` through call site
+  (B) in §4.1, but never reaches `_run_slack_search` (that lane lives only inside
+  `SearchTool`), so **it never returns Slack federated results.** The `/search` API
+  (`server/features/search/api.py`) builds a `SearchTool` with `enable_slack_search=True`,
+  so it can return Slack results for a user who connected Slack.
 
 ---
 
@@ -389,7 +393,7 @@ OAuth exchange for real).
 6. Ask a chat question whose answer lives only in Slack messages, with a
    persona scoped to the linked document set. Confirm a citation resolves to a
    Slack message link, not an indexed document.
-7. Disconnect the Slack OAuth token (`DELETE /federated/{id}/oauth-token`) and
+7. Disconnect the Slack OAuth token (`DELETE /federated/{id}/oauth`) and
    repeat step 6. Confirm the turn completes normally with no Slack citations
    and no error surfaced to the user.
 
@@ -407,8 +411,7 @@ than launching Playwright ad hoc.
 
 ## 9. Footguns
 
-- **The framework is generic; the product is Slack-only.** `FederatedConnectorSource`
-  (`configs/constants.py:318`) has exactly one member. Every abstraction in
+- **The framework is generic; the product is Slack-only.** `FederatedConnectorSource` has exactly one member. Every abstraction in
   `federated_connectors/` (`interfaces.py`, `registry.py`, `factory.py`) is built
   for N sources, but only Slack has ever been implemented. Reading the registry
   code in isolation overstates how general the actual behavior is.
@@ -419,8 +422,8 @@ than launching Playwright ad hoc.
   search. `_run_slack_search` inside `SearchTool` is the entire Slack federated
   search feature today. See §4.1.
 - **Two call sites of the same function do not mean two independent fetches.**
-  `search_tool.py:838` prefetches once and threads the (always-empty, for
-  Slack) result through every lane; `search_runner.py:111` only calls the
+  `search_tool.py` prefetches once and threads the (always-empty, for
+  Slack) result through every lane; `search_runner.py` only calls the
   registry itself when nothing was prefetched, which happens only outside
   `SearchTool` (the EE Search UI path). Reading only "there are two call sites"
   without checking `prefetched_federated_retrieval_infos` leads to a wrong

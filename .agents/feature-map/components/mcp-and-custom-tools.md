@@ -5,6 +5,7 @@
 > configuration, credential storage and scope, the MCP OAuth flow, and how a
 > schema or server becomes one or more runtime `Tool` rows.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE, with EE additions in MCP server private-sharing (`make_mcp_server_private`)
 **Owns:**
@@ -15,7 +16,7 @@
 `backend/onyx/tools/tool_implementations/custom/` (`custom_tool.py`,
 `openapi_parsing.py`, `base_tool_types.py`), `backend/onyx/oauth/`,
 `web/src/app/admin/mcp-actions/`, `web/src/app/admin/openapi-actions/`,
-`web/src/sections/actions/`
+`web/src/sections/actions/`, `web/src/lib/mcp/`
 
 **Read first:** `[[tools-framework]]`. It owns the `Tool` interface, the
 three-way discriminator on the `Tool` table, and `tool_constructor.py`'s

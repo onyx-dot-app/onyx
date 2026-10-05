@@ -8,6 +8,7 @@
 > credential in place of a sandbox-visible placeholder, and only then forwards
 > the request upstream.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
 **Edition:** CE, with a Cloud-only lockdown on built-in credential editing (see `[[craft-admin]]`)
 **Owns:**
@@ -91,7 +92,7 @@ time.
 | `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | `configs.py` | How long the proxy parks a request awaiting an `ASK` decision before claiming `EXPIRED` (`gate.py:_await_decision`). |
 | `MCP_SESSION_TAG_HEADER` | `configs.py` | Header opencode's in-process MCP client uses to carry the session tag (`gate.py:_extract_session_tag`). |
 | `PARSER_MAX_BODY_BYTES` | `sandbox_proxy/addons/gate.py` (constant, not env) | 32 MiB request-body cap; see §9. |
-| `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` | `docs/craft/features/external-apps/cloud-managed-app-credentials.md` | Seeds Onyx-managed built-ins (disabled) on tenant creation. |
+| `AUTO_PROVISION_DEFAULT_EXTERNAL_APPS` | `backend/onyx/configs/app_configs.py` (default `false`) | Seeds Onyx-managed built-ins (disabled) on tenant creation. |
 
 ---
 
@@ -118,32 +119,31 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 
 - `ExternalApp` (`backend/onyx/db/models.py:ExternalApp`): the configured
   app. `upstream_url_patterns` is a plain regex list for built-ins and a glob
-  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`,
-  `models.py:7291`). `organization_credentials` and (on
+  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). `organization_credentials` and (on
   `ExternalAppUserCredential`) `user_credentials` are `EncryptedJson` /
   `SensitiveValue`, read only via `.get_value(apply_mask=False)`.
-- `ExternalAppUserCredential` (`models.py:7302`): one row per `(external_app_id,
+- `ExternalAppUserCredential` (`models.py`): one row per `(external_app_id,
   user_id)`. `granted_scopes` is `NULL` when the provider didn't report a
   scope grant, a list when it did; the two must not be conflated.
-- `GatedApp` (`models.py:7355`): the shared identity row for anything
+- `GatedApp` (`models.py`): the shared identity row for anything
   policy-gated. `CheckConstraint ck_gated_app_single_target` enforces exactly
   one of `external_app_id` / `mcp_server_id`. Rows are created lazily
   (`onyx/db/gated_app.py:get_or_create_gated_app_id`); a target with no row
   has never been policied or approved.
-- `GatedActionPolicy` (`models.py:7423`): sparse per-action override, one row
+- `GatedActionPolicy` (`models.py`): sparse per-action override, one row
   per `(gated_app_id, action_id)`. An unset action resolves to the catalog's
   `default_policy` at read time
   (`external_apps/providers/registry.py:effective_policy`), not a stored row
   with a default value.
-- `ActionApproval` (`models.py:6710`): one row per gated request, whether
+- `ActionApproval` (`models.py`): one row per gated request, whether
   parked for a human or auto-decided by a grant. `decision IS NULL` means
   pending or a proxy-crash orphan; `actions[0]` (JSONB, insertion-sorted
   strictest-first) is what governed the request
   (`server/features/build/db/action_approval.py:insert_action_approval`).
-- `Sandbox.encrypted_pat` (`models.py:6472`): the sandbox's own scoped Onyx
+- `Sandbox.encrypted_pat` (`models.py`): the sandbox's own scoped Onyx
   API token, decrypted only inside `OnyxPatResolver.resolve`
   (`sandbox_proxy/resolvers/onyx_pat.py`).
-- `BuildSession` (`models.py:6353`): the session an `ASK` request is
+- `BuildSession` (`models.py`): the session an `ASK` request is
   attributed to; see `[[craft-sessions]]`.
 
 ---
@@ -382,7 +382,7 @@ identical in shape whether a human or a grant decided.
 Connect: `GET /api/build/apps/{id}/oauth/start` builds the provider's
 authorize URL (`server/features/build/external_apps/oauth.py`); the callback
 exchanges the code, stamps an absolute `expires_at`
-(`token_utils.py:stamp_expires_at`) and stores the granted scopes verbatim.
+(`external_apps/token_utils.py:stamp_expires_at`) and stores the granted scopes verbatim.
 
 Refresh is lazy and happens at the credential-injection seam, not on a
 schedule: `ExternalAppResolver.resolve` calls `ensure_fresh_credentials`
@@ -454,7 +454,7 @@ they can never disagree about which server owns a request; see
 2. **A `DENY` verdict blocks before any upstream connection.**
    `_resolve_and_match` sets the 403 and returns before `request()` ever
    reaches credential injection or forwarding
-   (`gate.py:632-638`); no `ActionApproval` row is written for a `DENY`.
+   (`gate.py:GateAddon._resolve_and_match`); no `ActionApproval` row is written for a `DENY`.
 3. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
    spoofable for which session within that user gets attributed.** See §4.3.
    Any change to session-tag handling must preserve the "verified against the

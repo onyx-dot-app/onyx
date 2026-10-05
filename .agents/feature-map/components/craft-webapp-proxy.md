@@ -5,6 +5,7 @@
 > server, and it is the trust boundary between the sandbox and the viewer's
 > browser.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
 **Edition:** CE (Craft ships in both editions; no EE-specific code in this path)
 **Owns:**
@@ -148,7 +149,11 @@ gateway error.
 ### 4.4 Proxying the HMR websocket
 
 `websocket_webapp_hmr` requires an authenticated user
-(`current_user_from_websocket_cookie`), runs the same access check, then
+(`current_user_from_websocket_cookie`, `onyx/auth/users.py`). That dependency
+checks the websocket origin and reads the session cookie. On multi-tenant
+deployments it resolves the tenant from the session token in Redis and sets
+the tenant context before it loads the user. It also requires
+`Permission.BASIC_ACCESS`. The handler then runs the same access check, then
 `_proxy_webapp_hmr_websocket` opens a second websocket to the sandbox's
 `/_next/webpack-hmr` endpoint and pumps messages both directions
 (`_pump_webapp_to_upstream`, `_pump_upstream_to_webapp`) until either side
@@ -217,9 +222,10 @@ provisioning entirely, since nothing will view them live.
 - [[craft-sandboxes]]: the sandbox manager that turns a `(sandbox_id, port)`
   pair into a reachable URL, and that runs the bootstrap/restore scripts.
 - [[auth-and-identity]]: `optional_user`, `current_user_from_websocket_cookie`.
-- [[multi-tenancy]]: sessions and sandboxes are tenant-scoped; this document
-  found no tenant-specific branching inside the proxy itself, since it
-  reaches the sandbox for a given session's already-tenant-scoped record.
+- [[multi-tenancy]]: sessions and sandboxes are tenant-scoped. The HTTP path
+  gets its tenant from the request middleware. The websocket path has no
+  such middleware, so `current_user_from_websocket_cookie` sets the tenant
+  context itself from the session token.
 
 **Depended on by**
 - [[craft-external-apps]]: unrelated egress path, but shares the theme of
@@ -246,14 +252,16 @@ provisioning entirely, since nothing will view them live.
 
 ### Tests
 
-No dedicated unit or integration test file for `webapp_proxy.py` was found
-in `backend/tests/`. `docs/craft/lazy-webapp-provisioning.md`
-describes a planned kind-cluster integration test (webapp tool scaffolds,
-installs, and serves through the proxy; restore auto-start behavior) that
-adapts `test_webapp_preview.py`, `test_snapshot_restore.py`, and
-`test_bun_node_modules_dedup.py`, but this document could not confirm those
-files exist on this branch. Treat manual reproduction as the verification
-path until a test is confirmed present.
+```bash
+cd backend && uv run pytest tests/unit/onyx/server/features/craft/test_webapp_proxy_header_stripping.py
+cd backend && uv run pytest tests/unit/onyx/server/features/craft/session/test_webapp_info.py
+cd backend && uv run pytest tests/external_dependency_unit/craft/test_webapp_hmr_websocket_auth.py
+cd backend && uv run pytest tests/integration/tests/craft/test_webapp_proxy.py
+cd backend && uv run pytest tests/integration/tests/craft/k8s/test_webapp_preview.py
+cd backend && uv run pytest tests/integration/tests/craft/docker_e2e/test_webapp_preview_docker.py
+```
+
+Use manual reproduction for the cache and hot-reload behaviour below.
 
 ### Manual reproduction
 

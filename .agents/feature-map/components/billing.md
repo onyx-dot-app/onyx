@@ -5,6 +5,7 @@
 > control-plane billing proxy for cloud. It decides what a customer pays for and
 > answers "what tier is this tenant on," not whether EE code is loaded.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform
 **Edition:** EE only. Self-hosted billing and cloud billing share one API surface
 but route to different backends.
@@ -21,9 +22,9 @@ but route to different backends.
 ## 1. What the user experiences
 
 An admin opens **Plans & Billing** (`ADMIN_ROUTES.BILLING`,
-`web/src/lib/admin-routes.ts:391`) and sees one of two views. With no active
+`web/src/lib/admin-routes.ts`) and sees one of two views. With no active
 subscription and no license, they see a plans picker (Business or Enterprise,
-`web/src/app/admin/billing/PlansView.tsx:253`) and can start Stripe checkout.
+`web/src/app/admin/billing/PlansView.tsx`) and can start Stripe checkout.
 With an active subscription or license, they see billing details: renewal
 date, seat usage, and a "manage subscription" link into the Stripe customer
 portal.
@@ -73,7 +74,7 @@ All authenticated handlers gate on
 All of these gate on `FULL_ADMIN_PANEL_ACCESS` too, and are sync `def` (not
 `async def`) because the work is blocking: `requests` calls, sync SQLAlchemy,
 RSA signature verification (module docstring,
-`backend/ee/onyx/server/license/api.py:1`).
+`backend/ee/onyx/server/license/api.py`).
 
 ### Frontend routes to backend
 
@@ -89,10 +90,10 @@ throw if `NEXT_PUBLIC_CLOUD_ENABLED` is true.
 |---|---|---|
 | `LICENSE_ENFORCEMENT_ENABLED` | `ee/onyx/configs/app_configs.py`, read by `tier.py` and `license_enforcement.py` | Default `true`. See [[editions-and-gating]] §2 for the full dispatch story. When false, self-hosted tier resolves to `Tier.ENTERPRISE` if EE code loaded, else `Tier.COMMUNITY` (`ee/onyx/utils/tier.py:_self_hosted_tier`), a legacy escape hatch. |
 | `MULTI_TENANT` | `shared_configs/configs.py` | Selects the cloud vs. self-hosted branch throughout this component. |
-| `CLOUD_DATA_PLANE_URL` | `ee/onyx/configs/app_configs.py` | Self-hosted proxy target for `/proxy/claim-license`, `/proxy/create-checkout-session`, etc. |
-| `CONTROL_PLANE_API_BASE_URL` | `onyx/configs/app_configs.py` | Cloud's direct billing target. |
-| `BILLING_CACHE_TTL_SECONDS` | `onyx/configs/app_configs.py`, read by `billing_cache.py` | TTL for the per-tenant billing-info cache (§5). |
-| `STRIPE_PUBLISHABLE_KEY_OVERRIDE`, `STRIPE_PUBLISHABLE_KEY_URL` | `onyx/configs/app_configs.py` | Env override takes priority over the S3-hosted key. |
+| `CLOUD_DATA_PLANE_URL` | `ee/onyx/configs/app_configs.py` | Default `https://cloud.onyx.app/api`. Self-hosted proxy target for `/proxy/claim-license`, `/proxy/create-checkout-session`, etc. |
+| `CONTROL_PLANE_API_BASE_URL` | `onyx/configs/app_configs.py` | Default `http://localhost:8082`. Cloud's direct billing target. |
+| `BILLING_CACHE_TTL_SECONDS` | `onyx/configs/app_configs.py`, read by `billing_cache.py` | Default 3600. TTL for the per-tenant billing-info cache (§5). |
+| `STRIPE_PUBLISHABLE_KEY` (config name `STRIPE_PUBLISHABLE_KEY_OVERRIDE`), `STRIPE_PUBLISHABLE_KEY_URL` | `onyx/configs/app_configs.py` | The env override takes priority over the S3-hosted key. |
 
 ---
 

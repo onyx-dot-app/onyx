@@ -4,6 +4,7 @@
 > HTTP) listens for Slack events, matches standard answers or runs a chat turn
 > in-process, and posts the answer back into the thread.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform (bot surface)
 **Edition:** CE core listener and regular-answer path. Standard answers are EE
 (`backend/ee/onyx/onyxbot/slack/handlers/handle_standard_answers.py`); CE falls back to a
@@ -95,6 +96,7 @@ Slack bots at a time, up to `MAX_TENANTS_PER_POD` (default 50).
 | `ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER` | false | Suppress a reply that found no LLM answer, only documents. |
 | `ONYX_BOT_DISPLAY_ERROR_MSGS` | false | Post the raw exception text into the thread on failure (see §9). |
 | `NOTIFY_SLACKBOT_NO_ANSWER` | false | Post an apology message when `handle_message` returns "failed". |
+| `ONYX_BOT_FEEDBACK_VISIBILITY` | `private` | Who sees the feedback confirmation message: `private`, `anonymous`, or `public`. |
 | `ONYX_BOT_FEEDBACK_REMINDER` | 0 (off) | Minutes until a scheduled DM reminder to leave feedback. |
 | `ONYX_BOT_REACT_EMOJI` / `ONYX_BOT_FOLLOWUP_EMOJI` | `eyes` / `sos` | Reaction emoji while thinking / for follow-up requests. |
 | `MAX_TENANTS_PER_POD` | 50 | Cloud scaling knob, `onyxbot/slack/config.py`. |
@@ -111,7 +113,7 @@ Slack bots at a time, up to `MAX_TENANTS_PER_POD` (default 50).
 | `enabled` | Soft-disable; `listener.py:prefilter_requests` drops every event for a disabled bot. |
 | `bot_token` | `EncryptedString`, unique. The `xoxb-` token used for `WebClient` (post messages, read channel info). |
 | `app_token` | `EncryptedString`, unique. The `xapp-` token used only to open the Socket Mode WebSocket. |
-| `user_token` | `EncryptedString`, nullable. Validated (`validate_user_token`) but not read anywhere in the listener path found in this codebase; reserved for future user-token-scoped calls. |
+| `user_token` | `EncryptedString`, nullable. Validated (`validate_user_token`). The listener path does not read it. Federated Slack search reads it (`search_tool.py:_prefetch_slack_data`, see §9). |
 
 Both `bot_token` and `app_token` are validated against live Slack API calls
 (`server/manage/validate_tokens.py:validate_bot_token`, `validate_app_token`) on
@@ -295,7 +297,7 @@ that point is not the message's original asker.
    sender mapped to a real Onyx account, restricting the search to public
    documents. `handle_stream_message_objects` (`process_message.py`) takes no
    ACL-bypass flag; the only lever is which `user` gets passed in
-   (`handle_regular_answer.py:316`). Cross-link [[access-control]].
+   (`handle_regular_answer.py:_get_slack_answer`, `onyx_user=` argument). Cross-link [[access-control]].
 2. **An unmapped Slack user (no resolvable email) never gets elevated access.**
    With `message_info.email is None`, `resolved_user` is `None`, the effective
    user is `get_anonymous_user()`, and the account-provisioning block in

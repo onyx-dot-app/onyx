@@ -6,6 +6,7 @@
 > shares the inline-vs-retrieval mechanics with [[file-store-and-user-files]]
 > and [[context-assembly]], which are the fuller authorities on that machinery.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:**

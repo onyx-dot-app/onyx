@@ -5,6 +5,7 @@
 > tenant, served unauthenticated to every page load because the login page and
 > anonymous chat need it before any user is known.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform
 **Edition:** EE. Reading and rendering the resulting settings is CE code
 (`useSettings`, `Logo`), but writing them and the admin page itself are EE-only.
@@ -22,7 +23,7 @@ An admin at **Appearance & Theming** (`/admin/theme`) can set the application
 name, upload a custom logo, choose whether the sidebar shows logo-only,
 name-only, or both, write custom header/footer/login-page copy, configure a
 first-visit popup or a persistent system announcement banner, and (Enterprise
-tier only) add a custom help link and turn off the "Powered by Onyx" line.
+tier only) add a custom help link. The "Powered by Onyx" line is not an admin setting. An operator hides it with the `HIDE_ONYX_BRANDING` env var, and it takes effect only on the Enterprise tier.
 Every one of these is visible to every user of the workspace, including
 anonymous chat visitors, immediately after save, without a page reload beyond
 the SWR/mutate refresh the save button triggers.
@@ -40,8 +41,9 @@ default rather than rendering broken or blank.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| PUT | `/admin/enterprise-settings` | `admin_ee_put_settings` | `require_permission(FULL_ADMIN_PANEL_ACCESS)`. Rejects a change to `custom_help_link_url`/`custom_help_link_label` or `hide_onyx_branding` if tier < `Tier.ENTERPRISE` (402), even if the caller crafts the request directly. |
+| PUT | `/admin/enterprise-settings` | `admin_ee_put_settings` | `require_permission(FULL_ADMIN_PANEL_ACCESS)`. Rejects a change to `custom_help_link_url`/`custom_help_link_label` if tier < `Tier.ENTERPRISE` (402), even if the caller crafts the request directly. |
 | PUT | `/admin/enterprise-settings/logo` | `put_logo` | Multipart upload. `is_logotype` query param picks logo vs. logotype slot. |
+| GET/POST | `/admin/enterprise-settings/scim/token` | `get_active_scim_token`, `create_scim_token` | `FULL_ADMIN_PANEL_ACCESS`. SCIM bearer token management (see [[auth-and-identity]]). Not branding, but it lives in this router. |
 | PUT | `/admin/enterprise-settings/custom-analytics-script` | `upload_custom_analytics_script` | Requires `CUSTOM_ANALYTICS_SECRET_KEY` to match; unrelated to visual branding but lives in the same store. |
 
 ### Public endpoints (router prefix `/enterprise-settings`,
@@ -52,6 +54,7 @@ default rather than rendering broken or blank.
 | GET | `/enterprise-settings` | `ee_fetch_settings` | Returns the full `EnterpriseSettings` blob. On `MULTI_TENANT`, requires a resolved tenant id (401 otherwise); self-hosted has none of that check. |
 | GET | `/enterprise-settings/logo` | `fetch_logo` | Serves the stored logo bytes. 404 if none uploaded. `Cache-Control: no-cache`. |
 | GET | `/enterprise-settings/logotype` | `fetch_logotype` | Same, for the wordmark variant. No explicit cache-control header (unlike the logo route). |
+| POST | `/enterprise-settings/refresh-token` | `refresh_access_token` | Not public: it needs `current_user_with_expired_token`. It refreshes a linked OAuth identity. |
 | GET | `/enterprise-settings/custom-analytics-script` | `fetch_custom_analytics_script` | Returns `None` for an unresolved tenant rather than 500ing. |
 
 These are intentionally public: the login page, the anonymous chat surface,
@@ -66,7 +69,7 @@ put anything sensitive in here, as this is accessible without auth"
 `web/src/proxy.ts:EE_ROUTES`, which lists `"/admin/theme"` explicitly, and
 only when `SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED` is true. The
 route additionally requires `Tier.BUSINESS` to be visible in the sidebar
-(`ADMIN_ROUTES.THEME.requiredTier`, `web/src/lib/admin-routes.ts:401`).
+(`ADMIN_ROUTES.THEME.requiredTier`, `web/src/lib/admin-routes.ts`).
 
 ### Field-level char limits (both sides)
 
@@ -95,8 +98,11 @@ comment that the two must be kept in sync and that
   `custom_popup_header`, `custom_popup_content`, `show_first_visit_notice`,
   `enable_consent_screen`, `consent_screen_prompt`, `custom_greeting_message`,
   `custom_login_subtitle`, `custom_help_link_url`, `custom_help_link_label`
-  (Enterprise-gated), `hide_onyx_branding` (Enterprise-gated, removes "Powered
-  by Onyx").
+  (Enterprise-gated). `hide_onyx_branding` is not a field here any more:
+  `load_settings` and `store_settings` drop a legacy stored value. The flag now
+  comes from the `HIDE_ONYX_BRANDING` env var through `UserSettings.hide_onyx_branding`
+  (`onyx/server/settings/api.py`), true only when the env var is true and the
+  tier is at least `Tier.ENTERPRISE`. `Logo` reads it from `useSettings()`.
 - Logo bytes are not in this blob. They live in the file store under two
   fixed, tenant-scoped file ids: `_LOGO_FILENAME = "__logo__"` and
   `_LOGOTYPE_FILENAME = "__logotype__"`
@@ -207,9 +213,9 @@ raster, never as `image/svg+xml` or `text/html`.
    logo is served unauthenticated from the app origin, so an SVG or HTML body
    stored there would execute as an active document rather than render as a
    static image.
-4. **Writing `custom_help_link_url`/`custom_help_link_label` or
-   `hide_onyx_branding` is blocked server-side below `Tier.ENTERPRISE`,
-   independent of what the frontend disables.** `admin_ee_put_settings`
+4. **Writing `custom_help_link_url`/`custom_help_link_label` is blocked
+   server-side below `Tier.ENTERPRISE`, independent of what the frontend
+   disables.** `admin_ee_put_settings`
    diffs the incoming values against `load_settings()` and 402s
    (`FEATURE_NOT_AVAILABLE`) only for a change to those two fields; every
    other appearance field (logo, app name, header/popup/banner content) is
@@ -323,8 +329,9 @@ exists for logo upload specifically.
 5. Try uploading a >5 MiB file, then a renamed `.png` that is actually HTML;
    confirm both are rejected (413 and 400 respectively) rather than stored.
 6. On a Business-tier (not Enterprise) license, confirm the custom help link
-   and "hide Onyx branding" controls are disabled in the UI, and that a
-   direct PUT with those fields changed returns 402.
+   control is disabled in the UI, and that a direct PUT with that field
+   changed returns 402. Confirm "Powered by Onyx" stays visible unless
+   `HIDE_ONYX_BRANDING=true` and the tier is Enterprise.
 
 ---
 

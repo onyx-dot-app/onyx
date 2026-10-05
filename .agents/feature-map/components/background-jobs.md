@@ -4,6 +4,7 @@
 > sync; it decides when a task runs, which worker runs it, how tenant context
 > travels with it, and how a stuck task is detected and recovered.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** background-jobs
 **Edition:** CE, with EE additions dispatched through the same versioned-app
 mechanism as the rest of the codebase
@@ -139,7 +140,10 @@ lists plus its own additions):
 - `beat_task_templates`: self-hosted-or-cloud task templates (`check-for-indexing`,
   `check-for-vespa-sync`, `check-for-pruning`, `check-for-connector-deletion`,
   `check-for-user-file-processing`, `check-for-checkpoint-cleanup`,
-  `check-for-index-attempt-cleanup`, and more). Filtered by
+  `check-for-index-attempt-cleanup`, `backfill-cc-pair-ids`, and more). The
+  `backfill-cc-pair-ids` entry runs every 5 minutes on the `index_reclaim` queue
+  (Light worker) and fills `cc_pair_ids` on existing OpenSearch chunks for the
+  cc-pair access filter (see [[access-control]] §4.3a). Filtered by
   `_VECTOR_DB_BEAT_TASK_NAMES` when `DISABLE_VECTOR_DB` is set.
   `beat_schedule.py:beat_task_templates`
 - `beat_cloud_tasks`: system-wide tasks that exist once regardless of tenant

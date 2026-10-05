@@ -4,6 +4,7 @@
 > generated images through a pluggable provider, plus the admin surface that
 > configures which provider and model the tool uses.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** tools
 **Edition:** CE
 **Owns:**
@@ -25,7 +26,10 @@ conversation) instead of generating from scratch.
 
 An admin configures the capability at `/admin/image-generation`: pick a
 provider (OpenAI, Azure, or Vertex AI), supply credentials, and choose it as
-default. Until an admin does this, the tool does not appear at all; the model
+default. The model list in the admin form includes the GPT Image 2.5 variants
+(`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`) next to `gpt-image-2`, `gpt-image-1.5`, and
+`gpt-image-1` (`web/src/views/admin/ImageGenerationPage/constants.ts`).
+Until an admin does this, the tool does not appear at all; the model
 never sees an image generation tool it cannot use, and a user is never told
 "image generation failed" for a capability that was simply never turned on.
 
@@ -161,7 +165,7 @@ for use as a fast pre-check.
 In `chat/llm_loop.py`, once any tool call in a cycle matches a stopping tool
 name, `ran_image_gen` is set `True` for the rest of that turn; the next cycle
 forces `tool_choice = ToolChoiceOptions.NONE` and offers no tools
-(`llm_loop.py:965`), and the reminder text injected before that final answer is
+(`llm_loop.py:run_llm_loop`, the `elif out_of_cycles or ran_image_gen` branch), and the reminder text injected before that final answer is
 `IMAGE_GEN_REMINDER` instead of the normal citation/file reminder
 (`llm_loop.py:select_reminder_text`). In effect, image generation is always the
 last tool call of a turn: the model must answer immediately afterward rather
@@ -265,7 +269,7 @@ cd backend && uv run pytest tests/integration/tests/tools/test_image_generation_
 ```
 
 ```bash
-cd web && npx playwright test tests/e2e/admin/image-generation/image-generation-content.spec.ts
+cd web && bun run playwright image-generation-content
 ```
 
 ### Manual reproduction

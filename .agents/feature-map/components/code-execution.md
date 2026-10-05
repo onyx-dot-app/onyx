@@ -3,6 +3,7 @@
 > Running code on the user's behalf: `PythonTool` (`run_python`), `BashTool` (`bash`), and
 > the external Code Interpreter service both talk to.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:**
@@ -52,12 +53,12 @@ without changing any persona configuration (`[[tools-framework]]` §5, contract 
 | GET | `/admin/code-interpreter` | `get_code_interpreter` | Returns `{enabled: bool}` from the `CodeInterpreterServer` row. |
 | PUT | `/admin/code-interpreter` | `update_code_interpreter` | Flips the `enabled` flag. |
 
-Registered in `backend/onyx/main.py:604` alongside the other admin routers. The frontend
+Registered in `backend/onyx/main.py` (as `code_interpreter_admin_router`) alongside the other admin routers. The frontend
 calls it through the Next.js proxy at `/api/admin/code-interpreter[/health]`
 (`web/src/hooks/useCodeInterpreter.ts`), consistent with the project rule to go through the
 frontend, not `:8080` directly.
 
-### Environment configuration (`backend/onyx/configs/app_configs.py:1674-1706`)
+### Environment configuration (`backend/onyx/configs/app_configs.py`)
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -76,7 +77,7 @@ There is no env var for bash-specific timeouts or output caps; `BashTool` reuses
 
 ## 3. Data model
 
-- `CodeInterpreterServer` (`backend/onyx/db/models.py:7080`): a single-row table
+- `CodeInterpreterServer` (`backend/onyx/db/models.py:CodeInterpreterServer`): a single-row table
   (`db/code_interpreter.py:fetch_code_interpreter_server` does `.one()`, so it assumes exactly
   one row exists) holding `server_enabled: bool`. This is the deployment-wide kill switch the
   admin page writes to. It is distinct from `CODE_INTERPRETER_BASE_URL`: the env var says where
@@ -133,6 +134,10 @@ LLM emits run_python(code=...)
           ├─ CodeInterpreterClient.download_file / delete_file     (generated files)
           └─ get_default_file_store().save_file(..., FileOrigin.CHAT_IMAGE_GEN)
 ```
+
+Each call to the service goes through `CodeInterpreterClient._send_with_admission_retry`.
+It retries HTTP 429 and 503 up to 3 attempts, honors `Retry-After`, and stays inside the
+call's time budget. After that it raises `CodeInterpreterBusyError`.
 
 Each streamed SSE event maps to a `StreamOutputEvent` / `StreamResultEvent` /
 `StreamErrorEvent` (`code_interpreter_client.py:_SSE_EVENT_MAP`), and `PythonTool.run` emits a
@@ -254,10 +259,10 @@ relied on to reap them, `python_tool.py:run`).
    the failure (`error`, `timed_out`, `exit_code=-1`) rather than raising out of `run`
    (`python_tool.py:run`, `bash_tool.py:run`). `[[tools-framework]]`'s
    `_safe_run_single_tool` is a second layer of the same guarantee; do not rely on only one.
-4. **Generated files must be access-checked on read.** They are not, for `CHAT_IMAGE_GEN`
-   (`[[file-store-and-user-files]]` §9). Any new code path that serves a code-interpreter
-   generated file must not assume the origin check exists; check the caller's access
-   explicitly if this component is extended.
+4. **Generated files must carry their chat session stamp.** `PythonTool` takes a required
+   `chat_session_id` and passes `chat_image_gen_metadata(...)` on save. Read access then
+   follows `access.py:_user_can_access_chat_image_gen_file`. A row with no stamp (written
+   before stamping began) is readable by any user. Do not add a save path that omits the stamp.
 5. **`BashTool` is never constructed through `tool_constructor.py`.** It cannot be reached by
    `allowed_tool_ids`, persona attachment, or `Tool.enabled`. Its only entry point is
    `fake_tools/coding_agent.py`. See `[[tools-framework]]` for the full consequence.
@@ -284,7 +289,7 @@ relied on to reap them, `python_tool.py:run`).
   own inner loop (`fake_tools/coding_agent.py`) that reuses `llm_step.py:run_llm_step_pkt_generator`
   directly rather than going through `run_llm_loop`.
 - `[[access-control]]`: gates `/admin/code-interpreter` on `Permission.FULL_ADMIN_PANEL_ACCESS`;
-  does **not** gate reads of generated files (see §5, §9).
+  does not gate reads of generated files, which follow the chat-session rule (see §4.5).
 
 **Depended on by**
 - `[[chat-frontend]]`: `PythonToolRenderer.tsx` and `CodingAgentRenderer.tsx` render these
@@ -374,9 +379,10 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `fake_tools/coding_agent.py` with a sentinel id, is never in `BUILT_IN_TOOL_MAP`'s
   persona-attach path, and its calls are not written as `ToolCall` rows. Code that assumes
   every built-in tool behaves like `run_python` will mishandle `bash`.
-- **Generated files are scoped by a session stamp that `PythonTool` must pass.** `run_python`
-  saves outputs as `FileOrigin.CHAT_IMAGE_GEN` with `chat_image_gen_metadata(self._chat_session_id)`.
-  A `PythonTool` built without `chat_session_id` writes unscoped rows
+- **Generated files are scoped by a session stamp.** `run_python` saves outputs as
+  `FileOrigin.CHAT_IMAGE_GEN` with `chat_image_gen_metadata(self._chat_session_id)`.
+  `tool_constructor.py:_require_chat_session_id` raises if the session ID is missing, so a new
+  build path cannot skip it. Old rows without a stamp stay readable by any user
   (`[[file-store-and-user-files]]` §9).
 - **Isolation is asserted in a docstring, not enforced in code.** The "no network access" claim
   for bash sessions (`code_interpreter_client.py:execute_bash_in_session`) is a statement about

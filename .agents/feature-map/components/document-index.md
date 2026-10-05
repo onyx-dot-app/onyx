@@ -4,13 +4,14 @@
 > metadata, answers hybrid/keyword/semantic/random/id-based retrieval calls, and
 > tracks the state machine for swapping in a new embedding model.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** search-index
 **Edition:** CE, with multi-tenant sharding differences on AWS-managed OpenSearch
 **Owns:**
 `backend/onyx/document_index/interfaces.py`, `factory.py`, `disabled.py`,
 `backend/onyx/document_index/opensearch/` (`opensearch_document_index.py`, `search.py`,
 `schema.py`, `constants.py`, `client.py`, `cluster_settings.py`, `index_reclaim.py`,
-`port_copy.py`, `string_filtering.py`),
+`port_copy.py`, `string_filtering.py`, `cc_pair_ids_backfill.py`),
 `backend/onyx/db/search_settings.py`, `swap_index.py`,
 `backend/onyx/natural_language_processing/search_nlp_models.py`,
 `backend/onyx/server/manage/search_settings.py`, `backend/onyx/server/manage/embedding/`
@@ -78,8 +79,9 @@ Per the frontend rule in `CLAUDE.md`, always call these through the web server
 | `USING_AWS_MANAGED_OPENSEARCH` | false | Changes shard/replica counts (`schema.py:DocumentSchema.get_index_settings_based_on_environment`) and gates IAM auth. |
 | `OPENSEARCH_TEXT_ANALYZER` | `"english"` | Stemming/tokenization analyzer for `title`/`content`. Changing it needs a reindex of existing indices. |
 | `OPENSEARCH_INDEX_NUM_SHARDS` / `OPENSEARCH_INDEX_NUM_REPLICAS` | environment-dependent | Override shard/replica counts. |
-| `HYBRID_SEARCH_SUBQUERY_CONFIGURATION` | `CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD` | Chooses which subqueries and normalization weight set hybrid search uses (`opensearch/constants.py`). |
-| `HYBRID_SEARCH_NORMALIZATION_PIPELINE` | `MIN_MAX` | `min_max` or `z_score` OpenSearch normalization technique (`opensearch/constants.py`). |
+| `HYBRID_SEARCH_SUBQUERY_CONFIGURATION` | `2` (`CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD`) | Integer enum value. `1` is the title-vector variant. Chooses which subqueries and weight set hybrid search uses (`opensearch/constants.py`). An invalid value blocks app start. |
+| `HYBRID_SEARCH_NORMALIZATION_PIPELINE` | `1` (`MIN_MAX`) | Integer enum value. `2` is `ZSCORE`. Chooses the OpenSearch normalization technique (`opensearch/constants.py`). |
+| `ENABLE_CC_PAIR_ACCESS_FILTER` | false | Fallback for the `cc_pair_access_filter` `enabled` runtime flag. True turns on shadow mode (see §4.3). The `enforce` flag has no env var and defaults to false. |
 | `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES` | 500 | Candidates fetched per hybrid subquery before fusion. |
 | `HYBRID_ALPHA` | 0.5 (`configs/chat_configs.py`) | Caller-level keyword/semantic hint, clamped to `[0, 1]`. See §4.3 and §9 for how little of this the index actually uses. |
 | `OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED` | true | Disables highlight computation in query bodies. |
@@ -138,7 +140,8 @@ Field-name constants (all in `opensearch/schema.py`), grouped by role:
   `LAST_UPDATED_FIELD_NAME`, `CREATED_AT_FIELD_NAME`, `DOCUMENT_SETS_FIELD_NAME`,
   `USER_PROJECTS_FIELD_NAME`, `PERSONAS_FIELD_NAME`,
   `ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME` (hierarchy-scoped search, uses an
-  OpenSearch bitmap `terms` query), `PRIMARY_OWNERS_FIELD_NAME`,
+  OpenSearch bitmap `terms` query), `CC_PAIR_IDS_FIELD_NAME` (IDs of the cc-pairs
+  that own the document; see §4.3), `PRIMARY_OWNERS_FIELD_NAME`,
   `SECONDARY_OWNERS_FIELD_NAME`.
 - Display-only, not searchable (`index: False`, `doc_values: False`, `store: False`):
   `SEMANTIC_IDENTIFIER_FIELD_NAME`, `IMAGE_FILE_ID_FIELD_NAME`,
@@ -265,10 +268,30 @@ instead of `hybrid_retrieval`.
 function that compiles every filter into the AND-ed `bool.filter` list used by hybrid,
 keyword, semantic, and random queries alike: ACL visibility
 (`_get_acl_visibility_filter`, a `should` of `{"term": {public: true}}` OR
-`{"terms": {access_control_list: [...]}}`, `minimum_should_match: 1`), source types,
+`{"terms": {access_control_list: [...]}}`, `minimum_should_match: 1`), the optional
+cc-pair access filter (below), source types,
 tags, document sets, per-user-project and per-persona filters, created/updated time
 ranges, chunk index and chunk size, an attached-document-id or hierarchy-node clause,
 tenant ID (multi-tenant only), and forced document sets.
+
+**Query-time cc-pair access filter.** `IndexFilters.cc_pair_access` is a
+`CCPairAccessFilter` with a mode (`CCPairAccessMode`: `OFF`, `SHADOW`, `ENFORCE`).
+`access/cc_pair_access.py:get_cc_pair_access_mode` picks the mode. It returns `None`
+when the `cc_pair_access_filter` `enabled` flag is off (env fallback
+`ENABLE_CC_PAIR_ACCESS_FILTER`). It returns `ENFORCE` only when the `enforce` flag
+is on and `is_cc_pair_ids_backfill_complete` is true. Otherwise it returns `SHADOW`.
+In `SHADOW` mode, results use the old ACL filter. A background check
+(`_log_cc_pair_access_shadow_disagreement`, at most 4 in flight) logs sample chunks
+where the old and new filters disagree. In `ENFORCE` mode,
+`_get_enforced_cc_pair_access` swaps in the cc-pair filter, which tests
+`cc_pair_ids` against the user's open and ACL cc-pairs. Chunks with no cc-pair (user
+files) fall back to the old ACL filter. Even in `OFF` mode, the filter exists to hide
+`SYNC_RESTRICTED` cc-pairs (`hidden_restricted_cc_pair_ids`). See [[permission-sync]].
+Chunks get `cc_pair_ids` at index time. The beat task
+`cc_pair_ids_backfill` fills older chunks without re-embedding, with progress in the
+KV store (`KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY`), restarted per `SearchSettings`
+generation. Metadata sync keeps the field current. Filter semantics are in
+`backend/onyx/document_index/FILTER_SEMANTICS.md`.
 
 ### 4.4 The embedding-model swap state machine
 
@@ -292,11 +315,12 @@ Two state machines exist, and they interlock at the moment of promotion.
 
 `create_search_settings` (`db/search_settings.py`) inserts the FUTURE row.
 `check_and_perform_index_swap` (`db/swap_index.py`) decides *when* to swap, branching
-on `switchover_type` (`INSTANT`, `REINDEX`, `ACTIVE_ONLY`, and the port-flow variant
-gated by `use_port_flow`): INSTANT swaps immediately and lets a background port
-backfill the new index afterward; REINDEX waits for every connector's index attempts
-on the new settings to match the connector count; ACTIVE_ONLY waits only on
-non-paused connectors. `_perform_index_swap` does the actual promotion:
+on `switchover_type` (`INSTANT`, `REINDEX`, `ACTIVE_ONLY`) and on `use_port_flow`. With
+`use_port_flow`, INSTANT swaps at once and the port backfills the live index
+afterward. The other types wait on `_port_swap_ready` for the required cc-pairs.
+Without `use_port_flow`, INSTANT swaps at once and deletes the cc-pairs' document
+rows, REINDEX waits until every connector has a successful attempt on the new
+settings, and ACTIVE_ONLY waits only on non-paused connectors. `_perform_index_swap` does the actual promotion:
 `update_search_settings_status(current, PAST)`,
 `update_search_settings_status(new, PRESENT)`, then calls
 `verify_and_create_index_if_necessary` on the index from
@@ -329,16 +353,16 @@ live read path. `record_failure__no_commit` parks a row in `BLOCKED` after
 ### 4.5 The embedding model and reranker
 
 `EmbeddingModel.from_db_model(search_settings, server_host, server_port)`
-(`search_nlp_models.py:1192`) materializes the embedder used for indexing and for
+(`search_nlp_models.py`) materializes the embedder used for indexing and for
 query-time embedding, pulling `model_name`, `normalize`, `query_prefix`,
 `passage_prefix`, `api_key`, `provider_type`, `api_url`, `deployment_name`,
 `reduced_dimension` straight off the `SearchSettings` row. Separate `server_host`
 values are used depending on whether the call is from indexing or inference.
 
-`RerankingModel` (`search_nlp_models.py:1216`) is a fully implemented class (local
+`RerankingModel` (`search_nlp_models.py`) is a fully implemented class (local
 cross-encoder plus direct API paths for Cohere/Bedrock) with **no active call site**.
 Its only instantiation in the codebase is inside
-`warm_up_cross_encoder` (`search_nlp_models.py:1436`), a function whose own docstring
+`warm_up_cross_encoder` (`search_nlp_models.py`), a function whose own docstring
 comment reads `# No longer used`. See §9.
 
 ---
@@ -475,7 +499,7 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 ## 9. Footguns
 
 - **The reranker looks load-bearing but is not.** `RerankingModel`
-  (`search_nlp_models.py:1216`) is fully built out with cloud-provider rerank calls,
+  (`search_nlp_models.py`) is fully built out with cloud-provider rerank calls,
   but its only call site is `warm_up_cross_encoder`, which its own comment marks
   `# No longer used`. Do not assume reranking runs in the live query path just
   because the class exists; verify with a fresh grep for `RerankingModel(` before

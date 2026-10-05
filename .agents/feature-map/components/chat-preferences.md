@@ -6,6 +6,7 @@
 > this document owns where each piece is set, stored, and how it reaches that
 > assembly step.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE, with tier gates (Business/Enterprise) on a few admin toggles
 **Owns:**
@@ -57,8 +58,8 @@ controls.
 |---|---|---|---|
 | PATCH | `/admin/settings` | `backend/onyx/server/settings/api.py` | Admin. Workspace `Settings` blob (company name/description, `auto_detect_search_filters`, `multi_model_chat_enabled`, `deep_research_enabled`, `search_ui_enabled`, retention, query-history policy, file limits, `anonymous_user_enabled`, `disable_default_assistant`). |
 | GET | `/settings` | `backend/onyx/server/settings/api.py` | Public read of the same blob, consumed by both admin and app UI. |
-| GET/PATCH | `/admin/default-assistant`, `/admin/default-assistant/configuration` | `backend/onyx/server/features/default_assistant/api.py:get_default_assistant_configuration`, `update_default_assistant` | Admin. Default persona's `tool_ids` and `system_prompt`. |
-| PATCH | `/admin/llm/default-chat-naming` | (LLM providers router) | Admin. Model used to auto-name new chats; unrelated to prompt content but lives on this page. |
+| GET `/admin/default-assistant/configuration`, PATCH `/admin/default-assistant` | `backend/onyx/server/features/default_assistant/api.py:get_default_assistant_configuration`, `update_default_assistant` | Admin. Default persona's `tool_ids` and `system_prompt`. |
+| POST/DELETE | `/admin/llm/default-chat-naming` | `backend/onyx/server/manage/llm/api.py` | Admin. Sets or clears the model used to auto-name new chats; unrelated to prompt content but lives on this page. |
 | PATCH | `/user/personalization` | `backend/onyx/server/manage/users.py:update_user_personalization_api` | User. `personal_name`, `personal_role`, `use_memories`, `enable_memory_tool`, `memories`, `user_preferences` in one call. |
 | PATCH | `/user/language` | `backend/onyx/server/manage/users.py:update_user_language_api` | User. Also sets the `NEXT_LOCALE` cookie via `set_locale_cookie`. |
 | PATCH | `/shortcut-enabled`, `/temperature-override-enabled`, `/temperature-default`, `/reasoning-effort-default`, `/auto-scroll`, `/paste-as-tile`, `/user/theme-preference`, `/user/chat-background`, `/user/default-app-mode`, `/user/default-model` | `backend/onyx/server/manage/users.py` | User. One column each, all in `backend/onyx/db/user_preferences.py`. |
@@ -104,7 +105,7 @@ No admin-configured setting overrides prompt *text* directly (per
 | `id`, `user_id` | FK `user.id`, `ondelete="CASCADE"` |
 | `memory_text` | The stored fact |
 | `conversation_id`, `message_id` | Nullable provenance fields |
-| `created_at` | |
+| `created_at`, `updated_at` | |
 
 Capped at `MAX_MEMORIES_PER_USER = 10` (`db/memory.py`); `add_memory` deletes the
 oldest row (lowest `id`) before inserting past the cap.
@@ -239,7 +240,7 @@ user-message text once sent, so this component has no direct dependency on
 ### 4.6 Incognito
 
 Incognito is **not** configured on the chat-preferences surfaces. Its
-admin-facing on/off switch (`IncognitoAvailability`, `EVERYONE`/`GROUPS`/off)
+admin-facing on/off switch (`IncognitoAvailability`: `OFF`, `EVERYONE`, `GROUPS`; default `OFF`)
 and its record mode (`IncognitoRecordMode`) live in the workspace's security
 settings, read by `chat/incognito.py:incognito_allowed_for_user` via
 `get_security_settings()`, distinct from `server/settings/models.py:Settings`.

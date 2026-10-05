@@ -5,6 +5,7 @@
 > direction, and REST/WebSocket endpoints the chat frontend calls to record a
 > spoken message or hear a reply read aloud.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** tools
 **Edition:** CE
 **Owns:**
@@ -114,8 +115,8 @@ to one of four implementations in `voice/providers/`:
 
 Every provider's STT and TTS call is wrapped in `traced_llm_call` with
 `LLMFlow.STT` or `LLMFlow.TTS` (`onyx/tracing/flows.py`); confirmed in all four
-provider files (e.g. `providers/openai.py:580,614`,
-`providers/zoom.py:444` for STT only). See [[observability]].
+provider files (e.g. `providers/openai.py`,
+`providers/zoom.py` for STT only). See [[observability]].
 
 ### Audio format handling
 
@@ -189,7 +190,7 @@ sample rather than silently truncating or shifting it.
    returned in a listing.
 3. **Audio is not persisted, and this is a deliberate privacy property, not an
    oversight.** `transcribe_audio` reads the upload into memory
-   (`user_api.py:97`), passes it to the provider, and returns only the
+   (`user_api.py`), passes it to the provider, and returns only the
    resulting text; the audio bytes are never written to the file store or any
    table. `synthesize_speech` streams provider-generated audio straight to the
    client (`audio_stream()` generator) and keeps no copy. The only persisted

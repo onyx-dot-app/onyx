@@ -4,6 +4,7 @@
 > default resolution, the per-turn factory, the LiteLLM wrapper and its streaming
 > contract, retries, and cost and trace instrumentation.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop (platform surface, consumed by every LLM caller)
 **Edition:** CE, with EE gating on visibility (`is_public`) and groups
 **Owns:**
@@ -57,16 +58,18 @@ Admin router, prefix `/admin/llm`:
 | POST/DELETE | `/admin/llm/default-chat-naming` | `set_provider_as_default_chat_naming` / `clear_default_chat_naming` | |
 | POST/DELETE | `/admin/llm/default-craft` | `set_provider_as_default_craft` / `clear_default_craft` | Craft has no capability check; see §9. |
 | GET | `/admin/llm/built-in/options`, `/built-in/options/{provider_name}` | `fetch_llm_options`, `fetch_llm_provider_options` | The well-known-provider catalogue. |
+| GET | `/admin/llm/custom-provider-names` | `fetch_custom_provider_names` | Names for the custom provider option. |
 | GET | `/admin/llm/auto-config` | `get_auto_config` | |
 | GET | `/admin/llm/vision-providers` | `get_vision_capable_providers` | |
 | GET | `/admin/llm/provider-contextual-cost` | `get_provider_contextual_cost` | |
-| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,portkey}/available-models` | per-vendor model discovery | Each hits the vendor's model-list API live; none touch the DB. |
+| POST | `/admin/llm/{bedrock,ollama,openrouter,lm-studio,litellm,bifrost,nebius-tokenfactory,openai-compatible,vercel-ai-gateway,portkey}/available-models` | per-vendor model discovery | Each hits the vendor's model-list API live; none touch the DB. |
 
 Non-admin router, prefix `/llm`:
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
 | GET | `/llm/provider` | `list_llm_provider_basics` | Providers visible to the caller, credentials stripped. |
+| GET | `/llm/provider/{provider_id}/models` | `list_llm_provider_models` | One page of a provider's models (`offset`, `query`, optional `persona_id`). |
 | GET | `/llm/persona/{persona_id}/providers` | `list_llm_providers_for_persona` | The providers/models a given assistant may use, group- and persona-filtered. |
 
 Every provider view returned by any of the above masks `api_key` and sensitive
@@ -90,13 +93,13 @@ see §9.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `GEN_AI_TEMPERATURE` | (`configs/model_configs.py`) | Last-resort temperature when nothing else sets one. |
+| `GEN_AI_TEMPERATURE` | 0 (`configs/model_configs.py`) | Last-resort temperature when nothing else sets one. |
 | `LLM_FIRST_CHUNK_MAX_RETRIES` | 2 | (`configs/chat_configs.py`) Retries allowed before the first streamed chunk. |
-| `LLM_SOCKET_READ_TIMEOUT` | 60 | (`configs/chat_configs.py`) Per-request socket read timeout. |
+| `LLM_SOCKET_READ_TIMEOUT` | 60 | (`configs/chat_configs.py`) Socket read timeout. It is also the default stall timeout between streamed chunks and, as `LLM_INVOKE_TIMEOUT_S`, the default total timeout of `invoke`. |
 | `BRAINTRUST_API_KEY`, `BRAINTRUST_PROJECT`, `BRAINTRUST_API_URL` | | Env fallback for Braintrust tracing. |
 | `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_HOST` | | Env fallback for Langfuse tracing. |
-| `USER_USAGE_TRACKING_ENABLED` | | Gates the per-user usage recorder, independent of Braintrust/Langfuse. |
-| `TRACING_CONFIG_CACHE_TTL_SECONDS` | | How often `DynamicTracingProcessor` re-reads the effective config. |
+| `USER_USAGE_TRACKING_ENABLED` | true | Gates the per-user usage recorder, independent of Braintrust/Langfuse. |
+| `TRACING_CONFIG_CACHE_TTL_SECONDS` | 30 | How often `DynamicTracingProcessor` re-reads the effective config. |
 | `MULTI_TENANT` | | Forces tracing config to env-only; blocks the tracing admin API. |
 
 ### Admin UI
@@ -172,7 +175,9 @@ providers.
 ### 4.2 Building the `LLM`: `llm_from_provider` and `get_llm`
 
 `factory.py:llm_from_provider` resolves `max_input_tokens` (configured value,
-else `get_max_input_tokens_from_llm_provider`) and temperature, in this
+else `get_max_input_tokens_from_llm_provider`, which reads the vendored model catalog in
+`llm/price_table/` through `llm/model_catalog.py`, then falls back to
+`GEN_AI_MODEL_FALLBACK_MAX_TOKENS`) and temperature, in this
 precedence: session override, then `ModelConfiguration.temperature_default`,
 then `user.temperature_default` (via `UserChatDefaults`), then
 `GEN_AI_TEMPERATURE` (applied inside `factory.py:get_llm` if still `None`).
@@ -252,7 +257,8 @@ reading any single chunk's `tool_calls` as complete
 truncates the call.
 
 Cost is tracked with `LitellmLLM._track_llm_cost` whenever a chunk's `usage`
-is set, which is normally only the final chunk (some providers emit a
+is set, which is normally only the final chunk. It records cost only when usage
+limits are enabled and the call uses an Onyx-managed API key (some providers emit a
 trailing usage-only chunk with empty `choices`, handled explicitly in
 `from_litellm_model_response_stream`).
 
@@ -372,7 +378,7 @@ separate `UserUsageTracingProcessor`, independent of Braintrust/Langfuse.
 | changes the streaming shape (`ModelResponseStream`, `Delta`) | every consumer in [[core-chat-loop]] (`llm_step.py`), `model_response.py:MessageAccumulator`, the gateway's `stream_bridge.py:merge_tool_call_delta`, and any code that assumes tool-call deltas arrive fully formed |
 | changes default resolution (`fetch_default_model`, `_update_default_model`) | the partial unique index still holds after a migration or backfill; `get_default_llm` and every `get_default_*` wrapper still returns a model, not `None`, where callers assume one exists |
 | adds a new LLM call site | tag it with an `LLMFlow` via `llm_generation_span` or `traced_llm_call`; verify in a Braintrust/Langfuse trace that it does not show up as `UNTAGGED_INVOKE`/`UNTAGGED_STREAM` |
-| changes retry behavior in `LitellmLLM.stream` | the `yielded_any` gate must still prevent post-first-chunk retries; confirm against the retryable exception tuple, which is intentionally narrow |
+| changes retry behavior in `LitellmLLM.stream_raw` | the `yielded_any` gate must still prevent post-first-chunk retries; confirm against the retryable exception tuple, which is intentionally narrow |
 | changes provider credential handling | confirm masking still happens in every response path in `server/manage/llm/api.py`, and that `_restore_masked_custom_config_values` still round-trips a masked value back to the stored one on update |
 
 ---

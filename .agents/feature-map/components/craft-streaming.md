@@ -6,6 +6,7 @@
 > has its own, and its reconnect story is weaker than chat's. See
 > [[streaming-protocol]] for the contrast.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
 **Edition:** CE
 **Owns:**

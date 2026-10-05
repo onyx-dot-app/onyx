@@ -4,6 +4,7 @@
 > and cost accounting, and outbound hooks. This component watches the system;
 > it does not run the system.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** observability
 **Edition:** CE for metrics, tracing, and audit logging. EE for hooks, usage
 export/reporting, log export, and query history.
@@ -242,6 +243,7 @@ so untagged calls still get *some* observability, not a substitute for
 instrumentation: a dashboard showing either sentinel means a call site did
 not set `GenerationContext.flow`. Direct callers of `invoke_raw`/`stream_raw`
 open no span, so they must call `llm_generation_span` or `traced_llm_call`.
+A span error goes through `LitellmLLM.redact_error` first, so credentials do not reach the trace backend.
 
 ### 4.6 Masking and incognito
 
@@ -301,7 +303,7 @@ Two independent systems both live under "usage", and they answer different
 questions:
 
 - **LLM cost tracking** (`onyx/llm/cost.py`, surfaced via `UserUsage`): what a
-  specific model call cost, computed per-token from a price table, with
+  specific model call cost, computed per-token from the vendored price table (`llm/price_table/`), with
   admin-configurable overrides (`server/features/usage/api.py:upsert_cost_override`,
   backed by `llm/cost_overrides.py`). This is what `UserUsageTracingProcessor`
   writes on every priced generation span.

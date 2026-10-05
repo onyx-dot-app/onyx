@@ -4,6 +4,7 @@
 > sync (who can see this document) and group sync (who is in this external group),
 > feed the raw material that [[access-control]] turns into query-time ACL strings.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** access-control
 **Edition:** EE only. There is no CE permission sync; a CE-only deployment has no
 mechanism to narrow a connector's documents below "public" or "shared with an
@@ -31,9 +32,11 @@ actually written into the index once it changes ([[document-index]] and
 ## 1. What the user experiences
 
 An admin turns on permission sync by setting a connector's access type to
-**Sync** instead of Public or Private, for a source that supports it (Google
-Drive, Confluence, Jira, Slack, Box, Canvas, GitHub, SharePoint, Teams, Outlook,
-Gmail; Salesforce is a partial case, see §4.5). From that point, Onyx does not
+**Sync** (or **Sync (restricted)**) instead of Public or Private, for a source that supports it (Google
+Drive, Confluence, Jira, Slack, Box, Canvas, GitHub, SharePoint, OneDrive, Teams, Outlook,
+Gmail; Salesforce is a partial case, see §4.5). With `SYNC_RESTRICTED`, the sync is the
+same, but only members of the connector's data-access groups can see the documents their
+source ACL allows (see [[access-control]]). From that point, Onyx does not
 decide who can see a document. The source system does, and Onyx mirrors it.
 
 The admin does not manually grant or revoke access to synced documents; the
@@ -54,7 +57,7 @@ this user see this document" can be stale. See §9.
 
 There are no end-user HTTP endpoints owned by this component; it is entirely a
 background job. Its only visible surface is connector configuration
-(`ConnectorCredentialPair.access_type == AccessType.SYNC`) and whatever the
+(`ConnectorCredentialPair.access_type` in `AccessType.perm_synced_types()`: `SYNC` or `SYNC_RESTRICTED`) and whatever the
 admin UI renders from `PermissionSyncAttempt` rows (owned by
 [[cc-pairs-and-credentials]]).
 
@@ -62,7 +65,7 @@ admin UI renders from `PermissionSyncAttempt` rows (owned by
 
 | Task | Trigger | Body |
 |---|---|---|
-| `CHECK_FOR_DOC_PERMISSIONS_SYNC` | Beat, every 30s, EE-gated | `doc_permission_syncing/tasks.py:check_for_doc_permissions_sync`. Scans `SYNC` cc_pairs, decides which are due (`_is_external_doc_permissions_sync_due`), fences and dispatches one generator task per due cc_pair. |
+| `CHECK_FOR_DOC_PERMISSIONS_SYNC` | Beat, every 30s, EE-gated | `doc_permission_syncing/tasks.py:check_for_doc_permissions_sync`. Scans perm-synced cc_pairs (`get_all_auto_sync_cc_pairs`), decides which are due (`_is_external_doc_permissions_sync_due`), fences and dispatches one generator task per due cc_pair. |
 | `CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK` | Dispatched by the check task | `doc_permission_syncing/tasks.py:connector_permission_sync_generator_task`. Runs one source's `doc_sync_func`, streams `DocExternalAccess`/`NodeExternalAccess` into Postgres. |
 | `CHECK_FOR_EXTERNAL_GROUP_SYNC` | Beat, every 20s, EE-gated | `external_group_syncing/tasks.py:check_for_external_group_sync`. Same shape as the doc check task, for group sync. |
 | `CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK` | Dispatched by the check task | `external_group_syncing/tasks.py:connector_external_group_sync_generator_task` -> `_perform_external_group_sync` -> `_timed_perform_external_group_sync`. Runs one source's `group_sync_func`, upserts `ExternalUserGroup` rows. |
@@ -88,6 +91,7 @@ ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:`). Both are
 | Teams | `TEAMS_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | `TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
 | Outlook | `OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
 | SharePoint | `SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
+| OneDrive | `ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY` (30 min) | `ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY` (5 min) |
 | Gmail | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
 | Zoom | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY`, but `doc_sync_func=mock_doc_sync` (a no-op; see §4.3) | no group sync |
 | Salesforce | none (`doc_sync_config=None`) | none; `censoring_config` only (§4.5) |
@@ -102,7 +106,7 @@ Every value is env-overridable and is additionally multiplied by
 
 ```
 ConnectorCredentialPair
-  .access_type: PUBLIC | SYNC | PRIVATE
+  .access_type: PUBLIC | PRIVATE | SYNC | SYNC_RESTRICTED
   .last_time_perm_sync, .last_time_external_group_sync
 
 DocPermissionSyncAttempt                          onyx/db/models.py
@@ -214,6 +218,11 @@ A source with none of the three is not in the dict at all;
 `_lazy_group_sync`, `_lazy_censoring`), so importing `sync_params` does not pull
 in every connector SDK.
 
+Perm-sync capability checks (`validate_perm_sync` probes and named checks) are
+dispatched from `ee/onyx/connectors/capability_checks.py` and `perm_sync_valid.py`. The
+check implementations live in the connector modules. Confluence, OneDrive, Outlook, and
+Slack have named perm-sync checks. See [[connectors]] §4.8.
+
 ### 4.2 Doc sync flow
 
 ```
@@ -256,11 +265,12 @@ Most doc-sync implementations funnel through
    reporting it, so Onyx makes it private. This is the fail-closed default for
    the "document disappeared or the user lost access" case.
 
-Confluence, Jira, Canvas, Box, SharePoint, Teams, and Outlook doc_sync
-(`ee/onyx/external_permissions/{confluence,jira,canvas,box,sharepoint,teams,outlook}/doc_sync.py`)
+Confluence, Jira, Canvas, Box, SharePoint, OneDrive, Teams, and Outlook doc_sync
+(`ee/onyx/external_permissions/{confluence,jira,canvas,box,sharepoint,onedrive,teams,outlook}/doc_sync.py`)
 are thin wrappers around `generic_doc_sync`, differing only in which connector
-class and `DocumentSource` they pass. Two sources have a genuinely different
-shape:
+class and `DocumentSource` they pass. Four sources have a different
+shape: Slack and Google Drive (below), and Gmail and GitHub (own `doc_sync.py`, no
+`generic_doc_sync`; GitHub uses `fetch_all_existing_docs_fn` to re-check repository visibility).
 
 - **Slack** (`ee/onyx/external_permissions/slack/doc_sync.py:slack_doc_sync`)
   does not use `generic_doc_sync` at all. Slack has no document-level ACL
@@ -424,11 +434,10 @@ document to the wrong person.
    source's doc_sync that does **not** route through `generic_doc_sync` (Slack
    is the current exception) must implement an equivalent "document vanished
    means private" rule itself, or a deleted/unshared source document stays
-   visible in Onyx indefinitely. **Unverified**: whether `slack_doc_sync`
-   implements an equivalent revocation path for a channel a user was removed
-   from; it was not read in full for this document. Check
-   `ee/onyx/external_permissions/slack/doc_sync.py` before relying on this for
-   Slack.
+   visible in Onyx indefinitely. `slack_doc_sync`, `gdrive_doc_sync`, and the Gmail doc sync ignore `fetch_all_existing_docs_*`.
+   They have no vanished-document rule. Slack re-applies current channel membership to every
+   document it still sees. A document that left the source stays as it was until pruning
+   removes it.
 2. **The write-side namespacing (`upsert_document_external_perms`,
    `upsert_external_groups`) and the read-side namespacing
    (`_get_acl_for_user`'s `prefix_external_group`) must both go through
@@ -497,11 +506,9 @@ document to the wrong person.
    the connector silently never gets a permission sync attempt, ever, while
    `connector_permission_sync_generator_task` treats it as a hard failure if
    dispatched anyway (`"No doc sync func found for ... with cc_pair="`,
-   raises). **Unverified**: whether the connector-creation UI/API actually
-   prevents selecting `SYNC` for a source with no doc-sync capability, or
-   whether this is caught only here at sync time. Check
-   `backend/onyx/server/documents/` connector-creation validation before
-   assuming the UI blocks this.
+   raises). `add_credential_to_connector` blocks this at creation: for `SYNC` and
+   `SYNC_RESTRICTED` it calls `check_if_valid_sync_source` and raises `INVALID_INPUT`. It also
+   requires the business tier (`require_business_tier_for_sync_access`).
 7. **`MAX_NUM_ENTRIES` (5000, `ExternalAccess.MAX_NUM_ENTRIES`) is enforced only
    at consumption time, not by the connector.** `RedisConnectorPermissionSync.update_db`
    skips (does not apply, counts as an error) any element whose combined
@@ -521,7 +528,7 @@ document to the wrong person.
   and `CheckpointedConnectorWithPermSync` (`onyx/connectors/interfaces.py`) are
   the connector-side contracts doc sync fetches through; a connector that adds
   perm-sync support implements one of these.
-- [[cc-pairs-and-credentials]]: `ConnectorCredentialPair.access_type == SYNC`
+- [[cc-pairs-and-credentials]]: `ConnectorCredentialPair.access_type` of `SYNC` or `SYNC_RESTRICTED`
   is what makes a cc_pair eligible at all; `last_time_perm_sync`/
   `last_time_external_group_sync` live on that model.
 - [[background-jobs]]: the Celery beat/fence/lock machinery

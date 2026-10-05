@@ -5,6 +5,7 @@
 > endpoints across roughly twenty routers, plus one dedicated router for
 > pushing documents into Onyx without a connector.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** onyx-api
 **Edition:** CE for the tag mechanism, the ingestion router, and OpenAPI
 generation. EE adds one tagged router ([[access-control]]'s user-group API).
@@ -53,7 +54,7 @@ API-native feature.
 ### The `public` tag
 
 `PUBLIC_API_TAGS: list[str | Enum] = ["public"]`
-(`backend/onyx/configs/constants.py:29`). Passed as `tags=PUBLIC_API_TAGS` on
+(`backend/onyx/configs/constants.py`). Passed as `tags=PUBLIC_API_TAGS` on
 an `APIRouter` (marks every route in the router) or on an individual
 `@router.get/post/...` decorator (marks just that route).
 
@@ -73,7 +74,7 @@ an `APIRouter` (marks every route in the router) or on an individual
 | `onyx/server/features/search/api.py` | The one-shot search endpoint, gated by `require_vector_db`; see [[internal-search]]. |
 | `onyx/server/features/web_search/api.py` | Web search router (router-level tag). |
 | `onyx/server/features/usage/api.py` | Usage and cost-override endpoints (three routers, all tagged); see [[rate-and-usage-limits]]. |
-| `onyx/server/features/mcp/client_metadata.py` | MCP OAuth client-metadata discovery endpoint; see [[mcp-server]]. |
+| `onyx/server/features/mcp/client_metadata.py` | MCP OAuth client-metadata discovery endpoint; see [[mcp-and-custom-tools]]. |
 | `onyx/server/features/build/interactive_turns/api.py`, `.../build/session/messages.py` | Craft/build session turn and message endpoints. |
 | `onyx/server/manage/users.py` | User management: list, invite, activate/deactivate, `/me`; see [[auth-and-identity]]. |
 | `onyx/server/manage/administrative.py` | Admin deletion-attempt endpoint. |
@@ -92,8 +93,8 @@ trusting a specific count, since new endpoints can add or drop the tag.
 
 | Method | Path | Handler | Auth | Notes |
 |---|---|---|---|---|
-| GET | `/onyx-api/connector-docs/{cc_pair_id}` | `get_docs_by_connector_credential_pair` | `require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)` | Lists the documents attached to one cc-pair. GATE 2: `verify_user_has_access_to_cc_pair`. |
-| GET | `/onyx-api/ingestion` | `get_ingestion_docs` | `require_permission(Permission.MANAGE_CONNECTORS)` | Lists every document ever pushed through this API, org-wide; no `allow_scope`, so no group scope can narrow it (comment at `ingestion.py:89`). |
+| GET | `/onyx-api/connector-docs/{cc_pair_id}` | `get_docs_by_connector_credential_pair` | `require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)` | Lists the documents attached to one cc-pair. GATE 2: `verify_user_has_access_to_cc_pair` at `CCPairAccessLevel.OPERATE`. The write routes use `EDIT`. |
+| GET | `/onyx-api/ingestion` | `get_ingestion_docs` | `require_permission(Permission.MANAGE_CONNECTORS)` | Lists every document ever pushed through this API, org-wide; no `allow_scope`, so no group scope can narrow it (comment in `ingestion.py:get_ingestion_docs`). |
 | POST | `/onyx-api/ingestion` | `upsert_ingestion_doc` | `require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)` + `Depends(require_vector_db)` | The write path; see §4.2. |
 | DELETE | `/onyx-api/ingestion/{document_id}` | `delete_ingestion_doc` | `require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)` + `Depends(require_vector_db)` | Only deletes documents with `from_ingestion_api=True`; refuses to delete a connector-synced document. |
 
@@ -106,7 +107,7 @@ dependency.
 
 | Variable | File | Default | Effect |
 |---|---|---|---|
-| `ENABLE_PUBLIC_DOCS` | `onyx/configs/app_configs.py:383` | off (`os.environ.get("ENABLE_PUBLIC_DOCS", "").lower() == "true"`) | When true, registers `/openapi.json`, `/docs`, `/redoc` on the FastAPI app (`onyx/main.py:527-529`). When false, those paths are never registered (404), not merely hidden. |
+| `ENABLE_PUBLIC_DOCS` | `onyx/configs/app_configs.py` | off (`os.environ.get("ENABLE_PUBLIC_DOCS", "").lower() == "true"`) | When true, registers `/openapi.json`, `/docs`, `/redoc` on the FastAPI app (`onyx/main.py:get_application`). When false, those paths are never registered (404), not merely hidden. |
 | `DISABLE_VECTOR_DB` | `onyx/configs/app_configs.py` | off | Gates `require_vector_db`; makes ingestion writes/deletes return 501. |
 
 ---
@@ -116,15 +117,15 @@ dependency.
 The ingestion router writes to tables it does not own:
 
 - `Document.from_ingestion_api` (`onyx/db/models.py`): set true by
-  `upsert_ingestion_doc` (`ingestion.py:137`); `delete_ingestion_doc` refuses
+  `upsert_ingestion_doc` (`ingestion.py:upsert_ingestion_doc`); `delete_ingestion_doc` refuses
   to act on a document where this is false. `get_ingestion_documents`
-  (`onyx/db/document.py:1432`) filters on it directly.
+  (`onyx/db/document.py`) filters on it directly.
 - `Document.content_hash`: written by
   `update_docs_content_hash__no_commit` (`onyx/indexing/indexing_pipeline.py`)
   after a successful vector-DB write, and is the mechanism that lets a
   re-push of unchanged content skip re-embedding.
 - Connector-credential-pair ownership rows, via
-  `get_cc_pair_ids_for_document` / `verify_user_can_edit_all_cc_pairs`
+  `get_cc_pair_ids_for_document` / `verify_user_can_manage_all_cc_pairs`
   (`onyx/db/connector_credential_pair.py`): a document can be served by more
   than one cc-pair, so both the create and delete paths check every owning
   pair, not just the one named in the request. See
@@ -185,11 +186,11 @@ POST /onyx-api/ingestion                          onyx_api/ingestion.py:upsert_i
   │    (get_owned_file_ids)
   ├─ document.from_ingestion_api = True
   ├─ resolve target_cc_pair_id (doc_info.cc_pair_id or DEFAULT_CC_PAIR_ID = 1,
-  │    onyx/configs/constants.py:72, the seeded default pair)
+  │    `onyx/configs/constants.py:DEFAULT_CC_PAIR_ID`, the seeded default pair)
   ├─ GATE 2: verify_user_has_access_to_cc_pair(target_cc_pair_id, ...)
   │    (the default pair is public, so a scoped manager cannot ingest into it
-  │    without broader access, per the comment at ingestion.py:155)
-  ├─ GATE 2 again: verify_user_can_edit_all_cc_pairs(existing_cc_pair_ids, ...)
+  │    without broader access, per the comment in `upsert_ingestion_doc`)
+  ├─ GATE 2 again: verify_user_can_manage_all_cc_pairs(existing_cc_pair_ids, ...)
   │    for every pair that ALREADY serves this document_id, before the
   │    upsert rewrites the shared row and replaces its chunks
   ├─ reject if document_id collides with an existing user-file id
@@ -215,7 +216,7 @@ DELETE /onyx-api/ingestion/{document_id}          ingestion.py:delete_ingestion_
   ├─ 404 if the document doesn't exist
   ├─ reject if from_ingestion_api is False (cannot delete a connector doc
   │    through this endpoint)
-  ├─ GATE 2: verify_user_can_edit_all_cc_pairs over every owning pair
+  ├─ GATE 2: verify_user_can_manage_all_cc_pairs over every owning pair
   ├─ record_port_orphan_candidates_for_document (commits) before the index
   │    delete, so a racing index-port doesn't resurrect the doc
   ├─ delete from every document index (primary + secondary if present)
@@ -250,14 +251,14 @@ grants whatever the underlying user's (or service account's)
    endpoint that already shipped in the docs is a breaking change to the
    documented surface even if the endpoint itself keeps working.
 2. **The two senses of "public" are different concepts and must not be
-   conflated.** `PUBLIC_API_TAGS` (`onyx/configs/constants.py:29`) marks an
+   conflated.** `PUBLIC_API_TAGS` (`onyx/configs/constants.py`) marks an
    endpoint as *documented and supported for integrators*; it is still fully
    authenticated. `PUBLIC_ENDPOINT_SPECS`
    (`onyx/server/auth_check.py:PUBLIC_ENDPOINT_SPECS`) marks an endpoint as
    *reachable with no auth dependency at all*. The two lists barely overlap:
-   `/health`, `/version`, `/versions`, `/auth/type`, and `/me` are marked
+   `/health`, `/health/ready`, `/version`, `/versions`, `/auth/type`, and `/me` are marked
    with the `public` tag in their routers (`onyx/server/manage/get_state.py`,
-   `onyx/server/manage/users.py:1081`) and separately listed in
+   `onyx/server/manage/users.py`) and separately listed in
    `PUBLIC_ENDPOINT_SPECS` because they are also meant to be callable before
    login. Every other `public`-tagged endpoint (ingestion, chat, personas,
    connectors, ...) requires a real session or token; being in
@@ -330,7 +331,7 @@ grants whatever the underlying user's (or service account's)
 | changes a tagged endpoint's request or response shape | this is a breaking change for integrators by definition (§5.1); check `transform_openapi_for_docs.py`'s schema-reference walk still resolves, and update `scripts/api_inference_sample.py` if it uses that endpoint |
 | changes `PUBLIC_API_TAGS` itself (not just which routes use it) | every one of the ~106 tagged routes and both OpenAPI scripts, since the string literal `"public"` is hardcoded again in `transform_openapi_for_docs.py:PUBLIC_TAG` rather than imported |
 | changes the ingestion router (`ingestion.py`) | [[indexing-pipeline]] (payload shape into `run_indexing_pipeline`), [[cc-pairs-and-credentials]] (the GATE 2 ownership checks), and the idempotency contract in §5.3 |
-| changes `ENABLE_PUBLIC_DOCS` default or behavior | whether `/openapi.json`/`/docs`/`/redoc` exist at all (`onyx/main.py:527-529`); confirm `PUBLIC_ENDPOINT_SPECS`'s entries for those three paths still match reality, since they assume the routes may or may not be registered |
+| changes `ENABLE_PUBLIC_DOCS` default or behavior | whether `/openapi.json`/`/docs`/`/redoc` exist at all (`onyx/main.py:get_application`); confirm `PUBLIC_ENDPOINT_SPECS`'s entries for those three paths still match reality, since they assume the routes may or may not be registered |
 | adds a new non-human credential type or changes scope capping | this surface's effective reachability; see [[auth-and-identity]] §7 for the fuller list of what else that touches |
 
 ---
@@ -344,21 +345,19 @@ cd backend && uv run pytest tests/integration -k ingestion
 cd backend && uv run pytest tests/integration -k onyx_api
 ```
 
+Ingestion coverage lives in `backend/tests/integration/tests/ingestion/test_ingestion_api.py`.
 Search `backend/tests/integration/tests/` for a directory named after the
 router you changed (for example `tests/integration/tests/pat`,
 `tests/integration/tests/api_key`) if the change is about auth rather than a
 specific endpoint's behavior; see `backend/AGENTS.md` for the authoritative
-command list and required secrets/env. This search did not locate a
-dedicated `tests/integration/tests/ingestion` directory in this checkout;
-treat the presence of ingestion-specific integration coverage as unverified
-and confirm directly before relying on it.
+command list and required secrets/env. Its single test is `test_ingestion_api_crud`.
 
 ### Regenerating the OpenAPI schema
 
 ```bash
-cd backend && uv run python scripts/onyx_openapi_schema.py <output.json>
+cd backend && uv run python scripts/onyx_openapi_schema.py -f <output.json>
 # with a docs-tagged copy alongside the stripped client-gen schema:
-cd backend && uv run python scripts/onyx_openapi_schema.py <output.json> <tagged_output.json>
+cd backend && uv run python scripts/onyx_openapi_schema.py -f <output.json> --tagged-for-docs <tagged_output.json>
 cd backend && uv run python scripts/transform_openapi_for_docs.py -i <tagged_output.json> -o <docs_output.json>
 ```
 
@@ -414,8 +413,8 @@ cd backend && uv run python scripts/transform_openapi_for_docs.py -i <tagged_out
   unscoped-looking.
 - **The stripped (client-generation) schema and the tagged (docs) schema are
   different artifacts from the same generator run.** `onyx_openapi_schema.py`
-  produces the full untagged-in-name-only schema by default; you must pass
-  `tagged_for_docs` explicitly to also get the version
+  produces the stripped schema by default; you must pass
+  `--tagged-for-docs <path>` explicitly to also get the version
   `transform_openapi_for_docs.py` expects as input. Running the docs
   transform against the stripped schema silently keeps nothing, since it
   filters on the `tags` field that stripping just removed.

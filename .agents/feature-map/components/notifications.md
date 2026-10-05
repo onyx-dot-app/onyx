@@ -5,6 +5,7 @@
 > site-wide banner. All four ride on one shared `Notification` table; nothing else in
 > the codebase gets its own notification mechanism.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform
 **Edition:** CE, with one EE-only producer (license expiry warnings)
 **Owns:**
@@ -64,7 +65,7 @@ Release notes have no dedicated endpoint. `ensure_release_notes_fresh_and_notify
 - `web/src/app/ee/admin/theme/page.tsx`: the admin banner editor. It calls
   `/api/admin/banner` directly and is reachable only from the EE admin section, even
   though the backend router itself is registered unconditionally in
-  `onyx/main.py:588`.
+  `onyx/main.py`.
 
 ### Env / config
 
@@ -306,7 +307,7 @@ playwright coverage was found for the bell popover or banner queue.
   endpoint for the banner itself, so a bug in `ensure_system_announcement_notification`
   can make `GET /admin/banner` (admin view) and what users actually see diverge.
 - **The admin banner's backend router is not EE-gated, only its editor UI is.**
-  `admin_banner_router` is registered unconditionally in `onyx/main.py:588`; only the
+  `admin_banner_router` is registered unconditionally in `onyx/main.py`; only the
   frontend page that calls it (`web/src/app/ee/admin/theme/page.tsx`) lives under the
   EE admin section. A CE deployment with API access could still set it.
 - **A row's `severity` is fixed at first insert for its dedup group.** A producer that

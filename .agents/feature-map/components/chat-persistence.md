@@ -4,6 +4,7 @@
 > its branching, tool call storage and nesting, surfaced documents, feedback,
 > sharing, incognito, search over history, and retention.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE, with an EE-only retention job
 **Owns:**
@@ -275,6 +276,10 @@ per-tool by `tool.in_code_tool_id` (search, web search, open URL, image
 generation, file reader, research agent, coding agent, memory, python, or a
 generic custom-tool fallback). The frontend renders these replayed packets
 with the same renderer it uses for the live stream.
+
+The response also carries `current_stream` (`CurrentStreamInfo.stream_id`) when the
+processing fence shows an unfinished stream. The client uses it to reconnect through
+`resume-stream`.
 
 ---
 

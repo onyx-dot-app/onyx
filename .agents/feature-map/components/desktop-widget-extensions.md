@@ -5,6 +5,7 @@
 > Chrome extension. None of the three runs its own product logic. Each one
 > loads or calls the same chat backend that [[chat-frontend]] uses.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** client-surfaces
 **Edition:** CE
 **Owns:**
@@ -33,8 +34,12 @@ user's regular browser instead of a second app window.
 launcher button (or an inline chat box embedded in the page) that they did
 not get from onyx.app. It streams answers the same way the main chat UI
 does: reasoning, then an answer, optionally with markdown formatting. There
-is no login screen. The widget is pre-authorized by the site owner, who
-embedded a key when they added the widget to their page.
+is no login screen. The site owner pre-authorizes the widget in one of two
+ways. In API-key mode, the owner embeds a shared key in the page. In JWT
+passthrough mode, the host page assigns a `tokenProvider` function that returns
+the visitor's own identity-provider token, so each visitor acts as their own
+Onyx user. Passthrough works on single-tenant deployments only
+(`docs/WIDGET_JWT_PASSTHROUGH.md`).
 
 **Chrome extension.** A user installs it from the Chrome Web Store, sees a
 welcome page on first install (`extensions/chrome/src/pages/welcome.html`),
@@ -62,6 +67,7 @@ in a browser tab; the extension carries no credentials of its own.
 | Desktop | `server_url` | `~/Library/Application Support/app.onyx.desktop/config.json` (macOS path; see `desktop/README.md` for Linux/Windows), read by `desktop/src-tauri/src/config.rs:load_config` | The only server this instance talks to. Defaults to `https://cloud.onyx.app` (`config.rs:DEFAULT_SERVER_URL`). Self-hosted use is a config edit, not a rebuild. |
 | Desktop | `summon_shortcut` | Same config file, `config.rs:default_summon_shortcut` | Global OS shortcut (`Super+Shift+Space` macOS / `Ctrl+Alt+Space` elsewhere) that raises the app from anywhere; can be set to `null` |
 | Widget | `backend-url`, `api-key` | HTML attributes on `<onyx-chat-widget>`, or `VITE_WIDGET_BACKEND_URL`/`VITE_WIDGET_API_KEY` baked in at build time for self-hosted builds (`widget/vite.config.ts`, `widget/src/config/config.ts:resolveConfig`) | Which backend the widget calls and the credential it authenticates with. Attributes always win over the baked-in env values. |
+| Widget | `tokenProvider` | JavaScript property on the element, not an attribute (`widget/src/widget.ts`) | An async function that returns a bearer token. It wins over `api-key`. The widget calls it before every request attempt (`config.ts:resolveAuthToken`). |
 | Chrome extension | `onyxExtensionDomain` | `chrome.storage.local`, default `http://localhost:3000` (`extensions/chrome/src/utils/constants.js:DEFAULT_ONYX_DOMAIN`), set via the options page (`extensions/chrome/src/pages/options.js`); `getOnyxDomain` (`storage.js`) trims the value and strips trailing slashes | Which Onyx deployment the side panel, new-tab override, and omnibox all point at |
 | Chrome extension | `onyxExtensionDomain`, `onyxExtensionDefaultNewTab` (enterprise policy) | `chrome.storage.managed`, populated by Chrome's extension policy (`extensions/chrome/managed_schema.json`, `extensions/chrome/README.md`'s "Enterprise configuration") | Admin-set values in managed storage take precedence over `chrome.storage.local` and are read-only in the options page; `setUseOnyxAsDefaultNewTab` (`storage.js`) is a no-op when the toggle is managed |
 
@@ -82,8 +88,11 @@ own storage, managed by the OS webview engine, not by Tauri code.
 
 **Widget.** `sessionStorage`, one JSON blob per browser tab
 (`widget/src/utils/storage.ts:SESSION_KEY`, TTL 24h), holding
-`{ sessionId, messages, timestamp }`. This is the chat session ID and message
-history, not a credential. **The API key itself is not stored by the widget
+`{ sessionId, messages, timestamp, identity }`. This is the chat session ID and message
+history, not a credential. `identity` is the JWT `sub` or `email` claim, or a fixed
+shared value for an API key (`widget/src/config/config.ts:deriveCredentialIdentity`).
+`loadSession` discards a stored session whose identity differs, so a second person on the
+same tab never sees the first person's messages. **The API key itself is not stored by the widget
 code**; it lives only in the customer page's HTML (an attribute on
 `<onyx-chat-widget>`) or, for self-hosted builds, gets compiled directly into
 the published `dist/onyx-widget.js` (`widget/vite.config.ts`'s `define`
@@ -139,7 +148,7 @@ titlebar over it, and CSS custom properties reserve space at the top of
 customer HTML: <onyx-chat-widget backend-url=... api-key=...>
   └─ OnyxChatWidget.connectedCallback()          widget/src/widget.ts
        ├─ resolveConfig(...)                     widget/src/config/config.ts (attrs win over VITE_* env)
-       ├─ new ApiService(backendUrl, apiKey)      widget/src/services/api-service.ts
+       ├─ new ApiService(...)                     widget/src/services/api-service.ts (token resolved per request)
        └─ loadSession() from sessionStorage       widget/src/utils/storage.ts
 user sends a message
   ├─ ApiService.createChatSession()  → POST /chat/create-chat-session   (first message only)
@@ -149,8 +158,11 @@ user sends a message
                  └─ widget.ts re-renders messages, saveSession() after each update
 ```
 
-Every request carries `Authorization: Bearer {api-key}`
-(`api-service.ts:getHeaders`) straight from the browser to `backend-url`.
+Every request carries `Authorization: Bearer {token}`
+(`api-service.ts:getHeaders`) straight from the browser to `backend-url`. The token is
+the `tokenProvider` result when one is set, else the `api-key`. In passthrough mode the
+backend verifies the JWT in `auth/users.py:_check_for_saml_and_jwt` and
+`auth/jwt.py:verify_jwt_token` (RS256 only).
 `origin: "widget"` on the send-message body maps to
 `MessageOrigin.WIDGET` (`backend/onyx/server/query_and_chat/models.py:MessageOrigin`),
 which the backend uses for telemetry only.
@@ -219,7 +231,8 @@ frame.
    (`widget/src/widget.ts`'s `@property({attribute: "api-key"})`) and sends
    it as a request header (`api-service.ts:getHeaders`); it does not persist
    it, echo it into the DOM beyond the attribute the page itself wrote, or
-   put it in `sessionStorage`. The unavoidable exposure is structural, not a
+   put it in `sessionStorage`. In `tokenProvider` mode no long-lived secret is in the
+   page at all. The unavoidable exposure is structural, not a
    widget bug: **any credential placed in an HTML attribute or a shipped JS
    bundle is visible to that page's own script and to anyone who views
    source.** `widget/README.md`'s "Security Note" states this and tells
@@ -255,7 +268,8 @@ frame.
 - [[chat-frontend]]: the desktop shell and the extension's side panel both
   load this app wholesale rather than reimplementing any UI.
 - [[auth-and-identity]]: the widget authenticates as a non-human caller
-  through the API-key path (`backend/onyx/auth/api_key.py`); the desktop
+  through the API-key path (`backend/onyx/auth/api_key.py`), or as the visitor through
+  JWT passthrough (`tokenProvider`, single-tenant only); the desktop
   webview and the extension's iframe authenticate as the logged-in human,
   through the normal cookie session that [[auth-and-identity]] documents.
   Several `/chat/*` endpoints also allow `allow_anonymous=True`
@@ -408,9 +422,9 @@ repository. Verification below is manual.
 - **The widget's own README states the exposure explicitly**
   (`widget/README.md`'s "Security Note"): the API key is visible client-side
   by construction, so a full-access key embedded in a widget is a live
-  credential leak, not a hypothetical one. There is no rotation or
-  short-lived-token mechanism visible in this codebase; the key is whatever
-  the site owner pasted into the HTML.
+  credential leak, not a hypothetical one. In API-key mode, nothing
+  rotates the key; it is whatever the site owner pasted into the HTML. The
+  `tokenProvider` mode avoids this: the host page controls token expiry and refresh.
 - **Self-hosted widget builds bake the API key into the published JS file**
   (`widget/vite.config.ts`'s `define` block under `isSelfHosted`). Anyone who
   downloads `dist/onyx-widget.js` from the customer's CDN gets the key in

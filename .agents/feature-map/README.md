@@ -71,5 +71,11 @@ agent can jump straight to the section it needs.
   survives edits; `llm_loop.py:412` does not.
 - **If you change a component, update its doc in the same PR.** A stale map is a
   liability.
+- **Every component records the commit it was last checked against**, on its
+  `**Verified against:** \`<sha>\` (<date>)` line. When you re-check a whole
+  document against the code, set the line to the commit you checked and today's
+  date. A small doc fix in a code PR does not change it. To find the components
+  that may be stale, list the commits since that hash on the component's code
+  paths: `git log <sha>..HEAD -- <paths from PATHS.md>`.
 - Prose follows the ASD-STE100 rules in the root `AGENTS.md`: short sentences,
   active voice, one word for one idea.

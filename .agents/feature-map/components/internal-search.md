@@ -5,6 +5,7 @@
 > the results, has an LLM pick and expand the best sections, and returns a
 > citation-ready string plus a rich response for the UI.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** search
 **Edition:** CE, with EE field censoring hooked in via `fetch_ee_implementation_or_noop`
 **Owns:**
@@ -73,6 +74,7 @@ constant `TARGET_NUM_SECTIONS_FOR_LLM_SELECTION`. It shares `search_pipeline`,
 | `FORCED_DOCUMENT_SET_NAMES` (`configs/app_configs.py`, read by `forced_document_set.py:get_forced_document_set_names`) | Search UI only (`force_configured_document_set_scope=True` in `_build_index_filters`); hard-restricts retrieval to the named document sets. Disabled under `MULTI_TENANT`. Not applied to chat's `internal_search` calls. |
 | `MAX_CHUNKS_FED_TO_CHAT` (`configs/chat_configs.py`) | Default for `SearchToolOverrideKwargs.max_llm_chunks`, the token-approximate cap on the final LLM string. |
 | `HYBRID_ALPHA`, `NUM_RETURNED_HITS` (`configs/chat_configs.py`) | Default hybrid weighting and hit count when a lane doesn't override them. |
+| `ENABLE_CC_PAIR_ACCESS_FILTER` (`configs/app_configs.py`, read by `OnyxRuntime.get_cc_pair_access_filter_enabled`) | Turns on the query-time cc-pair access filter in shadow mode. Results still use the old ACL filter, and disagreements are logged. The `enforce` flag is cache-only (default off) and only applies after the cc-pair ID backfill is complete (`access/cc_pair_access.py:get_cc_pair_access_mode`). |
 
 ---
 
@@ -158,6 +160,11 @@ the inferred window with any caller-selected range, so an inferred window can
 only narrow, never widen, an explicit one; a disjoint inferred window is dropped
 rather than applied.
 
+When the scope narrows to a subset of sources, `run` appends a note to the
+response (`_build_scope_note`) that names the sources covered and the queries run, so a repeat
+call can vary its terms. Each call also records a `SearchCycle`, which
+`decide_search_scope` reads on later calls in the same turn.
+
 ### 4.3 Parallel retrieval lanes
 
 One lane per deduplicated semantic-style query (`deduplicate_queries`, weight
@@ -176,7 +183,7 @@ Each non-Slack lane calls `_run_search_for_query`, which calls `search_pipeline`
    caller-supplied `document_set` names against `filter_document_set_names_by_user_access`
    (`db/document_set.py`), floors `updated_at_range` at the persona's
    `search_start_date` (never loosens it), and attaches the pre-fetched
-   `access_control_list`, `attached_document_ids`, and `hierarchy_node_ids`;
+   `access_control_list`, `cc_pair_access`, `attached_document_ids`, and `hierarchy_node_ids`;
 2. calls `search_chunks` (`context/search/retrieval/search_runner.py`), which
    fans out to `get_federated_retrieval_functions`
    (`federated_connectors/federated_retrieval.py`) for any non-Slack federated
@@ -250,7 +257,9 @@ the LLM, assigning one citation number per unique `document_id` starting at
 
 1. **ACL prefetch happens once per `run()`, before any parallel work, and is not
    optional.** `build_access_filters_for_user(self.user, db_session)` runs inside
-   the single DB session opened at the top of `run()`. There is no flag that skips
+   the single DB session opened at the top of `run()`. It returns a `UserAccessFilters`
+   object: the ACL list plus an optional `CCPairAccessFilter` (`cc_pair_access`, set
+   only when the cc-pair filter flag is on). There is no flag that skips
    it: the only input that decides document access is the `user` the caller passes
    to `SearchTool`. A caller that wants a narrower scope passes a narrower user (the
    Slack bot passes the anonymous user in shared channels). Do not add a skip flag;
@@ -265,7 +274,8 @@ the LLM, assigning one citation number per unique `document_id` starting at
    `llm_facing_response` is the compact, trimmed, citation-tagged string the
    model reads. `rich_response` (`SearchDocsResponse`) carries `search_docs` (all
    top sections before LLM selection), `displayed_docs` (only the LLM-selected
-   ones), `citation_mapping`, and optional `retrieval_diagnostics`. Do not feed
+   ones; `None` means all retrieved documents, an empty list means none), and
+   `citation_mapping`. Do not feed
    `rich_response` fields back into the prompt, and do not trim
    `llm_facing_response` content out of `rich_response`.
 4. **Citation numbering ranges are per tool call, not per turn.**
@@ -401,6 +411,7 @@ than launching Playwright ad hoc.
   See [[document-index]].
 - **An explicitly empty `source_type` list is a real answer, not a missing
   filter.** `SearchTool.run` treats `user_selected_filters.source_type == []`
+  (outside project mode, which ignores user filters)
   as "search nothing" and returns an empty response immediately, while `None`
   means "no source filter at all". Do not normalize one into the other.
 - **The Slack lane is not ACL-filtered the same way as every other lane.** Its

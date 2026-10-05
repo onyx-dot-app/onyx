@@ -5,6 +5,7 @@
 > from a worker thread to an HTTP response, and how a client resumes a stream
 > it lost.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** core-loop
 **Edition:** CE
 **Owns:**
@@ -51,7 +52,7 @@ one JSON object per line this way.
 | `CHAT_STREAM_BUFFER_TTL_S` | 3600 | TTL of each buffered chunk and the run's meta key while the run is in progress. |
 | `CHAT_STREAM_BUFFER_DONE_TTL_S` | 600 | TTL applied to the same keys once the run finishes. |
 | `CHAT_STREAM_BUFFER_MAX_BYTES` | 16 MiB | Cap on compressed bytes per run; past this the buffer is marked `truncated` and resume stops being possible. |
-| `INTEGRATION_TESTS_MODE` | | Enables `ToolCallDebug` packets (`llm_loop.py`, guarded by `if INTEGRATION_TESTS_MODE and tool_calls`) and `mock_llm_response`. |
+| `INTEGRATION_TESTS_MODE` | | Enables `ToolCallDebug` packets (`llm_loop.py`, guarded by `if INTEGRATION_TESTS_MODE and tool_calls`). |
 
 `_RESUME_MAX_CHUNKS_PER_READ = 32` (`chat_backend.py`) caps how many buffer chunks
 `resume_chat_stream` decompresses per loop iteration, bounding peak memory on a
@@ -65,14 +66,15 @@ This component has no tables. Packets are never written to Postgres; the chat
 tables under [[chat-persistence]] store the *result* of a turn (`ChatMessage`,
 `ToolCall`, `SearchDoc`), not the packet stream that produced it.
 
-The only durable storage here is the **stream buffer**, a transient,
+The stream ID is the reserved assistant message ID, or the user message ID in a multi-model turn
+(`process_message.py:build_chat_turn`, `processing_stream_id`). The only durable storage here is the **stream buffer**, a transient,
 cross-pod cache structure (`backend/onyx/chat/stream_buffer.py`), used so any
 api-server pod can replay and tail an in-flight run:
 
-- **Chunk keys** (`chatstream_{chat_session_id}_{run_id}:{chunk_n}`): zlib-compressed
+- **Chunk keys** (`chatstream_{chat_session_id}_{stream_id}:{chunk_n}`): zlib-compressed
   concatenations of the raw NDJSON lines written since the last flush
   (`StreamBufferWriter.flush`, threshold `_FLUSH_THRESHOLD_BYTES = 32 KiB`).
-- **Meta key** (`chatstream_{chat_session_id}_{run_id}:meta`): a `StreamBufferMeta`
+- **Meta key** (`chatstream_{chat_session_id}_{stream_id}:meta`): a `StreamBufferMeta`
   (`chunk_count`, `done`, `truncated`) as JSON.
 - Both live in `CacheBackend` (Redis, or Postgres on the lite deployment flavor)
   with TTL `CHAT_STREAM_BUFFER_TTL_S`, extended to `CHAT_STREAM_BUFFER_DONE_TTL_S`
@@ -100,7 +102,6 @@ string values.
 |---|---|---|
 | Control | `SectionEnd` | Closes the current tool/reasoning block on the frontend. |
 | Control | `OverallStop` | Ends the whole run. Carries `stop_reason` (`"user_cancelled"` or unset for natural completion). Also the terminator for `AgentResponseDelta`, which has no dedicated end packet. |
-| Control | `TopLevelBranching` | Sent ahead of parallel tool calls (`num_parallel_branches`) so the frontend allocates all branches before any of them renders, instead of rendering one and re-flowing. |
 | Control | `PacketException` | Carries a Python `Exception` (`Field(exclude=True)`, never serialized); used internally, not over the wire as JSON (see §9). |
 | Control | `ChatHeartbeat` | Payload-less keepalive so idle proxies do not kill a silent stream. |
 | Reasoning | `ReasoningStart` / `ReasoningDelta` / `ReasoningDone` | Opens the reasoning block, streams its tokens, closes it. |
@@ -187,7 +188,8 @@ reaches the HTTP response, in addition to yielding it live. `flush` compresses
 and writes a new chunk once `_FLUSH_THRESHOLD_BYTES` of pending text accumulates;
 `mark_done` finalizes the meta record when the run ends.
 
-`resume_chat_stream` (`chat_backend.py:resume_chat_stream`) replays from
+`resume_chat_stream` (`chat_backend.py:resume_chat_stream`) finds the stream ID in
+the processing fence (`get_processing_stream_id`), then replays from
 `cursor` via `read_stream_chunks`, yielding decompressed blocks verbatim, then
 either detects `done` or falls into a poll loop (`CHAT_RESUME_POLL_INTERVAL_S`)
 that checks `is_chat_session_processing` to tell a live writer from a dead one,
@@ -201,7 +203,9 @@ emitting `ChatHeartbeat` packets on `CHAT_HEARTBEAT_INTERVAL_S` while waiting.
    clients mirror it by hand**: `web/src/app/app/services/streamingModels.ts:PacketType`
    and `mobile/src/chat/streamingModels.ts`. Nothing enforces this at build
    time. Adding, renaming, or removing a value in `StreamingType` and not
-   updating both frontends is a silent break.
+   updating both frontends is a silent break. The backend no longer sends
+   `top_level_branching`, and web dropped it, but `mobile/src/chat/streamingModels.ts`
+   still lists it.
 2. **A packet with no frontend renderer renders as nothing.** `findRenderer`
    (`web/src/app/app/message/messageComponents/renderMessageComponent.tsx:findRenderer`)
    returns `null` when no `is*Packet` predicate matches a group. A new packet
@@ -295,7 +299,7 @@ emitting `ChatHeartbeat` packets on `CHAT_HEARTBEAT_INTERVAL_S` while waiting.
 
 ```bash
 # Frontend Playwright specs that assert directly on the packet stream.
-cd web && bunx playwright test tests/e2e/chat/chat_message_rendering.spec.ts
+cd web && bun run playwright chat_message_rendering
 ```
 
 `web/tests/e2e/utils/chatStream.ts` (`parseChatStreamBody`, `getPacketObjectsByType`)
@@ -305,8 +309,7 @@ needs to assert on packet ordering or a new packet type without a real LLM call.
 
 `INTEGRATION_TESTS_MODE=true` is required for tests that need `ToolCallDebug`
 packets to assert which tool ran and with what arguments
-(`llm_loop.py`, gated by `if INTEGRATION_TESTS_MODE and tool_calls`), and to use
-`mock_llm_response` at all (`process_message.py` raises otherwise).
+(`llm_loop.py`, gated by `if INTEGRATION_TESTS_MODE and tool_calls`).
 
 ### Manual reproduction
 

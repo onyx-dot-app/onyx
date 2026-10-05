@@ -5,6 +5,7 @@
 > `ConnectorCredentialPair` (cc-pair) joins the two and is the object every other
 > system actually operates on.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** ingestion
 **Edition:** CE, with EE providing real encryption (loaded by default) and sync-type access
 **Owns:**
@@ -67,28 +68,30 @@ deletion units.
 |---|---|---|---|
 | POST | `/manage/admin/connector` | `create_connector_from_model` | `server/documents/connector.py` |
 | POST | `/manage/admin/connector-with-mock-credential` | | `server/documents/connector.py` |
-| DELETE | `/manage/admin/connector/{connector_id}` | | `server/documents/connector.py:1666` |
+| DELETE | `/manage/admin/connector/{connector_id}` | `delete_connector_by_id` | `server/documents/connector.py` |
 | POST | `/manage/admin/connector/run-once` | | Triggers one manual index attempt. |
-| GET | `/manage/admin/connector/indexing-status` | | Backs the indexing status admin page. |
+| POST | `/manage/admin/connector/indexing-status` | | Backs the indexing status admin page. |
 | POST | `/manage/connector-request` | | Public "request a connector" form. |
 | POST | `/manage/credential`, `POST /manage/credential/private-key` | `create_credential_from_model` | `server/documents/credential.py` |
 | GET | `/manage/credential`, `/manage/credential/{id}` | `list_credentials`, `get_credential_by_id` | `server/documents/credential.py` |
 | PATCH | `/manage/credential/{id}` | `update_credential_from_model` | |
 | PUT | `/manage/admin/credential/{id}`, `PUT /manage/admin/credential/private-key/{id}` | `update_credential_data` | Admin-only, any user's credential. |
 | DELETE | `/manage/admin/credential/{id}` | `delete_credential_by_id_admin` | |
+| DELETE | `/manage/credential/{id}`, `/manage/credential/force/{id}` | | Owner delete, and delete that also removes the pairs that use the credential. |
 | PUT | `/manage/admin/credential/swap` | `swap_credentials_for_connector` | Swaps the credential a cc-pair uses. |
 | GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Admin listing, masked. |
 | GET, POST | `/connector/oauth/*` | `server/documents/standard_oauth.py` | Connector-side OAuth authorization flow. |
-| PUT | `/manage/connector/{connector_id}/credential` | `associate_credential_to_connector` | `server/documents/cc_pair.py:797`. Creates the cc-pair. |
+| PUT | `/manage/connector/{connector_id}/credential` | `associate_credential_to_connector` | `server/documents/cc_pair.py`. Creates the cc-pair. Takes `ConnectorCredentialPairMetadata`, including manage-access groups and data-access groups. |
 | DELETE | `/manage/connector/{connector_id}/credential/{credential_id}` | `dissociate_credential_from_connector` | Hard-deletes the pairing row directly (no background cleanup); used when the pairing has no indexed documents yet. |
-| GET | `/manage/admin/cc-pair/{id}` | `get_cc_pair_full_info` | `server/documents/cc_pair.py:338` |
+| GET | `/manage/admin/cc-pair/{id}` | `get_cc_pair_full_info` | `server/documents/cc_pair.py` |
 | PUT | `/manage/admin/cc-pair/{id}/status` | `update_cc_pair_status` | Pause/resume only. |
 | PUT | `/manage/admin/cc-pair/{id}/name`, `PUT .../property` | | |
 | POST | `/manage/admin/cc-pair/{id}/prune` | `prune_cc_pair` | |
 | GET | `/manage/admin/cc-pair/{id}/index-attempts`, `.../errors`, `.../permission-sync-attempts`, `.../external-group-sync-attempts`, `.../get-docs-sync-status` | | Status surfaces for one cc-pair. |
-| POST | `/manage/admin/deletion-attempt` | `create_deletion_attempt_for_connector_id` | `server/manage/administrative.py:149`. **The real deletion trigger.** |
-| POST | `/manage/admin/targeted-reindex` | `server/documents/targeted_reindex.py` | Reindex only the documents that previously failed. |
-| GET | `/manage/admin/credential-capabilities/*` | `server/documents/credential_capabilities.py` | Test a credential/connector combination without indexing. |
+| POST | `/manage/admin/deletion-attempt` | `create_deletion_attempt_for_connector_id` | `server/manage/administrative.py`. **The real deletion trigger.** Needs `CCPairAccessLevel.EDIT` on the pair. |
+| POST, GET | `/manage/admin/indexing/targeted-reindex`, `/manage/admin/indexing/targeted-reindex/{job_id}` | `server/documents/targeted_reindex.py` | Reindex only the documents that previously failed, and read the job. |
+| POST, GET | `/manage/admin/credential/{id}/capability-check`, `/capability-report`, `/manage/admin/credential/capability-reports`, `/manage/admin/credential/{id}/binding-check` | `server/documents/credential_capabilities.py` | Test a credential/connector combination without indexing. See [[connectors]] §4.8. |
+| GET, PUT | `/manage/admin/cc-pair/{id}/data-access`, `/manage-access`; GET `/manage/admin/manage-access-prefill` | `ee/onyx/server/documents/cc_pair.py` | EE only. Data-access groups decide who reads the pair's documents. Manage-access groups, each with a role, decide who administers it. See [[access-control]]. |
 
 ### Environment / config
 
@@ -147,14 +150,14 @@ references the `(connector_id, credential_id)` pair directly.
 | `id` | int, unique, Sequence-backed | The identifier used by nearly every other table and API. |
 | `connector_id`, `credential_id` | int, PK (composite) | |
 | `name` | str | |
-| `status` | `ConnectorCredentialPairStatus` | See §5. |
-| `access_type` | `AccessType` | `public` / `private` / `sync`. See §5. |
+| `status` | `ConnectorCredentialPairStatus` | `SCHEDULED`, `INITIAL_INDEXING`, `ACTIVE`, `PAUSED`, `DELETING`, `INVALID`. See §5. |
+| `access_type` | `AccessType` | `public` / `private` / `sync` / `sync_restricted`. `sync_restricted` is perm sync narrowed to members of the pair's data-access groups. See §5. |
 | `in_repeated_error_state` | bool | Orthogonal to `status`: a cc-pair can be `ACTIVE` and still be erroring on every attempt. |
 | `auto_sync_options` | JSONB, nullable | Source-specific config for [[permission-sync]] (e.g. Google Drive customer id / domain). |
 | `last_time_perm_sync`, `last_time_external_group_sync`, `last_time_hierarchy_fetch`, `last_successful_index_time`, `last_pruned` | datetime, nullable | Watermarks each background job reads and writes. |
 | `total_docs_indexed` | int | |
 | `indexing_trigger` | `IndexingMode`, nullable | Set to force an out-of-band `update` or `reindex` on the next beat cycle (`connector.py:mark_ccpair_with_indexing_trigger`). |
-| `processing_mode` | `ProcessingMode`, default `REGULAR` | `REGULAR` runs the full chunk/embed/index pipeline; `FILE_SYSTEM` and `RAW_BINARY` bypass it (used by Craft's file ingestion). |
+| `processing_mode` | `ProcessingMode`, default `REGULAR` | `REGULAR` runs the full chunk/embed/index pipeline. `RAW_BINARY` writes raw bytes to S3 with no text extraction. `FILE_SYSTEM` is deprecated: it bypasses indexing and is not searchable. Listing queries filter to `REGULAR` by default. |
 | `creator_id` | UUID, nullable | Who created the pair; drives curator/groupless-ownership checks. |
 | `deletion_failure_message` | str, nullable | Set when a deletion attempt fails partway. |
 
@@ -163,7 +166,8 @@ references the `(connector_id, credential_id)` pair directly.
 | Table | Keys | Note |
 |---|---|---|
 | `document_set__connector_credential_pair` | `(document_set_id, connector_credential_pair_id, is_current)` | `is_current=False` rows are the prior membership set, deleted once the document set finishes resyncing (`models.py:DocumentSet__ConnectorCredentialPair`). |
-| `user_group__connector_credential_pair` | `(user_group_id, cc_pair_id, is_current)` | Same current/prior pattern, for group-scoped visibility. |
+| `user_group__connector_credential_pair` | `(user_group_id, cc_pair_id, is_current)`, plus `role` | Same current/prior pattern. The groups that manage the pair. `role` is `ConnectorManageRole` (`EDITOR` changes and deletes, `OPERATOR` schedules and monitors). |
+| `user_group__cc_pair_data_access` | `(cc_pair_id, user_group_id)` | The data-access groups: who may read the pair's documents (`models.py:UserGroup__CCPairDataAccess`). |
 | `credential__user_group` | `(credential_id, user_group_id)` | Which groups may **use** a credential, independent of which groups can see the cc-pair's documents. |
 | `document_by_connector_credential_pair` | `(id=document_id, connector_id, credential_id)` | The fan-out table: one row per (document, cc-pair) that indexed it. `get_document_connector_count` (`db/document.py:get_document_connector_count`) counts these rows to decide whether a document is orphaned on deletion. See §5. |
 | `hierarchy_node_by_connector_credential_pair` | `(hierarchy_node_id, connector_id, credential_id)` | Folder/space tree ownership, cleaned up the same way during pruning. |
@@ -222,7 +226,7 @@ Connector (1) ---< ConnectorCredentialPair >--- (1) Credential
 credential belongs to the user (or is public/curator-shared), validates
 `AccessType.SYNC` is gated to sources that support it and requires the
 business tier (`fetch_ee_implementation_or_noop("onyx.utils.tier", ...)`),
-then inserts the `ConnectorCredentialPair` row with `status=SCHEDULED`.
+then inserts the `ConnectorCredentialPair` row with `status=SCHEDULED`. The gate applies to both `SYNC` and `SYNC_RESTRICTED` (`AccessType.is_perm_synced`). The call also writes the manage-access groups and data-access groups.
 
 ### 4.2 Encryption
 
@@ -308,9 +312,11 @@ cron; every cc-pair is re-evaluated every 15 seconds against its own
 `PUT /manage/admin/cc-pair/{id}/status` → `cc_pair.py:update_cc_pair_status`.
 Only `ACTIVE` and `PAUSED` are accepted here (not `DELETING`; the comment at
 `cc_pair.py:500` is explicit that this route must not be usable to delete).
-Pausing sets a Redis stop fence (`RedisConnector.stop.set_fence(True)`),
+`CCPairAccessLevel.OPERATE` is enough here. Pausing sets a Redis stop fence (`RedisConnector.stop.set_fence(True)`),
 requests cancellation of any in-progress `IndexAttempt` rows
-(`IndexingCoordination.request_cancellation`), and revokes their Celery tasks.
+(`IndexingCoordination.request_cancellation`), and revokes their Celery tasks. A first
+attempt that waits for capability checks has no task, so it is canceled directly
+(`cancel_waiting_index_attempt__no_commit`).
 It updates `status=PAUSED` and immediately re-fires `CHECK_FOR_INDEXING` so the
 change is picked up without waiting for the next 15-second tick. Pausing stops
 new indexing, permission sync, and pruning from starting; it does not touch
@@ -323,8 +329,10 @@ The admin UI's delete action calls `POST /manage/admin/deletion-attempt`
 **not** the credential-dissociation endpoint (that one is a direct hard delete
 used only when a pairing has no indexed documents; see §2). The real flow:
 
-1. Permission gate: global admins can delete any cc-pair; a non-admin can only
-   delete a groupless cc-pair they created (`user_owns_groupless_cc_pair`).
+1. Permission gate: `get_connector_credential_pair_for_user` with
+   `CCPairAccessLevel.EDIT`. A user with global `MANAGE_CONNECTORS` passes. A scoped
+   manager needs the `EDITOR` role in a group that manages the pair. The creator of a
+   non-public pair with no manage group also passes.
 2. Cancel any scheduled/in-progress index attempts.
 3. Set `status = DELETING` and commit.
 4. Fire `CHECK_FOR_CONNECTOR_DELETION` immediately (also runs on its own beat
@@ -393,12 +401,12 @@ It does not block the delete call; see §9.
    otherwise the document is updated (access/doc-set membership shrinks) and
    kept. This is the load-bearing invariant for any change to the deletion
    task.
-5. **`AccessType.SYNC` must only be set for sources permission-sync actually
+5. **`AccessType.SYNC` and `SYNC_RESTRICTED` must only be set for sources permission-sync actually
    supports.** Enforced at creation time
    (`add_credential_to_connector` → `check_if_valid_sync_source`), gated to the
-   business tier in EE. A cc-pair with `access_type=SYNC` promises that
+   business tier in EE. A cc-pair with `access_type=SYNC` or `SYNC_RESTRICTED` promises that
    [[permission-sync]] is the source of truth for who can see its documents;
-   `PUBLIC` and `PRIVATE` never consult external permissions.
+   `PUBLIC` and `PRIVATE` never consult external permissions. For `SYNC_RESTRICTED`, only members of the pair's data-access groups can see the documents their source ACL allows.
 6. **Pausing must not silently continue background work.** `update_cc_pair_status`
    must cancel in-flight index attempts and set the stop fence; a status change
    that only flips the `status` column without the Redis fence and cancellation
@@ -419,7 +427,7 @@ It does not block the delete call; see §9.
 
 **Depends on**
 - [[access-control]]: `AccessType`, curator scoping (`assert_within_scope`,
-  `user_owns_groupless_cc_pair`), and `credential__user_group` /
+  `CCPairAccessLevel`, `ConnectorManageRole`), and `credential__user_group` /
   `user_group__connector_credential_pair` all extend the group/ACL model owned
   there.
 - [[auth-and-identity]]: `Credential.user_id`, the requesting `User`'s

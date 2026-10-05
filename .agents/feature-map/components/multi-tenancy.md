@@ -4,6 +4,7 @@
 > schema, a physical shard, and a `contextvars` value that must be correct for
 > every session, thread, and task the request or job creates.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** multi-tenancy
 **Edition:** CE runs with exactly one tenant (the `public` schema) and most of this
 component is inert. EE/cloud is where sharding, provisioning, gating, and
@@ -68,7 +69,7 @@ paths that already exist, and to make it visible when a new path does not.
 | `ONYX_DB_SHARD_OVERRIDES` | same | JSON map of `tenant_id -> shard name`, a static operator escape hatch bypassing the `tenant_shard` catalog table. |
 | `ONYX_DB_SHARD_MAP_TTL_SECONDS` / `_VERSION_POLL_SECONDS` | same | In-process shard-routing cache TTL and the Redis version-poll interval (`db/engine/shard_version.py`). |
 | `USE_IAM_AUTH` | same | RDS IAM auth instead of a static password; token minting is bound to a shard's specific host/port/user (`db/engine/iam_auth.py`). |
-| `TARGET_AVAILABLE_TENANTS` | `ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py` | Size of the pre-provisioned tenant pool `check_available_tenants` maintains. |
+| `TARGET_AVAILABLE_TENANTS` | `configs/app_configs.py`, read by `ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py` | Size of the pre-provisioned tenant pool `check_available_tenants` maintains. |
 
 ### Endpoints and tasks
 
@@ -78,7 +79,7 @@ paths that already exist, and to make it visible when a new path does not.
 | Tenant creation / assignment | `ee/onyx/server/tenants/provisioning.py:get_or_provision_tenant` | Called from the signup/OAuth flow. Draws from the pre-provisioned pool or creates fresh. |
 | `CLOUD_CHECK_AVAILABLE_TENANTS` (Celery) | `ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py:check_available_tenants` | Beat task; tops up the pre-provisioned pool and migrates stale pool tenants. |
 | SSO discovery / authorize | `backend/onyx/server/sso_discovery.py`, `onyx/auth/sso_tenant_token.py` | Cloud serves every workspace from one domain; discovery resolves the tenant and mints a short-lived signed `workspace_token` (`generate_sso_tenant_token`) that pins the authorize step to one tenant. |
-| Alembic (tenant schemas) | `backend/alembic/run_multitenant_migrations.py` | Parallel batched migration runner across every tenant schema on every shard. |
+| Alembic (tenant schemas) | `backend/alembic/run_multitenant_migrations.py` | Parallel batched migration runner across every tenant schema on every shard. The `--snapshot-template` flag also stores the template dump new tenants are cloned from. |
 | Alembic (catalog) | `backend/alembic_tenants/` | Migrates only `PublicBase`-derived tables in the `public` schema. |
 
 ---
@@ -96,6 +97,7 @@ Physical layout (Postgres):
       tenant_invite_counter
       tenant_anonymous_user_path
       tenant_sso_domain
+      tenant_schema_snapshot
     schema tenant_<uuid>        <- one tenant's data, Base-derived tables
       users, chat_session, document, persona, ...
     schema tenant_<uuid>        <- another tenant, same table shapes
@@ -112,7 +114,7 @@ Physical layout (Postgres):
 - **`onyx/db/models.py:PublicBase`**: the catalog tables, always in `public`, never
   duplicated per tenant: `UserTenantMapping`, `UserTenantMappingOAuthAccount`,
   `AvailableTenant`, `TenantAnonymousUserPath`, `TenantSSODomain`,
-  `TenantInviteCounter`, `TenantShard`.
+  `TenantInviteCounter`, `TenantShard`, `TenantSchemaSnapshot`.
 - **`public.tenant_shard`** (`db/tenant_shard.py`): `(tenant_id, shard_name,
   updated_at)`. Written by `record_tenant_placement` before a tenant's schema is
   created; absence means "the default shard". Read by `shard_routing.py`.
@@ -121,7 +123,16 @@ Physical layout (Postgres):
   `resolve_tenant_id` during login and impersonation.
 - **`public.available_tenant`**: the pre-provisioned tenant pool
   `check_available_tenants` (`ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py`)
-  keeps topped up, so signup does not pay the ~80s migration cost synchronously.
+  keeps topped up, so signup does not pay the schema build cost synchronously.
+- **`public.tenant_schema_snapshot`** (`onyx/db/models.py:TenantSchemaSnapshot`): a SQL
+  dump of one shard's template schema (`TENANT_TEMPLATE_SCHEMA`) at one Alembic head
+  revision, unique per `(shard_name, alembic_revision)`. The rollout job writes it:
+  `alembic/run_multitenant_migrations.py --snapshot-template` migrates the template
+  and calls `store_template_snapshots`. Only the newest two per shard are kept.
+  `ee/onyx/server/tenants/schema_management.py:build_tenant_schema` clones the
+  snapshot for the code's head into a new tenant (`apply_snapshot`). It replays the
+  migration chain instead when the shard has no snapshot at that head, or when the
+  schema already holds tables (a retried build).
 - **`public.tenant_invite_counter`** (`db/tenant_invite_counter.py`): per-tenant
   trial invite cap, incremented via `reserve_trial_invites` (a Postgres
   `INSERT ... ON CONFLICT DO UPDATE` that row-locks the tenant for the
@@ -198,7 +209,7 @@ that does not include `tenant_id` in its kwargs silently runs against the defaul
 schema. The beat scheduler (`background/celery/apps/beat.py`) iterates
 `get_all_tenant_ids()` (`db/engine/tenant_utils.py`) and schedules one entry per
 tenant per per-tenant task, and one shared entry for cloud-wide tasks
-(`MULTI_TENANT` branch in `beat.py:generate_schedule`).
+(`MULTI_TENANT` branch in `beat.py:DynamicTenantScheduler._generate_schedule`).
 
 Other places that set the contextvar directly, without going through
 `TenantAwareTask`, all follow the same `.set(token)` / `try/finally: .reset(token)`
@@ -223,7 +234,7 @@ call started from inside a request or a task does not automatically inherit the
 current contextvar's *live* value across a raw thread boundary unless the caller
 copies the context. [[core-chat-loop]] documents the concrete case: `_run_models`
 (`chat/process_message.py`) submits each per-model worker with a copied
-`contextvars.Context` (`contextvars.copy_context().run`, `process_message.py:1615-1623`)
+`contextvars.Context` (`contextvars.copy_context().run`, `process_message.py`)
 specifically because tenant ID and tracing context live in contextvars. Generalize
 that pattern: **a bare `Thread(target=fn)`, a `ThreadPoolExecutor.submit(fn)`, or a
 background `asyncio.create_task` that does not wrap its target in
@@ -345,7 +356,7 @@ developer has to remember to add.
 |---|---|
 | adds a new table | Does it belong once per tenant (`Base`, `alembic/`) or once globally (`PublicBase`, `alembic_tenants/`)? Getting this backwards means the table is either duplicated into every schema or never created at all (§5.4). |
 | adds a new thread or thread pool anywhere reachable from a request or task | Does it copy `contextvars.Context`, or set/reset the tenant contextvar explicitly? An uncopied thread silently resolves to the default tenant or raises, depending on `MULTI_TENANT` (§4.2, §9). |
-| adds a new Celery task | Does it take `tenant_id` and route through `TenantAwareTask` (or an equivalent explicit `.set()`/`.reset()`)? Does the beat schedule need a per-tenant entry (`beat.py:generate_schedule`) or a single cloud-wide one? |
+| adds a new Celery task | Does it take `tenant_id` and route through `TenantAwareTask` (or an equivalent explicit `.set()`/`.reset()`)? Does the beat schedule need a per-tenant entry (`beat.py:DynamicTenantScheduler._generate_schedule`) or a single cloud-wide one? |
 | adds a new global cache (in-process `lru_cache`/`functools.cache`, a module-level dict) that stores anything derived from tenant data | It needs the tenant in its key, or it must genuinely be tenant-independent (see §9 for what was checked and found safe). |
 | changes session creation (`get_session`, `get_async_session`, or their EE equivalents) | Every one of the call sites in §5.1; confirm `schema_translate_map` still gets built from `get_current_tenant_id()`, never a value the caller could substitute. |
 | adds a new retrieval entry point that queries the document index | [[access-control]]'s and this document's §5.5: it must go through `_get_search_filters`, which appends both the ACL clause and, under `MULTI_TENANT`, the tenant term clause. |
@@ -482,7 +493,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}
   `@functools.cache` decorators found (`llm/model_capabilities.py:get_model_map`,
   `llm/multi_llm.py`'s two log-dedup caches, `indexing/document_push.py:get_document_push_config`,
   `db/engine/iam_auth.py:create_ssl_context_if_iam`) all cache process-global,
-  non-tenant-derived state (litellm's static model map, log-once flags, env-derived
+  non-tenant-derived state (the vendored model catalog, log-once flags, env-derived
   config, TLS context construction), not tenant data. This is a snapshot, not a
   standing guarantee: any new module-level cache must be checked against this same
   question before it is added.
@@ -507,7 +518,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-password}" psql -h "${POSTGRES_HOST:-localhost}
 |---|---|---|
 | Tracing admin API | `onyx/server/manage/tracing/api.py:_reject_if_multi_tenant` | Rejects tracing-provider configuration outright (`OnyxErrorCode.SINGLE_TENANT_ONLY`). |
 | Forced document sets | `onyx/context/search/forced_document_set.py:get_forced_document_set_names` | Feature disabled entirely; `FORCED_DOCUMENT_SET_NAMES` is ignored. |
-| Beat scheduling | `background/celery/apps/beat.py:generate_schedule` | Cloud-wide tasks scheduled once for all tenants rather than once per tenant. |
+| Beat scheduling | `background/celery/apps/beat.py:DynamicTenantScheduler._generate_schedule` | Cloud-wide tasks scheduled once for all tenants rather than once per tenant. |
 | Pruning/fence block expiration | `background/celery/tasks/pruning/tasks.py:_get_pruning_block_expiration`, `_get_fence_validation_block_expiration` | Base expiration multiplied by `OnyxRuntime.get_beat_multiplier()`; unmultiplied otherwise. |
 | Feature flags | `onyx/feature_flags/factory.py:get_default_feature_flag_provider` | Uses the PostHog-backed provider (also enabled under `DEV_MODE`); otherwise a no-op provider that always returns `False`. |
 | Signup rate limiting | `onyx/auth/signup_rate_limit.py:enforce_signup_rate_limit` | Enforced only when both `MULTI_TENANT` and `SIGNUP_RATE_LIMIT_ENABLED`; a no-op otherwise. |

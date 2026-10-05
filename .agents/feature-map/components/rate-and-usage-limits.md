@@ -6,6 +6,7 @@
 > mechanisms with separate storage and separate scopes; they only share a
 > name.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform
 **Edition:** Mixed. Token rate limits: CE enforces GLOBAL scope only; EE adds
 USER and USER_GROUP scope, and EE is also the only edition that can create or
@@ -70,10 +71,12 @@ invisible in normal use.
 |---|---|---|---|
 | POST | `/chat/send-chat-message` | `handle_send_chat_message` | Also runs `check_api_key_usage`. `chat_backend.py:handle_send_chat_message` |
 | (inline) | chat session auto-naming | `_generate_or_fallback_chat_session_name` | Calls `check_token_rate_limits` directly, not as a `Depends`. `chat_backend.py:_generate_or_fallback_chat_session_name` |
-| POST | `/build/sessions/{id}/send-message` | (Craft turn) | Called inline before creating the user message. `features/build/session/messages.py:send_message` (function name at line 128 call site) |
+| POST | `/build/sessions/{id}/send-message` | (Craft turn) | Called inline before creating the user message. `features/build/session/messages.py:send_message`  |
 | POST | `/build/sessions/{id}/subagents/{sub_id}/send-message` | `send_subagent_message` | `features/build/session/messages.py:send_subagent_message` |
 | POST | `/gateway/v1/chat/completions`, `/gateway/v1/responses`, `/gateway/v1/messages` | `gateway_chat_completions`, `gateway_responses`, `gateway_anthropic_messages` | The AI Gateway (OpenAI/Anthropic-compatible passthrough), EE-only. `_resolve_metered_gateway_model` also runs `check_llm_cost_limit_for_provider` on the resolved provider's key. `ee/onyx/server/gateway/api.py` |
 | POST | `/search` | `search` | Called inline before the LLM is resolved. Also runs `check_api_key_usage`. Used by the MCP server. `features/search/api.py:search` |
+| POST | `/search/send-search-message` | `handle_send_search_message` | The EE Search UI. Checks the token budgets and the cloud cost cap only when the request runs query expansion or LLM document selection. `ee/onyx/server/query_and_chat/search_backend.py` |
+| POST | `/search/search-flow-classification` | `search_flow_classification` | Runs only the cloud cost cap (`check_llm_cost_limit_for_provider`), not the token budgets. Same file. |
 | (in process) | Slack bot answer | `handle_regular_answer` | Called inline, charged to `usage_user`. An over-budget request gets the budget message in the thread. `onyxbot/slack/handlers/handle_regular_answer.py` |
 
 ### HTTP endpoints that enforce `check_api_key_usage`
@@ -90,7 +93,7 @@ for the Gateway and Craft/Build surfaces.
 
 `check_global_token_rate_limits` (`token_limit.py`) enforces only the GLOBAL
 scope, without a user principal, from the indexing pipeline:
-`onyx/indexing/indexing_pipeline.py:772` (function that embeds/indexes
+`onyx/indexing/indexing_pipeline.py` (the step that embeds and indexes
 document batches). This exists because indexing can itself burn LLM budget
 (vision/summarization models) with no requesting user to attribute the call
 to.
@@ -101,10 +104,10 @@ to.
 |---|---|---|
 | `USAGE_LIMITS_ENABLED` | `MULTI_TENANT` | Gate for the whole tenant-usage-limit system (`shared_configs/configs.py`). |
 | `USAGE_LIMIT_WINDOW_SECONDS` | 604800 (7 days) | Fixed window for tenant usage buckets (`shared_configs/configs.py`). |
-| `USAGE_LIMIT_LLM_COST_CENTS_TRIAL` / `_PAID` | | Weekly LLM cost cap, cents (`shared_configs/configs.py`). |
-| `USAGE_LIMIT_CHUNKS_INDEXED_TRIAL` / `_PAID` | | Weekly indexed-chunk cap. |
-| `USAGE_LIMIT_API_CALLS_TRIAL` / `_PAID` | | Weekly API/PAT call cap. |
-| `USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL` / `_PAID` | | Weekly non-streaming call cap. |
+| `USAGE_LIMIT_LLM_COST_CENTS_TRIAL` / `_PAID` | 3200 / 6400 | Weekly LLM cost cap, cents (`shared_configs/configs.py`). |
+| `USAGE_LIMIT_CHUNKS_INDEXED_TRIAL` / `_PAID` | 400000 / 4000000 | Weekly indexed-chunk cap. |
+| `USAGE_LIMIT_API_CALLS_TRIAL` / `_PAID` | 0 / 40000 | Weekly API/PAT call cap. |
+| `USAGE_LIMIT_NON_STREAMING_CALLS_TRIAL` / `_PAID` | 0 / 160 | Weekly non-streaming call cap. |
 | `AUTH_RATE_LIMITING_ENABLED` | derived | On when both `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS` are set (`app_configs.py`). Off by default. |
 | `RATE_LIMIT_MAX_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS` | unset | The auth-router HTTP rate limit. |
 | `FEEDBACK_RATE_LIMIT_MAX_REQUESTS` / `_WINDOW_SECONDS` | 100 / 60 | Per-user chat-feedback limiter, on by default. |

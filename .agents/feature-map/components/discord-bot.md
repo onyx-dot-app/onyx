@@ -5,6 +5,7 @@
 > map a Discord user to an individual Onyx identity: every message in a tenant is
 > answered as one shared service account.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** integrations
 **Edition:** CE
 **Owns:**
@@ -45,7 +46,7 @@ reply, or into a dedicated thread depending on `thread_only_mode`.
 | `DELETE /manage/admin/discord-bot/service-api-key` | `discord_bot/api.py` |
 | `!register <key>` Discord command | `handle_commands.py:handle_registration_command` |
 | `!sync-channels` Discord command | `handle_commands.py:handle_sync_channels_command` |
-| `DISCORD_BOT_TOKEN`, `DISCORD_BOT_INVOKE_CHAR` env vars | `backend/onyx/configs/app_configs.py:2192-2193` |
+| `DISCORD_BOT_TOKEN`, `DISCORD_BOT_INVOKE_CHAR` env vars | `backend/onyx/configs/app_configs.py` (`DISCORD_BOT_TOKEN`, `DISCORD_BOT_INVOKE_CHAR`) |
 
 Bot config API access is refused with 403 on Cloud (`MULTI_TENANT`) or when
 `DISCORD_BOT_TOKEN` is set, since both mean the token is managed outside the
@@ -55,21 +56,21 @@ admin panel (`discord_bot/api.py:_check_bot_config_api_access`).
 
 ## 3. Data model
 
-`DiscordBotConfig` (`backend/onyx/db/models.py:4525`): one row per tenant, fixed
+`DiscordBotConfig` (`backend/onyx/db/models.py:DiscordBotConfig`): one row per tenant, fixed
 `id='SINGLETON'`, holds the encrypted bot token when not set via env var.
 
-`DiscordGuildConfig` (`models.py:4545`): one row per Discord server. `guild_id` is
+`DiscordGuildConfig` (`models.py:DiscordGuildConfig`): one row per Discord server. `guild_id` is
 `NULL` until the `!register` command completes it; `registration_key` is the
 one-time key embedding the tenant id (`discord_bot/utils.py:generate_discord_registration_key`).
 Holds `default_persona_id` and `enabled`.
 
-`DiscordChannelConfig` (`models.py:4585`): one row per channel, foreign-keyed to a
+`DiscordChannelConfig` (`models.py:DiscordChannelConfig`): one row per channel, foreign-keyed to a
 guild config with `ondelete="CASCADE"`. Holds `require_bot_invocation`,
 `thread_only_mode`, `persona_override_id`, `enabled`, and Discord-derived
 `channel_type`/`is_private` metadata.
 
 The Discord service API key is a regular `ApiKey` row named
-`DISCORD_SERVICE_API_KEY_NAME` (`configs/constants.py:96`), one per tenant,
+`DISCORD_SERVICE_API_KEY_NAME` (`configs/constants.py`, value `discord-bot-service`), one per tenant,
 created lazily by `db/discord_bot.py:get_or_create_discord_service_api_key`.
 
 ---
@@ -128,13 +129,16 @@ OnyxDiscordClient.on_message                                    client.py
    every request authenticates as the same API-key user,
    `check_token_rate_limits`/`check_api_key_usage` on
    `chat_backend.py:handle_send_chat_message` throttle the whole guild together.
+   The EE token check holds an API-key user to GLOBAL budgets only
+   (`ee/onyx/server/query_and_chat/token_limit.py:_check_token_rate_limits`), so a
+   per-user or per-group budget never applies to Discord answers.
    Contrast [[slack-bot]], where each Slack sender is provisioned as their own
    Onyx user (`onyx/db/users.py:add_slack_user_if_not_exists`), so rate limits
    and document ACLs apply per person. See [[rate-and-usage-limits]].
 3. **`origin=MessageOrigin.DISCORDBOT` never survives API-key auth.**
    `chat_backend.py:handle_send_chat_message` overrides `origin` to
    `MessageOrigin.API` whenever the request carries a hashed API key or PAT
-   (`chat_backend.py:836-839`), which every Discord bot request does. The
+   (`chat_backend.py:handle_send_chat_message`), which every Discord bot request does. The
    `DISCORDBOT` enum value is set client-side but is unobservable server-side.
 4. **A registration key is single-use and tenant-bound.** `register_guild`
    requires the guild's `guild_id` to still be `NULL`

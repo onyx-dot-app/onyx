@@ -4,6 +4,7 @@
 > then docprocessing) chunks, embeds, and writes each document to every configured
 > document index, then tracks the run as an `IndexAttempt`.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** indexing
 **Edition:** CE, with EE-relevant usage-limit and hook checks inline (`USAGE_LIMITS_ENABLED`,
 `onyx.hooks.points.document_ingestion`, `onyx.hooks.points.document_push`)
@@ -87,6 +88,7 @@ is already local.
 | `CELERY_INDEXING_LOCK_TIMEOUT` | see configs | TTL of the per-attempt cross-batch Redis lock (§4.5). |
 | `NUM_DAYS_TO_KEEP_CHECKPOINTS`, `NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS` | see configs | Retention windows for the two cleanup beat tasks. |
 | `DOCUMENT_PUSH_ENDPOINT_URL`, `DOCUMENT_PUSH_API_KEY`, `DOCUMENT_PUSH_TIMEOUT_SECONDS` | unset | Config-driven external sink; see §4.4 and `document_push.py`. Single-tenant only. |
+| `CONNECTOR_CHECKS_ENABLED` | false | When true, a cc-pair's first index attempt waits for its required capability checks (§4.1). Pair it with `NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED`. |
 
 ---
 
@@ -178,7 +180,7 @@ not define the OpenSearch mapping those objects must match.
    |  [optional] add_contextual_summaries(...)               -- LLM doc/chunk context
    |  embed_and_stream(...)                                  -- IndexChunk, spilled to local disk (ChunkBatchStore)
    |  adapter.lock_context(...)                               -- per-document Postgres row lock
-   |    enricher.enrich_chunk(...)                            -- ACL, doc sets, boost -> DocMetadataAwareIndexChunk
+   |    enricher.enrich_chunk(...)                            -- ACL, doc sets, boost, cc_pair_ids -> DocMetadataAwareIndexChunk
    |    write_chunks_to_vector_db_with_backoff(...)  x N      -- once, to the index of the attempt's SearchSettings
    |    adapter.post_index(...)                                -- chunk counts, indexed timestamps
    |  IndexingCoordination.update_batch_completion_and_docs    -- cross-batch Redis-locked counter update
@@ -221,6 +223,16 @@ yielded `(document_batch, hierarchy_node_batch, failure, next_checkpoint)`:
 - the connector's own checkpoint object is serialized to the FileStore
   (`checkpointing_utils.py:save_checkpoint`) and `IndexAttempt.checkpoint_pointer`
   is updated to point at it.
+
+**First-attempt hold.** `try_creating_docfetching_task` creates a cc-pair's first
+`IndexAttempt` as usual. When `get_first_indexing_hold`
+(`connectors/capability_checks/indexing_hold.py`) returns a hold, it creates the
+attempt without a Celery task id and sends no docfetching task. A hold applies when
+a capability-check run is in flight, a run failed to run, or a required and
+applicable check `FAILED`. `CONNECTOR_CHECKS_ENABLED` off, a pair with a dispatched
+attempt, and a source with no named checks never hold. Each `check_for_indexing` beat
+calls `try_dispatching_waiting_attempt`. It sends the task once no hold applies. See
+[[connectors]] §4.8.
 
 When the connector's checkpoint reports no more work, docfetching calls
 `IndexingCoordination.set_total_batches`, which is the signal `check_for_indexing`
@@ -503,7 +515,7 @@ this component only describes how a `UserFile` reaches the vector index.
    `HEARTBEAT_TIMEOUT_SECONDS` without the heartbeat thread's DB write succeeding
    will eventually be killed as dead, even if it's still making real progress.
 6. **ACLs are attached at index-write time, not read time.** `enrich_chunk` bakes
-   `access`, `document_sets`, `boost`, and ancestor hierarchy into the chunk at write.
+   `access`, `document_sets`, `boost`, `cc_pair_ids`, and ancestor hierarchy into the chunk at write.
    A permission change requires either a metadata-only `Updatable.update` patch (no
    re-embed) or a full reindex, depending on what changed; see [[access-control]].
 7. **The chunk schema this component produces must match the index mapping

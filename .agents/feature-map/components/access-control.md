@@ -4,6 +4,7 @@
 > indexed chunk at write time, compiled from the acting user at read time, and
 > checked at exactly one point before any chunk leaves the index.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** access-control
 **Edition:** CE for the ACL data model, individual and public access, and the single
 compile-time chokepoint. EE for group-derived ACL entries, curator scoping, and
@@ -74,6 +75,8 @@ and §9).
 | GET | `/user-groups/minimal` | same file | `Permission.BASIC_ACCESS`; any authenticated user can list group names (not membership) for persona/document-set configuration UIs. |
 | PUT | `/admin/user-group/{id}/permissions` | same file | `Permission.MANAGE_USER_GROUPS` / `FULL_ADMIN_PANEL_ACCESS` depending on the specific route; sets what a group's members can do, not document access. |
 | CRUD | `/document-set*` | `backend/onyx/server/features/document_set/api.py` | Creating/editing a set with `is_public=False` requires naming the owning user or group(s); `filter_document_set_names_by_user_access`/`filter_document_set_ids_by_user_access` (`db/document_set.py`) are the read-side access check reused everywhere a caller supplies set names or IDs. |
+| GET/PUT | `/admin/cc-pair/{id}/data-access`, `/admin/cc-pair/{id}/manage-access` | `ee/onyx/server/documents/cc_pair.py` | EE only. Data-access groups decide who reads a connector's documents. Manage-access groups (with an `EDITOR` or `OPERATOR` role) decide who administers the connector. |
+| PUT | `/admin/user-group/{id}/data-access-cc-pairs`, `/admin/user-group/{id}/managed-cc-pairs` | `ee/onyx/server/user_group/api.py` | EE only. The same two relations, set from the group side. |
 | GET | `/hierarchy/*` | `backend/onyx/server/features/hierarchy/api.py` | Folder/space browsing scoped by `get_user_external_group_ids` and `get_accessible_hierarchy_nodes_for_source` (see §4). |
 | SCIM | `backend/ee/onyx/server/scim/*.py` | | Provisions users and groups from an external IdP; writes the same `UserGroup`/`User__UserGroup` rows the manual admin UI writes. |
 
@@ -122,6 +125,9 @@ source-system identity grants.
 User ──┬──< User__UserGroup >──┬── UserGroup ──< PermissionGrant
         │  (is_manager: bool)   │
         │                       └──< UserGroup__ConnectorCredentialPair >── ConnectorCredentialPair
+        │                       │      (role: EDITOR | OPERATOR; who MANAGES the pair)
+        │                       └──< UserGroup__CCPairDataAccess >── ConnectorCredentialPair
+        │                              (who may READ the pair's documents)
         │                       └──< document sets shared with the group (join table)
         │
         └──< DocumentSet (owned, is_public=False) >──< DocumentSet__ConnectorCredentialPair >── ConnectorCredentialPair
@@ -133,7 +139,7 @@ Document ── external_user_emails: str[]
          (populated by permission sync; see [[permission-sync]])
 
 DocumentByConnectorCredentialPair ── connector_id, credential_id
-ConnectorCredentialPair ── access_type: PUBLIC | SYNC | PRIVATE
+ConnectorCredentialPair ── access_type: PUBLIC | SYNC | SYNC_RESTRICTED | PRIVATE
 
 DocMetadataAwareIndexChunk (in-memory, indexing time)
   .access: DocumentAccess              # computed from the rows above
@@ -143,6 +149,7 @@ DocMetadataAwareIndexChunk (in-memory, indexing time)
 OpenSearch chunk document
   ACCESS_CONTROL_LIST_FIELD_NAME: str[]   # DocumentAccess.to_acl() minus PUBLIC_DOC_PAT
   PUBLIC_FIELD_NAME: bool                 # PUBLIC_DOC_PAT split out of the list
+  CC_PAIR_IDS_FIELD_NAME: int[]           # cc-pairs the document belongs to (§4.3a)
 ```
 
 - `UserGroup` (`onyx/db/models.py`, EE-managed via `ee/onyx/db/user_group.py`):
@@ -204,8 +211,9 @@ indexing/adapters/document_indexing_adapter.py:DocumentIndexingAdapter.prepare_e
                  → DocumentAccess.build(user_emails=..., user_groups=[], is_public=Document.is_public)
             EE: ee.onyx.access.access._get_access_for_documents
                  → calls the CE function first, then adds:
-                    - user_groups from fetch_user_groups_for_documents (internal Onyx groups
-                      the document is shared with via a document set / connector)
+                    - user_groups from fetch_user_groups_for_documents (the data-access
+                      groups of the document's PRIVATE cc-pairs; PUBLIC cc-pairs give their
+                      manage groups, which changes nothing; perm-synced pairs give none)
                     - external_user_emails / external_user_group_ids from the Document row
                     - is_public widened to True if the document is public in the source
                       system, or "censoring only" applies for this source (see §4.5), or
@@ -244,10 +252,11 @@ build_access_filters_for_user(user, db_session)     context/search/preprocessing
                               UNION
                                 {prefix_external_group(g.external_user_group_id) for g in
                                  fetch_external_groups_for_user(db_session, user.id)}
-  → list[str], stored as IndexFilters.access_control_list
+  → UserAccessFilters: the list[str] becomes IndexFilters.access_control_list; the
+    cc-pair sets (§4.3a) become IndexFilters.cc_pair_access
 
 SearchTool.run / search_pipeline → _build_index_filters       context/search/pipeline.py
-  → IndexFilters(access_control_list=<the list above>, ...)
+  → IndexFilters(access_control_list=<the list above>, cc_pair_access=<§4.3a>, ...)
 
 document_index.hybrid_retrieval / keyword_retrieval / semantic_retrieval / random_retrieval
   └─ DocumentQuery._get_search_filters(access_control_list=index_filters.access_control_list, ...)
@@ -274,6 +283,44 @@ invocation, inside the single DB session opened at the top of `run()`
 (`search_tool.py`), before any parallel retrieval lane starts (§5.3). Anonymous users route through
 `current_chat_accessible_user`, never `current_user`, and get only
 `{PUBLIC_DOC_PAT}` from either the CE or the EE `_get_acl_for_user`.
+
+### 4.3a Query-time cc-pair access filter
+
+A `SYNC_RESTRICTED` pair needs the workspace setting `allow_connector_group_restrictions`
+(`/admin/security`, default off, Business tier to turn on). `cc_pair.py:_assert_sync_restricted_allowed`
+rejects a pair that uses it while the setting is off.
+
+A second filter works from the cc-pair a chunk belongs to instead of from the
+ACL snapshot stored on the chunk. `onyx/db/connector_credential_pair.py:get_cc_pair_access_sets_for_user`
+sorts every live cc-pair into three sets for the acting user:
+
+- **Open** pairs: `PUBLIC` pairs, and non-synced pairs where the user owns the
+  credential or is in a data-access group. These need no ACL match.
+- **ACL** pairs: `SYNC` pairs, and `SYNC_RESTRICTED` pairs where the user is in
+  a data-access group. These need a public chunk or a `user_email:` or
+  `external_group:` match.
+- **Hidden restricted** pairs: `SYNC_RESTRICTED` pairs that grant the user
+  nothing.
+
+`access_filters.py:build_access_filters_for_user` returns these sets as
+`CCPairAccessFilter` on `UserAccessFilters`. `onyx/access/cc_pair_access.py:get_cc_pair_access_mode`
+picks the `CCPairAccessMode`:
+
+- `OFF`: the filter is not used. It is built only to hide `SYNC_RESTRICTED`
+  pairs from the ACL filter.
+- `SHADOW`: results use the ACL filter. The cc-pair filter is only compared and
+  logged. This is the mode when `ENABLE_CC_PAIR_ACCESS_FILTER` (or the Redis
+  override `cc_pair_access_filter` / `enabled`) is on.
+- `ENFORCE`: results use the cc-pair filter. This needs the Redis-only flag
+  `cc_pair_access_filter` / `enforce` and a finished `cc_pair_ids` backfill
+  (`document_index/opensearch/cc_pair_ids_backfill.py:is_cc_pair_ids_backfill_complete`).
+
+In `_get_search_filters`, `_get_cc_pair_access_visibility_filter` replaces the
+ACL clause only in `ENFORCE` mode. In every other mode the ACL clause stays,
+plus `_get_restricted_cc_pair_guard`, which removes chunks of hidden restricted
+pairs unless another pair of the chunk grants access. Chunks with no cc-pair
+(user files) fall back to the ACL filter. `user_can_access_chat_file` applies the
+same rule in Python.
 
 ### 4.4 Document sets and hierarchy scope: an additive, not alternative, filter
 
@@ -343,7 +390,8 @@ These are the rules whose violation is silent: nothing crashes, a user just sees
    passes a real, non-`None` `access_control_list` (the four hybrid/keyword/
    semantic/random query builders and the ID-based retrieval builder, all in
    `search.py`) routes through this one function, and it is the only place
-   `_get_acl_visibility_filter` is invoked. No other function in the codebase
+   `_get_acl_visibility_filter`, `_get_cc_pair_access_visibility_filter`, and
+   `_get_restricted_cc_pair_guard` are invoked. No other function in the codebase
    builds an OpenSearch `filter` clause referencing
    `ACCESS_CONTROL_LIST_FIELD_NAME` or `PUBLIC_FIELD_NAME`. A new retrieval
    entry point that hand-builds a query instead of going through
@@ -570,6 +618,11 @@ verified by "it still returns documents"; it is verified by a second user
   Testing a permission change only in CE (the default local dev setup) proves
   nothing about whether the EE group-derived ACL entries still compose
   correctly, and vice versa. Verify both editions before trusting a fix.
+- **The cc-pair filter has three modes and only `ENFORCE` changes results.**
+  `SHADOW` logs disagreements and still returns ACL-filtered results. `ENFORCE`
+  needs the Redis flag and a complete `cc_pair_ids` backfill, so a tenant can
+  have the master flag on and still run the ACL filter. A `SYNC_RESTRICTED`
+  pair is hidden in every mode, because the ACL alone cannot express it.
 - **A change to how the ACL is computed does not take effect until a
   reindex.** The ACL stored on an already-indexed chunk is a snapshot from
   whenever it was last written or updated (`Updatable.update`, see

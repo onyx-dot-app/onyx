@@ -8,6 +8,7 @@
 > `web/src/lib/admin-routes.ts`. Management happens through the same
 > user-facing router as browsing, gated by the `MANAGE_SKILLS` permission.
 
+**Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** craft
 **Edition:** CE (Craft ships in both editions; no EE-specific code in this path)
 **Owns:**
@@ -133,7 +134,7 @@ BuildSession
     mcp_config_hash
 ```
 
-- `Skill` (`backend/onyx/db/models.py:4903`): `built_in_skill_id` and
+- `Skill` (`backend/onyx/db/models.py:Skill`): `built_in_skill_id` and
   `bundle_file_id` are mutually exclusive
   (`ck_skill_definition_source`). A built-in's real content lives on disk
   under `BUILTIN_SKILLS_PATH` (`skills/built_in.py:BUILTIN_SKILLS_PATH`), not
@@ -142,23 +143,23 @@ BuildSession
   the first time a custom skill's stored bundle is inspected
   (`validation.py:validate_stored_custom_skill`) and gates whether it's ever
   hydrated into a fileset.
-- `Skill__User` / `Skill__UserGroup` (`models.py:733`, `models.py:5132`): one
+- `Skill__User` / `Skill__UserGroup` (`models.py:Skill__User`, `models.py:Skill__UserGroup`): one
   row per explicit share, `permission` is `VIEWER` or `EDITOR`
   (`SkillSharePermission`). `Skill.public_permission` is the org-wide grade,
   independent of any explicit share.
-- `UserSkillPreference` (`models.py:757`): the only row that represents
+- `UserSkillPreference` (`models.py:UserSkillPreference`): the only row that represents
   "this user has this skill turned on." Built-ins don't need one -
   `_is_enabled_for_user` (`db/skill.py`) treats every built-in as
   enabled unconditionally; only custom (or org-shared) skills need an
   opt-in row. The unique index is on `(user_id, name)`, not `(user_id,
   skill_id)`: two skills can never both be "enabled" under the same name for
   one user, which is what produces `SKILL_NAME_CONFLICT` on enable.
-- `ExternalApp__Skill` (`models.py:7198`): non-owning link, unique on
+- `ExternalApp__Skill` (`models.py:ExternalApp__Skill`): non-owning link, unique on
   `skill_id`, so a skill depends on at most one external app.
 - `Sandbox.skills_hash` / `Sandbox.mcp_config_hash`
-  (`models.py:6469-6470`): the last runtime fingerprint successfully pushed to
+  (`models.py:Sandbox`): the last runtime fingerprint successfully pushed to
   that sandbox. `BuildSession.skills_hash` /
-  `.mcp_config_hash` (`models.py:6401-6402`) record what the session's live
+  `.mcp_config_hash` (`models.py:BuildSession`) record what the session's live
   opencode instance was actually configured with, which can lag the
   sandbox's stored hash until the user reloads (§4.4, §5.1).
 
@@ -303,7 +304,7 @@ Two hash fields exist at two levels: `Sandbox.skills_hash` is "what was last
 successfully pushed to this sandbox's managed volume"; `BuildSession.skills_hash`
 is "what the currently-running opencode instance for this session was
 configured with." `session_runtime_stale`
-(`server/features/build/db/build_session.py:106`) compares the two: a live,
+(`server/features/build/db/build_session.py`) compares the two: a live,
 interactive, already-started session is stale if `sandbox.skills_hash !=
 session.skills_hash` (or the MCP equivalent). This is what
 `SkillsStaleNotice.tsx` renders and what
