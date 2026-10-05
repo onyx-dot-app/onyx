@@ -30,10 +30,20 @@ from onyx.connectors.edit_plan.models import (
 from onyx.connectors.edit_plan.planner import compute_edit_plan, normalize_steps
 from onyx.connectors.edit_plan.store import compute_base_state_hash
 from onyx.connectors.field_policy import FieldClass, ScopeDirection
+from onyx.connectors.file.edit_planning import FilePlanningData
+from onyx.connectors.github.config import GithubConnectorConfig
 from onyx.connectors.models import InputType
+from onyx.connectors.planning_rule import (
+    ConnectorChangeOverride,
+    PlanningData,
+    RuleSteps,
+    planning_rule_with_data,
+)
+from onyx.connectors.planning_rule_registry import PLANNING_RULES
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.models import StoredFileFacts
 
 _NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -779,3 +789,161 @@ def test_base_state_hash_covers_source_and_input_type(changes: dict[str, Any]) -
     assert compute_base_state_hash(current) != compute_base_state_hash(
         current.model_copy(update=changes)
     )
+
+
+# Planning rule steps
+
+
+class _RuleData(PlanningData):
+    backfill_repositories: str
+
+
+def _github_rule(
+    old: GithubConnectorConfig,  # noqa: ARG001
+    new: GithubConnectorConfig,
+    data: _RuleData,
+) -> ConnectorChangeOverride:
+    return ConnectorChangeOverride(
+        rule_steps=RuleSteps(
+            field_names=frozenset({"repo_owner"}),
+            backfill_config=new.model_dump(mode="json")
+            | {"repositories": data.backfill_repositories},
+            prune=True,
+        )
+    )
+
+
+@pytest.fixture
+def github_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(
+        PLANNING_RULES,
+        DocumentSource.GITHUB,
+        planning_rule_with_data(
+            GithubConnectorConfig,
+            _RuleData,
+            lambda *_: _RuleData(backfill_repositories=""),
+            _github_rule,
+        ),
+    )
+
+
+def test_rule_steps_replace_the_default_steps_of_their_fields(
+    github_rule: None,  # noqa: ARG001
+) -> None:
+    current = _current(
+        DocumentSource.GITHUB, {"repo_owner": "onyx", "repositories": "a"}
+    )
+    plan = _plan(
+        current,
+        _inputs(
+            supports_windowed_runs=False,
+            rule_data=_RuleData(backfill_repositories="a"),
+        ),
+        connector_specific_config={"repo_owner": "acme", "repositories": "a"},
+    )
+
+    # The IDENTITY change gives no full re-index; the rule's backfill runs
+    # even though the source cannot fetch a window.
+    assert _kinds(plan) == [EditStepKind.SCOPED_BACKFILL, EditStepKind.PRUNE]
+    backfill_step = _step(plan, EditStepKind.SCOPED_BACKFILL)
+    assert backfill_step.reasons == [EditStepReason.ITEMS_ADDED_OR_CHANGED]
+    assert backfill_step.field_names == ["repo_owner"]
+    assert backfill_step.backfill is not None
+    assert backfill_step.backfill.connector_config_override is not None
+    assert backfill_step.backfill.connector_config_override["repositories"] == "a"
+    assert _step(plan, EditStepKind.PRUNE).reasons == [EditStepReason.ITEMS_REMOVED]
+
+
+def test_fields_outside_the_rule_steps_keep_the_default_steps(
+    github_rule: None,  # noqa: ARG001
+) -> None:
+    current = _current(
+        DocumentSource.GITHUB, {"repo_owner": "onyx", "repositories": "a"}
+    )
+    plan = _plan(
+        current,
+        _inputs(rule_data=_RuleData(backfill_repositories="a")),
+        connector_specific_config={"repo_owner": "acme", "repositories": "a,b"},
+    )
+
+    # The default widening has no delta config while repo_owner changes, so
+    # it is a full re-index, which also covers the rule's backfill.
+    assert _kinds(plan) == [EditStepKind.FULL_REINDEX_THEN_PRUNE]
+
+
+def test_rule_without_its_data_uses_the_default_rules(
+    github_rule: None,  # noqa: ARG001
+) -> None:
+    current = _current(
+        DocumentSource.GITHUB, {"repo_owner": "onyx", "repositories": "a"}
+    )
+    plan = _plan(
+        current, connector_specific_config={"repo_owner": "acme", "repositories": "a"}
+    )
+
+    assert _kinds(plan) == [EditStepKind.FULL_REINDEX_THEN_PRUNE]
+    assert plan.steps[0].reasons == [EditStepReason.IDENTITY_CHANGED]
+
+
+def _file_data(**metadata: dict[str, Any]) -> FilePlanningData:
+    return FilePlanningData(
+        files={
+            file_id: StoredFileFacts(
+                display_name=f"{file_id}.txt",
+                file_type="text/plain",
+                content_sha256=f"sha-{file_id}",
+            )
+            for file_id in ("f1", "f2", "f3")
+        },
+        old_metadata=metadata.get("old", {}),
+        new_metadata=metadata.get("new", {}),
+    )
+
+
+def test_file_edit_indexes_added_files_and_prunes_removed_ones() -> None:
+    current = _current(
+        DocumentSource.FILE,
+        {"file_locations": ["f1", "f2"], "zip_metadata_file_id": "m1"},
+        indexing_start=_START,
+    )
+    plan = _plan(
+        current,
+        _inputs(
+            supports_windowed_runs=False,
+            rule_data=_file_data(
+                old={"f1.txt": {"title": "one"}},
+                new={"f1.txt": {"title": "one"}, "f3.txt": {"title": "three"}},
+            ),
+        ),
+        connector_specific_config={
+            "file_locations": ["f1", "f3"],
+            "zip_metadata_file_id": "m2",
+        },
+    )
+
+    assert _kinds(plan) == [EditStepKind.SCOPED_BACKFILL, EditStepKind.PRUNE]
+    backfill_step = _step(plan, EditStepKind.SCOPED_BACKFILL)
+    assert backfill_step.field_names == ["file_locations", "zip_metadata_file_id"]
+    assert backfill_step.backfill is not None
+    assert backfill_step.backfill.window_start == _START
+    override = backfill_step.backfill.connector_config_override
+    assert override is not None
+    assert override["file_locations"] == ["f3"]
+    assert override["zip_metadata_file_id"] == "m2"
+
+
+def test_file_edit_without_file_data_reindexes() -> None:
+    current = _current(
+        DocumentSource.FILE,
+        {"file_locations": ["f1"], "zip_metadata_file_id": "m1"},
+    )
+    plan = _plan(
+        current,
+        _inputs(supports_windowed_runs=False),
+        connector_specific_config={
+            "file_locations": ["f1", "f2"],
+            "zip_metadata_file_id": "m2",
+        },
+    )
+
+    assert _kinds(plan) == [EditStepKind.FULL_REINDEX]

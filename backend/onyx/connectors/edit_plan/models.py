@@ -13,6 +13,7 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.config_diff import ConfigFieldChange
 from onyx.connectors.models import InputType
+from onyx.connectors.planning_rule import PlanningData
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 
 
@@ -75,6 +76,10 @@ class EditStepReason(str, Enum):
     BEHAVIOR_CHANGED = "behavior_changed"
     SCOPE_WIDENED = "scope_widened"
     SCOPE_NARROWED = "scope_narrowed"
+    # A planning rule found items (e.g. files) that were added or changed, or
+    # whose documents are gone.
+    ITEMS_ADDED_OR_CHANGED = "items_added_or_changed"
+    ITEMS_REMOVED = "items_removed"
     OPAQUE_SCOPE_CHOICE = "opaque_scope_choice"
     INDEXING_START_EARLIER = "indexing_start_earlier"
     CREDENTIAL_FULL_PATH = "credential_full_path"
@@ -161,6 +166,8 @@ class EditPlanInputs(BaseModel):
     # None when nothing that validation checks changed.
     validation: ProposedPairingValidation | None = None
     dry_run_results: list[CapabilityCheckResult] = []
+    # What the source's planning rule reads besides the configs, if anything.
+    rule_data: PlanningData | None = None
 
 
 class EditPlan(BaseModel):

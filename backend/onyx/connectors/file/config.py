@@ -19,9 +19,9 @@ class LocalFileConnectorConfig(ConnectorConfig):
     ]
     # Display names for the UI only; the connector ignores them.
     file_names: Annotated[list[str] | None, FieldPolicy(FieldClass.COSMETIC)] = None
-    # The metadata sets document fields (and can set the document id). An
-    # in-place file edit saves the merged metadata as a new file, so adding
-    # files to a connector with metadata gives a full re-index.
+    # The metadata sets document fields (and can set the document id). With
+    # stored files, the planning rule (``edit_planning``) re-indexes only the
+    # files whose entries changed.
     zip_metadata_file_id: Annotated[str | None, _BEHAVIOR] = None
     # Deprecated inline metadata: arbitrary JSON keyed by file name.
     zip_metadata: Annotated[dict[str, Any] | None, _BEHAVIOR] = None

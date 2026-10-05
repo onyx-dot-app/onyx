@@ -6,6 +6,7 @@ from typing import Any
 
 import pydantic
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_config import ConnectorConfig
@@ -20,7 +21,11 @@ from onyx.connectors.field_policy import (
     ScopeToggle,
     get_field_policy,
 )
-from onyx.connectors.planning_rule import ConnectorChangeOverride, PlanningRule
+from onyx.connectors.planning_rule import (
+    ConnectorChangeOverride,
+    PlanningData,
+    PlanningRule,
+)
 from onyx.connectors.planning_rule_registry import PLANNING_RULES
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.utils.logger import setup_logger
@@ -208,6 +213,7 @@ def classify_source_config_change(
     source: DocumentSource,
     old_config: dict[str, Any],
     new_config: dict[str, Any],
+    rule_data: PlanningData | None = None,
 ) -> list[ConfigFieldChange]:
     """``classify_config_change`` with the source's config class and planning
     rule."""
@@ -216,7 +222,59 @@ def classify_source_config_change(
         old_config,
         new_config,
         PLANNING_RULES.get(source),
+        rule_data,
     )
+
+
+def source_change_override(
+    source: DocumentSource,
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+    rule_data: PlanningData | None = None,
+) -> ConnectorChangeOverride | None:
+    """What the source's planning rule decides for the edit. None when the
+    source has no rule, the rule uses the default rules, or either config
+    fails validation."""
+    rule = PLANNING_RULES.get(source)
+    if rule is None:
+        return None
+    config_class = CONNECTOR_CLASS_MAP[source].config_class
+    old_model = _validate(config_class, old_config)
+    new_model = _validate(config_class, new_config)
+    if old_model is None or new_model is None:
+        return None
+    override = rule.apply(old_model, new_model, rule_data)
+    if override is not None and override.rule_steps is not None:
+        unknown_fields = override.rule_steps.field_names - set(
+            config_class.model_fields
+        )
+        if unknown_fields:
+            raise ValueError(
+                f"The planning rule for {config_class.__name__} returned steps "
+                f"for unknown fields: {sorted(unknown_fields)}"
+            )
+    return override
+
+
+def load_source_rule_data(
+    db_session: Session,
+    source: DocumentSource,
+    cc_pair_id: int,
+    old_config: dict[str, Any],
+    new_config: dict[str, Any],
+) -> PlanningData | None:
+    """The data the source's planning rule reads for this edit. None when the
+    rule reads none or either config fails validation (the rule is then
+    skipped)."""
+    rule = PLANNING_RULES.get(source)
+    if rule is None or rule.load_data is None:
+        return None
+    config_class = CONNECTOR_CLASS_MAP[source].config_class
+    old_model = _validate(config_class, old_config)
+    new_model = _validate(config_class, new_config)
+    if old_model is None or new_model is None:
+        return None
+    return rule.load_data(db_session, cc_pair_id, old_model, new_model)
 
 
 def classify_config_change(
@@ -224,6 +282,7 @@ def classify_config_change(
     old_config: dict[str, Any],
     new_config: dict[str, Any],
     rule: PlanningRule | None = None,
+    rule_data: PlanningData | None = None,
 ) -> list[ConfigFieldChange]:
     """One entry per field whose value differs between the two configs.
 
@@ -241,7 +300,7 @@ def classify_config_change(
         old_values = old_model.model_dump(mode="json")
         new_values = new_model.model_dump(mode="json")
         if rule:
-            override = rule.apply(old_model, new_model)
+            override = rule.apply(old_model, new_model, rule_data)
     else:
         old_values = _with_defaults(config_class, old_config)
         new_values = _with_defaults(config_class, new_config)
@@ -302,6 +361,7 @@ def build_source_scoped_backfill_config(
     source: DocumentSource,
     old_config: dict[str, Any],
     new_config: dict[str, Any],
+    rule_data: PlanningData | None = None,
 ) -> dict[str, Any] | None:
     """``build_scoped_backfill_config`` with the source's config class and
     planning rule."""
@@ -310,6 +370,7 @@ def build_source_scoped_backfill_config(
         old_config,
         new_config,
         PLANNING_RULES.get(source),
+        rule_data,
     )
 
 
@@ -318,6 +379,7 @@ def build_scoped_backfill_config(
     old_config: dict[str, Any],
     new_config: dict[str, Any],
     rule: PlanningRule | None = None,
+    rule_data: PlanningData | None = None,
 ) -> dict[str, Any] | None:
     """The new config limited to the items a widening added, for a one-off
     backfill of just those items.
@@ -330,7 +392,9 @@ def build_scoped_backfill_config(
     """
     changes = [
         change
-        for change in classify_config_change(config_class, old_config, new_config, rule)
+        for change in classify_config_change(
+            config_class, old_config, new_config, rule, rule_data
+        )
         if change.field_class != FieldClass.COSMETIC
     ]
     if len(changes) != 1:

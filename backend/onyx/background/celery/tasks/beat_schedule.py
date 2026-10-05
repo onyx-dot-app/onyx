@@ -139,6 +139,18 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-staged-connector-file-cleanup",
+        "task": OnyxCeleryTask.CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still hold staged uploads to delete.
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-stale-capability-runs",
         "task": OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
         "schedule": timedelta(minutes=10),

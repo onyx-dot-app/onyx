@@ -24,6 +24,12 @@ from onyx.connectors.drupal_wiki.config import (
     DrupalWikiConnectorConfig,
     drupal_wiki_planning_rule,
 )
+from onyx.connectors.file.config import LocalFileConnectorConfig
+from onyx.connectors.file.edit_planning import (
+    FilePlanningData,
+    file_planning_rule,
+    load_file_planning_data,
+)
 from onyx.connectors.google_drive.config import (
     GoogleDriveConnectorConfig,
     google_drive_planning_rule,
@@ -37,7 +43,11 @@ from onyx.connectors.outlook.config import (
     OutlookConnectorConfig,
     outlook_planning_rule,
 )
-from onyx.connectors.planning_rule import PlanningRule, planning_rule
+from onyx.connectors.planning_rule import (
+    PlanningRule,
+    planning_rule,
+    planning_rule_with_data,
+)
 from onyx.connectors.salesforce.config import (
     SalesforceConnectorConfig,
     salesforce_planning_rule,
@@ -59,6 +69,12 @@ PLANNING_RULES: dict[DocumentSource, PlanningRule] = {
     ),
     DocumentSource.DRUPAL_WIKI: planning_rule(
         DrupalWikiConnectorConfig, drupal_wiki_planning_rule
+    ),
+    DocumentSource.FILE: planning_rule_with_data(
+        LocalFileConnectorConfig,
+        FilePlanningData,
+        load_file_planning_data,
+        file_planning_rule,
     ),
     DocumentSource.GOOGLE_DRIVE: planning_rule(
         GoogleDriveConnectorConfig, google_drive_planning_rule

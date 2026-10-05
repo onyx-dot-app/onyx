@@ -4,7 +4,8 @@ capabilities, validation results). It decides which propagation steps the edit
 needs; it reads and writes nothing.
 
 Each config field change maps to steps by its field class (see
-``field_policy``). The planner then merges the steps so that a full re-index
+``field_policy``), unless the source's planning rule decides the steps for
+that field (``RuleSteps``). The planner then merges the steps so that a full re-index
 replaces the backfills and a re-index followed by a prune replaces a plain
 prune.
 """
@@ -19,6 +20,7 @@ from onyx.connectors.config_diff import (
     ConfigFieldChange,
     build_source_scoped_backfill_config,
     classify_source_config_change,
+    source_change_override,
 )
 from onyx.connectors.edit_plan.models import (
     CredentialChoice,
@@ -36,6 +38,7 @@ from onyx.connectors.edit_plan.models import (
     ReconciliationChoice,
 )
 from onyx.connectors.field_policy import FieldClass, ScopeDirection
+from onyx.connectors.planning_rule import ConnectorChangeOverride, RuleSteps
 from onyx.connectors.planning_rule_registry import (
     CREDENTIAL_SWAP_FULL_PATH_SOURCES,
 )
@@ -187,6 +190,7 @@ def _widen_steps(
             current.source,
             current.connector_specific_config,
             proposed.connector_specific_config,
+            inputs.rule_data,
         )
         if inputs.supports_windowed_runs
         else None
@@ -236,9 +240,6 @@ def _field_change_steps(
             if change.scope_direction in (ScopeDirection.NARROW, ScopeDirection.BOTH):
                 narrowed_fields.append(change.field_name)
 
-    # TODO(evan-onyx): the file connector replaces these steps with per-file
-    # steps (index new or changed files, prune removed ones) from a content
-    # hash per file. Add that as a field of ConnectorChangeOverride.
     if identity_fields:
         steps.append(
             _step(
@@ -263,6 +264,49 @@ def _field_change_steps(
                 EditStepKind.PRUNE,
                 EditStepReason.SCOPE_NARROWED,
                 field_names=narrowed_fields,
+            )
+        )
+    return steps
+
+
+def _rule_steps(
+    rule_steps: RuleSteps,
+    changes: list[ConfigFieldChange],
+    proposed: ProposedPairState,
+    inputs: EditPlanInputs,
+) -> list[EditStep]:
+    """The steps a planning rule decided for its fields. Its backfill config
+    limits the run, so it does not need a source that fetches a window."""
+    field_names = [
+        change.field_name
+        for change in changes
+        if change.field_name in rule_steps.field_names
+    ]
+    steps: list[EditStep] = []
+    if rule_steps.backfill_config is not None:
+        window = _backfill_window(
+            proposed.indexing_start, inputs.now, rule_steps.backfill_config
+        )
+        steps.append(
+            _step(
+                EditStepKind.SCOPED_BACKFILL,
+                EditStepReason.ITEMS_ADDED_OR_CHANGED,
+                field_names=field_names,
+                backfill=window,
+            )
+            if window is not None
+            else _step(
+                EditStepKind.FULL_REINDEX,
+                EditStepReason.ITEMS_ADDED_OR_CHANGED,
+                field_names=field_names,
+            )
+        )
+    if rule_steps.prune:
+        steps.append(
+            _step(
+                EditStepKind.PRUNE,
+                EditStepReason.ITEMS_REMOVED,
+                field_names=field_names,
             )
         )
     return steps
@@ -501,13 +545,32 @@ def compute_edit_plan(
             current.source,
             current.connector_specific_config,
             proposed.connector_specific_config,
+            inputs.rule_data,
         )
         if config_changed
         else []
     )
+    override: ConnectorChangeOverride | None = (
+        source_change_override(
+            current.source,
+            current.connector_specific_config,
+            proposed.connector_specific_config,
+            inputs.rule_data,
+        )
+        if config_changed
+        else None
+    )
+    rule_steps: RuleSteps | None = override.rule_steps if override else None
     credential_changed: bool = proposed.credential_id != current.credential_id
 
-    steps = _field_change_steps(field_changes, current, proposed, inputs)
+    default_changes = [
+        change
+        for change in field_changes
+        if rule_steps is None or change.field_name not in rule_steps.field_names
+    ]
+    steps = _field_change_steps(default_changes, current, proposed, inputs)
+    if rule_steps is not None:
+        steps.extend(_rule_steps(rule_steps, field_changes, proposed, inputs))
     indexing_start_steps, notes = _indexing_start_steps(current, proposed, inputs)
     steps.extend(indexing_start_steps)
     access_steps, access_notes = _access_steps(current, proposed, inputs)
@@ -537,7 +600,7 @@ def compute_edit_plan(
 
     opaque_fields = [
         change.field_name
-        for change in field_changes
+        for change in default_changes
         if change.scope_direction == ScopeDirection.UNKNOWN
     ]
 
