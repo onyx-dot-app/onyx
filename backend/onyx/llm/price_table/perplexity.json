@@ -1,6 +1,17 @@
 {
   "aliases": {},
   "models": {
+    "pplx-decider-v1-27b": {
+      "cost": {
+        "input": 0.04,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "evaluation",
+      "name": "pplx-decider-v1-27b"
+    },
     "pplx-embed-context-v1-0.6b": {
       "cost": {
         "input": 0.008,

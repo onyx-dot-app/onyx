@@ -103,7 +103,7 @@
       "family": "kimi-k3",
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 1048576
       },
       "modalities": {
         "input": [
