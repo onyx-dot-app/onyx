@@ -30,8 +30,12 @@ on:
     types: [completed]
     branches: [auto/update-recommended-models]
 
+# actions:read is required: a caller's permissions cap what the reusable
+# workflow may grant GITHUB_TOKEN, and repair runs fetch the failed run's
+# logs with it.
 permissions:
   contents: read
+  actions: read
 
 jobs:
   update-recommended-models:

@@ -85,12 +85,20 @@ def call_responses_api(
         status: str | None = submitted.get("status")
         if status in ("completed", "failed", "cancelled", "incomplete"):
             return submitted
-        if time.monotonic() > deadline:
+        remaining: float = deadline - time.monotonic()
+        if remaining <= 0:
             raise TimeoutError(
                 f"Response {response_id} still {status} after {timeout}s"
             )
-        time.sleep(poll_interval)
-        submitted = api_request(f"/{response_id}", api_key, 60.0)
+        # Bound the sleep and the poll request by the remaining budget so the
+        # call can't overshoot the caller's timeout.
+        time.sleep(min(poll_interval, remaining))
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"Response {response_id} still {status} after {timeout}s"
+            )
+        submitted = api_request(f"/{response_id}", api_key, min(60.0, remaining))
         status = submitted.get("status")
         print(f"  response {response_id}: {status}", flush=True)
 
