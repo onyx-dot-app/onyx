@@ -641,6 +641,60 @@ class PersonalAccessToken(Base):
     )
 
 
+class OAuthProviderGrant(Base):
+    __tablename__ = "oauth_provider_grant"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[str] = mapped_column(String(2048), nullable=False)
+    client_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    resource: Mapped[str] = mapped_column(String(2048), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(postgresql.JSONB(), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    revoked_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    __table_args__ = (
+        Index("ix_oauth_provider_grant_user_created", "user_id", "created_at"),
+    )
+
+
+class OAuthProviderToken(Base):
+    __tablename__ = "oauth_provider_token"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    grant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("oauth_provider_grant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[Literal["access", "refresh"]] = mapped_column(
+        String(7), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    consumed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('access', 'refresh')", name="ck_oauth_provider_token_kind"
+        ),
+    )
+
+
 class Notification(Base):
     __tablename__ = "notification"
 
@@ -5604,6 +5658,22 @@ class PublicBase(DeclarativeBase):
     """
 
     __abstract__ = True
+
+
+class OAuthProviderClient(PublicBase):
+    __tablename__ = "oauth_provider_client"
+    __table_args__ = ({"schema": "public"},)
+
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_metadata: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_used_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
 
 
 # Strictly keeps track of the tenant that a given user will authenticate to.
