@@ -45,9 +45,12 @@ def _resolve(
     return next(([c] for c in candidates if c in files or c in dirs), [])
 
 
-def _ownership(names: set[str]) -> list[tuple[str, list[str]]]:
+def _ownership(names: set[str], changed: list[str]) -> list[tuple[str, list[str]]]:
     """(owned repo path, components) for every PATHS.md row that names components."""
     files, dirs, _ = _repo_paths()
+    # A deleted file is gone from the index but its PATHS.md row still owns it.
+    files |= set(changed)
+    dirs |= {p.rsplit("/", i)[0] for p in changed for i in range(1, p.count("/") + 1)}
     owned: list[tuple[str, list[str]]] = []
     for line in (MAP_DIR / "PATHS.md").read_text().splitlines():
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -88,7 +91,7 @@ def stale_components(changed: list[str]) -> dict[str, list[str]]:
         for path in changed
         if path.startswith(".agents/feature-map/components/")
     }
-    owned = _ownership(names)
+    owned = _ownership(names, changed)
     stale: dict[str, list[str]] = {}
     for path in changed:
         if path.startswith(_IGNORED_PREFIXES) or any(
