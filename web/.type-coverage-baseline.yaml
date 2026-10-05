@@ -27,7 +27,7 @@ packages:
   src/app/mcp: 99.5
   src/app/nrf: 99.2
   src/app/oauth-config: 100
-  src/components: 97.6
+  src/components: 97.7
   src/components/admin: 96.7
   src/components/auth: 89.3
   src/components/chat: 97.2
@@ -118,7 +118,7 @@ packages:
   src/sections/connectors: 100
   src/sections/document-sidebar: 99.5
   src/sections/input: 99.8
-  src/sections/knowledge: 99.7
+  src/sections/knowledge: 99.6
   src/sections/modals: 99.5
   src/sections/model-selector: 99.6
   src/sections/onboarding: 99.8

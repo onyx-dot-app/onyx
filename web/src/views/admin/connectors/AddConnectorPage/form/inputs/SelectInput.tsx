@@ -1,6 +1,7 @@
 import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 import type { StringWithDescription } from "@/lib/connectors/types";
-import { Field } from "formik";
+import { InputSingleSelect } from "@opal/components";
+import { useField } from "formik";
 import { useTranslations } from "next-intl";
 
 export default function SelectInput({
@@ -17,6 +18,7 @@ export default function SelectInput({
   label?: string;
 }) {
   const t = useTranslations("admin.connectorsList");
+  const [field, , helpers] = useField<string>(name);
 
   return (
     <>
@@ -33,18 +35,20 @@ export default function SelectInput({
       </label>
       {description && <CredentialSubText>{description}</CredentialSubText>}
 
-      <Field
-        as="select"
-        name={name}
-        className="w-full p-2 border border-border-03 rounded-08 bg-transparent text-text-04 focus:ring-2 focus:ring-lighter-agent focus:border-lighter-agent focus:outline-hidden"
-      >
-        <option value="">{t("selectInput.emptyOption.label")}</option>
-        {options?.map((option: any) => (
-          <option key={option.name} value={option.name}>
-            {option.name}
-          </option>
-        ))}
-      </Field>
+      <InputSingleSelect
+        id={name}
+        value={field.value ?? ""}
+        onValueChange={(value) => void helpers.setValue(value)}
+        placeholder={t("selectInput.emptyOption.label")}
+        options={[
+          {
+            options: options.map((option) => ({
+              value: option.name,
+              title: option.name,
+            })),
+          },
+        ]}
+      />
     </>
   );
 }

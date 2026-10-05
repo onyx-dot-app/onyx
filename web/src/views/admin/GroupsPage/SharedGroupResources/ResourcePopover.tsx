@@ -4,14 +4,20 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { SvgEmpty } from "@opal/icons";
 import { Content } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import { Popover } from "@opal/components";
-import { Divider } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
-import { cn, clickOnKeyDown } from "@opal/utils";
+import {
+  Dropdown,
+  InputTypeIn,
+  type DropdownMenuItem,
+  type DropdownMenuRow,
+} from "@opal/components";
+import { cn } from "@opal/utils";
 import type { ResourcePopoverProps } from "@/views/admin/GroupsPage/SharedGroupResources/interfaces";
 
+/**
+ * A type-in that lists the resources the caller already filtered by its
+ * text, in titled sections. The rendered item can hold its own buttons, so
+ * each is a custom row.
+ */
 function ResourcePopover({
   placeholder,
   searchValue,
@@ -22,92 +28,67 @@ function ResourcePopover({
   const [open, setOpen] = useState(false);
 
   const totalItems = sections.reduce((sum, s) => sum + s.items.length, 0);
+  const items: DropdownMenuItem[] =
+    totalItems === 0
+      ? [
+          {
+            kind: "custom",
+            id: "no-results",
+            disabled: true,
+            render: ({ props }) => (
+              <div {...props} className="px-3 py-3">
+                <Content
+                  icon={SvgEmpty}
+                  title={t("sharedResources.popover.noResults.title")}
+                  sizePreset="secondary"
+                  variant="section"
+                />
+              </div>
+            ),
+          },
+        ]
+      : sections
+          .filter((section) => section.items.length > 0)
+          .map((section, idx): DropdownMenuItem => ({
+            kind: "group",
+            ...(section.label !== undefined && { title: section.label }),
+            items: section.items.map(
+              (item): DropdownMenuRow => ({
+                kind: "custom",
+                id: `${section.label ?? idx}-${item.key}`,
+                keywords: [item.label],
+                disabled: item.disabled,
+                keepOpen: true,
+                onActivate: item.onSelect,
+                render: ({ highlighted, props }) => (
+                  <div
+                    {...props}
+                    aria-label={item.label}
+                    className={cn(
+                      "rounded-08 cursor-pointer transition-colors",
+                      item.disabled
+                        ? "bg-background-tint-02"
+                        : highlighted && "bg-background-tint-02"
+                    )}
+                  >
+                    {item.render(!!item.disabled)}
+                  </div>
+                ),
+              })
+            ),
+          }));
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Anchor>
+    <Dropdown open={open} onOpenChange={setOpen}>
+      <Dropdown.Trigger asChild typeIn behavior="open">
         <InputTypeIn
           placeholder={placeholder}
           value={searchValue}
-          onChange={(e) => {
-            onSearchChange(e.target.value);
-            if (!open) setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
+          onChange={(e) => onSearchChange(e.target.value)}
         />
-      </Popover.Anchor>
-      <Popover.Content
-        width="trigger"
-        align="start"
-        sideOffset={4}
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
-        <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
-          {totalItems === 0 ? (
-            <div className="px-3 py-3">
-              <Content
-                icon={SvgEmpty}
-                title={t("sharedResources.popover.noResults.title")}
-                sizePreset="secondary"
-                variant="section"
-              />
-            </div>
-          ) : (
-            sections.map(
-              (section, idx) =>
-                section.items.length > 0 && (
-                  <div key={section.label ?? `section-${idx}`}>
-                    {section.label && (
-                      <Section
-                        flexDirection="row"
-                        gap={1}
-                        padding={0}
-                        height="auto"
-                        alignItems="center"
-                        justifyContent="start"
-                        className="px-2 pt-2 pb-1"
-                      >
-                        <Text secondaryBody text03 className="shrink-0">
-                          {section.label}
-                        </Text>
-                        <Divider paddingParallel={0} paddingPerpendicular={0} />
-                      </Section>
-                    )}
-                    <Section
-                      gap={1}
-                      alignItems="stretch"
-                      justifyContent="start"
-                    >
-                      {section.items.map((item) => (
-                        // The rendered item can hold its own buttons, so this
-                        // stays a div with button semantics.
-                        <div
-                          key={item.key}
-                          className={cn(
-                            "rounded-08 cursor-pointer",
-                            item.disabled
-                              ? "bg-background-tint-02"
-                              : "hover:bg-background-tint-02 transition-colors"
-                          )}
-                          role="button"
-                          tabIndex={0}
-                          aria-label={item.label}
-                          onKeyDown={clickOnKeyDown(item.onSelect)}
-                          onClick={() => {
-                            item.onSelect();
-                          }}
-                        >
-                          {item.render(!!item.disabled)}
-                        </div>
-                      ))}
-                    </Section>
-                  </div>
-                )
-            )
-          )}
-        </div>
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data label={placeholder} items={items} />
+    </Dropdown>
   );
 }
 

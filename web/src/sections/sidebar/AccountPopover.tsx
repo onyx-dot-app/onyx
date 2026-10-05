@@ -12,9 +12,15 @@ import {
 } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { loginPath } from "@/lib/auth/paths";
-import { Popover, PopoverMenu } from "@opal/components";
+import {
+  Dropdown,
+  LineItemButton,
+  SidebarTab,
+  useDropdownViews,
+  type DropdownMenuItem,
+  type DropdownView,
+} from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { SidebarTab, LineItemButton } from "@opal/components";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
@@ -37,17 +43,14 @@ import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
 
-interface SettingsPopoverProps {
-  onUserSettingsClick: () => void;
-  onOpenNotifications: () => void;
+interface SettingsItemsProps {
   undismissedCount: number;
 }
 
-function SettingsPopover({
-  onUserSettingsClick,
-  onOpenNotifications,
+/** The account menu's rows. The notifications row leads to its page. */
+function useSettingsItems({
   undismissedCount,
-}: SettingsPopoverProps) {
+}: SettingsItemsProps): DropdownMenuItem[] {
   const t = useTranslations("accountPopover");
   const { user, userResolution } = useUser();
   const settings = useSettings();
@@ -87,10 +90,13 @@ function SettingsPopover({
       });
   };
 
-  return (
-    <PopoverMenu>
-      {[
-        <div key="user-email" className="p-2">
+  return [
+    {
+      kind: "custom",
+      id: "user-email",
+      disabled: true,
+      render: ({ props }) => (
+        <div {...props} className="p-2">
           <Content
             sizePreset="main-ui"
             title={
@@ -99,98 +105,146 @@ function SettingsPopover({
                 : getUserEmail(user)
             }
           />
-        </div>,
-        null,
-        <div key="user-settings" data-testid="Settings/user-settings">
-          <LineItemButton
-            sizePreset="main-ui"
-            variant="section"
-            rounding={2}
-            icon={SvgSliders}
-            title={t("settings.label")}
-            href="/app/settings"
-            onClick={onUserSettingsClick}
-          />
-        </div>,
-        <LineItemButton
-          key="notifications"
-          sizePreset="main-ui"
-          variant="section"
-          rounding={2}
-          icon={SvgBell}
-          title={t("notifications.label")}
-          onClick={onOpenNotifications}
-          rightChildren={
-            undismissedCount ? (
-              <SvgNotificationBubble count={undismissedCount} />
-            ) : undefined
-          }
-        />,
-        <LineItemButton
-          key="help-faq"
-          sizePreset="main-ui"
-          variant="section"
-          rounding={2}
-          icon={SvgHelpCircle}
-          title={t("helpFaq.label")}
-          href="https://docs.onyx.app"
-          target="_blank"
-        />,
-        enterpriseSettings?.custom_help_link_url && (
-          <LineItemButton
-            key="custom-help-link"
-            sizePreset="main-ui"
-            variant="section"
-            rounding={2}
-            icon={SvgExternalLink}
-            title={
-              enterpriseSettings.custom_help_link_label ||
-              enterpriseSettings.custom_help_link_url
-            }
-            href={enterpriseSettings.custom_help_link_url}
-            target="_blank"
-          />
-        ),
-        showLogin && (
-          <LineItemButton
-            key="log-in"
-            sizePreset="main-ui"
-            variant="section"
-            rounding={2}
-            icon={SvgUser}
-            title={t("logIn.label")}
-            onClick={handleLogin}
-          />
-        ),
-        showLogout && (
-          <LineItemButton
-            key="log-out"
-            sizePreset="main-ui"
-            variant="section"
-            color="danger"
-            rounding={2}
-            icon={SvgLogOut}
-            title={t("signOut.label")}
-            onClick={handleLogout}
-          />
-        ),
-        null,
-        <div key="version" className="p-2">
-          <Content
-            sizePreset="secondary"
-            variant="body"
-            color="muted"
-            orientation="reverse"
-            icon={SvgOnyxLogo}
-            title={markdown(
-              `[Onyx ${
-                settings.version ?? "dev"
-              }](https://docs.onyx.app/changelog)`
-            )}
-          />
-        </div>,
-      ]}
-    </PopoverMenu>
+        </div>
+      ),
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          // A real link, under the id the tests know it by.
+          kind: "custom",
+          id: "user-settings",
+          keywords: [t("settings.label")],
+          render: ({ highlighted, props }) => (
+            <div data-testid="Settings/user-settings">
+              <LineItemButton
+                selectVariant="select-heavy"
+                interaction={highlighted ? "hover" : "rest"}
+                sizePreset="main-ui"
+                variant="section"
+                rounding={2}
+                icon={SvgSliders}
+                title={t("settings.label")}
+                href="/app/settings"
+                {...props}
+              />
+            </div>
+          ),
+        },
+        {
+          kind: "custom",
+          id: "notifications",
+          keywords: [t("notifications.label")],
+          onActivate: (views) => views.push("notifications"),
+          render: ({ highlighted, props }) => (
+            <LineItemButton
+              presentational
+              selectVariant="select-heavy"
+              interaction={highlighted ? "hover" : "rest"}
+              sizePreset="main-ui"
+              variant="section"
+              rounding={2}
+              icon={SvgBell}
+              title={t("notifications.label")}
+              rightChildren={
+                undismissedCount ? (
+                  <SvgNotificationBubble count={undismissedCount} />
+                ) : undefined
+              }
+              {...props}
+            />
+          ),
+        },
+        {
+          kind: "action",
+          id: "help-faq",
+          icon: SvgHelpCircle,
+          title: t("helpFaq.label"),
+          href: "https://docs.onyx.app",
+          target: "_blank",
+        },
+        ...(enterpriseSettings?.custom_help_link_url
+          ? [
+              {
+                kind: "action" as const,
+                id: "custom-help-link",
+                icon: SvgExternalLink,
+                title:
+                  enterpriseSettings.custom_help_link_label ||
+                  enterpriseSettings.custom_help_link_url,
+                href: enterpriseSettings.custom_help_link_url,
+                target: "_blank",
+              },
+            ]
+          : []),
+        ...(showLogin
+          ? [
+              {
+                kind: "action" as const,
+                id: "log-in",
+                icon: SvgUser,
+                title: t("logIn.label"),
+                onSelect: handleLogin,
+              },
+            ]
+          : []),
+        ...(showLogout
+          ? [
+              {
+                kind: "action" as const,
+                id: "log-out",
+                icon: SvgLogOut,
+                danger: true,
+                title: t("signOut.label"),
+                onSelect: handleLogout,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "custom",
+          id: "version",
+          disabled: true,
+          render: ({ props }) => (
+            <div {...props} className="p-2">
+              <Content
+                sizePreset="secondary"
+                variant="body"
+                color="muted"
+                orientation="reverse"
+                icon={SvgOnyxLogo}
+                title={markdown(
+                  `[Onyx ${
+                    settings.version ?? "dev"
+                  }](https://docs.onyx.app/changelog)`
+                )}
+              />
+            </div>
+          ),
+        },
+      ],
+    },
+  ];
+}
+
+interface NotificationsPageProps {
+  onShowBuildIntro?: () => void;
+}
+
+/** The notifications page, one row holding the panel; back pops, a pick closes. */
+function NotificationsPage({ onShowBuildIntro }: NotificationsPageProps) {
+  const views = useDropdownViews();
+  return (
+    <NotificationsPopover
+      onClose={() => views.pop()}
+      onNavigate={() => views.close()}
+      onShowBuildIntro={onShowBuildIntro}
+    />
   );
 }
 
@@ -201,12 +255,9 @@ export interface SettingsProps {
 export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   const t = useTranslations("accountPopover");
   const folded = useSidebarFolded();
-  const [popupState, setPopupState] = useState<
-    "Settings" | "Notifications" | undefined
-  >(undefined);
+  const [menuOpen, setMenuOpen] = useState(false);
   const { user, userResolution } = useUser();
   const appPosition = useAppPosition();
-  const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
@@ -225,18 +276,31 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
       }
       preload("/api/llm/provider", errorHandlingFetcher);
       void refreshNotificationSummary();
-      setPopupState("Settings");
-    } else {
-      setPopupState(undefined);
     }
+    setMenuOpen(state);
+  };
+  const items = useSettingsItems({ undismissedCount });
+  const notificationsView: DropdownView = {
+    items: [
+      {
+        kind: "custom",
+        id: "notifications-page",
+        keepOpen: true,
+        render: ({ props }) => (
+          <div {...props}>
+            <NotificationsPage onShowBuildIntro={onShowBuildIntro} />
+          </div>
+        ),
+      },
+    ],
   };
   if (userResolution === "loading") {
     return <SidebarTabSkeleton folded={folded} />;
   }
 
   return (
-    <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
-      <Popover.Trigger asChild>
+    <Dropdown width={25} open={menuOpen} onOpenChange={handlePopoverOpen}>
+      <Dropdown.Trigger asChild>
         <div id="onyx-user-dropdown">
           <SidebarTab
             icon={(props) => (
@@ -252,35 +316,17 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
               ) : undefined
             }
             type="button"
-            selected={!!popupState || appPosition.isUserSettings()}
+            selected={menuOpen || appPosition.isUserSettings()}
           >
             {userDisplayName}
           </SidebarTab>
         </div>
-      </Popover.Trigger>
-
-      <Popover.Content
-        align={isMobile ? "start" : "end"}
-        side={isMobile ? "top" : "right"}
-        width={popupState === "Notifications" ? "2xl" : "lg"}
-      >
-        {popupState === "Settings" && (
-          <SettingsPopover
-            onUserSettingsClick={() => {
-              setPopupState(undefined);
-            }}
-            onOpenNotifications={() => setPopupState("Notifications")}
-            undismissedCount={undismissedCount}
-          />
-        )}
-        {popupState === "Notifications" && (
-          <NotificationsPopover
-            onClose={() => setPopupState("Settings")}
-            onNavigate={() => setPopupState(undefined)}
-            onShowBuildIntro={onShowBuildIntro}
-          />
-        )}
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={userDisplayName}
+        items={items}
+        views={{ notifications: notificationsView }}
+      />
+    </Dropdown>
   );
 }

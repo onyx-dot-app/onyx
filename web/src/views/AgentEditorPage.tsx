@@ -9,13 +9,11 @@ import {
   Button,
   Card,
   Divider,
-  LineItemButton,
+  Dropdown,
+  InputTypeInTag,
   MessageCard,
-  Popover,
-  PopoverMenu,
   Tooltip,
   useCreateModal,
-  InputTypeInTag,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
@@ -224,8 +222,8 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         className="hidden"
       />
 
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <Popover.Trigger asChild>
+      <Dropdown open={popoverOpen} onOpenChange={setPopoverOpen}>
+        <Dropdown.Trigger asChild>
           <Hoverable.Root group="inputAvatar" width="fit">
             <InputAvatar className="relative flex flex-col items-center justify-center h-30 w-30">
               {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
@@ -245,44 +243,54 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               </div>
             </InputAvatar>
           </Hoverable.Root>
-        </Popover.Trigger>
-        <Popover.Content>
-          <PopoverMenu>
-            {[
-              <LineItemButton
-                sizePreset="main-ui"
-                rounding={2}
-                key="upload-image"
-                icon={SvgImage}
-                onClick={() => fileInputRef.current?.click()}
-                selectVariant="select-heavy"
-                title={t("editor.avatar.uploadImage.label")}
-              />,
-              null,
-              <div key="icon-grid" className="grid grid-cols-4 gap-1">
-                <SquareButton
-                  key="default-icon"
-                  icon={() => (
-                    <CustomAgentAvatar name={values.name} size={30} />
-                  )}
-                  onClick={() => handleIconClick(null)}
-                  transient={!imageSrc && values.icon_name === null}
-                />
-                {Object.keys(agentAvatarIconMap).map((iconName) => (
-                  <SquareButton
-                    key={iconName}
-                    onClick={() => handleIconClick(iconName)}
-                    icon={() => (
-                      <CustomAgentAvatar iconName={iconName} size={30} />
-                    )}
-                    transient={values.icon_name === iconName}
-                  />
-                ))}
-              </div>,
-            ]}
-          </PopoverMenu>
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("editor.avatar.edit.label")}
+          items={[
+            {
+              kind: "action",
+              id: "upload-image",
+              icon: SvgImage,
+              title: t("editor.avatar.uploadImage.label"),
+              onSelect: () => fileInputRef.current?.click(),
+            },
+            {
+              kind: "group",
+              items: [
+                // The icon grid is one row with its own controls; a pick
+                // closes the list itself.
+                {
+                  kind: "custom",
+                  id: "icon-grid",
+                  keepOpen: true,
+                  render: ({ props }) => (
+                    <div {...props} className="grid grid-cols-4 gap-1">
+                      <SquareButton
+                        key="default-icon"
+                        icon={() => (
+                          <CustomAgentAvatar name={values.name} size={30} />
+                        )}
+                        onClick={() => handleIconClick(null)}
+                        transient={!imageSrc && values.icon_name === null}
+                      />
+                      {Object.keys(agentAvatarIconMap).map((iconName) => (
+                        <SquareButton
+                          key={iconName}
+                          onClick={() => handleIconClick(iconName)}
+                          icon={() => (
+                            <CustomAgentAvatar iconName={iconName} size={30} />
+                          )}
+                          transient={values.icon_name === iconName}
+                        />
+                      ))}
+                    </div>
+                  ),
+                },
+              ],
+            },
+          ]}
+        />
+      </Dropdown>
     </>
   );
 }
