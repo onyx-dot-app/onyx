@@ -31,7 +31,6 @@ from onyx.db.models import (
 )
 from onyx.mcp_oauth.models import (
     MCPOAuthGrantInfo,
-    MCPOAuthOwner,
     MCPOAuthTokenInfo,
     MCPOAuthTokenPair,
 )
@@ -41,10 +40,6 @@ from shared_configs.contextvars import get_current_tenant_id
 MCP_OAUTH_ACCESS_LIFETIME = timedelta(minutes=15)
 MCP_OAUTH_GRANT_LIFETIME = timedelta(days=30)
 MCP_OAUTH_STORAGE_ERRORS = (SQLAlchemyError, ShardConfigurationError, ShardLookupError)
-
-
-def _rowcount(result: object) -> int:
-    return cast(CursorResult[Any], result).rowcount or 0
 
 
 def mcp_oauth_tenant_has_members(tenant_id: str) -> bool:
@@ -98,48 +93,6 @@ def mcp_oauth_owner_is_member(
         )
 
 
-def mcp_oauth_owner_snapshot(user: User) -> MCPOAuthOwner:
-    return MCPOAuthOwner(
-        user_id=user.id,
-        email=user.email,
-        oauth_identities=tuple(
-            (account.oauth_name, account.account_id) for account in user.oauth_accounts
-        ),
-    )
-
-
-def get_mcp_oauth_owner(session: Session, user_id: UUID) -> MCPOAuthOwner | None:
-    user = session.get(User, user_id, populate_existing=True)
-    return (
-        mcp_oauth_owner_snapshot(user) if user is not None and user.is_active else None
-    )
-
-
-def get_mcp_oauth_token_owner(
-    session: Session, raw_token: str, *, client_id: str, resource: str
-) -> MCPOAuthOwner | None:
-    parsed = parse_mcp_oauth_token(raw_token)
-    if parsed is None or parsed.tenant_id != get_current_tenant_id():
-        return None
-    user = (
-        session.scalars(
-            select(User)
-            .join(MCPOAuthGrant, MCPOAuthGrant.user_id == User.id)
-            .join(MCPOAuthToken, MCPOAuthToken.grant_id == MCPOAuthGrant.id)
-            .where(
-                MCPOAuthToken.token_hash == parsed.token_hash,
-                MCPOAuthToken.kind == parsed.kind.value,
-                MCPOAuthGrant.client_id == client_id,
-                MCPOAuthGrant.resource == resource,
-                User.__table__.c.is_active.is_(True),
-            )
-        )
-        .unique()
-        .one_or_none()
-    )
-    return mcp_oauth_owner_snapshot(user) if user is not None else None
-
-
 def register_mcp_oauth_client(client: OAuthClientInformationFull) -> None:
     if (
         not client.client_id
@@ -183,7 +136,7 @@ def get_mcp_oauth_client(client_id: str) -> OAuthClientInformationFull | None:
                 .values(last_used_at=now)
             )
             session.commit()
-            if _rowcount(result) == 0:
+            if not cast(CursorResult[Any], result).rowcount:
                 stored = session.get(MCPOAuthClient, client_id, populate_existing=True)
                 if stored is None:
                     return None
@@ -205,7 +158,7 @@ def _issue_tokens(
             expires_at=expires_at,
         )
     )
-    refresh_token = None
+    refresh_token: str | None = None
     if issue_refresh:
         refresh_token = generate_mcp_oauth_token(
             get_current_tenant_id(), MCPOAuthTokenKind.REFRESH

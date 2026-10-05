@@ -8,9 +8,6 @@ from redis.asyncio import Redis
 
 from onyx.mcp_oauth import attempts
 from onyx.mcp_oauth.attempts import (
-    MCPOAuthConsentBinding,
-    PendingMCPOAuthAuthorization,
-    StoredMCPOAuthCode,
     allow_mcp_oauth_request,
     bind_authorization_request,
     consume_authorization_code,
@@ -19,6 +16,11 @@ from onyx.mcp_oauth.attempts import (
     get_authorization_request,
     store_authorization_code,
     store_authorization_request,
+)
+from onyx.mcp_oauth.models import (
+    MCPOAuthConsentBinding,
+    PendingMCPOAuthAuthorization,
+    StoredMCPOAuthCode,
 )
 
 pytestmark = pytest.mark.asyncio(loop_scope="module")
@@ -443,9 +445,13 @@ async def test_invalid_handles_do_not_touch_redis() -> None:
     assert await consume_authorization_code(bad_handle) is None
 
 
-async def test_rate_limit_counter_has_atomic_ttl(redis_client: Redis) -> None:
+async def test_rate_limit_counter_has_atomic_ttl(
+    redis_client: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
     bucket = f"bucket-{uuid4().hex}"
     window_seconds = 60
+    frozen_now = time.time()
+    monkeypatch.setattr(attempts.time, "time", lambda: frozen_now)
     key = attempts._rate_key(bucket, window_seconds)
     try:
         assert await allow_mcp_oauth_request(

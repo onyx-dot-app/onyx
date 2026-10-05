@@ -38,13 +38,9 @@ class ParsedMCPOAuthToken(BaseModel):
     token_hash: str
 
 
-def _validate_mcp_oauth_tenant_id(tenant_id: str) -> None:
+def generate_mcp_oauth_token(tenant_id: str, kind: MCPOAuthTokenKind) -> str:
     if _MCP_OAUTH_TENANT_RE.fullmatch(tenant_id) is None:
         raise ValueError("Invalid MCP OAuth tenant ID")
-
-
-def generate_mcp_oauth_token(tenant_id: str, kind: MCPOAuthTokenKind) -> str:
-    _validate_mcp_oauth_tenant_id(tenant_id)
     if kind == MCPOAuthTokenKind.ACCESS:
         prefix = MCP_OAUTH_ACCESS_TOKEN_PREFIX
     elif kind == MCPOAuthTokenKind.REFRESH:

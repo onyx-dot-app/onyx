@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from mcp.server.auth.provider import AuthorizationParams
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from onyx.auth.mcp_oauth import MCPOAuthTokenKind
@@ -37,9 +38,27 @@ class MCPOAuthTokenPair(BaseModel):
     scopes: tuple[str, ...]
 
 
-class MCPOAuthOwner(BaseModel):
+class PendingMCPOAuthAuthorization(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    client_id: str
+    client_name: str
+    params: AuthorizationParams
+
+
+class MCPOAuthConsentBinding(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     user_id: UUID
-    email: str
-    oauth_identities: tuple[tuple[str, str], ...]
+    tenant_id: str
+    session_hash: str
+    csrf_token: str = Field(repr=False)
+
+
+class StoredMCPOAuthCode(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    authorization: PendingMCPOAuthAuthorization
+    user_id: UUID
+    tenant_id: str
+    expires_at: float

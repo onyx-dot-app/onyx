@@ -8,9 +8,13 @@ from collections.abc import Awaitable
 from typing import cast
 from uuid import UUID
 
-from mcp.server.auth.provider import AuthorizationParams
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
+from onyx.mcp_oauth.models import (
+    MCPOAuthConsentBinding,
+    PendingMCPOAuthAuthorization,
+    StoredMCPOAuthCode,
+)
 from onyx.redis.redis_pool import get_async_redis_connection
 from shared_configs.configs import DEFAULT_REDIS_PREFIX
 
@@ -42,32 +46,6 @@ if count == 1 then
 end
 return count <= tonumber(ARGV[2])
 """
-
-
-class PendingMCPOAuthAuthorization(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    client_id: str
-    client_name: str
-    params: AuthorizationParams
-
-
-class MCPOAuthConsentBinding(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    user_id: UUID
-    tenant_id: str
-    session_hash: str
-    csrf_token: str = Field(repr=False)
-
-
-class StoredMCPOAuthCode(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    authorization: PendingMCPOAuthAuthorization
-    user_id: UUID
-    tenant_id: str
-    expires_at: float
 
 
 def _new_handle() -> str:
@@ -104,19 +82,6 @@ def _rate_key(bucket: str, window_seconds: int) -> str:
     return f"{_RATE_KEY_PREFIX}:{{{digest}}}:{window_id}"
 
 
-def _constant_time_equal(first: str, second: str) -> bool:
-    try:
-        first_bytes = first.encode("ascii")
-        second_bytes = second.encode("ascii")
-    except UnicodeEncodeError:
-        return False
-    return secrets.compare_digest(first_bytes, second_bytes)
-
-
-def _json_for_model(model: BaseModel) -> str:
-    return model.model_dump_json()
-
-
 def _loads_model[T: BaseModel](raw: object, model_type: type[T]) -> T | None:
     if not isinstance(raw, (str, bytes, bytearray)):
         return None
@@ -137,7 +102,7 @@ async def store_authorization_request(
     redis = await get_async_redis_connection()
     was_stored = await redis.set(
         pending_key,
-        _json_for_model(authorization),
+        authorization.model_dump_json(),
         ex=AUTHORIZATION_REQUEST_TTL_SECONDS,
         nx=True,
     )
@@ -180,7 +145,7 @@ async def bind_authorization_request(
         session_hash=session_hash,
         csrf_token=_new_handle(),
     )
-    raw_binding = _json_for_model(binding)
+    raw_binding = binding.model_dump_json()
     was_bound = await redis.set(
         binding_key,
         raw_binding,
@@ -226,7 +191,7 @@ async def consume_authorization_request(
         binding.user_id != user_id
         or binding.tenant_id != tenant_id
         or binding.session_hash != session_hash
-        or not _constant_time_equal(binding.csrf_token, csrf_token)
+        or not secrets.compare_digest(binding.csrf_token.encode(), csrf_token.encode())
     ):
         return None
     if not isinstance(raw_binding, (str, bytes, bytearray)):
@@ -269,7 +234,7 @@ async def store_authorization_code(record: StoredMCPOAuthCode) -> str:
     redis = await get_async_redis_connection()
     was_stored = await redis.set(
         key,
-        _json_for_model(record),
+        record.model_dump_json(),
         ex=ttl_seconds,
         nx=True,
     )
