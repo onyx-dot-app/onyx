@@ -4,6 +4,7 @@ import { Permission } from "@/lib/types";
 import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
+import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -307,23 +308,16 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       // Access type and groups live on the connector setup page, so reaching
       // /admin/connectors says nothing about them. `web` has no credential
       // template, so its page shows the configuration straight away.
+      const setupPage = new ConnectorSetupPage(page, "web");
       await page.goto("/admin/connectors/web");
       await page.waitForLoadState("networkidle");
-      await expect(page.getByText("Document Access")).toBeVisible({
-        timeout: 10000,
-      });
+      await expect(setupPage.accessTypeSelect).toBeVisible({ timeout: 10000 });
 
       // a global holder defaults to public, which has no groups to scope
       // must be the picker, not "assigned to group X" — the old code auto-assigned
-      const accessType = page.getByRole("combobox", {
-        name: "Document Access",
-      });
-      await expect(accessType).toHaveValue("Public");
-      await accessType.click();
-      await page.getByRole("option", { name: "Private", exact: true }).click();
-      await expect(
-        page.getByText("Assign group access for this Connector")
-      ).toBeVisible({ timeout: 10000 });
+      await expect(setupPage.accessTypeSelect).toHaveValue("Public");
+      await setupPage.pickAccessType("Private");
+      await expect(setupPage.groupAccessPrompt).toBeVisible({ timeout: 10000 });
 
       // Drive's credential form used to render an empty fragment for non-admins
       // — a blank modal, no error, no network call.
