@@ -1,4 +1,14 @@
+from typing import Annotated, Self
+
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.field_policy import (
+    FieldClass,
+    FieldPolicy,
+    ScopeDirection,
+    ScopeInclude,
+    ScopeOpaque,
+    ScopeToggle,
+)
 from onyx.connectors.microsoft_utils.config import MicrosoftCloudBinding
 
 MAX_WORKERS = 10
@@ -12,13 +22,39 @@ EXPORT_MESSAGES_CAP = 100_000
 # so the queue a batch drains should outlast its biggest channel.
 CHANNEL_BATCH_PER_WORKER = 4
 
+_MEETING_ORGANIZERS = "meeting_organizers"
+# Files, transcripts and meeting chats are documents of their own.
+_DOCUMENT_TYPE_TOGGLE = FieldPolicy(
+    FieldClass.SCOPE, scope=ScopeToggle(widens_when=True)
+)
+
 
 class TeamsConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
-    teams: list[str] | None = None
-    max_workers: int = MAX_WORKERS
-    include_attachments: bool = False
-    include_inline_images: bool = False
-    include_meeting_transcripts: bool = False
-    meeting_organizers: list[str] | None = None
-    transcript_organizers: list[str] | None = None
-    include_meeting_chats: bool = False
+    teams: Annotated[
+        list[str] | None,
+        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
+    ] = None
+    max_workers: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = MAX_WORKERS
+    include_attachments: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = False
+    # Adds image sections to thread and meeting chat documents.
+    include_inline_images: Annotated[bool, FieldPolicy(FieldClass.BEHAVIOR)] = False
+    include_meeting_transcripts: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = False
+    meeting_organizers: Annotated[
+        list[str] | None,
+        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
+    ] = None
+    # Legacy key, read only while meeting_organizers is empty.
+    transcript_organizers: Annotated[
+        list[str] | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
+    ] = None
+    include_meeting_chats: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = False
+
+    @classmethod
+    def classify_scope_change(  # ty: ignore[invalid-method-override]
+        cls, old: Self, new: Self
+    ) -> dict[str, ScopeDirection]:
+        # With the legacy key set, an empty meeting_organizers falls back to it
+        # instead of meaning every organizer.
+        if old.transcript_organizers or new.transcript_organizers:
+            return {_MEETING_ORGANIZERS: ScopeDirection.UNKNOWN}
+        return {}
