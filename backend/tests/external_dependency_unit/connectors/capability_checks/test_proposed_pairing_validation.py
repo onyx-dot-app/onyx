@@ -121,6 +121,7 @@ def _validate(
     return validate_proposed_pairing(
         db_session,
         connector_id=cc_pair.connector_id,
+        cc_pair_id=cc_pair.id,
         source=source,
         input_type=InputType.POLL,
         connector_specific_config=_PROPOSED_CONFIG,

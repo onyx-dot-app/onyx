@@ -201,7 +201,8 @@ def run_draft_capability_checks_task(
     """Runs a draft run's PENDING checks and writes each result into the stored
     run as it lands. The task is the only writer of the run after its start.
     Before each next check it stops if a newer run for the same draft key
-    started."""
+    started. A dry run of a pair builds the connector with the pair's input
+    type, as creation does."""
     run = load_draft_run(UUID(run_id))
     if run is None:
         task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
@@ -261,10 +262,13 @@ def run_draft_capability_checks_task(
             return
         mark_next_running()
         save_draft_run(run)
+        pair_scope = run.pair_scope
         generate_capability_report(
             credential,
             source=snapshot.source,
             connector_specific_config=connector_specific_config,
+            connector_id=pair_scope.connector_id if pair_scope is not None else None,
+            input_type=pair_scope.input_type if pair_scope is not None else None,
             access_type=snapshot.access_type,
             on_result=on_result,
             check_ids=frozenset(check.check_id for check in pending),

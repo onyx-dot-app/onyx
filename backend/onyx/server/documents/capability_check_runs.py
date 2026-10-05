@@ -24,9 +24,11 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckState,
     DraftCheckStateKind,
     DraftRerunMode,
+    DraftRunPairScope,
     DraftRunStatus,
     StoredDraftRun,
     apply_cached_result,
+    cc_pair_draft_key,
     decide_draft_check_state,
     draft_result_cache_key,
     draft_run_start_lock,
@@ -50,6 +52,8 @@ from onyx.connectors.capability_checks.runner import (
     capability_check_run_stale_after,
 )
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.credential_capability import (
     mark_capability_report_running,
     mark_capability_run_failed,
@@ -236,10 +240,12 @@ def start_draft_capability_check_run(
     draft_key: str,
     form_values: dict[str, Any],
     rerun: DraftRerunMode = DraftRerunMode.NONE,
+    pair_scope: DraftRunPairScope | None = None,
 ) -> DraftCheckRunSnapshot:
     """Decides every check's draft state, fills results from the cache, and
     enqueues one task for the checks that are left. Does no I/O to the source.
     The run replaces any earlier run of the same user and draft key.
+    ``pair_scope`` makes the run a dry run of an existing pair.
 
     ``rerun`` picks the cached results to ignore: with FAILED, a cached FAILED
     result is run again, so a fix made at the source since the last run shows;
@@ -274,6 +280,7 @@ def start_draft_capability_check_run(
             form_values=(
                 form_state.values if connector_specific_config is not None else None
             ),
+            cc_pair_id=pair_scope.cc_pair_id if pair_scope is not None else None,
         )
         cached = (
             None if rerun == DraftRerunMode.ALL else get_cached_draft_result(cache_key)
@@ -301,6 +308,7 @@ def start_draft_capability_check_run(
             checks=checks,
         ),
         result_cache_keys=result_cache_keys,
+        pair_scope=pair_scope,
     )
     if has_pending:
         # The task can wait in the queue this long, plus a margin for the
@@ -346,3 +354,56 @@ def start_draft_capability_check_run(
         save_draft_run(run)
         raise CapabilityRunEnqueueError(str(e)) from e
     return run.snapshot
+
+
+def start_cc_pair_draft_check_run(
+    db_session: Session,
+    *,
+    user_id: UUID,
+    cc_pair_id: int,
+    proposed_credential: Credential | None,
+    access_type: AccessType,
+    connector_specific_config: dict[str, Any],
+    rerun: DraftRerunMode = DraftRerunMode.NONE,
+) -> DraftCheckRunSnapshot:
+    """Starts a dry run of the capability checks for a proposed state of an
+    existing pair. Like a create-form draft run, it never writes a stored
+    report; the checks get the pair's connector, as at creation.
+    ``proposed_credential`` None keeps the pair's credential. The caller
+    authorizes the user for the pair and the proposed credential.
+
+    Raises:
+        OnyxError: The pair does not exist, or its source has no connector
+            configuration.
+        CapabilityRunEnqueueError: As for a create-form draft run.
+    """
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session, cc_pair_id, eager_load_connector=True, eager_load_credential=True
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            f"Connector-credential pair {cc_pair_id} does not exist.",
+        )
+    connector = cc_pair.connector
+    mapping = CONNECTOR_CLASS_MAP.get(connector.source)
+    if mapping is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{connector.source.value} has no connector configuration.",
+        )
+    return start_draft_capability_check_run(
+        user_id=user_id,
+        credential=proposed_credential or cc_pair.credential,
+        source=connector.source,
+        config_class=mapping.config_class,
+        access_type=access_type,
+        draft_key=cc_pair_draft_key(cc_pair_id),
+        form_values=connector_specific_config,
+        rerun=rerun,
+        pair_scope=DraftRunPairScope(
+            cc_pair_id=cc_pair_id,
+            connector_id=connector.id,
+            input_type=connector.input_type,
+        ),
+    )
