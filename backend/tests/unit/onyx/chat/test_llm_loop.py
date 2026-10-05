@@ -1724,3 +1724,11 @@ class TestSelectReminderText:
             ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
         )
         assert result == IMAGE_GEN_REMINDER
+
+    def test_image_gen_keeps_citation_reminder(self) -> None:
+        """Citation guidance lives in the tail reminder, so image gen must not
+        drop it when a turn retrieved citeable documents."""
+        result = self._select(ran_image_gen=True, include_citation_reminder=True)
+        assert result is not None
+        assert IMAGE_GEN_REMINDER in result
+        assert "provide inline citations" in result

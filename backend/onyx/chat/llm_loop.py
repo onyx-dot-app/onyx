@@ -815,16 +815,23 @@ def select_reminder_text(
     the model is told to call a tool it doesn't have and leaks confusing
     "open_url is not available" replies.
     """
-    if ran_image_gen:
-        return IMAGE_GEN_REMINDER
-    if just_ran_web_search and has_open_url_tool and not out_of_cycles:
-        return OPEN_URL_REMINDER
-    return build_reminder_message(
+    base_reminder = build_reminder_message(
         reminder_text=persona_task_prompt,
         include_citation_reminder=include_citation_reminder,
         include_file_reminder=include_file_reminder,
         is_last_cycle=out_of_cycles,
     )
+    if ran_image_gen:
+        # Citation/file guidance moved out of the system prompt and into this
+        # tail message, so it must still be appended after the image-gen note.
+        return (
+            f"{IMAGE_GEN_REMINDER}\n\n{base_reminder}"
+            if base_reminder
+            else IMAGE_GEN_REMINDER
+        )
+    if just_ran_web_search and has_open_url_tool and not out_of_cycles:
+        return OPEN_URL_REMINDER
+    return base_reminder
 
 
 def run_llm_loop(
