@@ -1,6 +1,7 @@
 import random
 import threading
 import time
+from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -29,6 +30,8 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import (
     INDEXING_PIPELINE_TRACE_NAME,
     DocumentBatchPrepareContext,
+    DocumentPushFailure,
+    IndexingPipelineResult,
     _apply_document_ingestion_hook,
     _partition_documents_blocked_by_llm_spend_limit,
     _system_llm_enrichment_is_allowed,
@@ -36,12 +39,15 @@ from onyx.indexing.indexing_pipeline import (
     filter_documents,
     get_docs_to_update,
     index_doc_batch,
+    index_doc_batch_with_handler,
     process_image_sections,
     run_indexing_pipeline,
 )
+from onyx.indexing.models import DocAwareChunk
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import AssistantMessage, TextContent
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import TraceContentMode
 
 
@@ -261,6 +267,146 @@ def test_contextual_rag(
     else:
         assert all(chunk.doc_summary == "" for chunk in chunks)
         assert all(chunk.chunk_context == "" for chunk in chunks)
+
+
+def _contextual_chunks(
+    embedder: DefaultIndexingEmbedder,
+    llm_invoke: Callable[..., AssistantMessage],
+    text: str,
+) -> list[DocAwareChunk]:
+    """Chunks of one document after contextual RAG ran with the given LLM."""
+    document = Document(
+        id="test_doc",
+        source=DocumentSource.WEB,
+        semantic_identifier="Test Document",
+        metadata={},
+        doc_updated_at=None,
+        sections=[TextSection(text=text, link="link")],
+    )
+    tokenizer = embedder.embedding_model.tokenizer
+    llm = Mock()
+    llm.config.max_input_tokens = get_max_input_tokens(
+        model_provider=LlmProviderNames.OPENAI, model_name="gpt-4o"
+    )
+    llm.invoke = llm_invoke
+    chunker = Chunker(
+        tokenizer=tokenizer, enable_multipass=False, enable_contextual_rag=True
+    )
+    return add_contextual_summaries(
+        chunks=chunker.chunk(process_image_sections([document])),
+        llm=llm,
+        tokenizer=tokenizer,
+        chunk_token_limit=chunker.chunk_token_limit * 2,
+    )
+
+
+def _failing_summary_invoke(*_args: Any, **kwargs: Any) -> AssistantMessage:
+    if kwargs["context"].flow == LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY:
+        raise RuntimeError("Your input exceeds the context window of this model.")
+    return AssistantMessage(content=[TextContent(text="chunk context")])
+
+
+@patch("onyx.llm.model_capabilities.GEN_AI_MAX_TOKENS", 4096)
+def test_contextual_rag_keeps_chunk_context_when_summary_fails(
+    embedder: DefaultIndexingEmbedder,
+) -> None:
+    """A document short enough to be quoted whole needs no summary for its
+    chunk contexts, so a failed summary costs only the summary."""
+    chunks = _contextual_chunks(
+        embedder, _failing_summary_invoke, "A sentence to fill the document. " * 200
+    )
+
+    assert len(chunks) > 1
+    assert all(chunk.doc_summary == "" for chunk in chunks)
+    assert all(chunk.chunk_context == "chunk context" for chunk in chunks)
+
+
+@patch("onyx.llm.model_capabilities.GEN_AI_MAX_TOKENS", 4096)
+def test_contextual_rag_indexes_long_document_without_context_when_summary_fails(
+    embedder: DefaultIndexingEmbedder,
+) -> None:
+    """A document too long to quote is described to the chunk prompt by its
+    summary, so without one the chunks are left bare instead of raising."""
+    chunks = _contextual_chunks(
+        embedder, _failing_summary_invoke, "A sentence to fill the document. " * 2000
+    )
+
+    assert len(chunks) > 1
+    assert all(chunk.doc_summary == "" for chunk in chunks)
+    assert all(chunk.chunk_context == "" for chunk in chunks)
+
+
+def _index_batch_with_handler(index_doc_batch_mock: Any, doc_ids: list[str]) -> Any:
+    documents = [_make_doc(doc_id) for doc_id in doc_ids]
+    with (
+        patch(f"{_PATCH_PREFIX}.index_doc_batch", index_doc_batch_mock),
+        patch(f"{_PATCH_PREFIX}.sentry_sdk"),
+    ):
+        return index_doc_batch_with_handler(
+            chunker=MagicMock(),
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            document_batch=documents,
+            request_id=None,
+            tenant_id="tenant",
+            adapter=MagicMock(),
+        )
+
+
+def _raise_for_bad_doc(**kwargs: Any) -> IndexingPipelineResult:
+    documents = kwargs["document_batch"]
+    if any(doc.id == "bad" for doc in documents):
+        raise RuntimeError("cannot index bad")
+    return IndexingPipelineResult(
+        new_docs=len(documents),
+        total_docs=len(documents),
+        total_chunks=2 * len(documents),
+        failures=[],
+    )
+
+
+def test_batch_handler_fails_only_the_document_that_raises() -> None:
+    index_doc_batch_mock = MagicMock(side_effect=_raise_for_bad_doc)
+
+    result = _index_batch_with_handler(index_doc_batch_mock, ["a", "bad", "b"])
+
+    assert result.new_docs == 2
+    assert result.total_docs == 3
+    assert result.total_chunks == 4
+    assert [f.failed_document.document_id for f in result.failures] == ["bad"]
+    assert result.failures[0].failure_message == "cannot index bad"
+    # The batch once, then each document on its own.
+    assert index_doc_batch_mock.call_count == 4
+
+
+def test_batch_handler_does_not_retry_a_failed_document_push() -> None:
+    """The documents are already written when the push fails, so a retry per
+    document would find them unchanged and drop the failure."""
+    index_doc_batch_mock = MagicMock(side_effect=DocumentPushFailure("sink down"))
+
+    result = _index_batch_with_handler(index_doc_batch_mock, ["a", "b"])
+
+    assert [f.failed_document.document_id for f in result.failures] == ["a", "b"]
+    assert index_doc_batch_mock.call_count == 1
+
+
+def test_batch_handler_does_not_retry_a_single_document_batch() -> None:
+    index_doc_batch_mock = MagicMock(side_effect=_raise_for_bad_doc)
+
+    result = _index_batch_with_handler(index_doc_batch_mock, ["bad"])
+
+    assert [f.failed_document.document_id for f in result.failures] == ["bad"]
+    assert index_doc_batch_mock.call_count == 1
+
+
+def test_batch_handler_passes_a_clean_batch_through() -> None:
+    index_doc_batch_mock = MagicMock(side_effect=_raise_for_bad_doc)
+
+    result = _index_batch_with_handler(index_doc_batch_mock, ["a", "b"])
+
+    assert result.new_docs == 2
+    assert result.failures == []
+    assert index_doc_batch_mock.call_count == 1
 
 
 # ---------------------------------------------------------------------------

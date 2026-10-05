@@ -139,6 +139,12 @@ INDEXING_PIPELINE_TRACE_NAME = "indexing_pipeline"
 CONTEXTUAL_RAG_REASONING_EFFORT = ReasoningEffort.OFF
 
 
+class DocumentPushFailure(Exception):
+    """The push to the external sink failed after the documents were written
+    and their content hashes committed. Retrying the batch per document would
+    skip them as unchanged and lose the failure, so the batch fails as is."""
+
+
 class _DocsToUpdateResult(NamedTuple):
     updatable_docs: list[Document]
     doc_id_to_content_hash: dict[str, str]
@@ -464,42 +470,56 @@ def index_doc_batch_with_handler(
     image_summarization_llm: LLM | None = None,
     llm: LLM | None = None,
 ) -> IndexingPipelineResult:
-    try:
-        index_pipeline_result = index_doc_batch(
-            chunker=chunker,
-            embedder=embedder,
-            document_index=document_index,
-            document_batch=document_batch,
-            request_id=request_id,
-            tenant_id=tenant_id,
-            adapter=adapter,
-            ignore_time_skip=ignore_time_skip,
-            index_to_secondary=index_to_secondary,
-            from_beginning=from_beginning,
-            enable_contextual_rag=enable_contextual_rag,
-            llm_enrichment_allowed=llm_enrichment_allowed,
-            image_summarization_llm=image_summarization_llm,
-            llm=llm,
-        )
+    def _index(
+        documents: list[Document], final: bool
+    ) -> IndexingPipelineResult | Exception:
+        """Returns the exception instead of raising so the caller can retry per
+        document. A stop signal still propagates. Only a final failure, one
+        that will not be retried, is reported to Sentry. A push failure is
+        always final."""
+        try:
+            return index_doc_batch(
+                chunker=chunker,
+                embedder=embedder,
+                document_index=document_index,
+                document_batch=documents,
+                request_id=request_id,
+                tenant_id=tenant_id,
+                adapter=adapter,
+                ignore_time_skip=ignore_time_skip,
+                index_to_secondary=index_to_secondary,
+                from_beginning=from_beginning,
+                enable_contextual_rag=enable_contextual_rag,
+                llm_enrichment_allowed=llm_enrichment_allowed,
+                image_summarization_llm=image_summarization_llm,
+                llm=llm,
+            )
+        except ConnectorStopSignal as e:
+            logger.warning(
+                "Connector stop signal detected in index_doc_batch_with_handler"
+            )
+            raise e
+        except Exception as e:
+            # don't log the batch directly, it's too much text
+            document_ids = [doc.id for doc in documents]
+            logger.exception("Failed to index document batch: %s", document_ids)
+            if not final and not isinstance(e, DocumentPushFailure):
+                return e
+            with sentry_sdk.new_scope() as scope:
+                scope.set_tag("stage", "indexing_pipeline")
+                scope.set_tag("tenant_id", tenant_id)
+                scope.set_tag("batch_size", str(len(documents)))
+                scope.set_extra("document_ids", document_ids)
+                scope.fingerprint = ["indexing-pipeline-failure", type(e).__name__]
+                sentry_sdk.capture_exception(e)
+            return e
 
-    except ConnectorStopSignal as e:
-        logger.warning("Connector stop signal detected in index_doc_batch_with_handler")
-        raise e
-    except Exception as e:
-        # don't log the batch directly, it's too much text
-        document_ids = [doc.id for doc in document_batch]
-        with sentry_sdk.new_scope() as scope:
-            scope.set_tag("stage", "indexing_pipeline")
-            scope.set_tag("tenant_id", tenant_id)
-            scope.set_tag("batch_size", str(len(document_batch)))
-            scope.set_extra("document_ids", document_ids)
-            scope.fingerprint = ["indexing-pipeline-failure", type(e).__name__]
-            sentry_sdk.capture_exception(e)
-        logger.exception("Failed to index document batch: %s", document_ids)
-
-        index_pipeline_result = IndexingPipelineResult(
+    def _failure_result(
+        documents: list[Document], e: Exception
+    ) -> IndexingPipelineResult:
+        return IndexingPipelineResult(
             new_docs=0,
-            total_docs=len(document_batch),
+            total_docs=len(documents),
             total_chunks=0,
             failures=[
                 ConnectorFailure(
@@ -512,11 +532,36 @@ def index_doc_batch_with_handler(
                     failure_message=str(e),
                     exception=e,
                 )
-                for document in document_batch
+                for document in documents
             ],
         )
 
-    return index_pipeline_result
+    retry_per_document = len(document_batch) > 1
+    batch_result: IndexingPipelineResult | Exception = _index(
+        document_batch, final=not retry_per_document
+    )
+    if not isinstance(batch_result, Exception):
+        return batch_result
+    if not retry_per_document or isinstance(batch_result, DocumentPushFailure):
+        return _failure_result(document_batch, batch_result)
+
+    # One document that cannot be indexed raises for the whole batch, so each
+    # is indexed again on its own and only the ones that still raise fail.
+    # Safe to repeat because prepare() upserts without doc_updated_at and the
+    # content hash is stamped only after the vector write commits, so a
+    # document whose batch raised is still updatable on its own pass.
+    results: list[IndexingPipelineResult] = []
+    for document in document_batch:
+        result: IndexingPipelineResult | Exception = _index([document], final=True)
+        if isinstance(result, Exception):
+            result = _failure_result([document], result)
+        results.append(result)
+    return IndexingPipelineResult(
+        new_docs=sum(r.new_docs for r in results),
+        total_docs=sum(r.total_docs for r in results),
+        total_chunks=sum(r.total_chunks for r in results),
+        failures=[failure for r in results for failure in r.failures],
+    )
 
 
 def _promote_new_staged_files(
@@ -959,6 +1004,34 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     return _process_image_sections(documents, llm)
 
 
+def _summarize_document(doc_content: str, llm: LLM) -> str:
+    """The LLM's summary of a document, or "" when the call fails, so the
+    document is indexed without one rather than failing with its batch."""
+    # The document changes on every call, so there is no prefix to cache.
+    prompt_msg = UserMessage(
+        content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
+    )
+    try:
+        response = llm.invoke(
+            GenerationRequest(
+                messages=[prompt_msg],
+                options=GenerationOptions(
+                    max_tokens=MAX_CONTEXT_TOKENS,
+                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                ),
+            ),
+            context=GenerationContext(
+                flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
+                content_mode=TraceContentMode.METADATA_ONLY,
+                total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
+            ),
+        )
+    except Exception:
+        logger.exception("Error adding document summary")
+        return ""
+    return response.text
+
+
 def add_document_summaries(
     chunks_by_doc: list[DocAwareChunk],
     llm: LLM,
@@ -979,28 +1052,7 @@ def add_document_summaries(
 
     doc_tokens = tokenizer.encode(chunks_by_doc[0].source_document.get_text_content())
     doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_tokens, tokenizer)
-
-    # Apply prompt caching: cache the static prompt, document content is the suffix
-    # Note: For document summarization, there's no cacheable prefix since the document changes
-    # So we just pass the full prompt without caching
-    summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-    prompt_msg = UserMessage(content=summary_prompt)
-
-    response = llm.invoke(
-        GenerationRequest(
-            messages=[prompt_msg],
-            options=GenerationOptions(
-                max_tokens=MAX_CONTEXT_TOKENS,
-                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-            ),
-        ),
-        context=GenerationContext(
-            flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
-            content_mode=TraceContentMode.METADATA_ONLY,
-            total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
-        ),
-    )
-    doc_summary = response.text
+    doc_summary = _summarize_document(doc_content, llm)
 
     for chunk in chunks_by_doc:
         chunk.doc_summary = doc_summary
@@ -1037,26 +1089,14 @@ def add_chunk_summaries(
         else chunks_by_doc[0].doc_summary
     )
     if not doc_info:
-        # This happens if the document is too long AND document summaries are turned off
-        # In this case we compute a doc summary using the LLM
-        fallback_prompt = UserMessage(
-            content=DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
-        )
-        response = llm.invoke(
-            GenerationRequest(
-                messages=[fallback_prompt],
-                options=GenerationOptions(
-                    max_tokens=MAX_CONTEXT_TOKENS,
-                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
-                ),
-            ),
-            context=GenerationContext(
-                flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
-                content_mode=TraceContentMode.METADATA_ONLY,
-                total_timeout_s=CONTEXTUAL_RAG_LLM_TIMEOUT,
-            ),
-        )
-        doc_info = response.text
+        # This happens if the document is too long AND there is no summary of
+        # it, either because document summaries are turned off or because the
+        # summary call failed. In this case we compute one using the LLM
+        doc_info = _summarize_document(doc_content, llm)
+    if not doc_info:
+        # No document description to anchor the chunk prompt, so the chunks
+        # get no context.
+        return
 
     from onyx.llm.prompt_cache.processor import cached_user_message
 
@@ -1620,12 +1660,15 @@ def index_doc_batch(
                     db_session=db_session,
                 )
 
-    _maybe_push_documents(
-        adapter=adapter,
-        filtered_documents=filtered_documents,
-        insertion_records=insertion_records,
-        from_beginning=from_beginning,
-    )
+    try:
+        _maybe_push_documents(
+            adapter=adapter,
+            filtered_documents=filtered_documents,
+            insertion_records=insertion_records,
+            from_beginning=from_beginning,
+        )
+    except Exception as e:
+        raise DocumentPushFailure(str(e)) from e
 
     return IndexingPipelineResult(
         new_docs=sum(1 for r in insertion_records if not r.already_existed),
