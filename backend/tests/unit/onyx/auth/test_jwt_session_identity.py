@@ -9,7 +9,6 @@ from fastapi_users.jwt import generate_jwt
 
 from onyx.auth import users as users_module
 from onyx.auth.users import SingleTenantJWTStrategy
-from onyx.error_handling.exceptions import OnyxError
 
 _SECRET = "jwt-session-identity-test-secret-32-bytes"
 _OTHER_SECRET = "jwt-session-identity-other-secret-32-bytes"
@@ -174,8 +173,7 @@ def test_invalid_token_cannot_supply_session_id(token_kind: str) -> None:
         payload["exp"] = datetime.now(timezone.utc) - timedelta(seconds=1)
         token = jwt.encode(payload, _SECRET, algorithm="HS256")
 
-    with pytest.raises(OnyxError):
-        strategy.get_session_id(token, user)
+    assert strategy.get_session_id(token, user) is None
 
 
 @pytest.mark.asyncio

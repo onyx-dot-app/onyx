@@ -1858,9 +1858,9 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
             public_key=public_key,
         )
 
-    def _decode_token(self, token: str) -> dict[str, Any] | None:
+    def get_session_id(self, token: str, user: User) -> str | None:
         try:
-            return decode_jwt(
+            data = decode_jwt(
                 token,
                 self.decode_key,
                 self.token_audience,
@@ -1868,10 +1868,7 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
             )
         except jwt.PyJWTError:
             return None
-
-    def _verified_session_id(self, token: str, user: User) -> str | None:
-        data = self._decode_token(token)
-        if data is None or data.get("sub") != str(user.id):
+        if data.get("sub") != str(user.id):
             return None
 
         sid = data.get("sid")
@@ -1879,25 +1876,16 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
             return sid
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    def get_session_id(self, token: str, user: User) -> str:
-        session_id = self._verified_session_id(token, user)
-        if session_id is None:
-            raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
-        return session_id
-
-    def _generate_token(self, user: User, session_id: str) -> str:
+    async def write_token(self, user: User, session_id: str | None = None) -> str:
         data: dict[str, Any] = {
             "sub": str(user.id),
             "aud": self.token_audience,
             "iat": int(datetime.now(timezone.utc).timestamp()),
-            "sid": session_id,
+            "sid": session_id or secrets.token_urlsafe(32),
         }
         return generate_jwt(
             data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm
         )
-
-    async def write_token(self, user: User) -> str:
-        return self._generate_token(user, secrets.token_urlsafe(32))
 
     async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
         # JWTs are stateless — nothing to invalidate server-side.
@@ -1914,10 +1902,8 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
         user: User,
     ) -> str:
         """Issue a fresh JWT with a new expiry."""
-        session_id = self._verified_session_id(token, user) if token else None
-        if session_id is None:
-            return await self.write_token(user)
-        return self._generate_token(user, session_id)
+        session_id = self.get_session_id(token, user) if token else None
+        return await self.write_token(user, session_id)
 
 
 def get_redis_strategy() -> TenantAwareRedisStrategy:
