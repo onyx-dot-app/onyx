@@ -198,11 +198,11 @@ def build_catalog_digest(
 ) -> str:
     sections: list[str] = []
     for vendor in vendors:
-        models = sorted(
+        models: list[CatalogModel] = sorted(
             (m for m in catalog if m.id.startswith(f"{vendor}/")),
             key=lambda m: (-m.created, m.id),
         )
-        lines = [
+        lines: list[str] = [
             f"### {vendor} ({len(models)} catalog entries, newest {max_per_vendor} shown)"
         ]
         for model in models[:max_per_vendor]:
@@ -232,7 +232,7 @@ def build_catalog_digest(
 def _api_request(
     path: str, api_key: str, timeout: float, body: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    request = urllib.request.Request(  # noqa: S310
+    request: urllib.request.Request = urllib.request.Request(  # noqa: S310
         f"{OPENAI_RESPONSES_URL}{path}",
         data=json.dumps(body).encode() if body is not None else None,
         headers={
@@ -278,16 +278,16 @@ def call_responses_api(
                 }
             },
         }
-        submitted = _api_request("", api_key, 60.0, body)
+        submitted: dict[str, Any] = _api_request("", api_key, 60.0, body)
         response_id = submitted.get("id")
         if not response_id:
             raise ValueError(f"No response id in submission: {submitted}")
     else:
         submitted = {}
 
-    deadline = time.monotonic() + timeout
+    deadline: float = time.monotonic() + timeout
     while True:
-        status = submitted.get("status")
+        status: str | None = submitted.get("status")
         if status in ("completed", "failed", "cancelled", "incomplete"):
             return submitted
         if time.monotonic() > deadline:
@@ -340,12 +340,12 @@ def _alias_to_native(
     naming glitch doesn't sink an otherwise-correct pick.
     """
     aliases: dict[str, str] = {}
-    keep_full = section_rules.id_transform == "keep_full_id"
-    vendors = _section_vendors(section_rules)
+    keep_full: bool = section_rules.id_transform == "keep_full_id"
+    vendors: set[str] = _section_vendors(section_rules)
     for model in catalog:
         if not keep_full and model.id.split("/", 1)[0] not in vendors:
             continue
-        native = derive_native_name(model, section_rules)
+        native: str = derive_native_name(model, section_rules)
         aliases[model.id] = native
         aliases[native] = native
         if "/" in model.id:
@@ -399,10 +399,10 @@ def _build_provider_section(
     errors: list[str],
     warnings: list[str],
 ) -> ProviderSection:
-    aliases = _alias_to_native(section_rules, catalog)
-    previous_names = {m.name for m in visible_models(previous_section)}
-    strict_catalog = section_rules.id_transform == "keep_full_id"
-    emit_display = section_rules.emit_display_name
+    aliases: dict[str, str] = _alias_to_native(section_rules, catalog)
+    previous_names: set[str] = {m.name for m in visible_models(previous_section)}
+    strict_catalog: bool = section_rules.id_transform == "keep_full_id"
+    emit_display: bool = section_rules.emit_display_name
 
     def resolve(raw_name: str) -> str | None:
         return _resolve_name(
@@ -425,7 +425,7 @@ def _build_provider_section(
         display = entry.get("display_name") if emit_display else None
         deduped.append(RecommendedModel(name=name, display_name=display))
 
-    default_name = pick.get("default_model") or ""
+    default_name: str = pick.get("default_model") or ""
     if not default_name:
         errors.append(f"{section_name}: no default_model")
     else:
@@ -440,7 +440,9 @@ def _build_provider_section(
     deduped.sort(key=lambda m: m.name != default_name)
 
     # Soft checks: recommend, don't reject
-    catalog_by_native = {derive_native_name(m, section_rules): m for m in catalog}
+    catalog_by_native: dict[str, CatalogModel] = {
+        derive_native_name(m, section_rules): m for m in catalog
+    }
     for model in deduped:
         entry = catalog_by_native.get(model.name)
         if entry is None:
@@ -478,7 +480,7 @@ def validate_and_build(
     providers: dict[str, ProviderSection] = {}
 
     raw_providers = agent_output.get("providers") or []
-    agent_providers = {
+    agent_providers: dict[str | None, dict[str, Any]] = {
         entry.get("section"): entry
         for entry in raw_providers
         if isinstance(entry, dict)
@@ -596,20 +598,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key: str | None = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         print("OPENAI_API_KEY is not set.", file=sys.stderr)
         return 2
 
     rules = load_rules(args.rules)
-    previous = load_previous(args.output)
+    previous: RecommendedModelsFile = load_previous(args.output)
+    catalog: list[CatalogModel]
     if args.catalog_file:
         catalog = load_catalog_file(args.catalog_file)
     else:
         catalog = fetch_catalog(args.catalog_url or OPENROUTER_MODELS_URL, 30.0)
 
-    today = datetime.now(tz=timezone.utc).date()
-    vendors = sorted(
+    today: date = datetime.now(tz=timezone.utc).date()
+    vendors: list[str] = sorted(
         {
             rule.vendor_prefix.rstrip("/")
             for s in rules.sections.values()
@@ -617,7 +620,7 @@ def main(argv: list[str] | None = None) -> int:
         }
     )
 
-    prompt = PROMPT_TEMPLATE.format(
+    prompt: str = PROMPT_TEMPLATE.format(
         current_file=args.output.read_text(),
         rules_file=args.rules.read_text(),
         catalog_digest=build_catalog_digest(
@@ -629,7 +632,7 @@ def main(argv: list[str] | None = None) -> int:
             failure_context=args.failure_context_file.read_text()[-60_000:]
         )
 
-    schema = _output_schema(list(previous.providers))
+    schema: dict[str, Any] = _output_schema(list(previous.providers))
     error: str | None = None
     agent_output: dict[str, Any] = {}
     recommendations: RecommendedModelsFile | None = None
@@ -637,11 +640,11 @@ def main(argv: list[str] | None = None) -> int:
     warnings: list[str] = []
 
     for attempt in range(args.max_attempts):
-        attempt_prompt = prompt
+        attempt_prompt: str = prompt
         if error:
             attempt_prompt += RETRY_CONTEXT_TEMPLATE.format(errors=error)
         print(f"Calling OpenAI Responses API (model={args.model})...", flush=True)
-        response = call_responses_api(
+        response: dict[str, Any] = call_responses_api(
             attempt_prompt,
             args.model,
             api_key,
@@ -675,7 +678,7 @@ def main(argv: list[str] | None = None) -> int:
             rationales,
         )
 
-    serialized = serialize(recommendations)
+    serialized: str = serialize(recommendations)
     if serialized == args.output.read_text():
         print(f"{args.output} is up to date.")
         return 0
