@@ -315,8 +315,12 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
 
       // a global holder defaults to public, which has no groups to scope
       // must be the picker, not "assigned to group X" — the old code auto-assigned
-      await page.getByText("Public", { exact: true }).first().click();
-      await page.getByText("Private", { exact: true }).first().click();
+      const accessType = page.getByRole("combobox", {
+        name: "Document Access",
+      });
+      await expect(accessType).toHaveValue("Public");
+      await accessType.click();
+      await page.getByRole("option", { name: "Private", exact: true }).click();
       await expect(
         page.getByText("Assign group access for this Connector")
       ).toBeVisible({ timeout: 10000 });

@@ -38,8 +38,15 @@ export class ConnectorSetupPage {
   }
 
   /** A select field from the connector config, by its config name. */
+  /** A select field's combobox: an `InputSingleSelect` whose input carries the field's name as its id. */
   selectField(fieldName: string): Locator {
-    return this.page.locator(`select[name="${fieldName}"]`);
+    return this.page.locator(`#${fieldName}`);
+  }
+
+  /** Open a select field and pick the option with this title. */
+  async pickOption(fieldName: string, title: string): Promise<void> {
+    await this.selectField(fieldName).click();
+    await this.page.getByRole("option", { name: title, exact: true }).click();
   }
 
   /** The row for a credential in the credential section, by its name. */

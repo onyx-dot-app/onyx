@@ -34,9 +34,12 @@ export class UsersAdminPage {
     this.inviteButton = page.getByRole("button", { name: "Invite Users" });
     this.searchInput = page.getByPlaceholder("Search users...");
 
-    this.accountTypesFilter = page.getByLabel("Filter by account type");
-    this.groupsFilter = page.getByLabel("Filter by group");
-    this.statusFilter = page.getByLabel("Filter by status");
+    // The trigger button: the open list carries the same label.
+    this.accountTypesFilter = page.getByRole("button", {
+      name: "Filter by account type",
+    });
+    this.groupsFilter = page.getByRole("button", { name: "Filter by group" });
+    this.statusFilter = page.getByRole("button", { name: "Filter by status" });
 
     this.table = page.getByRole("table");
     this.tableRows = page.getByRole("table").locator("tbody tr");
