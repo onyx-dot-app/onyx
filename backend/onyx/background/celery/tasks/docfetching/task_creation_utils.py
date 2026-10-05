@@ -13,7 +13,11 @@ from onyx.configs.constants import (
 )
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexModelStatus
-from onyx.db.index_attempt import claim_waiting_index_attempt, mark_attempt_failed
+from onyx.db.index_attempt import (
+    BackfillSpec,
+    claim_waiting_index_attempt,
+    mark_attempt_failed,
+)
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -104,7 +108,53 @@ def try_creating_docfetching_task(
 
     Now uses database-based coordination instead of Redis fencing.
     """
+    return _try_creating_attempt(
+        celery_app,
+        cc_pair,
+        search_settings,
+        db_session,
+        r,
+        tenant_id,
+        from_beginning=reindex,
+        backfill=None,
+    )
 
+
+def try_creating_backfill_attempt(
+    celery_app: Celery,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+    backfill: BackfillSpec,
+    db_session: Session,
+    r: TenantRedisClient,
+    tenant_id: str,
+) -> int | None:
+    """Creates a backfill attempt and sends its docfetching task. Returns None
+    when the pair skips indexing, its first attempt is held for the capability
+    checks, or another attempt is active for these search settings."""
+    return _try_creating_attempt(
+        celery_app,
+        cc_pair,
+        search_settings,
+        db_session,
+        r,
+        tenant_id,
+        from_beginning=False,
+        backfill=backfill,
+    )
+
+
+def _try_creating_attempt(
+    celery_app: Celery,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+    db_session: Session,
+    r: TenantRedisClient,
+    tenant_id: str,
+    *,
+    from_beginning: bool,
+    backfill: BackfillSpec | None,
+) -> int | None:
     # we need to serialize any attempt to trigger indexing since it can be triggered
     # either via celery beat or manually (API call)
     lock: RedisLock = r.lock(
@@ -127,6 +177,13 @@ def try_creating_docfetching_task(
         # A first attempt that waits for the capability checks is created
         # without its task; the beat sends it once the checks pass.
         held = get_first_indexing_hold(db_session, cc_pair) is not None
+        # A backfill never waits: until the first full run is sent, it has
+        # nothing to add to.
+        if held and backfill is not None:
+            task_logger.info(
+                f"Skipping backfill while the first attempt is held: cc_pair={cc_pair.id}"
+            )
+            return None
         custom_task_id = (
             None if held else _new_docfetching_task_id(cc_pair, search_settings)
         )
@@ -138,7 +195,8 @@ def try_creating_docfetching_task(
             cc_pair_id=cc_pair.id,
             search_settings_id=search_settings.id,
             celery_task_id=custom_task_id,
-            from_beginning=reindex,
+            from_beginning=from_beginning,
+            backfill=backfill,
         )
 
         if index_attempt_id is None:

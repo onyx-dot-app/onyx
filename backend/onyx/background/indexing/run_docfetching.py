@@ -3,7 +3,7 @@ import time
 import traceback
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import sentry_sdk
 from celery import Celery
@@ -83,7 +83,7 @@ from onyx.db.index_attempt_metrics import (
     time_stage,
 )
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import Connector, Credential, IndexAttempt
+from onyx.db.models import Connector, Credential, IndexAttempt, SearchSettings
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
@@ -117,6 +117,47 @@ logger = setup_logger(propagate=False)
 INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
 
 
+def _get_run_config(attempt: IndexAttempt) -> dict[str, Any]:
+    """The connector config the attempt runs with: its override, else the
+    connector's saved config."""
+    if attempt.connector_config_override is not None:
+        return attempt.connector_config_override
+    return attempt.connector_credential_pair.connector.connector_specific_config
+
+
+def _get_backfill_window(attempt: IndexAttempt) -> tuple[datetime, datetime]:
+    if attempt.poll_range_start is None or attempt.poll_range_end is None:
+        raise RuntimeError(f"Backfill attempt {attempt.id} has no window")
+    return attempt.poll_range_start, attempt.poll_range_end
+
+
+def _get_incremental_window_start(
+    db_session: Session,
+    index_attempt: IndexAttempt,
+    search_settings: SearchSettings,
+    earliest_index_time: float,
+) -> datetime:
+    # A port-flow FUTURE's resume cursor comes from its synthetic seed
+    # (get_last_successful_... keeps ignore_synthetic_seed=False by default).
+    last_successful_index_poll_range_end = (
+        earliest_index_time
+        if index_attempt.from_beginning
+        else get_last_successful_attempt_poll_range_end(
+            cc_pair_id=index_attempt.connector_credential_pair_id,
+            earliest_index=earliest_index_time,
+            search_settings=search_settings,
+            db_session=db_session,
+        )
+    )
+
+    if last_successful_index_poll_range_end > POLL_CONNECTOR_OFFSET:
+        return datetime.fromtimestamp(
+            last_successful_index_poll_range_end, tz=timezone.utc
+        ) - timedelta(minutes=POLL_CONNECTOR_OFFSET)
+    # don't go into "negative" time if we've never indexed before
+    return datetime.fromtimestamp(0, tz=timezone.utc)
+
+
 def _get_connector_runner(
     db_session: Session,
     attempt: IndexAttempt,
@@ -128,7 +169,9 @@ def _get_connector_runner(
     raw_file_callback: RawFileCallback | None = None,
 ) -> ConnectorRunner:
     """
-    NOTE: `start_time` and `end_time` are only used for poll connectors
+    NOTE: `start_time` and `end_time` are only used for poll and checkpointed
+    connectors. A load-state connector ignores them and fetches everything,
+    so a backfill of such a source is a full run.
 
     Returns an iterator of document batches and whether the returned documents
     are the complete list of existing documents of the connector. If the task of
@@ -144,15 +187,16 @@ def _get_connector_runner(
     credential_id = attempt.connector_credential_pair.credential.id
     connector_id = attempt.connector_credential_pair.connector.id
     source = attempt.connector_credential_pair.connector.source
-    connector_specific_config = (
-        attempt.connector_credential_pair.connector.connector_specific_config
-    )
+    connector_specific_config = _get_run_config(attempt)
+    has_config_override = attempt.connector_config_override is not None
+    is_backfill = attempt.is_backfill
 
     def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
         # Best-effort scribe for the validation outcome below; never raises.
         # INTEGRATION_TESTS_MODE skips the validation itself, so there is no
-        # outcome to record.
-        if INTEGRATION_TESTS_MODE:
+        # outcome to record. The pair's report describes its saved config, so
+        # a run with an override records nothing.
+        if INTEGRATION_TESTS_MODE or has_config_override:
             return
         record_blocking_validation_outcome(
             credential_id=credential_id,
@@ -170,7 +214,7 @@ def _get_connector_runner(
                 db_session=db_session,
                 source=attempt.connector_credential_pair.connector.source,
                 input_type=task,
-                connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
+                connector_specific_config=connector_specific_config,
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
             )
@@ -206,7 +250,8 @@ def _get_connector_runner(
         # leave_connector_active=True to allow it to continue.
         # For example, if there is nightly maintenance on a Confluence Server instance,
         # the connector will fail to initialize every night.
-        if not leave_connector_active:
+        # A backfill may run a partial config, so its failure never pauses the pair.
+        if not leave_connector_active and not is_backfill:
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
                 cc_pair_id=attempt.connector_credential_pair.id,
@@ -389,9 +434,7 @@ def run_docfetching_entrypoint(
             tenant_str = f" for tenant {tenant_id}"
 
         connector_name = attempt.connector_credential_pair.connector.name
-        connector_config = (
-            attempt.connector_credential_pair.connector.connector_specific_config
-        )
+        connector_config = _get_run_config(attempt)
         credential_id = attempt.connector_credential_pair.credential_id
 
     logger.info(
@@ -466,9 +509,6 @@ def connector_document_extraction(
         tenant_id,
     )
 
-    # Get batch storage (transition to IN_PROGRESS is handled by run_indexing_entrypoint)
-    batch_storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
-
     # Initialize memory tracer. NOTE: won't actually do anything if
     # `INDEXING_TRACER_INTERVAL` is 0.
     memory_tracer = MemoryTracer(interval=INDEXING_TRACER_INTERVAL)
@@ -490,8 +530,18 @@ def connector_document_extraction(
         if index_attempt.search_settings is None:
             raise ValueError("Search settings must be set for indexing")
 
-        # Clear the indexing trigger if it was set, to prevent duplicate indexing attempts
-        if index_attempt.connector_credential_pair.indexing_trigger is not None:
+        # Read once: the batch tasks get it so they need no lookup per batch.
+        is_backfill = index_attempt.is_backfill
+        batch_storage = get_document_batch_storage(
+            cc_pair_id, index_attempt_id, is_backfill=is_backfill
+        )
+
+        # Clear the indexing trigger if it was set, to prevent duplicate indexing
+        # attempts. A backfill does not serve the trigger, so it leaves it set.
+        if (
+            not index_attempt.is_backfill
+            and index_attempt.connector_credential_pair.indexing_trigger is not None
+        ):
             logger.info(
                 "Clearing indexing trigger: cc_pair=%s trigger=%s",
                 index_attempt.connector_credential_pair.id,
@@ -539,43 +589,28 @@ def connector_document_extraction(
             )
         )
 
-        # Set up time windows for polling. A port-flow FUTURE's resume cursor comes from its
-        # synthetic seed (get_last_successful_... keeps ignore_synthetic_seed=False by default).
-        last_successful_index_poll_range_end = (
-            earliest_index_time
-            if from_beginning
-            else get_last_successful_attempt_poll_range_end(
-                cc_pair_id=cc_pair_id,
-                earliest_index=earliest_index_time,
-                search_settings=index_attempt.search_settings,
-                db_session=db_session,
+        # A backfill resumes nothing. The query skips backfills, so a normal
+        # attempt never resumes a backfill's window or checkpoint either.
+        most_recent_attempt = (
+            None
+            if index_attempt.is_backfill
+            else next(
+                iter(
+                    get_recent_completed_attempts_for_cc_pair(
+                        cc_pair_id=cc_pair_id,
+                        search_settings_id=index_attempt.search_settings_id,
+                        db_session=db_session,
+                        limit=1,
+                    )
+                ),
+                None,
             )
-        )
-
-        if last_successful_index_poll_range_end > POLL_CONNECTOR_OFFSET:
-            window_start = datetime.fromtimestamp(
-                last_successful_index_poll_range_end, tz=timezone.utc
-            ) - timedelta(minutes=POLL_CONNECTOR_OFFSET)
-        else:
-            # don't go into "negative" time if we've never indexed before
-            window_start = datetime.fromtimestamp(0, tz=timezone.utc)
-
-        most_recent_attempt = next(
-            iter(
-                get_recent_completed_attempts_for_cc_pair(
-                    cc_pair_id=cc_pair_id,
-                    search_settings_id=index_attempt.search_settings_id,
-                    db_session=db_session,
-                    limit=1,
-                )
-            ),
-            None,
         )
 
         # The hash of the config this run uses. It replaces the hash stamped at
         # creation, because the config can change before the attempt starts.
         connector_config_hash = compute_connector_config_hash(
-            db_connector.connector_specific_config
+            _get_run_config(index_attempt)
         )
         config_changed_since_last_attempt = (
             most_recent_attempt is not None
@@ -587,19 +622,29 @@ def connector_document_extraction(
                 cc_pair_id,
             )
 
-        # if the last attempt didn't complete cleanly, reuse the same window. This
-        # is necessary to ensure correctness with checkpointing. If we don't do this,
-        # things like new slack channels could be missed (since existing slack
-        # channels are cached as part of the checkpoint).
-        if (
-            most_recent_attempt
-            and most_recent_attempt.poll_range_end
-            and most_recent_attempt.status.should_reuse_checkpoint()
-            and not config_changed_since_last_attempt
-        ):
-            window_end = most_recent_attempt.poll_range_end
+        if index_attempt.is_backfill:
+            # exactly the requested window, outside the incremental cursor
+            window_start, window_end = _get_backfill_window(index_attempt)
         else:
-            window_end = datetime.now(tz=timezone.utc)
+            window_start = _get_incremental_window_start(
+                db_session,
+                index_attempt,
+                index_attempt.search_settings,
+                earliest_index_time,
+            )
+            # if the last attempt didn't complete cleanly, reuse the same window. This
+            # is necessary to ensure correctness with checkpointing. If we don't do this,
+            # things like new slack channels could be missed (since existing slack
+            # channels are cached as part of the checkpoint).
+            if (
+                most_recent_attempt
+                and most_recent_attempt.poll_range_end
+                and most_recent_attempt.status.should_reuse_checkpoint()
+                and not config_changed_since_last_attempt
+            ):
+                window_end = most_recent_attempt.poll_range_end
+            else:
+                window_end = datetime.now(tz=timezone.utc)
 
         # set time range in db
         index_attempt.poll_range_start = window_start
@@ -627,9 +672,13 @@ def connector_document_extraction(
         # if the last attempt was successful
         # OR
         # if the connector config changed since the last attempt
+        # OR
+        # if this is a backfill, which never resumes. Its batch storage is
+        # separate, so the cleanup leaves normal attempts' batches alone.
         with time_stage(IndexAttemptStage.CHECKPOINT_LOAD, index_attempt_id):
             if (
                 index_attempt.from_beginning
+                or index_attempt.is_backfill
                 or (most_recent_attempt and most_recent_attempt.status.is_successful())
                 or config_changed_since_last_attempt
             ):
@@ -855,6 +904,7 @@ def connector_document_extraction(
                     "tenant_id": tenant_id,
                     "batch_num": batch_num,  # 0-indexed
                     "enqueue_time_ms": int(time.time() * 1000),
+                    "is_backfill": is_backfill,
                 }
 
                 # Queue document processing task

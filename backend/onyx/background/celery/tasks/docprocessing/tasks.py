@@ -439,7 +439,10 @@ def monitor_indexing_attempt_progress(
         return
 
     # Check if the CC Pair should be moved to INITIAL_INDEXING
-    if cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED:
+    if (
+        cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED
+        and not attempt.is_backfill
+    ):
         cc_pair.status = ConnectorCredentialPairStatus.INITIAL_INDEXING
         db_session.commit()
 
@@ -474,7 +477,9 @@ def monitor_indexing_attempt_progress(
         return
 
     storage = get_document_batch_storage(
-        attempt.connector_credential_pair_id, attempt.id
+        attempt.connector_credential_pair_id,
+        attempt.id,
+        is_backfill=attempt.is_backfill,
     )
 
     # Check task completion using Celery
@@ -599,7 +604,10 @@ def check_indexing_completion(
             status=attempt.status.value,
         )
 
-        if attempt.status.is_successful():
+        # A backfill leaves the pair's status, schedule, error state and success
+        # metrics alone: it ran outside the incremental cursor, often with a
+        # partial config.
+        if attempt.status.is_successful() and not attempt.is_backfill:
             # NOTE: we define the last successful index time as the time the last successful
             # attempt finished. This is distinct from the poll_range_end of the last successful
             # attempt, which is the time up to which documents have been fetched.
@@ -913,8 +921,10 @@ def fail_inconsistent_index_attempts(db_session: Session, lock_beat: RedisLock) 
             or fresh_attempt.status.is_terminal()
         ):
             continue
+        # A backfill is always created with its task, so it never waits.
         if (
             fresh_attempt.status == IndexingStatus.NOT_STARTED
+            and not fresh_attempt.is_backfill
             and not cc_pair_has_dispatched_index_attempts(
                 db_session, fresh_attempt.connector_credential_pair_id
             )
@@ -1531,6 +1541,7 @@ def docprocessing_task(
     tenant_id: str,
     batch_num: int,
     enqueue_time_ms: int | None = None,
+    is_backfill: bool = False,
 ) -> None:
     """Process a batch of documents through the indexing pipeline.
 
@@ -1541,6 +1552,9 @@ def docprocessing_task(
     docfetching enqueued this task. Used to compute the QUEUE_WAIT stage
     metric. Optional + defaults to None so in-flight tasks queued by an older
     docfetching deployment continue to work across rolling deploys.
+
+    ``is_backfill`` selects the backfill batch storage. It defaults to False
+    for the same reason.
     """
     # Start heartbeat for this indexing attempt
     heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
@@ -1548,7 +1562,12 @@ def docprocessing_task(
         # Cannot use the TaskSingleton approach here because the worker is multithreaded
         token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
         _docprocessing_task(
-            index_attempt_id, cc_pair_id, tenant_id, batch_num, enqueue_time_ms
+            index_attempt_id,
+            cc_pair_id,
+            tenant_id,
+            batch_num,
+            enqueue_time_ms,
+            is_backfill=is_backfill,
         )
     finally:
         stop_heartbeat(heartbeat_thread, stop_event)  # Stop heartbeat before exiting
@@ -1685,6 +1704,8 @@ def _docprocessing_task(
     tenant_id: str,
     batch_num: int,
     enqueue_time_ms: int | None = None,
+    *,
+    is_backfill: bool = False,
 ) -> None:
     start_time = time.monotonic()
 
@@ -1734,9 +1755,6 @@ def _docprocessing_task(
         f"Processing document batch: attempt={index_attempt_id} batch_num={batch_num} "
     )
 
-    # Get the document batch storage
-    storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
-
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     r = get_redis_client(tenant_id=tenant_id)
 
@@ -1768,6 +1786,10 @@ def _docprocessing_task(
                 "index_attempt_id": index_attempt_id,
                 "batch_num": batch_num,
             },
+        )
+
+        storage = get_document_batch_storage(
+            cc_pair_id, index_attempt_id, is_backfill=is_backfill
         )
 
         # Retrieve documents from storage. Time recorded as BATCH_LOAD; we
