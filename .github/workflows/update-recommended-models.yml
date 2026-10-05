@@ -104,11 +104,12 @@ jobs:
           MAX_REPAIR_COMMITS: 5
         run: |
           proceed=true
-          read -r pr_number pr_head <<< "$(
-            gh pr list --state open --head "${BRANCH}" \
-              --json number,headRefOid \
-              --jq '.[0] | "\(.number) \(.headRefOid)" // " "'
-          )"
+          # Capture first: a gh failure must abort the step, not read as
+          # "no open PR" and silently skip the repair.
+          pr_list="$(gh pr list --state open --head "${BRANCH}" \
+            --json number,headRefOid \
+            --jq '.[0] | "\(.number) \(.headRefOid)" // " "')"
+          read -r pr_number pr_head <<< "${pr_list}"
           if [ -z "${pr_number}" ]; then
             echo "::notice::No open PR for ${BRANCH} (merged or closed). Skipping repair."
             proceed=false

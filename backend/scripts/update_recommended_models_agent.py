@@ -216,10 +216,16 @@ def build_catalog_digest(
             elif model.expiration_date:
                 flags.append(f"expires {model.expiration_date}")
             # OpenRouter prices are USD per token; report per million tokens.
-            try:
-                prompt_price = f"{float(model.pricing.get('prompt', 0)) * 1e6:.4g}"
-            except (TypeError, ValueError):
+            # Keep "?" for missing values so an unknown price isn't mistaken
+            # for a free tier.
+            raw_price: Any = model.pricing.get("prompt")
+            if raw_price is None:
                 prompt_price = "?"
+            else:
+                try:
+                    prompt_price = f"{float(raw_price) * 1e6:.4g}"
+                except (TypeError, ValueError):
+                    prompt_price = "?"
             lines.append(
                 f"- {model.id} | {model.name} | created {_created_date(model)}"
                 f" | prompt ${prompt_price}/Mtok"
