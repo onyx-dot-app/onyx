@@ -8,11 +8,12 @@ from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
     ScopeInclude,
-    ScopeOpaque,
+    ScopeOrdered,
 )
 
-# A numeric limit: no descriptor compares the old and new values.
-_LIMIT = FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
+# The connector's values for a None limit.
+DEFAULT_MAX_PAGES = 10000
+DEFAULT_SKIP_DOC_ABSOLUTE_CHARS = 200000
 
 
 class TestRailConnectorConfig(ConnectorConfig):
@@ -26,9 +27,24 @@ class TestRailConnectorConfig(ConnectorConfig):
     # Matters only when max_pages cuts the case list short.
     cases_page_size: Annotated[int | None, FieldPolicy(FieldClass.COSMETIC)] = None
     # A cap on case pages per project and suite.
-    max_pages: Annotated[int | None, _LIMIT] = None
+    max_pages: Annotated[
+        int | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=True, none_means=DEFAULT_MAX_PAGES),
+        ),
+    ] = None
     # Cases with more text than this are skipped.
-    skip_doc_absolute_chars: Annotated[int | None, _LIMIT] = None
+    skip_doc_absolute_chars: Annotated[
+        int | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(
+                widens_when_larger=True,
+                none_means=DEFAULT_SKIP_DOC_ABSOLUTE_CHARS,
+            ),
+        ),
+    ] = None
 
     # The constructor treats a blank string like None (use the default).
     @field_validator(

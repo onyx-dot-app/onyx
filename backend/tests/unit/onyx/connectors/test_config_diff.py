@@ -17,6 +17,7 @@ from onyx.connectors.field_policy import (
     ScopeExclude,
     ScopeInclude,
     ScopeOpaque,
+    ScopeOrdered,
     ScopeToggle,
 )
 from onyx.connectors.github.config import GithubConnectorConfig
@@ -468,3 +469,66 @@ def test_one_item_string_backfill_keeps_the_exact_value() -> None:
     )
 
     assert delta == {"folder_path": " /Q1, 2024"}
+
+
+class _LimitConfig(ConnectorConfig):
+    max_pages: Annotated[
+        int | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=True, none_means=100),
+        ),
+    ] = None
+    depth: Annotated[
+        int,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=True, unbounded=(-1,)),
+        ),
+    ] = 0
+    start_date: Annotated[
+        str | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=False, unbounded=(None, "")),
+        ),
+    ] = None
+
+
+@pytest.mark.parametrize(
+    ("field_name", "old_value", "new_value", "expected"),
+    [
+        ("max_pages", 10, 20, ScopeDirection.WIDEN),
+        ("max_pages", 20, 10, ScopeDirection.NARROW),
+        ("max_pages", None, 200, ScopeDirection.WIDEN),
+        ("max_pages", None, 50, ScopeDirection.NARROW),
+        ("depth", 2, -1, ScopeDirection.WIDEN),
+        ("depth", -1, 5, ScopeDirection.NARROW),
+        ("start_date", "2024-01-01", "2023-06-01", ScopeDirection.WIDEN),
+        ("start_date", "2023-06-01", "2024-01-01", ScopeDirection.NARROW),
+        ("start_date", "2024-01-01", None, ScopeDirection.WIDEN),
+        ("start_date", None, "2024-01-01", ScopeDirection.NARROW),
+    ],
+)
+def test_ordered_scope_direction(
+    field_name: str, old_value: Any, new_value: Any, expected: ScopeDirection
+) -> None:
+    changes = classify_config_change(
+        _LimitConfig, {field_name: old_value}, {field_name: new_value}
+    )
+
+    assert [change.scope_direction for change in changes] == [expected]
+
+
+def test_ordered_scope_none_means_its_default() -> None:
+    # None stands for 100, so 100 is no change.
+    assert (
+        classify_config_change(_LimitConfig, {"max_pages": None}, {"max_pages": 100})
+        == []
+    )
+
+
+def test_ordered_widening_has_no_scoped_backfill() -> None:
+    assert (
+        build_scoped_backfill_config(_LimitConfig, {"depth": 1}, {"depth": 2}) is None
+    )

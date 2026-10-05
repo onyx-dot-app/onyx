@@ -6,7 +6,7 @@ from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
     ScopeInclude,
-    ScopeOpaque,
+    ScopeOrdered,
 )
 
 _IDENTITY = FieldPolicy(FieldClass.IDENTITY)
@@ -19,6 +19,13 @@ class MediaWikiConnectorConfig(ConnectorConfig):
     categories: Annotated[list[str], _TARGETS]
     pages: Annotated[list[str], _TARGETS]
     # -1 is unbounded; a deeper recursion widens.
-    recurse_depth: Annotated[int, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())]
+    # -1 means no depth limit.
+    recurse_depth: Annotated[
+        int,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=True, unbounded=(-1,)),
+        ),
+    ]
     language_code: Annotated[str, _IDENTITY] = "en"
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE

@@ -6,7 +6,7 @@ from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
     ScopeInclude,
-    ScopeOpaque,
+    ScopeOrdered,
 )
 
 _EMPTY_MEANS_ALL = FieldPolicy(
@@ -17,8 +17,13 @@ _EMPTY_MEANS_ALL = FieldPolicy(
 class DiscordConnectorConfig(ConnectorConfig):
     server_ids: Annotated[list[str] | None, _EMPTY_MEANS_ALL] = None
     channel_names: Annotated[list[str] | None, _EMPTY_MEANS_ALL] = None
-    # YYYY-MM-DD. Messages before it are not fetched; no descriptor compares dates.
+    # YYYY-MM-DD; messages before it are not fetched. An earlier date (or
+    # none) fetches more. ISO dates compare as strings.
     start_date: Annotated[
-        str | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
+        str | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=False, unbounded=(None, "")),
+        ),
     ] = None
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE

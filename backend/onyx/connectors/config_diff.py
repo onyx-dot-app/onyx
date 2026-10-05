@@ -15,6 +15,7 @@ from onyx.connectors.field_policy import (
     ScopeExclude,
     ScopeInclude,
     ScopeOpaque,
+    ScopeOrdered,
     ScopeToggle,
     get_field_policy,
 )
@@ -90,12 +91,42 @@ def _inverted(direction: ScopeDirection) -> ScopeDirection:
     return direction
 
 
+def _ordered_direction(
+    field_name: str, scope: ScopeOrdered, old_value: Any, new_value: Any
+) -> ScopeDirection:
+    old = scope.none_means if old_value is None else old_value
+    new = scope.none_means if new_value is None else new_value
+    if old == new:
+        return ScopeDirection.NONE
+    if old in scope.unbounded:
+        return ScopeDirection.NARROW
+    if new in scope.unbounded:
+        return ScopeDirection.WIDEN
+    try:
+        larger = new > old
+    except TypeError:
+        logger.warning(
+            "Ordered scope field %s has values that do not compare", field_name
+        )
+        return ScopeDirection.UNKNOWN
+    return (
+        ScopeDirection.WIDEN
+        if larger == scope.widens_when_larger
+        else ScopeDirection.NARROW
+    )
+
+
 def _scope_change(
     field_name: str, policy: FieldPolicy, old_value: Any, new_value: Any
 ) -> _ScopeChange:
     scope = policy.scope
     if scope is None or isinstance(scope, ScopeOpaque):
         return _ScopeChange(direction=ScopeDirection.UNKNOWN)
+
+    if isinstance(scope, ScopeOrdered):
+        return _ScopeChange(
+            direction=_ordered_direction(field_name, scope, old_value, new_value)
+        )
 
     if isinstance(scope, ScopeToggle):
         if not isinstance(old_value, bool) or not isinstance(new_value, bool):

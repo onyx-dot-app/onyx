@@ -12,6 +12,7 @@ BaseModel instance in ``Annotated`` metadata as a schema for the field.
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from pydantic.fields import FieldInfo
 
@@ -73,11 +74,23 @@ class ScopeToggle:
 
 
 @dataclass(frozen=True)
+class ScopeOrdered:
+    """A limit or a date floor. A larger value fetches more documents when
+    ``widens_when_larger``, fewer otherwise. ``unbounded`` lists the values
+    that mean no limit (the widest scope). ``none_means`` is the value the
+    connector uses when the field is None."""
+
+    widens_when_larger: bool
+    unbounded: tuple[Any, ...] = ()
+    none_means: Any = None
+
+
+@dataclass(frozen=True)
 class ScopeOpaque:
     """A scope field whose change direction cannot be derived from its values."""
 
 
-ScopeDescriptor = ScopeInclude | ScopeExclude | ScopeToggle | ScopeOpaque
+ScopeDescriptor = ScopeInclude | ScopeExclude | ScopeToggle | ScopeOrdered | ScopeOpaque
 
 
 @dataclass(frozen=True)

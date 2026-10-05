@@ -33,9 +33,9 @@ class UrlRewriteRule(BaseModel):
 class WebConnectorConfig(ConnectorConfig):
     model_config = ConfigDict(extra="allow")
 
-    # Document ids are the page URLs, not the base URL: the base URL is only
-    # where the crawl starts (or the sitemap / URL file), so it selects pages.
-    base_url: Annotated[str, _OPAQUE_SCOPE]
+    # Document ids are the page URLs. A new base URL (e.g. http to https or a
+    # new host) usually gives new ids for the same pages: re-index and prune.
+    base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
     web_connector_type: Annotated[WEB_CONNECTOR_VALID_SETTINGS, _OPAQUE_SCOPE] = (
         WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE
     )
