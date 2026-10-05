@@ -164,6 +164,16 @@ class TestTheTraps:
         assert access.is_public is False
         assert access.external_user_group_ids == set()
 
+    def test_shared_internally_grants_only_the_owner(self) -> None:
+        # Not seen live, and Zoom does not say which viewers it means.
+        settings = ZoomRecordingSettings(share_recording="internally")
+
+        access = _resolve(_client(settings))
+
+        assert access.external_user_emails == {_OWNER}
+        assert access.is_public is False
+        assert access.external_user_group_ids == set()
+
     def test_share_settings_zoom_does_not_document_grant_only_the_owner(
         self,
     ) -> None:

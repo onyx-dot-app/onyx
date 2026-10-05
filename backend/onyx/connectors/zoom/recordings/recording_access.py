@@ -186,6 +186,13 @@ def _link_access(
         or not treat_link_access_as_public
     ):
         return _OWNER_ONLY
+    if settings.share_recording is ZoomShareRecording.INTERNALLY:
+        logger.warning(
+            "Recording %s is shared internally, which Zoom does not define, so "
+            "only its owner may read it",
+            uuid,
+        )
+        return _OWNER_ONLY
     if not settings.authentication_option:
         if settings.recording_authentication:
             logger.warning(
