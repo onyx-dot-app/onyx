@@ -56,7 +56,10 @@ locals {
 
   # A nested JSON key is reached only through the key it sits under, so whole
   # free-form objects are named by prefix.
-  default_uninspected_field_prefixes = ["connector_specific_config", "credential_json"]
+  default_uninspected_field_prefixes = [
+    "connector_specific_config", "credential_json", "definition", "custom_config",
+    "new_custom_config", "existing_custom_config", "connection_headers", "config", "environment",
+  ]
 
   # The names cover query string and body parameters, and the top-level keys
   # of a JSON body.
@@ -67,8 +70,8 @@ locals {
 
   # Cloud Armor does not parse a multipart body. It reads the file content as
   # parameter names, which no exclusion covers, so the content rule sets skip
-  # the uploads. A GET has no content type and still takes the whole check.
-  multipart_guard = "!request.headers['content-type'].lower().startsWith('multipart/form-data') && "
+  # an upload. The method check keeps the header from exempting a GET.
+  multipart_guard = "!(request.method.matches('POST|PUT|PATCH') && request.headers['content-type'].lower().startsWith('multipart/form-data')) && "
 
   # One exclusion per content rule set, for every signature in it.
   waf_exclusions = {

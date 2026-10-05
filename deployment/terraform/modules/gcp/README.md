@@ -301,9 +301,10 @@ Google sign-in callback.
   configuration are covered by prefix. Everything else in the request is still
   checked: the path, the headers, the cookies, the other parameters, and the
   parameter names.
-- The same rule sets skip `multipart/form-data` requests. Cloud Armor does not
-  parse a multipart body and reads the file content as parameter names, which
-  no exclusion covers.
+- The same rule sets skip an upload, a `POST`, `PUT` or `PATCH` with a
+  `multipart/form-data` body. Cloud Armor does not parse a multipart body and
+  reads the file content as parameter names, which no exclusion covers. The
+  header alone exempts nothing: a `GET` is checked in full whatever it sends.
 - `scannerdetection` and `sessionfixation` check every request in full.
 
 When a legitimate request gets a 403, the load balancer log names the

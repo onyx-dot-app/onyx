@@ -76,7 +76,7 @@ run "defaults_enforce_the_owasp_rule_sets_at_sensitivity_one" {
     condition = one([
       for r in google_compute_security_policy.this.rule :
       one(r.match).expr[0].expression if r.description == "OWASP CRS sqli"
-    ]) == "!request.headers['content-type'].lower().startsWith('multipart/form-data') && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
+    ]) == "!(request.method.matches('POST|PUT|PATCH') && request.headers['content-type'].lower().startsWith('multipart/form-data')) && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
     error_message = "The SQLi rule should evaluate sqli-v33-stable at sensitivity 1."
   }
 }
@@ -87,7 +87,7 @@ run "content_rule_sets_skip_multipart_uploads_only" {
   assert {
     condition = alltrue([
       for r in google_compute_security_policy.this.rule :
-      startswith(one(r.match).expr[0].expression, "!request.headers['content-type'].lower().startsWith('multipart/form-data') && evaluatePreconfiguredWaf(")
+      startswith(one(r.match).expr[0].expression, "!(request.method.matches('POST|PUT|PATCH') && request.headers['content-type'].lower().startsWith('multipart/form-data')) && evaluatePreconfiguredWaf(")
       if startswith(r.description, "OWASP CRS ") && !contains(["methodenforcement", "scannerdetection", "sessionfixation"], trimprefix(r.description, "OWASP CRS "))
     ])
     error_message = "Rule sets that read field values should skip multipart uploads, whose file content Cloud Armor reads as parameter names."
@@ -177,7 +177,7 @@ run "a_rule_set_outside_the_defaults_is_tuned_too" {
   assert {
     condition = startswith(one([
       for r in google_compute_security_policy.this.rule : one(r.match).expr[0].expression if r.description == "OWASP CRS generic"
-    ]), "!request.headers['content-type'].lower().startsWith('multipart/form-data') && evaluatePreconfiguredWaf('generic-v422-stable'")
+    ]), "!(request.method.matches('POST|PUT|PATCH') && request.headers['content-type'].lower().startsWith('multipart/form-data')) && evaluatePreconfiguredWaf('generic-v422-stable'")
     error_message = "Every rule set outside the untuned three should skip multipart uploads."
   }
 
@@ -359,7 +359,7 @@ run "per_rule_settings_override_the_module_wide_ones" {
   assert {
     condition = one([
       for r in google_compute_security_policy.this.rule : one(r.match).expr[0].expression if r.description == "OWASP CRS sqli"
-    ]) == "!request.headers['content-type'].lower().startsWith('multipart/form-data') && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 2, 'opt_out_rule_ids': ['owasp-crs-v030301-id942421-sqli', 'owasp-crs-v030301-id942432-sqli']})"
+    ]) == "!(request.method.matches('POST|PUT|PATCH') && request.headers['content-type'].lower().startsWith('multipart/form-data')) && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 2, 'opt_out_rule_ids': ['owasp-crs-v030301-id942421-sqli', 'owasp-crs-v030301-id942432-sqli']})"
     error_message = "The SQLi rule should carry its own sensitivity and opt-outs."
   }
 
