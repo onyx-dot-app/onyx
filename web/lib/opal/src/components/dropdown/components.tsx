@@ -170,10 +170,17 @@ function Dropdown({
   });
 
   const getTriggerProps = useCallback(
-    ({ typeIn }: { typeIn: boolean }): DropdownTriggerProps => ({
-      // A type-in is the combobox. A button keeps its role: a combobox takes
-      // no name from its content, so a button trigger would lose its name.
-      role: typeIn && mode === "picker" ? "combobox" : undefined,
+    ({
+      typeIn,
+      nativeButton = false,
+    }: {
+      typeIn: boolean;
+      nativeButton?: boolean;
+    }): DropdownTriggerProps => ({
+      // A picker's trigger is the combobox, unless it is a <button>: a
+      // combobox takes no name from its content, so a button would lose
+      // its name. A button keeps its role, with the popup it owns.
+      role: mode === "picker" && !nativeButton ? "combobox" : undefined,
       "aria-expanded": isOpen,
       "aria-haspopup": mode === "picker" ? "listbox" : "menu",
       "aria-controls": `${id}-listbox`,
@@ -322,10 +329,14 @@ function DropdownTrigger({
     getTriggerProps,
   } = useDropdownContext();
   const nodeRef = useRef<HTMLElement | null>(null);
+  // Whether the element is a <button>: known once it mounts, and it decides
+  // the role the trigger carries.
+  const [nativeButton, setNativeButton] = useState(false);
   const ref = useCallback(
     (node: HTMLElement | null) => {
       if (node) {
         nodeRef.current = node;
+        setNativeButton(node.tagName === "BUTTON");
         registerTrigger(node);
         setTriggerRef(node);
       } else {
@@ -339,7 +350,7 @@ function DropdownTrigger({
   // This trigger is the one in use: it anchors the list and takes focus back.
   const claim = () => setTriggerRef(nodeRef.current);
 
-  const triggerProps = getTriggerProps({ typeIn });
+  const triggerProps = getTriggerProps({ typeIn, nativeButton });
   const onKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (disabled) return;
     claim();

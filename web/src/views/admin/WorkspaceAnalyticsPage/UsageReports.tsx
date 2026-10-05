@@ -193,7 +193,17 @@ function GenerateReportMenu({
         onSecondary: () =>
           calendarRef.current?.querySelector("button")?.focus(),
         render: ({ props }) => (
-          <div {...props} ref={calendarRef}>
+          <div
+            {...props}
+            ref={calendarRef}
+            // Escape from a focused day closes the list.
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setOpen(false);
+                reset();
+              }
+            }}
+          >
             <Section
               flexDirection="column"
               justifyContent="start"

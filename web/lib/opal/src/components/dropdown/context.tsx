@@ -65,7 +65,11 @@ export interface DropdownContextValue {
    * trigger is a combobox; a menu's keeps its own role. A type-in trigger
    * also announces list autocomplete.
    */
-  getTriggerProps: (options: { typeIn: boolean }) => DropdownTriggerProps;
+  getTriggerProps: (options: {
+    typeIn: boolean;
+    /** The trigger is a `<button>`: it keeps its role and its name. */
+    nativeButton?: boolean;
+  }) => DropdownTriggerProps;
 }
 
 export interface DropdownTriggerProps {

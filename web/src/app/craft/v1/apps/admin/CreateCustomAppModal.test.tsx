@@ -253,7 +253,9 @@ describe("CreateCustomAppModal", () => {
 
     const appModal = screen.getByRole("dialog", { name: /Edit Acme CRM/ });
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
-    expect(appModal).not.toContainElement(
+    // The list portals into the modal: outside it, the modal would block
+    // clicks on it.
+    expect(appModal).toContainElement(
       screen.getByPlaceholderText("Search editable skills...")
     );
     fireEvent.click(screen.getAllByRole("button", { name: /acme-lookup/ })[0]!);

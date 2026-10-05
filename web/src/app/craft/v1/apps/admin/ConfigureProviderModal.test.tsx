@@ -380,9 +380,7 @@ describe("ConfigureProviderModal", () => {
     expect(await screen.findByText("Add skills to Slack")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Associate slack-helper" })
-    );
+    fireEvent.click(screen.getByRole("option", { name: /^slack-helper/ }));
     expect(screen.getByRole("button", { name: "Save skills" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));

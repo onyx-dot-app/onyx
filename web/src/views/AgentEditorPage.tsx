@@ -273,6 +273,10 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                       {...props}
                       ref={iconGridRef}
                       className="grid grid-cols-4 gap-1"
+                      // Escape from a focused icon closes the list.
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setPopoverOpen(false);
+                      }}
                     >
                       <SquareButton
                         key="default-icon"
