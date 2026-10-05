@@ -292,6 +292,73 @@ class TestConstructMessageHistory:
         assert result[4] == user_msg2  # Last user message
         assert result[5] == assistant_with_tool  # After last user message
 
+    def test_cacheable_flags_cover_stable_prefix(self) -> None:
+        """System, kept history, custom agent, project files, last user
+        message, and tool rounds after it are all byte-stable within a turn
+        and must carry should_cache. The trailing reminder is rebuilt per
+        turn and stays uncached."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        old_user = create_message("Previous turn", MessageType.USER, 5)
+        old_answer = create_message("Previous answer", MessageType.ASSISTANT, 5)
+        custom_agent = create_message("Custom agent task", MessageType.USER, 10)
+        user_msg = create_message("Search for X", MessageType.USER, 5)
+        assistant_with_tool = create_assistant_with_tool_call("tc_1", "search", 5)
+        tool_response = create_tool_response("tc_1", "Search results...", 10)
+        reminder = create_message("Remember to cite", MessageType.USER, 5)
+
+        simple_chat_history = [
+            old_user,
+            old_answer,
+            user_msg,
+            assistant_with_tool,
+            tool_response,
+        ]
+        context_files = create_context_files(num_files=1, tokens_per_file=50)
+
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=custom_agent,
+            simple_chat_history=simple_chat_history,
+            reminder_message=reminder,
+            context_files=context_files,
+            available_tokens=1000,
+        )
+
+        assert all(msg.should_cache for msg in result[:-1])
+        assert result[-1] is reminder
+        assert not result[-1].should_cache
+
+    def test_cacheable_flags_exclude_truncated_history(self) -> None:
+        """History messages evicted by the token budget must not be marked
+        cacheable; kept history and the tail segments still are."""
+        system_prompt = create_message("System", MessageType.SYSTEM, 10)
+        dropped_user = create_message("Ancient turn", MessageType.USER, 100)
+        kept_user = create_message("Recent turn", MessageType.USER, 5)
+        kept_answer = create_message("Recent answer", MessageType.ASSISTANT, 5)
+        user_msg = create_message("Latest question", MessageType.USER, 5)
+
+        simple_chat_history = [
+            dropped_user,
+            kept_user,
+            kept_answer,
+            user_msg,
+        ]
+        context_files = create_context_files()
+
+        # Budget fits system + last user + one kept pair, not the ancient turn.
+        result = construct_message_history(
+            system_prompt=system_prompt,
+            custom_agent_prompt=None,
+            simple_chat_history=simple_chat_history,
+            reminder_message=None,
+            context_files=context_files,
+            available_tokens=35,
+        )
+
+        assert dropped_user not in result
+        assert not dropped_user.should_cache
+        assert all(msg.should_cache for msg in result)
+
     def test_construct_message_history_does_not_duplicate_project_images(
         self,
     ) -> None:

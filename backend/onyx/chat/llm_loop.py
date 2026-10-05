@@ -418,6 +418,13 @@ def construct_message_history(
     if system_prompt:
         system_prompt.should_cache = True
 
+    # These are byte-stable across turns (persona task prompt, project file
+    # contents), so keep them in the cacheable prefix.
+    if custom_agent_prompt:
+        custom_agent_prompt.should_cache = True
+    for msg in project_messages:
+        msg.should_cache = True
+
     # If no history, build minimal context
     if not simple_chat_history:
         result = [system_prompt] if system_prompt else []
@@ -580,9 +587,14 @@ def construct_message_history(
         result.append(forgotten_files_message)
 
     # 5. Add last user message (with context images attached)
+    last_user_message.should_cache = True
     result.append(last_user_message)
 
     # 6. Add messages after last user message (tool calls, responses, etc.)
+    # These are prior tool rounds of the current turn — append-only and
+    # byte-stable between loop iterations, so cache them too.
+    for msg in messages_after_last_user:
+        msg.should_cache = True
     result.extend(messages_after_last_user)
 
     # 7. Add reminder message at the very end
