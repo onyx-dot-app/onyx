@@ -1,5 +1,10 @@
 # Fleet telemetry
 
+The central Fleet Management Service, dashboard, archive and AWS stack live in
+[`onyx-dot-app/fleet-management-service`](https://github.com/onyx-dot-app/fleet-management-service).
+This repository owns application hooks and the source collector implementation.
+Telemetry environment variables and the ingestion contract retain their names for compatibility.
+
 The API and workers emit reviewed fields into one bounded memory queue per process.
 Emissions perform no database, network, disk, serialization, or logging operations.
 Queue contention, overload, and disabled collection drop events without waiting.
