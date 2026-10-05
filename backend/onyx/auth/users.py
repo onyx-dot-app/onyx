@@ -2256,6 +2256,17 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
+    from onyx.mcp_oauth.auth import (
+        authenticate_mcp_oauth_request,
+        extract_mcp_oauth_bearer,
+    )
+
+    mcp_token = extract_mcp_oauth_bearer(request)
+    if mcp_token is not None:
+        return await authenticate_mcp_oauth_request(
+            request, async_db_session, mcp_token
+        )
+
     if user is not None:
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.SESSION

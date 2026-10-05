@@ -51,4 +51,5 @@ class UsageCredentialType(str, Enum):
     JWT = "jwt"
     PAT = "pat"
     CRAFT_PAT = "craft_pat"
+    MCP_OAUTH = "mcp_oauth"
     API_KEY = "api_key"

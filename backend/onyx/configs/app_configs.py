@@ -1897,6 +1897,10 @@ API_KEY_HASH_ROUNDS = (
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+MCP_SERVER_OAUTH_ENABLED = (
+    os.environ.get("MCP_SERVER_OAUTH_ENABLED", "").lower() == "true"
+)
+MCP_SERVER_OAUTH_RESOURCE_URL = os.environ.get("MCP_SERVER_OAUTH_RESOURCE_URL") or None
 _MCP_SERVER_API_REQUEST_TIMEOUT_RAW = int(
     os.environ.get("MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS") or 300
 )

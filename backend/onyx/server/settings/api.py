@@ -12,6 +12,7 @@ from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
     HIDE_ONYX_BRANDING,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
+    MCP_SERVER_OAUTH_ENABLED,
     POSTHOG_API_KEY,
     POSTHOG_HOST,
 )
@@ -220,6 +221,7 @@ def fetch_settings(
 
     return UserSettings(
         **general_settings.model_dump(),
+        mcp_server_oauth_enabled=MCP_SERVER_OAUTH_ENABLED,
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
