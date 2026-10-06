@@ -3,14 +3,14 @@ from uuid import UUID
 from mcp.server.auth.provider import AuthorizationCode
 from pydantic import BaseModel, ConfigDict
 
-from onyx.oauth_provider.models import (
-    OAuthProviderConsentBinding as MCPOAuthConsentBinding,
-    OAuthProviderGrantInfo as MCPOAuthGrantInfo,
-    PendingOAuthProviderAuthorization as PendingMCPOAuthAuthorization,
-    StoredOAuthProviderCode as StoredMCPOAuthCode,
-    OAuthProviderTokenInfo as MCPOAuthTokenInfo,
-    OAuthProviderTokenPair as MCPOAuthTokenPair,
-)
+from onyx.oauth_provider import models as _oauth_provider_models
+
+MCPOAuthConsentBinding = _oauth_provider_models.OAuthProviderConsentBinding
+MCPOAuthGrantInfo = _oauth_provider_models.OAuthProviderGrantInfo
+MCPOAuthTokenInfo = _oauth_provider_models.OAuthProviderTokenInfo
+MCPOAuthTokenPair = _oauth_provider_models.OAuthProviderTokenPair
+PendingMCPOAuthAuthorization = _oauth_provider_models.PendingOAuthProviderAuthorization
+StoredMCPOAuthCode = _oauth_provider_models.StoredOAuthProviderCode
 
 
 class MCPOAuthAuthorizationCode(AuthorizationCode):
@@ -33,4 +33,3 @@ class MCPOAuthIntrospection(BaseModel):
     expires_at: int
     subject: str
     grant_id: UUID
-

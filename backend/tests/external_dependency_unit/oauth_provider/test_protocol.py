@@ -34,6 +34,7 @@ from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.db.enums import Permission
 from onyx.db.models import OAuthProviderClient, OAuthProviderGrant, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
+from onyx.mcp_oauth import attempts as oauth_attempts
 from onyx.mcp_oauth import auth as oauth_auth
 from onyx.mcp_oauth.config import get_mcp_oauth_settings
 from onyx.server.auth_check import check_router_auth
@@ -54,6 +55,49 @@ _RESOURCE = f"{_ORIGIN}/mcp/"
 _REDIRECT = "http://127.0.0.1:9876/callback"
 _UNKNOWN_OAUTH_ACCESS_TOKEN = "onyx_oat_public." + "a" * 43
 _UNKNOWN_OAUTH_REFRESH_TOKEN = "onyx_ort_public." + "a" * 43
+
+
+async def test_rate_limiter_counts_bucket_and_keeps_ttl(
+    redis_client: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bucket = f"test-rate-{uuid4()}"
+    monkeypatch.setattr(oauth_attempts.time, "time", lambda: 1000.0)
+    key = oauth_attempts._rate_key(bucket, 600)
+    try:
+        assert (
+            await oauth_attempts.allow_mcp_oauth_request(
+                bucket, limit=2, window_seconds=600
+            )
+            is True
+        )
+        assert (
+            await oauth_attempts.allow_mcp_oauth_request(
+                bucket, limit=2, window_seconds=600
+            )
+            is True
+        )
+        assert (
+            await oauth_attempts.allow_mcp_oauth_request(
+                bucket, limit=2, window_seconds=600
+            )
+            is False
+        )
+        assert await redis_client.ttl(key) > 0
+    finally:
+        await redis_client.delete(key)
+
+
+@pytest.mark.parametrize(
+    ("limit", "window_seconds"),
+    [(0, 600), (2, 0)],
+)
+async def test_rate_limiter_rejects_non_positive_limits(
+    limit: int, window_seconds: int
+) -> None:
+    with pytest.raises(ValueError):
+        await oauth_attempts.allow_mcp_oauth_request(
+            f"test-rate-{uuid4()}", limit=limit, window_seconds=window_seconds
+        )
 
 
 @pytest.fixture(params=[AuthBackend.REDIS])
