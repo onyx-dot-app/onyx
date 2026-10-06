@@ -142,3 +142,33 @@ class OutlookEvent(BaseModel):
 class OutlookEventPage(BaseModel):
     events: list[OutlookEvent]
     next_link: str | None = None
+
+
+class MailboxCursor(BaseModel):
+    """Where the walk stands in one mailbox."""
+
+    mailbox: OutlookMailbox
+    # False until the mailbox is probed and its folder tree listed.
+    opened: bool = False
+    # Set when nothing is left to read. The step drops the cursor.
+    finished: bool = False
+    # Folders left to walk, popped from the end.
+    folders: list[OutlookFolder] = []
+    # Every folder id under an excluded root, so a conversation message filed
+    # deep inside Deleted Items is dropped like one at its top.
+    excluded_folder_ids: list[str] = []
+    current_folder: OutlookFolder | None = None
+    delta_next_link: str | None = None
+    # Entries seen in the current folder's delta round, to detect the cap.
+    folder_change_count: int = 0
+    # True once the current folder is being re-read without the server filter.
+    folder_unfiltered: bool = False
+    # Conversations already rebuilt for this mailbox in this attempt, oldest
+    # first. The connector caps it per mailbox.
+    seen_conversation_ids: dict[str, None] = {}
+    # The calendar view round, one page per step after the folders.
+    calendar_next_link: str | None = None
+    calendar_done: bool = False
+    # Recurring series already resolved for this mailbox in this attempt,
+    # written or not. The connector caps it per mailbox.
+    seen_series_ids: set[str] = set()

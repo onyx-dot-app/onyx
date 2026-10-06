@@ -26,7 +26,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from babel.core import get_global
-from pydantic import BaseModel, model_validator
+from pydantic import model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
@@ -93,6 +93,7 @@ from onyx.connectors.outlook.mailboxes import (
 )
 from onyx.connectors.outlook.models import (
     EVENT_OCCURRENCE,
+    MailboxCursor,
     OutlookAttachment,
     OutlookEvent,
     OutlookFolder,
@@ -194,36 +195,6 @@ MAX_TRACKED_SERIES_PER_MAILBOX = TRACKED_SERIES_PER_STEP // MAILBOX_WORKERS
 SKIPPED_EVENT_SENSITIVITIES = frozenset({"private", "confidential"})
 
 
-class MailboxCursor(BaseModel):
-    """Where the walk stands in one mailbox."""
-
-    mailbox: OutlookMailbox
-    # False until the mailbox is probed and its folder tree listed.
-    opened: bool = False
-    # Set when nothing is left to read. The step drops the cursor.
-    finished: bool = False
-    # Folders left to walk, popped from the end.
-    folders: list[OutlookFolder] = []
-    # Every folder id under an excluded root, so a conversation message filed
-    # deep inside Deleted Items is dropped like one at its top.
-    excluded_folder_ids: list[str] = []
-    current_folder: OutlookFolder | None = None
-    delta_next_link: str | None = None
-    # Entries seen in the current folder's delta round, to detect the cap.
-    folder_change_count: int = 0
-    # True once the current folder is being re-read without the server filter.
-    folder_unfiltered: bool = False
-    # Conversations already rebuilt for this mailbox in this attempt, oldest
-    # first, the newest MAX_TRACKED_CONVERSATIONS_PER_MAILBOX kept.
-    seen_conversation_ids: dict[str, None] = {}
-    # The calendar view round, one page per step after the folders.
-    calendar_next_link: str | None = None
-    calendar_done: bool = False
-    # Recurring series already resolved for this mailbox in this attempt,
-    # written or not, capped at MAX_TRACKED_SERIES_PER_MAILBOX.
-    seen_series_ids: set[str] = set()
-
-
 class OutlookCheckpoint(ConnectorCheckpoint):
     # None until enumerated, then the mailboxes not yet started, popped from the end.
     mailboxes: list[OutlookMailbox] | None = None
@@ -238,13 +209,21 @@ class OutlookCheckpoint(ConnectorCheckpoint):
         flight across a deploy resumes without losing progress."""
         if not isinstance(data, dict) or not data.get("current_mailbox"):
             return data
-        cursor = {
+        cursor: dict[str, Any] = {
             name: data[name] for name in MailboxCursor.model_fields if name in data
         }
         cursor["mailbox"] = data["current_mailbox"]
         cursor["opened"] = True
         cursor["folders"] = data.get("folders") or []
-        kept = {
+        # The old shape tracked a whole step's worth per mailbox. Keep the
+        # newest within the per-mailbox caps so the cursor is not oversized.
+        seen_conversations: list[str] = list(data.get("seen_conversation_ids") or [])
+        cursor["seen_conversation_ids"] = dict.fromkeys(
+            seen_conversations[-MAX_TRACKED_CONVERSATIONS_PER_MAILBOX:]
+        )
+        seen_series: list[str] = list(data.get("seen_series_ids") or [])
+        cursor["seen_series_ids"] = set(seen_series[-MAX_TRACKED_SERIES_PER_MAILBOX:])
+        kept: dict[str, Any] = {
             name: value
             for name, value in data.items()
             if name in ("has_more", "mailboxes")
@@ -724,8 +703,10 @@ class OutlookConnector(
 
         # Worked on copies and written back only once every mailbox finished
         # its unit, so a raise in one leaves the whole step to be retried.
-        queued = list(checkpoint.mailboxes)
-        cursors = [cursor.model_copy(deep=True) for cursor in checkpoint.active]
+        queued: list[OutlookMailbox] = list(checkpoint.mailboxes)
+        cursors: list[MailboxCursor] = [
+            cursor.model_copy(deep=True) for cursor in checkpoint.active
+        ]
         while len(cursors) < MAILBOX_WORKERS and queued:
             cursors.append(MailboxCursor(mailbox=queued.pop()))
         if not cursors:
@@ -1218,7 +1199,8 @@ class OutlookConnector(
     ) -> Generator[Document | ConnectorFailure, None, None]:
         mailbox = cursor.mailbox
         folder = cursor.current_folder
-        assert folder is not None
+        if folder is None:
+            raise ValueError("Cannot read a folder page without a current folder")
 
         window_start = self._mail_window_start(start)
         try:

@@ -48,6 +48,8 @@ from onyx.connectors.outlook.connector import (
     MAX_ATTACHMENT_TEXT_PER_CONVERSATION,
     MAX_ATTACHMENTS_PER_MESSAGE,
     MAX_MESSAGES_PER_CONVERSATION,
+    MAX_TRACKED_CONVERSATIONS_PER_MAILBOX,
+    MAX_TRACKED_SERIES_PER_MAILBOX,
     SLIM_BATCH_SIZE,
     OutlookCheckpoint,
     OutlookConnector,
@@ -789,6 +791,24 @@ def test_checkpoint_saved_with_one_current_mailbox_resumes_where_it_stopped() ->
     assert cursor.folder_change_count == 7
     assert cursor.seen_conversation_ids == {CONVERSATION_ID: None}
     assert cursor.calendar_done
+
+
+def test_oversized_single_mailbox_checkpoint_keeps_the_newest_within_the_caps() -> None:
+    conversations: list[str] = [
+        f"c-{i}" for i in range(MAX_TRACKED_CONVERSATIONS_PER_MAILBOX + 3)
+    ]
+    series: list[str] = [f"s-{i}" for i in range(MAX_TRACKED_SERIES_PER_MAILBOX + 2)]
+    saved = {
+        "has_more": True,
+        "current_mailbox": mailbox().model_dump(),
+        "seen_conversation_ids": dict.fromkeys(conversations),
+        "seen_series_ids": series,
+    }
+
+    cursor = OutlookCheckpoint.model_validate_json(json.dumps(saved)).active[0]
+
+    assert list(cursor.seen_conversation_ids) == conversations[3:]
+    assert cursor.seen_series_ids == set(series[2:])
 
 
 def test_denied_mailbox_is_a_failure_when_named_and_a_skip_otherwise() -> None:
