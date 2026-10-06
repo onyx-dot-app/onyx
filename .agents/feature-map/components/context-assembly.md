@@ -266,7 +266,8 @@ merges:
 - The user-configured persona task prompt (`persona.task_prompt`), if any.
 - `prompts/chat_prompts.py:LAST_CYCLE_CITATION_REMINDER`, appended only on the
   final cycle (`out_of_cycles`).
-- `prompts/chat_prompts.py:CITATION_REMINDER` followed by
+- `prompts/chat_prompts.py:REQUIRE_CITATION_GUIDANCE` (unless the task prompt
+  already carries it), `ANSWER_COVERAGE_GUIDANCE`, and
   `ANSWER_COMPLETENESS_REMINDER`, appended whenever a search-like tool has run
   this turn (`should_cite_documents or always_cite_documents`) and kept on every
   subsequent cycle until the turn ends, not just the cycle the search ran in.

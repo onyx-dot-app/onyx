@@ -141,7 +141,7 @@ def build_reminder_message(
         # REQUIRE_CITATION_GUIDANCE and ANSWER_COVERAGE_GUIDANCE are the same
         # blocks that used to be appended to the system prompt; they moved here
         # so head prompts stay byte-stable across loop iterations for prompt
-        # caching. They supersede the shorter CITATION_REMINDER.
+        # caching.
         # reminder_text may already carry the guidance when the task prompt
         # authored a {{CITATION_GUIDANCE}} tag — don't emit it twice. The tag
         # only injects REQUIRE_CITATION_GUIDANCE, so COVERAGE is appended
