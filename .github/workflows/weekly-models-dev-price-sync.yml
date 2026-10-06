@@ -91,7 +91,9 @@ jobs:
       - name: Post PR to Slack for review
         if: steps.pr.outputs.pr_number != ''
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          # The repo's established channel-posting bot (cve-alerts uses the
+          # same token); SLACK_BOT_TOKEN is the integration-test workspace's.
+          SLACK_BOT_TOKEN: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
           # #slop-factory
           SLACK_CHANNEL: C0C6T9W2U3X
           MENTION_USER: rohoswagger

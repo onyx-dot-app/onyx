@@ -43,7 +43,8 @@ jobs:
     secrets:
       CHERRY_PICK_APP_PRIVATE_KEY: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      # The repo's established channel-posting bot (cve-alerts uses the same token).
+      SLACK_BOT_TOKEN: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
     with:
       task-name: recommended-models
       script: backend/scripts/update_recommended_models_agent.py
