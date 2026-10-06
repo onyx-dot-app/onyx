@@ -135,6 +135,7 @@ def folder(**overrides: Any) -> OutlookFolder:
 def message(**overrides: Any) -> OutlookMessage:
     fields: dict[str, Any] = {
         "id": "msg-1",
+        "internet_message_id": f"<{overrides.get('id', 'msg-1')}@contoso.com>",
         "conversation_id": CONVERSATION_ID,
         "parent_folder_id": INBOX_ID,
         "subject": "Quarterly plan",
@@ -165,7 +166,9 @@ def thread_doc_id(conversation_id: str) -> str:
 def change(**overrides: Any) -> OutlookMessageChange:
     fields: dict[str, Any] = {
         "id": "msg-1",
+        "internet_message_id": f"<{overrides.get('id', 'msg-1')}@contoso.com>",
         "conversation_id": CONVERSATION_ID,
+        "parent_folder_id": INBOX_ID,
         "received_at": RECEIVED,
     }
     conversation_id = overrides.get("conversation_id", CONVERSATION_ID)

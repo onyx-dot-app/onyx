@@ -108,7 +108,11 @@ from onyx.connectors.outlook.models import (
     OutlookMailbox,
     OutlookMailboxPage,
     OutlookMessage,
+    OutlookMessageChange,
     OutlookRecipient,
+    ThreadCopy,
+    ThreadGroup,
+    ThreadListing,
 )
 from onyx.connectors.outlook.source_operations import (
     CONFIG_AUTHORITY_HOST,
@@ -116,11 +120,15 @@ from onyx.connectors.outlook.source_operations import (
     OutlookSourceOperations,
 )
 from onyx.connectors.outlook.threads import (
-    ThreadEntry,
-    ThreadListing,
     ThreadTable,
+    candidate_copies,
+    choose_builder,
+    copy_document_id,
     delete_abandoned_tables,
-    merge_listings,
+    group_threads,
+    newest_message_ids,
+    partial_copies,
+    readers_of,
     thread_document_id,
     thread_key,
 )
@@ -223,11 +231,14 @@ class OutlookCheckpoint(ConnectorCheckpoint):
     mailboxes: list[OutlookMailbox] | None = None
     # The mailboxes being listed, at most MAILBOX_WORKERS of them.
     active: list[MailboxCursor] = []
-    # Listing pages written so far, one per listing step.
+    # Listing pages written so far, one per listing step, and the rows in them.
     listing_pages: int = 0
-    # None until the listings are merged into build shards.
-    build_shards: int | None = None
-    next_shard: int = 0
+    listing_rows: int = 0
+    # None until the listing is split into build buckets.
+    build_buckets: int | None = None
+    # The bucket being built and the threads of it already built.
+    next_bucket: int = 0
+    next_thread: int = 0
 
     @model_validator(mode="before")
     @classmethod
@@ -347,14 +358,23 @@ def _owners(
 
 
 def indexable_messages(
-    messages: list[OutlookMessage], excluded_folder_ids: set[str]
+    messages: list[OutlookMessage],
+    excluded_folder_ids: set[str],
+    cutoff: datetime | None = None,
 ) -> list[OutlookMessage]:
-    """Drop drafts and messages sitting in excluded folders."""
+    """Drop drafts, messages in excluded folders and mail older than the cutoff."""
     return [
         message
         for message in messages
-        if not message.is_draft and message.parent_folder_id not in excluded_folder_ids
+        if not message.is_draft
+        and message.parent_folder_id not in excluded_folder_ids
+        and not (cutoff and message.received_at and message.received_at < cutoff)
     ]
+
+
+def copy_message_id(message: OutlookMessage) -> str:
+    """The id a message copy is matched by across mailboxes."""
+    return message.internet_message_id or message.id
 
 
 def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
@@ -398,12 +418,39 @@ def owner_access(mailbox: OutlookMailbox) -> ExternalAccess:
     return _user_access({mailbox.address.lower()})
 
 
-def holders_access(holders: Iterable[OutlookMailbox]) -> ExternalAccess:
-    """Everyone whose mailbox holds a copy of the thread. Indexing and the
-    permission sync both grant exactly this, so neither widens the other. A
-    poll window lists only the mailboxes that gained a message, and the next
-    permission sync, minutes later, restores the full holder list."""
-    return _user_access({holder.address.lower() for holder in holders})
+def readers_access(readers: Iterable[OutlookMailbox]) -> ExternalAccess:
+    """The owners of the mailboxes that hold every message in the document.
+    Indexing and the permission sync both grant exactly this, so neither
+    widens the other."""
+    return _user_access({reader.address.lower() for reader in readers})
+
+
+def slim_thread_documents(
+    group: ThreadGroup, include_permissions: bool
+) -> list[SlimDocument]:
+    """The documents indexing produces for a thread, by the same rules it
+    uses, with their readers when permissions are wanted."""
+    candidates = candidate_copies(group)
+    builder = choose_builder(candidates)
+    readers = readers_of(
+        candidates, newest_message_ids(builder, MAX_MESSAGES_PER_CONVERSATION)
+    )
+    documents = [
+        SlimDocument(
+            id=thread_document_id(group.key),
+            external_access=readers_access(readers) if include_permissions else None,
+        )
+    ]
+    documents.extend(
+        SlimDocument(
+            id=copy_document_id(group.key, copy.mailbox),
+            external_access=(
+                owner_access(copy.mailbox) if include_permissions else None
+            ),
+        )
+        for copy in partial_copies(group, readers)
+    )
+    return documents
 
 
 def event_access(mailbox: OutlookMailbox, event: OutlookEvent) -> ExternalAccess:
@@ -549,12 +596,14 @@ def extract_attachment_text(data: bytes, name: str, cap: int) -> str:
 
 
 def build_thread_document(
-    entry: ThreadEntry,
+    document_id: str,
+    mailbox: OutlookMailbox,
+    readers: list[OutlookMailbox],
     messages: list[OutlookMessage],
     attachment_sections: dict[str, list[TextSection]] | None = None,
     include_permissions: bool = False,
 ) -> Document | None:
-    """Assemble indexable messages of one thread into a document, oldest
+    """Assemble indexable messages of one thread copy into a document, oldest
     first, each message followed by the text of its attachments. None when
     there is nothing to index."""
     kept = sorted(messages, key=_message_sort_key)[-MAX_MESSAGES_PER_CONVERSATION:]
@@ -570,7 +619,7 @@ def build_thread_document(
     primary_owners, secondary_owners = _owners(kept)
     newest = kept[-1]
     return Document(
-        id=thread_document_id(entry.key),
+        id=document_id,
         sections=sections,
         source=DocumentSource.OUTLOOK,
         semantic_identifier=subject,
@@ -580,15 +629,13 @@ def build_thread_document(
         primary_owners=primary_owners,
         secondary_owners=secondary_owners,
         metadata={
-            "mailbox": entry.first.mailbox.address,
-            "mailbox_count": str(len(entry.holders)),
+            "mailbox": mailbox.address,
+            "mailbox_count": str(len(readers)),
             "message_count": str(len(kept)),
         },
         parent_hierarchy_raw_node_id=newest.parent_folder_id
-        or mailbox_node_id(entry.first.mailbox),
-        external_access=(
-            holders_access(entry.holders) if include_permissions else None
-        ),
+        or mailbox_node_id(mailbox),
+        external_access=(readers_access(readers) if include_permissions else None),
     )
 
 
@@ -748,18 +795,17 @@ class OutlookConnector(
                 checkpoint, table, start, end, include_permissions
             )
             return checkpoint
-        if checkpoint.build_shards is None:
-            entries = merge_listings(table.iter_pages(checkpoint.listing_pages))
-            checkpoint.build_shards = table.write_shards(
-                entries, THREADS_PER_BUILD_STEP
+        if checkpoint.build_buckets is None:
+            checkpoint.build_buckets = table.write_buckets(
+                checkpoint.listing_pages, checkpoint.listing_rows
             )
             logger.info(
-                "Outlook: %s threads to build in %s shards",
-                len(entries),
-                checkpoint.build_shards,
+                "Outlook: %s message copies listed, building in %s buckets",
+                checkpoint.listing_rows,
+                checkpoint.build_buckets,
             )
             return checkpoint
-        if checkpoint.next_shard < checkpoint.build_shards:
+        if checkpoint.next_bucket < checkpoint.build_buckets:
             yield from self._build_step(checkpoint, table, include_permissions)
             return checkpoint
         table.delete_all()
@@ -804,6 +850,7 @@ class OutlookConnector(
         if listings:
             table.write_page(checkpoint.listing_pages, listings)
             checkpoint.listing_pages += 1
+            checkpoint.listing_rows += len(listings)
         for items in results:
             for item in items:
                 if not isinstance(item, ThreadListing):
@@ -824,32 +871,39 @@ class OutlookConnector(
         table: ThreadTable,
         include_permissions: bool,
     ) -> Generator[Document | ConnectorFailure, None, None]:
-        """Builds every thread of the next shard, side by side."""
-        entries = table.read_shard(checkpoint.next_shard)
-        exclusions = {
-            mailbox_id: table.read_mailbox_exclusions(mailbox_id)
-            for mailbox_id in {entry.first.mailbox.id for entry in entries}
+        """Builds the next THREADS_PER_BUILD_STEP threads of the current
+        bucket, side by side. A bucket is regrouped on every step: it is one
+        read, and the checkpoint then needs only two counters."""
+        table.touch()
+        groups: list[ThreadGroup] = sorted(
+            group_threads(table.read_bucket(checkpoint.next_bucket)),
+            key=lambda group: group.key,
+        )
+        step: list[ThreadGroup] = groups[
+            checkpoint.next_thread : checkpoint.next_thread + THREADS_PER_BUILD_STEP
+        ]
+        mailbox_ids: set[str] = {
+            copy.mailbox.id for group in step for copy in group.copies
         }
-        results: list[Document | ConnectorFailure | None] = (
+        exclusions: dict[str, set[str]] = {
+            mailbox_id: table.read_mailbox_exclusions(mailbox_id)
+            for mailbox_id in mailbox_ids
+        }
+        results: list[list[Document | ConnectorFailure]] = (
             run_functions_tuples_in_parallel(
                 [
-                    (
-                        self._build_thread,
-                        (
-                            entry,
-                            exclusions[entry.first.mailbox.id],
-                            include_permissions,
-                        ),
-                    )
-                    for entry in entries
+                    (self._build_thread, (group, exclusions, include_permissions))
+                    for group in step
                 ],
                 max_workers=THREAD_BUILD_WORKERS,
             )
         )
-        for result in results:
-            if result is not None:
-                yield result
-        checkpoint.next_shard += 1
+        for items in results:
+            yield from items
+        checkpoint.next_thread += len(step)
+        if checkpoint.next_thread >= len(groups):
+            checkpoint.next_bucket += 1
+            checkpoint.next_thread = 0
 
     def _advance_mailbox(
         self,
@@ -1041,51 +1095,53 @@ class OutlookConnector(
                 f"These mailboxes or groups cannot be resolved: {names}. Fix or "
                 "remove them from the connector before pruning or permission sync."
             )
-        # Holders by thread key, keyed by mailbox id so a mailbox counts once.
-        holders_by_key: dict[str, dict[str, OutlookMailbox]] = {}
-        for mailbox in mailboxes:
-            try:
-                self.ops.probe_mailbox(mailbox_id=mailbox.id)
-            except OutlookGraphError as e:
-                if e.status == 404:
-                    logger.info(
-                        "Outlook: %s is gone, listing nothing for it", mailbox.address
+        # The listing is too large to hold, so it goes through a thread table
+        # of its own and is read back one bucket at a time.
+        table = ThreadTable(uuid4().hex)
+        pages = 0
+        rows = 0
+        try:
+            for mailbox in mailboxes:
+                try:
+                    self.ops.probe_mailbox(mailbox_id=mailbox.id)
+                except OutlookGraphError as e:
+                    if e.status == 404:
+                        logger.info(
+                            "Outlook: %s is gone, listing nothing for it",
+                            mailbox.address,
+                        )
+                        continue
+                    raise
+                # A 404 past the probe is a folder that vanished mid-walk, not
+                # the mailbox, so it aborts the walk like any other error.
+                excluded = self._excluded_well_known_folder_ids(mailbox)
+                tree = list(self._walk_folder_tree(mailbox, excluded))
+                access = owner_access(mailbox) if include_permissions else None
+                yield list(self._hierarchy_nodes(mailbox, tree, access))
+                for page in self._thread_listing_pages(mailbox, tree):
+                    if page:
+                        table.write_page(pages, page)
+                        pages += 1
+                        rows += len(page)
+                    if callback is not None:
+                        callback.progress("outlook_slim_docs", len(page))
+                if self.include_calendar:
+                    yield from self._slim_batches(
+                        self._event_slim_pages(mailbox, include_permissions), callback
                     )
-                    continue
-                raise
-            # A 404 past the probe is a folder that vanished mid-walk, not the
-            # mailbox, so it aborts the walk like any other error.
-            excluded = self._excluded_well_known_folder_ids(mailbox)
-            tree = list(self._walk_folder_tree(mailbox, excluded))
-            access = owner_access(mailbox) if include_permissions else None
-            yield list(self._hierarchy_nodes(mailbox, tree, access))
-            for page in self._thread_listing_pages(mailbox, tree):
-                for listing in page:
-                    holders_by_key.setdefault(listing.key, {})[mailbox.id] = mailbox
-                if callback is not None:
-                    callback.progress("outlook_slim_docs", len(page))
-            if self.include_calendar:
-                yield from self._slim_batches(
-                    self._event_slim_pages(mailbox, include_permissions), callback
-                )
-        # A thread is listed once every mailbox has been read, so its readers
-        # are the full holder list.
-        yield from self._slim_batches(
-            (
-                [
-                    SlimDocument(
-                        id=thread_document_id(key),
-                        external_access=(
-                            holders_access(holders.values())
-                            if include_permissions
-                            else None
-                        ),
-                    )
-                    for key, holders in holders_by_key.items()
-                ],
-            ),
-            callback=None,
-        )
+            # A thread is listed once every mailbox has been read, so its
+            # readers come from the full set of copies.
+            bucket_count = table.write_buckets(pages, rows)
+            yield from self._slim_batches(
+                (
+                    slim_thread_documents(group, include_permissions)
+                    for bucket in range(bucket_count)
+                    for group in group_threads(table.read_bucket(bucket))
+                ),
+                callback=None,
+            )
+        finally:
+            table.delete_all()
 
     def _slim_batches(
         self,
@@ -1123,16 +1179,15 @@ class OutlookConnector(
                 # Unfiltered, since a filtered round caps at FILTERED_DELTA_CAP,
                 # so mail older than the cutoff is dropped here and pruned.
                 yield [
-                    ThreadListing(
-                        key=key, mailbox=mailbox, conversation_id=change.conversation_id
-                    )
+                    listing
                     for change in page.changes
                     if not change.removed
+                    and not change.is_draft
                     and change.conversation_id
                     and not (
                         cutoff and change.received_at and change.received_at < cutoff
                     )
-                    and (key := thread_key(change.conversation_index or ""))
+                    and (listing := self._thread_listing(mailbox, change)) is not None
                 ]
                 next_link = page.next_link
                 if next_link is None:
@@ -1371,10 +1426,10 @@ class OutlookConnector(
             raise
 
         end_at = _poll_bound(end)
-        # Keyed by thread so a thread the page lists twice is recorded once.
+        # Keyed by message so a copy the page lists twice is recorded once.
         listings: dict[str, ThreadListing] = {}
         for change in page.changes:
-            if change.removed or not change.conversation_id:
+            if change.removed or change.is_draft or not change.conversation_id:
                 continue
             # Read-state entries arrive for old messages whatever the filter
             # says, so the window is applied again here.
@@ -1386,20 +1441,9 @@ class OutlookConnector(
                 continue
             if end_at and change.received_at and change.received_at > end_at:
                 continue
-            key = thread_key(change.conversation_index or "")
-            if key is None:
-                logger.warning(
-                    "Outlook: message %s in %s has no conversation index, skipping",
-                    change.id,
-                    mailbox.address,
-                )
-                continue
-            listings.setdefault(
-                key,
-                ThreadListing(
-                    key=key, mailbox=mailbox, conversation_id=change.conversation_id
-                ),
-            )
+            listing = self._thread_listing(mailbox, change)
+            if listing is not None:
+                listings.setdefault(listing.message_id, listing)
         yield from listings.values()
 
         # Committed with the cursor, so a page replayed after a failure part
@@ -1424,6 +1468,29 @@ class OutlookConnector(
             cursor.folder_unfiltered = True
             return
         cursor.current_folder = None
+
+    def _thread_listing(
+        self, mailbox: OutlookMailbox, change: OutlookMessageChange
+    ) -> ThreadListing | None:
+        """The listing row for one message copy, None when Outlook set no
+        conversation index on it."""
+        key = thread_key(change.conversation_index or "")
+        if key is None:
+            logger.warning(
+                "Outlook: message %s in %s has no conversation index, skipping",
+                change.id,
+                mailbox.address,
+            )
+            return None
+        if change.conversation_id is None:
+            return None
+        return ThreadListing(
+            key=key,
+            mailbox=mailbox,
+            conversation_id=change.conversation_id,
+            message_id=change.internet_message_id or change.id,
+            received_at=change.received_at,
+        )
 
     def _history_cutoff(self) -> datetime | None:
         """The oldest receipt time still indexed, None when all mail is."""
@@ -1566,63 +1633,148 @@ class OutlookConnector(
 
     def _build_thread(
         self,
-        entry: ThreadEntry,
-        excluded_folder_ids: set[str],
+        group: ThreadGroup,
+        exclusions: dict[str, set[str]],
         include_permissions: bool,
-    ) -> Document | ConnectorFailure | None:
-        """The thread's document, read from the first mailbox that listed it."""
-        mailbox = entry.first.mailbox
-        conversation_id = entry.first.conversation_id
-        document_id = thread_document_id(entry.key)
-        # Pages arrive newest first, so the walk stops at the newest indexable
-        # messages however many drafts or trashed replies sit among them.
-        kept: list[OutlookMessage] = []
-        fetched = 0
-        next_link: str | None = None
+    ) -> list[Document | ConnectorFailure]:
+        """The thread's document from the copy that holds its newest message
+        and the most messages, readable by the copies holding every message
+        in it, plus one document per copy that cannot read it."""
+        cutoff: datetime | None = self._history_cutoff()
+        candidates: list[ThreadCopy] = candidate_copies(group)
+        items: list[Document | ConnectorFailure] = []
         try:
-            while True:
-                page = self.ops.fetch_conversation_messages_page(
-                    mailbox_id=mailbox.id,
-                    conversation_id=conversation_id,
-                    next_link=next_link,
+            # The listing holds only the window's messages, so the copies are
+            # compared on their full outlines. One candidate needs no
+            # comparison: it is the builder and the only reader.
+            if len(candidates) > 1:
+                for copy in candidates:
+                    copy.received = self._conversation_outline(
+                        copy, exclusions[copy.mailbox.id], cutoff
+                    )
+            builder: ThreadCopy = choose_builder(candidates)
+            kept = self._copy_messages(builder, exclusions[builder.mailbox.id], cutoff)
+            readers: list[OutlookMailbox] = (
+                [builder.mailbox]
+                if len(candidates) == 1
+                else readers_of(candidates, {copy_message_id(m) for m in kept})
+            )
+            document = self._copy_document(
+                thread_document_id(group.key),
+                builder,
+                kept,
+                readers,
+                include_permissions,
+            )
+            if document is not None:
+                items.append(document)
+            for copy in partial_copies(group, readers):
+                document = self._copy_document(
+                    copy_document_id(group.key, copy.mailbox),
+                    copy,
+                    self._copy_messages(copy, exclusions[copy.mailbox.id], cutoff),
+                    [copy.mailbox],
+                    include_permissions,
                 )
-                # The budget applies to raw messages, so a final page is cut
-                # to what is left of it before filtering.
-                within_budget = page.messages[: CONVERSATION_FETCH_LIMIT - fetched]
-                fetched += len(within_budget)
-                kept.extend(indexable_messages(within_budget, excluded_folder_ids))
-                next_link = page.next_link
-                if (
-                    next_link is None
-                    or len(kept) >= MAX_MESSAGES_PER_CONVERSATION
-                    or fetched >= CONVERSATION_FETCH_LIMIT
-                ):
-                    break
-            # Cut here so attachments are read only for the messages the
-            # document keeps.
-            kept = kept[:MAX_MESSAGES_PER_CONVERSATION]
-            attachments: dict[str, list[TextSection]] = {}
-            budget = AttachmentBudget()
-            for message in kept:
-                if not (self.include_attachments and message.has_attachments):
-                    continue
-                attachments[message.id] = self._attachment_sections(
-                    mailbox, message, budget
-                )
+                if document is not None:
+                    items.append(document)
         except OutlookGraphError as e:
             # A recorded failure lets the poll window move past the mail, so a
             # transient failure raises and keeps the checkpoint for the retry.
             if e.fails_the_attempt:
                 raise
-            return ConnectorFailure(
-                failed_document=DocumentFailure(document_id=document_id),
-                failure_message=(
-                    f"Failed to fetch conversation {conversation_id} in "
-                    f"{mailbox.address}: {e}"
-                ),
-                exception=e,
+            items.append(
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=thread_document_id(group.key)
+                    ),
+                    failure_message=f"Failed to fetch thread {group.key}: {e}",
+                    exception=e,
+                )
             )
-        return build_thread_document(entry, kept, attachments, include_permissions)
+        return items
+
+    def _conversation_outline(
+        self,
+        copy: ThreadCopy,
+        excluded_folder_ids: set[str],
+        cutoff: datetime | None,
+    ) -> dict[str, datetime | None]:
+        """Every indexable message of the copy, by message id, without bodies."""
+        received: dict[str, datetime | None] = {}
+        fetched = 0
+        next_link: str | None = None
+        while True:
+            page = self.ops.fetch_conversation_outline_page(
+                mailbox_id=copy.mailbox.id,
+                conversation_id=copy.conversation_id,
+                next_link=next_link,
+            )
+            within_budget = page.changes[: CONVERSATION_FETCH_LIMIT - fetched]
+            fetched += len(within_budget)
+            for change in within_budget:
+                if (
+                    change.is_draft
+                    or change.parent_folder_id in excluded_folder_ids
+                    or (cutoff and change.received_at and change.received_at < cutoff)
+                ):
+                    continue
+                received[change.internet_message_id or change.id] = change.received_at
+            next_link = page.next_link
+            if next_link is None or fetched >= CONVERSATION_FETCH_LIMIT:
+                return received
+
+    def _copy_messages(
+        self,
+        copy: ThreadCopy,
+        excluded_folder_ids: set[str],
+        cutoff: datetime | None,
+    ) -> list[OutlookMessage]:
+        """The newest indexable messages of one copy, with bodies."""
+        # Pages arrive newest first, so the walk stops at the newest indexable
+        # messages however many drafts or trashed replies sit among them.
+        kept: list[OutlookMessage] = []
+        fetched = 0
+        next_link: str | None = None
+        while True:
+            page = self.ops.fetch_conversation_messages_page(
+                mailbox_id=copy.mailbox.id,
+                conversation_id=copy.conversation_id,
+                next_link=next_link,
+            )
+            # The budget applies to raw messages, so a final page is cut
+            # to what is left of it before filtering.
+            within_budget = page.messages[: CONVERSATION_FETCH_LIMIT - fetched]
+            fetched += len(within_budget)
+            kept.extend(indexable_messages(within_budget, excluded_folder_ids, cutoff))
+            next_link = page.next_link
+            if (
+                next_link is None
+                or len(kept) >= MAX_MESSAGES_PER_CONVERSATION
+                or fetched >= CONVERSATION_FETCH_LIMIT
+            ):
+                return kept[:MAX_MESSAGES_PER_CONVERSATION]
+
+    def _copy_document(
+        self,
+        document_id: str,
+        copy: ThreadCopy,
+        kept: list[OutlookMessage],
+        readers: list[OutlookMailbox],
+        include_permissions: bool,
+    ) -> Document | None:
+        """One copy's document, each message followed by its attachments."""
+        attachments: dict[str, list[TextSection]] = {}
+        budget = AttachmentBudget()
+        for message in kept:
+            if not (self.include_attachments and message.has_attachments):
+                continue
+            attachments[message.id] = self._attachment_sections(
+                copy.mailbox, message, budget
+            )
+        return build_thread_document(
+            document_id, copy.mailbox, readers, kept, attachments, include_permissions
+        )
 
     def _attachment_sections(
         self, mailbox: OutlookMailbox, message: OutlookMessage, budget: AttachmentBudget

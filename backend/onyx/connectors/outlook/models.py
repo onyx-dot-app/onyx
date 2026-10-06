@@ -58,6 +58,9 @@ class OutlookRecipient(BaseModel):
 
 class OutlookMessage(BaseModel):
     id: str
+    # The RFC 5322 Message-ID. The same in every mailbox a message was
+    # delivered to, which the Graph id is not.
+    internet_message_id: str | None = None
     conversation_id: str | None = None
     parent_folder_id: str | None = None
     subject: str | None = None
@@ -97,9 +100,12 @@ class OutlookMessageChange(BaseModel):
 
     id: str
     removed: bool = False
+    internet_message_id: str | None = None
     conversation_id: str | None = None
     conversation_index: str | None = None
+    parent_folder_id: str | None = None
     received_at: datetime | None = None
+    is_draft: bool = False
 
 
 class OutlookDeltaPage(BaseModel):
@@ -170,3 +176,31 @@ class MailboxCursor(BaseModel):
     # Recurring series already resolved for this mailbox in this attempt,
     # written or not. The connector caps it per mailbox.
     seen_series_ids: set[str] = set()
+
+
+class ThreadListing(BaseModel):
+    """One mailbox's copy of one message, as the delta listing saw it."""
+
+    key: str
+    mailbox: OutlookMailbox
+    conversation_id: str
+    # The Internet Message-ID, or the Graph id when Outlook set none, so a
+    # message without one is never matched across mailboxes.
+    message_id: str
+    received_at: datetime | None = None
+
+
+class ThreadCopy(BaseModel):
+    """One mailbox's copy of a thread: when it received each message."""
+
+    mailbox: OutlookMailbox
+    conversation_id: str
+    received: dict[str, datetime | None] = {}
+
+
+class ThreadGroup(BaseModel):
+    """A thread as listed across mailboxes."""
+
+    key: str
+    newest_message_id: str
+    copies: list[ThreadCopy]

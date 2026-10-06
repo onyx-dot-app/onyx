@@ -100,10 +100,21 @@ GROUP_NAME_MATCH_LIMIT = 2
 MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
 # The delta walk only needs to know which conversations changed.
-CHANGE_SELECT = "id,conversationId,conversationIndex,receivedDateTime"
+CHANGE_SELECT = ",".join(
+    (
+        "id",
+        "internetMessageId",
+        "conversationId",
+        "conversationIndex",
+        "parentFolderId",
+        "receivedDateTime",
+        "isDraft",
+    )
+)
 MESSAGE_SELECT = ",".join(
     (
         "id",
+        "internetMessageId",
         "conversationId",
         "parentFolderId",
         "subject",
@@ -201,9 +212,12 @@ def _parse_change(raw: dict[str, Any]) -> OutlookMessageChange:
     return OutlookMessageChange(
         id=raw["id"],
         removed="@removed" in raw,
+        internet_message_id=raw.get("internetMessageId"),
         conversation_id=raw.get("conversationId"),
         conversation_index=raw.get("conversationIndex"),
+        parent_folder_id=raw.get("parentFolderId"),
         received_at=parse_graph_datetime(received) if received else None,
+        is_draft=bool(raw.get("isDraft")),
     )
 
 
@@ -212,6 +226,7 @@ def _parse_message(raw: dict[str, Any]) -> OutlookMessage:
     sent = raw.get("sentDateTime")
     return OutlookMessage(
         id=raw["id"],
+        internet_message_id=raw.get("internetMessageId"),
         conversation_id=raw.get("conversationId"),
         parent_folder_id=raw.get("parentFolderId"),
         subject=raw.get("subject"),
@@ -835,6 +850,44 @@ class OutlookSourceOperations(SourceOperations):
             {"Prefer": TEXT_BODY_PREFERENCE},
         )
         return _parse_message(raw) if raw else None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs a conversation id, which only the delta walk produces. The "
+            "mail-read check proves the fields on the mailbox-wide route."
+        ),
+    )
+    def fetch_conversation_outline_page(
+        self,
+        *,
+        mailbox_id: str,
+        conversation_id: str,
+        page_size: int = MESSAGES_PAGE_SIZE,
+        next_link: str | None = None,
+    ) -> OutlookDeltaPage:
+        """One page of a conversation's messages in one mailbox, newest
+        first, ids and receipt times only, to compare copies across mailboxes
+        without reading a body."""
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._user_url(mailbox_id)}/messages"
+            params = {
+                "$filter": (
+                    f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
+                    f"conversationId eq '{_odata_quote(conversation_id)}'"
+                ),
+                "$orderby": "receivedDateTime desc",
+                "$select": CHANGE_SELECT,
+                "$top": str(page_size),
+            }
+        data = self._get(url, params)
+        return OutlookDeltaPage(
+            changes=[_parse_change(raw) for raw in data.get("value", [])],
+            next_link=data.get("@odata.nextLink"),
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
