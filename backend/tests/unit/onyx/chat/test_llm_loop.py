@@ -1087,6 +1087,47 @@ class TestForgottenFileMetadata:
             if m is not forgotten
         )
 
+    def test_forgotten_message_stays_out_of_cacheable_prefix(self) -> None:
+        """The forgotten-files message is rebuilt whenever eviction grows the
+        dropped set, so it must sit outside the cacheable prefix — after the
+        tool rounds and before the reminder — instead of breaking contiguity
+        before the last user message.
+        """
+        file_meta = _make_file_metadata("file-abc", "moby_dick.txt")
+        file_msg = create_message("x" * 2000, MessageType.USER, 500)
+        file_msg.file_id = "file-abc"
+
+        history = [
+            file_msg,
+            create_message("Got it", MessageType.ASSISTANT, 10),
+            create_message("Tell me about ch1", MessageType.USER, 10),
+        ]
+        reminder = create_message("Remember to cite", MessageType.USER, 5)
+
+        result = construct_message_history(
+            system_prompt=create_message("system", MessageType.SYSTEM, 5),
+            custom_agent_prompt=None,
+            simple_chat_history=history,
+            reminder_message=reminder,
+            context_files=create_context_files(),
+            available_tokens=100,
+            token_counter=_simple_token_counter,
+            all_injected_file_metadata={"file-abc": file_meta},
+            available_tool_names={FILE_READER_TOOL_NAME},
+        )
+
+        forgotten = self._find_forgotten_message(result)
+        assert forgotten is not None
+
+        forgotten_idx = result.index(forgotten)
+        # Everything before the forgotten message is the stable cacheable
+        # prefix; the forgotten message and the trailing reminder are not.
+        assert all(msg.should_cache for msg in result[:forgotten_idx])
+        assert not forgotten.should_cache
+        assert result[-1] is reminder
+        assert not result[-1].should_cache
+        assert result.index(reminder) == forgotten_idx + 1
+
     # ------------------------------------------------------------------
     # Case 3: file message removed by summary truncation ("orphaned" metadata)
     # ------------------------------------------------------------------

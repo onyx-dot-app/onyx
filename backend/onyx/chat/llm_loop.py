@@ -569,7 +569,7 @@ def construct_message_history(
 
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
-    # [forgotten_files], [last_user_message], [messages_after_last_user], [reminder]
+    # [last_user_message], [messages_after_last_user], [forgotten_files], [reminder]
     result = [system_prompt] if system_prompt else []
 
     # 1. Add truncated history before last user message
@@ -582,20 +582,22 @@ def construct_message_history(
     # 3. Add context files / file-metadata messages (inserted before last user message)
     result.extend(project_messages)
 
-    # 4. Add forgotten-files metadata (right before the user's question)
-    if forgotten_files_message:
-        result.append(forgotten_files_message)
-
-    # 5. Add last user message (with context images attached)
+    # 4. Add last user message (with context images attached)
     last_user_message.should_cache = True
     result.append(last_user_message)
 
-    # 6. Add messages after last user message (tool calls, responses, etc.)
+    # 5. Add messages after last user message (tool calls, responses, etc.)
     # These are prior tool rounds of the current turn — append-only and
     # byte-stable between loop iterations, so cache them too.
     for msg in messages_after_last_user:
         msg.should_cache = True
     result.extend(messages_after_last_user)
+
+    # 6. Add forgotten-files metadata after the tool rounds, before the
+    # reminder. Its contents change whenever history eviction grows the
+    # dropped set, so it must stay out of the contiguous cacheable prefix.
+    if forgotten_files_message:
+        result.append(forgotten_files_message)
 
     # 7. Add reminder message at the very end
     if reminder_message:
