@@ -1,6 +1,8 @@
 """Tests for license API utilities."""
 
 import inspect
+from collections.abc import Generator
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from types import FunctionType
 from unittest.mock import MagicMock, patch
@@ -249,75 +251,73 @@ class TestClaimUsesTheCheckoutSession:
         mock_post.assert_not_called()
 
 
+_DOWNGRADE_STEPS = [
+    "make_all_cc_pairs_public__no_commit",
+    "remove_custom_user_groups__no_commit",
+    "disable_paid_features__no_commit",
+    "invalidate_provider_listing_cache",
+    "reset_enterprise_settings",
+    "clear_chat_retention",
+    "db_delete_license",
+]
+
+
+@pytest.fixture
+def downgrade_steps() -> Generator[MagicMock, None, None]:
+    """Every step of the downgrade mocked under one parent, which records the
+    order they ran in."""
+    steps = MagicMock()
+    with ExitStack() as stack:
+        for name in _DOWNGRADE_STEPS:
+            mock = stack.enter_context(patch(f"ee.onyx.server.license.api.{name}"))
+            steps.attach_mock(mock, name)
+        steps.make_all_cc_pairs_public__no_commit.return_value = [1, 2]
+        steps.remove_custom_user_groups__no_commit.return_value = 3
+        yield steps
+
+
 class TestDowngradeToCommunity:
-    @patch("ee.onyx.server.license.api.invalidate_provider_listing_cache")
-    @patch("ee.onyx.server.license.api.db_delete_license")
-    @patch("ee.onyx.server.license.api.remove_custom_user_groups__no_commit")
-    @patch("ee.onyx.server.license.api.make_all_cc_pairs_public__no_commit")
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
     @patch("ee.onyx.server.license.api.LICENSE_ENFORCEMENT_ENABLED", True)
-    def test_access_changes_are_committed_before_the_license_goes(
-        self,
-        mock_make_public: MagicMock,
-        mock_remove_groups: MagicMock,
-        mock_delete_license: MagicMock,
-        _mock_invalidate: MagicMock,
-    ) -> None:
-        """The other order could drop the license and then fail, leaving an
-        unlicensed deployment that still holds synced permissions."""
+    def test_the_license_goes_last(self, downgrade_steps: MagicMock) -> None:
+        """Removed earlier, a later failure would leave an unlicensed deployment
+        that still holds synced permissions and running paid features."""
         db_session = MagicMock()
-        calls = MagicMock()
-        calls.attach_mock(mock_make_public, "make_public")
-        calls.attach_mock(mock_remove_groups, "remove_groups")
-        calls.attach_mock(db_session.commit, "commit")
-        calls.attach_mock(mock_delete_license, "delete_license")
-        mock_make_public.return_value = [1, 2]
-        mock_remove_groups.return_value = 3
+        downgrade_steps.attach_mock(db_session.commit, "commit")
 
         response = downgrade_to_community(user=MagicMock(), db_session=db_session)
 
         assert response.connectors_made_public == 2
         assert response.user_groups_removed == 3
-        assert [call[0] for call in calls.mock_calls] == [
-            "make_public",
-            "remove_groups",
+        assert [call[0] for call in downgrade_steps.mock_calls] == [
+            "make_all_cc_pairs_public__no_commit",
+            "remove_custom_user_groups__no_commit",
+            "disable_paid_features__no_commit",
             "commit",
-            "delete_license",
+            "invalidate_provider_listing_cache",
+            "reset_enterprise_settings",
+            "clear_chat_retention",
+            "db_delete_license",
         ]
 
-    @patch("ee.onyx.server.license.api.db_delete_license")
-    @patch("ee.onyx.server.license.api.remove_custom_user_groups__no_commit")
-    @patch("ee.onyx.server.license.api.make_all_cc_pairs_public__no_commit")
     @patch("ee.onyx.server.license.api.MULTI_TENANT", True)
-    def test_cloud_is_rejected_untouched(
-        self,
-        mock_make_public: MagicMock,
-        mock_remove_groups: MagicMock,
-        mock_delete_license: MagicMock,
-    ) -> None:
+    def test_cloud_is_rejected_untouched(self, downgrade_steps: MagicMock) -> None:
         with pytest.raises(OnyxError):
             downgrade_to_community(user=MagicMock(), db_session=MagicMock())
 
-        mock_make_public.assert_not_called()
-        mock_remove_groups.assert_not_called()
-        mock_delete_license.assert_not_called()
+        assert not downgrade_steps.mock_calls
 
-    @patch("ee.onyx.server.license.api.db_delete_license")
-    @patch("ee.onyx.server.license.api.make_all_cc_pairs_public__no_commit")
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
     @patch("ee.onyx.server.license.api.LICENSE_ENFORCEMENT_ENABLED", False)
     def test_enforcement_off_is_rejected_untouched(
-        self,
-        mock_make_public: MagicMock,
-        mock_delete_license: MagicMock,
+        self, downgrade_steps: MagicMock
     ) -> None:
         """With enforcement off the tier stays Enterprise whatever the license,
         so a downgrade would only make the connectors public."""
         with pytest.raises(OnyxError):
             downgrade_to_community(user=MagicMock(), db_session=MagicMock())
 
-        mock_make_public.assert_not_called()
-        mock_delete_license.assert_not_called()
+        assert not downgrade_steps.mock_calls
 
 
 class TestLicenseHandlersStayOffTheEventLoop:

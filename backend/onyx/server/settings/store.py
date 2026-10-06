@@ -120,6 +120,19 @@ def load_settings(raise_on_error: bool = False) -> Settings:
     return settings
 
 
+def clear_chat_retention() -> None:
+    """Stops the retention task from deleting chats. Raises if the stored
+    settings cannot be read, so a failed read never passes for cleared."""
+    with settings_write_lock():
+        settings: Settings = load_settings(raise_on_error=True)
+        if settings.maximum_chat_retention_days is not None:
+            settings.maximum_chat_retention_days = None
+            store_settings(settings)
+    # A deletion chain carries the limit it started with. Without its marker
+    # it stops at the next batch.
+    get_cache_backend().delete(OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE)
+
+
 def store_settings(settings: Settings) -> None:
     cache = get_cache_backend()
 
