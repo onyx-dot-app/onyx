@@ -26,8 +26,8 @@ global:
 # pod type:
 #   - Shell-based pods (api server, celery workers, bots, MCP server) mount at
 #     /usr/local/share/ca-certificates, run `update-ca-certificates` at startup,
-#     and get REQUESTS_CA_BUNDLE / SSL_CERT_FILE / OPENSEARCH_CA_CERTS pointed at
-#     the merged system bundle (a configMap OPENSEARCH_CA_CERTS takes precedence). These require the container to run as root (the chart default);
+#     and get REQUESTS_CA_BUNDLE / SSL_CERT_FILE pointed at the merged system
+#     bundle. These require the container to run as root (the chart default);
 #     incompatible with runAsNonRoot overrides.
 #   - Model servers run on a distroless image with no shell, so they mount at
 #     /etc/onyx/certs and merge the mounted roots with certifi's public roots in
