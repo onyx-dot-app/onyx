@@ -30,7 +30,13 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import ToolChoiceOptions
-from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
+from onyx.prompts.chat_prompts import (
+    ANSWER_COMPLETENESS_REMINDER,
+    ANSWER_COVERAGE_GUIDANCE,
+    IMAGE_GEN_REMINDER,
+    OPEN_URL_REMINDER,
+    REQUIRE_CITATION_GUIDANCE,
+)
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME
 from onyx.tools.models import ParallelToolCallResponse, ToolCallKickoff, ToolResponse
@@ -1839,6 +1845,46 @@ class TestSelectReminderText:
         )
         assert result == IMAGE_GEN_REMINDER
 
+    def test_citation_reminder_carries_relocated_guidance(self) -> None:
+        """The citation guidance that used to be appended to the system prompt
+        must arrive via the reminder instead, so head prompts stay byte-stable
+        for prompt caching."""
+        result = self._select(include_citation_reminder=True)
+        assert result is not None
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+        assert ANSWER_COVERAGE_GUIDANCE.strip() in result
+        assert ANSWER_COMPLETENESS_REMINDER in result
+
+    def test_image_gen_reminder_still_carries_citation_guidance(self) -> None:
+        """A turn mixing a citeable tool with generate_image must not lose the
+        citation instructions to the image-gen short-circuit."""
+        result = self._select(ran_image_gen=True, include_citation_reminder=True)
+        assert result is not None
+        assert IMAGE_GEN_REMINDER in result
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+
+    def test_open_url_reminder_still_carries_citation_guidance(self) -> None:
+        result = self._select(
+            just_ran_web_search=True,
+            has_open_url_tool=True,
+            include_citation_reminder=True,
+        )
+        assert result is not None
+        assert OPEN_URL_REMINDER in result
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+
+    def test_authored_citation_tag_is_not_duplicated(self) -> None:
+        """When the task prompt's {{CITATION_GUIDANCE}} already resolved to the
+        guidance inside reminder_text, it must not be appended a second time."""
+        result = self._select(
+            persona_task_prompt="Task." + REQUIRE_CITATION_GUIDANCE,
+            include_citation_reminder=True,
+        )
+        assert result is not None
+        assert result.count(REQUIRE_CITATION_GUIDANCE.strip()) == 1
+        # COVERAGE is only added by the reminder, so it still appears once.
+        assert ANSWER_COVERAGE_GUIDANCE.strip() in result
+
 
 @pytest.mark.parametrize("select_none", [False, True])
 def test_saved_search_docs_follow_the_search_selection(select_none: bool) -> None:
@@ -1932,3 +1978,100 @@ def test_saved_search_docs_follow_the_search_selection(select_none: bool) -> Non
     state_container.add_tool_call.assert_called_once()
     saved_call = state_container.add_tool_call.call_args.args[0]
     assert saved_call.search_docs == ([] if select_none else [doc])
+
+
+def test_head_prompts_byte_stable_across_citeable_tool_round() -> None:
+    """Regression for prompt caching: an internal_search call flips
+    should_cite_documents mid-turn. The system prompt and custom agent prompt
+    rebuilt on the next loop iteration must be byte-identical — any
+    cite-dependent bytes in the head would bust the cached prefix. Citation
+    guidance arrives via the trailing reminder instead."""
+    doc = SearchDoc(
+        document_id="retrieved",
+        chunk_ind=0,
+        semantic_identifier="Retrieved document",
+        blurb="content",
+        source_type=DocumentSource.FILE,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    tool_call = ToolCallKickoff(
+        tool_call_id="search-1",
+        tool_name=SearchTool.NAME,
+        tool_args={"queries": ["ticket"]},
+        placement=Placement(turn_index=0),
+    )
+    search_tool = Mock()
+    search_tool.name = SearchTool.NAME
+    search_tool.id = 1
+    llm = Mock()
+    llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-5.2",
+        temperature=0,
+        max_input_tokens=100000,
+    )
+    with (
+        patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+        patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+        patch(
+            "onyx.chat.llm_loop.get_session_with_current_tenant",
+            return_value=nullcontext(),
+        ),
+        patch(
+            "onyx.chat.llm_loop.get_default_base_system_prompt",
+            return_value="Base system prompt. {{CITATION_GUIDANCE}}",
+        ),
+        patch("onyx.chat.llm_loop.compute_all_tool_tokens", return_value=0),
+        patch(
+            "onyx.chat.llm_loop.run_llm_step",
+            side_effect=[
+                (
+                    LlmStepResult(answer=None, tool_calls=[tool_call], reasoning=None),
+                    False,
+                ),
+                (
+                    LlmStepResult(answer="Done", tool_calls=None, reasoning=None),
+                    False,
+                ),
+            ],
+        ) as step,
+        patch(
+            "onyx.chat.llm_loop.run_tool_calls",
+            return_value=ParallelToolCallResponse(
+                tool_responses=[
+                    ToolResponse(
+                        rich_response=SearchDocsResponse(
+                            search_docs=[doc],
+                            citation_mapping={},
+                            displayed_docs=None,
+                        ),
+                        llm_facing_response="",
+                        tool_call=tool_call,
+                    )
+                ],
+                updated_citation_mapping={},
+            ),
+        ),
+    ):
+        run_llm_loop(
+            emitter=Mock(),
+            state_container=Mock(),
+            simple_chat_history=[create_message("Find it", MessageType.USER, 5)],
+            tools=[search_tool],
+            custom_agent_prompt="Be terse. {{CITATION_GUIDANCE}}",
+            context_files=create_context_files(),
+            persona=None,
+            user_memory_context=None,
+            llm=llm,
+            token_counter=lambda _: 10,
+        )
+
+    assert step.call_count == 2
+    first_head = step.call_args_list[0].kwargs["history"][:2]
+    second_head = step.call_args_list[1].kwargs["history"][:2]
+    assert [m.message for m in first_head] == [m.message for m in second_head]
+    for msg in first_head:
+        assert REQUIRE_CITATION_GUIDANCE.strip() not in msg.message

@@ -773,9 +773,19 @@ def select_reminder_text(
     "open_url is not available" replies.
     """
     if ran_image_gen:
-        return IMAGE_GEN_REMINDER
+        return build_reminder_message(
+            reminder_text=IMAGE_GEN_REMINDER,
+            include_citation_reminder=include_citation_reminder,
+            include_file_reminder=include_file_reminder,
+            is_last_cycle=out_of_cycles,
+        )
     if just_ran_web_search and has_open_url_tool and not out_of_cycles:
-        return OPEN_URL_REMINDER
+        return build_reminder_message(
+            reminder_text=OPEN_URL_REMINDER,
+            include_citation_reminder=include_citation_reminder,
+            include_file_reminder=include_file_reminder,
+            is_last_cycle=out_of_cycles,
+        )
     return build_reminder_message(
         reminder_text=persona_task_prompt,
         include_citation_reminder=include_citation_reminder,
@@ -941,6 +951,10 @@ def run_llm_loop(
             # now that project files are loaded in.
             persona_datetime_aware = persona.datetime_aware if persona else True
             cite_documents = should_cite_documents or always_cite_documents
+            # Head prompts never take cite-dependent content: the message
+            # prefix must be byte-stable across loop iterations for prompt
+            # caching. Citation guidance lives in the uncached trailing
+            # reminder instead.
             if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
                 processed_system_prompt = (
@@ -948,7 +962,6 @@ def run_llm_loop(
                         persona_system_prompt,
                         datetime_aware=persona_datetime_aware,
                         append_datetime_if_aware=True,
-                        should_cite_documents=cite_documents,
                     )
                     if persona_system_prompt
                     else None
@@ -980,7 +993,6 @@ def run_llm_loop(
                         datetime_aware=persona_datetime_aware,
                         user_memory_context=prompt_memory_context,
                         tools=tools,
-                        should_cite_documents=cite_documents,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
@@ -992,7 +1004,6 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=False,
-                            should_cite_documents=cite_documents,
                         )
                         if custom_agent_prompt
                         else None
@@ -1013,7 +1024,6 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=True,
-                            should_cite_documents=cite_documents,
                         )
                         if custom_agent_prompt
                         else None
