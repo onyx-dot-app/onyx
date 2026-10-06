@@ -48,8 +48,8 @@ Agent. These are the traps.
 - `internal_search`: the tool over your indexed company data. See [[internal-search]].
 - `web_search`: a separate tool hitting an external provider. See [[web-search]].
 - Federated search: query-time search against a source that was never indexed. Slack
-  is a lane inside `internal_search`; other federated sources plug into
-  `search_chunks`. See [[federated-search]].
+  is a lane inside `internal_search`. Slack is the only registered federated source
+  today. Future sources can plug into `search_chunks`. See [[federated-search]].
 - Chat search: `GET /chat/search` searches the user's own conversation history.
 
 **"Agent"** means three things depending on context: a `Persona`, an autonomous

@@ -224,7 +224,7 @@ The merged list is capped to `override_kwargs.num_hits`.
 `_trim_sections_by_tokens` (`search_tool.py`) first drops sections once a token
 budget (`max_llm_chunks * DOC_EMBEDDING_CONTEXT_SIZE * SELECTION_TOKEN_BUDGET_MULTIPLIER`,
 `SELECTION_TOKEN_BUDGET_MULTIPLIER = 2`) is exhausted, counting at most
-`MAX_CHUNKS_FOR_RELEVANCE = 3` chunks per section so one chunk-heavy document
+`MAX_CHUNKS_FOR_RELEVANCE = 3` chunks per section so one chunk-heavy section
 cannot starve the budget. `select_sections_for_expansion`
 (`secondary_llm_flows/document_filter.py`) then makes one LLM call over all
 surviving sections together (so the model can compare across documents, not just

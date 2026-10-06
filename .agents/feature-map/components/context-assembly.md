@@ -201,8 +201,10 @@ text file, tagged with `file_id`.
   notice, §4.6). This is an accepted tradeoff, not a bug: constantly dragging
   every uploaded file forward would crowd out the actual conversation.
 - **Project files** move forward with the conversation every cycle, the same
-  way the custom agent prompt does, and `chat/README.md` states outright that
-  they must never be dropped from context. They are assumed to be central to
+  way the custom agent prompt does, and `chat/README.md` states that they must
+  not be dropped by history truncation. Project files that fit are injected.
+  Oversized sets are routed to search or file metadata by
+  `process_message.py:extract_context_files`. They are assumed to be central to
   what the user is doing, not a needle-in-a-haystack fact to search for.
 
 At upload, every file is token-counted with the target LLM's tokenizer where

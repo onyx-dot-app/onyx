@@ -186,7 +186,7 @@ inline, per the comment in
 
 ### 4.3 Checkout and portal (`ee/onyx/server/billing/service.py`)
 
-Both self-hosted and cloud funnel through
+The unified `/admin/billing` handlers, for both self-hosted and cloud, funnel through
 `_make_billing_request` (`service.py:_make_billing_request`), which picks a
 base URL and auth scheme by deployment type:
 

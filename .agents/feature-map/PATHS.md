@@ -38,7 +38,7 @@ here. Read the component that documents the setting in its env table.
 |---|---|
 | `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search, tools-framework |
-| `backend/onyx/tools/tool_implementations/web_search/`, `open_url/` | web-search |
+| `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/knowledge_graph/` | **incomplete feature.** The knowledge graph tool cannot run yet. See INDEX.md, Incomplete features. |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
 | `backend/onyx/tools/tool_implementations/bash/`, `python/` | code-execution |

@@ -1,8 +1,8 @@
 # Image Generation
 
-> A chat tool that turns a prompt (and optionally reference images) into one or more
-> generated images through a pluggable provider, plus the admin surface that
-> configures which provider and model the tool uses.
+> A chat tool that turns a prompt (and optionally reference images) into one image
+> through a pluggable provider, plus the admin surface that configures which provider
+> and model the tool uses.
 
 **Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** tools

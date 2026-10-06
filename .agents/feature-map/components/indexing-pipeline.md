@@ -303,8 +303,9 @@ type to one of three `SectionChunker` implementations
 payload stream, then `ChunkPayload.to_doc_aware_chunk` attaches the per-document
 `title_prefix` (from the blurb splitter) and `metadata_suffix_semantic`/`_keyword`
 (`get_metadata_suffix_for_document_index`), each computed once by `Chunker` before
-dispatch and trimmed out of `content_token_limit` if either would exceed
-`MAX_METADATA_PERCENTAGE` (25%) of the budget. `CHUNK_OVERLAP` is always 0 (no
+dispatch. If the semantic metadata suffix would reach `MAX_METADATA_PERCENTAGE`
+(25%) of the chunk budget, `Chunker._handle_single_document` drops it. The title
+prefix and keyword suffix have no such check. `CHUNK_OVERLAP` is always 0 (no
 sentence-level overlap between chunks); the only overlap-like behavior is in
 multipass "large chunks" (`generate_large_chunks`), which concatenate
 `LARGE_CHUNK_RATIO` consecutive normal chunks into one oversized chunk for a second

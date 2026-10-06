@@ -174,8 +174,9 @@ POST /user/projects/file/upload          server/features/projects/api.py:upload_
 Synchronous, inside the request:
 - `projects_file_utils.py:categorize_uploaded_files` extracts text (or
   estimates image tokens) and token-counts every file, rejecting anything over
-  the admin size/token limits, password-protected, or with too many embedded
-  images. It calls `extract_file_text` with `break_on_unprocessable=False`, so
+  the admin size limit, over the token limit (spreadsheets over the limit are
+  accepted and skip indexing instead), password-protected, or with too many
+  embedded images. It calls `extract_file_text` with `break_on_unprocessable=False`, so
   extraction failure here becomes a *rejection*, not a silent empty result.
 - `server/documents/connector.py:upload_files` writes the accepted bytes to
   the blob store immediately (`FileOrigin.USER_FILE`), returning storage

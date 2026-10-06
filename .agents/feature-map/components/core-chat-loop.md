@@ -39,20 +39,20 @@ answers side by side, then mark one as preferred.
 | POST | `/chat/send-chat-message` | `handle_send_chat_message` | **The turn endpoint.** Returns NDJSON `text/event-stream` when `stream=true`, else a single `ChatFullResponse`. |
 | GET | `/chat/chat-session/{id}/resume-stream` | `resume_chat_stream` | Replays the durable buffer, then tails the live stream. |
 | POST | `/chat/stop-chat-session/{id}` | `stop_chat_session` | Sets the stop fence for one stream. Optional `stream_id` query parameter. Without it, the endpoint stops the stream in the processing fence. |
-| POST | `/chat/create-chat-session` |  | |
-| GET | `/chat/get-chat-session/{id}` |  | Replays saved packets for a loaded session. |
-| GET | `/chat/get-user-chat-sessions` |  | |
-| PUT | `/chat/rename-chat-session`, `PATCH /chat/chat-session/{id}` |  | |
-| DELETE | `/chat/delete-chat-session/{id}`, `/chat/delete-all-chat-sessions` |  | |
-| PUT | `/chat/update-chat-session-{model,temperature,reasoning}` |  | Per-session overrides. |
-| PUT | `/chat/set-preferred-response` | `set_preferred_response` | Picks the winner of a multi-model turn. |
-| PUT | `/chat/set-message-as-latest` |  | Branch selection. |
-| POST/DELETE | `/chat/create-chat-message-feedback`, `/chat/remove-chat-message-feedback` |  | |
-| GET | `/chat/search` |  | Search across the user's own chat history. |
-| GET | `/chat/file/{file_id:path}` |  | Serves a file attached to a message. |
-| GET | `/chat/max-selected-document-tokens`, `/chat/available-context-tokens/{id}` |  | Budget introspection for the UI. |
-| GET/POST | `/chat/incognito-availability`, `/chat/end-incognito-session/{id}` |  | See §9. |
-| POST | `/chat/seed-chat-session-from-slack` |  | Continue a Slack thread in the web UI. See [[slack-bot]]. |
+| POST | `/chat/create-chat-session` | `create_new_chat_session` | |
+| GET | `/chat/get-chat-session/{id}` | `get_chat_session` | Replays saved packets for a loaded session. |
+| GET | `/chat/get-user-chat-sessions` | `get_user_chat_sessions` | |
+| PUT | `/chat/rename-chat-session`, `PATCH /chat/chat-session/{id}` | `rename_chat_session`, `patch_chat_session` | |
+| DELETE | `/chat/delete-chat-session/{id}`, `/chat/delete-all-chat-sessions` | `delete_chat_session_by_id`, `delete_all_chat_sessions` | |
+| PUT | `/chat/update-chat-session-{model,temperature,reasoning}` | `update_chat_session_model`, `update_chat_session_temperature`, `update_chat_session_reasoning` | Per-session overrides. |
+| PUT | `/chat/set-preferred-response` | `set_preferred_response_endpoint` | Picks the winner of a multi-model turn. |
+| PUT | `/chat/set-message-as-latest` | `set_message_as_latest` | Branch selection. |
+| POST/DELETE | `/chat/create-chat-message-feedback`, `/chat/remove-chat-message-feedback` | `create_chat_feedback`, `remove_chat_feedback` | |
+| GET | `/chat/search` | `search_chats` | Search across the user's own chat history. |
+| GET | `/chat/file/{file_id:path}` | `fetch_chat_file` | Serves a file attached to a message. |
+| GET | `/chat/max-selected-document-tokens`, `/chat/available-context-tokens/{id}` | `get_max_document_tokens`, `get_available_context_tokens_for_session` | Budget introspection for the UI. |
+| GET/POST | `/chat/incognito-availability`, `/chat/end-incognito-session/{id}` | `get_incognito_availability`, `end_incognito_session` | See §9. |
+| POST | `/chat/seed-chat-session-from-slack` | `seed_chat_from_slack` | Continue a Slack thread in the web UI. See [[slack-bot]]. |
 
 `send-chat-message` layers three dependencies: `require_permission(Permission.WRITE_CHAT, allow_anonymous=True)`,
 `check_token_rate_limits`, and `check_api_key_usage`. See [[rate-and-usage-limits]].
@@ -163,8 +163,9 @@ Each worker gets:
 - its own `ChatStateContainer`
 
 All workers write `(model_idx, packet)` tuples to **one shared `merged_queue`**.
-A single writer thread, `_drain_to_completion`, drains it and yields packets in
-arrival order. A failing worker yields a `StreamingError` for that model only;
+A single writer thread, `_drain_to_completion`, drains it and publishes packets to the
+stream buffer and reader tee in arrival order. `_read_stream` is the generator that
+yields them to the caller. A failing worker yields a `StreamingError` for that model only;
 the others keep running.
 
 ### 4.4 Context assembly per cycle
@@ -204,8 +205,9 @@ container, opens a **fresh short-lived DB session**, and calls `save_chat_turn`,
 which writes the message, the `SearchDoc` rows, the `ToolCall` rows and their
 document links, and the citation mapping, then commits once.
 
-After the save, one model's completion "claims" history compression via a
-`compression_claimed` flag, and runs `compress_chat_history` if
+`_persist_model_outcome` claims history compression for one model through a
+`compression_claimed` flag, before it calls `llm_loop_completion_handle`. After the
+save, that call runs `compress_chat_history` if
 `get_compression_params(...).should_compress`. Content-free incognito turns
 return after `append_incognito_message` and skip compression.
 

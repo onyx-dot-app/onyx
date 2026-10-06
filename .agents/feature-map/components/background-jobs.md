@@ -111,8 +111,8 @@ this document.
   contextvar in a `finally` block. **If `tenant_id` is absent from kwargs, it
   silently falls back to `POSTGRES_DEFAULT_SCHEMA`** rather than raising. See
   [[multi-tenancy]] and §5.
-- Signal handlers registered per app (each app file wires the same functions to
-  its own `celery.signals`): `on_task_prerun` resets per-task logging context
+- Signal handlers registered per app (each app file wires these functions to
+  its own `celery.signals`; only `apps/light.py` also wires `on_task_revoked`): `on_task_prerun` resets per-task logging context
   (`app_base.py:on_task_prerun`); `on_task_postrun` removes the task's id from
   whichever Redis taskset it belongs to, keyed by task-id prefix
   (`app_base.py:on_task_postrun`); `on_task_revoked` does the same cleanup for the
@@ -314,7 +314,7 @@ time. `TenantAwareTask.__call__` sets the tenant contextvar, runs the task, and
 resets it. `task_prerun` clears per-task logging context vars so a pruning
 task's `[CC Pair:]` log prefix cannot leak into the next task run on the same
 thread. `task_postrun` removes the task id from whichever Redis taskset it
-belongs to (matched by id prefix). `task_revoked` removes an expired task id only
+belongs to (matched by id prefix). `task_revoked` (wired by the Light worker only) removes an expired task id only
 from the document-sync taskset (`app_base.py:on_task_revoked` returns early for
 any other id prefix).
 

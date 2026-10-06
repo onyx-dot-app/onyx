@@ -140,8 +140,10 @@ recorded in `stack.error`. The loop's own check on `params.signal?.aborted` thro
 
 `Packet = { placement: Placement; obj: ObjTypes }`. `PacketType` (`streamingModels.ts`)
 enumerates the packet types the client renders or reads; `ObjTypes` is the discriminated
-union of their bodies. Heartbeat packets are not in the enum. `lib.tsx:withoutHeartbeats`
-drops them before packet handling. The enum **must** match the Python packet types the
+union of their bodies. `chat_heartbeat` packets are not in the enum. `lib.tsx:withoutHeartbeats`
+drops them on the send-message stream. `image_generation_heartbeat` is not in the enum
+either, and no filter drops it: it reaches the client and renders nothing. `resumeStream` does not filter, so its
+caller sees heartbeat packets too. The enum **must** match the Python packet types the
 backend emits for the client; see §5.
 
 ---
@@ -257,7 +259,9 @@ unclosed trailing `$$` so `remark-math` does not choke on a LaTeX block mid-stre
 session from the conversation) is triggered from two places:
 `useChatController.ts:handleNewSessionNaming` after a brand-new session's first exchange
 (with a 200 ms delay to give the backend time to persist the session row), and
-`useChatSessionController.ts` on load, if the loaded session has no `description` yet.
+`useChatSessionController.ts` on load, if the loaded session has no `description` yet
+and is either a seeded one-message chat or has at least two messages. An empty or
+single-message unseeded session is not auto-named.
 Both call `refreshChatSessions()` afterward. See §9 for the double-fire footgun.
 
 Sharing: `ShareChatSessionModal.tsx` calls `PATCH /api/chat/chat-session/{id}` with
@@ -377,8 +381,9 @@ enforced by lint (`i18n/no-raw-jsx-text`) and pre-commit (`typescript-check`) wh
     error, it disappears. A new backend packet type is invisible in the UI until
     `findRenderer` and `streamingModels.ts:PacketType` both know about it.
 14. **The TypeScript `PacketType` enum (`services/streamingModels.ts`) must match the
-    Python packet types** the backend emits for the client, except heartbeats, which the
-    client filters out (see [[streaming-protocol]]). A mismatch is a
+    Python packet types** the backend emits for the client, except the heartbeats:
+    the send-message stream filters out `chat_heartbeat`, and the client ignores
+    `image_generation_heartbeat` (see [[streaming-protocol]]). A mismatch is a
     silent no-render, not a type error, because packets arrive as parsed JSON.
 15. **An unresolved citation renders nothing, never broken markup.** `MemoizedAnchor`
     returns `<></>` rather than the raw `[D1](url)` text when the citation or document has
@@ -509,7 +514,7 @@ hoc for a one-off check.
 - **Auto-naming can fire twice.** `handleNewSessionNaming`
   (`useChatController.ts`) names a new session after its first exchange;
   `useChatSessionController.ts` also renames on load if `chatSession.description` is
-  still empty. A rapid reload right after the first message can trigger both.
+  still empty and the session is a seeded one-message chat or has two or more messages. A rapid reload right after the first message can trigger both.
 - **Opal `Text` strips `className`.** A component that needs to control `Text`'s layout
   must use a wrapping element or `Text`'s own props, not a passed-in class.
 - **Citations resolve by `document_id` lookup at render time, not by index.** A
