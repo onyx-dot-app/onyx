@@ -129,6 +129,11 @@ export interface SeatUpdateResponse {
   message: string | null;
 }
 
+export interface CommunityDowngradeResponse {
+  connectors_made_public: number;
+  user_groups_removed: number;
+}
+
 // ----------------------------------------------------------------------------
 // Trial Management Types
 // ----------------------------------------------------------------------------

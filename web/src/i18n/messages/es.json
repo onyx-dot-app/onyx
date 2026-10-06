@@ -1385,6 +1385,34 @@
           "text": "Se te facturará el <value>{date}</value>, cuando termine tu prueba gratuita de 1 mes."
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "No se pudo cambiar a Community"
+        },
+        "link": {
+          "label": "Cambiar a Community"
+        },
+        "modal": {
+          "confirmButton": {
+            "label": "Cambiar a Community",
+            "loading": "Cambiando..."
+          },
+          "connectors": {
+            "text": "Todos los conectores pasan a ser públicos. Los documentos que eran privados por permisos sincronizados o grupos serán visibles para todos los usuarios. Los resultados de búsqueda se actualizan cuando se reescribe el índice, lo que puede tardar en un índice grande."
+          },
+          "description": "Esto elimina tu licencia y todas las funciones de pago. No se puede deshacer.",
+          "features": {
+            "text": "Se eliminan las claves de API de cuentas de servicio, los límites de frecuencia de tokens y los hooks. Se desactivan las respuestas estándar y los tokens SCIM. Se restablecen la marca personalizada y la retención de chats."
+          },
+          "groups": {
+            "text": "Se eliminan los grupos de usuarios. Los agentes, conjuntos de documentos, proveedores de LLM, servidores MCP y skills compartidos con un grupo pasan a ser públicos."
+          },
+          "license": {
+            "text": "La licencia se elimina de este despliegue."
+          },
+          "title": "Cambiar a Community Edition"
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "Activar la clave de licencia"
@@ -11515,6 +11543,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "Si eres el administrador, visita la página de <billingLink>Facturación de administración</billingLink> para {hadLicense, select, true {renovar} other {activar}} tu licencia, regístrate a través de Stripe o escribe a <supportLink>support@onyx.app</supportLink> para obtener ayuda con la facturación."
+        },
+        "downgradeButton": {
+          "label": "Cambiar a Community"
         },
         "heading": {
           "title": "Acceso restringido"

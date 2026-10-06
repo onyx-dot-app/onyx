@@ -1385,6 +1385,34 @@
           "text": "1개월 무료 체험이 끝나면 <value>{date}</value>에 결제됩니다."
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "다운그레이드에 실패했습니다"
+        },
+        "link": {
+          "label": "Community로 다운그레이드"
+        },
+        "modal": {
+          "confirmButton": {
+            "label": "다운그레이드",
+            "loading": "다운그레이드 중..."
+          },
+          "connectors": {
+            "text": "모든 커넥터가 공개됩니다. 동기화된 권한이나 그룹으로 비공개였던 문서가 모든 사용자에게 표시됩니다. 검색 결과는 인덱스가 다시 작성된 후 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
+          },
+          "description": "라이선스와 모든 유료 기능이 제거됩니다. 이 작업은 되돌릴 수 없습니다.",
+          "features": {
+            "text": "서비스 계정 API 키, Token 사용량 제한, 훅이 삭제됩니다. 표준 답변과 SCIM 토큰이 비활성화됩니다. 사용자 지정 브랜딩과 채팅 보존 기간이 초기화됩니다."
+          },
+          "groups": {
+            "text": "사용자 그룹이 제거됩니다. 그룹과 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬은 공개됩니다."
+          },
+          "license": {
+            "text": "이 배포에서 라이선스가 제거됩니다."
+          },
+          "title": "Community Edition으로 다운그레이드"
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "라이선스 키 활성화"
@@ -11515,6 +11543,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "관리자라면 <billingLink>관리자 결제</billingLink> 페이지에서 라이선스를 {hadLicense, select, true {갱신} other {활성화}}하거나 Stripe를 통해 가입하거나 결제 관련 지원은 <supportLink>support@onyx.app</supportLink>으로 문의하세요."
+        },
+        "downgradeButton": {
+          "label": "Community로 다운그레이드"
         },
         "heading": {
           "title": "액세스 제한됨"

@@ -1385,6 +1385,34 @@
           "text": "Vous serez facturé le <value>{date}</value> après la fin de votre essai gratuit d'un mois."
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "Échec du passage à Community"
+        },
+        "link": {
+          "label": "Passer à Community"
+        },
+        "modal": {
+          "confirmButton": {
+            "label": "Passer à Community",
+            "loading": "Changement en cours..."
+          },
+          "connectors": {
+            "text": "Tous les connecteurs deviennent publics. Les documents que les permissions synchronisées ou les groupes gardaient privés deviennent visibles par tous les utilisateurs. Les résultats de recherche suivent une fois l'index réécrit, ce qui peut prendre du temps sur un grand index."
+          },
+          "description": "Cette action supprime votre licence et toutes les fonctionnalités payantes. Elle est irréversible.",
+          "features": {
+            "text": "Les clés d'API des comptes de service, les limites de débit de jetons et les hooks sont supprimés. Les réponses standard et les jetons SCIM sont désactivés. La personnalisation de la marque et la rétention des conversations sont réinitialisées."
+          },
+          "groups": {
+            "text": "Les groupes d'utilisateurs sont supprimés. Les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et skills partagés avec un groupe deviennent publics."
+          },
+          "license": {
+            "text": "La licence est supprimée de ce déploiement."
+          },
+          "title": "Passer à Community Edition"
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "Activer la clé de licence"
@@ -11515,6 +11543,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "Si vous êtes l'administrateur, rendez-vous sur la page <billingLink>Facturation admin</billingLink> pour {hadLicense, select, true {renouveler} other {activer}} votre licence, inscrivez-vous via Stripe ou contactez <supportLink>support@onyx.app</supportLink> pour toute question de facturation."
+        },
+        "downgradeButton": {
+          "label": "Passer à Community"
         },
         "heading": {
           "title": "Accès restreint"
