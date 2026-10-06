@@ -1715,8 +1715,11 @@ LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
 
+# Cache chat system prompt + history + in-loop tool rounds via provider prompt
+# caching (Anthropic explicit breakpoints; implicit caching elsewhere). On by
+# default; set to "false" to opt out.
 PROMPT_CACHE_CHAT_HISTORY = (
-    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
+    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "true").lower() == "true"
 )
 
 # Opt-in cap on outgoing image-count for Azure providers (any model_provider
