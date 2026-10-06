@@ -941,6 +941,10 @@ def run_llm_loop(
             # now that project files are loaded in.
             persona_datetime_aware = persona.datetime_aware if persona else True
             cite_documents = should_cite_documents or always_cite_documents
+            # Head prompts never take cite-dependent content: the message
+            # prefix must be byte-stable across loop iterations for prompt
+            # caching. Citation guidance lives in the uncached trailing
+            # reminder instead.
             if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
                 processed_system_prompt = (
@@ -948,7 +952,7 @@ def run_llm_loop(
                         persona_system_prompt,
                         datetime_aware=persona_datetime_aware,
                         append_datetime_if_aware=True,
-                        should_cite_documents=cite_documents,
+                        should_cite_documents=False,
                     )
                     if persona_system_prompt
                     else None
@@ -980,7 +984,7 @@ def run_llm_loop(
                         datetime_aware=persona_datetime_aware,
                         user_memory_context=prompt_memory_context,
                         tools=tools,
-                        should_cite_documents=cite_documents,
+                        should_cite_documents=False,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
@@ -992,7 +996,7 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=False,
-                            should_cite_documents=cite_documents,
+                            should_cite_documents=False,
                         )
                         if custom_agent_prompt
                         else None
@@ -1013,7 +1017,7 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=True,
-                            should_cite_documents=cite_documents,
+                            should_cite_documents=False,
                         )
                         if custom_agent_prompt
                         else None

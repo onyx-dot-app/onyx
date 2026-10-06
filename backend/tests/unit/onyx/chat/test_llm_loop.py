@@ -30,7 +30,13 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import ToolChoiceOptions
-from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
+from onyx.prompts.chat_prompts import (
+    ANSWER_COMPLETENESS_REMINDER,
+    ANSWER_COVERAGE_GUIDANCE,
+    IMAGE_GEN_REMINDER,
+    OPEN_URL_REMINDER,
+    REQUIRE_CITATION_GUIDANCE,
+)
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME
 from onyx.tools.models import ParallelToolCallResponse, ToolCallKickoff, ToolResponse
@@ -1838,6 +1844,16 @@ class TestSelectReminderText:
             ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
         )
         assert result == IMAGE_GEN_REMINDER
+
+    def test_citation_reminder_carries_relocated_guidance(self) -> None:
+        """The citation guidance that used to be appended to the system prompt
+        must arrive via the reminder instead, so head prompts stay byte-stable
+        for prompt caching."""
+        result = self._select(include_citation_reminder=True)
+        assert result is not None
+        assert REQUIRE_CITATION_GUIDANCE.strip() in result
+        assert ANSWER_COVERAGE_GUIDANCE.strip() in result
+        assert ANSWER_COMPLETENESS_REMINDER in result
 
 
 @pytest.mark.parametrize("select_none", [False, True])

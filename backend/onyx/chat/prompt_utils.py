@@ -11,7 +11,6 @@ from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
     ANSWER_COVERAGE_GUIDANCE,
-    CITATION_REMINDER,
     DEFAULT_SYSTEM_PROMPT,
     FILE_REMINDER,
     LAST_CYCLE_CITATION_REMINDER,
@@ -139,7 +138,12 @@ def build_reminder_message(
     if is_last_cycle:
         reminder += "\n\n" + LAST_CYCLE_CITATION_REMINDER
     if include_citation_reminder:
-        reminder += "\n\n" + CITATION_REMINDER
+        # REQUIRE_CITATION_GUIDANCE and ANSWER_COVERAGE_GUIDANCE are the same
+        # blocks that used to be appended to the system prompt; they moved here
+        # so head prompts stay byte-stable across loop iterations for prompt
+        # caching. They supersede the shorter CITATION_REMINDER.
+        reminder += "\n\n" + REQUIRE_CITATION_GUIDANCE
+        reminder += "\n\n" + ANSWER_COVERAGE_GUIDANCE
         reminder += "\n\n" + ANSWER_COMPLETENESS_REMINDER
     if include_file_reminder:
         reminder += "\n\n" + FILE_REMINDER
