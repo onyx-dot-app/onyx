@@ -30,10 +30,9 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { UserGroup } from "@/lib/types";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
 import { StaticPermissionLabel } from "@/sections/modals/ShareModalPermissionControls";
-import {
-  SharePermissionMenu,
+import SharePermissionMenu, {
   type SharePermissionMenuOption,
-} from "@/sections/modals/SharePermissionMenu";
+} from "@/lib/permissions/components/SharePermissionMenu";
 
 export interface ConnectorManageAccessCardProps {
   ccPairId: number;
@@ -238,7 +237,7 @@ export function ConnectorManageAccessCard({
                       name: row.group_name,
                     })}
                     disabled={!canEdit || isSaving}
-                    menuWidth="lg"
+                    menuWidth={60}
                     onChange={(role) => changeRole(row.group_id, role)}
                     onRemove={() => removeGroup(row.group_id)}
                     options={roleOptions}
