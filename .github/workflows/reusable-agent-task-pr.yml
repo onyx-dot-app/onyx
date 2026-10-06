@@ -312,29 +312,12 @@ jobs:
           (github.event_name != 'workflow_run' ||
            steps.repair-guard.outputs.proceed == 'true') &&
           steps.pr.outputs.pr_number != ''
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_CHANNEL: ${{ inputs.slack-channel }}
-          MENTION_USER: ${{ inputs.slack-mention }}
-          PR_URL: ${{ steps.pr.outputs.pr_url }}
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-          TASK_NAME: ${{ inputs.task-name }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          mention=""
-          if [ -n "${MENTION_USER}" ]; then
-            slack_id="$(jq -r --arg gh "${MENTION_USER}" \
-              'to_entries[] | select(.value | ascii_downcase == ($gh | ascii_downcase)) | .key' \
-              .github/actions/slack-notify/user-mappings.json | head -1)"
-            mention="<@${slack_id:-${MENTION_USER}}>"
-          fi
-          jq -cn \
-            --arg channel "${SLACK_CHANNEL}" \
-            --arg text "$(printf '*🤖 %s PR ready for review* %s\n*PR:* <%s|#%s>\n*Run:* <%s|workflow run>' \
-              "${TASK_NAME}" "${mention}" "${PR_URL}" "${PR_NUMBER}" "${RUN_URL}")" \
-            '{channel: $channel, text: $text, unfurl_links: false, unfurl_media: false}' \
-            | curl -sS --fail-with-body -X POST https://slack.com/api/chat.postMessage \
-                -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
-                -H 'Content-type: application/json; charset=utf-8' --data-binary @- \
-            | jq -e '.ok' > /dev/null \
-            || echo "::warning::Slack post to ${SLACK_CHANNEL} failed (is the bot in the channel?)"
+        uses: ./.github/actions/slack-post-message
+        with:
+          bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          channel: ${{ inputs.slack-channel }}
+          mention: ${{ inputs.slack-mention }}
+          text: |
+            *🤖 ${{ inputs.task-name }} PR ready for review* {mention}
+            *PR:* <${{ steps.pr.outputs.pr_url }}|#${{ steps.pr.outputs.pr_number }}>
+            *Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>

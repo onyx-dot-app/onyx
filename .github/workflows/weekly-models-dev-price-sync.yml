@@ -90,29 +90,16 @@ jobs:
       # the PR is the artifact; a Slack hiccup must not fail the run.
       - name: Post PR to Slack for review
         if: steps.pr.outputs.pr_number != ''
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
+        uses: ./.github/actions/slack-post-message
+        with:
+          bot-token: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}
           # #slop-factory
-          SLACK_CHANNEL: C0C6T9W2U3X
-          MENTION_USER: rohoswagger
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          slack_id="$(jq -r --arg gh "${MENTION_USER}" \
-            'to_entries[] | select(.value | ascii_downcase == ($gh | ascii_downcase)) | .key' \
-            .github/actions/slack-notify/user-mappings.json | head -1)"
-          mention="<@${slack_id:-${MENTION_USER}}>"
-          jq -cn \
-            --arg channel "${SLACK_CHANNEL}" \
-            --arg text "$(printf '*🤖 models.dev price sync PR ready for review* %s\n*PR:* <%s|#%s>\n*Run:* <%s|workflow run>' \
-              "${mention}" "${REPO_URL}/pull/${PR_NUMBER}" "${PR_NUMBER}" "${RUN_URL}")" \
-            '{channel: $channel, text: $text, unfurl_links: false, unfurl_media: false}' \
-            | curl -sS --fail-with-body -X POST https://slack.com/api/chat.postMessage \
-                -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
-                -H 'Content-type: application/json; charset=utf-8' --data-binary @- \
-            | jq -e '.ok' > /dev/null \
-            || echo "::warning::Slack post to ${SLACK_CHANNEL} failed (is the bot in the channel?)"
+          channel: C0C6T9W2U3X
+          mention: rohoswagger
+          text: |
+            *🤖 models.dev price sync PR ready for review* {mention}
+            *PR:* <${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.pr_number }}|#${{ steps.pr.outputs.pr_number }}>
+            *Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>
 
   notify-slack-on-failure:
     needs:
