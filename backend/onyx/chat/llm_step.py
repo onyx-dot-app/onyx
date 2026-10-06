@@ -5,6 +5,7 @@ from collections.abc import Callable, Generator, Mapping, Sequence
 from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
+from onyx.chat.chat_utils import count_message_replay_tokens
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import current_turn_persists_content
@@ -501,30 +502,76 @@ def _select_recent_image_indices(
     return keep, max(0, total - cap)
 
 
-def _cache_split_stats(history: list[ChatMessageSimple]) -> dict[str, str]:
+_CACHEABLE_HISTORY_MESSAGE_TYPES: set[MessageType] = {
+    MessageType.SYSTEM,
+    MessageType.USER,
+    MessageType.USER_REMINDER,
+    MessageType.ASSISTANT,
+    MessageType.TOOL_CALL_RESPONSE,
+}
+
+
+def _cacheable_history_prefix_length(history: list[ChatMessageSimple]) -> int:
+    """Messages in the cacheable prompt prefix — the split point
+    translate_history_to_llm_format applies. Messages of non-cacheable
+    types can sit inside the prefix but never extend it."""
+    prefix_len: int = 0
+    all_previous_msgs_cacheable: bool = True
+    if PROMPT_CACHE_CHAT_HISTORY:
+        for idx, msg in enumerate(history):
+            if msg.message_type in _CACHEABLE_HISTORY_MESSAGE_TYPES:
+                all_previous_msgs_cacheable = (
+                    all_previous_msgs_cacheable and msg.should_cache
+                )
+                if all_previous_msgs_cacheable:
+                    prefix_len = idx + 1
+    return prefix_len
+
+
+def _cache_split_stats(
+    history: list[ChatMessageSimple], llm_config: LLMConfig
+) -> dict[str, str]:
     """Cache-layout stats for the generation span, so operators can see
     per-request whether prompt caching is engaged and how large the
-    cacheable prefix is. Mirrors the contiguous-prefix rule used by
-    translate_history_to_llm_format."""
-    prefix_msgs = 0
-    prefix_tokens = 0
-    if PROMPT_CACHE_CHAT_HISTORY:
-        for msg in history:
-            if msg.message_type not in [
-                MessageType.SYSTEM,
-                MessageType.USER,
-                MessageType.USER_REMINDER,
-                MessageType.ASSISTANT,
-                MessageType.TOOL_CALL_RESPONSE,
-            ]:
-                break
-            if not msg.should_cache:
-                break
-            prefix_msgs += 1
+    cacheable prefix is. Applies the same image replay/drop rules as
+    translate_history_to_llm_format so the token estimate matches what
+    the request actually carries."""
+    prefix_len: int = _cacheable_history_prefix_length(history)
+    prefix_msgs: list[ChatMessageSimple] = history[:prefix_len]
+
+    supports_image_input: bool = True
+    if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
+        supports_image_input = model_supports_image_input(
+            llm_config.model_name,
+            llm_config.model_provider,
+            llm_config.deployment_name,
+        )
+    keep_image_indices: set[tuple[int, int]] | None = None
+    if supports_image_input:
+        image_cap: int | None = resolve_image_cap(llm_config.model_provider)
+        if image_cap is not None:
+            keep_image_indices, _ = _select_recent_image_indices(history, image_cap)
+
+    prefix_tokens: int = 0
+    for idx, msg in enumerate(prefix_msgs):
+        if not supports_image_input:
+            prefix_tokens += count_message_replay_tokens(
+                msg, image_files_replayed_as_markers=True
+            )
+        elif keep_image_indices is not None and msg.image_files:
+            dropped_image_cost: int = sum(
+                f.token_count
+                for img_idx, f in enumerate(msg.image_files)
+                if f.file_type == ChatFileType.IMAGE
+                and (idx, img_idx) not in keep_image_indices
+            )
+            prefix_tokens += msg.token_count - dropped_image_cost
+        else:
             prefix_tokens += msg.token_count
+
     return {
         "prompt_cache_chat_history": "on" if PROMPT_CACHE_CHAT_HISTORY else "off",
-        "cacheable_prefix_msgs": str(prefix_msgs),
+        "cacheable_prefix_msgs": str(prefix_len),
         "cacheable_prefix_tokens": str(prefix_tokens),
         "history_msgs": str(len(history)),
     }
@@ -544,8 +591,7 @@ def translate_history_to_llm_format(
     # Note: cacheability is computed from pre-translation ChatMessageSimple types.
     # Some providers flatten tool history into plain assistant/user text, so this split
     # may be less semantically meaningful, but it remains safe and order-preserving.
-    last_cacheable_msg_idx = -1
-    all_previous_msgs_cacheable = True
+    last_cacheable_msg_idx = _cacheable_history_prefix_length(history) - 1
 
     # History can contain images even when the current model cannot accept
     # them (e.g. the user switched models mid-session). Sending them yields a
@@ -587,20 +633,6 @@ def translate_history_to_llm_format(
             )
 
     for idx, msg in enumerate(history):
-        # if the message is being added to the history
-        if PROMPT_CACHE_CHAT_HISTORY and msg.message_type in [
-            MessageType.SYSTEM,
-            MessageType.USER,
-            MessageType.USER_REMINDER,
-            MessageType.ASSISTANT,
-            MessageType.TOOL_CALL_RESPONSE,
-        ]:
-            all_previous_msgs_cacheable = (
-                all_previous_msgs_cacheable and msg.should_cache
-            )
-            if all_previous_msgs_cacheable:
-                last_cacheable_msg_idx = idx
-
         if msg.message_type == MessageType.SYSTEM:
             system_msg = SystemMessage(
                 role="system",
@@ -871,7 +903,7 @@ def run_llm_step_pkt_generator(
     ) as span_generation:
         span_generation.span_data.model_config = {
             **(span_generation.span_data.model_config or {}),
-            **_cache_split_stats(history),
+            **_cache_split_stats(history, llm.config),
         }
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history

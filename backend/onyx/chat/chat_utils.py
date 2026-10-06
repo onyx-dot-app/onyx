@@ -47,6 +47,7 @@ from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id, store_plaintext
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_CONTEXT_PROMPT,
+    NON_VISION_IMAGE_MARKER,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
@@ -79,6 +80,33 @@ CONTENT_UNAVAILABLE_NOTICE = (
     "format. Its contents are not available to you — do not guess them. If "
     "needed, ask the user for a text-based copy.]"
 )
+
+# Used when no token_counter is available to measure the non-vision image
+# marker; intentionally generous so budgeting stays conservative.
+_NON_VISION_MARKER_TOKEN_FALLBACK = 40
+
+
+def count_message_replay_tokens(
+    msg: ChatMessageSimple,
+    *,
+    image_files_replayed_as_markers: bool = False,
+    token_counter: Callable[[str], int] | None = None,
+) -> int:
+    if not image_files_replayed_as_markers:
+        return msg.token_count
+    # Include images whose stored cost is zero, such as project images.
+    num_images = sum(
+        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+    )
+    if not num_images:
+        return msg.token_count
+    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    marker_tokens = (
+        token_counter(sample_marker)
+        if token_counter
+        else _NON_VISION_MARKER_TOKEN_FALLBACK
+    )
+    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
 
 
 def build_file_context(
