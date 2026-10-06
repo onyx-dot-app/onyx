@@ -36,6 +36,11 @@ class _MemoryCacheBackend(CacheBackend):
         self._ttls.pop(key, None)
         return self._store.pop(key, None)
 
+    def incr(self, key: str, ex: int) -> int:
+        count = int(self.get(key) or 0) + 1
+        self.set(key, count, ex=ex)
+        return count
+
     def set(
         self,
         key: str,

@@ -74,6 +74,10 @@ class RedisCacheBackend(CacheBackend):
     ) -> bool:
         return bool(self._r.set(key, value, ex=ex, nx=True))
 
+    def incr(self, key: str, ex: int) -> int:
+        self._r.set(key, 0, ex=ex, nx=True)
+        return int(self._r.incr(key))
+
     def delete(self, key: str) -> None:
         self._r.delete(key)
 

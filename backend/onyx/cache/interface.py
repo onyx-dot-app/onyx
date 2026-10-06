@@ -105,6 +105,14 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def incr(self, key: str, ex: int) -> int:
+        """Atomically add one to an integer value and return the new count.
+
+        A missing or expired key starts at one and expires after ``ex`` seconds.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def delete(self, key: str) -> None:
         raise NotImplementedError
 
