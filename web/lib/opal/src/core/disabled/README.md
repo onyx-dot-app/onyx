@@ -11,6 +11,10 @@ When `disabled` is true, it also blocks the keyboard: the children sit in a `<fi
 input. `allowClick` keeps the children interactive, so it leaves the keyboard enabled too. The
 fieldset is always rendered, so toggling `disabled` does not remount the children.
 
+A `tooltip` only shows on hover, and nothing in a disabled region can take focus to open it. So
+`Disabled` also keeps the tooltip's plain text in a visually hidden, polite live region while it is
+disabled: screen readers read the reason in the region and announce it when it changes.
+
 ## Props
 
 | Prop          | Type                                     | Default   | Description                                                                         |

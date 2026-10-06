@@ -1,6 +1,7 @@
 import "@opal/core/disabled/styles.css";
 import React from "react";
 import { Tooltip, type TooltipSide } from "@opal/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import type { RichStr, WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -28,7 +29,8 @@ interface DisabledProps extends WithoutStyles<
   /**
    * Tooltip content shown on hover when disabled. Implies `allowClick` so that
    * the tooltip trigger can receive pointer events. Supports inline markdown
-   * via `markdown()`.
+   * via `markdown()`. Screen readers read it as plain text from a hidden live
+   * region.
    */
   tooltip?: string | RichStr;
 
@@ -88,6 +90,13 @@ function Disabled({
       data-opal-disabled={disabled || undefined}
       data-allow-click={disabled && enableClick ? "" : undefined}
     >
+      {/* The tooltip only exists while hovered, and nothing inside a disabled
+        region can take focus to open it, so the reason is also kept here for
+        assistive technology. It is polite and always rendered, so a change of
+        reason is announced and unlocking announces nothing. */}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {disabled && tooltip ? toPlainString(tooltip) : ""}
+      </span>
       <fieldset disabled={blockKeyboard} className="contents">
         {children}
       </fieldset>

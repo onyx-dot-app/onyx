@@ -2,6 +2,8 @@ import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Disabled } from "@opal/core/disabled/components";
+import { markdown } from "@opal/utils";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
 
 it("disables the form controls inside, so the keyboard cannot reach them", async () => {
   const user = userEvent.setup();
@@ -50,4 +52,26 @@ it("keeps a control's state when it toggles between enabled and disabled", async
 
   expect(screen.getByRole("textbox", { name: "name" })).toBe(input);
   expect(input).toHaveValue("kept");
+});
+
+it("gives screen readers the tooltip's reason while disabled, as plain text", () => {
+  const { rerender } = render(
+    <TooltipProvider>
+      <Disabled disabled tooltip={markdown("Select **an account** first")}>
+        <input aria-label="name" />
+      </Disabled>
+    </TooltipProvider>
+  );
+
+  const status = screen.getByText("Select an account first");
+  expect(status).toHaveAttribute("aria-live", "polite");
+
+  rerender(
+    <TooltipProvider>
+      <Disabled disabled={false} tooltip="Select an account first">
+        <input aria-label="name" />
+      </Disabled>
+    </TooltipProvider>
+  );
+  expect(screen.queryByText("Select an account first")).not.toBeInTheDocument();
 });
