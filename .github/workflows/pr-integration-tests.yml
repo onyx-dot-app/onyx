@@ -241,7 +241,7 @@ jobs:
           # per-run tags accumulated on a single ECR image digest until they
           # hit the 1000-tags-per-image cap. Downstream jobs pull
           # <repo>@<digest> via this job's `digest` output instead.
-          outputs: type=image,push=true,push-by-digest=true
+          outputs: type=image,name=${{ env.RUNS_ON_ECR_CACHE }},push=true,push-by-digest=true
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           # Attestations attach as ECR referrers to the image digest, which is
