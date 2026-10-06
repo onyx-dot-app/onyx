@@ -149,14 +149,15 @@ on, regardless of how many documents any one call actually returns.
 
 ### 4.4 Teaching the format: prompt and reminder
 
-`chat/prompt_utils.py:build_system_prompt` appends citation guidance
-(`REQUIRE_CITATION_GUIDANCE`, `prompts/chat_prompts.py`) to the system prompt when
-`should_cite_documents` is set and the persona's prompt template did not already
-include the placeholder (`apply_prompt_placeholders`,
-`append_citation_if_missing=True`). Separately, `llm_loop.py:select_reminder_text`
-appends `CITATION_REMINDER` plus `ANSWER_COMPLETENESS_REMINDER` (and
+Citation guidance lives only in the trailing reminder, never in the system
+prompt: head prompts are built with `should_cite_documents=False` so the cached
+message prefix stays byte-stable across loop iterations (a `{{CITATION_GUIDANCE}}`
+tag in a system/agent prompt resolves to empty). `llm_loop.py:select_reminder_text`
+appends `REQUIRE_CITATION_GUIDANCE`, `ANSWER_COVERAGE_GUIDANCE`, and
+`ANSWER_COMPLETENESS_REMINDER` (`prompts/chat_prompts.py`, plus
 `LAST_CYCLE_CITATION_REMINDER` on the final cycle) to the reminder message whenever `should_cite_documents or always_cite_documents` is
-true, via `prompt_utils.py:build_reminder_message`. The citation reminder strings tell the
+true, via `prompt_utils.py:build_reminder_message`. `REQUIRE_CITATION_GUIDANCE` is
+skipped if the task prompt already carried it via `{{CITATION_GUIDANCE}}`. The citation reminder strings tell the
 model to cite the `"document"` field using `[1]`, `[2]`, `[3]` syntax.
 
 Per [[core-chat-loop]] §4.4, the reminder is always the **last** message in the
