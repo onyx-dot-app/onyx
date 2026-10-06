@@ -1,6 +1,7 @@
 """Tests for llm_step.py, specifically sanitization and argument parsing."""
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -870,6 +871,73 @@ class TestNonVisionImageStripping:
         )
         assert isinstance(translated, list)
         assert len(translated) == 1
+
+
+@pytest.mark.parametrize("cache_enabled", [False, True])
+@pytest.mark.parametrize("supports_images", [False, True])
+def test_cache_stats_reuse_request_image_decisions(
+    monkeypatch: pytest.MonkeyPatch, cache_enabled: bool, supports_images: bool
+) -> None:
+    from contextlib import nullcontext
+
+    monkeypatch.setattr(llm_step_module, "PROMPT_CACHE_CHAT_HISTORY", cache_enabled)
+    monkeypatch.setattr(llm_step_module, "ENABLE_AZURE_IMAGE_CAP", True)
+    monkeypatch.setattr(llm_step_module, "_AZURE_DEFAULT_IMAGE_CAP", 1)
+    capability_check = MagicMock(return_value=supports_images)
+    monkeypatch.setattr(llm_step_module, "model_supports_image_input", capability_check)
+    image_selector = MagicMock(wraps=llm_step_module._select_recent_image_indices)
+    monkeypatch.setattr(llm_step_module, "_select_recent_image_indices", image_selector)
+    monkeypatch.setattr(
+        llm_step_module,
+        "process_with_prompt_cache",
+        lambda **kw: (kw["cacheable_prefix"] + kw["suffix"], None),
+    )
+    message: ChatMessageSimple = _make_user_msg(
+        "describe", [_make_image("img0"), _make_image("img1")]
+    )
+    message.token_count = 105
+    message.image_token_count = 100
+    message.should_cache = True
+    llm = MagicMock(spec=LitellmLLM)
+    llm.config = _make_llm_config(AZURE_PROVIDER_NAME)
+    llm.stream_raw.return_value = iter(())
+    span = MagicMock()
+    span.span_data.model_config = {}
+    monkeypatch.setattr(
+        llm_step_module, "generation_span", lambda **_: nullcontext(span)
+    )
+
+    list(
+        llm_step_module.run_llm_step_pkt_generator(
+            history=[message],
+            tool_definitions=[],
+            tool_choice=ToolChoiceOptions.AUTO,
+            llm=llm,
+            placement=Placement(turn_index=0),
+            state_container=None,
+            citation_processor=None,
+        )
+    )
+
+    capability_check.assert_called_once()
+    assert image_selector.call_count == int(supports_images)
+    stats: dict[str, str] = span.span_data.model_config
+    assert stats["prompt_cache_chat_history"] == ("on" if cache_enabled else "off")
+    assert stats["cacheable_prefix_msgs"] == ("1" if cache_enabled else "0")
+    expected_tokens: int = (55 if supports_images else 85) if cache_enabled else 0
+    assert stats["cacheable_prefix_tokens"] == str(expected_tokens)
+    assert stats["history_msgs"] == "1"
+    translated = span.span_data.input
+    assert isinstance(translated[0], UserMessage)
+    if supports_images:
+        assert _attached_image_file_ids(translated[0]) == ["img0"]
+        assert translated[1].content == _expected_image_drop_reminder(1)
+    else:
+        assert isinstance(translated[0].content, list)
+        assert not any(
+            isinstance(part, ImageContentPart) for part in translated[0].content
+        )
+        assert len(translated[0].content) == 3
 
 
 class TestEmptyAnswerRecovery:

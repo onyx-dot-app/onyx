@@ -9,7 +9,7 @@ from onyx.chat.chat_utils import count_message_replay_tokens
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import current_turn_persists_content
-from onyx.chat.models import ChatMessageSimple, LlmStepResult
+from onyx.chat.models import ChatMessageSimple, HistoryImageReplay, LlmStepResult
 from onyx.chat.tool_call_args_streaming import (
     ParsedToolArguments,
     maybe_emit_argument_delta,
@@ -528,17 +528,9 @@ def _cacheable_history_prefix_length(history: list[ChatMessageSimple]) -> int:
     return prefix_len
 
 
-def _cache_split_stats(
+def _resolve_history_image_replay(
     history: list[ChatMessageSimple], llm_config: LLMConfig
-) -> dict[str, str]:
-    """Cache-layout stats for the generation span, so operators can see
-    per-request whether prompt caching is engaged and how large the
-    cacheable prefix is. Applies the same image replay/drop rules as
-    translate_history_to_llm_format so the token estimate matches what
-    the request actually carries."""
-    prefix_len: int = _cacheable_history_prefix_length(history)
-    prefix_msgs: list[ChatMessageSimple] = history[:prefix_len]
-
+) -> HistoryImageReplay:
     supports_image_input: bool = True
     if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
         supports_image_input = model_supports_image_input(
@@ -546,15 +538,34 @@ def _cache_split_stats(
             llm_config.model_provider,
             llm_config.deployment_name,
         )
+    image_cap: int | None = (
+        resolve_image_cap(llm_config.model_provider) if supports_image_input else None
+    )
     keep_image_indices: set[tuple[int, int]] | None = None
-    if supports_image_input:
-        image_cap: int | None = resolve_image_cap(llm_config.model_provider)
-        if image_cap is not None:
-            keep_image_indices, _ = _select_recent_image_indices(history, image_cap)
+    dropped_image_count: int = 0
+    if image_cap is not None:
+        keep_image_indices, dropped_image_count = _select_recent_image_indices(
+            history, image_cap
+        )
+    return HistoryImageReplay(
+        supports_image_input=supports_image_input,
+        image_cap=image_cap,
+        keep_image_indices=keep_image_indices,
+        dropped_image_count=dropped_image_count,
+    )
+
+
+def _cache_split_stats(
+    history: list[ChatMessageSimple], image_replay: HistoryImageReplay
+) -> dict[str, str]:
+    """Estimate prefix tokens using the request's resolved image replay decisions."""
+    prefix_len: int = _cacheable_history_prefix_length(history)
+    prefix_msgs: list[ChatMessageSimple] = history[:prefix_len]
+    keep_image_indices: set[tuple[int, int]] | None = image_replay.keep_image_indices
 
     prefix_tokens: int = 0
     for idx, msg in enumerate(prefix_msgs):
-        if not supports_image_input:
+        if not image_replay.supports_image_input:
             prefix_tokens += count_message_replay_tokens(
                 msg, image_files_replayed_as_markers=True
             )
@@ -580,6 +591,8 @@ def _cache_split_stats(
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
+    *,
+    image_replay: HistoryImageReplay | None = None,
 ) -> list[ChatCompletionMessage]:
     """Convert a list of ChatMessageSimple to list[ChatCompletionMessage] format.
 
@@ -597,13 +610,8 @@ def translate_history_to_llm_format(
     # them (e.g. the user switched models mid-session). Sending them yields a
     # provider 400, so replay a text marker instead. Admins can mark custom
     # vision models with the VISION flow type to keep images flowing.
-    supports_image_input = True
-    if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
-        supports_image_input = model_supports_image_input(
-            llm_config.model_name,
-            llm_config.model_provider,
-            llm_config.deployment_name,
-        )
+    image_replay = image_replay or _resolve_history_image_replay(history, llm_config)
+    supports_image_input: bool = image_replay.supports_image_input
 
     # Per-request image cap (provider-aware). When the cap is enforced and
     # images are dropped, we emit a system-reminder UserMessage at the end of
@@ -611,15 +619,11 @@ def translate_history_to_llm_format(
     # The cap bounds image payloads, so it only applies when images are
     # actually sent — markers for a non-vision model are plain text and must
     # never be capped away.
-    image_cap = (
-        resolve_image_cap(llm_config.model_provider) if supports_image_input else None
-    )
-    keep_image_indices: set[tuple[int, int]] | None = None
+    image_cap: int | None = image_replay.image_cap
+    keep_image_indices: set[tuple[int, int]] | None = image_replay.keep_image_indices
     image_drop_notice: str | None = None
     if image_cap is not None:
-        keep_image_indices, dropped_image_count = _select_recent_image_indices(
-            history, image_cap
-        )
+        dropped_image_count: int = image_replay.dropped_image_count
         if dropped_image_count > 0:
             logger.warning(
                 "Image cap enforced: provider=%s model=%s cap=%d dropped=%d",
@@ -869,7 +873,12 @@ def run_llm_step_pkt_generator(
             sub_turn_index=sub_turn_index,
         )
 
-    llm_msg_history = translate_history_to_llm_format(history, llm.config)
+    image_replay: HistoryImageReplay = _resolve_history_image_replay(
+        history, llm.config
+    )
+    llm_msg_history = translate_history_to_llm_format(
+        history, llm.config, image_replay=image_replay
+    )
     has_reasoned = False
 
     if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
@@ -903,7 +912,7 @@ def run_llm_step_pkt_generator(
     ) as span_generation:
         span_generation.span_data.model_config = {
             **(span_generation.span_data.model_config or {}),
-            **_cache_split_stats(history, llm.config),
+            **_cache_split_stats(history, image_replay),
         }
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history

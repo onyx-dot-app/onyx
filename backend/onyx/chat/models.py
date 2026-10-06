@@ -21,6 +21,13 @@ from onyx.tools.models import SearchToolUsage, ToolCallKickoff
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 
 
+class HistoryImageReplay(BaseModel):
+    supports_image_input: bool
+    image_cap: int | None = None
+    keep_image_indices: set[tuple[int, int]] | None = None
+    dropped_image_count: int = 0
+
+
 class CitationMode(str, Enum):
     """Defines how citations should be handled in the output.
 
