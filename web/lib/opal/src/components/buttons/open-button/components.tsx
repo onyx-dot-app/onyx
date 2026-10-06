@@ -110,12 +110,15 @@ function OpenButton({
   disabled,
   ...statefulProps
 }: OpenButtonProps) {
-  // Derive open state: explicit prop → Radix data-state (injected via Slot chain)
-  const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
-    | string
-    | undefined;
+  // Derive open state: explicit prop → the trigger attributes injected via the
+  // Slot chain: Radix's data-state, or aria-expanded from an Opal Dropdown.
+  const triggerProps = statefulProps as Record<string, unknown>;
+  const isOpen =
+    triggerProps["data-state"] === "open" ||
+    triggerProps["aria-expanded"] === true ||
+    triggerProps["aria-expanded"] === "true";
   const resolvedInteraction: InteractiveStatefulInteraction =
-    interaction ?? (dataState === "open" ? "hover" : "rest");
+    interaction ?? (isOpen ? "hover" : "rest");
 
   const isLarge = size === "lg";
 
