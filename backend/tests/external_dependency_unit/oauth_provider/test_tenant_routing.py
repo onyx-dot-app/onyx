@@ -91,7 +91,6 @@ async def test_cloud_token_tenant_wins_over_cookie_without_membership_bypass(
     monkeypatch.setattr(tenant_tracking, "MULTI_TENANT", True)
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
-    monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_RESOURCE_URL", None)
     users: list[User] = []
     access_tokens: list[str] = []
     context = CURRENT_TENANT_ID_CONTEXTVAR.set("public")

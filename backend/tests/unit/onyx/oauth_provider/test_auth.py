@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import httpx
@@ -32,7 +32,6 @@ _OAUTH_ACCESS_TOKEN_BYTES = _OAUTH_ACCESS_TOKEN.encode("ascii")
 def introspection_backend(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "https://onyx.example")
-    monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_RESOURCE_URL", None)
     monkeypatch.setattr(mcp_auth.time, "time", lambda: 1000)
     backend = AsyncMock()
     monkeypatch.setattr(mcp_auth, "get_http_client", lambda: backend)
@@ -200,7 +199,6 @@ async def test_introspection_preserves_billing_and_outage_status(
 ) -> None:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
-    monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_RESOURCE_URL", None)
     backend = AsyncMock()
     backend.get.return_value = httpx.Response(status_code)
     monkeypatch.setattr(mcp_auth, "get_http_client", lambda: backend)
@@ -224,7 +222,6 @@ async def test_insufficient_scope_has_discovery_challenge(
 ) -> None:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
-    monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_RESOURCE_URL", None)
     monkeypatch.setattr(mcp_api, "MCP_SERVER_CORS_ORIGINS", ["https://client.example"])
     backend = AsyncMock()
     backend.get.return_value = httpx.Response(403)
@@ -266,7 +263,6 @@ async def test_discovery_aliases_and_challenge_point_to_same_resource(
 ) -> None:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", "http://localhost:3000")
-    monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_RESOURCE_URL", None)
     server = FastMCP("discovery-test", auth=mcp_auth.build_mcp_server_auth())
     monkeypatch.setattr(mcp_api, "mcp_server", server)
     app = mcp_api.create_mcp_fastapi_app()
