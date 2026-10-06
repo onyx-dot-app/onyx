@@ -1,14 +1,19 @@
-"""Requests the connector-edit apply step puts on a cc-pair: a restart of its
-index attempts, a prune, a prune after the next full re-index, and an access
-change. Callers commit, so the requests land in the same transaction as the
-edit."""
+"""Writes the connector-edit apply step makes on a cc-pair: the edited state,
+a restart of its index attempts, a full re-index, a prune, a prune after the
+next full re-index, backfills, and an access change. Callers commit, so all of
+them land in one transaction."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Any
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import NotificationType
+from onyx.db.backfill_models import BackfillSpec, PendingBackfill
+from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
@@ -68,6 +73,61 @@ def _lock_cc_pair_for_request(
     return cc_pair
 
 
+def lock_cc_pair_for_edit__no_commit(db_session: Session, cc_pair_id: int) -> None:
+    """Row-locks the pair and reloads its state, so concurrent applies run one
+    after the other and each reads what the previous one committed. Raises
+    ``OnyxError`` (CONFLICT) for a DELETING pair."""
+    db_session.expire_all()
+    _lock_cc_pair_for_request(db_session, cc_pair_id)
+
+
+def write_edited_pair_state__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+    *,
+    connector_specific_config: dict[str, Any],
+    indexing_start: datetime | None,
+    name: str,
+    refresh_freq: int | None,
+    prune_freq: int | None,
+) -> None:
+    """Writes the edited config and settings. The config, indexing_start and
+    frequencies live on the connector, which all its pairs share.
+
+    Raises:
+        ValueError: A frequency is below its minimum.
+    """
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    cc_pair.name = name
+    connector = cc_pair.connector
+    connector.connector_specific_config = connector_specific_config
+    # A naive UTC column.
+    connector.indexing_start = (
+        indexing_start.astimezone(timezone.utc).replace(tzinfo=None)
+        if indexing_start is not None
+        else None
+    )
+    connector.refresh_freq = refresh_freq
+    connector.prune_freq = prune_freq
+    connector.validate_refresh_freq()
+    connector.validate_prune_freq()
+
+
+def reactivate_invalid_cc_pair__no_commit(db_session: Session, cc_pair_id: int) -> bool:
+    """INVALID -> ACTIVE, retiring the pair's CONNECTOR_INVALID alerts.
+    Returns True when the pair was INVALID."""
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    if cc_pair.status != ConnectorCredentialPairStatus.INVALID:
+        return False
+    cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
+    clear_connector_alerts__no_commit(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        notif_type=NotificationType.CONNECTOR_INVALID,
+    )
+    return True
+
+
 def _restartable_attempts_select(cc_pair_id: int) -> Select[tuple[IndexAttempt]]:
     """The pair's active attempts that run with its config. All search
     settings and backfills too: they all run with the old config. The beat
@@ -111,6 +171,7 @@ def request_attempt_restart__no_commit(
     ).all()
 
     task_ids: list[str] = []
+    requeued: list[PendingBackfill] = []
     for attempt in attempts:
         # A first attempt held for the capability checks has no task to see a
         # cancel request. Ending it keeps it undispatched, so the next attempt
@@ -124,7 +185,111 @@ def request_attempt_restart__no_commit(
         attempt.cancellation_requested = True
         if attempt.celery_task_id is not None:
             task_ids.append(attempt.celery_task_id)
+        if (
+            attempt.is_backfill
+            and attempt.poll_range_start is not None
+            and attempt.poll_range_end is not None
+        ):
+            # The beat runs it again; a full re-index created later covers it.
+            requeued.append(
+                PendingBackfill(
+                    request_id=uuid4(),
+                    requested_at=attempt.time_created,
+                    backfill=BackfillSpec(
+                        window_start=attempt.poll_range_start,
+                        window_end=attempt.poll_range_end,
+                        connector_config_override=attempt.connector_config_override,
+                    ),
+                )
+            )
+    if requeued:
+        cc_pair.pending_backfills = [*requeued, *cc_pair.pending_backfills]
     return task_ids
+
+
+def request_full_reindex__no_commit(db_session: Session, cc_pair_id: int) -> None:
+    """Sets the REINDEX trigger: the beat's next attempt on the current index
+    runs from the beginning. On a paused pair it fires on resume."""
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    cc_pair.indexing_trigger = IndexingMode.REINDEX
+
+
+def request_backfills__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+    backfills: list[BackfillSpec],
+    requested_at: datetime,
+) -> None:
+    """Queues backfills on the pair. The indexing beat creates them one at a
+    time, once the pair is ACTIVE and has no active attempt, so a restarted
+    attempt or a pause never drops them. ``requested_at`` is DB time."""
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    cc_pair.pending_backfills = [
+        *cc_pair.pending_backfills,
+        *(
+            PendingBackfill(
+                request_id=uuid4(), requested_at=requested_at, backfill=backfill
+            )
+            for backfill in backfills
+        ),
+    ]
+
+
+def remove_pending_backfill__no_commit(
+    db_session: Session, cc_pair_id: int, request_id: UUID
+) -> None:
+    """Drops one pending backfill, after the beat created its attempt."""
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    cc_pair.pending_backfills = [
+        pending
+        for pending in cc_pair.pending_backfills
+        if pending.request_id != request_id
+    ]
+
+
+def clear_backfills_covered_by_attempt__no_commit(
+    db_session: Session, cc_pair_id: int, index_attempt_id: int
+) -> int:
+    """Drops the pending backfills that a full re-index covers: those
+    requested before the attempt was created. Returns how many it dropped."""
+    attempt = db_session.get(IndexAttempt, index_attempt_id)
+    if attempt is None:
+        raise ValueError(f"Index attempt {index_attempt_id} does not exist")
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    kept = [
+        pending
+        for pending in cc_pair.pending_backfills
+        if pending.requested_at > attempt.time_created
+    ]
+    dropped = len(cc_pair.pending_backfills) - len(kept)
+    if dropped:
+        cc_pair.pending_backfills = kept
+    return dropped
+
+
+def has_scoped_backfill_outstanding(db_session: Session, cc_pair_id: int) -> bool:
+    """True when a backfill with a config override waits on the pair or runs.
+    Its override was built from an older config, so a config edit makes it
+    stale."""
+    pending_backfills = db_session.scalar(
+        select(ConnectorCredentialPair.pending_backfills).where(
+            ConnectorCredentialPair.id == cc_pair_id
+        )
+    )
+    if any(
+        pending.backfill.connector_config_override is not None
+        for pending in pending_backfills or []
+    ):
+        return True
+    # Checked in Python: a NULL override can be stored as JSON null.
+    return any(
+        attempt.connector_config_override is not None
+        for attempt in db_session.scalars(
+            _restartable_attempts_select(cc_pair_id).where(
+                IndexAttempt.is_backfill.is_(True)
+            )
+        )
+    )
 
 
 def request_prune__no_commit(db_session: Session, cc_pair_id: int) -> None:

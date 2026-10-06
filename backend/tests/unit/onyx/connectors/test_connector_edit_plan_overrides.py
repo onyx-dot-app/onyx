@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-from onyx.background.indexing.models import BackfillSpec
 from onyx.connectors.edit_plan.models import (
     CredentialChoice,
     CredentialPath,
@@ -19,6 +18,7 @@ from onyx.connectors.edit_plan.models import (
     ReconciliationOption,
 )
 from onyx.connectors.edit_plan.overrides import resolve_edit_steps
+from onyx.db.backfill_models import BackfillSpec
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

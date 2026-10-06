@@ -163,6 +163,53 @@ def fetch_credentials_by_source(
     return list(credentials)
 
 
+def credential_usable_for_source(
+    credential: Credential, source: DocumentSource
+) -> bool:
+    """True when a ``source`` connector can use the credential: its own
+    source, or a family credential the source accepts."""
+    return is_credential_usable_for_source(
+        credential.source, _stored_json(credential), source
+    )
+
+
+def swap_cc_pair_credential__no_commit(
+    db_session: Session, cc_pair: ConnectorCredentialPair, new_credential: Credential
+) -> None:
+    """Moves the pair and its indexed documents to ``new_credential``. Rows
+    are keyed by (connector, credential), so another pair of the connector
+    that already uses the credential is a CONFLICT. Hierarchy rows follow the
+    pair by their ON UPDATE CASCADE key."""
+    if (
+        db_session.scalar(
+            select(ConnectorCredentialPair.id).where(
+                ConnectorCredentialPair.connector_id == cc_pair.connector_id,
+                ConnectorCredentialPair.credential_id == new_credential.id,
+                ConnectorCredentialPair.id != cc_pair.id,
+            )
+        )
+        is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Connector {cc_pair.connector_id} already uses credential "
+            f"{new_credential.id} in another connection.",
+        )
+    db_session.execute(
+        update(DocumentByConnectorCredentialPair)
+        .where(
+            and_(
+                DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == cc_pair.credential_id,
+            )
+        )
+        .values(credential_id=new_credential.id)
+    )
+    cc_pair.credential_id = new_credential.id
+    cc_pair.credential = new_credential
+
+
 def swap_credentials_connector(
     new_credential_id: int, connector_id: int, user: User, db_session: Session
 ) -> ConnectorCredentialPair:
@@ -188,30 +235,12 @@ def swap_credentials_connector(
         )
 
     # Check if the new credential is compatible with the connector
-    if not is_credential_usable_for_source(
-        new_credential.source,
-        _stored_json(new_credential),
-        existing_pair.connector.source,
-    ):
+    if not credential_usable_for_source(new_credential, existing_pair.connector.source):
         raise ValueError(
             f"New credential source {new_credential.source} cannot be used by connector source {existing_pair.connector.source}"
         )
 
-    db_session.execute(
-        update(DocumentByConnectorCredentialPair)
-        .where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == existing_pair.credential_id,
-            )
-        )
-        .values(credential_id=new_credential_id)
-    )
-
-    # Update the existing pair with the new credential
-    existing_pair.credential_id = new_credential_id
-    existing_pair.credential = new_credential
+    swap_cc_pair_credential__no_commit(db_session, existing_pair, new_credential)
 
     # Update ccpair status if it's in INVALID state
     if existing_pair.status == ConnectorCredentialPairStatus.INVALID:

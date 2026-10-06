@@ -15,7 +15,6 @@ from onyx.background.celery.tasks.docfetching.task_creation_utils import (
     try_creating_backfill_attempt,
 )
 from onyx.background.celery.tasks.docprocessing.tasks import check_indexing_completion
-from onyx.background.indexing.models import BackfillSpec
 from onyx.background.indexing.run_docfetching import (
     _get_connector_runner,
     connector_document_extraction,
@@ -26,6 +25,7 @@ from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import source_supports_windowed_runs
 from onyx.connectors.models import ConnectorCheckpoint, Document, TextSection
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.connector_credential_pair import (
     get_last_successful_attempt_poll_range_end,
     resync_cc_pair,

@@ -3,12 +3,14 @@
 
 import json
 from io import BytesIO
+from typing import Any
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import ONYX_METADATA_FILENAME, DocumentSource, FileOrigin
 from onyx.connectors.file.config import LocalFileConnectorConfig
+from onyx.connectors.file.edit_staging import ensure_files_staged_for_edit
 from onyx.connectors.file.metadata import load_zip_metadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.file_record import get_stored_file_facts
@@ -41,14 +43,45 @@ def _current_file_config(
     )
 
 
+def _base_metadata(
+    db_session: Session,
+    cc_pair_id: int,
+    current: LocalFileConnectorConfig,
+    draft_zip_metadata_file_id: str | None,
+) -> dict[str, Any]:
+    """The metadata a new zip merges into: the draft's when the edit already
+    staged one, else the pair's current metadata."""
+    if (
+        draft_zip_metadata_file_id is None
+        or draft_zip_metadata_file_id == current.zip_metadata_file_id
+    ):
+        return load_zip_metadata(current.zip_metadata_file_id, current.zip_metadata)
+    ensure_files_staged_for_edit(db_session, cc_pair_id, [draft_zip_metadata_file_id])
+    return load_zip_metadata(draft_zip_metadata_file_id, None)
+
+
 def stage_file_connector_upload(
-    db_session: Session, cc_pair_id: int, files: list[UploadFile]
+    db_session: Session,
+    cc_pair_id: int,
+    files: list[UploadFile],
+    draft_zip_metadata_file_id: str | None = None,
 ) -> FileUploadResponse:
     """Saves the uploads as files staged for an edit of the pair. An upload
     with the content, name and type of a current file returns that file's id,
-    so its document keeps its id. A zip's metadata is merged into the pair's
-    current metadata and staged as a new metadata file."""
+    so its document keeps its id. A zip's metadata is merged into the draft's
+    metadata (``draft_zip_metadata_file_id``: the pair's file or one staged
+    earlier in this edit), else into the pair's current metadata, and staged
+    as a new metadata file. Without a zip, the draft's metadata file id comes
+    back unchanged.
+
+    Raises:
+        OnyxError: The pair is not a file connector, or the draft's metadata
+            file was not staged for this pair's edit.
+    """
     current = _current_file_config(db_session, cc_pair_id)
+    base_metadata = _base_metadata(
+        db_session, cc_pair_id, current, draft_zip_metadata_file_id
+    )
     uploaded = upload_files(
         files, FileOrigin.CONNECTOR, staged_for_cc_pair_id=cc_pair_id
     )
@@ -71,11 +104,11 @@ def stage_file_connector_upload(
         file_store.delete_file(file_id)
         file_ids.append(current_file_id)
 
-    zip_metadata_file_id: str | None = None
+    zip_metadata_file_id = draft_zip_metadata_file_id
     if uploaded.zip_metadata_file_id is not None:
-        merged_metadata = load_zip_metadata(
-            current.zip_metadata_file_id, current.zip_metadata
-        ) | load_zip_metadata(uploaded.zip_metadata_file_id, None)
+        merged_metadata = base_metadata | load_zip_metadata(
+            uploaded.zip_metadata_file_id, None
+        )
         zip_metadata_file_id = file_store.save_file(
             content=BytesIO(json.dumps(merged_metadata).encode("utf-8")),
             display_name=ONYX_METADATA_FILENAME,

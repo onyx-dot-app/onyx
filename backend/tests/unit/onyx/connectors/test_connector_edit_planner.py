@@ -7,7 +7,6 @@ from typing import Any
 
 import pytest
 
-from onyx.background.indexing.models import BackfillSpec
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
@@ -40,6 +39,7 @@ from onyx.connectors.planning_rule import (
     planning_rule_with_data,
 )
 from onyx.connectors.planning_rule_registry import PLANNING_RULES
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

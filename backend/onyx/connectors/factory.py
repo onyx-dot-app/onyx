@@ -27,10 +27,9 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
-from onyx.db.models import ConnectorCredentialPair, Credential
+from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
@@ -484,12 +483,46 @@ def validate_ccpair_for_user(
     if not credential:
         raise ValueError("Credential not found")
 
-    # Plain values for the closure: it runs inside exception handlers, where
-    # lazy ORM attribute loads can raise (e.g. ``PendingRollbackError``) and
-    # replace the exception being handled.
-    source = connector.source
-    input_type = connector.input_type
-    connector_specific_config = connector.connector_specific_config
+    return validate_and_record_pairing(
+        db_session,
+        connector_id=connector_id,
+        cc_pair_id=None,
+        source=connector.source,
+        input_type=connector.input_type,
+        connector_specific_config=connector.connector_specific_config,
+        credential=credential,
+        access_type=access_type,
+        enforce_creation=enforce_creation,
+        trigger=trigger,
+    )
+
+
+def validate_and_record_pairing(
+    db_session: Session,
+    *,
+    connector_id: int,
+    cc_pair_id: int | None,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential: Credential,
+    access_type: AccessType,
+    enforce_creation: bool,
+    trigger: CapabilityCheckTrigger,
+) -> bool:
+    """Validates a pairing from the given values and records the outcome as
+    the pairing's capability report under ``trigger``. ``cc_pair_id`` is the
+    edited pair whose fresh dry-run results are reused; None for a new
+    pairing. An edit passes its proposed values before it writes them.
+
+    Raises:
+        ValidationError: The binding, the construction or a required check
+            failed and ``enforce_creation`` is True. An unexpected error is
+            raised as ``ConnectorValidationError``.
+    """
+    if INTEGRATION_TESTS_MODE or source in _SOURCES_WITHOUT_PAIRING_VALIDATION:
+        return True
+    credential_id = credential.id
 
     def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
         # Best-effort scribe for the outcome below; never raises and never
@@ -539,15 +572,9 @@ def validate_ccpair_for_user(
         return False
 
     if use_named_checks:
-        # An applied edit reuses fresh results of the pair's dry runs.
-        edited_cc_pair: ConnectorCredentialPair | None = (
-            get_connector_credential_pair(db_session, connector_id, credential_id)
-            if trigger == CapabilityCheckTrigger.CONNECTOR_CONFIG_UPDATE
-            else None
-        )
         return validate_pairing_with_named_checks(
             connector_id=connector_id,
-            cc_pair_id=edited_cc_pair.id if edited_cc_pair is not None else None,
+            cc_pair_id=cc_pair_id,
             trigger=trigger,
             source=source,
             input_type=input_type,

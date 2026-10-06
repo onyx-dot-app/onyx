@@ -23,6 +23,7 @@ from onyx.background.celery.celery_redis import (
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
+    try_creating_backfill_attempt,
     try_creating_docfetching_task,
     try_dispatching_waiting_attempt,
 )
@@ -47,7 +48,7 @@ from onyx.background.indexing.index_attempt_utils import (
     cleanup_index_attempts,
     get_old_index_attempt_ids,
 )
-from onyx.configs.app_configs import PERSISTENT_INDEXING
+from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP, PERSISTENT_INDEXING
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_INDEXING_LOCK_TIMEOUT,
@@ -75,7 +76,9 @@ from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
 from onyx.db.connector_edit_requests import (
+    clear_backfills_covered_by_attempt__no_commit,
     promote_prune_after_reindex_request__no_commit,
+    remove_pending_backfill__no_commit,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
@@ -105,7 +108,7 @@ from onyx.db.index_attempt_metrics import (
     time_stage,
 )
 from onyx.db.indexing_coordination import CoordinationStatus, IndexingCoordination
-from onyx.db.models import IndexAttempt, SearchSettings
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
@@ -810,6 +813,54 @@ def _dispatch_pair_waiting_attempt(
     return dispatched
 
 
+def _try_creating_pending_backfill(
+    celery_app: Celery,
+    db_session: Session,
+    *,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+    secondary_index_building: bool,
+    redis_client: TenantRedisClient,
+    tenant_id: str,
+) -> bool:
+    """Creates the attempt of the pair's oldest pending backfill on the
+    current index, and drops the request. The caller checked that no attempt
+    is active there. The backfill waits while the pair is not ACTIVE, and
+    while an indexing trigger or a prune-after-reindex request is pending:
+    that run goes first, and a full re-index covers the backfill."""
+    if not search_settings.status.is_current() or not cc_pair.pending_backfills:
+        return False
+    if (
+        cc_pair.status != ConnectorCredentialPairStatus.ACTIVE
+        or cc_pair.indexing_trigger is not None
+        or cc_pair.prune_after_reindex_requested_at is not None
+        or (DISABLE_INDEX_UPDATE_ON_SWAP and secondary_index_building)
+    ):
+        return False
+
+    pending = cc_pair.pending_backfills[0]
+    attempt_id = try_creating_backfill_attempt(
+        celery_app,
+        cc_pair,
+        search_settings,
+        pending.backfill,
+        db_session,
+        redis_client,
+        tenant_id,
+    )
+    if attempt_id is None:
+        return False
+    # After the attempt commits: a crash in between runs the backfill twice,
+    # which is harmless, instead of never.
+    remove_pending_backfill__no_commit(db_session, cc_pair.id, pending.request_id)
+    db_session.commit()
+    task_logger.info(
+        f"Pending backfill queued: index_attempt={attempt_id} cc_pair={cc_pair.id} "
+        f"request_id={pending.request_id}"
+    )
+    return True
+
+
 def _kickoff_indexing_tasks(
     celery_app: Celery,
     db_session: Session,
@@ -859,6 +910,20 @@ def _kickoff_indexing_tasks(
                 f"_kickoff_indexing_tasks - CC pair not found: cc_pair={cc_pair_id}"
             )
             result.skipped_not_found += 1
+            continue
+
+        # Before should_index: a backfill does not wait for the refresh
+        # schedule, and runs on a pair with no refresh_freq.
+        if _try_creating_pending_backfill(
+            celery_app,
+            db_session,
+            cc_pair=cc_pair,
+            search_settings=search_settings,
+            secondary_index_building=secondary_index_building,
+            redis_client=redis_client,
+            tenant_id=tenant_id,
+        ):
+            result.created += 1
             continue
 
         # Heavyweight check after fetching cc pair
@@ -922,6 +987,19 @@ def _kickoff_indexing_tasks(
                 f"Connector indexing queued: index_attempt={attempt_id} cc_pair={cc_pair.id} search_settings={search_settings.id}"
             )
             result.created += 1
+            if (
+                reindex
+                and search_settings.status.is_current()
+                and cc_pair.pending_backfills
+            ):
+                dropped = clear_backfills_covered_by_attempt__no_commit(
+                    db_session, cc_pair.id, attempt_id
+                )
+                db_session.commit()
+                task_logger.info(
+                    f"Full re-index covers pending backfills: index_attempt={attempt_id} "
+                    f"cc_pair={cc_pair.id} dropped={dropped}"
+                )
         else:
             task_logger.error(
                 f"Failed to create indexing task: cc_pair={cc_pair.id} search_settings={search_settings.id}"

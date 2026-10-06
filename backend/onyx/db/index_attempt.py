@@ -16,9 +16,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session, joinedload
 
-from onyx.background.indexing.models import BackfillSpec
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import ConnectorFailure
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,

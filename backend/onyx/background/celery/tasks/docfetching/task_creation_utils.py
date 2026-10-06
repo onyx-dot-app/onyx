@@ -5,7 +5,6 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.indexing.models import BackfillSpec
 from onyx.configs.constants import (
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
     OnyxCeleryPriority,
@@ -13,6 +12,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
 )
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexModelStatus
 from onyx.db.index_attempt import (
     claim_waiting_index_attempt,

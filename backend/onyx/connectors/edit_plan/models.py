@@ -5,7 +5,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
-from onyx.background.indexing.models import BackfillSpec
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
@@ -14,6 +13,7 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.config_diff import ConfigFieldChange
 from onyx.connectors.models import InputType
 from onyx.connectors.planning_rule import PlanningData
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 
 
@@ -87,6 +87,9 @@ class EditStepReason(str, Enum):
     # The source gets document permissions only while it indexes.
     PERMISSIONS_FETCHED_DURING_INDEXING = "permissions_fetched_during_indexing"
     ATTEMPT_RUNNING = "attempt_running"
+    # A backfill of an earlier edit waits or runs with a config built from the
+    # old config. A full re-index covers it.
+    SCOPED_BACKFILL_SUPERSEDED = "scoped_backfill_superseded"
     ADMIN_ADDED = "admin_added"
 
 
@@ -161,6 +164,8 @@ class EditPlanInputs(BaseModel):
     fetches_permissions_during_indexing: bool
     access_filter_enforced: bool
     attempt_running: bool
+    # A backfill with a config override waits on the pair or runs.
+    scoped_backfill_outstanding: bool = False
     indexed_document_count: int
     now: datetime
     # None when nothing that validation checks changed.

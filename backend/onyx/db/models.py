@@ -65,6 +65,7 @@ from onyx.configs.constants import (
     TokenRateLimitScope,
 )
 from onyx.connectors.models import InputType
+from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
@@ -1051,6 +1052,14 @@ class ConnectorCredentialPair(Base):
     # documents. Cleared once its permissions are in the document index.
     perm_sync_pending_since: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # Backfills an applied edit requested, oldest first. The indexing beat
+    # creates one at a time while the pair is ACTIVE and has no active attempt.
+    pending_backfills: Mapped[list[PendingBackfill]] = mapped_column(
+        PydanticListType(PendingBackfill),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
     )
 
     # Determines how documents are processed after fetching:

@@ -71,3 +71,7 @@ def ensure_base_state_matches(stored: StoredEditPlan, current: PairState) -> Non
             OnyxErrorCode.EDIT_PLAN_STALE,
             "The connector changed after this plan was computed. Compute a new plan.",
         )
+
+
+def delete_edit_plan(plan_id: UUID) -> None:
+    get_cache_backend().delete(_plan_key(plan_id))
