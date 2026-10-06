@@ -1,30 +1,43 @@
 @reference "#reference.css";
 
 /* ============================================================================
-   AttachmentItemButton — layout only
-
-   Colors come from the Interactive.Stateful palette (`--interactive-foreground`
-   / `--interactive-foreground-icon`) via the `select-heavy` variant and its
-   prominence cells; nothing here sets a state color.
+   AttachmentItem — the row layout shared by AttachmentItem (static) and
+   AttachmentItemButton (interactive)
 
    Structure: root → title (tile + Content) / center / action.
+
+   The row sets no state colors. On its own it paints the surface named by
+   `data-surface`; inside AttachmentItemButton it has none and the
+   Interactive.Stateful palette (`--interactive-foreground-icon`) drives it.
    ============================================================================ */
 
-.opal-attachment-item-button {
+.opal-attachment-item {
   @apply flex w-full min-w-0 flex-row items-center justify-between gap-2 p-1;
+}
+
+.opal-attachment-item[data-surface] {
+  border-radius: var(--radius-12);
+}
+
+.opal-attachment-item[data-surface="primary"] {
+  background-color: var(--background-tint-00);
+}
+
+.opal-attachment-item[data-surface="secondary"] {
+  background-color: var(--background-tint-01);
 }
 
 /* Natural width (shrinkable for truncation, but no grow): the center slot is
    the one that expands, and justify-between keeps the action slot trailing
    when there is no center. */
-.opal-attachment-item-button-title {
+.opal-attachment-item-title {
   @apply flex min-w-0 flex-row items-center gap-2;
 }
 
 /* The signature square: its rounding (radius-08) complements the row's own
-   container rounding (radius-12) at the shared inset. Sized by the same
-   token as the action slot so the row's two fixed-width regions agree. */
-.opal-attachment-item-button-tile {
+   rounding (radius-12) at the shared inset. Sized by the same token as the
+   action slot so the row's two fixed-width regions agree. */
+.opal-attachment-item-tile {
   @apply flex shrink-0 items-center justify-center overflow-hidden;
   height: var(--spacing-block-36);
   width: var(--spacing-block-36);
@@ -32,22 +45,29 @@
   border-radius: var(--radius-08);
 }
 
-.opal-attachment-item-button-icon {
+.opal-attachment-item-icon {
   @apply h-4 w-4;
   stroke: var(--interactive-foreground-icon, var(--text-02));
 }
 
-.opal-attachment-item-button-image {
+/* A static row sets its own icon color. It may sit inside an unrelated
+   Interactive surface, whose --interactive-foreground-icon would otherwise
+   reach the tile (even a transparent one). */
+.opal-attachment-item[data-surface] .opal-attachment-item-icon {
+  stroke: var(--text-02);
+}
+
+.opal-attachment-item-image {
   @apply h-full w-full object-cover;
 }
 
-.opal-attachment-item-button-center {
+.opal-attachment-item-center {
   @apply min-w-0 flex-1;
 }
 
 /* Reserved even when empty: rows with and without actions align, and
    hover-revealed buttons cause no layout shift. */
-.opal-attachment-item-button-action {
+.opal-attachment-item-action {
   @apply flex shrink-0 flex-row items-center justify-center gap-2 self-stretch;
   min-width: var(--spacing-block-36);
 }
