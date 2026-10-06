@@ -1,18 +1,18 @@
 {
-  "version": "1.19",
+  "version": "1.20",
   "updated_at": "2026-10-06T00:00:00Z",
   "providers": {
     "openai": {
-      "default_model": "claude-opus-5-5",
+      "default_model": "gpt-6-astra",
       "additional_visible_models": [
-        {
-          "name": "claude-opus-5-5"
-        },
         {
           "name": "gpt-6-astra"
         },
         {
-          "name": "claude-sonnet-5-5"
+          "name": "gpt-6.1-sol"
+        },
+        {
+          "name": "gpt-6-luna"
         }
       ]
     },
