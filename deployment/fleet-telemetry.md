@@ -135,6 +135,15 @@ collectors, use separate roles or raise this limit to twice the configured colle
 
 ## Verification
 
+Development builds report `dev`. Release builds use the existing `ONYX_VERSION`.
+Set optional `ONYX_BUILD_SHA` to the build's lowercase hex Git commit (7–40 characters)
+to identify the source revision. Invalid values are omitted; telemetry does not invoke Git.
+Heartbeat delivery counters separate recent loss from cumulative drops, local validation
+failures, and server rejections. Queues remain bounded and lossy across process termination.
+Connector jobs include the integration ID when their source table identifies it. Unknown
+work totals stay unavailable. Long-running jobs without a progress timestamp raise a
+coverage warning; a stale reported progress timestamp raises a stall issue.
+
 Unit tests cover strict privacy validation, fault isolation, lock contention, bounded queues,
 partial HTTP acknowledgments, stable retry IDs, first-answer timing, and OpenSearch item acknowledgments.
 They also verify Kubernetes resource denominators and content exclusion.

@@ -141,7 +141,11 @@ def test_bounded_source_pages_reconcile_all_connectors_and_safe_outcomes(
         attempt = next(event for event in events if event["event_type"] == "attempt")
         assert attempt["data"]["state"] == "failed"
         assert attempt["data"]["error_code"] == "auth"
+        assert attempt["data"]["error_count"] == 1
+        assert attempt["revision"] == 1
         jobs = [event for event in events if event["event_type"] == "job"]
+        assert all(event["data"]["cc_pair_id"] == 1 for event in jobs)
+        assert all("docs_total" not in event["data"] for event in jobs)
         assert {event["data"]["job_type"] for event in jobs} == {
             "permission_sync",
             "group_sync",

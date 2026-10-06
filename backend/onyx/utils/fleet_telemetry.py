@@ -250,6 +250,8 @@ _FIELDS: dict[str, frozenset[str]] = {
             "started_at",
             "ended_at",
             "entity_id",
+            "cc_pair_id",
+            "last_progress_at",
             "users_processed",
             "groups_processed",
             "memberships_synced",
@@ -292,11 +294,14 @@ _FIELDS: dict[str, frozenset[str]] = {
             "shared",
         }
     ),
-    "version": frozenset({"version", "image_digest", "shared"}),
+    "version": frozenset({"version", "commit_sha", "image_digest", "shared"}),
     "heartbeat": frozenset(
         {
             "config_revision",
             "dropped_events",
+            "recent_dropped_events",
+            "rejected_events",
+            "invalid_events",
             "spool_events",
             "connector_count",
             "collector_enabled",
@@ -406,6 +411,10 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
             if not isinstance(value, str) or not _VERSION.fullmatch(value):
                 return None
             safe[key] = value
+        elif key == "commit_sha":
+            if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{7,40}", value):
+                return None
+            safe[key] = value
         elif key == "image_digest":
             if (
                 not isinstance(value, str)
@@ -508,13 +517,20 @@ class BoundedTelemetry:
         self.config = config
         self.pid = os.getpid()
         self._queue: deque[
-            tuple[str, dict[str, Any], str | None, str | None, float, str | None, str]
+            tuple[
+                str, dict[str, Any], str | None, str | None, float, str | None, str, int
+            ]
         ] = deque()
         self._lock = threading.Lock()
         self._flush_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.dropped = 0
+        self.rejected = 0
+        self.invalid = 0
+        self._reported_dropped = 0
+        self._recent_dropped = 0
+        self._last_loss_at = float("-inf")
         self.sent = 0
         self.failures = 0
         self._blocked_until = 0.0
@@ -538,6 +554,7 @@ class BoundedTelemetry:
         event_id: str | None = None,
         occurred_at: float | None = None,
         service: str | None = None,
+        revision: int = 0,
     ) -> bool:
         """No thread creation, serialization, logging, network, disk, or database calls."""
         try:
@@ -546,10 +563,16 @@ class BoundedTelemetry:
                 or self._stop.is_set()
                 or not self.settings["enabled"]
                 or (service is not None and service not in _SERVICES)
+                or type(revision) is not int
+                or not 0 <= revision <= 1_000_000_000
             ):
                 return False
             safe = sanitize_data(event_type, data)
-            if safe is None or not self._lock.acquire(blocking=False):
+            if safe is None:
+                self.invalid += 1
+                self.dropped += 1
+                return False
+            if not self._lock.acquire(blocking=False):
                 self.dropped += 1
                 return False
             try:
@@ -573,6 +596,7 @@ class BoundedTelemetry:
                         occurred_at if occurred_at is not None else time.time(),
                         event_id,
                         service or self.config.service,
+                        revision,
                     )
                 )
                 return True
@@ -604,7 +628,16 @@ class BoundedTelemetry:
                 for _ in range(min(len(self._queue), self.config.batch_size))
             ]
         events = []
-        for event_type, data, user_id, tenant, occurred_at, event_id, service in items:
+        for (
+            event_type,
+            data,
+            user_id,
+            tenant,
+            occurred_at,
+            event_id,
+            service,
+            revision,
+        ) in items:
             customer = (
                 str(uuid.uuid5(uuid.NAMESPACE_X500, tenant))
                 if MULTI_TENANT and tenant
@@ -613,6 +646,7 @@ class BoundedTelemetry:
             events.append(
                 {
                     "schema_version": 2,
+                    "revision": revision,
                     "event_id": event_id or str(uuid.uuid4()),
                     "event_type": event_type,
                     "occurred_at": datetime.fromtimestamp(
@@ -674,6 +708,7 @@ class BoundedTelemetry:
                     raise ValueError("Unsupported telemetry response encoding")
                 if not response.ok:
                     if response.status_code in {400, 413, 422}:
+                        self.rejected += len(self._pending)
                         self.dropped += len(self._pending)
                         self._pending = []
                     raise RuntimeError("telemetry delivery failed")
@@ -703,6 +738,7 @@ class BoundedTelemetry:
                 if outcome == "accepted":
                     self.sent += 1
                 elif outcome == "rejected":
+                    self.rejected += 1
                     self.dropped += 1
                 else:
                     retained.append(event)
@@ -762,6 +798,25 @@ class BoundedTelemetry:
         except Exception:
             pass
 
+    def delivery_health(self) -> dict[str, int]:
+        """Background observations distinguish new loss from historical totals."""
+        dropped = self.dropped
+        now = time.monotonic()
+        if now - self._last_loss_at >= 60:
+            self._recent_dropped = 0
+        delta = max(0, dropped - self._reported_dropped)
+        if delta:
+            self._recent_dropped += delta
+            self._last_loss_at = now
+        self._reported_dropped = dropped
+        return {
+            "dropped_events": dropped,
+            "recent_dropped_events": self._recent_dropped,
+            "rejected_events": self.rejected,
+            "invalid_events": self.invalid,
+            "spool_events": len(self._queue) + len(self._pending),
+        }
+
     def _run(self) -> None:
         last_resource: float | None = None
         last_config: float | None = None
@@ -778,8 +833,14 @@ class BoundedTelemetry:
             )
             from onyx import __version__
 
-            version = __version__ if _VERSION.fullmatch(__version__) else "unknown"
-            self.emit("version", {"version": version})
+            version = "dev" if __version__ == "Development" else __version__
+            version_data = {
+                "version": version if _VERSION.fullmatch(version) else "unknown"
+            }
+            commit_sha = os.environ.get("ONYX_BUILD_SHA", "")
+            if re.fullmatch(r"[a-f0-9]{7,40}", commit_sha):
+                version_data["commit_sha"] = commit_sha
+            self.emit("version", version_data)
             while not self._stop.is_set():
                 now = time.monotonic()
                 if poll_due(last_config, now, 60):
@@ -797,8 +858,7 @@ class BoundedTelemetry:
                         "heartbeat",
                         {
                             "config_revision": self.settings["config_revision"],
-                            "dropped_events": self.dropped,
-                            "spool_events": len(self._queue) + len(self._pending),
+                            **self.delivery_health(),
                             "collector_enabled": True,
                             **self.health,
                         },

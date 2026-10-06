@@ -17,6 +17,7 @@ from onyx.utils import fleet_telemetry as fleet
 from onyx.utils.fleet_telemetry_collector import (
     FleetCollector,
     classify_local_error,
+    safe_attempt_error_data,
     safe_connector_data,
 )
 from onyx.utils.fleet_telemetry_kubernetes import KubernetesCollector, quantity
@@ -986,6 +987,8 @@ def test_sender_initial_policy_and_resources_run_once_at_low_host_uptime(
         "time",
         SimpleNamespace(monotonic=lambda: uptime, time=time.time, time_ns=time.time_ns),
     )
+    monkeypatch.setattr("onyx.__version__", "Development")
+    monkeypatch.setenv("ONYX_BUILD_SHA", "a" * 40)
     sender = client()
     policy = Mock()
     resource = Mock()
@@ -1001,7 +1004,62 @@ def test_sender_initial_policy_and_resources_run_once_at_low_host_uptime(
     sender._run()
     policy.assert_called_once()
     resource.assert_called_once_with(sender)
-    heartbeat = [
-        event for event in sender._take_batch() if event["event_type"] == "heartbeat"
-    ]
+    events = sender._take_batch()
+    assert next(event for event in events if event["event_type"] == "version")[
+        "data"
+    ] == {"version": "dev", "commit_sha": "a" * 40}
+    heartbeat = [event for event in events if event["event_type"] == "heartbeat"]
     assert len(heartbeat) == 1 and flushed.call_count == 2
+
+
+def test_delivery_health_retains_recent_loss_for_overlapping_producers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = [0.0]
+    monkeypatch.setattr(fleet.time, "monotonic", lambda: now[0])
+    sender = client()
+    assert not sender.emit("connector", {"name": "private"})
+    first = sender.delivery_health()
+    assert first["invalid_events"] == first["recent_dropped_events"] == 1
+    assert sender.delivery_health()["recent_dropped_events"] == 1
+    now[0] = 61.0
+    later = sender.delivery_health()
+    assert later["recent_dropped_events"] == 0 and later["dropped_events"] == 1
+
+
+def test_metadata_repair_revision_and_build_sha_are_bounded() -> None:
+    sender = client()
+    assert sender.emit(
+        "version", {"version": "dev", "commit_sha": "a" * 40}, revision=1
+    )
+    event = sender._take_batch()[0]
+    assert event["revision"] == 1
+    assert not sender.emit("version", {"version": "dev", "commit_sha": "private/repo"})
+    assert not sender.emit("heartbeat", {}, revision=-1)
+    assert not sender.emit("heartbeat", {}, revision=True)
+
+
+@pytest.mark.parametrize(
+    "sample,stage",
+    [
+        ("embedding failure PRIVATE TOKEN", "embed"),
+        ("opensearch rejected PRIVATE URL", "write"),
+        ("parser failed PRIVATE PATH", "prepare"),
+        ("401 unauthorized PRIVATE TOKEN", None),
+    ],
+)
+def test_safe_attempt_error_data_counts_fatal_errors_and_only_known_stages(
+    sample: str, stage: str | None
+) -> None:
+    data = safe_attempt_error_data(
+        {
+            "local_error_sample": sample,
+            "has_error": True,
+            "error_count": 0,
+            "connector_type": "file",
+        },
+        client(),
+    )
+    assert data["error_count"] == 1
+    assert data.get("stage") == stage
+    assert "PRIVATE" not in json.dumps(data)

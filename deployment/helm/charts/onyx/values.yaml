@@ -1674,6 +1674,8 @@ sandboxPushPolicy:
   allowTelepresenceAmbassador: false
 
 configMap:
+  # Optional build commit for telemetry; accepts only a lowercase hex Git SHA.
+  ONYX_BUILD_SHA: ""
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this
   # block. The compose stack uses underscored service names (e.g. `api_server`,
   # `cache`, `inference_model_server`) which are invalid in K8s DNS labels and

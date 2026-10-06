@@ -34,6 +34,8 @@ from onyx.utils.fleet_telemetry import (
 )
 from shared_configs.configs import MULTI_TENANT
 
+SOURCE_EVENT_REVISION = 1
+
 
 def _iso(value: Any) -> str | None:
     if isinstance(value, datetime):
@@ -75,6 +77,29 @@ def classify_local_error(*samples: Any) -> str:
         if re.search(pattern, candidate, re.IGNORECASE):
             return category
     return "internal"
+
+
+def safe_attempt_error_data(
+    row: dict[str, Any], client: BoundedTelemetry
+) -> dict[str, Any]:
+    category = classify_local_error(
+        row.get("local_error_type"),
+        row.get("local_error_sample"),
+        row.get("local_item_error_sample"),
+    )
+    data: dict[str, Any] = {
+        "error_count": max(row["error_count"] or 0, int(row["has_error"])),
+        "error_code": category,
+        "error_fingerprint": client.fingerprint(
+            "attempt:" + str(row["connector_type"]) + ":" + category
+        ),
+    }
+    stage = {"embedding": "embed", "index_write": "write", "parse": "prepare"}.get(
+        category
+    )
+    if stage is not None:
+        data["stage"] = stage
+    return data
 
 
 def safe_connector_data(
@@ -182,7 +207,7 @@ class FleetCollector:
         durable_id: bool,
         observed_at: datetime | None = None,
     ) -> bool:
-        identity = f"{self.client.config.deployment_id}:{schema}:{event_type}:{entity}:{revision.isoformat()}"
+        identity = f"{self.client.config.deployment_id}:{schema}:{event_type}:{entity}:{revision.isoformat()}:{SOURCE_EVENT_REVISION}"
         if durable_id and observed_at is not None:
             # Active source rows may update counters without a revision timestamp.
             # Only already-sanitized structural state participates in identity.
@@ -205,6 +230,7 @@ class FleetCollector:
             tenant_id=schema if MULTI_TENANT else None,
             event_id=event_id,
             occurred_at=(observed_at or revision).timestamp(),
+            revision=SOURCE_EVENT_REVISION,
         )
 
     def collect_one_schema(self) -> bool:
@@ -281,15 +307,7 @@ class FleetCollector:
             }:
                 data["ended_at"] = _iso(updated)
             if row["has_error"] or row["error_count"]:
-                category = classify_local_error(
-                    row.get("local_error_type"),
-                    row.get("local_error_sample"),
-                    row.get("local_item_error_sample"),
-                )
-                data["error_code"] = category
-                data["error_fingerprint"] = self.client.fingerprint(
-                    "attempt:" + str(row["connector_type"]) + ":" + category
-                )
+                data.update(safe_attempt_error_data(row, self.client))
             if not self._event(
                 "attempt",
                 data,
@@ -350,6 +368,13 @@ class FleetCollector:
                 data["duration_ms"] = max(
                     0, (row["ended_at"] - row["started_at"]).total_seconds() * 1000
                 )
+            if row["id"].split(":", 1)[0] in {
+                "permission",
+                "group",
+                "hierarchy",
+                "port",
+            }:
+                data["cc_pair_id"] = row["entity_id"]
             if not self._event(
                 "job",
                 data,
@@ -516,8 +541,7 @@ class FleetCollector:
                 {
                     "collector_enabled": True,
                     "config_revision": self.client.settings["config_revision"],
-                    "dropped_events": self.client.dropped,
-                    "spool_events": len(self.client._queue) + len(self.client._pending),
+                    **self.client.delivery_health(),
                     **self.client.health,
                 },
             )
