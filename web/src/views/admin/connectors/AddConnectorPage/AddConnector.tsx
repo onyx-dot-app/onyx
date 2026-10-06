@@ -15,6 +15,7 @@ import { CredentialsConfigurer } from "@/lib/credentials/components/CredentialsC
 import { submitFiles } from "@/lib/connectors/svc";
 import { submitGoogleSite } from "@/lib/connectors/svc";
 import AdvancedFormPage from "@/views/admin/connectors/AddConnectorPage/form/Advanced";
+import ConnectorSettings from "@/views/admin/connectors/AddConnectorPage/form/ConnectorSettings";
 import DynamicConnectionForm from "@/views/admin/connectors/AddConnectorPage/form/DynamicConnectorCreationForm";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
@@ -70,6 +71,7 @@ import { SvgArrowExchange } from "@opal/icons";
 import { useTranslations } from "next-intl";
 import {
   SYNC_RESTRICTED_ACCESS_TYPE,
+  toManageAccess,
   toWireAccess,
 } from "@/lib/connectors/accessType";
 
@@ -261,12 +263,17 @@ export default function AddConnector({
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),
+          specificGroupsRequired: t(
+            "settings.documentAccess.specificGroups.required"
+          ),
         }
       )}
       onSubmit={async (values) => {
         const {
           name,
           groups,
+          group_roles,
+          data_access_group_ids,
           access_type: formAccessType,
           restrict_access_to_groups,
           restriction_group_ids,
@@ -282,6 +289,11 @@ export default function AddConnector({
           restriction_group_ids,
         });
         const access_type = wireAccess.access_type;
+        // A private connector's readers; its `groups` are its managers, each
+        // with a role.
+        const dataAccess =
+          access_type === "private" ? data_access_group_ids : undefined;
+        const manageAccess = toManageAccess(groups, group_roles);
 
         // Apply special transforms according to application logic
         const transformedConnectorSpecificConfig = Object.entries(
@@ -341,7 +353,9 @@ export default function AddConnector({
             advancedConfiguration.indexingStart,
             values.access_type,
             groups,
-            name
+            name,
+            dataAccess,
+            manageAccess
           );
           if (response) {
             onSuccess();
@@ -356,7 +370,9 @@ export default function AddConnector({
               selectedFiles,
               name,
               access_type,
-              groups
+              groups,
+              dataAccess,
+              manageAccess
             );
             if (response) {
               onSuccess();
@@ -430,7 +446,8 @@ export default function AddConnector({
                 undefined,
                 access_type === SYNC_RESTRICTED_ACCESS_TYPE
                   ? wireAccess.restriction_group_ids
-                  : undefined
+                  : dataAccess,
+                manageAccess
               );
               if (linkCredentialResponse.ok) {
                 onSuccess();
@@ -672,6 +689,20 @@ export default function AddConnector({
                           </Section>
                         </fieldset>
                       </Card>
+                    </Disabled>
+
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    <Disabled
+                      disabled={!configUnlocked}
+                      tooltip={gateMessage ?? undefined}
+                    >
+                      <fieldset disabled={!configUnlocked} className="contents">
+                        <ConnectorSettings
+                          connector={connector}
+                          currentCredential={formCredential}
+                          disabled={!configUnlocked}
+                        />
+                      </fieldset>
                     </Disabled>
 
                     {connector !== "file" && (

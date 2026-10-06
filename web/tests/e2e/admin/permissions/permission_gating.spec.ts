@@ -315,8 +315,10 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
 
       // a global holder defaults to public, which has no groups to scope
       // must be the picker, not "assigned to group X" — the old code auto-assigned
-      await expect(setupPage.accessTypeSelect).toHaveValue("Public");
-      await setupPage.pickAccessType("Private");
+      await expect(setupPage.accessTypeSelect).toHaveValue(
+        "Everyone in Your Organization"
+      );
+      await setupPage.pickAccessType("Specific Groups");
       await expect(setupPage.groupAccessPrompt).toBeVisible({ timeout: 10000 });
 
       // Drive's credential form used to render an empty fragment for non-admins

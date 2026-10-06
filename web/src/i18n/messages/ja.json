@@ -1963,25 +1963,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "ソースから権限を自動的に同期します。検索を行うユーザーがソースでそのドキュメントへのアクセス権限を持つ場合に限り、{appName}で検索可能になります。",
-          "disabledReason": "現在の認証情報の認証方式は権限の自動同期に対応していません。対応している認証方式に変更してください。",
-          "name": "権限の自動同期"
-        },
-        "heading": {
-          "description": "このコネクタでインデックスされたドキュメントへのアクセス権を管理します。",
-          "title": "ドキュメントアクセス"
-        },
-        "privateOption": {
-          "description": "（ユーザーグループページで）このコネクタへのアクセスを明示的に付与されたユーザーのみが、このコネクタで取り込まれたドキュメントにアクセスできます",
-          "name": "非公開"
-        },
-        "publicOption": {
-          "description": "{appName}のアカウントを持つすべてのユーザーが、このコネクタで取り込まれたドキュメントにアクセスできます",
-          "name": "公開"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# 日} other {# 日}}",
@@ -2157,6 +2138,7 @@
           "description": "全員がソースから同期されたアクセス権を保持します。",
           "title": "グループを追加するまで制限はありません"
         },
+        "loadError": "グループを読み込めませんでした。ページを再読み込みして、もう一度お試しください。",
         "memberCount": "{count, plural, other {#人のメンバー}}",
         "picker": {
           "placeholder": "このコネクタへのアクセスを制限するグループを追加"
@@ -2164,26 +2146,12 @@
         "remove": {
           "tooltip": "{name}を削除"
         },
+        "table": {
+          "group": "グループ"
+        },
         "toggle": {
           "description": "選択したグループのメンバーにアクセスを限定します。同期された権限も引き続き適用されます。",
           "title": "グループへのアクセス制限"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "このコネクタへのグループアクセスを割り当てる"
-        },
-        "assignToGroup": {
-          "title": "このコネクタを管理できるグループ"
-        },
-        "scopedManagerGroups": {
-          "description": "このコネクタへのアクセスを付与するには、管理しているグループを1つ以上選択してください"
-        },
-        "syncGroups": {
-          "description": "以下のグループは、このコネクタを管理できるユーザーを制御します。ドキュメントへのアクセスはソース自体の権限から継承されます。"
-        },
-        "visibleToGroups": {
-          "description": "このコネクタは、以下で選択したグループに表示・アクセス可能になります"
         }
       },
       "indexAttemptsTable": {
@@ -2670,10 +2638,6 @@
           "toast": "不明なエラーが発生しました"
         }
       },
-      "connectorName": {
-        "label": "コネクター名",
-        "subtext": "コネクターの内容がわかる名前です。"
-      },
       "credentialRequired": {
         "tooltip": "最初に認証情報を選択してください。"
       },
@@ -2978,6 +2942,57 @@
           "hours": "時間",
           "minutes": "分"
         }
+      },
+      "settings": {
+        "description": "コネクタの情報とアクセス。",
+        "displayName": {
+          "title": "コネクタの表示名"
+        },
+        "documentAccess": {
+          "description": "このコネクタでインデックスされたドキュメントにアクセスできるユーザーを管理します。",
+          "everyone": {
+            "description": "このコネクタでインデックスされたドキュメントは、組織内の全員に公開されます。",
+            "title": "組織内の全員"
+          },
+          "specificGroups": {
+            "description": "このコネクタのドキュメントにアクセスできるグループを指定します。",
+            "required": "グループを 1 つ以上選択してください。",
+            "title": "特定のグループ"
+          },
+          "sync": {
+            "description": "{appName}はソースと権限を同期します。ユーザーはソースで閲覧できるものだけを検索できます。",
+            "disabledReason": "現在の認証情報の認証方式は権限の自動同期に対応していません。対応している認証方式に変更してください。",
+            "title": "{source}と同期"
+          },
+          "title": "ドキュメントへのアクセス"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "常に共有",
+            "title": "管理者"
+          },
+          "description": "コネクタを運用（インデックスのスケジュールと監視）または設定を編集できるユーザーを管理します。",
+          "note": "「コネクタの管理」権限（グループマネージャーのロールまたはグループ権限）を持つユーザーのみが、コネクタを運用または編集できます。",
+          "placeholder": "グループを追加してこのコネクタを共有",
+          "role": {
+            "editor": {
+              "description": "設定を更新・削除できます。",
+              "label": "編集者"
+            },
+            "menu": {
+              "ariaLabel": "{name} のロール"
+            },
+            "operator": {
+              "description": "インデックス作成をスケジュール・監視できます。",
+              "label": "オペレーター"
+            },
+            "removeAccess": {
+              "label": "アクセスを削除"
+            }
+          },
+          "title": "コネクタの管理アクセス"
+        },
+        "title": "コネクタ設定"
       }
     },
     "costOverrides": {

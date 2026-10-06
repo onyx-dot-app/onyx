@@ -6,6 +6,7 @@ import type {
   CardColor,
   IconFunctionComponent,
   RichStr,
+  Rounding,
   ShadowVariants,
   StatusVariants,
 } from "@opal/types";
@@ -70,6 +71,8 @@ interface MessageCardBaseProps {
    * @default 0
    */
   contentPadding?: 0 | 0.5 | 1 | 2;
+
+  rounding?: Rounding;
 
   /**
    * Drop-shadow depth of the card, passed to `Card`.
@@ -196,6 +199,7 @@ function MessageCard({
   bottomChildren,
   rightChildren,
   onClose,
+  rounding = 4,
   ref,
 }: MessageCardProps) {
   const { icon: DefaultIcon, iconClass, color } = VARIANT_CONFIG[variant];
@@ -232,7 +236,7 @@ function MessageCard({
     rightChildren
   );
 
-  // Built on Card: the root owns color, border, rounding, and padding, so
+  // Built on Card: the root owns color, border, and padding, so
   // this component keeps only its message layout. The wrapper preserves the
   // stretch behavior the old root class carried, since Card takes no
   // className.
@@ -242,7 +246,7 @@ function MessageCard({
         color={color}
         border="solid"
         borderColor={variant}
-        rounding={4}
+        rounding={rounding}
         padding={outerPadding}
         shadow={shadow}
       >

@@ -28,7 +28,7 @@ packages:
   src/app/nrf: 99.2
   src/app/oauth-config: 100
   src/components: 97.7
-  src/components/admin: 96.7
+  src/components/admin: 96.1
   src/components/auth: 89.3
   src/components/chat: 97.2
   src/components/context: 100
@@ -66,7 +66,7 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 98.8
+  src/lib/connectors: 98.9
   src/lib/constants: 100
   src/lib/credentials: 98.4
   src/lib/extension: 100
@@ -115,7 +115,6 @@ packages:
   src/sections/banners: 98.5
   src/sections/cards: 100
   src/sections/chat: 99.7
-  src/sections/connectors: 100
   src/sections/document-sidebar: 99.5
   src/sections/input: 99.8
   src/sections/knowledge: 99.6

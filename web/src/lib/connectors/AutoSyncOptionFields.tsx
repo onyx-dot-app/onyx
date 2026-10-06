@@ -1,4 +1,3 @@
-import { JSX } from "react";
 import type { ValidAutoSyncSource } from "@/lib/connectors/types/source";
 
 interface AutoSyncConfig {
@@ -9,7 +8,7 @@ interface AutoSyncConfig {
     string,
     {
       label: string;
-      subtext: JSX.Element;
+      subtext: string;
     }
   >;
 }

@@ -19,6 +19,7 @@ import {
   Table,
   Tag,
   Text,
+  type TableColumn,
 } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -48,13 +49,10 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/views/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/views/admin/ServiceAccountsPage/ApiKeyFormModal";
 import EditServiceAccountModal from "@/views/admin/ServiceAccountsPage/EditServiceAccountModal";
-import { createTableColumns } from "@opal/components/table/columns";
 import { Section } from "@/layouts/general-layouts";
 
 const API_KEY_SWR_KEY = SWR_KEYS.adminApiKeys;
 const route = ADMIN_ROUTES.API_KEYS;
-
-const tc = createTableColumns<APIKey>();
 
 // ---------------------------------------------------------------------------
 // Page
@@ -132,13 +130,16 @@ export default function ServiceAccountsPage() {
   };
 
   const columns = useMemo(
-    () => [
-      tc.qualifier({
+    (): TableColumn<APIKey>[] => [
+      {
+        kind: "qualifier",
         content: "icon",
-        getContent: () => SvgUserKey,
-      }),
-      tc.column("api_key_name", {
-        header: t("table.columns.name.header"),
+        icon: () => SvgUserKey,
+      },
+      {
+        kind: "data",
+        field: "api_key_name",
+        title: t("table.columns.name.header"),
         weight: 25,
         cell: (value) => (
           <Content
@@ -147,19 +148,22 @@ export default function ServiceAccountsPage() {
             variant="body"
           />
         ),
-      }),
-      tc.column("api_key_display", {
-        header: t("table.columns.apiKey.header"),
+      },
+      {
+        kind: "data",
+        field: "api_key_display",
+        title: t("table.columns.apiKey.header"),
         weight: 30,
         cell: (value) => (
           <Text font="secondary-mono" color="text-03">
             {value}
           </Text>
         ),
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "groups",
-        header: t("table.columns.groups.header"),
+        title: t("table.columns.groups.header"),
         width: { weight: 25, minWidth: 160 },
         cell: (row) => {
           const groups = row.groups ?? [];
@@ -187,8 +191,9 @@ export default function ServiceAccountsPage() {
             </div>
           );
         },
-      }),
-      tc.actions({
+      },
+      {
+        kind: "actions",
         cell: (row) => (
           <div className="flex flex-row gap-1">
             <Button
@@ -239,7 +244,7 @@ export default function ServiceAccountsPage() {
             </Dropdown>
           </div>
         ),
-      }),
+      },
     ],
     [t] // eslint-disable-line react-hooks/exhaustive-deps
   );
@@ -316,10 +321,10 @@ export default function ServiceAccountsPage() {
 
           {hasKeys && (
             <Table
-              data={filteredApiKeys}
+              items={filteredApiKeys}
               getRowId={(row) => String(row.api_key_id)}
               columns={columns}
-              searchTerm={search}
+              query={search}
             />
           )}
         </div>

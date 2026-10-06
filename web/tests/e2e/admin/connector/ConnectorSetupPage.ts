@@ -17,19 +17,17 @@ export class ConnectorSetupPage {
   readonly pageTitle: Locator;
   readonly connectorNameInput: Locator;
   readonly createConnectorButton: Locator;
-  /** The "Document Access" picker: public, private, or a group's. */
+  /** The "Document Access" picker: everyone, specific groups, or auto sync. */
   readonly accessTypeSelect: Locator;
-  /** The prompt that follows a private pick, asking for groups. */
+  /** The group picker that follows a "Specific Groups" pick. */
   readonly groupAccessPrompt: Locator;
 
   constructor(page: Page, source: string) {
     this.page = page;
     this.source = source;
     this.pageTitle = page.locator('[aria-label="admin-page-title"]');
-    // Scoped: a credential form on the same page carries a name field too.
-    this.connectorNameInput = page
-      .getByTestId("connector-form")
-      .getByTestId("name");
+    // Its own test id: a credential form on the same page has a name field too.
+    this.connectorNameInput = page.getByTestId("connector-name");
     this.createConnectorButton = page.getByRole("button", {
       name: "Connect",
       exact: true,
@@ -37,8 +35,8 @@ export class ConnectorSetupPage {
     this.accessTypeSelect = page.getByRole("combobox", {
       name: "Document Access",
     });
-    this.groupAccessPrompt = page.getByText(
-      "Assign group access for this Connector"
+    this.groupAccessPrompt = page.getByPlaceholder(
+      "Add groups to restrict access to this connector"
     );
   }
 
@@ -57,8 +55,10 @@ export class ConnectorSetupPage {
     await this.pick(this.selectField(fieldName), title);
   }
 
-  /** Open the access type picker and pick "Public" or "Private". */
-  async pickAccessType(title: "Public" | "Private"): Promise<void> {
+  /** Open the access type picker and pick an option by its title. */
+  async pickAccessType(
+    title: "Everyone in Your Organization" | "Specific Groups"
+  ): Promise<void> {
     await this.pick(this.accessTypeSelect, title);
   }
 

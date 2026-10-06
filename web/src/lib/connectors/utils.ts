@@ -1,6 +1,8 @@
 import * as Yup from "yup";
-import type { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
-import type { ConnectorGroupRestrictionFormValues } from "@/lib/connectors/accessType";
+import type {
+  ConnectorAccessFormValues,
+  ConnectorGroupRestrictionFormValues,
+} from "@/lib/connectors/accessType";
 import { ValidSources } from "@/lib/connectors/types/source";
 import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
@@ -89,6 +91,7 @@ export function splitCredentialBoundFields(
 
 interface ConnectorValidationMessages {
   oneDriveUsersRequired?: string;
+  specificGroupsRequired?: string;
 }
 
 const buildInitialValuesForFields = (
@@ -118,13 +121,15 @@ const buildInitialValuesForFields = (
 export function createConnectorInitialValues(
   connector: ConfigurableSources
 ): Record<string, any> &
-  AccessTypeGroupSelectorFormType &
+  ConnectorAccessFormValues &
   ConnectorGroupRestrictionFormValues {
   const configuration = connectorConfigs[connector];
 
   return {
     name: "",
     groups: [],
+    group_roles: {},
+    data_access_group_ids: [],
     access_type: "public",
     restrict_access_to_groups: false,
     restriction_group_ids: [],
@@ -185,6 +190,15 @@ export function createConnectorValidationSchema(
       .when("access_type", ([accessType], schema) =>
         requireGroups && accessType !== "sync"
           ? schema.min(1, "Select at least one group you manage")
+          : schema
+      ),
+    // Specific Groups with none picked would let no group read the
+    // documents.
+    data_access_group_ids: Yup.array()
+      .of(Yup.number())
+      .when("access_type", ([accessType], schema) =>
+        accessType === "private"
+          ? schema.min(1, messages.specificGroupsRequired)
           : schema
       ),
     ...fieldSchemas,

@@ -1963,25 +1963,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "Wir synchronisieren Berechtigungen automatisch aus der Quelle. Ein Dokument ist in {appName} nur dann auffindbar, wenn der suchende Benutzer in der Quelle Zugriff auf das Dokument hat.",
-          "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechsle zu einer unterstützten Authentifizierungsmethode.",
-          "name": "Berechtigungen automatisch synchronisieren"
-        },
-        "heading": {
-          "description": "Lege fest, wer Zugriff auf die von diesem Konnektor indexierten Dokumente hat.",
-          "title": "Dokumentzugriff"
-        },
-        "privateOption": {
-          "description": "Nur Benutzer, denen explizit Zugriff auf diesen Konnektor gewährt wurde (über die Seite Benutzergruppen), können auf die von diesem Konnektor importierten Dokumente zugreifen",
-          "name": "Privat"
-        },
-        "publicOption": {
-          "description": "Jeder mit einem {appName}-Konto kann auf die von diesem Konnektor importierten Dokumente zugreifen",
-          "name": "Öffentlich"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# Tag} other {# Tage}}",
@@ -2157,6 +2138,7 @@
           "description": "Alle behalten den aus der Quelle synchronisierten Zugriff.",
           "title": "Keine Beschränkung, bis Gruppen hinzugefügt werden"
         },
+        "loadError": "Gruppen konnten nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
         "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
         "picker": {
           "placeholder": "Gruppen hinzufügen, um den Zugriff auf diesen Connector zu beschränken"
@@ -2164,26 +2146,12 @@
         "remove": {
           "tooltip": "{name} entfernen"
         },
+        "table": {
+          "group": "Gruppe"
+        },
         "toggle": {
           "description": "Zugriff auf Mitglieder der ausgewählten Gruppen beschränken. Synchronisierte Berechtigungen gelten weiterhin.",
           "title": "Zugriff auf Gruppen beschränken"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "Gruppenzugriff für diesen Konnektor zuweisen"
-        },
-        "assignToGroup": {
-          "title": "Gruppen, die diesen Connector verwalten können"
-        },
-        "scopedManagerGroups": {
-          "description": "Wähle eine oder mehrere der von dir verwalteten Gruppen aus, um Zugriff auf diesen Konnektor zu gewähren"
-        },
-        "syncGroups": {
-          "description": "Die folgenden Gruppen legen fest, wer diesen Konnektor verwalten kann. Der Zugriff auf seine Dokumente wird von den Berechtigungen der Quelle selbst übernommen."
-        },
-        "visibleToGroups": {
-          "description": "Dieser Konnektor ist für die unten ausgewählten Gruppen sichtbar/zugänglich"
         }
       },
       "indexAttemptsTable": {
@@ -2670,10 +2638,6 @@
           "toast": "Ein unbekannter Fehler ist aufgetreten"
         }
       },
-      "connectorName": {
-        "label": "Konnektorname",
-        "subtext": "Ein aussagekräftiger Name für den Konnektor."
-      },
       "credentialRequired": {
         "tooltip": "Wähle zuerst einen Zugang aus."
       },
@@ -2978,6 +2942,57 @@
           "hours": "Stunden",
           "minutes": "Minuten"
         }
+      },
+      "settings": {
+        "description": "Connector-Informationen und Zugriff.",
+        "displayName": {
+          "title": "Anzeigename des Connectors"
+        },
+        "documentAccess": {
+          "description": "Legen Sie fest, wer auf die von diesem Connector indexierten Dokumente zugreifen kann.",
+          "everyone": {
+            "description": "Von diesem Connector indexierte Dokumente sind für alle in Ihrer Organisation öffentlich.",
+            "title": "Alle in Ihrer Organisation"
+          },
+          "specificGroups": {
+            "description": "Benennen Sie Gruppen, die auf Dokumente dieses Connectors zugreifen können.",
+            "required": "Wählen Sie mindestens eine Gruppe aus.",
+            "title": "Bestimmte Gruppen"
+          },
+          "sync": {
+            "description": "{appName} synchronisiert Berechtigungen mit der Quelle. Nutzer können nur durchsuchen, was sie in der Quelle sehen können.",
+            "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechsle zu einer unterstützten Authentifizierungsmethode.",
+            "title": "Mit {source} synchronisieren"
+          },
+          "title": "Dokumentzugriff"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "Immer geteilt",
+            "title": "Admins"
+          },
+          "description": "Legen Sie fest, wer den Connector betreiben (Indexierung planen und überwachen) und/oder seine Konfiguration bearbeiten kann.",
+          "note": "Nur Nutzer mit der Berechtigung „Connectors verwalten“ (Gruppenmanager-Rolle oder Gruppenberechtigungen) erhalten Zugriff, um Connectors zu betreiben und/oder zu bearbeiten.",
+          "placeholder": "Gruppen hinzufügen, um diesen Connector zu teilen",
+          "role": {
+            "editor": {
+              "description": "Konfigurationen ändern/löschen.",
+              "label": "Bearbeiter"
+            },
+            "menu": {
+              "ariaLabel": "Rolle für {name}"
+            },
+            "operator": {
+              "description": "Indexierung planen/überwachen.",
+              "label": "Operator"
+            },
+            "removeAccess": {
+              "label": "Zugriff entfernen"
+            }
+          },
+          "title": "Verwaltungszugriff für den Connector"
+        },
+        "title": "Connector-Einstellungen"
       }
     },
     "costOverrides": {

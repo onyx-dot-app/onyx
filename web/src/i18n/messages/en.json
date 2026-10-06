@@ -1963,25 +1963,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "We will automatically sync permissions from the source. A document will be searchable in {appName} if and only if the user performing the search has permission to access the document in the source.",
-          "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
-          "name": "Auto Sync Permissions"
-        },
-        "heading": {
-          "description": "Control who has access to the documents indexed by this connector.",
-          "title": "Document Access"
-        },
-        "privateOption": {
-          "description": "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
-          "name": "Private"
-        },
-        "publicOption": {
-          "description": "Everyone with an account on {appName} can access the documents pulled in by this connector",
-          "name": "Public"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# day} other {# days}}",
@@ -2157,6 +2138,7 @@
           "description": "Everyone keeps the access synced from the source.",
           "title": "No restriction until groups are added"
         },
+        "loadError": "Could not load groups. Reload the page to try again.",
         "memberCount": "{count, plural, one {# member} other {# members}}",
         "picker": {
           "placeholder": "Add groups to restrict access to this connector"
@@ -2164,26 +2146,12 @@
         "remove": {
           "tooltip": "Remove {name}"
         },
+        "table": {
+          "group": "Group"
+        },
         "toggle": {
           "description": "Limit access to members of selected groups. Synced permissions still apply.",
           "title": "Restrict Access to Groups"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "Assign group access for this Connector"
-        },
-        "assignToGroup": {
-          "title": "Groups that can manage this Connector"
-        },
-        "scopedManagerGroups": {
-          "description": "Select one or more of the groups you manage to give access to this Connector"
-        },
-        "syncGroups": {
-          "description": "The groups below control who can manage this Connector. Access to its documents is inherited from the source's own permissions."
-        },
-        "visibleToGroups": {
-          "description": "This Connector will be visible/accessible by the groups selected below"
         }
       },
       "indexAttemptsTable": {
@@ -2670,10 +2638,6 @@
           "toast": "An unknown error occurred"
         }
       },
-      "connectorName": {
-        "label": "Connector Name",
-        "subtext": "A descriptive name for the connector."
-      },
       "credentialRequired": {
         "tooltip": "Select a credential first."
       },
@@ -2978,6 +2942,57 @@
           "hours": "hours",
           "minutes": "minutes"
         }
+      },
+      "settings": {
+        "description": "Connector information and access.",
+        "displayName": {
+          "title": "Connector Display Name"
+        },
+        "documentAccess": {
+          "description": "Control who can access documents indexed by this connector.",
+          "everyone": {
+            "description": "Documents indexed by this connector will be public to everyone in your organization.",
+            "title": "Everyone in Your Organization"
+          },
+          "specificGroups": {
+            "description": "Name groups who can access documents from this connector.",
+            "required": "Pick at least one group.",
+            "title": "Specific Groups"
+          },
+          "sync": {
+            "description": "{appName} syncs permissions with the source. Users can search only what they can see in the source.",
+            "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
+            "title": "Sync with {source}"
+          },
+          "title": "Document Access"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "Always shared",
+            "title": "Admins"
+          },
+          "description": "Control who can operate (schedule and monitor indexing) and/or edit the connector configurations.",
+          "note": "Only users with “Manage Connectors” permissions (group manager role or group permissions) will be granted access to operate and/or edit connectors.",
+          "placeholder": "Add groups to share this connector",
+          "role": {
+            "editor": {
+              "description": "Update/delete configurations.",
+              "label": "Editor"
+            },
+            "menu": {
+              "ariaLabel": "Role for {name}"
+            },
+            "operator": {
+              "description": "Schedule/monitor indexing.",
+              "label": "Operator"
+            },
+            "removeAccess": {
+              "label": "Remove Access"
+            }
+          },
+          "title": "Connector Manage Access"
+        },
+        "title": "Connector Settings"
       }
     },
     "costOverrides": {

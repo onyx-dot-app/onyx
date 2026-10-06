@@ -1963,25 +1963,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "Nous synchroniserons automatiquement les permissions depuis la source. Un document ne sera consultable dans {appName} que si l'utilisateur effectuant la recherche est autorisé à y accéder dans la source.",
-          "disabledReason": "La méthode d'authentification de l'identifiant actuel ne prend pas en charge la synchronisation automatique des permissions. Veuillez passer à une méthode d'authentification prise en charge.",
-          "name": "Synchronisation automatique des permissions"
-        },
-        "heading": {
-          "description": "Contrôlez qui a accès aux documents indexés par ce connecteur.",
-          "title": "Accès aux documents"
-        },
-        "privateOption": {
-          "description": "Seuls les utilisateurs ayant reçu un accès explicite à ce connecteur (via la page Groupes d'utilisateurs) peuvent accéder aux documents importés par ce connecteur",
-          "name": "Privé"
-        },
-        "publicOption": {
-          "description": "Toute personne disposant d'un compte {appName} peut accéder aux documents importés par ce connecteur",
-          "name": "Public"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# jour} other {# jours}}",
@@ -2157,6 +2138,7 @@
           "description": "Tout le monde conserve l'accès synchronisé depuis la source.",
           "title": "Aucune restriction tant qu'aucun groupe n'est ajouté"
         },
+        "loadError": "Impossible de charger les groupes. Rechargez la page pour réessayer.",
         "memberCount": "{count, plural, one {# membre} other {# membres}}",
         "picker": {
           "placeholder": "Ajouter des groupes pour restreindre l'accès à ce connecteur"
@@ -2164,26 +2146,12 @@
         "remove": {
           "tooltip": "Retirer {name}"
         },
+        "table": {
+          "group": "Groupe"
+        },
         "toggle": {
           "description": "Limite l'accès aux membres des groupes sélectionnés. Les permissions synchronisées s'appliquent toujours.",
           "title": "Restreindre l'accès à des groupes"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "Attribuer l'accès des groupes à ce connecteur"
-        },
-        "assignToGroup": {
-          "title": "Groupes pouvant gérer ce connecteur"
-        },
-        "scopedManagerGroups": {
-          "description": "Sélectionnez un ou plusieurs des groupes que vous gérez pour donner accès à ce connecteur"
-        },
-        "syncGroups": {
-          "description": "Les groupes ci-dessous contrôlent qui peut gérer ce connecteur. L'accès à ses documents est hérité des permissions de la source elle-même."
-        },
-        "visibleToGroups": {
-          "description": "Ce connecteur sera visible/accessible par les groupes sélectionnés ci-dessous"
         }
       },
       "indexAttemptsTable": {
@@ -2670,10 +2638,6 @@
           "toast": "Une erreur inconnue est survenue"
         }
       },
-      "connectorName": {
-        "label": "Nom du connecteur",
-        "subtext": "Un nom descriptif pour le connecteur."
-      },
       "credentialRequired": {
         "tooltip": "Sélectionnez d'abord un identifiant."
       },
@@ -2978,6 +2942,57 @@
           "hours": "heures",
           "minutes": "minutes"
         }
+      },
+      "settings": {
+        "description": "Informations et accès du connecteur.",
+        "displayName": {
+          "title": "Nom d'affichage du connecteur"
+        },
+        "documentAccess": {
+          "description": "Contrôlez qui peut accéder aux documents indexés par ce connecteur.",
+          "everyone": {
+            "description": "Les documents indexés par ce connecteur seront publics pour tout le monde dans votre organisation.",
+            "title": "Tout le monde dans votre organisation"
+          },
+          "specificGroups": {
+            "description": "Indiquez les groupes qui peuvent accéder aux documents de ce connecteur.",
+            "required": "Choisissez au moins un groupe.",
+            "title": "Groupes spécifiques"
+          },
+          "sync": {
+            "description": "{appName} synchronise les autorisations avec la source. Les utilisateurs ne peuvent rechercher que ce qu'ils voient dans la source.",
+            "disabledReason": "La méthode d'authentification de l'identifiant actuel ne prend pas en charge la synchronisation automatique des permissions. Veuillez passer à une méthode d'authentification prise en charge.",
+            "title": "Synchroniser avec {source}"
+          },
+          "title": "Accès aux documents"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "Toujours partagé",
+            "title": "Administrateurs"
+          },
+          "description": "Contrôlez qui peut exploiter (planifier et surveiller l'indexation) et/ou modifier la configuration du connecteur.",
+          "note": "Seuls les utilisateurs disposant des autorisations « Gérer les connecteurs » (rôle de gestionnaire de groupe ou autorisations de groupe) pourront exploiter et/ou modifier les connecteurs.",
+          "placeholder": "Ajouter des groupes pour partager ce connecteur",
+          "role": {
+            "editor": {
+              "description": "Modifier/supprimer les configurations.",
+              "label": "Éditeur"
+            },
+            "menu": {
+              "ariaLabel": "Rôle de {name}"
+            },
+            "operator": {
+              "description": "Planifier/surveiller l'indexation.",
+              "label": "Opérateur"
+            },
+            "removeAccess": {
+              "label": "Retirer l'accès"
+            }
+          },
+          "title": "Accès de gestion du connecteur"
+        },
+        "title": "Paramètres du connecteur"
       }
     },
     "costOverrides": {

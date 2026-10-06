@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { Formik } from "formik";
-import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
+import DocumentAccessField from "@/lib/connectors/components/DocumentAccessField";
 import {
   ConfigurableSources,
   ValidSources,
@@ -12,8 +12,13 @@ jest.mock("@/lib/permissions/hooks", () => ({
 jest.mock("@/hooks/useTierAtLeast", () => ({
   useTierAtLeast: jest.fn(),
 }));
-jest.mock("@/components/admin/connectors/AutoSyncOptions", () => ({
-  AutoSyncOptions: () => null,
+jest.mock("@/lib/connectors/components/AutoSyncOptions", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+jest.mock("@/lib/connectors/components/GroupShareList", () => ({
+  __esModule: true,
+  default: () => null,
 }));
 
 const { usePermissionAuthority } = jest.requireMock("@/lib/permissions/hooks");
@@ -22,12 +27,16 @@ const { useTierAtLeast } = jest.requireMock("@/hooks/useTierAtLeast");
 function renderForm(connector: ConfigurableSources) {
   return render(
     <Formik
-      initialValues={{ access_type: "public", groups: [] }}
+      initialValues={{
+        access_type: "public",
+        groups: [],
+        data_access_group_ids: [],
+      }}
       onSubmit={() => {}}
     >
       {({ values }) => (
         <>
-          <AccessTypeForm connector={connector} />
+          <DocumentAccessField connector={connector} />
           <output data-testid="access-type">{values.access_type}</output>
         </>
       )}
@@ -35,7 +44,7 @@ function renderForm(connector: ConfigurableSources) {
   );
 }
 
-describe("AccessTypeForm", () => {
+describe("DocumentAccessField", () => {
   beforeEach(() => {
     useTierAtLeast.mockReturnValue(true);
     usePermissionAuthority.mockReturnValue({
@@ -60,6 +69,14 @@ describe("AccessTypeForm", () => {
 
     await waitFor(() =>
       expect(screen.getByTestId("access-type")).toHaveTextContent("private")
+    );
+  });
+
+  it("defaults to auto sync on a source that supports it", async () => {
+    renderForm(ValidSources.GoogleDrive as ConfigurableSources);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("access-type")).toHaveTextContent("sync")
     );
   });
 
