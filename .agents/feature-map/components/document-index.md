@@ -516,11 +516,13 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
 - **`OpenSearchIndexPair.index` writes to the primary only.** A caller that expects
   both generations to receive a write is wrong, and nothing errors. Only the port
   backfill fills the secondary. `delete` and `update` do reach both.
-- **A local OpenSearch under disk pressure fails as "Could not connect to a document
-  index".** OpenSearch's flood-stage watermark flips affected indices read-only when
-  disk usage crosses the threshold; the resulting error at the Onyx layer looks like a
-  connectivity problem, not a disk problem. Check `df` and OpenSearch cluster health
-  before debugging the client code.
+- **An OpenSearch under disk pressure fails as "Could not connect to a document
+  index".** OpenSearch's disk watermarks block index creation at the high watermark
+  and flip affected indices read-only at flood stage; the resulting error at the Onyx
+  layer looks like a connectivity problem, not a disk problem. The dev/CI compose
+  overlay sets `cluster.routing.allocation.disk.threshold_enabled=false`, so this
+  failure mode does not apply to dev/CI stacks — only to deployments without that
+  overlay. There, check `df` and cluster health before debugging the client code.
 - **`"dynamic": "strict"` means a partially-migrated schema change breaks indexing
   outright**, not gradually. A chunk built with a new field against an index whose
   mapping has not been updated raises on `index()`, not on read.
