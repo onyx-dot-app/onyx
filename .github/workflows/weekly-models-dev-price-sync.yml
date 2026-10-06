@@ -92,7 +92,9 @@ jobs:
       # The job checks out main for the sync, so the action loads from a
       # separate checkout of this run's own sha — which carries the action.
       - name: Checkout Slack actions
+        id: slack-actions
         if: steps.pr.outputs.pr_number != ''
+        continue-on-error: true # notification-only; a checkout outage must not fail the run
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
@@ -101,7 +103,7 @@ jobs:
           sparse-checkout: .github/actions
 
       - name: Post PR to Slack for review
-        if: steps.pr.outputs.pr_number != ''
+        if: steps.pr.outputs.pr_number != '' && steps.slack-actions.outcome == 'success'
         uses: ./.ci-actions/.github/actions/slack-post-message
         with:
           bot-token: ${{ secrets.CVE_REVIEWS_BOT_TOKEN }}

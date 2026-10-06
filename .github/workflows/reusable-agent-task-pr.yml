@@ -311,11 +311,13 @@ jobs:
       # working tree: a workflow_run repair checks out the task PR's head,
       # which can predate the action.
       - name: Checkout Slack actions
+        id: slack-actions
         if: >-
           inputs.slack-channel != '' &&
           (github.event_name != 'workflow_run' ||
            steps.repair-guard.outputs.proceed == 'true') &&
           steps.pr.outputs.pr_number != ''
+        continue-on-error: true # notification-only; a checkout outage must not fail the run
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
@@ -328,7 +330,8 @@ jobs:
           inputs.slack-channel != '' &&
           (github.event_name != 'workflow_run' ||
            steps.repair-guard.outputs.proceed == 'true') &&
-          steps.pr.outputs.pr_number != ''
+          steps.pr.outputs.pr_number != '' &&
+          steps.slack-actions.outcome == 'success'
         uses: ./.ci-actions/.github/actions/slack-post-message
         with:
           bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
