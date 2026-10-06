@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Table, createTableColumns } from "@opal/components";
+import { Table, type TableColumn } from "@opal/components";
 import { SvgUser } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
@@ -105,19 +105,18 @@ const USERS: User[] = [
 // Columns
 // ---------------------------------------------------------------------------
 
-const tc = createTableColumns<User>();
-
-const columns = [
-  tc.qualifier({
+const columns: TableColumn<User>[] = [
+  {
+    kind: "qualifier",
     content: "icon",
-    getContent: () => SvgUser,
+    icon: () => SvgUser,
     background: true,
-  }),
-  tc.column("name", { header: "Name", weight: 25 }),
-  tc.column("email", { header: "Email", weight: 30 }),
-  tc.column("role", { header: "Role", weight: 15 }),
-  tc.column("status", { header: "Status", weight: 15 }),
-  tc.actions(),
+  },
+  { kind: "data", field: "name", title: "Name", weight: 25 },
+  { kind: "data", field: "email", title: "Email", weight: 30 },
+  { kind: "data", field: "role", title: "Role", weight: 15 },
+  { kind: "data", field: "status", title: "Status", weight: 15 },
+  { kind: "actions" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -136,11 +135,23 @@ type Story = StoryObj<typeof Table>;
 export const Default: Story = {
   render: () => (
     <Table
-      data={USERS}
+      items={USERS}
       columns={columns}
       getRowId={(r) => r.id}
       pageSize={8}
       footer={{}}
+    />
+  ),
+};
+
+export const WithoutHeader: Story = {
+  render: () => (
+    <Table
+      items={USERS.slice(0, 4)}
+      columns={columns}
+      getRowId={(r) => r.id}
+      size="md"
+      showHeader={false}
     />
   ),
 };

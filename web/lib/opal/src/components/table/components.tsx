@@ -28,9 +28,11 @@ import { SortingPopover } from "@opal/components/table/ColumnSortabilityPopover"
 import type { WidthConfig } from "@opal/components/table/hooks/useColumnWidths";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@opal/utils";
+import { resolveColumn } from "@opal/components/table/columns";
 import type {
   DataTableProps as BaseDataTableProps,
   DataTableFooterConfig,
+  TableColumn,
   OnyxColumnDef,
   OnyxDataColumn,
   OnyxQualifierColumn,
@@ -62,9 +64,10 @@ interface ProcessedColumns<TData> {
 }
 
 function processColumns<TData>(
-  columns: OnyxColumnDef<TData>[],
+  columnLiterals: TableColumn<TData>[],
   size: TableSize
 ): ProcessedColumns<TData> {
+  const columns = columnLiterals.map((col) => resolveColumn(col));
   const tanstackColumns: ColumnDef<TData, any>[] = [];
   const fixedColumnIds = new Set<string>();
   const columnWeights: Record<string, number> = {};
@@ -119,59 +122,60 @@ function processColumns<TData>(
 // ---------------------------------------------------------------------------
 
 /**
- * Config-driven table component that wires together `useDataTable`,
- * `useColumnWidths`, and `useDraggableRows` automatically.
- *
- * Full flexibility via the column definitions from `createTableColumns()`.
+ * Config-driven table. Columns are plain literals told apart by `kind`, like
+ * Dropdown items.
  *
  * @example
  * ```tsx
- * const tc = createTableColumns<TeamMember>();
- * const columns = [
- *   tc.qualifier({ content: "icon", getContent: (r) => UserIcon }),
- *   tc.column("name", { header: "Name", weight: 23 }),
- *   tc.column("email", { header: "Email", weight: 28 }),
- *   tc.actions(),
- * ];
- *
- * <Table data={items} columns={columns} footer={{}} />
+ * <Table
+ *   items={members}
+ *   getRowId={(m) => m.id}
+ *   columns={[
+ *     { kind: "qualifier", content: "icon", icon: () => SvgUser },
+ *     { kind: "data", field: "name", title: "Name", weight: 23 },
+ *     { kind: "data", field: "email", title: "Email", weight: 28 },
+ *     { kind: "actions" },
+ *   ]}
+ *   footer={{}}
+ * />
  * ```
  */
 export function Table<TData>(props: DataTableProps<TData>) {
   const {
-    data,
+    items,
     columns,
     getRowId,
+    label,
     pageSize,
     initialSorting,
     initialColumnVisibility,
-    initialRowSelection,
+    values,
     initialViewSelected,
     draggable,
     footer,
     size = "lg",
-    variant = "cards",
+    prominence = "primary",
     selectionBehavior = "no-select",
     onSelectionChange,
     onRowClick,
     getRowLabel,
-    searchTerm,
+    query,
     height,
     serverSide,
     emptyState,
+    showHeader = true,
   } = props;
 
-  const effectivePageSize = pageSize ?? (footer ? 10 : data.length);
+  const effectivePageSize = pageSize ?? (footer ? 10 : items.length);
 
   // Whether the qualifier column should exist in the DOM.
   // Derived from the column definitions: if a qualifier column exists with
   // content !== "simple", always show it. If content === "simple" (or no
   // qualifier column defined), show only for multi-select (checkboxes).
-  const qualifierColDef = columns.find(
-    (c): c is OnyxQualifierColumn<TData> => c.kind === "qualifier"
-  );
+  const qualifierColDef = columns.find((c) => c.kind === "qualifier");
   const hasQualifierColumn =
-    (qualifierColDef != null && qualifierColDef.content !== "simple") ||
+    (qualifierColDef != null &&
+      (qualifierColDef.content ?? "simple") !== "simple") ||
     selectionBehavior === "multi-select";
 
   // 1. Process columns (memoized on columns + size)
@@ -219,22 +223,22 @@ export function Table<TData>(props: DataTableProps<TData>) {
     enterViewMode,
     exitViewMode,
   } = useDataTable({
-    data,
+    data: items,
     columns: tanstackColumns,
     pageSize: effectivePageSize,
     initialSorting,
     initialColumnVisibility,
-    initialRowSelection,
+    values,
     initialViewSelected,
     getRowId,
     onSelectionChange,
-    searchTerm,
+    query,
     serverSide: serverSide
       ? {
           totalItems: serverSide.totalItems,
           onSortingChange: serverSide.onSortingChange,
           onPaginationChange: serverSide.onPaginationChange,
-          onSearchTermChange: serverSide.onSearchTermChange,
+          onQueryChange: serverSide.onQueryChange,
         }
       : undefined,
   });
@@ -256,7 +260,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
   }, [!!serverSide, !!draggable]); // eslint-disable-line react-hooks/exhaustive-deps
   const effectiveDraggable = serverSide ? undefined : draggable;
   const draggableReturn = useDraggableRows({
-    data,
+    data: items,
     getRowId,
     enabled: !!effectiveDraggable && table.getState().sorting.length === 0,
     onReorder: effectiveDraggable?.onReorder,
@@ -356,7 +360,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
           }}
         >
           <TableElement
-            variant={variant}
+            aria-label={label}
             selectionBehavior={selectionBehavior}
             width={
               Object.keys(columnWidths).length > 0
@@ -376,105 +380,107 @@ export function Table<TData>(props: DataTableProps<TData>) {
                 />
               ))}
             </colgroup>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header, headerIndex) => {
-                    const colDef = columnKindMap.get(header.id);
+            {showHeader && (
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header, headerIndex) => {
+                      const colDef = columnKindMap.get(header.id);
 
-                    // Qualifier header — select-all checkbox only for multi-select
-                    if (colDef?.kind === "qualifier") {
-                      return (
-                        <QualifierContainer key={header.id} type="head">
-                          {isMultiSelect && (
-                            <InputCheckbox
-                              checked={isAllRowsSelected}
-                              indeterminate={
-                                !isAllRowsSelected && selectedCount > 0
-                              }
-                              onCheckedChange={(checked) => {
-                                // Indeterminate → clear all; otherwise toggle normally
-                                if (!isAllRowsSelected && selectedCount > 0) {
-                                  toggleAllRowsSelected(false);
-                                } else {
-                                  toggleAllRowsSelected(checked);
+                      // Qualifier header — select-all checkbox only for multi-select
+                      if (colDef?.kind === "qualifier") {
+                        return (
+                          <QualifierContainer key={header.id} type="head">
+                            {isMultiSelect && (
+                              <InputCheckbox
+                                checked={isAllRowsSelected}
+                                indeterminate={
+                                  !isAllRowsSelected && selectedCount > 0
                                 }
-                              }}
-                            />
-                          )}
-                        </QualifierContainer>
-                      );
-                    }
+                                onCheckedChange={(checked) => {
+                                  // Indeterminate → clear all; otherwise toggle normally
+                                  if (!isAllRowsSelected && selectedCount > 0) {
+                                    toggleAllRowsSelected(false);
+                                  } else {
+                                    toggleAllRowsSelected(checked);
+                                  }
+                                }}
+                              />
+                            )}
+                          </QualifierContainer>
+                        );
+                      }
 
-                    // Actions header
-                    if (colDef?.kind === "actions") {
-                      const actionsDef = colDef as OnyxActionsColumn<TData>;
+                      // Actions header
+                      if (colDef?.kind === "actions") {
+                        const actionsDef = colDef as OnyxActionsColumn<TData>;
+                        return (
+                          <ActionsContainer key={header.id} type="head">
+                            {actionsDef.showColumnVisibility !== false && (
+                              <ColumnVisibilityPopover
+                                table={table}
+                                columnVisibility={
+                                  table.getState().columnVisibility
+                                }
+                              />
+                            )}
+                            {actionsDef.showSorting !== false && (
+                              <SortingPopover
+                                table={table}
+                                sorting={table.getState().sorting}
+                                footerText={actionsDef.sortingFooterText}
+                              />
+                            )}
+                          </ActionsContainer>
+                        );
+                      }
+
+                      // Data / Display header
+                      const canSort = header.column.getCanSort();
+                      const sortDir = header.column.getIsSorted();
+                      const nextHeader = headerGroup.headers[headerIndex + 1];
+                      const canResize =
+                        header.column.getCanResize() &&
+                        !!nextHeader &&
+                        !widthConfig.fixedColumnIds.has(nextHeader.id);
+
+                      const dataCol =
+                        colDef?.kind === "data"
+                          ? (colDef as OnyxDataColumn<TData>)
+                          : null;
+
                       return (
-                        <ActionsContainer key={header.id} type="head">
-                          {actionsDef.showColumnVisibility !== false && (
-                            <ColumnVisibilityPopover
-                              table={table}
-                              columnVisibility={
-                                table.getState().columnVisibility
-                              }
-                            />
+                        <TableHead
+                          key={header.id}
+                          width={columnWidths[header.id]}
+                          alignment={colDef?.alignment}
+                          sorted={
+                            canSort ? toOnyxSortDirection(sortDir) : undefined
+                          }
+                          onSort={
+                            canSort
+                              ? () => header.column.toggleSorting()
+                              : undefined
+                          }
+                          icon={dataCol?.icon}
+                          resizable={canResize}
+                          onResizeStart={
+                            canResize
+                              ? createResizeHandler(header.id, nextHeader.id)
+                              : undefined
+                          }
+                        >
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
                           )}
-                          {actionsDef.showSorting !== false && (
-                            <SortingPopover
-                              table={table}
-                              sorting={table.getState().sorting}
-                              footerText={actionsDef.sortingFooterText}
-                            />
-                          )}
-                        </ActionsContainer>
+                        </TableHead>
                       );
-                    }
-
-                    // Data / Display header
-                    const canSort = header.column.getCanSort();
-                    const sortDir = header.column.getIsSorted();
-                    const nextHeader = headerGroup.headers[headerIndex + 1];
-                    const canResize =
-                      header.column.getCanResize() &&
-                      !!nextHeader &&
-                      !widthConfig.fixedColumnIds.has(nextHeader.id);
-
-                    const dataCol =
-                      colDef?.kind === "data"
-                        ? (colDef as OnyxDataColumn<TData>)
-                        : null;
-
-                    return (
-                      <TableHead
-                        key={header.id}
-                        width={columnWidths[header.id]}
-                        alignment={colDef?.alignment}
-                        sorted={
-                          canSort ? toOnyxSortDirection(sortDir) : undefined
-                        }
-                        onSort={
-                          canSort
-                            ? () => header.column.toggleSorting()
-                            : undefined
-                        }
-                        icon={dataCol?.icon}
-                        resizable={canResize}
-                        onResizeStart={
-                          canResize
-                            ? createResizeHandler(header.id, nextHeader.id)
-                            : undefined
-                        }
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
+                    })}
+                  </TableRow>
+                ))}
+              </TableHeader>
+            )}
 
             <TableBody
               dndSortable={hasDraggable ? draggableReturn : undefined}
@@ -512,6 +518,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                   <TableRow
                     key={row.id}
                     sortableId={rowId}
+                    prominence={prominence}
                     selected={row.getIsSelected()}
                     data-clickable={onRowClick ? true : undefined}
                     tabIndex={onRowClick ? 0 : undefined}
