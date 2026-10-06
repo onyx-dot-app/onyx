@@ -543,7 +543,6 @@ jobs:
           COMPOSE_PROFILES=s3-filestore
           S3_ENDPOINT_URL=http://object-store:8333
           S3_LEGACY_ENDPOINT_URL=http://minio:9000
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
           EXA_API_KEY=${EXA_API_KEY_VALUE}
@@ -724,7 +723,6 @@ jobs:
           COMPOSE_PROFILES=s3-filestore
           S3_ENDPOINT_URL=http://object-store:8333
           S3_LEGACY_ENDPOINT_URL=http://minio:9000
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
           EXA_API_KEY=${EXA_API_KEY_VALUE}
@@ -878,7 +876,6 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
           REQUIRE_EMAIL_VERIFICATION=false

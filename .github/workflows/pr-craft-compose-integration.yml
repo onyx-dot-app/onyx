@@ -343,7 +343,6 @@ jobs:
           # onyx.* reads these at import; DockerSandboxManager needs the
           # proxy/docker env. USER_AUTH_SECRET must match the stack's .env.
           ENABLE_CRAFT: "true"
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
           USER_AUTH_SECRET: "craft-compose-ci-only-dummy-secret"
           SANDBOX_BACKEND: "docker"
           SANDBOX_PROXY_HOST: "sandbox-proxy"
