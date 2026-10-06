@@ -316,33 +316,17 @@ def _try_fallback_tool_extraction(
 
 def _build_project_message(
     context_files: ExtractedContextFiles | None,
-    token_counter: Callable[[str], int] | None,
-    available_tool_names: set[str] | None = None,
 ) -> list[ChatMessageSimple]:
-    """Build messages for context-injected / tool-backed files.
+    """Build the message for context-injected files.
 
-    Returns up to two messages:
-    1. The full-text files message (if file_texts is populated).
-    2. A lightweight metadata message for oversized files, naming whichever
-       retrieval tool this request actually received.
+    Returns the full-text files message (if file_texts is populated). The
+    oversized-file metadata notice is built separately by the caller — its
+    text names the tools offered this cycle, so it belongs outside the
+    cacheable prefix.
     """
-    if not context_files:
+    if not context_files or not context_files.file_texts:
         return []
-
-    messages: list[ChatMessageSimple] = []
-    if context_files.file_texts:
-        messages.append(
-            _create_context_files_message(context_files, token_counter=None)
-        )
-    if context_files.file_metadata_for_tool and token_counter:
-        messages.append(
-            _create_file_tool_metadata_message(
-                context_files.file_metadata_for_tool,
-                token_counter,
-                available_tool_names,
-            )
-        )
-    return messages
+    return [_create_context_files_message(context_files, token_counter=None)]
 
 
 def count_message_replay_tokens(
@@ -399,10 +383,17 @@ def construct_message_history(
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
-    project_messages = _build_project_message(
-        context_files, token_counter, available_tool_names
+    project_messages = _build_project_message(context_files)
+    oversized_files_message: ChatMessageSimple | None = None
+    if context_files and context_files.file_metadata_for_tool and token_counter:
+        oversized_files_message = _create_file_tool_metadata_message(
+            context_files.file_metadata_for_tool,
+            token_counter,
+            available_tool_names,
+        )
+    project_messages_tokens = sum(m.token_count for m in project_messages) + (
+        oversized_files_message.token_count if oversized_files_message else 0
     )
-    project_messages_tokens = sum(m.token_count for m in project_messages)
 
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count if system_prompt else 0
@@ -431,6 +422,8 @@ def construct_message_history(
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
         result.extend(project_messages)
+        if oversized_files_message:
+            result.append(oversized_files_message)
         if reminder_message:
             result.append(reminder_message)
         return result
@@ -569,7 +562,8 @@ def construct_message_history(
 
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
-    # [last_user_message], [messages_after_last_user], [forgotten_files], [reminder]
+    # [last_user_message], [messages_after_last_user], [file_metadata_notices],
+    # [reminder]
     result = [system_prompt] if system_prompt else []
 
     # 1. Add truncated history before last user message
@@ -593,9 +587,12 @@ def construct_message_history(
         msg.should_cache = True
     result.extend(messages_after_last_user)
 
-    # 6. Add forgotten-files metadata after the tool rounds, before the
-    # reminder. Its contents change whenever history eviction grows the
-    # dropped set, so it must stay out of the contiguous cacheable prefix.
+    # 6. Add tool-dependent file notices after the tool rounds, before the
+    # reminder. The oversized-file notice names the tools offered this cycle
+    # and the forgotten-files notice is rebuilt whenever eviction grows the
+    # dropped set, so both must stay out of the contiguous cacheable prefix.
+    if oversized_files_message:
+        result.append(oversized_files_message)
     if forgotten_files_message:
         result.append(forgotten_files_message)
 

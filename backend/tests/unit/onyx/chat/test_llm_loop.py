@@ -744,13 +744,16 @@ class TestConstructMessageHistory:
             available_tool_names={"read_file"},
         )
 
-        # Should have: system, tool_metadata_message, user
+        # Should have: system, user, tool_metadata_message — the notice names
+        # the tools offered this cycle, so it lives in the uncached tail.
         assert len(result) == 3
-        metadata_msg = result[1]
+        metadata_msg = result[2]
         assert metadata_msg.message_type == MessageType.USER
         assert "report.xlsx" in metadata_msg.message
         # read_file is offered, so the listing carries the id it consumes.
         assert "xlsx-1" in metadata_msg.message
+        assert user_msg.should_cache
+        assert not metadata_msg.should_cache
 
     def test_metadata_only_and_text_files_both_present(self) -> None:
         """When both text content and tool metadata are present, both messages
@@ -790,14 +793,16 @@ class TestConstructMessageHistory:
             token_counter=_simple_token_counter,
         )
 
-        # Should have: system, context_files_message, tool_metadata_message, user
+        # Should have: system, context_files_message, user,
+        # tool_metadata_message — the tool-dependent notice sits in the tail.
         assert len(result) == 4
         # Context files message (text content)
         assert "documents" in result[1].message
         assert "Text file content here" in result[1].message
         # Tool metadata message
-        assert "data.xlsx" in result[2].message
-        assert result[3] == user_msg
+        assert result[2] == user_msg
+        assert "data.xlsx" in result[3].message
+        assert not result[3].should_cache
 
 
 def _simple_token_counter(text: str) -> int:
