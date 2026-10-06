@@ -340,6 +340,9 @@ invalidate the reservation after the fact. This reservation must happen before
 `extract_context_files` decides whether project files fit (§4.3): reversing
 that order would let files claim space the prompt still needs.
 
+`extract_context_files` receives immutable user-file metadata. Its parallel
+content loader does not receive the preparation database session.
+
 Inside `run_llm_loop`, `available_tokens` is further reduced per cycle by
 `compute_all_tool_tokens(final_tools, token_counter)` before
 `construct_message_history` is called, since tool definitions themselves

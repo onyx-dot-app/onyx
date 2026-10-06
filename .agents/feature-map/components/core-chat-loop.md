@@ -168,6 +168,9 @@ stream buffer and reader tee in arrival order. `_read_stream` is the generator t
 yields them to the caller. A failing worker yields a `StreamingError` for that model only;
 the others keep running.
 
+Preparation captures immutable metadata before parallel project/persona file
+reads. The content workers do not share the preparation database session.
+
 ### 4.4 Context assembly per cycle
 
 `construct_message_history` (`llm_loop.py`) produces this order:

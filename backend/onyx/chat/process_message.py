@@ -92,11 +92,12 @@ from onyx.db.memory import get_memories
 from onyx.db.models import ChatMessage, ChatSession, Persona, User, UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
+from onyx.db.user_file import capture_user_file_metadata
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, log_onyx_error
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
+from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
 from onyx.file_store.utils import (
     get_default_file_store,
     load_in_memory_chat_files,
@@ -368,10 +369,9 @@ def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
 
 
 def extract_context_files(
-    user_files: list[UserFile],
+    user_files: list[UserFileMetadata],
     llm_max_context_window: int,
     reserved_token_count: int,
-    db_session: Session,
     # Because the tokenizer is a generic tokenizer, the token count may be incorrect.
     # to account for this, the maximum context that is allowed for this function is
     # 60% of the LLM's max context window. The other benefit is that for projects with
@@ -385,11 +385,9 @@ def extract_context_files(
     the all-or-nothing fit check and the actual content loading.
 
     Args:
-        project_id: The project ID to load files from
-        user_id: The user ID for authorization
+        user_files: Captured metadata for authorized files
         llm_max_context_window: Maximum tokens allowed in the LLM context window
         reserved_token_count: Number of tokens to reserve for other content
-        db_session: Database session
         max_llm_context_percentage: Maximum percentage of the LLM context window to use.
     Returns:
         ExtractedContextFiles containing:
@@ -438,10 +436,7 @@ def extract_context_files(
 
     # Files fit — load them into context
     user_file_map = {uf.file_id: uf for uf in user_files}
-    in_memory_files = load_in_memory_chat_files(
-        user_file_ids=[uf.id for uf in user_files],
-        db_session=db_session,
-    )
+    in_memory_files = load_in_memory_chat_files(user_files)
 
     file_texts: list[str] = []
     image_files: list[ChatLoadedFile] = []
@@ -505,8 +500,8 @@ def extract_context_files(
     )
 
 
-def _build_tool_metadata(user_file: UserFile) -> FileToolMetadata:
-    """Build lightweight FileToolMetadata from a UserFile record.
+def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
+    """Build lightweight FileToolMetadata from captured file fields.
 
     Delegates to ``build_file_context`` so that the file ID exposed to the
     LLM is always consistent with what FileReaderTool expects.
@@ -901,10 +896,9 @@ def build_chat_turn(
     llm_max_context_window = min(llm.config.max_input_tokens for llm in llms)
 
     extracted_context_files = extract_context_files(
-        user_files=context_user_files,
+        user_files=capture_user_file_metadata(context_user_files),
         llm_max_context_window=llm_max_context_window,
         reserved_token_count=reserved_token_count,
-        db_session=db_session,
     )
 
     search_params = determine_search_params(

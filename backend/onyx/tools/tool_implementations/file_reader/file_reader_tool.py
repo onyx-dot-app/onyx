@@ -9,9 +9,10 @@ from typing_extensions import override
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.user_file import get_user_file_metadata
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
-from onyx.file_store.utils import load_chat_file_by_id, load_user_file
+from onyx.file_store.utils import load_chat_file_by_id, load_user_file_content
 from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -139,7 +140,8 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
     def _load_file(self, file_id: UUID) -> InMemoryChatFile:
         if file_id in self._user_file_ids:
             with get_session_with_current_tenant() as db_session:
-                return load_user_file(file_id, db_session)
+                metadata = get_user_file_metadata(file_id, db_session)
+            return load_user_file_content(metadata)
         return load_chat_file_by_id(str(file_id))
 
     def run(

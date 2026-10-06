@@ -2,8 +2,9 @@ import base64
 import threading
 from enum import Enum
 from typing import Callable, NotRequired
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypedDict  # noreorder
 
 # Sidecar attribute names used by the lazy-content materialization shim. They
@@ -93,6 +94,18 @@ class FileDescriptor(TypedDict):
     type: ChatFileType
     name: NotRequired[str | None]
     user_file_id: NotRequired[str | None]
+
+
+class UserFileMetadata(BaseModel):
+    """Immutable file fields captured before concurrent content loading."""
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    id: UUID
+    file_id: str
+    name: str
+    file_type: str
+    token_count: int | None
 
 
 class InMemoryChatFile(BaseModel):
