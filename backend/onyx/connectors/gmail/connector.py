@@ -73,6 +73,10 @@ EMAIL_FIELDS = [
 MAX_MESSAGE_BODY_BYTES = 10 * 1024 * 1024  # 10MB cap to keep large threads safe
 
 PAGES_PER_CHECKPOINT = 1
+# The most pages the slim listing reads for one user (about 10 million
+# threads at the default page size). It stops a bad page token from looping
+# forever.
+MAX_SLIM_PAGES_PER_USER = 100_000
 
 add_retries = retry_builder(tries=50, max_delay=30)
 
@@ -654,9 +658,11 @@ class GmailConnector(
 
             for user_email in self._get_all_user_emails():
                 # Each call reads one page. List every page of this user,
-                # and start the next user from its first page.
+                # and start the next user from its first page. A listing
+                # that stops early would make pruning delete the threads
+                # it did not list, so a stuck token raises.
                 page_token: str | None = None
-                while True:
+                for _ in range(MAX_SLIM_PAGES_PER_USER):
                     pt_dict[PAGE_TOKEN_KEY] = None
                     yield from self._fetch_slim_threads(
                         user_email,
@@ -666,9 +672,19 @@ class GmailConnector(
                         end,
                         callback=callback,
                     )
-                    page_token = pt_dict[PAGE_TOKEN_KEY]
-                    if page_token is None:
+                    next_page_token = pt_dict[PAGE_TOKEN_KEY]
+                    if next_page_token is None:
                         break
+                    if next_page_token == page_token:
+                        raise RuntimeError(
+                            f"Gmail returned the same page token twice for {user_email}"
+                        )
+                    page_token = next_page_token
+                else:
+                    raise RuntimeError(
+                        f"Gmail slim listing for {user_email} read "
+                        f"{MAX_SLIM_PAGES_PER_USER} pages without reaching the end"
+                    )
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
