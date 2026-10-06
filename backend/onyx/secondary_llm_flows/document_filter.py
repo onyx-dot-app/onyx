@@ -306,7 +306,9 @@ def select_sections_for_expansion(
             max_sections=max_sections,
             extra_instructions=extra_instructions,
             formatted_doc_sections=json.dumps(
-                sections_dict, indent=None if COMPACT_TOOL_OUTPUT else 2
+                sections_dict,
+                indent=None if COMPACT_TOOL_OUTPUT else 2,
+                separators=(",", ":") if COMPACT_TOOL_OUTPUT else None,
             ),
             user_query=user_query,
         )

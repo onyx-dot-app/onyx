@@ -411,6 +411,7 @@ def _convert_sections_to_llm_string_with_citations(
     return json.dumps(
         output,
         indent=None if COMPACT_TOOL_OUTPUT else 2,
+        separators=(",", ":") if COMPACT_TOOL_OUTPUT else None,
         ensure_ascii=False,
     ), citation_mapping
 

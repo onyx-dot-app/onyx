@@ -113,4 +113,6 @@ SKIP_DEEP_RESEARCH_CLARIFICATION = (
 
 # Tool/secondary-flow JSON payloads are machine-read; pretty-print
 # indentation costs input tokens on every later request that replays them.
-COMPACT_TOOL_OUTPUT = os.environ.get("COMPACT_TOOL_OUTPUT", "false").lower() == "true"
+COMPACT_TOOL_OUTPUT: bool = (
+    os.environ.get("COMPACT_TOOL_OUTPUT", "false").lower() == "true"
+)
