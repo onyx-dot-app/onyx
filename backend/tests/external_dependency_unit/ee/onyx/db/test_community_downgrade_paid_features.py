@@ -3,6 +3,7 @@ request: nothing below their tier could turn them off afterwards. The database
 tests roll their transaction back."""
 
 from collections.abc import Generator
+from io import BytesIO
 from uuid import uuid4
 
 import pytest
@@ -12,16 +13,17 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.community_downgrade import disable_paid_features__no_commit
 from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
 from ee.onyx.server.enterprise_settings.store import (
+    get_logo_filename,
+    get_logotype_filename,
     load_analytics_script,
 )
 from ee.onyx.server.enterprise_settings.store import load_settings as load_branding
 from ee.onyx.server.enterprise_settings.store import reset_settings as reset_branding
 from ee.onyx.server.enterprise_settings.store import store_settings as store_branding
-from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import (
     DISCORD_SERVICE_API_KEY_NAME,
     KV_CUSTOM_ANALYTICS_SCRIPT_KEY,
-    OnyxRedisLocks,
+    FileOrigin,
     TokenRateLimitScope,
 )
 from onyx.db.enums import AccountType, HookFailStrategy, HookPoint, UserFileStatus
@@ -36,6 +38,7 @@ from onyx.db.models import (
     UserFile,
     UserGroup,
 )
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.server.settings.store import (
     clear_chat_retention,
@@ -200,22 +203,32 @@ def test_chat_retention_is_cleared() -> None:
     settings = load_settings()
     settings.maximum_chat_retention_days = 30
     store_settings(settings)
-    cache = get_cache_backend()
-    cache.set(OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE, "chain-token", ex=60)
 
     clear_chat_retention()
 
     assert load_settings().maximum_chat_retention_days is None
-    # A deletion chain started under the old limit loses its marker and stops.
-    assert not cache.exists(OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE)
 
 
 @pytest.mark.usefixtures("tenant_context", "restore_settings")
 def test_branding_is_reset() -> None:
     store_branding(EnterpriseSettings(application_name="Acme Search"))
     get_kv_store().store(KV_CUSTOM_ANALYTICS_SCRIPT_KEY, "console.log('x')")
+    file_store: FileStore = get_default_file_store()
+    logo_ids: list[str] = [get_logo_filename(), get_logotype_filename()]
+    for file_id in logo_ids:
+        file_store.save_file(
+            content=BytesIO(b"logo"),
+            display_name=file_id,
+            file_origin=FileOrigin.OTHER,
+            file_type="image/png",
+            file_id=file_id,
+        )
 
     reset_branding()
 
     assert load_branding() == EnterpriseSettings()
     assert load_analytics_script() is None
+    for file_id in logo_ids:
+        assert not file_store.has_file(file_id, FileOrigin.OTHER, "image/png")
+    # Nothing left to remove is not an error.
+    reset_branding()

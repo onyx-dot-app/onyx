@@ -251,7 +251,7 @@ class TestClaimUsesTheCheckoutSession:
         mock_post.assert_not_called()
 
 
-_DOWNGRADE_STEPS = [
+_DOWNGRADE_STEPS: list[str] = [
     "make_all_cc_pairs_public__no_commit",
     "remove_custom_user_groups__no_commit",
     "disable_paid_features__no_commit",
@@ -266,7 +266,7 @@ _DOWNGRADE_STEPS = [
 def downgrade_steps() -> Generator[MagicMock, None, None]:
     """Every step of the downgrade mocked under one parent, which records the
     order they ran in."""
-    steps = MagicMock()
+    steps: MagicMock = MagicMock()
     with ExitStack() as stack:
         for name in _DOWNGRADE_STEPS:
             mock = stack.enter_context(patch(f"ee.onyx.server.license.api.{name}"))

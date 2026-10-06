@@ -128,9 +128,6 @@ def clear_chat_retention() -> None:
         if settings.maximum_chat_retention_days is not None:
             settings.maximum_chat_retention_days = None
             store_settings(settings)
-    # A deletion chain carries the limit it started with. Without its marker
-    # it stops at the next batch.
-    get_cache_backend().delete(OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE)
 
 
 def store_settings(settings: Settings) -> None:

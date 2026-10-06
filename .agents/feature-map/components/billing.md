@@ -257,8 +257,8 @@ expired license gates the other routes. No frontend code calls it.
 - `reset_settings` stores a default `EnterpriseSettings`, deletes the custom
   analytics script, and deletes the logo and logotype files.
   `clear_chat_retention` sets `maximum_chat_retention_days` to `None` under
-  `settings_write_lock` and deletes the `CHAT_TTL_CHAIN_ACTIVE` marker, which
-  stops a chat deletion chain that started under the old limit.
+  `settings_write_lock`. A chat deletion chain that started under the old
+  limit ends at its next batch ([[chat-persistence]]).
 
 ---
 
