@@ -2956,6 +2956,7 @@
           },
           "specificGroups": {
             "description": "이 커넥터의 문서에 액세스할 수 있는 그룹을 지정합니다.",
+            "required": "그룹을 하나 이상 선택하세요.",
             "title": "특정 그룹"
           },
           "sync": {

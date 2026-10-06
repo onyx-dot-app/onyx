@@ -2956,6 +2956,7 @@
           },
           "specificGroups": {
             "description": "指定可以访问此连接器文档的群组。",
+            "required": "请至少选择一个群组。",
             "title": "特定群组"
           },
           "sync": {

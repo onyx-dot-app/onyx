@@ -2956,6 +2956,7 @@
           },
           "specificGroups": {
             "description": "Benennen Sie Gruppen, die auf Dokumente dieses Connectors zugreifen können.",
+            "required": "Wählen Sie mindestens eine Gruppe aus.",
             "title": "Bestimmte Gruppen"
           },
           "sync": {

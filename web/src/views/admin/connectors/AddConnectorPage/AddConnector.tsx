@@ -263,6 +263,9 @@ export default function AddConnector({
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),
+          specificGroupsRequired: t(
+            "settings.documentAccess.specificGroups.required"
+          ),
         }
       )}
       onSubmit={async (values) => {

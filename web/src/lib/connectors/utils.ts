@@ -91,6 +91,7 @@ export function splitCredentialBoundFields(
 
 interface ConnectorValidationMessages {
   oneDriveUsersRequired?: string;
+  specificGroupsRequired?: string;
 }
 
 const buildInitialValuesForFields = (
@@ -189,6 +190,15 @@ export function createConnectorValidationSchema(
       .when("access_type", ([accessType], schema) =>
         requireGroups && accessType !== "sync"
           ? schema.min(1, "Select at least one group you manage")
+          : schema
+      ),
+    // Specific Groups with none picked would let no group read the
+    // documents.
+    data_access_group_ids: Yup.array()
+      .of(Yup.number())
+      .when("access_type", ([accessType], schema) =>
+        accessType === "private"
+          ? schema.min(1, messages.specificGroupsRequired)
           : schema
       ),
     ...fieldSchemas,
