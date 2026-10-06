@@ -1,12 +1,17 @@
 import contextvars
+import threading
 import time
 
+import pytest
+
 from onyx.utils.threadpool_concurrency import (
+    ContextThreadPoolExecutor,
     FunctionCall,
     run_functions_in_parallel,
     run_functions_tuples_in_parallel,
     run_in_background,
     run_with_timeout,
+    start_thread_future,
     start_thread_with_context,
     wait_on_background,
 )
@@ -204,3 +209,62 @@ def test_start_thread_with_context_passes_args() -> None:
     thread.join(timeout=2.0)
 
     assert seen == [("pos", "kw")]
+
+
+def test_executor_isolates_concurrent_submission_contexts() -> None:
+    barrier = threading.Barrier(2)
+
+    def read_then_change() -> str:
+        barrier.wait(timeout=2)
+        inherited = test_var.get()
+        test_var.set("worker")
+        return inherited
+
+    token = test_var.set("first")
+    try:
+        with ContextThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(read_then_change)
+            test_var.set("second")
+            second = executor.submit(read_then_change)
+            assert first.result(timeout=3) == "first"
+            assert second.result(timeout=3) == "second"
+            assert executor.submit(test_var.get).result(timeout=3) == "second"
+        assert test_var.get() == "second"
+    finally:
+        test_var.reset(token)
+
+
+def test_thread_uses_explicit_empty_context() -> None:
+    token = test_var.set("caller")
+    observed: list[str] = []
+    try:
+        worker = start_thread_with_context(
+            lambda: observed.append(test_var.get()), context=contextvars.Context()
+        )
+        worker.join(timeout=2)
+        assert not worker.is_alive()
+        assert observed == ["default"]
+        assert test_var.get() == "caller"
+    finally:
+        test_var.reset(token)
+
+
+def test_thread_future_preserves_context_and_result() -> None:
+    token = test_var.set("future")
+    try:
+        future = start_thread_future(test_var.get, name="test-result")
+        assert future.result(timeout=2) == "future"
+    finally:
+        test_var.reset(token)
+
+
+def test_thread_future_preserves_base_exception() -> None:
+    error = BaseException("worker failed")
+
+    def fail() -> None:
+        raise error
+
+    future = start_thread_future(fail, name="test-error")
+    with pytest.raises(BaseException) as caught:
+        future.result(timeout=2)
+    assert caught.value is error
