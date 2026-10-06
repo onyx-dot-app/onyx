@@ -46,12 +46,12 @@ from onyx.oauth_provider.attempts import (
     store_authorization_request,
 )
 from onyx.oauth_provider.config import (
-    OAuthProviderSettings,
     canonical_mcp_resource,
-    validate_oauth_redirect_uri,
+    validate_oauth_url,
 )
 from onyx.oauth_provider.models import (
     OAuthProviderAuthorizationCode,
+    OAuthProviderSettings,
     OAuthProviderTokenPair,
     PendingOAuthProviderAuthorization,
     StoredOAuthProviderCode,
@@ -93,7 +93,7 @@ def validate_public_oauth_client(client: OAuthClientInformationFull) -> None:
     if not client.redirect_uris or len(client.redirect_uris) > 10:
         raise ValueError("Between one and ten redirect URIs are required")
     for redirect_uri in client.redirect_uris:
-        validate_oauth_redirect_uri(str(redirect_uri))
+        validate_oauth_url(str(redirect_uri), allow_query=True)
     if (
         "authorization_code" not in client.grant_types
         or set(client.grant_types) - {"authorization_code", "refresh_token"}
@@ -196,7 +196,7 @@ class OnyxOAuthProvider(OAuthProvider):
         if not client_id.startswith("https://"):
             return await run_in_threadpool(get_oauth_provider_client, client_id)
         try:
-            validate_oauth_redirect_uri(client_id)
+            validate_oauth_url(client_id, allow_query=True)
             document = await _cimd_fetcher(client_id).fetch(client_id)
             if str(document.client_id) != client_id:
                 return None
@@ -204,7 +204,7 @@ class OnyxOAuthProvider(OAuthProvider):
                 client_id=client_id,
                 client_name=document.client_name or urlsplit(client_id).netloc,
                 redirect_uris=[
-                    AnyUrl(validate_oauth_redirect_uri(uri))
+                    AnyUrl(validate_oauth_url(uri, allow_query=True))
                     for uri in document.redirect_uris
                 ],
                 grant_types=document.grant_types,
@@ -256,19 +256,20 @@ class OnyxOAuthProvider(OAuthProvider):
         normalized = params.model_copy(
             update={"resource": resource, "scopes": [Permission.READ_SEARCH.value]}
         )
-        request_id = await store_authorization_request(
+        request_id = await run_in_threadpool(
+            store_authorization_request,
             PendingOAuthProviderAuthorization(
                 client_id=client.client_id,
                 client_name=client.client_name or "OAuth client",
                 params=normalized,
-            )
+            ),
         )
         return f"{self.settings.web_url}/oauth-provider/authorize?{urlencode({'request': request_id})}"
 
     async def load_authorization_code(
         self, client: OAuthClientInformationFull, authorization_code: str
     ) -> OAuthProviderAuthorizationCode | None:
-        record = await get_authorization_code(authorization_code)
+        record = await run_in_threadpool(get_authorization_code, authorization_code)
         if (
             record is None
             or record.authorization.client_id != client.client_id
@@ -295,7 +296,9 @@ class OnyxOAuthProvider(OAuthProvider):
     ) -> OAuthToken:
         if not isinstance(authorization_code, OAuthProviderAuthorizationCode):
             raise TokenError("invalid_grant", "Invalid authorization code")
-        record = await consume_authorization_code(authorization_code.code)
+        record = await run_in_threadpool(
+            consume_authorization_code, authorization_code.code
+        )
         if (
             record is None
             or record.authorization.client_id != client.client_id

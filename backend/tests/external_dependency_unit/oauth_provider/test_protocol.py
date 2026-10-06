@@ -33,13 +33,12 @@ from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.db.enums import Permission
 from onyx.db.models import OAuthProviderClient, OAuthProviderGrant, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
-from onyx.oauth_provider import attempts as oauth_attempts
 from onyx.oauth_provider.config import get_oauth_provider_settings
 from onyx.server.auth_check import check_router_auth
 from onyx.server.oauth_provider import api as oauth_api
 from onyx.server.oauth_provider import provider as oauth_provider
 from onyx.server.oauth_provider.api import router as user_router
-from onyx.server.oauth_provider.protocol import create_oauth_provider_protocol_router
+from onyx.server.oauth_provider.protocol import router as protocol_router
 from onyx.server.oauth_provider.provider import _cimd_fetcher
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
@@ -52,49 +51,6 @@ _ORIGIN = "http://localhost:3000"
 _RESOURCE = f"{_ORIGIN}/mcp/"
 _REDIRECT = "http://127.0.0.1:9876/callback"
 _UNKNOWN_OAUTH_REFRESH_TOKEN = "onyx_ort_tenant_does_not_exist." + "a" * 43
-
-
-async def test_rate_limiter_counts_bucket_and_keeps_ttl(
-    redis_client: Redis, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    bucket = f"test-rate-{uuid4()}"
-    monkeypatch.setattr(oauth_attempts.time, "time", lambda: 1000.0)
-    key = oauth_attempts._rate_key(bucket, 600)
-    try:
-        assert (
-            await oauth_attempts.allow_oauth_provider_request(
-                bucket, limit=2, window_seconds=600
-            )
-            is True
-        )
-        assert (
-            await oauth_attempts.allow_oauth_provider_request(
-                bucket, limit=2, window_seconds=600
-            )
-            is True
-        )
-        assert (
-            await oauth_attempts.allow_oauth_provider_request(
-                bucket, limit=2, window_seconds=600
-            )
-            is False
-        )
-        assert await redis_client.ttl(key) > 0
-    finally:
-        await redis_client.delete(key)
-
-
-@pytest.mark.parametrize(
-    ("limit", "window_seconds"),
-    [(0, 600), (2, 0)],
-)
-async def test_rate_limiter_rejects_non_positive_limits(
-    limit: int, window_seconds: int
-) -> None:
-    with pytest.raises(ValueError):
-        await oauth_attempts.allow_oauth_provider_request(
-            f"test-rate-{uuid4()}", limit=limit, window_seconds=window_seconds
-        )
 
 
 @pytest.fixture(params=[AuthBackend.REDIS])
@@ -121,7 +77,6 @@ async def protocol_client(
     protocol_session_strategy: TenantAwareRedisStrategy | SingleTenantJWTStrategy,
 ) -> AsyncGenerator[httpx.AsyncClient, None]:
     monkeypatch.setattr(app_configs, "OAUTH_PROVIDER_ENABLED", True)
-    monkeypatch.setattr(app_configs, "MCP_SERVER_OAUTH_RESOURCE_URL", None)
     monkeypatch.setattr(app_configs, "WEB_DOMAIN", _ORIGIN)
     user = create_test_user(db_session, "mcp_protocol", assign_default_group=False)
     user.effective_permissions = [
@@ -131,9 +86,7 @@ async def protocol_client(
     db_session.commit()
     app = FastAPI()
     register_onyx_exception_handlers(app)
-    app.include_router(
-        create_oauth_provider_protocol_router(get_oauth_provider_settings())
-    )
+    app.include_router(protocol_router)
     app.include_router(user_router)
     app.include_router(
         fastapi_users.get_refresh_router(auth_backend, requires_verification=False),

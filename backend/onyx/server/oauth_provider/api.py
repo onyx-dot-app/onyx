@@ -144,10 +144,11 @@ async def consent_details(
     user: User = Depends(require_permission(Permission.CREATE_USER_API_KEYS)),
 ) -> OAuthConsentInfo:
     session_hash = await _authorization_session(request, user)
-    pending = await get_authorization_request(authorization_request)
+    pending = await run_in_threadpool(get_authorization_request, authorization_request)
     if pending is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Authorization request expired")
-    binding = await bind_authorization_request(
+    binding = await run_in_threadpool(
+        bind_authorization_request,
         authorization_request,
         user_id=user.id,
         tenant_id=get_current_tenant_id(),
@@ -183,7 +184,8 @@ async def decide_consent(
     if request.headers.get("origin") != settings.web_origin:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Invalid authorization origin")
     session_hash = await _authorization_session(request, user)
-    pending = await consume_authorization_request(
+    pending = await run_in_threadpool(
+        consume_authorization_request,
         payload.request_id,
         user_id=user.id,
         tenant_id=get_current_tenant_id(),
@@ -216,13 +218,14 @@ async def decide_consent(
             OnyxErrorCode.INVALID_INPUT,
             "Client redirect changed; restart authorization",
         ) from error
-    code = await store_authorization_code(
+    code = await run_in_threadpool(
+        store_authorization_code,
         StoredOAuthProviderCode(
             authorization=pending,
             user_id=user.id,
             tenant_id=get_current_tenant_id(),
             expires_at=time.time() + AUTHORIZATION_CODE_TTL_SECONDS,
-        )
+        ),
     )
     return OAuthConsentResult(
         redirect_url=construct_redirect_uri(

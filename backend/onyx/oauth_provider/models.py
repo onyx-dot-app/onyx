@@ -75,3 +75,12 @@ class OAuthProviderOwner(BaseModel):
     user_id: UUID
     email: str
     oauth_identities: tuple[tuple[str, str], ...]
+
+
+class OAuthProviderSettings(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    issuer_url: str
+    mcp_resource_url: str
+    web_url: str
+    web_origin: str

@@ -649,12 +649,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         from onyx.oauth_provider.config import get_oauth_provider_settings
         from onyx.server.oauth_provider.api import router as oauth_provider_user_router
         from onyx.server.oauth_provider.protocol import (
-            create_oauth_provider_protocol_router,
+            router as oauth_provider_protocol_router,
         )
 
+        # Fail at startup, not on the first request, when WEB_DOMAIN is unusable.
+        get_oauth_provider_settings()
         include_router_with_global_prefix_prepended(
-            application,
-            create_oauth_provider_protocol_router(get_oauth_provider_settings()),
+            application, oauth_provider_protocol_router
         )
         include_router_with_global_prefix_prepended(
             application, oauth_provider_user_router

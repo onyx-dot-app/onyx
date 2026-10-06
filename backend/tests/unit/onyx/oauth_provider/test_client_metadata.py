@@ -8,7 +8,7 @@ from fastmcp.server.auth import cimd, ssrf
 from fastmcp.server.auth.ssrf import SSRFFetchError, SSRFFetchResponse
 
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.oauth_provider.config import OAuthProviderSettings
+from onyx.oauth_provider.models import OAuthProviderSettings
 from onyx.server.oauth_provider.provider import (
     OAuthClientMetadataUnavailable,
     OnyxOAuthProvider,

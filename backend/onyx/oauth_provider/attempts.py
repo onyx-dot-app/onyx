@@ -3,39 +3,23 @@ import math
 import re
 import secrets
 import time
-from collections.abc import Awaitable
-from typing import cast
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
+from onyx.cache.factory import get_shared_cache_backend
 from onyx.oauth_provider.models import (
     OAuthProviderConsentBinding,
     PendingOAuthProviderAuthorization,
     StoredOAuthProviderCode,
 )
-from onyx.redis.redis_pool import get_async_redis_connection
-from shared_configs.configs import DEFAULT_REDIS_PREFIX
 
 AUTHORIZATION_REQUEST_TTL_SECONDS = 10 * 60
 AUTHORIZATION_CODE_TTL_SECONDS = 60
 
 _HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
-_KEY_PREFIX = f"{DEFAULT_REDIS_PREFIX}:oauth_provider"
-_REQUEST_KEY_PREFIX = f"{_KEY_PREFIX}:request"
-_CODE_KEY_PREFIX = f"{_KEY_PREFIX}:code"
-
-_CONSUME_REQUEST_SCRIPT = """
-if redis.call("GET", KEYS[2]) ~= ARGV[1] then
-  return nil
-end
-local pending = redis.call("GET", KEYS[1])
-if not pending then
-  return nil
-end
-redis.call("DEL", KEYS[1], KEYS[2])
-return pending
-"""
+_REQUEST_KEY_PREFIX = "oauth_provider:request"
+_CODE_KEY_PREFIX = "oauth_provider:code"
 
 
 def _handle_digest(handle: str) -> str | None:
@@ -48,10 +32,9 @@ def _request_keys(handle: str) -> tuple[str, str] | None:
     digest = _handle_digest(handle)
     if digest is None:
         return None
-    tag = f"{{{digest}}}"
     return (
-        f"{_REQUEST_KEY_PREFIX}:{tag}:pending",
-        f"{_REQUEST_KEY_PREFIX}:{tag}:binding",
+        f"{_REQUEST_KEY_PREFIX}:{digest}:pending",
+        f"{_REQUEST_KEY_PREFIX}:{digest}:binding",
     )
 
 
@@ -59,11 +42,11 @@ def _code_key(code: str) -> str | None:
     digest = _handle_digest(code)
     if digest is None:
         return None
-    return f"{_CODE_KEY_PREFIX}:{{{digest}}}"
+    return f"{_CODE_KEY_PREFIX}:{digest}"
 
 
-def _loads_model[T: BaseModel](raw: object, model_type: type[T]) -> T | None:
-    if not isinstance(raw, (str, bytes, bytearray)):
+def _loads_model[T: BaseModel](raw: bytes | None, model_type: type[T]) -> T | None:
+    if raw is None:
         return None
     try:
         return model_type.model_validate_json(raw)
@@ -71,38 +54,32 @@ def _loads_model[T: BaseModel](raw: object, model_type: type[T]) -> T | None:
         return None
 
 
-async def store_authorization_request(
+def store_authorization_request(
     authorization: PendingOAuthProviderAuthorization,
 ) -> str:
     handle = secrets.token_urlsafe(32)
     pending_key, _ = _request_keys(handle) or (None, None)
     if pending_key is None:
         raise RuntimeError("Generated invalid OAuth provider authorization handle")
-
-    redis = await get_async_redis_connection()
-    was_stored = await redis.set(
+    if not get_shared_cache_backend().set_if_absent(
         pending_key,
         authorization.model_dump_json(),
         ex=AUTHORIZATION_REQUEST_TTL_SECONDS,
-        nx=True,
-    )
-    if not was_stored:
+    ):
         raise RuntimeError("OAuth provider authorization handle collision")
     return handle
 
 
-async def get_authorization_request(
-    handle: str,
-) -> PendingOAuthProviderAuthorization | None:
+def get_authorization_request(handle: str) -> PendingOAuthProviderAuthorization | None:
     keys = _request_keys(handle)
     if keys is None:
         return None
+    return _loads_model(
+        get_shared_cache_backend().get(keys[0]), PendingOAuthProviderAuthorization
+    )
 
-    redis = await get_async_redis_connection()
-    return _loads_model(await redis.get(keys[0]), PendingOAuthProviderAuthorization)
 
-
-async def bind_authorization_request(
+def bind_authorization_request(
     handle: str,
     *,
     user_id: UUID,
@@ -114,9 +91,9 @@ async def bind_authorization_request(
         return None
     pending_key, binding_key = keys
 
-    redis = await get_async_redis_connection()
-    remaining_ttl_ms = await redis.pttl(pending_key)
-    if remaining_ttl_ms <= 0:
+    cache = get_shared_cache_backend()
+    remaining_ttl = cache.ttl(pending_key)
+    if remaining_ttl <= 0:
         return None
 
     binding = OAuthProviderConsentBinding(
@@ -125,19 +102,10 @@ async def bind_authorization_request(
         session_hash=session_hash,
         csrf_token=secrets.token_urlsafe(32),
     )
-    raw_binding = binding.model_dump_json()
-    was_bound = await redis.set(
-        binding_key,
-        raw_binding,
-        px=remaining_ttl_ms,
-        nx=True,
-    )
-    if was_bound:
+    if cache.set_if_absent(binding_key, binding.model_dump_json(), ex=remaining_ttl):
         return binding
 
-    existing_binding = _loads_model(
-        await redis.get(binding_key), OAuthProviderConsentBinding
-    )
+    existing_binding = _loads_model(cache.get(binding_key), OAuthProviderConsentBinding)
     if existing_binding is None:
         return None
     if (
@@ -149,7 +117,7 @@ async def bind_authorization_request(
     return None
 
 
-async def consume_authorization_request(
+def consume_authorization_request(
     handle: str,
     *,
     user_id: UUID,
@@ -162,35 +130,23 @@ async def consume_authorization_request(
         return None
     pending_key, binding_key = keys
 
-    redis = await get_async_redis_connection()
-    raw_binding = await redis.get(binding_key)
-    binding = _loads_model(raw_binding, OAuthProviderConsentBinding)
-    if binding is None:
-        return None
+    cache = get_shared_cache_backend()
+    binding = _loads_model(cache.get(binding_key), OAuthProviderConsentBinding)
     if (
-        binding.user_id != user_id
+        binding is None
+        or binding.user_id != user_id
         or binding.tenant_id != tenant_id
         or binding.session_hash != session_hash
         or not secrets.compare_digest(binding.csrf_token.encode(), csrf_token.encode())
     ):
         return None
-    if not isinstance(raw_binding, (str, bytes, bytearray)):
-        return None
-
-    raw_pending = await cast(
-        Awaitable[object],
-        redis.eval(
-            _CONSUME_REQUEST_SCRIPT,
-            2,
-            pending_key,
-            binding_key,
-            raw_binding,
-        ),
-    )
-    return _loads_model(raw_pending, PendingOAuthProviderAuthorization)
+    # getdel lets exactly one concurrent approval take the request.
+    pending = _loads_model(cache.getdel(pending_key), PendingOAuthProviderAuthorization)
+    cache.delete(binding_key)
+    return pending
 
 
-async def store_authorization_code(record: StoredOAuthProviderCode) -> str:
+def store_authorization_code(record: StoredOAuthProviderCode) -> str:
     seconds_until_expiry = record.expires_at - time.time()
     if seconds_until_expiry <= 0:
         raise ValueError("OAuth provider authorization code is already expired")
@@ -200,80 +156,32 @@ async def store_authorization_code(record: StoredOAuthProviderCode) -> str:
     key = _code_key(code)
     if key is None:
         raise RuntimeError("Generated invalid OAuth provider authorization code")
-
-    redis = await get_async_redis_connection()
-    was_stored = await redis.set(
+    if not get_shared_cache_backend().set_if_absent(
         key,
         record.model_dump_json(),
         ex=max(1, math.ceil(seconds_until_expiry)),
-        nx=True,
-    )
-    if not was_stored:
+    ):
         raise RuntimeError("OAuth provider authorization code collision")
     return code
 
 
-async def get_authorization_code(code: str) -> StoredOAuthProviderCode | None:
+def get_authorization_code(code: str) -> StoredOAuthProviderCode | None:
     key = _code_key(code)
     if key is None:
         return None
-
-    redis = await get_async_redis_connection()
-    record = _loads_model(await redis.get(key), StoredOAuthProviderCode)
+    record = _loads_model(get_shared_cache_backend().get(key), StoredOAuthProviderCode)
     if record is None or record.expires_at <= time.time():
         return None
     return record
 
 
-async def consume_authorization_code(code: str) -> StoredOAuthProviderCode | None:
+def consume_authorization_code(code: str) -> StoredOAuthProviderCode | None:
     key = _code_key(code)
     if key is None:
         return None
-
-    redis = await get_async_redis_connection()
-    record = _loads_model(await redis.getdel(key), StoredOAuthProviderCode)
-    if record is None or record.expires_at <= time.time():
-        return None
-    return record
-
-
-_RATE_KEY_PREFIX = f"{DEFAULT_REDIS_PREFIX}:oauth_provider:rate"
-
-_RATE_LIMIT_SCRIPT = """
-local count = redis.call("INCR", KEYS[1])
-if count == 1 then
-  redis.call("EXPIRE", KEYS[1], ARGV[1])
-end
-return count <= tonumber(ARGV[2])
-"""
-
-
-def _rate_key(bucket: str, window_seconds: int) -> str:
-    digest = hashlib.sha256(bucket.encode("utf-8")).hexdigest()
-    window_id = int(time.time() // window_seconds)
-    return f"{_RATE_KEY_PREFIX}:{{{digest}}}:{window_id}"
-
-
-async def allow_oauth_provider_request(
-    bucket: str,
-    *,
-    limit: int,
-    window_seconds: int,
-) -> bool:
-    if limit <= 0:
-        raise ValueError("OAuth provider rate limit must be positive")
-    if window_seconds <= 0:
-        raise ValueError("OAuth provider rate-limit window must be positive")
-
-    redis = await get_async_redis_connection()
-    allowed = await cast(
-        Awaitable[object],
-        redis.eval(
-            _RATE_LIMIT_SCRIPT,
-            1,
-            _rate_key(bucket, window_seconds),
-            str(window_seconds),
-            str(limit),
-        ),
+    record = _loads_model(
+        get_shared_cache_backend().getdel(key), StoredOAuthProviderCode
     )
-    return bool(allowed)
+    if record is None or record.expires_at <= time.time():
+        return None
+    return record

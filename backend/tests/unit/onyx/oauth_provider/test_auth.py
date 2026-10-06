@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -56,8 +56,8 @@ async def test_oauth_rate_limit_uses_forwarded_client_address(
     forwarded: tuple[str, str],
     addresses: tuple[str, str],
 ) -> None:
-    limiter = AsyncMock(return_value=True)
-    monkeypatch.setattr(oauth_protocol, "allow_oauth_provider_request", limiter)
+    limiter = Mock(return_value=True)
+    monkeypatch.setattr(oauth_protocol, "within_rate_limit", limiter)
     for chain in forwarded:
         request = Request(
             {
@@ -74,10 +74,10 @@ async def test_oauth_rate_limit_uses_forwarded_client_address(
             }
         )
         assert await oauth_protocol._rate_limit(request, "register") is None
-    buckets = [call.args[0] for call in limiter.await_args_list]
+    buckets = [call.args[0] for call in limiter.call_args_list]
     assert buckets == [
-        f"register:ip:{addresses[0]}",
-        "register:global",
-        f"register:ip:{addresses[1]}",
-        "register:global",
+        f"oauth_provider:register:ip:{addresses[0]}",
+        "oauth_provider:register:global",
+        f"oauth_provider:register:ip:{addresses[1]}",
+        "oauth_provider:register:global",
     ]
