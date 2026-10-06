@@ -2653,9 +2653,6 @@
         "title": "Die Anmeldedaten konnten nicht geladen werden."
       },
       "field": {
-        "optional": {
-          "label": "(optional)"
-        },
         "optionalSuffix": {
           "label": "optional"
         }
@@ -2793,8 +2790,20 @@
         },
         "title": "‘{connector}’ ist kein gültiger Konnektortyp!"
       },
+      "fileInput": {
+        "chooseButton": {
+          "label": "{multiple, select, true {Dateien auswählen} other {Datei auswählen}}"
+        },
+        "prompt": "{multiple, select, true {Oder ziehen Sie Dateien hierher.} other {Oder ziehen Sie eine Datei hierher.}}"
+      },
       "listInput": {
-        "placeholder": "{label} eingeben"
+        "addButton": {
+          "label": "Neu hinzufügen"
+        },
+        "placeholder": "{label} eingeben",
+        "removeButton": {
+          "tooltip": "Entfernen"
+        }
       },
       "oauth": {
         "error": {

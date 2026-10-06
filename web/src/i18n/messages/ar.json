@@ -2653,9 +2653,6 @@
         "title": "فشل تحميل بيانات الاعتماد."
       },
       "field": {
-        "optional": {
-          "label": "(اختياري)"
-        },
         "optionalSuffix": {
           "label": "اختياري"
         }
@@ -2793,8 +2790,20 @@
         },
         "title": "‘{connector}’ ليس نوع موصل صالحًا!"
       },
+      "fileInput": {
+        "chooseButton": {
+          "label": "{multiple, select, true {اختر ملفات} other {اختر ملفًا}}"
+        },
+        "prompt": "{multiple, select, true {أو اسحب الملفات وأفلتها هنا.} other {أو اسحب ملفًا وأفلته هنا.}}"
+      },
       "listInput": {
-        "placeholder": "أدخل {label}"
+        "addButton": {
+          "label": "إضافة جديد"
+        },
+        "placeholder": "أدخل {label}",
+        "removeButton": {
+          "tooltip": "إزالة"
+        }
       },
       "oauth": {
         "error": {

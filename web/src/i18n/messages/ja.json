@@ -2653,9 +2653,6 @@
         "title": "認証情報の読み込みに失敗しました。"
       },
       "field": {
-        "optional": {
-          "label": "（任意）"
-        },
         "optionalSuffix": {
           "label": "任意"
         }
@@ -2793,8 +2790,20 @@
         },
         "title": "「{connector}」は有効なコネクタータイプではありません。"
       },
+      "fileInput": {
+        "chooseButton": {
+          "label": "{multiple, select, true {ファイルを選択} other {ファイルを選択}}"
+        },
+        "prompt": "{multiple, select, true {またはここにファイルをドラッグ＆ドロップしてください。} other {またはここにファイルをドラッグ＆ドロップしてください。}}"
+      },
       "listInput": {
-        "placeholder": "{label} を入力"
+        "addButton": {
+          "label": "新規追加"
+        },
+        "placeholder": "{label} を入力",
+        "removeButton": {
+          "tooltip": "削除"
+        }
       },
       "oauth": {
         "error": {

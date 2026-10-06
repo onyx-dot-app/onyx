@@ -1,68 +1,52 @@
-import { Label, SubLabel } from "@/components/Field";
-import { ErrorMessage, useField } from "formik";
-import { useTranslations } from "next-intl";
+import { InputNumber } from "@opal/components";
+import { InputVertical } from "@opal/layouts";
+import { FormikField } from "@/refresh-components/form/FormikField";
 
-export default function NumberInput({
-  label,
-  optional,
-  description,
-  name,
-  showNeverIfZero,
-}: {
-  label: string;
+interface NumberInputProps {
   name: string;
-  optional?: boolean;
+  label: string;
   description?: string;
-  showNeverIfZero?: boolean;
-}) {
-  const t = useTranslations("admin.connectorsList");
-  const [field, meta, helpers] = useField(name);
+  optional?: boolean;
+  disabled?: boolean;
+}
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // If the input is empty, set the value to undefined or null
-    // This prevents the "NaN from empty string" error
-    if (e.target.value === "") {
-      helpers.setValue(undefined);
-    } else {
-      helpers.setValue(Number(e.target.value));
-    }
-  };
-
+/** A whole-number field. Empty stores `undefined`; -1 is the lowest value. */
+export default function NumberInput({
+  name,
+  label,
+  description,
+  optional,
+  disabled,
+}: NumberInputProps) {
   return (
-    <div className="w-full flex flex-col">
-      <Label>
-        <>
-          {label}
-          {optional && (
-            <span className="text-text-500 ms-1">
-              {t("field.optional.label")}
-            </span>
-          )}
-        </>
-      </Label>
-      {description && <SubLabel>{description}</SubLabel>}
-
-      <input
-        {...field}
-        type="number"
-        min="-1"
-        onChange={handleChange}
-        value={
-          field.value === undefined || field.value === null ? "" : field.value
-        }
-        className={`mt-2 block w-full px-3 py-2 
-                bg-white dark:bg-transparent border border-background-300 rounded-md 
-                text-sm shadow-xs placeholder-text-400
-                focus:outline-hidden focus:border-sky-500 focus:ring-1 focus:ring-sky-500
-                disabled:bg-background-50 disabled:text-text-500 disabled:border-background-200 disabled:shadow-none
-                invalid:border-pink-500 invalid:text-pink-600
-                focus:invalid:border-pink-500 focus:invalid:ring-pink-500`}
-      />
-      <ErrorMessage
+    // The field name ties the label to the input's id and shows the field's
+    // Formik error under it.
+    <InputVertical
+      withLabel={name}
+      disabled={disabled}
+      title={label}
+      description={description}
+      suffix={optional ? "optional" : undefined}
+    >
+      <FormikField<number | undefined>
         name={name}
-        component="div"
-        className="text-error text-sm mt-1"
+        render={(field, helper, _meta, status) => (
+          <InputNumber
+            id={name}
+            value={field.value ?? null}
+            onChange={(value) => {
+              // InputNumber has no blur callback, so touch on change to show
+              // the field's validation error.
+              void helper.setTouched(true, false);
+              void helper.setValue(value ?? undefined);
+            }}
+            // Some sources take -1 for "no limit", such as a recursion depth.
+            min={-1}
+            variant={status === "error" ? "error" : "primary"}
+            disabled={disabled}
+          />
+        )}
       />
-    </div>
+    </InputVertical>
   );
 }

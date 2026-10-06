@@ -291,9 +291,16 @@ export const RenderField: FC<RenderFieldProps> = ({
           label={label}
           optional={field.optional}
           description={description}
+          disabled={disabled}
         />
       ) : field.type === "list" ? (
-        <ListInput name={field.name} label={label} description={description} />
+        <ListInput
+          name={field.name}
+          label={label}
+          description={description}
+          optional={field.optional}
+          disabled={disabled}
+        />
       ) : field.type === "string_pair_list" ? (
         <StringPairListInput
           name={field.name}
@@ -313,6 +320,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           description={description}
           options={field.options || []}
           label={label}
+          disabled={disabled}
         />
       ) : field.type === "multiselect" ? (
         <MultiSelectField
@@ -334,6 +342,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           optional={field.optional}
           description={description}
           name={field.name}
+          disabled={disabled}
         />
       ) : field.type === "checkbox" && field.tabLabels ? (
         <CheckboxTabsField option={field} label={label} disabled={disabled} />

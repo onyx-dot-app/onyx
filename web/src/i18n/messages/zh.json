@@ -2653,9 +2653,6 @@
         "title": "加载凭据失败。"
       },
       "field": {
-        "optional": {
-          "label": "（可选）"
-        },
         "optionalSuffix": {
           "label": "可选"
         }
@@ -2793,8 +2790,20 @@
         },
         "title": "‘{connector}’ 不是有效的连接器类型！"
       },
+      "fileInput": {
+        "chooseButton": {
+          "label": "{multiple, select, true {选择文件} other {选择文件}}"
+        },
+        "prompt": "{multiple, select, true {或将文件拖放到此处。} other {或将文件拖放到此处。}}"
+      },
       "listInput": {
-        "placeholder": "输入{label}"
+        "addButton": {
+          "label": "新增"
+        },
+        "placeholder": "输入{label}",
+        "removeButton": {
+          "tooltip": "移除"
+        }
       },
       "oauth": {
         "error": {

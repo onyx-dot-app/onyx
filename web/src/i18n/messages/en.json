@@ -2653,9 +2653,6 @@
         "title": "Failed to load credentials."
       },
       "field": {
-        "optional": {
-          "label": "(optional)"
-        },
         "optionalSuffix": {
           "label": "optional"
         }
@@ -2793,8 +2790,20 @@
         },
         "title": "‘{connector}’ is not a valid Connector Type!"
       },
+      "fileInput": {
+        "chooseButton": {
+          "label": "{multiple, select, true {Choose files} other {Choose a file}}"
+        },
+        "prompt": "{multiple, select, true {Or drag and drop files here.} other {Or drag and drop a file here.}}"
+      },
       "listInput": {
-        "placeholder": "Enter {label}"
+        "addButton": {
+          "label": "Add New"
+        },
+        "placeholder": "Enter {label}",
+        "removeButton": {
+          "tooltip": "Remove"
+        }
       },
       "oauth": {
         "error": {

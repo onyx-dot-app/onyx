@@ -10,6 +10,7 @@ import { Button, Spacer, Text } from "@opal/components";
 import { InputErrorText, InputVertical, Section } from "@opal/layouts";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import { useStableRowKeys } from "@/views/admin/connectors/AddConnectorPage/form/inputs/useStableRowKeys";
 
 interface StringPairListInputProps {
   name: string;
@@ -45,36 +46,7 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
   const { values } = useFormikContext<Record<string, any>>();
   const pairs: Record<string, string>[] = values[name] || [];
 
-  // Stable per-row keys so removing a middle row doesn't shift native input
-  // state (focus/autofill) onto the row that takes its index. Index keys would;
-  // content-derived keys would remount the row on every keystroke. New rows are
-  // seeded here, and the remove handler drops the key at that index so each id
-  // stays with its row.
-  const [rowKeys, setRowKeys] = React.useState<{
-    keys: number[];
-    nextKey: number;
-  }>({
-    keys: pairs.map((_, index) => index),
-    nextKey: pairs.length,
-  });
-  if (rowKeys.keys.length < pairs.length) {
-    const keysToAdd = pairs.length - rowKeys.keys.length;
-    setRowKeys({
-      keys: [
-        ...rowKeys.keys,
-        ...Array.from(
-          { length: keysToAdd },
-          (_, index) => rowKeys.nextKey + index
-        ),
-      ],
-      nextKey: rowKeys.nextKey + keysToAdd,
-    });
-  } else if (rowKeys.keys.length > pairs.length) {
-    setRowKeys({
-      keys: rowKeys.keys.slice(0, pairs.length),
-      nextKey: rowKeys.nextKey,
-    });
-  }
+  const rowKeys = useStableRowKeys(pairs.length);
 
   return (
     <InputVertical title={label} description={description}>
@@ -138,10 +110,7 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
                     type="button"
                     tooltip={t("stringPairList.removeButton.tooltip")}
                     onClick={() => {
-                      setRowKeys((prev) => ({
-                        keys: prev.keys.filter((_, i) => i !== index),
-                        nextKey: prev.nextKey,
-                      }));
+                      rowKeys.removeKey(index);
                       arrayHelpers.remove(index);
                     }}
                   />

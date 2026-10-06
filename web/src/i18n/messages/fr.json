@@ -2653,9 +2653,6 @@
         "title": "Échec du chargement des identifiants."
       },
       "field": {
-        "optional": {
-          "label": "(facultatif)"
-        },
         "optionalSuffix": {
           "label": "facultatif"
         }
@@ -2793,8 +2790,20 @@
         },
         "title": "‘{connector}’ n'est pas un type de connecteur valide !"
       },
+      "fileInput": {
+        "chooseButton": {
+          "label": "{multiple, select, true {Choisir des fichiers} other {Choisir un fichier}}"
+        },
+        "prompt": "{multiple, select, true {Ou glissez-déposez des fichiers ici.} other {Ou glissez-déposez un fichier ici.}}"
+      },
       "listInput": {
-        "placeholder": "Saisissez {label}"
+        "addButton": {
+          "label": "Ajouter"
+        },
+        "placeholder": "Saisissez {label}",
+        "removeButton": {
+          "tooltip": "Retirer"
+        }
       },
       "oauth": {
         "error": {

@@ -1,49 +1,43 @@
-import CredentialSubText from "@/lib/credentials/components/CredentialFields";
-import type { StringWithDescription } from "@/lib/connectors/types";
-import { InputSingleSelect } from "@opal/components";
-import { useField } from "formik";
 import { useTranslations } from "next-intl";
+import { InputSingleSelectField } from "@opal/form";
+import { InputVertical } from "@opal/layouts";
+import type { StringWithDescription } from "@/lib/connectors/types";
 
+interface SelectInputProps {
+  name: string;
+  label: string;
+  description?: string;
+  optional?: boolean;
+  disabled?: boolean;
+  options: StringWithDescription[];
+}
+
+/** A single choice from a fixed list of options. */
 export default function SelectInput({
   name,
-  optional,
-  description,
-  options,
   label,
-}: {
-  name: string;
-  optional?: boolean;
-  description?: string;
-  options: StringWithDescription[];
-  label?: string;
-}) {
-  const t = useTranslations("admin.connectorsList");
-  const [field, , helpers] = useField<string>(name);
+  description,
+  optional,
+  disabled,
+  options,
+}: SelectInputProps) {
+  const t = useTranslations("admin.connectorsList.selectInput");
 
   return (
-    <>
-      <label
-        htmlFor={name}
-        className="block text-sm font-medium text-text-700 mb-1"
-      >
-        {label}
-        {optional && (
-          <span className="text-text-500 ms-1">
-            {t("field.optional.label")}
-          </span>
-        )}
-      </label>
-      {description && <CredentialSubText>{description}</CredentialSubText>}
-
-      <InputSingleSelect
+    // The field name ties the label to the select's id and shows the field's
+    // Formik error under it.
+    <InputVertical
+      withLabel={name}
+      disabled={disabled}
+      title={label}
+      description={description}
+      suffix={optional ? "optional" : undefined}
+    >
+      <InputSingleSelectField
+        name={name}
         id={name}
-        value={field.value ?? ""}
-        onValueChange={(value) => {
-          // The empty option is a choice here, as it was in the native select.
-          void helpers.setValue(value);
-          void helpers.setTouched(true, false);
-        }}
-        placeholder={t("selectInput.emptyOption.label")}
+        placeholder={t("emptyOption.label")}
+        disabled={disabled}
         options={[
           {
             options: options.map((option) => ({
@@ -53,6 +47,6 @@ export default function SelectInput({
           },
         ]}
       />
-    </>
+    </InputVertical>
   );
 }

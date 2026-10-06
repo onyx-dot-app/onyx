@@ -2653,9 +2653,6 @@
         "title": "No se pudieron cargar las credenciales."
       },
       "field": {
-        "optional": {
-          "label": "(opcional)"
-        },
         "optionalSuffix": {
           "label": "opcional"
         }
@@ -2793,8 +2790,20 @@
         },
         "title": "¡‘{connector}’ no es un tipo de conector válido!"
       },
+      "fileInput": {
+        "chooseButton": {
+          "label": "{multiple, select, true {Elegir archivos} other {Elegir un archivo}}"
+        },
+        "prompt": "{multiple, select, true {O arrastra y suelta archivos aquí.} other {O arrastra y suelta un archivo aquí.}}"
+      },
       "listInput": {
-        "placeholder": "Introduce {label}"
+        "addButton": {
+          "label": "Añadir uno nuevo"
+        },
+        "placeholder": "Introduce {label}",
+        "removeButton": {
+          "tooltip": "Quitar"
+        }
       },
       "oauth": {
         "error": {

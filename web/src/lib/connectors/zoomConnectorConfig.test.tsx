@@ -80,8 +80,9 @@ test("the plan select offers exactly the tiers the backend parses", async () => 
 test("the rate limit share is an advanced number field", () => {
   render(<ZoomForm />);
 
-  const rateLimit = screen.getByRole("spinbutton");
-  expect(rateLimit).toHaveAttribute("name", "rate_limit_percent");
+  const rateLimit = screen.getByLabelText(/Zoom API Rate Limit/);
+  expect(rateLimit).toHaveAttribute("id", "rate_limit_percent");
+  expect(rateLimit).toHaveAttribute("inputmode", "numeric");
 });
 
 test("the plan has to be chosen", async () => {
