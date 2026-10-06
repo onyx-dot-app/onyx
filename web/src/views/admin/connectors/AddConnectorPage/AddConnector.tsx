@@ -639,6 +639,10 @@ export default function AddConnector({ connector }: AddConnectorProps) {
                       />
                     )}
 
+                    {(!noCredentials || hasVisibleBoundFields) && (
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
+                    )}
+
                     {/* The wizard could not reach these sections without a
                       valid credential; on one page they stay disabled until
                       the credential and the bound fields are valid instead. */}
