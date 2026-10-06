@@ -1,6 +1,7 @@
 """`_completion` must send an explicit reasoning_effort "none" when GPT-5.4+ take
 function tools over chat completions, and leave responses routes and older
-models alone."""
+models alone. Names LiteLLM itself bridges to the responses API keep their
+effort."""
 
 from typing import Any
 from unittest.mock import patch
@@ -67,9 +68,14 @@ def _sent_kwargs(
     return dict(completion.call_args.kwargs)
 
 
+# LiteLLM's bridge matches only bare "gpt-5.N" names, so this one stays on
+# chat completions.
+_UNBRIDGED_MODEL = "openai.gpt-5.6-sol"
+
+
 def test_chat_completions_tools_send_explicit_none() -> None:
     kwargs = _sent_kwargs(
-        _bifrost_llm("openai/gpt-5.6-sol", BIFROST_API_MODE_CHAT_COMPLETIONS), _TOOLS
+        _bifrost_llm(_UNBRIDGED_MODEL, BIFROST_API_MODE_CHAT_COMPLETIONS), _TOOLS
     )
     assert kwargs["reasoning_effort"] == "none"
     assert "reasoning" not in kwargs
@@ -78,11 +84,33 @@ def test_chat_completions_tools_send_explicit_none() -> None:
 def test_off_still_sends_explicit_none_with_tools() -> None:
     """OFF normally omits every reasoning kwarg, which these models reject."""
     kwargs = _sent_kwargs(
-        _bifrost_llm("openai/gpt-5.6-sol", BIFROST_API_MODE_CHAT_COMPLETIONS),
+        _bifrost_llm(_UNBRIDGED_MODEL, BIFROST_API_MODE_CHAT_COMPLETIONS),
         _TOOLS,
         ReasoningEffort.OFF,
     )
     assert kwargs["reasoning_effort"] == "none"
+
+
+def test_bridged_tool_turn_keeps_effort() -> None:
+    """LiteLLM sends this tool turn to the responses API, where tools and
+    reasoning combine, so the chosen effort and summary must reach it."""
+    kwargs = _sent_kwargs(
+        _bifrost_llm("openai/gpt-5.6-sol", BIFROST_API_MODE_CHAT_COMPLETIONS),
+        _TOOLS,
+        ReasoningEffort.HIGH,
+    )
+    assert kwargs["reasoning_effort"] == {"effort": "high", "summary": "auto"}
+    assert "reasoning" not in kwargs
+
+
+def test_bridged_tool_turn_off_sends_none() -> None:
+    kwargs = _sent_kwargs(
+        _bifrost_llm("openai/gpt-5.6-sol", BIFROST_API_MODE_CHAT_COMPLETIONS),
+        _TOOLS,
+        ReasoningEffort.OFF,
+    )
+    assert kwargs["reasoning_effort"] == {"effort": "none"}
+    assert "reasoning" not in kwargs
 
 
 def test_chat_completions_without_tools_keeps_reasoning() -> None:
@@ -138,7 +166,7 @@ def test_forced_none_survives_the_retry_ladder() -> None:
             )
         return None
 
-    llm = _bifrost_llm("openai/gpt-5.6-sol", BIFROST_API_MODE_CHAT_COMPLETIONS)
+    llm = _bifrost_llm(_UNBRIDGED_MODEL, BIFROST_API_MODE_CHAT_COMPLETIONS)
     with patch("onyx.llm.litellm_singleton.litellm.completion", side_effect=completion):
         llm._completion(
             prompt=[UserMessage(content="hello")],
