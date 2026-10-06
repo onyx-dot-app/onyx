@@ -1,4 +1,3 @@
-from io import BytesIO
 from uuid import UUID
 
 import puremagic
@@ -327,6 +326,10 @@ def undelete_persona(
     )
 
 
+# Every allowlisted image type is identified by its first few bytes.
+_AVATAR_SNIFF_BYTES = 2048
+
+
 # used for assistant profile pictures
 @admin_router.post("/upload-image")
 def upload_file(
@@ -334,16 +337,17 @@ def upload_file(
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
     # Store the type sniffed from the bytes, never the client-declared one.
-    content = file.file.read()
-    file_type = _sniff_avatar_mime_type(content)
+    header: bytes = file.file.read(_AVATAR_SNIFF_BYTES)
+    file.file.seek(0)
+    file_type: str | None = _sniff_avatar_mime_type(header)
     if file_type is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Avatar must be a PNG, JPEG, GIF, or WebP image",
         )
     file_store = get_default_file_store()
-    file_id = file_store.save_file(
-        content=BytesIO(content),
+    file_id: str = file_store.save_file(
+        content=file.file,
         display_name=file.filename,
         file_origin=FileOrigin.CHAT_UPLOAD,
         file_type=file_type,
@@ -351,12 +355,14 @@ def upload_file(
     return {"file_id": file_id}
 
 
-def _sniff_avatar_mime_type(content: bytes) -> str | None:
+def _sniff_avatar_mime_type(header: bytes) -> str | None:
     try:
-        matches = puremagic.magic_string(content)
+        matches: list[puremagic.PureMagicWithConfidence] = puremagic.magic_string(
+            header
+        )
     except (puremagic.PureError, ValueError):
         return None
-    mime_type = matches[0].mime_type if matches else None
+    mime_type: str | None = matches[0].mime_type if matches else None
     if mime_type not in INLINE_SAFE_IMAGE_MIME_TYPES:
         return None
     return mime_type
@@ -840,7 +846,7 @@ def get_persona_avatar(
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
-    etag = f'"{file_id}-{RESPONSE_POLICY_VERSION}"'
+    etag: str = f'"{file_id}-{RESPONSE_POLICY_VERSION}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
