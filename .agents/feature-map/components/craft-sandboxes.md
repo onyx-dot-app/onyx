@@ -85,8 +85,10 @@ Celery task: `CLEANUP_IDLE_SANDBOXES` (`backend/onyx/background/celery/tasks/bui
 scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS` on self-hosted beats
 (`beat_schedule.py:get_tasks_to_schedule`). In `MULTI_TENANT` deployments,
 `get_cloud_tasks_to_schedule` fans the same template out with the cloud beat
-multiplier, so the effective interval is `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8`
-(`backend/onyx/background/celery/tasks/beat_schedule.py`). It is consumed by the
+multiplier (`backend/onyx/background/celery/tasks/beat_schedule.py`). The default
+interval is `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8`
+(`CLOUD_BEAT_MULTIPLIER_DEFAULT`). Operators can change the multiplier in Redis
+(`backend/onyx/server/runtime/onyx_runtime.py:OnyxRuntime.get_beat_multiplier`). It is consumed by the
 **`sandbox` Celery queue**, currently routed to `celery-worker-heavy`
 (`docs/craft/infra/sandbox-worker-network-policy.md`).
 
@@ -365,8 +367,10 @@ symlink into it rather than copying (`session_workspace.py`).
    **fail-closed**: a session-output snapshot failure on a reachable pod aborts
    the reap (sandbox stays `RUNNING`, retried next sweep); only an unreachable
    pod is terminated anyway, because its workspace is already unrecoverable.
-2. **Periodic background snapshot** (same task, non-idle branch): every sweep
-   tick, sessions whose latest `Snapshot` is older than
+2. **Periodic background snapshot** (same task, non-idle branch): the sweep
+   skips a sandbox unless its user has a stale ACTIVE session
+   (`db/sandbox.py:user_has_stale_active_session`). Otherwise, workspaces whose
+   latest `Snapshot` is older than
    `SANDBOX_IDLE_TIMEOUT_SECONDS / 4` (15 min at the default) get re-snapshotted
    even though the sandbox stays `RUNNING`, bounding data loss from an
    *ungraceful* pod death (node eviction, spot reclaim, crash) rather than a

@@ -117,9 +117,10 @@ and before the websocket is accepted:
    who already loaded a `PUBLIC_ORG` preview keeps access for up to 30
    seconds after the owner sets it back to `PRIVATE`.
 
-**The security answer:** a preview is reachable only by the session owner,
-or by anyone else if and only if the session's sharing scope is not
-`PRIVATE`. There is no separate "preview link" credential. `PUBLIC_ORG`
+**The security answer:** a preview is reachable by the session owner,
+or by any other authenticated tenant user while the sharing scope is not
+`PRIVATE`. A cached grant can stay valid for up to 30 seconds after the scope
+changes back to `PRIVATE`. There is no separate "preview link" credential. `PUBLIC_ORG`
 grants access to the live app only. Transcript and session routes still
 require session ownership (`db/build_session.py:get_build_session`). A
 logged-in viewer without the right sharing scope gets a 404. An authenticated non-owner

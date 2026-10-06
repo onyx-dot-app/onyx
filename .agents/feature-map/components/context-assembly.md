@@ -144,8 +144,8 @@ once per turn. A turn that runs three tool cycles calls
 3. Citation guidance (`prompts/chat_prompts.py:REQUIRE_CITATION_GUIDANCE`, then
    `ANSWER_COVERAGE_GUIDANCE`), only appended if the placeholder wasn't already
    present in the base prompt.
-4. Per-tool guidance sections, each gated on that tool actually being offered
-   this cycle: search, internal-search, web-search, open-URL, Python, image
+4. Per-tool guidance sections, each gated on the turn's configured tools
+   list (not the tools exposed in this cycle): search, internal-search, web-search, open-URL, Python, image
    generation, memory (`prompts/tool_prompts.py`). `include_all_guidance=True`
    forces every section on; `calculate_reserved_tokens` uses this to size a
    worst-case prompt up front (§4.8).
@@ -221,7 +221,7 @@ when the vector DB is disabled, to lightweight `FileToolMetadata` entries that
 name whichever retrieval tool this cycle actually offers
 (`llm_loop.py:_create_file_tool_metadata_message`).
 
-Project files are additionally always vectorized into the search index
+Project files are additionally vectorized into the search index when the vector DB is enabled
 (`chat/README.md`, "Projects"), independent of whether they fit in context, so
 a model with a smaller window can RAG over the project instead of losing it.
 

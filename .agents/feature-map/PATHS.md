@@ -37,7 +37,7 @@ here. Read the component that documents the setting in its env table.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/tools/interface.py`, `models.py`, `tool_constructor.py`, `tool_runner.py`, `built_in_tools.py`, `tool_name.py` | tools-framework |
-| `backend/onyx/tools/tool_implementations/search/`, `search_like_tool_utils.py` | internal-search, tools-framework |
+| `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search, tools-framework |
 | `backend/onyx/tools/tool_implementations/web_search/`, `open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/knowledge_graph/` | **incomplete feature.** The knowledge graph tool cannot run yet. See INDEX.md, Incomplete features. |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
@@ -138,7 +138,7 @@ so verify the callers rather than a single component.
 | `backend/onyx/onyxbot/`, `backend/ee/onyx/onyxbot/`, `backend/onyx/db/slack_bot.py`, `db/slack_channel_config.py`, `server/manage/slack_bot.py` | slack-bot |
 | `backend/onyx/db/discord_bot.py`, `server/manage/discord_bot/` | discord-bot |
 | `backend/onyx/server/onyx_api/` | onyx-api |
-| `backend/onyx/mcp_server/`, `mcp_server_main.py` | mcp-server |
+| `backend/onyx/mcp_server/`, `backend/onyx/mcp_server_main.py` | mcp-server |
 | `backend/onyx/server/gateway/`, `backend/ee/onyx/server/gateway/` | llm-gateway |
 | `backend/onyx/voice/`, `server/manage/voice/`, `db/voice.py` | voice |
 | `backend/onyx/image_gen/`, `server/features/image_generation/`, `server/manage/image_generation/`, `db/image_generation.py` | image-generation |

@@ -15,7 +15,7 @@ but route to different backends.
 `backend/ee/onyx/utils/tier.py`, `backend/onyx/server/settings/tier_order.py`,
 `backend/onyx/db/models.py:License`, `web/src/app/admin/billing/` (`page.tsx`,
 `PlansView.tsx`, `CheckoutView.tsx`, `BillingDetailsView.tsx`,
-`LicenseActivationCard.tsx`), `web/src/lib/billing/` (`svc.ts`, `interfaces.ts`)
+`LicenseActivationCard.tsx`), `web/src/lib/billing/` (`svc.ts`, `types.ts`)
 
 ---
 
@@ -109,9 +109,12 @@ throw if `NEXT_PUBLIC_CLOUD_ENABLED` is true.
   Postgres.
 - No dedicated seat table. Seats are counted live:
   `ee/onyx/db/license.py:get_used_seats` counts active `UserTenantMapping`
-  rows on cloud (`MULTI_TENANT`), or active `User` rows excluding
-  `AccountType.EXT_PERM_USER`, `AccountType.SERVICE_ACCOUNT`, and the
-  anonymous user on self-hosted. `ee/onyx/db/license.py:user_counts_toward_seats`
+  rows on cloud (`MULTI_TENANT`), keeping only rows whose `User` is active and
+  excluding the anonymous user
+  (`ee/onyx/db/user_tenant_mapping.py:get_tenant_count`). On self-hosted it
+  counts active `User` rows excluding `AccountType.EXT_PERM_USER`,
+  `AccountType.SERVICE_ACCOUNT`, and the anonymous user.
+  `ee/onyx/db/license.py:user_counts_toward_seats`
   is the per-user predicate kept manually in sync with that query's filter.
 - No local subscription/plan table on either deployment type. Cloud billing
   state (Stripe subscription id, status, period dates, seats) lives entirely
@@ -142,7 +145,8 @@ get_tier(tenant_id=None)
       get_cached_tier(tid) hit -> _cloud_tier(customer_tier)
       recent miss marker set -> Tier.BUSINESS
       else -> lazy refresh from control plane -> cache it -> _cloud_tier(...)
-      any Redis or control-plane failure -> Tier.BUSINESS
+      Redis read failure, or control-plane lookup failure -> Tier.BUSINESS
+      (a Redis write failure after a good refresh still returns the fresh tier)
 ```
 
 `tier_from_license_metadata` (`ee/onyx/utils/tier.py:tier_from_license_metadata`)
@@ -224,8 +228,8 @@ control-plane-side downgrade) - that is enforced separately by
    (control plane), never a guessed tier.
 2. **Tier resolution fails toward the lower tier, never the higher one.**
    Self-hosted: a DB read failure (missing table, `SQLAlchemyError`) returns
-   `Tier.COMMUNITY` (`ee/onyx/utils/tier.py:_self_hosted_tier`). Cloud: any
-   Redis or control-plane failure returns `Tier.BUSINESS`
+   `Tier.COMMUNITY` (`ee/onyx/utils/tier.py:_self_hosted_tier`). Cloud: a
+   Redis read failure or a control-plane lookup failure returns `Tier.BUSINESS`
    (`ee/onyx/utils/tier.py:get_tier`), which is the cloud floor tier (cloud
    has no `Tier.COMMUNITY`; the public schema itself resolves to `BUSINESS`
    unconditionally). Neither path can fail toward `ENTERPRISE`.
@@ -304,7 +308,7 @@ control-plane-side downgrade) - that is enforced separately by
 | If your change... | Also check |
 |---|---|
 | adds a new `CustomerTier` value or changes `_CUSTOMER_TIER_TO_TIER` | `tier_from_license_metadata` and `_cloud_tier`'s unknown-tier fallback (`Tier.BUSINESS`); every `tier_at_least` call site that assumes only three `Tier` values |
-| changes `BILLING_CACHE_TTL_SECONDS` or `BILLING_INFO_CACHE_TTL_SECONDS` | how stale an entitlement can appear post-purchase; whether `invalidate_billing_info_cache` is called from every mutation path (`create_checkout_session`, `update_seats`, `end_trial`, `/license/claim`) |
+| changes `BILLING_CACHE_TTL_SECONDS` or `BILLING_INFO_CACHE_TTL_SECONDS` | how stale an entitlement can appear post-purchase; whether `invalidate_billing_info_cache` is called from every mutation path (`create_checkout_session`, `update_seats`, `end_trial`, `/license/claim`; `/license/upload`, `/license/refresh`, and `DELETE /license` do not call it today) |
 | changes seat-counting logic (`get_used_seats`, `user_counts_toward_seats`) | keep the two in sync (the module comment says so explicitly); `license_enforcement.py`'s 402 threshold uses the cached `used_seats`, which is a separate write path from the live count |
 | changes the license-enforcement middleware's fail-open/fail-closed behavior | §5 points 3 and 4; do not accidentally make it fail closed on transient Redis errors, which would lock out every self-hosted customer during a Redis blip |
 | adds a new billing endpoint | whether it needs the self-hosted circuit breaker treatment (`_is_billing_circuit_open`/`_open_billing_circuit`), and whether it must call `invalidate_billing_info_cache()` after a state-changing operation |

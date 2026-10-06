@@ -270,14 +270,14 @@ the LLM, assigning one citation number per unique `document_id` starting at
    to `SearchTool`. A caller that wants a narrower scope passes a narrower user (the
    Slack bot passes the anonymous user in shared channels). Do not add a skip flag;
    see [[access-control]] §5.3.
-2. **Document-set names supplied by a user are access-checked in `SearchTool.run`**
+2. **Document-set names supplied by authenticated users are access-checked in `SearchTool.run`**
    with `filter_document_set_names_by_user_access`. `SearchTool` calls
    `search_pipeline` with prefetched `acl_filters` and no `db_session`, so the
    matching check in `_build_index_filters` is skipped on this path. That second
    check applies only to callers that pass a session. Both checks must stay in
    place; removing either reopens the bypass where a user overrides the persona's
    configured document sets with arbitrary names. Unauthorized names raise
-   `OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)`.
+   `OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)`. Both checks skip anonymous users (`user.is_anonymous`).
 3. **`llm_facing_response` and `rich_response` serve different audiences.**
    `llm_facing_response` is the compact, trimmed, citation-tagged string the
    model reads. `rich_response` (`SearchDocsResponse`) carries `search_docs` (all

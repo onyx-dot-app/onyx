@@ -441,11 +441,12 @@ repository. Verification below is manual.
   but does nothing to the embedded string literal.
 - **The desktop app's external-navigation allowlist is narrower than it
   looks.** `should_open_in_external_browser` only redirects away from a
-  `/app?chatId=...` URL (`window.rs:is_chat_session_url`); a link clicked
-  from the settings page, a non-chat route, or a `window.open` popup from
-  those routes stays inside the app webview instead of going to the system
-  browser, which can surprise a user expecting every external link to leave
-  the app.
+  `/app?chatId=...` URL (`window.rs:is_chat_session_url`); a plain link
+  clicked from the settings page or a non-chat route stays inside the app
+  webview instead of going to the system browser, which can surprise a user
+  expecting every external link to leave the app. `window.open` and
+  `target="_blank"` popups are separate: both window builders send them to
+  `open_new_window_externally` on every route.
 - **The widget's SSE parser fails hard on any malformed line**
   (`api-service.ts:parseSSEStream` deliberately throws rather than skipping
   a bad packet, per its own comment "Fail fast ... don't hide backend

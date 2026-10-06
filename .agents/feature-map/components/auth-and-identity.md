@@ -121,7 +121,7 @@ the coding-agent sandbox).
 | Variable | File | Default | Effect |
 |---|---|---|---|
 | `USER_AUTH_SECRET` | `configs/app_configs.py` | `""` | Signs password-reset/verification tokens, OAuth state, captcha cookies, the SSO tenant-pin token, and anonymous-user JWTs. `verify_user_auth_secret` (`auth/users.py`) refuses to start a real deployment with it empty; `DEV_MODE`/`INTEGRATION_TESTS_MODE` downgrade the refusal to a warning. |
-| `SESSION_EXPIRE_TIME_SECONDS` | `configs/app_configs.py` | 7 days (`86400 * 7`) | Redis/JWT session lifetime; also read from the legacy `REDIS_AUTH_EXPIRE_TIME_SECONDS` name. |
+| `SESSION_EXPIRE_TIME_SECONDS` | `configs/app_configs.py` | 7 days (`86400 * 7`) | Redis/Postgres/JWT session lifetime; also read from the legacy `REDIS_AUTH_EXPIRE_TIME_SECONDS` name. |
 | `AUTH_BACKEND` | `configs/app_configs.py` | `redis` | `redis` \| `postgres` \| `jwt`; selects `TenantAwareRedisStrategy` / `RefreshableDatabaseStrategy` / `SingleTenantJWTStrategy` (`auth/users.py`). |
 | `SIGNUP_RATE_LIMIT_ENABLED` | `configs/app_configs.py` | | Gates `signup_rate_limit.py`; only enforced under `MULTI_TENANT`. |
 | `CAPTCHA_ENABLED`, `RECAPTCHA_*` | `configs/app_configs.py` | | reCAPTCHA Enterprise on signup and pre-OAuth. |
@@ -393,7 +393,9 @@ is marked as such.
    `current_user_from_websocket`/`current_user_with_expired_token`/
    `control_plane_dep`/`current_cloud_superuser`/`verify_scim_token`, and no
    `require_permission(...)`-generated dependency (detected via the
-   `_is_require_permission` marker attribute), unless the route's
+   `_is_require_permission` marker attribute) or websocket auth dependency
+   (detected via the `_is_websocket_auth_dependency` marker, set on
+   `current_user_from_websocket_cookie`), unless the route's
    `(path, methods)` is in `PUBLIC_ENDPOINT_SPECS` (`ee/onyx/server/
    auth_check.py` extends this list for SCIM discovery and billing). **A new
    endpoint is protected by default only if you add a real dependency**;

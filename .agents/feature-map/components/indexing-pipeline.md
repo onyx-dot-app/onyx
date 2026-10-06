@@ -86,7 +86,7 @@ is already local.
 | `STRICT_CHUNK_TOKEN_LIMIT` (`shared_configs/configs.py`) | see configs | Forces an oversized split chunk to be re-split at token boundaries in `text_section_chunker.py`. |
 | `INDEXING_WORKER_HEARTBEAT_INTERVAL` (`configs/constants.py`) | see configs | Cadence of the DB heartbeat counter increment (§4.7). |
 | `INDEXING_WORKER_MEMORY_LIMIT_MB` | see configs | Docfetching watchdog kills the subprocess if RSS exceeds this. |
-| `CELERY_INDEXING_LOCK_TIMEOUT` | see configs | TTL of the per-attempt cross-batch Redis lock (§4.5). |
+| `CELERY_INDEXING_LOCK_TIMEOUT` | see configs | TTL of the cross-batch Redis lock, scoped to one connector pair and search settings (§4.5). |
 | `NUM_DAYS_TO_KEEP_CHECKPOINTS`, `NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS` | see configs | Retention windows for the two cleanup beat tasks. |
 | `DOCUMENT_PUSH_ENDPOINT_URL`, `DOCUMENT_PUSH_API_KEY`, `DOCUMENT_PUSH_TIMEOUT_SECONDS` | unset | Config-driven external sink; see §4.4 and `document_push.py`. Single-tenant only. |
 | `CONNECTOR_CHECKS_ENABLED` | false | When true, a cc-pair's first index attempt waits for its required capability checks (§4.1). Pair it with `NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED`. |
@@ -151,7 +151,7 @@ not define the OpenSearch mapping those objects must match.
 | `RedisConnector(...).delete` | `redis_connector.py` | Fence + taskset for connector deletion (§4.8). |
 | `RedisConnector(...).prune` | `redis_connector_prune.py` | Fence + taskset for a pruning run (§4.8). |
 | `RedisDocprocessing(index_attempt_id, redis_client)` | `redis_docprocessing.py` | Per-attempt `pending`/`in_flight` batch counters, incremented on enqueue and consulted by the heartbeat-staleness check (§4.7); `cleanup()` on terminal status. |
-| `redis_connector.db_lock_key(search_settings_id)` | `docprocessing/tasks.py` | Cross-batch lock serializing `IndexingCoordination.update_batch_completion_and_docs` writes for one attempt (§4.5). |
+| `redis_connector.db_lock_key(search_settings_id)` | `docprocessing/tasks.py` | Cross-batch lock serializing `IndexingCoordination.update_batch_completion_and_docs` writes. The key is per `cc_pair_id` and `search_settings_id`, so it is wider than one attempt (§4.5). |
 
 ---
 
@@ -496,9 +496,11 @@ this component only describes how a `UserFile` reaches the vector index.
    Docprocessing builds a single-index handle with `get_default_document_index(...,
    None)`. The port backfill, not a second write, fills the FUTURE index; see
    [[document-index]] §5 for the retrieval-side half of this contract.
-2. **A document's chunks are written atomically per document, per index.** All
+2. **A document's chunks are grouped per document, per index.** All
    chunks for one document must be passed to `DocumentIndex.index()` in a single
-   call (never split across calls); `write_chunks_to_vector_db_with_backoff`'s
+   call (never split across calls). The write is not atomic: the OpenSearch
+   implementation flushes a large document in several bulk writes, so a late
+   failure can leave earlier chunks indexed; `write_chunks_to_vector_db_with_backoff`'s
    per-document retry loop groups by document ID for exactly this reason, and
    `_embed_chunks_to_store` strips a failed document's chunks from every already-
    written sub-batch so a partial embedding failure never leaves stale successor
@@ -581,7 +583,7 @@ this component only describes how a `UserFile` reaches the vector index.
 | changes a Celery task signature or queue | `docfetching/tasks.py`, `docprocessing/tasks.py`, `beat_schedule.py`'s queue/priority entries, and every `app.send_task` call site that constructs the kwargs by hand (there is no shared schema enforcing the two stay in sync across a rolling deploy) |
 | changes the checkpoint format (`ConnectorCheckpoint` subclass fields) | `checkpointing_utils.py:load_checkpoint`/`get_latest_valid_checkpoint`, and every in-flight `IndexAttempt.checkpoint_pointer` written by the old format: a rolling deploy must tolerate reading both |
 | changes `IndexAttempt` states (`IndexingStatus`) | `should_reuse_checkpoint()`, `is_terminal()`, `is_successful()`, every `mark_attempt_*` function in `db/index_attempt.py`, `validate_active_indexing_attempts`, and the admin connector-status UI that renders the enum |
-| changes `IndexingCoordination` locking or the cross-batch Redis lock | every concurrent `docprocessing_task` for the same attempt; verify the bounded-timeout behavior still fails a task cleanly rather than wedging on a fossil lock |
+| changes `IndexingCoordination` locking or the cross-batch Redis lock | every concurrent `docprocessing_task` for the same connector pair and search settings; verify the bounded-timeout behavior still fails a task cleanly rather than wedging on a fossil lock |
 | changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), plus the FUTURE-write path (`ignore_content_hash_gate=True`) |
 | changes pruning or deletion's document-removal task | both callers (`pruning/tasks.py` and `connector_deletion/tasks.py`) share `document_by_cc_pair_cleanup_task`; a change there affects both flows even though they trigger differently |
 | changes the reindex-port re-embed logic | `port_reembed.py`'s two strategies must still match what the chunker/embedder currently produce for a fresh index, or the ported chunks will diverge from a true reindex |
@@ -667,7 +669,7 @@ See `backend/AGENTS.md` for the authoritative commands and required env.
   `CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300` exists because an earlier unbounded
   `acquire()` let one killed worker's fossil lock (held for up to
   `CELERY_INDEXING_LOCK_TIMEOUT`, several hours) wedge every docprocessing thread
-  across the entire fleet for that attempt. A "fix" that removes the timeout
+  across the entire fleet for that connector pair and search settings. A "fix" that removes the timeout
   reintroduces that production incident.
 - **The targeted-reindex fence exclusion is deliberate, not an oversight.**
   `try_create_index_attempt`'s active-attempt check explicitly filters out

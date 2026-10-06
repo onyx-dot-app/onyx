@@ -80,8 +80,9 @@ Run **§8 How to verify a change** for each component.
 1. **Tests.** Run the ones the component names. If the change adds behaviour and
    adds no test, say so plainly. Integration tests are preferred in this repo. Check
    `backend/AGENTS.md` for the commands and the required environment.
-2. **Manual reproduction.** Follow the steps in §8. Drive the browser with
-   `claude-in-chrome` against the user's real Chrome. Read
+2. **Manual reproduction.** Follow the steps in §8. For browser flows, drive the
+   browser with `claude-in-chrome` against the user's real Chrome. For other surfaces,
+   use the client the component's §8 names. Read
    `backend/log/<service>_debug.log` for backend behaviour.
 3. **Negative check.** Verify the failure mode too, not only the happy path. Stop
    mid-stream, revoke a permission, send an empty input, reload the page.

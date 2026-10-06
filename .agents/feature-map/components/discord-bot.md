@@ -23,9 +23,11 @@ one managed by Onyx on Cloud, then creates a guild registration at
 `/admin/discord-bot` (`web/src/app/admin/discord-bot/page.tsx`). This produces a
 one-time registration key. A Discord server admin runs `!register <key>` in any
 channel of their server, which links that Discord guild to the tenant
-(`handle_commands.py:handle_registration_command`). The Onyx admin then enables
-the guild and its channels at `/admin/discord-bot/[guild-id]`, choosing a default
-persona per guild and optionally overriding it per channel
+(`handle_commands.py:handle_registration_command`). The Onyx admin then configures
+the guild at `/admin/discord-bot/[guild-id]`. Guild configs are enabled by default and
+channel configs are disabled by default, so the admin enables the channels the bot
+must answer in. The admin also chooses a default persona per guild and optionally
+overrides it per channel
 (`web/src/app/admin/discord-bot/[guild-id]/page.tsx`). In an enabled channel, the
 bot answers when @mentioned, or always if `require_bot_invocation` is off, or
 implicitly when a user replies to the bot or posts in a bot-owned thread
@@ -225,7 +227,7 @@ has no e2e coverage since it requires a live Discord connection).
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
 2. Set `DISCORD_BOT_TOKEN` or create a bot config via `/admin/discord-bot`.
 3. Create a guild registration, run `!register <key>` in the target Discord
-   server, then enable the guild and at least one channel.
+   server, then enable at least one channel (the guild is enabled by default).
 4. @mention the bot in an enabled channel and confirm a response with citations.
 5. Grep `backend/log/api_server_debug.log` for `discordbot` or the tenant id to
    confirm the request authenticated with the service API key.

@@ -139,8 +139,10 @@ recorded in `stack.error`. The loop's own check on `params.signal?.aborted` thro
 ### Packets (`services/streamingModels.ts`)
 
 `Packet = { placement: Placement; obj: ObjTypes }`. `PacketType` (`streamingModels.ts`)
-enumerates every wire type; `ObjTypes` is the discriminated union of every packet body.
-This enum **must** match the Python `PacketType` the backend emits; see §5.
+enumerates the packet types the client renders or reads; `ObjTypes` is the discriminated
+union of their bodies. Heartbeat packets are not in the enum. `lib.tsx:withoutHeartbeats`
+drops them before packet handling. The enum **must** match the Python packet types the
+backend emits for the client; see §5.
 
 ---
 
@@ -367,14 +369,16 @@ enforced by lint (`i18n/no-raw-jsx-text`) and pre-commit (`typescript-check`) wh
 
 ### Streaming invariants (this component's own)
 
-13. **Every backend packet type needs a renderer, or a matching predicate in
-    `findRenderer`, or it silently renders as nothing.** `RendererComponent` falls back to
+13. **Every backend display packet type needs a renderer, or a matching predicate in
+    `findRenderer`, or it silently renders as nothing.** Control and metadata packets
+    (`stop`, `citation_info`) have no renderer by design; see §4.5. `RendererComponent` falls back to
     `{ icon: null, status: null, content: <></> }` when no renderer matches
     (`renderMessageComponent.tsx:RendererComponent`), so an unhandled packet type does not
     error, it disappears. A new backend packet type is invisible in the UI until
     `findRenderer` and `streamingModels.ts:PacketType` both know about it.
 14. **The TypeScript `PacketType` enum (`services/streamingModels.ts`) must match the
-    Python `PacketType`** the backend emits (see [[streaming-protocol]]). A mismatch is a
+    Python packet types** the backend emits for the client, except heartbeats, which the
+    client filters out (see [[streaming-protocol]]). A mismatch is a
     silent no-render, not a type error, because packets arrive as parsed JSON.
 15. **An unresolved citation renders nothing, never broken markup.** `MemoizedAnchor`
     returns `<></>` rather than the raw `[D1](url)` text when the citation or document has

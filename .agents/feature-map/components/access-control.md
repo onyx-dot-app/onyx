@@ -232,8 +232,11 @@ DocMetadataAwareIndexChunk.from_index_chunk(access=<DocumentAccess>, ...)
 ```
 
 A document with no permission-sync-capable connector and no explicit sharing gets
-`is_public=False` and an empty ACL: nobody can retrieve it through ACL-filtered
-search until it is made public or granted a matching ACL entry. A document set
+`is_public=False`. Its ACL holds only the email of the credential owner, because
+`get_access_info_for_documents` adds that email for cc-pairs that are not
+permission-synced (the entry is `None` and dropped when the owner is unknown).
+Other users cannot retrieve it through ACL-filtered search until it is made public
+or granted a matching ACL entry. A document set
 does not grant access (see §4.4).
 
 ### 4.3 Read path: from acting user to the query

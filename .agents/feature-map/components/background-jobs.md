@@ -348,7 +348,8 @@ other workers. Light is the exception: it reads
 3. **Never enqueue a task without an expiration.** Quoting `backend/AGENTS.md`:
    "Never enqueue a task without an expiration. Always supply `expires=` when
    sending tasks, either from the beat schedule or directly from another task."
-   Every entry in `beat_schedule.py` sets `expires` via `BEAT_EXPIRES_DEFAULT`;
+   Every entry in `beat_schedule.py` sets `expires`. Most use `BEAT_EXPIRES_DEFAULT`;
+   a few set their own (60 seconds, one hour);
    a new direct `send_task` call needs the same. One exception exists: the
    docfetching `send_task` in `docfetching/task_creation_utils.py` sets no
    `expires=`, because that queue can wait hours under load and the indexing

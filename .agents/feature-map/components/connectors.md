@@ -234,7 +234,9 @@ does the same enumeration as the full connector without downloading bodies.
    - **True**: builds an `OnyxDBCredentialsProvider` via
      `credentials_provider.py:build_db_credentials_provider` and calls
      `connector.set_credentials_provider(provider)`. The connector never sees
-     the raw credential dict; it pulls through the provider under a Redis lock
+     the raw credential dict; it pulls through the provider. `get_credentials()` does
+     not take a lock. The connector must enter the provider as a context manager
+     (`__enter__`) around a renewal to take the Redis lock
      (`OnyxDBCredentialsProvider.LOCK_TTL = 900`), which matters for
      credentials that rotate mid-run.
    - **False**: decrypts `credential.credential_json` once, converts it with
@@ -252,7 +254,7 @@ does the same enumeration as the full connector without downloading bodies.
 
 `credentials_provider.py` gives a connector two implementations of
 `CredentialsProviderInterface`, both handing back a plain dict:
-`OnyxDBCredentialsProvider` (dynamic, DB-backed, lock-guarded, used for real
+`OnyxDBCredentialsProvider` (dynamic, DB-backed, lock taken on `__enter__`, used for real
 cc-pairs) and `OnyxStaticCredentialsProvider` (in-memory, used by tests and the
 `if __name__ == "__main__"` manual-test pattern the README recommends).
 `is_dynamic()` tells a connector whether it must re-acquire the lock around

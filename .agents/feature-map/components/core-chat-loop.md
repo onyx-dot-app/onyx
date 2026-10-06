@@ -218,7 +218,8 @@ return after `append_incognito_message` and skip compression.
 - On stop it persists every model's partial output, emits
   `OverallStop(stop_reason="user_cancelled")`, and sets `drain_done`.
 - `drain_done` turns every `Emitter.emit` into a no-op, so worker threads cannot keep
-  growing the queue after cancellation and exit quickly.
+  growing the queue after cancellation. It does not interrupt a worker. A worker stays
+  active until its in-flight LLM or tool call returns.
 - The processing fence is re-armed every 60 s. `resume_chat_stream` uses it to detect
   a dead writer.
 - Heartbeats (`ChatHeartbeat`) go out every `CHAT_HEARTBEAT_INTERVAL_S` on both the

@@ -58,9 +58,11 @@ never sees an image generation tool it cannot use, and a user is never told
 |---|---|---|
 | `IMAGE_MODEL_NAME`, `IMAGE_MODEL_PROVIDER` (`configs/app_configs.py`) | `ImageGenerationTool.__init__` defaults | Fallback model/provider if a call site does not pass its own; in practice the tool is always constructed from the DB default config (`tool_constructor.py:_get_image_generation_config`, `generation.py:_default_provider_and_model`). |
 
-There is no feature flag gating this component; availability is entirely a
-function of whether a default `ImageGenerationConfig` exists with complete
-credentials (§4, §5). The check does not test that the provider accepts them.
+There is no feature flag gating this component. The system-level availability check
+needs a default `ImageGenerationConfig` with complete credentials (§4, §5). The
+tool must also be attached to the persona and enabled, because
+`tool_constructor.py:construct_tools` only visits enabled persona tools. The check
+does not test that the provider accepts the credentials.
 
 ---
 

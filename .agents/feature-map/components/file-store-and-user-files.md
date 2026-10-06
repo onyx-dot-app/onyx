@@ -167,7 +167,7 @@ POST /user/projects/file/upload          server/features/projects/api.py:upload_
       │   ├─ categorize_uploaded_files          server/features/projects/projects_file_utils.py
       │   ├─ upload_files                       server/documents/connector.py  (blob write)
       │   └─ UserFile row insert, status=PROCESSING (or SKIPPED)
-      └─ per accepted file, enqueue:
+      └─ per indexable file (not `SKIPPED`), enqueue:
           PROCESS_SINGLE_USER_FILE  →  background/celery/tasks/user_file_processing/tasks.py
 ```
 
@@ -234,7 +234,7 @@ a hard failure.
 logs the exception (`logger.exception`) and returns an empty `ExtractionResult`
 on any unexpected parser crash. This is the one place extraction failure is *not* surfaced to the caller (see §5 and §9);
 the upload-time path (`categorize_uploaded_files`) is stricter and rejects
-instead.
+empty text, except for a PDF or DOCX that has detected embedded images (see §5).
 
 ### 4.4 The two consumption paths
 
@@ -433,7 +433,10 @@ access-control consequence of this.
 5. **Extraction failure must be surfaced, not silently indexed as empty**, at
    upload time: `categorize_uploaded_files` rejects a file it cannot extract
    text from (`extract_file_text(..., break_on_unprocessable=False)` returning
-   `""` becomes a `RejectedFile`, not silent acceptance). The one exception is
+   `""` becomes a `RejectedFile`, not silent acceptance). The exception is a PDF
+   or DOCX with empty text but detected embedded images (image extraction on):
+   it is accepted with a token count of 0 and indexed through the captioning
+   path. The other exception is
    `extract_text_and_images`'s internal exception handler, which does return
    an empty `ExtractionResult` on an unexpected parser crash during indexing
    (§4.3, §9); a new caller of `extract_text_and_images` must not assume a
