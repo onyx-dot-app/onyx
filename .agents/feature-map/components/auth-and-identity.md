@@ -48,9 +48,10 @@ generic OIDC provider, or SAML, depending on what an admin configured. On
 Onyx Cloud, a single login page serves every workspace: the user types their
 email first, and the page discovers which SSO buttons (if any) that
 workspace exposes before showing them (`server/sso_discovery.py`). The first
-person to register in a fresh deployment becomes an implicit admin (seeded
-via `get_default_admin_user_emails_`, `backend/onyx/auth/users.py` and
-`backend/ee/onyx/auth/users.py:get_default_admin_user_emails_`); after that,
+person to register in a fresh deployment becomes an implicit admin
+(`backend/onyx/auth/users.py:UserManager.create` checks `user_count == 0`).
+`get_default_admin_user_emails_` (`backend/onyx/auth/users.py` and
+`backend/ee/onyx/auth/users.py`) only adds configured admin emails; after that,
 new signups are ordinary users unless an admin invites them or a domain is
 configured to auto-provision.
 
@@ -165,9 +166,10 @@ ScimToken   ── hashed bearer token for IdP-driven provisioning
 ### `PermissionGrant` (`models.py`)
 
 `(group_id, permission)` unique pair, `grant_source: GrantSource` (`USER` \|
-`SCIM` \| `SYSTEM`), `granted_by`, `is_deleted`. The only place a `Permission`
-is durably attached to anything; a user's `effective_permissions` is the
-union of every non-deleted grant across every group they belong to, plus
+`SCIM` \| `SYSTEM`), `granted_by`, `is_deleted`. The canonical source of
+every group-based permission. `User.effective_permissions` is a persisted
+projection of these grants, not a second source. It is the
+union of every non-deleted grant across every group the user belongs to, plus
 `account_derived_permissions` (`db/permissions.py`, currently only:
 a `SERVICE_ACCOUNT` in no group gets `WRITE_CHAT` directly, since it has no
 group to draw chat scope from).

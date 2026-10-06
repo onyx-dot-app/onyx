@@ -164,7 +164,12 @@ OpenSearch chunk document
   `user_id` (owner for a private, groupless set), a join table to
   `ConnectorCredentialPair` (which connectors feed it) and a join to users/groups
   it is shared with. `_add_user_filters` is the one predicate every document-set
-  read query applies: public, or owned, or shared via a managed/member group.
+  query applies. With `get_editable=False` (read, including search lookups), it
+  allows public sets, any set for a user with `READ_DOCUMENT_SETS` or
+  `MANAGE_DOCUMENT_SETS`, and sets shared with a group the user belongs to. With
+  `get_editable=True`, it allows sets inside the user's managed scope, plus a
+  private groupless set the user owns. Ownership of a private groupless set
+  applies only to editable lookups.
 - `Document.external_user_emails` / `external_user_group_ids` / `is_public`: the
   raw permission-sync output, written by [[permission-sync]] connectors, read by
   `access/access.py` to build the indexed ACL. `ExternalUserGroup`

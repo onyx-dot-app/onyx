@@ -113,7 +113,7 @@ run()                                              search_tool.py
           ├─ _build_index_filters                     context/search/pipeline.py
           └─ search_chunks                            context/search/retrieval/search_runner.py
 
- 3. (no separate filtering stage; filters are compiled into the index query in step 2)
+ 3. (no separate filtering stage; filters are compiled into the index query in step 2, except for the Slack lane, which gets none)
 
  4. weighted_reciprocal_rank_fusion                 tools/tool_implementations/search/search_utils.py
  5. merge_individual_chunks                          context/search/pipeline.py
@@ -192,10 +192,12 @@ Each non-Slack lane calls `_run_search_for_query`, which calls `search_pipeline`
    with `combine_retrieval_results`;
 3. runs EE per-field censoring via `fetch_ee_implementation_or_noop("onyx.external_permissions.post_query_censoring", "_post_query_chunk_censoring", ...)`.
 
-There is **no separate filtering stage**. Source, document-set, time, ACL, and
-project/persona scope are all compiled into the `IndexFilters` object that goes
-into the index query itself; nothing is filtered out of results after the fact
-except the EE field censoring above.
+There is **no separate filtering stage**. For the `search_pipeline` lanes, source,
+document-set, time, ACL, and project/persona scope are all compiled into the
+`IndexFilters` object that goes into the index query itself. Nothing is filtered
+out of those results after the fact except the EE field censoring above. The
+dedicated Slack lane receives none of these filters, only the pre-fetched Slack
+token and entity config (§5.8).
 
 There is **no reranking model in this path**. `RerankingModel`
 (`natural_language_processing/search_nlp_models.py:RerankingModel`) exists, but
@@ -302,7 +304,9 @@ the LLM, assigning one citation number per unique `document_id` starting at
    `_run_slack_search` builds its `ChunkIndexRequest` with
    `IndexFilters(access_control_list=None)`; access is enforced entirely by the
    scope of the OAuth or bot token that was pre-fetched, not by the standard ACL
-   list. Do not assume every lane in the fan-out is ACL-filtered the same way.
+   list. `_run_slack_search` also receives no `effective_filters`, so inferred
+   time, document-set, and persona filters do not constrain Slack results. Do not
+   assume every lane in the fan-out is filtered the same way.
 
 ---
 

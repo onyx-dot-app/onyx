@@ -597,8 +597,9 @@ See `backend/AGENTS.md` for required env and secrets.
   A test that only checks "the call still succeeds" will not catch this
   degradation.
 - **`count_tokens` degrades to a rough local estimate on failure**, not an
-  error: if the Anthropic passthrough is unavailable or fails, or
-  `litellm.token_counter` itself raises, the endpoint falls back to
+  error: if the Anthropic passthrough has a transport failure
+  (`AnthropicPassthroughUnavailable`), or `litellm.token_counter` itself
+  raises, the endpoint falls back to
   `len(json.dumps(...)) // 4` (`gateway_anthropic_count_tokens` in `api.py`). A caller relying on
   exact token counts (e.g. Claude Code's context-window tracking) can get a
   materially wrong number without any error surfacing.

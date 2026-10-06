@@ -403,11 +403,13 @@ the snapshot) and, if the session has a port, the webapp bootstrap script is
 rewritten and the dev server is restarted via exec, but only if the restored
 snapshot actually contains a webapp.
 
-**Retention: prune-on-write, keep exactly one.** After a new session snapshot
+**Retention: prune-on-write, keep one in the normal case.** After a new session snapshot
 lands, `create_session_snapshot_keep_latest`
 (`session/sandbox_lifecycle.py:174`) deletes every prior `Snapshot` for that
 session (`SnapshotManager.delete_snapshot`, idempotent: a missing blob counts as
 already-deleted). The new archive is stored before any old blob is deleted.
+Pruning is best-effort. If `delete_snapshot` raises, the function logs a
+warning and keeps that old row, so more than one `Snapshot` row can remain.
 The new `Snapshot` row is committed only after those deletions
 (`db_session.commit()` is the last step). A commit failure in that window can
 leave no restorable snapshot, because the old blobs are already gone.

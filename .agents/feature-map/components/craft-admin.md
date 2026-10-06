@@ -111,9 +111,12 @@ permission. See §5 for why the flag alone is not the real gate.
   `EndpointPolicy.ALWAYS | ASK | DENY`), written by
   `replace_action_policies__no_commit` (`backend/onyx/db/gated_app.py:80`).
   Unset actions resolve to the catalog's `default_policy`, not a stored row.
-- `ExternalApp.default_policy`: the fallback for off-catalog built-in requests
-  and the entire blanket policy for a custom app
-  (`docs/craft/features/external-apps/action-policies.md`).
+- A connected-app request that matches no catalog action gets a synthetic
+  whole-domain `ASK` action. `apply_credential_gate`
+  (`onyx/external_apps/matching/engine.py`) hard-codes this fallback. It
+  applies to custom apps too, because their catalog is empty. `ExternalApp`
+  has no `default_policy` column. `default_policy` is a catalog field on
+  `EndpointDescriptor`, and it only seeds the admin form.
 - `LLMModelFlow` row with `llm_model_flow_type = LLMModelFlowType.CRAFT`
   (`backend/onyx/db/llm.py`, `fetch_default_craft_model`): the Preferences
   page's default-model selection. See `[[llm-providers]]`.
@@ -180,8 +183,10 @@ outbound HTTPS request from a Craft sandbox
 Credential injection (`sandbox_proxy/credential_injection.py`) is a separate
 concern from policy: a resolver only injects a secret for an app the user has
 connected. A request that matches no connected app's `upstream_url_patterns`
-is not gated by this pipeline at all (`matched_actions is None` in
-`request_evaluator.py`); see §5 for what governs that traffic instead.
+is not gated by the external-app evaluator. The separate
+`McpRequestEvaluator` can still gate it as an MCP call. A request that
+neither evaluator matches has `matched_actions is None` in
+`request_evaluator.py` and is not gated; see §5 for what governs that traffic instead.
 
 ### 4.3 Preferences: what an admin sets
 
@@ -272,8 +277,10 @@ not cover:
    forwarding; it does not rely on the agent choosing not to attempt the call.
 4. **General internet egress from a sandbox is not the same guarantee as
    "admin-approved."** Requests that match no connected app's
-   `upstream_url_patterns` are not evaluated by the action-policy gate at all
-   (`matched_actions is None`); the proxy forwards them unchanged. The
+   `upstream_url_patterns` get no verdict from `ExternalAppRequestEvaluator`.
+   `McpRequestEvaluator` then runs, and it gates matched MCP tool calls. A
+   request that neither evaluator matches has `matched_actions is None`, is
+   not evaluated by the action-policy gate, and the proxy forwards it unchanged. The
    sandbox's iptables lockdown (`firewall-init.sh`) drops all outbound traffic
    except to the proxy. Public-host access (needed for `npm`, `pip`, etc.)
    therefore goes through the proxy. **The admin-configured app policy governs
@@ -337,8 +344,8 @@ not cover:
 | If your change… | Also check |
 |---|---|
 | changes the access gate (`is_craft_enabled_for_user`, the PostHog flag, or `ENABLE_CRAFT`) | every user-facing `/build` route (they all sit behind `require_onyx_craft_enabled`; `/build/admin` routes do not); the Access page's `enabledCount` math (`CraftPage/index.tsx`); anonymous-user exclusion |
-| adds an external app (built-in or custom) | the egress ruleset the proxy reads (`sandbox_proxy/request_evaluator.py`); the app's `default_policy` seed (`DENY` for built-in, admin-chosen for custom); its `upstream_url_patterns` regex correctness (a bad regex is silently skipped, not rejected); the skill it may be associated with, see [[mcp-and-custom-tools]] |
-| changes the egress policy (an action's `ALWAYS/ASK/DENY`, or `default_policy`) | `sandbox_proxy/addons/gate.py`'s three branches; the credential-injection path for `ALWAYS` (a token refresh failure there still blocks); the `external-app-skill-action-availability` doc, since `DENY`d actions are meant to be fenced out of the pushed `SKILL.md` |
+| adds an external app (built-in or custom) | the egress ruleset the proxy reads (`sandbox_proxy/request_evaluator.py`); the catalog `default_policy` values that seed the admin form; its `upstream_url_patterns` regex correctness (a bad regex is silently skipped, not rejected); the skill it may be associated with, see [[mcp-and-custom-tools]] |
+| changes the egress policy (an action's `ALWAYS/ASK/DENY`, or the hard-coded `ASK` fallback in `apply_credential_gate`) | `sandbox_proxy/addons/gate.py`'s three branches; the credential-injection path for `ALWAYS` (a token refresh failure there still blocks); the `external-app-skill-action-availability` doc, since `DENY`d actions are meant to be fenced out of the pushed `SKILL.md` |
 | changes admin instructions (`craft_instructions` or the base template) | `agent_instructions.py:generate_agent_instructions` and both sandbox managers (`docker_sandbox_manager.py`, `kubernetes_sandbox_manager.py`) that call it; the Preferences page's base-instructions preview (`GET /build/admin/base-instructions`) must still reflect the template a change touches |
 | changes the Craft default model | `[[llm-providers]]`'s blast radius for `LLMModelFlowType.CRAFT`; the fallback-to-chat-default resolution in `CraftPreferencesPage` |
 | changes `GatedApp` / `GatedActionPolicy` shape | both consumers: the admin API (`external_apps/api.py`) and the live proxy (`sandbox_proxy/request_evaluator.py`, `addons/gate.py`); MCP servers share this table, so an external-app-only migration will silently break MCP gating |

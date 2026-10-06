@@ -207,7 +207,7 @@ sandbox process (opencode / a tool call)
      matched_actions is None        -> off-catalog: skip policy evaluation (ungated),
                                         but continue to step 7 for host-based credential
                                         injection or a credential-error block.
-     governing_action.policy DENY   -> 403 policy_denied, no DB row, no upstream call.
+     governing_action.policy DENY   -> 403 policy_denied, no DB row, request not forwarded.
      governing_action.policy ALWAYS -> proceed straight to credential injection (step 7).
      governing_action.policy ASK    -> resolve the originating BuildSession from the
                                         in-band session tag (fail closed if absent/
@@ -456,9 +456,11 @@ they can never disagree about which server owns a request; see
    every possible upstream response shape (e.g. an API that reflects request
    headers back in its response body is a property of the *upstream*, not
    this proxy, and would leak the header regardless of this contract).
-2. **A `DENY` verdict blocks before any upstream connection.**
-   `_resolve_and_match` sets the 403 and returns before `request()` ever
-   reaches credential injection or forwarding
+2. **A `DENY` verdict blocks forwarding of the request.**
+   The upstream TLS connection may already be open, because mitmproxy's
+   default `eager` strategy connects before `request()` sees the decrypted
+   request. `_resolve_and_match` sets the 403 and returns before `request()`
+   ever reaches credential injection or forwarding
    (`gate.py:GateAddon._resolve_and_match`); no `ActionApproval` row is written for a `DENY`.
 3. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
    spoofable for which session within that user gets attributed.** See §4.3.
@@ -521,7 +523,7 @@ they can never disagree about which server owns a request; see
 
 **Depends on**
 - `[[craft-admin]]`: owns `ExternalApp`/`GatedApp` admin CRUD, the
-  `default_policy`/`GatedActionPolicy` values this document reads at request
+  catalog `default_policy` and `GatedActionPolicy` values this document reads at request
   time, and the network-lockdown-vs-action-gate distinction this document's
   §5 restates precisely for the proxy's own enforcement code.
 - `[[craft-sandboxes]]`: the sandbox pod/container this proxy identifies by
@@ -604,7 +606,8 @@ that arbiter without extending it.
 3. To confirm a `DENY` actually blocks: on `/admin/craft/apps`, set one
    Slack action to `DENY`, have the agent attempt exactly that action, and
    confirm the proxy log shows `egress_block ... reason=policy_denied` with
-   **no** corresponding upstream connection log, and the agent's tool call
+   **no** `egress_allow` log line (the upstream connection itself may still
+   open), and the agent's tool call
    receives the `policy_denied` 403 body verbatim (not a generic failure).
 4. To confirm an `ASK` action pauses correctly: set an action to `ASK`, have
    the agent attempt it, confirm an approval card appears in the session,
@@ -618,7 +621,7 @@ that arbiter without extending it.
 
 ### What "working" looks like
 
-- A `DENY`-policied action never reaches the upstream host (no `egress_allow`
+- A `DENY`-policied action is never forwarded to the upstream host (no `egress_allow`
   log line for it), and the sandbox-visible error is `policy_denied`, not a
   generic timeout or connection error.
 - An `ASK` action either surfaces exactly one approval card per distinct

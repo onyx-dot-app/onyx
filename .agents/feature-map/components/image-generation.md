@@ -29,7 +29,9 @@ provider (OpenAI, Azure, or Vertex AI), supply credentials, and choose it as
 default. The model list in the admin form includes the GPT Image 2.5 variants
 (`gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`) next to `gpt-image-2`, `gpt-image-1.5`, and
 `gpt-image-1` (`web/src/views/admin/ImageGenerationPage/constants.ts`).
-Until an admin does this, the tool does not appear at all. The exception is EE tenant provisioning, which creates a default config from the OpenAI key (`ee/onyx/server/tenants/provisioning.py`). The tool does not appear in a deployment without a default config; the model
+Until an admin does this, the tool does not appear at all. Missing or
+incomplete configuration hides the tool. A rejected API key does not, and it
+fails only when the tool runs. The exception is EE tenant provisioning, which creates a default config from the OpenAI key (`ee/onyx/server/tenants/provisioning.py`). The tool does not appear in a deployment without a default config; the model
 never sees an image generation tool it cannot use, and a user is never told
 "image generation failed" for a capability that was simply never turned on.
 
@@ -54,11 +56,11 @@ never sees an image generation tool it cannot use, and a user is never told
 
 | Name | Where | Effect |
 |---|---|---|
-| `IMAGE_MODEL_NAME`, `IMAGE_MODEL_PROVIDER` (`configs/app_configs.py`) | `ImageGenerationTool.__init__` defaults | Fallback model/provider if a call site does not pass its own; in practice the tool is always constructed from the DB default config (`generation.py:_default_provider_and_model`). |
+| `IMAGE_MODEL_NAME`, `IMAGE_MODEL_PROVIDER` (`configs/app_configs.py`) | `ImageGenerationTool.__init__` defaults | Fallback model/provider if a call site does not pass its own; in practice the tool is always constructed from the DB default config (`tool_constructor.py:_get_image_generation_config`, `generation.py:_default_provider_and_model`). |
 
 There is no feature flag gating this component; availability is entirely a
-function of whether a default `ImageGenerationConfig` exists with valid
-credentials (§4, §5).
+function of whether a default `ImageGenerationConfig` exists with complete
+credentials (§4, §5). The check does not test that the provider accepts them.
 
 ---
 
@@ -113,9 +115,11 @@ accept either a "clone" mode (reuse credentials from an existing
 `api_key`/`api_base`/etc). Either way the backend creates a fresh `LLMProvider`
 row and `ModelConfiguration` row, then an `ImageGenerationConfig` pointing at
 them (`db/image_generation.py:create_image_generation_config__no_commit`).
-`validate_credentials` (`image_gen/factory.py`) is called before persisting,
-and `test_image_generation` lets an admin generate a throwaway test image
-before saving.
+In new-credentials mode, `_build_llm_provider_request` calls
+`validate_credentials` (`image_gen/factory.py`) before persisting. Clone mode
+copies the API key from the source provider and skips that check.
+`test_image_generation` is a separate, optional step: it lets an admin
+generate a throwaway test image before saving.
 
 ### Resolving the default config
 
@@ -123,7 +127,10 @@ before saving.
 where `is_default=True`
 (`db/image_generation.py:get_default_image_generation_config`), reads its
 `ModelConfiguration.llm_provider` for credentials, and calls
-`validate_credentials`. `is_image_generation_configured(db_session)` wraps this
+`validate_credentials`. That check only confirms that the credentials are
+complete enough to build the provider (for example, Azure needs key, base, and
+version). It does not call the provider, so a rejected or expired key still
+passes until generation fails. `is_image_generation_configured(db_session)` wraps this
 in a boolean; `ensure_image_generation_configured()` wraps it in an exception
 for use as a fast pre-check.
 
@@ -198,8 +205,9 @@ the returned base64 data.
 2. **Credentials never reach the client or the LLM.** The admin API only ever
    returns a masked API key (`server/manage/image_generation/models.py:_mask_api_key`,
    first 4 / last 4 characters). The tool receives full credentials
-   server-side only, resolved fresh per generation
-   (`generation.py:_default_provider_and_model`).
+   server-side only. The chat tool reads them from the default config when
+   `tool_constructor.py` builds the tool for a turn. The standalone endpoint
+   resolves them per generation in `generation.py:_default_provider_and_model`.
 3. **A provider that does not support reference images must reject them
    explicitly, not silently ignore them.**
    `ImageGenerationTool._resolve_reference_image_file_ids` raises a

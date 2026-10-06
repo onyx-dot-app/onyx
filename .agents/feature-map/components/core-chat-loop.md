@@ -61,7 +61,7 @@ answers side by side, then mark one as preferred.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `MAX_LLM_CYCLES` | 6 | Max tool-call cycles in one turn. |
+| `MAX_LLM_CYCLES` | 6 | Max LLM cycles in one turn. The last cycle turns tools off and forces an answer. |
 | `CHAT_HEARTBEAT_INTERVAL_S` | 15 | SSE keepalive cadence, live and resumed. |
 | `CHAT_RESUME_POLL_INTERVAL_S` | 0.2 | Poll cadence for `resume_chat_stream`. |
 | `CHAT_STREAM_BUFFER_TTL_S` | 3600 | Durable buffer lifetime. |
@@ -131,7 +131,7 @@ Three layers, three responsibilities. This separation is the load-bearing idea:
 It never talks to an LLM.
 2. **`llm_loop.py` runs the turn.** A `while` loop: assemble context, run one inference,
    execute the tools it asked for, repeat until the LLM answers or `MAX_LLM_CYCLES`
-   is hit.
+   is hit. The last cycle sets `tool_choice` to `NONE`, so the LLM must answer.
 3. **`llm_step.py` runs one inference.** It wraps the provider stream and splits the token
    stream into reasoning, answer, and tool-call sections so the emitter can push
    each token as it arrives.

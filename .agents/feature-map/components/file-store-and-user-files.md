@@ -40,7 +40,7 @@ appears inline in the chat and can be downloaded.
 Deleting a file that is still attached to a project or a custom agent is
 blocked with an explicit warning, rather than silently breaking the project.
 Attaching a file inside an incognito chat behaves like a normal upload except
-that the file's row is stripped of content once the session ends.
+that a background sweep deletes the file's blob and its row after the session ends.
 
 ---
 
@@ -371,6 +371,10 @@ access-control consequence of this.
   sessions but does **not** delete the underlying `UserFile` rows or blobs;
   files fall back to being ordinary (unassociated) recent files. Deleting a
   project cannot orphan a blob.
+- **Incognito uploads**: `sweep_stale_incognito_user_files`
+  (`chat/incognito.py`, run from `check_for_user_file_delete`) marks uploads of
+  ended incognito sessions as deleting. `delete_user_file_impl` then deletes the
+  blob, the plaintext blob, and the `UserFile` row. No redacted row remains.
 - **Incognito sweep**: `check_for_incognito_file_cleanup`
   (`tasks.py`) retries deletion of tool-generated blobs whose session-teardown
   pass failed, driven by the `INCOGNITO_SESSION_METADATA_KEY` stamp every
@@ -438,10 +442,12 @@ access-control consequence of this.
    must be explicit about which one it means, or resolve through
    `db/user_file.py:get_file_id_by_user_file_id` the way `fetch_chat_file`
    does.
-7. **A storage rename (`FileStore.change_file_id`) does not move the backing
-   object**, only repoints the `FileRecord`. The old `file_id` must never be
-   reused for a new `save_file` call, or the new write silently overwrites the
-   renamed object still referenced by the old key.
+7. **On the object-store backends (S3, GCS, Azure), a storage rename
+   (`FileStore.change_file_id`) does not move the backing object**, only
+   repoints the `FileRecord`. The old `file_id` must never be reused for a new
+   `save_file` call, or the new write silently overwrites the renamed object
+   still referenced by the old key. The Postgres backend is safe: it moves the
+   `FileContent` row to the new id, so a reused id makes a new large object.
 
 ---
 
@@ -558,9 +564,10 @@ tests over unit tests for anything touching the upload-to-index pipeline.
   every file indexed; this is intentional (so growth doesn't require
   reindexing), not evidence of a bug when you see indexing work you didn't
   expect.
-- **`change_file_id` does not move the object.** Reusing a renamed-away
-  `file_id` for a fresh `save_file` overwrites the object the renamed record
-  still points at. Treat every `file_id` as write-once.
+- **On object-store backends, `change_file_id` does not move the object.**
+  Reusing a renamed-away `file_id` for a fresh `save_file` overwrites the object
+  the renamed record still points at. Treat every `file_id` as write-once. The
+  Postgres backend moves the `FileContent` row, so it does not have this hazard.
 - **Deleting a `UserFile` is blocked, not cascaded**, while it has project or
   persona associations. A script that force-deletes without unlinking first
   will get a `has_associations=True` result, not a deletion; don't paper over

@@ -280,10 +280,10 @@ frame.
   webview and the extension's iframe authenticate as the logged-in human,
   through the normal cookie session that [[auth-and-identity]] documents.
   Several `/chat/*` endpoints also allow `allow_anonymous=True`
-  (`backend/onyx/server/query_and_chat/chat_backend.py`), but the widget's
-  own contract is API-key auth, not anonymous access; a widget deployed
-  without a key would rely on that anonymous path if the backend allows it,
-  which is unverified from this repository alone.
+  (`backend/onyx/server/query_and_chat/chat_backend.py`), but the widget
+  cannot use that path. A widget with neither `api-key` nor `tokenProvider`
+  throws the missing-credential error in `resolveAuthToken`
+  (`widget/src/config/config.ts`) before it sends a request.
 - [[onyx-api]]: the widget's two-endpoint integration is a narrow, unofficial
   slice of the same public HTTP surface.
 - [[whitelabelling-and-theme]]: the widget's color attributes

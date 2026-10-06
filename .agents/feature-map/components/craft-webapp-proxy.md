@@ -138,9 +138,11 @@ patch relative links.
 
 Request headers are filtered through `EXCLUDED_REQUEST_HEADERS`
 (`webapp_proxy.py`) before forwarding: the viewer's Onyx cookie,
-`Authorization`, CSRF tokens, and every client-identity header
-(`x-forwarded-*`, `cf-connecting-ip`, IDP-injected identity headers) are
-stripped. The sandbox runs LLM-generated code; it must never see the
+`Authorization`, CSRF tokens, and the explicitly listed client-identity
+headers (`forwarded`, named `x-forwarded-*` headers, `x-real-ip`,
+`cf-connecting-ip`, and the IDP user and email headers) are stripped. The
+filter also drops every `x-onyx-*` and `sec-fetch-*` header by prefix. A
+header that is in neither list reaches the sandbox. The sandbox runs LLM-generated code; it must never see the
 viewer's Onyx credentials. Response headers are filtered through
 `EXCLUDED_HEADERS`: hop-by-hop headers are dropped, and `set-cookie` is
 stripped so app code running in the sandbox cannot set a cookie on the
@@ -204,7 +206,7 @@ provisioning entirely, since nothing will view them live.
    without that check is a direct information leak into a user's sandbox.
 2. **The sandbox must never receive the viewer's Onyx credentials.**
    `EXCLUDED_REQUEST_HEADERS` strips cookies, `Authorization`, CSRF tokens,
-   and identity headers before every forwarded request. A new header the
+   and the listed identity headers before every forwarded request. A new header the
    sandbox should not see must be added there, not assumed absent.
 3. **The proxy must not cache content-volatile dev assets.** Only
    `_next/static/media/*` is content-hashed and safe to cache immutably;

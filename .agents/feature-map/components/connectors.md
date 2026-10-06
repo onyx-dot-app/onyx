@@ -88,9 +88,11 @@ frontend changes a new connector requires.
 | POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`). |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
-Every call that runs a connector goes through
+Every connector run on a cc-pair (index, prune, hierarchy fetch, targeted reindex,
+capability check) goes through
 `backend/onyx/connectors/factory.py:instantiate_connector` before it touches the
-source; see §4.
+source. User-file ingestion is the exception: it builds `LocalFileConnector`
+directly in `user_file_processing/tasks.py:_load_user_file_documents`. See §4.
 
 ### The `DocumentSource` enum: the canonical list
 
@@ -547,7 +549,7 @@ lack of a key, ask instead. The shared helper
   changes.
 - **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
   OneDrive, and Outlook have a gateway; most connectors still make source-API calls inline, so the
-  "one file that talks to the source" guarantee only holds for those two today.
+  "one file that talks to the source" guarantee only holds for those four today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`
   to preserve existing behavior for connector rows that predate the setting.

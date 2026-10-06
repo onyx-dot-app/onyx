@@ -158,7 +158,8 @@ lists plus its own additions):
 
 Every schedule entry sets `expires` (default `BEAT_EXPIRES_DEFAULT = 15 * 60`
 seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
-`backend/AGENTS.md` rule that no task may be enqueued without an expiration.
+`backend/AGENTS.md` rule that no task may be enqueued without an expiration
+(the docfetching `send_task` is the one direct-enqueue exception, see §5).
 
 ### Environment configuration
 
@@ -310,8 +311,9 @@ time. `TenantAwareTask.__call__` sets the tenant contextvar, runs the task, and
 resets it. `task_prerun` clears per-task logging context vars so a pruning
 task's `[CC Pair:]` log prefix cannot leak into the next task run on the same
 thread. `task_postrun` removes the task id from whichever Redis taskset it
-belongs to (matched by id prefix); `task_revoked` does the equivalent cleanup for
-tasks that never ran at all (expired before execution).
+belongs to (matched by id prefix). `task_revoked` removes an expired task id only
+from the document-sync taskset (`app_base.py:on_task_revoked` returns early for
+any other id prefix).
 
 ### 4.4 Craft scheduled tasks
 
@@ -344,7 +346,10 @@ other workers. Light is the exception: it reads
    "Never enqueue a task without an expiration. Always supply `expires=` when
    sending tasks, either from the beat schedule or directly from another task."
    Every entry in `beat_schedule.py` sets `expires` via `BEAT_EXPIRES_DEFAULT`;
-   a new direct `send_task` call needs the same.
+   a new direct `send_task` call needs the same. One exception exists: the
+   docfetching `send_task` in `docfetching/task_creation_utils.py` sets no
+   `expires=`, because that queue can wait hours under load and the indexing
+   watchdog fails an attempt whose task is lost. Do not add a short expiry there.
 4. **A fence must always be released or expire.** Every Celery connector and indexing
    `FENCE_TTL` covered here is 7 days, a defensive backstop, not the intended recovery path.
    The intended path is the checker task's fence-validation pass (§4.2). A

@@ -490,9 +490,11 @@ same builder, `sandbox/user_library.py:build_user_library_fileset`
 (a flat `{path: bytes}` `FileSet`, skipping directories and `sync_disabled`
 files):
 
-1. **On upload, upload-zip, delete, or a `sync_disabled` toggle**:
+1. **On upload, upload-zip, or delete**:
    `sync_user_library_to_active_sandboxes` (`sandbox/user_library.py`) pushes
    the rebuilt set synchronously (no Celery) to every active sandbox.
+   `set_sync_disabled` (`db/user_library.py`) has no production caller and
+   the API has no toggle route, so a `sync_disabled` change triggers no sync.
 2. **At session provisioning** (both a fresh session and a restore, inside
    `ensure_sandbox_ready`/`ensure_session_ready`, §4.1):
    `session/sandbox_lifecycle.py:build_managed_content_payload` reads
@@ -563,11 +565,11 @@ auto-named by a different one.
    `session_runtime_intact` is the fast-path check; anything that fails it
    must route through `ensure_session_ready` under the user's
    `session_creation_lock`, never rebuild a workspace ad hoc.
-5. **History must reach durable storage before a sandbox can be reaped.**
-   `sleep_sandbox` is fail-closed on workspace snapshots (a snapshot
-   failure aborts the reap) but only best-effort on opencode history (a
-   failed history snapshot on an otherwise-healthy pod also aborts the reap;
-   see §4.5 for the gap this still leaves on an unhealthy pod).
+5. **History must reach durable storage before a healthy sandbox can be reaped.**
+   `sleep_sandbox` aborts the reap when a workspace snapshot fails or when
+   the opencode history snapshot fails on a pod that passes `health_check`.
+   If the pod is unreachable, `sleep_sandbox` logs a warning and sleeps the
+   sandbox without a fresh history snapshot. See §4.5 for this gap.
 6. **A `client_request_id` makes `send-message` idempotent**, not merely
    deduplicated at the HTTP layer: `get_turn_for_request` returns the
    existing turn for a repeated id rather than creating a second one.
@@ -627,7 +629,7 @@ auto-named by a different one.
 | adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; `list_live_approvals`'s time-window filter; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_session_grant` can actually cover |
 | changes session state (`BuildSession` columns, `session_ready.py`) | `session_runtime_intact`'s fast-path check; `reconcile_session_llm_config`'s short-circuit comparison; any snapshot/restore path in `[[craft-sandboxes]]` that reads these columns |
 | changes artifact upsert or hashing | the FE artifact list/version display; `export_docx`/`download_artifact`, which read the live workspace, not the DB row's cached bytes |
-| changes user library sync | both trigger sets (upload/delete/toggle synchronous sync via `sync_user_library_to_active_sandboxes`, and session-provisioning sync via `build_managed_content_payload`/`push_managed_content`); the shared `Document`/cc-pair machinery other ingestion consumers also read |
+| changes user library sync | both trigger sets (upload/delete synchronous sync via `sync_user_library_to_active_sandboxes`, and session-provisioning sync via `build_managed_content_payload`/`push_managed_content`); the shared `Document`/cc-pair machinery other ingestion consumers also read |
 | changes opencode history capture points | `[[craft-sandboxes]]`'s reaper, background-sweep, and recovery paths that are the three callers; the manual `/opencode-history-snapshot` endpoint, if you wire up a per-turn caller for the first time |
 
 ---

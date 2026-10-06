@@ -207,7 +207,10 @@ via `PydanticListType`, not a separate table.
 
 ### 4.1 Access filtering: `_add_user_filters`
 
-Every list/fetch goes through `db/persona.py:_add_user_filters`, which builds
+Every access-controlled, user-facing list or fetch goes through
+`db/persona.py:_add_user_filters`. The helpers `get_personas` and
+`get_personas_by_ids` do not apply it. Their docstrings warn that they can
+return personas from all users. `_add_user_filters` builds
 one query combining: global `MANAGE_AGENTS`/`READ_AGENTS` short-circuits,
 ownership (`user_id` or `owner_group_id` membership), `EDITOR`-level direct or
 group shares, org-wide `is_public` with `EDITOR` `public_permission`, and, for
@@ -277,10 +280,11 @@ persona row those functions read.
 
 ### 4.5 The default assistant
 
-`db/persona.py:get_default_behavior_persona` and
-`get_default_assistant` both resolve `Persona.id == DEFAULT_PERSONA_ID` (`0`,
-`onyx/configs/constants.py:DEFAULT_PERSONA_ID`), the latter additionally
-filtering `builtin_persona.is_(True)` and `deleted.is_(False)`. It is not
+`db/persona.py:get_default_behavior_persona` filters by
+`Persona.id == DEFAULT_PERSONA_ID` (`0`,
+`onyx/configs/constants.py:DEFAULT_PERSONA_ID`). `get_default_assistant` does
+not filter by id. It selects rows with `builtin_persona.is_(True)` and
+`deleted.is_(False)` and calls `one_or_none()`. The default assistant is not
 seeded by `backend/onyx/seeding/` (that package is currently empty of persona
 logic); the seed data and its historical reworks live in Alembic migrations,
 for example `alembic/versions/505c488f6662_merge_default_assistants_into_unified.py`,
@@ -501,8 +505,9 @@ Relevant existing e2e coverage: `web/tests/e2e/agents/create_and_edit_agent.spec
   Featuring an agent after users already exist does not retroactively pin it
   for them; only new signups pick it up
   (`seed_pinned_personas_from_featured`'s own docstring states this).
-- **`display_priority` is admin-only, not caller-supplied on the general
-  update path.** The frontend's `buildAgentUpsertRequest` always sends
-  `display_priority: null`; only `PATCH /admin/agents/display-priorities`
-  changes it. A change that tries to set ordering through the regular
-  create/update request silently does nothing.
+- **`display_priority` is set by the admin reorder endpoint in the normal flow.**
+  The upsert API accepts `display_priority`, but `upsert_persona` only stores it
+  on creation or when the existing value is null. The standard frontend form
+  (`buildAgentUpsertRequest`) always sends `null`. Only
+  `PATCH /admin/agents/display-priorities` changes a set value. A form change
+  that tries to reorder through the regular update silently does nothing.

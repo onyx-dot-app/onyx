@@ -343,8 +343,10 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/too
 cd backend && uv run pytest tests/unit -k "prompt or memory or personalization"
 ```
 
-There is no integration test for `auto_detect_search_filters` or for the
-`input_prompt` API surface. A change to either needs new integration coverage,
+There is no functional integration test for `auto_detect_search_filters` or
+for `input_prompt` API behavior.
+`backend/tests/integration/tests/permissions_access/test_basic_access.py` only
+covers the `/input_prompt` `BASIC_ACCESS` gate. A change to either behavior needs new integration coverage,
 not just the existing unit tests.
 
 ### Manual reproduction
