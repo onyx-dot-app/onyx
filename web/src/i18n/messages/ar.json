@@ -2888,10 +2888,9 @@
           "title": "خطأ أثناء الإرسال."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "الإعدادات"
-        }
+      "content": {
+        "title": "محتوى الموصل",
+        "description": "حدد المحتوى المراد فهرسته لهذا الموصل."
       },
       "selectInput": {
         "emptyOption": {

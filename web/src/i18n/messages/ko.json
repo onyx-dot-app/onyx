@@ -2888,10 +2888,9 @@
           "title": "제출 중 오류가 발생했습니다."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "구성"
-        }
+      "content": {
+        "title": "커넥터 콘텐츠",
+        "description": "이 커넥터에서 인덱싱할 콘텐츠를 선택하세요."
       },
       "selectInput": {
         "emptyOption": {

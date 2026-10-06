@@ -2888,10 +2888,9 @@
           "title": "送信中にエラーが発生しました。"
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "設定"
-        }
+      "content": {
+        "title": "コネクタのコンテンツ",
+        "description": "このコネクタでインデックスするコンテンツを選択してください。"
       },
       "selectInput": {
         "emptyOption": {

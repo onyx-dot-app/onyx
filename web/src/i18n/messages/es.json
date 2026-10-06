@@ -2888,10 +2888,9 @@
           "title": "Error durante el envío."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Configuración"
-        }
+      "content": {
+        "title": "Contenido del conector",
+        "description": "Selecciona el contenido que se indexará para este conector."
       },
       "selectInput": {
         "emptyOption": {

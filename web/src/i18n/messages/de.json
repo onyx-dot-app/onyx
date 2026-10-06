@@ -2888,10 +2888,9 @@
           "title": "Fehler beim Senden."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Konfiguration"
-        }
+      "content": {
+        "title": "Connector-Inhalte",
+        "description": "Wählen Sie die Inhalte aus, die für diesen Connector indexiert werden sollen."
       },
       "selectInput": {
         "emptyOption": {

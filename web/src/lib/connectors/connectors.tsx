@@ -548,7 +548,6 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How should we index your Google Drive?",
         optional: true,
         tabs: [
           {
@@ -734,7 +733,6 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Confluence?",
         optional: true,
         tabs: [
           {
@@ -834,7 +832,6 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Jira?",
         optional: true,
         tabs: [
           {

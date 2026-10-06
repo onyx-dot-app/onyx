@@ -1,7 +1,7 @@
 import { useTranslations } from "next-intl";
-import { Card } from "@opal/components";
+import { Card, Collapsible } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { Content, Section } from "@opal/layouts";
+import { Section } from "@opal/layouts";
 import ConnectorConfigFields from "@/views/admin/connectors/AddConnectorPage/form/ConnectorConfigFields";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
@@ -14,7 +14,7 @@ interface ConnectorContentSectionProps {
   connector: ConfigurableSources;
   currentCredential: Credential<any> | null;
   disabled?: boolean;
-  /** Why the section is disabled, shown as its description and tooltip. */
+  /** Why the section is disabled, shown as a tooltip. */
   disabledReason?: string;
 }
 
@@ -27,42 +27,34 @@ export default function ConnectorContentSection({
   disabled,
   disabledReason,
 }: ConnectorContentSectionProps) {
-  const t = useTranslations("admin.connectorsList.sections.configuration");
+  const t = useTranslations("admin.connectorsList.content");
 
   return (
     <Disabled disabled={disabled} tooltip={disabledReason}>
-      <Card border="solid" rounding={4} padding={6} disabled={disabled}>
-        {/* A disabled fieldset also takes the controls out of the tab order;
-          the wrapper above only blocks the pointer. */}
-        <fieldset
+      {/* A disabled fieldset also takes the controls out of the tab order;
+        the wrapper above only blocks the pointer. */}
+      <fieldset
+        disabled={disabled}
+        className="contents"
+        data-testid="connector-form"
+      >
+        <Collapsible
+          title={t("title")}
+          description={t("description")}
           disabled={disabled}
-          className="contents"
-          data-testid="connector-form"
         >
-          <Section gap={4} alignItems="start" width="full">
-            {/* Announces why the section is locked when the reason changes. */}
-            <Section
-              alignItems="start"
-              width="full"
-              height="fit"
-              aria-live="polite"
-            >
-              <Content
-                title={t("title")}
-                description={disabledReason}
-                sizePreset="main-content"
-                variant="section"
+          <Card border="solid" rounding={4} padding={4} disabled={disabled}>
+            <Section gap={4} alignItems="start" width="full">
+              <ConnectorConfigFields
+                values={values}
+                config={config}
+                connector={connector}
+                currentCredential={currentCredential}
               />
             </Section>
-            <ConnectorConfigFields
-              values={values}
-              config={config}
-              connector={connector}
-              currentCredential={currentCredential}
-            />
-          </Section>
-        </fieldset>
-      </Card>
+          </Card>
+        </Collapsible>
+      </fieldset>
     </Disabled>
   );
 }

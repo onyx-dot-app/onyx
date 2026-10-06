@@ -2888,10 +2888,9 @@
           "title": "Error during submission."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Configuration"
-        }
+      "content": {
+        "title": "Connector Content",
+        "description": "Select content to index for this connector."
       },
       "selectInput": {
         "emptyOption": {

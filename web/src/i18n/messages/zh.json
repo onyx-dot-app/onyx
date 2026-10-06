@@ -2888,10 +2888,9 @@
           "title": "提交时出错。"
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "配置"
-        }
+      "content": {
+        "title": "连接器内容",
+        "description": "选择此连接器要索引的内容。"
       },
       "selectInput": {
         "emptyOption": {

@@ -113,8 +113,10 @@ export type ConnectorValueField =
   | FileOption
   | StringTabOption;
 
-export interface TabOption extends Option {
+export interface TabOption extends Omit<Option, "label"> {
   type: "tab";
+  /** Heading above the tabs. Leave it out when the tab labels say enough. */
+  label?: Option["label"];
   defaultTab?: string;
   tabs: {
     label: string;
