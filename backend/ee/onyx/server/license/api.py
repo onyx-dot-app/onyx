@@ -5,6 +5,7 @@ These endpoints allow self-hosted Onyx instances to:
 2. Upload a license file manually (for air-gapped deployments)
 3. View license status and seat usage
 4. Refresh/delete the local license
+5. Downgrade to the Community tier
 
 NOTE: Cloud (MULTI_TENANT) deployments do NOT use these endpoints.
 Cloud licensing is managed via the control plane and gated_tenants Redis key.
@@ -21,6 +22,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
+from ee.onyx.db.community_downgrade import make_all_cc_pairs_public__no_commit
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import (
     get_license_metadata,
@@ -28,6 +30,7 @@ from ee.onyx.db.license import (
 )
 from ee.onyx.server.billing.api import invalidate_billing_info_cache
 from ee.onyx.server.license.models import (
+    CommunityDowngradeResponse,
     LicenseResponse,
     LicenseStatusResponse,
     LicenseUploadResponse,
@@ -273,3 +276,35 @@ def delete_license(
     deleted = db_delete_license(db_session)
 
     return {"deleted": deleted}
+
+
+@router.post("/downgrade")
+def downgrade_to_community(
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CommunityDowngradeResponse:
+    """
+    Drop this deployment to the Community tier.
+
+    Every connector becomes public, permissions synced from the sources stop
+    applying, and the license is removed. Lives under /license so it stays
+    reachable while an expired license gates the rest of the API.
+    """
+    if MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Downgrading is only available for self-hosted deployments",
+        )
+
+    # Committed before the license goes: a failure in between leaves a licensed
+    # deployment with public connectors, which a retry finishes.
+    cc_pair_ids = make_all_cc_pairs_public__no_commit(db_session)
+    db_session.commit()
+    db_delete_license(db_session)
+
+    logger.notice(
+        "Downgraded to Community by %s: %d connectors made public",
+        user.email,
+        len(cc_pair_ids),
+    )
+    return CommunityDowngradeResponse(connectors_made_public=len(cc_pair_ids))
