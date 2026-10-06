@@ -188,6 +188,7 @@ so verify the callers rather than a single component.
 | Path | Component(s) |
 |---|---|
 | `deployment/` | the deployed component. For Craft, also `docs/craft/infra/`. |
+| `deployment/helm/dev/` | local development tooling. Not a product component; see `docs/craft/dev/local-kubernetes.md`. |
 | `.github/workflows/` | CI. Not a product component; verify by reading the workflow. |
 | `cli/`, `tools/`, `scripts/` | developer tooling. Not a product component. |
 
