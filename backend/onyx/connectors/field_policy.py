@@ -39,10 +39,17 @@ class ScopeDirection(str, Enum):
 class ScopeInclude:
     """Items to fetch. Values are a list, None, or a comma-separated string.
 
-    With ``empty_means_all``, an empty value fetches everything.
+    With ``empty_means_all``, an empty value fetches everything. With
+    ``empty_list_means_none`` too, only None (or a blank string) fetches
+    everything, and an empty list fetches nothing.
     """
 
     empty_means_all: bool
+    empty_list_means_none: bool = False
+
+    def __post_init__(self) -> None:
+        if self.empty_list_means_none and not self.empty_means_all:
+            raise ValueError("empty_list_means_none needs empty_means_all")
 
 
 @dataclass(frozen=True)

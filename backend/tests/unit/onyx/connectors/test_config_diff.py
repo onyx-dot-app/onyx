@@ -38,6 +38,14 @@ class _Config(ConnectorConfig):
         str | None,
         FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=False)),
     ] = None
+    # None (or a blank string) fetches every kind, [] fetches none.
+    kinds: Annotated[
+        str | list[str] | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=True, empty_list_means_none=True),
+        ),
+    ] = None
     skipped: Annotated[
         list[str] | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeExclude())
     ] = None
@@ -96,7 +104,9 @@ def _only_change(
         (None, ["a"], ScopeDirection.NARROW, ["a"], []),
         ([], ["a"], ScopeDirection.NARROW, ["a"], []),
         (["a"], None, ScopeDirection.WIDEN, [], ["a"]),
-        (["a"], [" ", ""], ScopeDirection.WIDEN, [], ["a"]),
+        (["a"], [], ScopeDirection.WIDEN, [], ["a"]),
+        # List entries are matched exactly, so whitespace is a change.
+        (["general "], ["general"], ScopeDirection.BOTH, ["general"], ["general "]),
     ],
 )
 def test_include_directions(
@@ -128,6 +138,43 @@ def test_include_comma_separated_string(
     old: str | None, new: str, direction: ScopeDirection
 ) -> None:
     assert _only_change({"repos": old}, {"repos": new}).scope_direction == direction
+
+
+@pytest.mark.parametrize(
+    "old, new, direction",
+    [
+        # Only None (or a blank string) means all.
+        (None, [], ScopeDirection.NARROW),
+        (None, ["a"], ScopeDirection.NARROW),
+        ("", "a", ScopeDirection.NARROW),
+        ([], None, ScopeDirection.WIDEN),
+        (["a"], None, ScopeDirection.WIDEN),
+        # [] fetches nothing.
+        ([], ["a"], ScopeDirection.WIDEN),
+        (["a"], [], ScopeDirection.NARROW),
+        (["a"], ["a", "b"], ScopeDirection.WIDEN),
+    ],
+)
+def test_include_where_only_none_means_all(
+    old: str | list[str] | None,
+    new: str | list[str] | None,
+    direction: ScopeDirection,
+) -> None:
+    assert _only_change({"kinds": old}, {"kinds": new}).scope_direction == direction
+
+
+def test_include_where_only_none_means_all_scoped_backfill() -> None:
+    assert build_scoped_backfill_config(_Config, {"kinds": []}, {"kinds": ["a"]}) == {
+        "kinds": ["a"]
+    }
+    assert (
+        build_scoped_backfill_config(_Config, {"kinds": ["a"]}, {"kinds": None}) is None
+    )
+
+
+def test_empty_list_means_none_needs_empty_means_all() -> None:
+    with pytest.raises(ValueError):
+        ScopeInclude(empty_means_all=False, empty_list_means_none=True)
 
 
 def test_include_change_without_scope_effect_is_left_out() -> None:
@@ -260,15 +307,28 @@ def test_scoped_backfill_keeps_only_added_items() -> None:
     delta = build_scoped_backfill_config(
         _Config,
         {"spaces": ["a"], "repos": "x", "skipped": ["s"], "batch_size": 10},
-        {"spaces": ["a", "b"], "repos": "x, y", "skipped": ["s"], "batch_size": 20},
+        {"spaces": ["a"], "repos": "x, y", "skipped": ["s"], "batch_size": 20},
     )
 
     assert delta == {
-        "spaces": ["b"],
+        "spaces": ["a"],
         "repos": "y",
         "skipped": ["s"],
         "batch_size": 20,
     }
+
+
+def test_scoped_backfill_is_none_when_two_include_fields_widen() -> None:
+    # A document must match both fields: the added items alone would miss
+    # (a, y) and (b, x).
+    assert (
+        build_scoped_backfill_config(
+            _Config,
+            {"spaces": ["a"], "repos": "x"},
+            {"spaces": ["a", "b"], "repos": "x, y"},
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
@@ -326,6 +386,32 @@ def test_slack_bot_messages(old: bool, new: bool, direction: ScopeDirection) -> 
     )
 
     assert change.scope_direction == direction
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [(None, None), ("", None), ("  ", None), (" main ", "main")],
+)
+def test_github_branch_and_repositories_are_stripped(
+    raw: str | None, expected: str | None
+) -> None:
+    config = GithubConnectorConfig.model_validate(
+        {"repo_owner": "onyx", "repositories": raw, "branch": raw}
+    )
+
+    assert config.repositories == expected
+    assert config.branch == expected
+
+
+def test_github_whitespace_is_not_a_change() -> None:
+    assert (
+        classify_config_change(
+            GithubConnectorConfig,
+            {"repo_owner": "onyx", "repositories": "a", "branch": "main"},
+            {"repo_owner": "onyx", "repositories": " a ", "branch": " main "},
+        )
+        == []
+    )
 
 
 def test_github_scoped_backfill_for_added_repositories() -> None:

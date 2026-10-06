@@ -48,18 +48,27 @@ class _ScopeChange(BaseModel):
 
 
 def _to_items(value: Any) -> list[str] | None:
-    """Normalizes a list, None, or comma-separated string into unique,
-    stripped, non-blank items, in order. None for any other type."""
+    """Normalizes a list, None, or comma-separated string into unique items,
+    in order. None for any other type.
+
+    List entries are kept exactly, since connectors (e.g. Slack) match them
+    exactly. Only the pieces of a comma-separated string are stripped, and
+    blank pieces are dropped.
+    """
     if value is None:
-        raw_items: list[Any] = []
-    elif isinstance(value, str):
-        raw_items = value.split(ITEM_SEPARATOR)
-    elif isinstance(value, list):
-        raw_items = value
-    else:
-        return None
-    items = (str(item).strip() for item in raw_items)
-    return list(dict.fromkeys(item for item in items if item))
+        return []
+    if isinstance(value, str):
+        pieces = (piece.strip() for piece in value.split(ITEM_SEPARATOR))
+        return list(dict.fromkeys(piece for piece in pieces if piece))
+    if isinstance(value, list):
+        return list(dict.fromkeys(str(item) for item in value))
+    return None
+
+
+def _include_means_all(value: Any) -> bool:
+    """For ``empty_list_means_none`` fields: only None or a blank string
+    fetches everything."""
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def _item_direction(added: list[str], removed: list[str]) -> ScopeDirection:
@@ -113,6 +122,13 @@ def _scope_change(
 
     if isinstance(scope, ScopeExclude):
         direction = _inverted(_item_direction(added, removed))
+    elif scope.empty_list_means_none:
+        old_all = _include_means_all(old_value)
+        new_all = _include_means_all(new_value)
+        if old_all == new_all:
+            direction = _item_direction(added, removed)
+        else:
+            direction = ScopeDirection.WIDEN if new_all else ScopeDirection.NARROW
     elif scope.empty_means_all and not old_items and new_items:
         direction = ScopeDirection.NARROW
     elif scope.empty_means_all and old_items and not new_items:
@@ -235,35 +251,36 @@ def build_scoped_backfill_config(
     """The new config limited to the items a widening added, for a one-off
     backfill of just those items.
 
-    Returns None unless every non-COSMETIC change widens a ScopeInclude field
-    by adding items. An include field that goes from items to empty with
-    ``empty_means_all`` widens to everything, which no delta can express.
+    Returns None unless exactly one non-COSMETIC change widens a ScopeInclude
+    field by adding items. With two widened include fields, a document must
+    match both, so the added items of each would miss pairs of old and new
+    items. An include field that goes from items to "all" widens to
+    everything, which no delta can express.
     """
     changes = [
         change
         for change in classify_config_change(config_class, old_config, new_config)
         if change.field_class != FieldClass.COSMETIC
     ]
-    if not changes:
+    if len(changes) != 1:
+        return None
+    change = changes[0]
+    if (
+        change.field_class != FieldClass.SCOPE
+        or change.scope_direction != ScopeDirection.WIDEN
+        or not change.added_items
+    ):
+        return None
+    policy = _policy_for(config_class, change.field_name)
+    if policy is None or not isinstance(policy.scope, ScopeInclude):
         return None
 
     delta_config = dict(new_config)
-    for change in changes:
-        if (
-            change.field_class != FieldClass.SCOPE
-            or change.scope_direction != ScopeDirection.WIDEN
-            or not change.added_items
-        ):
-            return None
-        policy = _policy_for(config_class, change.field_name)
-        if policy is None or not isinstance(policy.scope, ScopeInclude):
-            return None
-        delta_config[change.field_name] = (
-            ITEM_SEPARATOR.join(change.added_items)
-            if isinstance(new_config.get(change.field_name), str)
-            else change.added_items
-        )
-
+    delta_config[change.field_name] = (
+        ITEM_SEPARATOR.join(change.added_items)
+        if isinstance(new_config.get(change.field_name), str)
+        else change.added_items
+    )
     if _validate(config_class, delta_config) is None:
         return None
     return delta_config

@@ -1,4 +1,6 @@
-from typing import Annotated
+from typing import Annotated, Any
+
+from pydantic import field_validator
 
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import (
@@ -28,3 +30,12 @@ class GithubConnectorConfig(ConnectorConfig):
     include_files: Annotated[bool, _DOCUMENT_TYPE_TOGGLE] = False
     # File document ids contain the branch.
     branch: Annotated[str | None, FieldPolicy(FieldClass.IDENTITY)] = None
+
+    # A blank value means every repository or the default branch, as in the
+    # connector.
+    @field_validator("repositories", "branch", mode="before")
+    @classmethod
+    def _strip_blank_to_none(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
