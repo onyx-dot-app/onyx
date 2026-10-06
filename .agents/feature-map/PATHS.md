@@ -97,6 +97,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/auth/`, `backend/ee/onyx/auth/`, `backend/onyx/server/auth/`, `server/saml*.py`, `server/oidc_multi.py`, `server/sso_discovery.py`, `server/manage/sso/` | auth-and-identity |
 | `backend/onyx/db/users.py`, `db/auth.py`, `db/api_key.py`, `db/pat.py`, `db/saml.py`, `db/sso_provider.py`, `server/api_key/`, `server/pat/`, `server/manage/users.py` | auth-and-identity |
 | `backend/onyx/oauth/`, `backend/onyx/db/oauth_config.py`, `server/features/oauth_config/`, `server/features/user_oauth_token/` | auth-and-identity |
+| `backend/onyx/oauth_provider/`, `backend/onyx/db/oauth_provider.py`, `server/oauth_provider/` | auth-and-identity |
 | `backend/onyx/db/tenant_shard.py`, `db/engine/`, `backend/onyx/server/middleware/` | multi-tenancy |
 | `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
 | `backend/onyx/server/middleware/latency_logging.py` | observability |
@@ -130,7 +131,7 @@ so verify the callers rather than a single component.
 
 | Path | What it is |
 |---|---|
-| `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/` | Cache and KV abstractions. Used by fences, rate limits, and the stream buffer. |
+| `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/` | Cache and KV abstractions. Used by fences, rate limits (`cache/rate_limit.py:within_rate_limit`), and the stream buffer. |
 | `backend/onyx/error_handling/` | `OnyxError` and the error-code taxonomy surfaced to clients. |
 | `backend/onyx/utils/` | Shared helpers. `utils/variable_functionality.py` holds `fetch_versioned_implementation` and `fetch_ee_implementation_or_noop`, the CE-to-EE dispatch mechanism. |
 

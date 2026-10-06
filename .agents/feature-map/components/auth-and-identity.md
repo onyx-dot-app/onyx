@@ -27,9 +27,11 @@ auth.
 `backend/onyx/db/users.py`, `db/auth.py`, `db/api_key.py`, `db/pat.py`,
 `db/saml.py`, `db/sso_provider.py`, `db/permissions.py`,
 `db/scoped_permissions.py`, `db/oauth_config.py`, `server/features/user_oauth_token/`,
-`backend/onyx/oauth/`, the `User`/`PermissionGrant`/`ApiKey`/
+`backend/onyx/oauth/`, the OAuth provider (`backend/onyx/oauth_provider/`,
+`backend/onyx/server/oauth_provider/`, `db/oauth_provider.py`), the `User`/`PermissionGrant`/`ApiKey`/
 `PersonalAccessToken`/`SSOProvider`/`SamlAccount`/`ScimToken`/`OAuthConfig`/
-`OAuthUserToken` tables in `backend/onyx/db/models.py`.
+`OAuthUserToken`/`OAuthProviderGrant`/`OAuthProviderToken`/`OAuthProviderClient` tables in
+`backend/onyx/db/models.py`.
 
 **Does not own:** which *documents* an authenticated user can see. That is
 [[access-control]]: this document supplies the `User` object and the
@@ -128,6 +130,7 @@ the coding-agent sandbox).
 | `DISPOSABLE_EMAIL_DOMAINS_URL` | `configs/app_configs.py` | | Remote disposable-domain blocklist, refreshed stale-while-revalidate. |
 | `MOBILE_ALLOWED_REDIRECT_URIS` | `configs/app_configs.py` | | Allowlist mobile SSO completion redirects against. |
 | `OIDC_DISCOVERY_CACHE_TTL_SECONDS` | `auth/oauth_refresher.py` | 3600 | OIDC discovery-document cache for token-refresh endpoint resolution. |
+| `OAUTH_PROVIDER_ENABLED` | `configs/app_configs.py` | `false` | Mounts the OAuth provider routers (`main.py`). `get_oauth_provider_settings` then requires `WEB_DOMAIN` to be HTTPS, or HTTP on a loopback host, and fails startup otherwise. The MCP resource is always `{WEB_DOMAIN}/mcp/`. |
 
 **Admin-configured (DB rows) and the legacy env path:** `SSOProvider` rows
 (`db/sso_provider.py`) hold the multi-provider OAuth/OIDC/SAML settings. The
@@ -378,6 +381,35 @@ manager global access to that resource type. See [[access-control]] §2 for
 how this plays out for user groups, document sets, and connectors
 specifically.
 
+### 4.9 OAuth provider (Onyx as the authorization server)
+
+Onyx issues user-bound credentials to external clients (first the MCP server's
+resource) through authorization codes with S256 PKCE. Routes are under
+`/api/oauth-provider/`:
+
+```
+metadata | register | authorize | token | revoke     server/oauth_provider/protocol.py
+  public, tenantless (TENANT_RESOLUTION_SKIP_PATHS); rate limited per client
+  address and globally through cache/rate_limit.py:within_rate_limit
+  authorize → stores a pending request (oauth_provider/attempts.py) and
+              redirects to the web consent page {WEB_DOMAIN}/oauth-provider/authorize
+  token     → reads the tenant from the code record or the refresh token,
+              sets CURRENT_TENANT_ID_CONTEXTVAR, then runs the SDK handler
+consent (GET, POST) | grants | grants/{id}            server/oauth_provider/api.py
+  GET consent  → bind_authorization_request: binds the request to user,
+                 tenant, login session (_session_hash) and a CSRF token
+  POST consent → Origin check, consume_authorization_request, revalidate
+                 the client redirect, store_authorization_code
+```
+
+`OnyxOAuthProvider` (`server/oauth_provider/provider.py`) subclasses fastmcp's
+`OAuthProvider`; the MCP SDK handlers do request validation and PKCE checks.
+Grants and tokens live in each tenant's schema (`OAuthProviderGrant`,
+`OAuthProviderToken`); registered clients live in the catalog
+(`OAuthProviderClient`). Pending requests, consent bindings and authorization
+codes live in the shared `CacheBackend` namespace (`get_shared_cache_backend`),
+so the flow works on Redis and on the PostgreSQL cache.
+
 ---
 
 ## 5. Contracts and invariants
@@ -470,6 +502,18 @@ is marked as such.
    provisioning channel keyed by tenant via the embedded token format, not a
    human session. Routing SCIM through `current_user` would require a
    `User` row to exist for the IdP itself, which is not the model here.
+10. **OAuth provider codes and consent requests are single-use.**
+   `consume_authorization_code` and `consume_authorization_request`
+   (`oauth_provider/attempts.py`) take the stored value with `getdel`, so
+   exactly one of two concurrent exchanges or approvals succeeds. A change
+   that reads and then deletes in two steps, or that restores a code after a
+   failure, allows a second redemption.
+11. **OAuth provider consent is bound to one user, tenant and login session.**
+   `consume_authorization_request` succeeds only for the user, tenant,
+   `_session_hash` and CSRF token recorded at the first consent GET, and the
+   POST also requires the web origin. Workspace membership is rechecked at
+   consent, on refresh (`_with_authorized_refresh` revokes the grant of a
+   removed owner) and on every token use.
 
 ---
 
@@ -587,6 +631,11 @@ secrets/env.
 
 ## 9. Footguns
 
+- **The OAuth provider protocol routes run without a tenant.** They are in
+  `TENANT_RESOLUTION_SKIP_PATHS`, so `CURRENT_TENANT_ID_CONTEXTVAR` is the
+  default schema on entry. `token` and `revoke` set the tenant from the code
+  record or the parsed token before they touch storage; new storage access in
+  `protocol.py` must do the same, or it reads the wrong schema.
 - **`User.role` looks like the authorization mechanism and is not.** It is a
   populated, typed, seemingly-normal enum column with realistic-looking
   values (`ADMIN`, `CURATOR`, `BASIC`...). Nothing about looking at the
