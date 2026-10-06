@@ -723,6 +723,10 @@ def get_last_successful_attempt_poll_range_end(
 
     This can be used to determine the next "start" time for a new index attempt.
 
+    An attempt that completed with errors moves the cursor too. Its failures
+    are tracked as IndexAttemptError rows, so they do not hold the window open
+    for every later run.
+
     A reindex-port synthetic seed carries PRESENT's poll cursor and IS a valid resume
     point, so it is considered by default - the FUTURE's first connector attempt resumes
     from it instead of refetching full history. This differs from the count/latest helpers,
@@ -740,7 +744,9 @@ def get_last_successful_attempt_poll_range_end(
         .filter(
             ConnectorCredentialPair.id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings.id,
-            IndexAttempt.status == IndexingStatus.SUCCESS,
+            IndexAttempt.status.in_(
+                [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+            ),
         )
     )
     if ignore_targeted_reindex:

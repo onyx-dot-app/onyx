@@ -548,6 +548,34 @@ def test_count_unique_active_cc_pairs_skips_targeted(
     assert cc_pair.id not in distinct_ids_before
 
 
+def test_get_last_successful_poll_range_end_counts_completed_with_errors(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """An attempt that completed with errors moves the cursor, a failed one
+    does not."""
+    from datetime import datetime, timezone
+
+    settings = get_current_search_settings(db_session)
+    ends = {
+        IndexingStatus.SUCCESS: datetime(2026, 1, 1, tzinfo=timezone.utc),
+        IndexingStatus.COMPLETED_WITH_ERRORS: datetime(2026, 2, 1, tzinfo=timezone.utc),
+        IndexingStatus.FAILED: datetime(2026, 3, 1, tzinfo=timezone.utc),
+    }
+    for status, end in ends.items():
+        attempt = _make_attempt(db_session, cc_pair.id, settings.id, status=status)
+        attempt.poll_range_end = end
+    db_session.commit()
+
+    result = get_last_successful_attempt_poll_range_end(
+        cc_pair_id=cc_pair.id,
+        earliest_index=0.0,
+        search_settings=settings,
+        db_session=db_session,
+    )
+
+    assert result == ends[IndexingStatus.COMPLETED_WITH_ERRORS].timestamp()
+
+
 def test_get_last_successful_poll_range_end_skips_targeted(
     db_session: Session, cc_pair: ConnectorCredentialPair
 ) -> None:
