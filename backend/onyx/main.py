@@ -174,7 +174,7 @@ from onyx.utils.middleware import (
     add_endpoint_context_middleware,
     add_onyx_request_id_middleware,
 )
-from onyx.utils.telemetry import RecordType, get_or_generate_uuid, optional_telemetry
+from onyx.utils.telemetry import get_or_generate_uuid
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
     fetch_versioned_implementation,
@@ -434,12 +434,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     from onyx.utils.fleet_telemetry import start_telemetry
 
     start_telemetry("api")
-
-    if not MULTI_TENANT:
-        # don't emit a metric for every pod rollover/restart
-        optional_telemetry(
-            record_type=RecordType.VERSION, data={"version": __version__}
-        )
 
     if RATE_LIMITING_ENABLED:
         await setup_auth_limiter()
