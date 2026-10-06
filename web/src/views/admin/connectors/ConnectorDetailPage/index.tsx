@@ -7,8 +7,6 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { toast } from "@opal/layouts";
 import CredentialSection from "@/lib/credentials/components/CredentialSection";
-import { NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED } from "@/lib/constants";
-import { ConnectorsCheckSection } from "@/app/admin/connector/[ccPairId]/ConnectorsCheckSection";
 import Text from "@/refresh-components/texts/Text";
 import {
   updateConnectorCredentialPairName,
@@ -599,15 +597,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
             )}
           </AlertDescription>
         </Alert>
-      )}
-
-      {NEXT_PUBLIC_CONNECTOR_CHECKS_CARD_ENABLED && (
-        <div className="mt-6">
-          <ConnectorsCheckSection
-            credentialId={ccPair.credential.id}
-            connectorId={ccPair.connector.id}
-          />
-        </div>
       )}
 
       <Title className="mb-2 mt-6" size="md">
