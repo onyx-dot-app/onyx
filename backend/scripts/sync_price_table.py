@@ -393,12 +393,12 @@ def _litellm_cost(entry: dict[str, Any]) -> dict[str, float]:
 def _is_gap_fill_chat_model(model_id: str, entry: dict[str, Any], today: str) -> bool:
     """Whether a litellm-only chat model is worth adding: a live, priced,
     first-party id (no fine-tunes, commitment tiers or region-prefixed ids)."""
-    tag = entry.get("litellm_provider") or ""
+    tag: str = entry.get("litellm_provider") or ""
     if tag not in _LITELLM_CHAT_GAP_FILL_TAGS and not tag.startswith("vertex_ai"):
         return False
     if "/" in model_id or model_id.startswith("ft:"):
         return False
-    deprecation_date = entry.get("deprecation_date")
+    deprecation_date: str | None = entry.get("deprecation_date")
     if deprecation_date and deprecation_date <= today:
         return False
     return (
@@ -422,7 +422,7 @@ def _litellm_new_entry(model_key: str, entry: dict[str, Any]) -> dict[str, Any]:
             k: v for k, v in (("context", context), ("output", output)) if v is not None
         }
     if entry["mode"] in _LITELLM_CHAT_MODES:
-        inputs = ["text"]
+        inputs: list[str] = ["text"]
         if entry.get("supports_vision"):
             inputs.append("image")
         if entry.get("supports_pdf_input"):
@@ -441,8 +441,9 @@ def _litellm_new_entry(model_key: str, entry: dict[str, Any]) -> dict[str, Any]:
 def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> None:
     """Enrich catalog entries with litellm-only fields; add non-chat models and
     gap-fill first-party chat models."""
-    enriched = added = added_chat = 0
-    today = date.today().isoformat()
+    enriched = added = 0
+    added_chat: int = 0
+    today: str = date.today().isoformat()
     for model_key, entry in litellm_map.items():
         if not isinstance(entry, dict):
             continue
