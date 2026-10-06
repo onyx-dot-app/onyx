@@ -1,21 +1,21 @@
 {
-  "version": "1.16",
-  "updated_at": "2026-10-05T00:00:00Z",
+  "version": "1.17",
+  "updated_at": "2026-10-06T00:00:00Z",
   "providers": {
     "openai": {
-      "default_model": "gpt-6.1-sol",
+      "default_model": "gemini-3.1-pro-preview",
       "additional_visible_models": [
         {
-          "name": "gpt-6.1-sol"
+          "name": "gemini-3.1-pro-preview"
         },
         {
-          "name": "gpt-5.6-terra"
+          "name": "gpt-6-astra"
         },
         {
-          "name": "gpt-6-luna"
+          "name": "gemini-3.8-flash"
         },
         {
-          "name": "gpt-5.5"
+          "name": "gemini-3.7-flash"
         }
       ]
     },
@@ -25,10 +25,6 @@
         {
           "name": "claude-opus-5-5",
           "display_name": "Claude Opus 5.5"
-        },
-        {
-          "name": "claude-fable-5-1",
-          "display_name": "Claude Fable 5.1"
         },
         {
           "name": "claude-sonnet-5-5",
@@ -50,6 +46,10 @@
         {
           "name": "gemini-3.8-flash",
           "display_name": "Gemini 3.8 Flash"
+        },
+        {
+          "name": "gemini-3.7-flash",
+          "display_name": "Gemini 3.7 Flash"
         }
       ]
     },
@@ -61,12 +61,16 @@
           "display_name": "GLM 5.3"
         },
         {
-          "name": "deepseek/deepseek-v4-pro",
-          "display_name": "DeepSeek V4 Pro 0423"
+          "name": "z-ai/glm-5.3-flash",
+          "display_name": "GLM 5.3 Flash"
         },
         {
-          "name": "qwen/qwen3.7-plus",
-          "display_name": "Qwen3.7 Plus"
+          "name": "deepseek/deepseek-v4.1-flash",
+          "display_name": "DeepSeek V4.1 Flash"
+        },
+        {
+          "name": "qwen/qwen3.8-max-0902",
+          "display_name": "Qwen3.8 Max 0902"
         },
         {
           "name": "moonshotai/kimi-k3",
