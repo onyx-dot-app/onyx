@@ -120,6 +120,7 @@ export default function TextListField({
                   type="button"
                   disabled={disabled}
                   tooltip={t("removeButton.tooltip")}
+                  aria-label={t("removeButton.tooltip")}
                   onClick={() => {
                     rowKeys.removeKey(index);
                     arrayHelpers.remove(index);

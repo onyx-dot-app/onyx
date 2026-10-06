@@ -6,6 +6,8 @@ import type { Credential } from "@/lib/credentials/types";
 import { RenderField } from "./FieldRendering";
 import { useFormikContext } from "formik";
 
+type ConnectorField = ConnectionConfiguration["values"][number];
+
 export interface ConnectorConfigFieldsProps {
   config: ConnectionConfiguration;
   values: any;
@@ -38,41 +40,36 @@ export default function ConnectorConfigFields({
     }
   }, [initialConnectorName, setFieldValue, values]);
 
+  // Advanced fields are all optional, so they sit in the same flat list
+  // instead of behind a toggle. A field's own visibleCondition still applies.
+  const showAdvanced: boolean =
+    !config.advancedValuesVisibleCondition ||
+    config.advancedValuesVisibleCondition(values, currentCredential);
+  const visibleFields: ConnectorField[] = [
+    ...config.values,
+    ...(showAdvanced ? config.advanced_values : []),
+  ].filter(
+    (field) =>
+      !field.hidden &&
+      (!field.visibleCondition ||
+        field.visibleCondition(values, currentCredential))
+  );
+
   return (
     <>
       {config.subtext && (
         <CredentialSubText>{config.subtext}</CredentialSubText>
       )}
 
-      {config.values.map(
-        (field) =>
-          !field.hidden && (
-            <RenderField
-              key={field.name}
-              field={field}
-              values={values}
-              connector={connector}
-              currentCredential={currentCredential}
-            />
-          )
-      )}
-
-      {/* Advanced fields are all optional, so they sit in the same flat
-        list instead of behind a toggle. */}
-      {(!config.advancedValuesVisibleCondition ||
-        config.advancedValuesVisibleCondition(values, currentCredential)) &&
-        config.advanced_values.map(
-          (field) =>
-            !field.hidden && (
-              <RenderField
-                key={field.name}
-                field={field}
-                values={values}
-                connector={connector}
-                currentCredential={currentCredential}
-              />
-            )
-        )}
+      {visibleFields.map((field) => (
+        <RenderField
+          key={field.name}
+          field={field}
+          values={values}
+          connector={connector}
+          currentCredential={currentCredential}
+        />
+      ))}
     </>
   );
 }

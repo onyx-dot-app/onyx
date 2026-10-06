@@ -332,6 +332,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           <FileDropzoneField
             name={field.name}
             isZip={field.type === "zip"}
+            aria-label={label}
             disabled={disabled}
           />
         </InputVertical>
