@@ -2073,8 +2073,8 @@
     "deepseek/deepseek-v4-flash": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.03,
+        "cache_read": 0.0005,
+        "input": 0.0005,
         "output": 1.28
       },
       "family": "deepseek-flash",
@@ -2102,8 +2102,8 @@
     "deepseek/deepseek-v4-flash-0731": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0152,
-        "input": 0.0152,
+        "cache_read": 0.0079,
+        "input": 0.0079,
         "output": 1.28
       },
       "family": "deepseek-flash",
@@ -2190,14 +2190,14 @@
     "deepseek/deepseek-v4-pro-0813": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.36,
-        "input": 0.4,
-        "output": 5
+        "cache_read": 0.022,
+        "input": 0.66,
+        "output": 1.98
       },
       "family": "deepseek-thinking",
       "limit": {
         "context": 1048576,
-        "output": 943718
+        "output": 393216
       },
       "modalities": {
         "input": [
@@ -2219,8 +2219,8 @@
     "deepseek/deepseek-v4.1-flash": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.006,
-        "input": 0.3,
+        "cache_read": 0.015,
+        "input": 0.019474,
         "output": 1.2
       },
       "family": "deepseek-flash",
@@ -3394,6 +3394,35 @@
       "structured_output": true,
       "tool_call": true
     },
+    "google/gemini-nano-banana-2.1": {
+      "attachment": true,
+      "cost": {
+        "input": 1.5,
+        "output": 7.5
+      },
+      "family": "nano-banana",
+      "limit": {
+        "context": 65536,
+        "output": 58982
+      },
+      "modalities": {
+        "input": [
+          "image",
+          "text"
+        ],
+        "output": [
+          "image",
+          "text"
+        ]
+      },
+      "name": "Nano Banana 2.1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-06",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "google/gemma-2-27b-it": {
       "attachment": false,
       "cost": {
@@ -4292,6 +4321,7 @@
     "meta-llama/llama-4-maverick": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.05,
         "input": 0.1875,
         "output": 0.6525
       },
@@ -4380,13 +4410,13 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.04,
-        "input": 0.35,
-        "output": 1.5
+        "input": 0.3,
+        "output": 1.2
       },
       "family": "muse",
       "limit": {
         "context": 131072,
-        "output": 117964
+        "output": 16384
       },
       "modalities": {
         "input": [
@@ -5172,6 +5202,35 @@
       "structured_output": true,
       "tool_call": true
     },
+    "mistralai/mistral-large-4-0": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.07,
+        "input": 0.68,
+        "output": 2.09
+      },
+      "family": "mistral-large",
+      "limit": {
+        "context": 524288,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral Large 4",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-06",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "mistralai/mistral-medium-3": {
       "attachment": true,
       "cost": {
@@ -5750,9 +5809,9 @@
     "moonshotai/kimi-k3": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.22,
-        "input": 0.67,
-        "output": 14
+        "cache_read": 0.23,
+        "input": 0.69,
+        "output": 15
       },
       "family": "kimi-k3",
       "limit": {
@@ -10366,13 +10425,13 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.0175,
-        "input": 0.0875,
-        "output": 0.35
+        "input": 0.09,
+        "output": 0.55
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 235929
+        "output": 16384
       },
       "modalities": {
         "input": [
@@ -10450,13 +10509,13 @@
     "qwen/qwen3-30b-a3b-instruct-2507": {
       "attachment": false,
       "cost": {
-        "input": 0.04815,
-        "output": 0.19305
+        "input": 0.1,
+        "output": 0.3
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 32000
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -11171,14 +11230,14 @@
     "qwen/qwen3.5-35b-a3b": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.05,
-        "input": 0.15,
-        "output": 1
+        "cache_read": 0.04,
+        "input": 0.08,
+        "output": 0.75
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 235929
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -11202,14 +11261,14 @@
     "qwen/qwen3.5-397b-a17b": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.225,
-        "input": 0.55,
-        "output": 3.5
+        "cache_read": 0.22,
+        "input": 0.45,
+        "output": 3
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 235929
+        "output": 81920
       },
       "modalities": {
         "input": [
@@ -11772,36 +11831,6 @@
       "temperature": true,
       "tool_call": true
     },
-    "qwen/qwen3.8-27b:free": {
-      "attachment": true,
-      "cost": {
-        "input": 0,
-        "output": 0
-      },
-      "family": "qwen",
-      "limit": {
-        "context": 262144,
-        "output": 235929
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "video"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Qwen3.8 27B (free)",
-      "open_weights": true,
-      "reasoning": true,
-      "release_date": "2026-08-14",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "qwen/qwen3.8-flash": {
       "attachment": true,
       "cost": {
@@ -12280,36 +12309,6 @@
       "temperature": true,
       "tool_call": false
     },
-    "stealth/space-bunny-alpha": {
-      "attachment": true,
-      "cost": {
-        "input": 0,
-        "output": 0
-      },
-      "family": "alpha",
-      "limit": {
-        "context": 1000000,
-        "output": 524288
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "video"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "Space Bunny Alpha",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-09-23",
-      "structured_output": false,
-      "temperature": true,
-      "tool_call": true
-    },
     "stepfun/step-3.5-flash": {
       "attachment": false,
       "cost": {
@@ -12483,9 +12482,9 @@
     "tencent/hy3": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.033,
-        "input": 0.132,
-        "output": 0.528
+        "cache_read": 0.020625,
+        "input": 0.0825,
+        "output": 0.33
       },
       "family": "Hy",
       "limit": {
@@ -12542,9 +12541,9 @@
     "tencent/hy4-preview": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.042,
-        "input": 0.834,
-        "output": 2.501
+        "cache_read": 0.0378,
+        "input": 0.7506,
+        "output": 2.2509
       },
       "family": "Hy",
       "limit": {
@@ -13822,9 +13821,9 @@
     "z-ai/glm-5.2": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0192,
-        "input": 0.0192,
-        "output": 16
+        "cache_read": 0.15,
+        "input": 0.152,
+        "output": 12
       },
       "family": "glm",
       "limit": {
@@ -13851,8 +13850,8 @@
     "z-ai/glm-5.3": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.045,
-        "input": 0.05,
+        "cache_read": 0.065,
+        "input": 0.07,
         "output": 7
       },
       "family": "glm",
@@ -14182,9 +14181,9 @@
     "~deepseek/deepseek-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.003,
-        "input": 0.003,
-        "output": 2.4
+        "cache_read": 0.015,
+        "input": 0.019474,
+        "output": 1.2
       },
       "family": "deepseek-flash",
       "limit": {
@@ -14212,8 +14211,8 @@
     "~deepseek/deepseek-pro-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.19,
-        "input": 0.1901,
+        "cache_read": 0.25,
+        "input": 0.2514,
         "output": 4.2
       },
       "family": "deepseek",
@@ -14241,8 +14240,8 @@
     "~deepseek/deepseek-v4-flash-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0152,
-        "input": 0.0152,
+        "cache_read": 0.0079,
+        "input": 0.0079,
         "output": 1.28
       },
       "family": "deepseek",
@@ -14359,7 +14358,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.45,
-        "input": 0.66,
+        "input": 0.68,
         "output": 13
       },
       "family": "kimi",
@@ -14667,8 +14666,8 @@
     "~z-ai/glm-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.0232,
-        "input": 0.0352,
+        "cache_read": 0.0214,
+        "input": 0.0214,
         "output": 0.5
       },
       "family": "glm-flash",

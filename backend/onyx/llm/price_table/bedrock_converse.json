@@ -61,6 +61,14 @@
       "mode": "image_generation",
       "name": "512-x-512/max-steps/stability.stable-diffusion-xl-v0"
     },
+    "amazon.nova-2-5-sonic": {
+      "cost": {
+        "input": 0.33,
+        "output": 2.75
+      },
+      "mode": "realtime",
+      "name": "amazon.nova-2-5-sonic"
+    },
     "amazon.nova-2-lite-v1:0": {
       "attachment": true,
       "cost": {

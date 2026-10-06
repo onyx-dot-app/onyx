@@ -1,6 +1,29 @@
 {
   "aliases": {},
   "models": {
+    "codestral-2508": {
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.3,
+        "output": 0.8999999999999999
+      },
+      "limit": {
+        "context": 128000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "codestral-2508",
+      "structured_output": true,
+      "tool_call": true
+    },
     "codestral-embed": {
       "cost": {
         "cache_read": 0.015,
@@ -50,6 +73,27 @@
       "release_date": "2024-05-29",
       "temperature": true,
       "tool_call": true
+    },
+    "codestral-mamba-latest": {
+      "cost": {
+        "cache_read": 0.024999999999999998,
+        "input": 0.25,
+        "output": 0.25
+      },
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "codestral-mamba-latest"
     },
     "devstral-2512": {
       "attachment": false,
@@ -217,6 +261,53 @@
       "temperature": true,
       "tool_call": true
     },
+    "devstral-small-latest": {
+      "cost": {
+        "cache_read": 0.01,
+        "input": 0.09999999999999999,
+        "output": 0.3
+      },
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "devstral-small-latest",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "glm-5-2": {
+      "cost": {
+        "cache_read": 0.14,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "glm-5-2",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "labs-devstral-small-2512": {
       "attachment": false,
       "cost": {
@@ -243,6 +334,28 @@
       "release_date": "2025-12-09",
       "status": "deprecated",
       "temperature": true,
+      "tool_call": true
+    },
+    "labs-leanstral-1-5-1": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "labs-leanstral-1-5-1",
+      "structured_output": true,
       "tool_call": true
     },
     "magistral-medium-latest": {
@@ -273,8 +386,177 @@
       "temperature": true,
       "tool_call": true
     },
+    "magistral-small-latest": {
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "magistral-small-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "ministral-14b-2512": {
+      "cost": {
+        "cache_read": 0.02,
+        "input": 0.19999999999999998,
+        "output": 0.19999999999999998
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "ministral-14b-2512",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "ministral-14b-latest": {
+      "cost": {
+        "cache_read": 0.02,
+        "input": 0.19999999999999998,
+        "output": 0.19999999999999998
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "ministral-14b-latest",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "ministral-3-14b-2512": {
+      "cost": {
+        "cache_read": 0.02,
+        "input": 0.19999999999999998,
+        "output": 0.19999999999999998
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "ministral-3-14b-2512",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "ministral-3-3b-2512": {
+      "cost": {
+        "cache_read": 0.01,
+        "input": 0.09999999999999999,
+        "output": 0.09999999999999999
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "ministral-3-3b-2512",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "ministral-3-8b-2512": {
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.15
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "ministral-3-8b-2512",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "ministral-3b-2512": {
+      "cost": {
+        "cache_read": 0.01,
+        "input": 0.09999999999999999,
+        "output": 0.09999999999999999
+      },
+      "limit": {
+        "context": 131072,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "ministral-3b-2512",
+      "structured_output": true,
+      "tool_call": true
+    },
     "ministral-3b-latest": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.01,
         "input": 0.04,
@@ -282,12 +564,13 @@
       },
       "family": "ministral",
       "limit": {
-        "context": 128000,
+        "context": 131072,
         "output": 128000
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "text"
@@ -301,14 +584,88 @@
       "temperature": true,
       "tool_call": true
     },
+    "ministral-8b-2512": {
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.15
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "ministral-8b-2512",
+      "structured_output": true,
+      "tool_call": true
+    },
     "ministral-8b-latest": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "cache_read": 0.015,
         "input": 0.1,
         "output": 0.1
       },
       "family": "ministral",
+      "limit": {
+        "context": 262144,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Ministral 8B (latest)",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2024-10-01",
+      "temperature": true,
+      "tool_call": true
+    },
+    "mistral-code-agent-latest": {
+      "cost": {
+        "cache_read": 0.04,
+        "input": 0.39999999999999997,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-code-agent-latest",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "mistral-code-fim-latest": {
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.3,
+        "output": 0.8999999999999999
+      },
       "limit": {
         "context": 128000,
         "output": 128000
@@ -322,11 +679,31 @@
         ]
       },
       "mode": "chat",
-      "name": "Ministral 8B (latest)",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2024-10-01",
-      "temperature": true,
+      "name": "mistral-code-fim-latest",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "mistral-code-latest": {
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.3,
+        "output": 0.8999999999999999
+      },
+      "limit": {
+        "context": 128000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-code-latest",
+      "structured_output": true,
       "tool_call": true
     },
     "mistral-embed": {
@@ -421,6 +798,60 @@
       "temperature": true,
       "tool_call": true
     },
+    "mistral-large-3": {
+      "cost": {
+        "cache_read": 0.049999999999999996,
+        "input": 0.5,
+        "output": 1.5
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-large-3",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "mistral-large-4": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.07,
+        "input": 0.68,
+        "output": 2.09
+      },
+      "family": "mistral-large",
+      "limit": {
+        "context": 524288,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral Large 4",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-06",
+      "status": "beta",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "mistral-large-latest": {
       "attachment": true,
       "cost": {
@@ -448,6 +879,31 @@
       "reasoning": false,
       "release_date": "2024-11-01",
       "temperature": true,
+      "tool_call": true
+    },
+    "mistral-medium": {
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-medium",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "mistral-medium-2505": {
@@ -532,6 +988,81 @@
       "release_date": "2026-04-29",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "mistral-medium-3": {
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-medium-3",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "mistral-medium-3-5": {
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-medium-3-5",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "mistral-medium-3.5": {
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-medium-3.5",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "mistral-medium-latest": {
@@ -629,6 +1160,29 @@
       "mode": "ocr",
       "name": "mistral-ocr-latest"
     },
+    "mistral-small": {
+      "cost": {
+        "cache_read": 0.01,
+        "input": 0.09999999999999999,
+        "output": 0.3
+      },
+      "limit": {
+        "context": 32000,
+        "output": 8191
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-small",
+      "structured_output": true,
+      "tool_call": true
+    },
     "mistral-small-2506": {
       "attachment": false,
       "cost": {
@@ -665,7 +1219,7 @@
       },
       "family": "mistral-small",
       "limit": {
-        "context": 256000,
+        "context": 262144,
         "output": 256000
       },
       "modalities": {
@@ -694,7 +1248,7 @@
       },
       "family": "mistral-small",
       "limit": {
-        "context": 256000,
+        "context": 262144,
         "output": 256000
       },
       "modalities": {
@@ -712,6 +1266,103 @@
       "reasoning": true,
       "release_date": "2026-03-16",
       "temperature": true,
+      "tool_call": true
+    },
+    "mistral-tiny": {
+      "cost": {
+        "cache_read": 0.024999999999999998,
+        "input": 0.25,
+        "output": 0.25
+      },
+      "limit": {
+        "context": 32000,
+        "output": 8191
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-tiny",
+      "structured_output": true
+    },
+    "mistral-vibe-cli-fast": {
+      "cost": {
+        "cache_read": 0.015,
+        "input": 0.15,
+        "output": 0.6
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-vibe-cli-fast",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "mistral-vibe-cli-latest": {
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-vibe-cli-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "mistral-vibe-cli-with-tools": {
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "mistral-vibe-cli-with-tools",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "open-mistral-7b": {
@@ -965,6 +1616,29 @@
       "temperature": false,
       "tool_call": false
     },
+    "voxtral-small-2507": {
+      "cost": {
+        "cache_read": 0.01,
+        "input": 0.09999999999999999,
+        "output": 0.39999999999999997
+      },
+      "limit": {
+        "context": 32768,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "voxtral-small-2507",
+      "structured_output": true,
+      "tool_call": true
+    },
     "voxtral-small-latest": {
       "attachment": true,
       "cost": {
@@ -974,7 +1648,7 @@
       },
       "family": "voxtral",
       "limit": {
-        "context": 32000,
+        "context": 32768,
         "output": 32000
       },
       "modalities": {
@@ -994,6 +1668,30 @@
       "temperature": true,
       "tool_call": true
     },
+    "zai-glm-5": {
+      "cost": {
+        "cache_read": 0.14,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "zai-glm-5",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "zai-glm-5-2": {
       "attachment": false,
       "cost": {
@@ -1003,7 +1701,7 @@
       },
       "family": "glm",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 131072
       },
       "modalities": {
@@ -1033,7 +1731,7 @@
       },
       "family": "glm",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 131072
       },
       "modalities": {
@@ -1051,6 +1749,30 @@
       "release_date": "2026-08-14",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "zai-glm-latest": {
+      "cost": {
+        "cache_read": 0.14,
+        "input": 1.4,
+        "output": 4.4
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "zai-glm-latest",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     }
   },

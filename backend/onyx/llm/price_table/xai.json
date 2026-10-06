@@ -1,6 +1,56 @@
 {
   "aliases": {},
   "models": {
+    "grok-4.20": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-0309": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-0309",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "grok-4.20-0309-non-reasoning": {
       "attachment": true,
       "cost": {
@@ -95,6 +145,401 @@
       "temperature": true,
       "tool_call": true
     },
+    "grok-4.20-beta": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-beta-0309": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta-0309",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-beta-0309-non-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta-0309-non-reasoning",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-beta-0309-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta-0309-reasoning",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-beta-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-beta-latest-non-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta-latest-non-reasoning",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-beta-latest-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta-latest-reasoning",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-beta-non-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta-non-reasoning",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-beta-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-beta-reasoning",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-experimental-beta-0304": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-experimental-beta-0304",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-experimental-beta-0304-non-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-experimental-beta-0304-non-reasoning",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-experimental-beta-0304-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-experimental-beta-0304-reasoning",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-experimental-beta-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-experimental-beta-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-experimental-beta-non-reasoning-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-experimental-beta-non-reasoning-latest",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-experimental-beta-reasoning-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-experimental-beta-reasoning-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-multi-agent": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "grok-4.20-multi-agent",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": false
+    },
     "grok-4.20-multi-agent-0309": {
       "attachment": true,
       "cost": {
@@ -141,6 +586,278 @@
       "structured_output": true,
       "temperature": true,
       "tool_call": false
+    },
+    "grok-4.20-multi-agent-beta-0309": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "grok-4.20-multi-agent-beta-0309",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-multi-agent-beta-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "grok-4.20-multi-agent-beta-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": false
+    },
+    "grok-4.20-multi-agent-experimental-beta-0304": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "grok-4.20-multi-agent-experimental-beta-0304",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": false
+    },
+    "grok-4.20-multi-agent-experimental-beta-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "grok-4.20-multi-agent-experimental-beta-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": false
+    },
+    "grok-4.20-multi-agent-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "responses",
+      "name": "grok-4.20-multi-agent-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": false
+    },
+    "grok-4.20-non-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-non-reasoning",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-non-reasoning-gv2": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-non-reasoning-gv2",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-non-reasoning-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-non-reasoning-latest",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-reasoning": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-reasoning",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-reasoning-gv2": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-reasoning-gv2",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-4.20-reasoning-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.20-reasoning-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
     },
     "grok-4.3": {
       "attachment": true,
@@ -189,6 +906,31 @@
       "temperature": true,
       "tool_call": true
     },
+    "grok-4.3-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.25,
+        "output": 2.5
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.3-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "grok-4.5": {
       "attachment": true,
       "cost": {
@@ -234,6 +976,31 @@
       "release_date": "2026-07-08",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "grok-4.5-latest": {
+      "cost": {
+        "cache_read": 0.3,
+        "input": 2.0,
+        "output": 6.0
+      },
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-4.5-latest",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "grok-4.6": {
@@ -375,6 +1142,106 @@
       "release_date": "2026-04-16",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "grok-build-latest": {
+      "cost": {
+        "cache_read": 0.3,
+        "input": 2.0,
+        "output": 6.0
+      },
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-build-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-code-fast": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.0,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-code-fast",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-code-fast-1": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.0,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-code-fast-1",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "grok-code-fast-1-0825": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 1.0,
+        "output": 2.0
+      },
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "grok-code-fast-1-0825",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "grok-imagine-image": {

@@ -2123,7 +2123,7 @@
       "attachment": false,
       "cost": {
         "input": 0.25,
-        "output": 0.9
+        "output": 0.8
       },
       "family": "trinity",
       "limit": {
@@ -2253,6 +2253,27 @@
       "reasoning": false,
       "release_date": "2025-11-25",
       "temperature": true,
+      "tool_call": false
+    },
+    "bfl/flux-3-image": {
+      "attachment": false,
+      "family": "flux",
+      "limit": {
+        "context": 0,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "image"
+        ]
+      },
+      "name": "FLUX 3 Image",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-10-05",
       "tool_call": false
     },
     "bfl/flux-3-video": {
@@ -2780,6 +2801,46 @@
       "reasoning": false,
       "release_date": "2025-04-15",
       "temperature": true,
+      "tool_call": false
+    },
+    "cohere/embed-v5.0-fast": {
+      "attachment": false,
+      "limit": {
+        "context": 128000,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Embed 5 Fast",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-09-30",
+      "tool_call": false
+    },
+    "cohere/embed-v5.0-pro": {
+      "attachment": false,
+      "limit": {
+        "context": 128000,
+        "output": 0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Embed 5 Pro",
+      "open_weights": false,
+      "reasoning": false,
+      "release_date": "2026-09-30",
       "tool_call": false
     },
     "cohere/rerank-v3.5": {
@@ -3989,6 +4050,34 @@
       "temperature": true,
       "tool_call": false
     },
+    "google/gemini-nano-banana-2.1": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.15,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "family": "nano-banana",
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text",
+          "image"
+        ]
+      },
+      "name": "Gemini Nano Banana 2.1",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-06",
+      "tool_call": false
+    },
     "google/gemini-omni-flash-preview": {
       "attachment": true,
       "cost": {
@@ -5072,27 +5161,6 @@
       "release_date": "2026-09-02",
       "tool_call": true
     },
-    "microsoft/mai-transcribe-1.5": {
-      "attachment": false,
-      "family": "mai",
-      "limit": {
-        "context": 0,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "audio"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "MAI-Transcribe-1.5",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-06-01",
-      "tool_call": false
-    },
     "microsoft/mai-transcribe-2": {
       "attachment": false,
       "family": "mai",
@@ -5236,9 +5304,9 @@
         ]
       },
       "name": "MiniMax H3",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": false,
-      "release_date": "2026-07-30",
+      "release_date": "2026-07-31",
       "tool_call": false
     },
     "minimax/minimax-h3-max": {
@@ -5567,19 +5635,20 @@
       "tool_call": false
     },
     "mistral/ministral-3b": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "input": 0.04,
         "output": 0.04
       },
       "family": "ministral",
       "limit": {
-        "context": 128000,
+        "context": 131072,
         "output": 128000
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "text"
@@ -5593,19 +5662,20 @@
       "tool_call": true
     },
     "mistral/ministral-8b": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "input": 0.1,
         "output": 0.1
       },
       "family": "ministral",
       "limit": {
-        "context": 128000,
+        "context": 262144,
         "output": 128000
       },
       "modalities": {
         "input": [
-          "text"
+          "text",
+          "image"
         ],
         "output": [
           "text"
@@ -5667,6 +5737,33 @@
       "release_date": "2025-12-02",
       "temperature": true,
       "tool_call": false
+    },
+    "mistral/mistral-large-4": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.07,
+        "input": 0.68,
+        "output": 2.09
+      },
+      "family": "mistral-large",
+      "limit": {
+        "context": 524288,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral Large 4",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-06",
+      "tool_call": true
     },
     "mistral/mistral-medium-3.5": {
       "attachment": false,
@@ -9073,9 +9170,9 @@
     "poolside/laguna-s-2.1": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.01,
-        "input": 0.1,
-        "output": 0.2
+        "cache_read": 0.009,
+        "input": 0.09,
+        "output": 0.18
       },
       "family": "laguna",
       "limit": {
