@@ -75,7 +75,9 @@ jobs:
       # A fork's token cannot dispatch, so those PRs leave it to the nightly.
       # One advisory fails every open PR at once, and GitHub cancels the older
       # pending run of a concurrency group when a newer one lands, so a main
-      # run already queued or running stands for all of them.
+      # run still waiting in the queue stands for all of them: it scans after
+      # this failure. A run already in progress has scanned, so a new one is
+      # queued behind it.
       - name: Dispatch CVE Alerts on main
         if: failure() && steps.gate.outcome == 'failure' && github.event.pull_request.head.repo.full_name == github.repository
         env:
@@ -84,9 +86,9 @@ jobs:
           SERVER_URL: ${{ github.server_url }}
           RUN_ID: ${{ github.run_id }}
         run: |
-          active="$(gh run list --repo "${REPO}" -w cve-alerts.yml -b main --json status --jq '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting")] | length')"
-          if [ "${active}" != "0" ]; then
-            echo "A CVE Alerts run on main is already queued or running, leaving it to that one"
+          queued="$(gh run list --repo "${REPO}" -w cve-alerts.yml -b main --json status --jq '[.[] | select(.status == "queued" or .status == "waiting" or .status == "pending")] | length')"
+          if [ "${queued}" != "0" ]; then
+            echo "A CVE Alerts run on main is already waiting to start, leaving it to that one"
             exit 0
           fi
           gh workflow run cve-alerts.yml --repo "${REPO}" --ref main -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
