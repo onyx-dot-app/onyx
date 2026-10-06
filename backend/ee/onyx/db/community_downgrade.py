@@ -236,10 +236,14 @@ def _keep_members_in_default_groups__no_commit(
     db_session: Session, group_ids: list[int], member_ids: list[UUID]
 ) -> None:
     """Permissions come only from group grants. Whoever is an admin through one
-    of these groups joins Admin, so the workspace keeps its admins, and a
-    standard user left in no default group joins Basic."""
+    of these groups joins Admin, so the workspace keeps its admins and its admin
+    API keys, and a standard user left in no default group joins Basic."""
     user_id = User.__table__.c.id
     is_standard = User.account_type == AccountType.STANDARD
+    # The account types that take their permissions from groups.
+    in_group_system = User.account_type.in_(
+        (AccountType.STANDARD, AccountType.SERVICE_ACCOUNT)
+    )
     admin_ids: Sequence[UUID] = db_session.scalars(
         select(user_id)
         .join(User__UserGroup, User__UserGroup.user_id == user_id)
@@ -251,7 +255,7 @@ def _keep_members_in_default_groups__no_commit(
             User__UserGroup.user_group_id.in_(group_ids),
             PermissionGrant.permission == Permission.FULL_ADMIN_PANEL_ACCESS,
             PermissionGrant.is_deleted.is_(False),
-            is_standard,
+            in_group_system,
         )
         .distinct()
     ).all()
@@ -278,12 +282,10 @@ def remove_custom_user_groups__no_commit(db_session: Session) -> int:
     resources public and every connector already public, the groups gate
     nothing a sync would need to rewrite."""
     lock_group_membership(db_session)
+    # No row lock here: a share edit locks its resource and then the group, so
+    # the groups are locked last too, by their delete.
     group_ids: list[int] = list(
-        db_session.scalars(
-            select(UserGroup.id)
-            .where(UserGroup.is_default.is_(False))
-            .with_for_update()
-        )
+        db_session.scalars(select(UserGroup.id).where(UserGroup.is_default.is_(False)))
     )
     if not group_ids:
         return 0

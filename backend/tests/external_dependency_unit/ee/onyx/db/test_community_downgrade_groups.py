@@ -14,19 +14,27 @@ from ee.onyx.db.community_downgrade import (
 )
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.enums import (
+    AccountType,
     GrantSource,
     Permission,
     PersonaSharePermission,
+    SkillSharePermission,
     UserFileStatus,
 )
 from onyx.db.models import (
     Base,
     DocumentSet,
     DocumentSet__UserGroup,
+    LLMProvider,
+    LLMProvider__UserGroup,
+    MCPServer,
+    MCPServer__UserGroup,
     PermissionGrant,
     Persona,
     Persona__UserFile,
     Persona__UserGroup,
+    Skill,
+    Skill__UserGroup,
     TokenRateLimit,
     TokenRateLimit__UserGroup,
     User,
@@ -56,7 +64,11 @@ def test_every_uncascaded_group_link_is_deleted_by_hand() -> None:
     assert {link.__tablename__ for link in _UNCASCADED_GROUP_LINKS} == uncascaded
 
 
-def _make_user(db_session: Session, in_basic: bool) -> User:
+def _make_user(
+    db_session: Session,
+    in_basic: bool,
+    account_type: AccountType = AccountType.STANDARD,
+) -> User:
     user = User(
         id=uuid4(),
         email=f"downgrade-{uuid4().hex[:8]}@example.com",
@@ -64,6 +76,7 @@ def _make_user(db_session: Session, in_basic: bool) -> User:
         is_active=True,
         is_superuser=False,
         is_verified=True,
+        account_type=account_type,
     )
     db_session.add(user)
     db_session.flush()
@@ -161,11 +174,21 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
         db_session.rollback()
 
 
+# An API key's service account takes its admin rights from groups too.
+@pytest.mark.parametrize(
+    "account_type", [AccountType.STANDARD, AccountType.SERVICE_ACCOUNT]
+)
 @pytest.mark.usefixtures("tenant_context")
-def test_an_admin_through_a_custom_group_stays_admin(db_session: Session) -> None:
+def test_an_admin_through_a_custom_group_stays_admin(
+    db_session: Session, account_type: AccountType
+) -> None:
     try:
         admin_group_id = fetch_default_group(db_session, DEFAULT_ADMIN_GROUP_NAME).id
-        admin = _make_user(db_session, in_basic=True)
+        admin = _make_user(
+            db_session,
+            in_basic=account_type == AccountType.STANDARD,
+            account_type=account_type,
+        )
         group = _make_group(db_session, [admin])
         db_session.add(
             PermissionGrant(
@@ -257,5 +280,72 @@ def test_what_a_group_shared_becomes_public(db_session: Session) -> None:
         # The file's index ACL follows its persona.
         assert user_file.needs_persona_sync
         assert not unshared_persona.is_public
+    finally:
+        db_session.rollback()
+
+
+def _make_skill(db_session: Session, author: User) -> Skill:
+    skill = Skill(
+        id=uuid4(),
+        name=f"downgrade-{uuid4().hex[:8]}",
+        description="",
+        bundle_file_id=f"downgrade-{uuid4().hex[:8]}",
+        bundle_sha256="0" * 64,
+        public_permission=None,
+        author_user_id=author.id,
+    )
+    db_session.add(skill)
+    return skill
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_group_shared_providers_servers_and_skills_become_public(
+    db_session: Session,
+) -> None:
+    try:
+        owner = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [owner])
+        providers = [
+            LLMProvider(
+                name=f"downgrade-{uuid4().hex[:8]}", provider="openai", is_public=False
+            )
+            for _ in range(2)
+        ]
+        servers = [
+            MCPServer(
+                owner=owner.email,
+                name=f"downgrade-{uuid4().hex[:8]}",
+                server_url="https://example.com/mcp",
+                is_public=False,
+            )
+            for _ in range(2)
+        ]
+        skills = [_make_skill(db_session, owner) for _ in range(2)]
+        db_session.add_all([*providers, *servers])
+        db_session.flush()
+        # The first of each pair is shared with the group. The second is not.
+        db_session.add_all(
+            [
+                LLMProvider__UserGroup(
+                    llm_provider_id=providers[0].id, user_group_id=group.id
+                ),
+                MCPServer__UserGroup(
+                    mcp_server_id=servers[0].id, user_group_id=group.id
+                ),
+                Skill__UserGroup(skill_id=skills[0].id, user_group_id=group.id),
+            ]
+        )
+        db_session.flush()
+
+        remove_custom_user_groups__no_commit(db_session)
+
+        for row in (*providers, *servers, *skills):
+            db_session.refresh(row)
+        assert providers[0].is_public
+        assert servers[0].is_public
+        assert skills[0].public_permission == SkillSharePermission.VIEWER
+        assert not providers[1].is_public
+        assert not servers[1].is_public
+        assert skills[1].public_permission is None
     finally:
         db_session.rollback()
