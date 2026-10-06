@@ -49,6 +49,25 @@ def request_retry_delay(failure_count: int) -> timedelta:
     )
 
 
+# A failed backfill retries after 5 minutes, doubling up to 6 hours.
+_BACKFILL_RETRY_BASE_SECONDS = 5 * 60
+_BACKFILL_RETRY_MAX_SECONDS = 6 * 60 * 60
+
+
+class FailedBackfillAttempt(BaseModel):
+    # The released request, with its new failure count and retry time.
+    pending: PendingBackfill
+    # None when the attempt no longer exists.
+    status: IndexingStatus | None
+
+
+class BackfillAttemptResolution(BaseModel):
+    # An attempt of a pending backfill is still active.
+    attempt_active: bool = False
+    succeeded: list[PendingBackfill] = []
+    failed: list[FailedBackfillAttempt] = []
+
+
 def _lock_cc_pair_for_request(
     db_session: Session, cc_pair_id: int
 ) -> ConnectorCredentialPair:
@@ -161,7 +180,8 @@ def request_attempt_restart__no_commit(
 
     Unlike pause, it leaves the stop fence alone: the fence blocks every new
     attempt until it is cleared. A pending REINDEX trigger is kept. On a
-    paused pair the trigger waits and fires on resume."""
+    paused pair the trigger waits and fires on resume. A stopped backfill's
+    request is released to run again, without a failure."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     if cc_pair.indexing_trigger != IndexingMode.REINDEX:
         cc_pair.indexing_trigger = indexing_mode
@@ -171,8 +191,10 @@ def request_attempt_restart__no_commit(
     ).all()
 
     task_ids: list[str] = []
-    requeued: list[PendingBackfill] = []
+    restarted_backfill_ids: set[int] = set()
     for attempt in attempts:
+        if attempt.is_backfill:
+            restarted_backfill_ids.add(attempt.id)
         # A first attempt held for the capability checks has no task to see a
         # cancel request. Ending it keeps it undispatched, so the next attempt
         # still waits for the checks.
@@ -185,25 +207,17 @@ def request_attempt_restart__no_commit(
         attempt.cancellation_requested = True
         if attempt.celery_task_id is not None:
             task_ids.append(attempt.celery_task_id)
-        if (
-            attempt.is_backfill
-            and attempt.poll_range_start is not None
-            and attempt.poll_range_end is not None
-        ):
-            # The beat runs it again; a full re-index created later covers it.
-            requeued.append(
-                PendingBackfill(
-                    request_id=uuid4(),
-                    requested_at=attempt.time_created,
-                    backfill=BackfillSpec(
-                        window_start=attempt.poll_range_start,
-                        window_end=attempt.poll_range_end,
-                        connector_config_override=attempt.connector_config_override,
-                    ),
-                )
+    if restarted_backfill_ids:
+        # A restart is not a failure: the beat runs the request again with no
+        # backoff.
+        cc_pair.pending_backfills = [
+            (
+                pending.model_copy(update={"attempt_id": None})
+                if pending.attempt_id in restarted_backfill_ids
+                else pending
             )
-    if requeued:
-        cc_pair.pending_backfills = [*requeued, *cc_pair.pending_backfills]
+            for pending in cc_pair.pending_backfills
+        ]
     return task_ids
 
 
@@ -235,16 +249,84 @@ def request_backfills__no_commit(
     ]
 
 
-def remove_pending_backfill__no_commit(
-    db_session: Session, cc_pair_id: int, request_id: UUID
+def track_backfill_attempt__no_commit(
+    db_session: Session, cc_pair_id: int, request_id: UUID, attempt_id: int
 ) -> None:
-    """Drops one pending backfill, after the beat created its attempt."""
+    """Records the attempt the beat created for a pending backfill. The
+    request stays until an attempt of it succeeds."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     cc_pair.pending_backfills = [
-        pending
+        (
+            pending.model_copy(update={"attempt_id": attempt_id})
+            if pending.request_id == request_id
+            else pending
+        )
         for pending in cc_pair.pending_backfills
-        if pending.request_id != request_id
     ]
+
+
+def _backfill_retry_delay(failure_count: int) -> timedelta:
+    return timedelta(
+        seconds=min(
+            _BACKFILL_RETRY_BASE_SECONDS * 2 ** (failure_count - 1),
+            _BACKFILL_RETRY_MAX_SECONDS,
+        )
+    )
+
+
+def resolve_backfill_attempts__no_commit(
+    db_session: Session, cc_pair_id: int, now: datetime
+) -> BackfillAttemptResolution:
+    """Settles the pending backfills whose attempt ended. A successful attempt
+    removes its request. Any other ended attempt, or one that no longer
+    exists, releases its request for a retry after a capped exponential
+    backoff from ``now`` (DB time)."""
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    tracked_ids = [
+        pending.attempt_id
+        for pending in cc_pair.pending_backfills
+        if pending.attempt_id is not None
+    ]
+    if not tracked_ids:
+        return BackfillAttemptResolution()
+    statuses: dict[int, IndexingStatus] = dict(
+        db_session.execute(
+            select(IndexAttempt.id, IndexAttempt.status).where(
+                IndexAttempt.id.in_(tracked_ids)
+            )
+        )
+        .tuples()
+        .all()
+    )
+
+    resolution = BackfillAttemptResolution()
+    kept: list[PendingBackfill] = []
+    for pending in cc_pair.pending_backfills:
+        if pending.attempt_id is None:
+            kept.append(pending)
+            continue
+        status = statuses.get(pending.attempt_id)
+        if status is not None and not status.is_terminal():
+            resolution.attempt_active = True
+            kept.append(pending)
+            continue
+        if status is not None and status.is_successful():
+            resolution.succeeded.append(pending)
+            continue
+        failure_count = pending.failure_count + 1
+        failed = pending.model_copy(
+            update={
+                "attempt_id": None,
+                "failure_count": failure_count,
+                "retry_after": now + _backfill_retry_delay(failure_count),
+            }
+        )
+        resolution.failed.append(FailedBackfillAttempt(pending=failed, status=status))
+        kept.append(failed)
+
+    if resolution.succeeded or resolution.failed:
+        cc_pair.pending_backfills = kept
+    return resolution
 
 
 def clear_backfills_covered_by_attempt__no_commit(

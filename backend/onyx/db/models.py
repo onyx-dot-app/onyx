@@ -1054,7 +1054,8 @@ class ConnectorCredentialPair(Base):
         DateTime(timezone=True), nullable=True
     )
     # Backfills an applied edit requested, oldest first. The indexing beat
-    # creates one at a time while the pair is ACTIVE and has no active attempt.
+    # creates one at a time while the pair is ACTIVE and has no active attempt,
+    # and keeps each request until an attempt of it succeeds.
     pending_backfills: Mapped[list[PendingBackfill]] = mapped_column(
         PydanticListType(PendingBackfill),
         nullable=False,

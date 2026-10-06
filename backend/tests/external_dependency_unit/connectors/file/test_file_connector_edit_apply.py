@@ -155,7 +155,9 @@ def test_apply_indexes_only_the_claimed_files(
     ).all()
     assert attempt.is_backfill
     assert attempt.connector_config_override == override
-    assert pair.pending_backfills == []
+    # The request stays until the attempt succeeds.
+    [tracked] = pair.pending_backfills
+    assert tracked.attempt_id == attempt.id
 
     # Docfetching builds the connector from the override.
     connector = LocalFileConnector(**override)

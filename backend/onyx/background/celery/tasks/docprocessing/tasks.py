@@ -64,6 +64,7 @@ from onyx.configs.constants import (
 )
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
 from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
+from onyx.db.backfill_models import PendingBackfill
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_alerts import (
     clear_connector_alerts__no_commit,
@@ -78,7 +79,8 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.connector_edit_requests import (
     clear_backfills_covered_by_attempt__no_commit,
     promote_prune_after_reindex_request__no_commit,
-    remove_pending_backfill__no_commit,
+    resolve_backfill_attempts__no_commit,
+    track_backfill_attempt__no_commit,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
@@ -813,6 +815,22 @@ def _dispatch_pair_waiting_attempt(
     return dispatched
 
 
+def _next_ready_backfill(
+    pending_backfills: list[PendingBackfill], now: datetime
+) -> PendingBackfill | None:
+    """The oldest request that is not in a failure backoff. A request in
+    backoff does not hold back the ones after it: each backfill writes the
+    same documents in any order."""
+    return next(
+        (
+            pending
+            for pending in pending_backfills
+            if pending.retry_after is None or pending.retry_after <= now
+        ),
+        None,
+    )
+
+
 def _try_creating_pending_backfill(
     celery_app: Celery,
     db_session: Session,
@@ -823,10 +841,10 @@ def _try_creating_pending_backfill(
     redis_client: TenantRedisClient,
     tenant_id: str,
 ) -> bool:
-    """Creates the attempt of the pair's oldest pending backfill on the
-    current index, and drops the request. The caller checked that no attempt
-    is active there. The backfill waits while the pair is not ACTIVE, and
-    while an indexing trigger or a prune-after-reindex request is pending:
+    """Settles the pair's ended backfill attempts, then creates the attempt of
+    its oldest ready backfill on the current index. The caller checked that no
+    attempt is active there. The backfill waits while the pair is not ACTIVE,
+    and while an indexing trigger or a prune-after-reindex request is pending:
     that run goes first, and a full re-index covers the backfill."""
     if not search_settings.status.is_current() or not cc_pair.pending_backfills:
         return False
@@ -838,7 +856,27 @@ def _try_creating_pending_backfill(
     ):
         return False
 
-    pending = cc_pair.pending_backfills[0]
+    now = get_db_current_time(db_session)
+    resolution = resolve_backfill_attempts__no_commit(db_session, cc_pair.id, now)
+    db_session.commit()
+    for pending in resolution.succeeded:
+        task_logger.info(
+            f"Pending backfill succeeded: index_attempt={pending.attempt_id} "
+            f"cc_pair={cc_pair.id} request_id={pending.request_id}"
+        )
+    for failed in resolution.failed:
+        task_logger.warning(
+            f"Pending backfill attempt did not succeed: cc_pair={cc_pair.id} "
+            f"request_id={failed.pending.request_id} status={failed.status} "
+            f"failure_count={failed.pending.failure_count} "
+            f"retry_after={failed.pending.retry_after}"
+        )
+    if resolution.attempt_active:
+        return False
+
+    pending = _next_ready_backfill(cc_pair.pending_backfills, now)
+    if pending is None:
+        return False
     attempt_id = try_creating_backfill_attempt(
         celery_app,
         cc_pair,
@@ -852,11 +890,13 @@ def _try_creating_pending_backfill(
         return False
     # After the attempt commits: a crash in between runs the backfill twice,
     # which is harmless, instead of never.
-    remove_pending_backfill__no_commit(db_session, cc_pair.id, pending.request_id)
+    track_backfill_attempt__no_commit(
+        db_session, cc_pair.id, pending.request_id, attempt_id
+    )
     db_session.commit()
     task_logger.info(
         f"Pending backfill queued: index_attempt={attempt_id} cc_pair={cc_pair.id} "
-        f"request_id={pending.request_id}"
+        f"request_id={pending.request_id} failure_count={pending.failure_count}"
     )
     return True
 

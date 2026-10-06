@@ -28,10 +28,16 @@ class BackfillSpec(BaseModel):
 
 
 class PendingBackfill(BaseModel):
-    """A backfill an applied edit requested, kept on the cc-pair until the
-    indexing beat can create its attempt."""
+    """A backfill an applied edit requested, kept on the cc-pair until an
+    attempt of it succeeds or a full re-index covers it."""
 
     request_id: UUID
     # DB time of the request. A full re-index created after it covers it.
     requested_at: datetime
     backfill: BackfillSpec
+    # The attempt the indexing beat created for it. None while it waits.
+    attempt_id: int | None = None
+    # Failed attempts in a row. A restart is not a failure.
+    failure_count: int = 0
+    # DB time before which the beat does not retry it after a failure.
+    retry_after: datetime | None = None
