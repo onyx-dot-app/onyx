@@ -295,8 +295,15 @@ def test_prune_listing_honors_indexing_start(
 @pytest.mark.parametrize(
     "source, expected",
     [
-        # Slim listing filters by last modified, as indexing does.
+        # Slim listing filters by last modified, as indexing does. These
+        # listings also yield hierarchy nodes; the prune keeps the ancestors
+        # of the listed documents, so the date filter stays on.
         (DocumentSource.CONFLUENCE, True),
+        (DocumentSource.BOX, True),
+        (DocumentSource.GOOGLE_DRIVE, True),
+        (DocumentSource.JIRA, True),
+        (DocumentSource.SHAREPOINT, True),
+        (DocumentSource.SLACK, True),
         # Slim listing ignores the start.
         (DocumentSource.NOTION, False),
         # A load connector lists all documents.
