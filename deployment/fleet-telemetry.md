@@ -119,13 +119,18 @@ GRANT SELECT ON public.connector,
     public.doc_permission_sync_attempt,
     public.external_group_permission_sync_attempt,
     public.hierarchy_fetch_attempt,
-    public.port_attempt
+    public.port_attempt,
+    public.fleet_signup_email_domains
 TO onyx_fleet_reader;
 ALTER ROLE onyx_fleet_reader SET default_transaction_read_only = on;
 ALTER ROLE onyx_fleet_reader SET statement_timeout = '1500ms';
 ALTER ROLE onyx_fleet_reader SET lock_timeout = '100ms';
 ALTER ROLE onyx_fleet_reader CONNECTION LIMIT 2;
 ```
+
+The domain-only view is created by migration `b67c3fa177d6`. It exposes signup domains and
+their earliest account creation timestamps. It excludes bot, external-permission, anonymous,
+and service accounts. The view owner needs user-table access; the collector does not.
 
 Do not grant access to credentials, users, document contents, file storage, or chat message tables.
 Avoid `GRANT SELECT ON ALL TABLES` and blanket default privileges.
@@ -156,3 +161,18 @@ ONYX_TELEMETRY_TEST_DB="$TEST_SOURCE_DATABASE_URL" uv run pytest backend/tests/e
 
 The tests create and remove an isolated schema. They check 250 connector pages,
 terminal failures, permission/group syncs, source read-only enforcement, and schema validation.
+
+
+## Signup domain identity
+
+Registration enqueues a `tenant_domain` event with a normalized email domain and signup timestamp.
+This uses the existing nonblocking sender and performs no telemetry network or database reads.
+The isolated collector reconciles the domain-only view on the connector collection cadence.
+Reads use 200-domain pages, read-only transactions, a 1.5-second statement timeout, and a
+100-millisecond lock timeout. Missing view permissions increment `email_domain_errors` without
+stopping connector collection. Full email addresses and local parts never enter these events.
+
+Existing accounts use their database creation timestamps. Historical timestamp ties cannot
+prove signup order. Accounts deleted before either collection path ran cannot be recovered.
+The fleet service retains domains after collection and recommends the earliest signup domain.
+Operators explicitly apply that domain as the tenant label; classification is independent.

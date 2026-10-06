@@ -13,7 +13,12 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import InternalError
 
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
-from onyx.db.fleet_telemetry import collector_engine, connector_page, job_page
+from onyx.db.fleet_telemetry import (
+    collector_engine,
+    connector_page,
+    email_domain_page,
+    job_page,
+)
 from onyx.utils.fleet_telemetry import BoundedTelemetry, TelemetryConfig
 from onyx.utils.fleet_telemetry_collector import FleetCollector
 
@@ -44,6 +49,23 @@ def source_schema() -> Generator[tuple[str, str], None, None]:
                     f'CREATE TABLE "{schema}".{table} (LIKE public.{table} INCLUDING DEFAULTS)'
                 )
             )  # noqa: S608 - Fixed table allowlist and generated schema.
+        connection.execute(
+            text(f'''CREATE TABLE "{schema}"."user" (
+            email text,created_at timestamptz,account_type text)''')
+        )  # noqa: S608 - Generated schema only.
+        connection.execute(
+            text(f'''INSERT INTO "{schema}"."user" VALUES
+            ('PRIVATE FIRST@Poc.Example.COM','2020-01-01','STANDARD'),
+            ('PRIVATE SECOND@onyx.app','2021-01-01','STANDARD'),
+            ('PRIVATE THIRD@poc.example.com','2022-01-01','STANDARD'),
+            ('PRIVATE BOT@excluded.example.com','2019-01-01','BOT')''')
+        )  # noqa: S608 - Generated schema only.
+        connection.execute(
+            text(f'''CREATE VIEW "{schema}".fleet_signup_email_domains WITH (security_barrier=true) AS
+            SELECT lower(split_part(email,'@',2)) AS domain,min(created_at) AS first_signup_at
+            FROM "{schema}"."user" WHERE account_type='STANDARD' AND email ~ '^[^@]+@[^@]+$'
+            GROUP BY lower(split_part(email,'@',2))''')
+        )  # noqa: S608 - Generated schema only.
         # Collection must not depend on obsolete connector columns.
         connection.execute(
             text(
@@ -184,5 +206,32 @@ def test_source_engine_cannot_write_and_schema_injection_is_rejected(
         assert len(active) == 1
         assert active[0]["docs_processed"] == 3
         assert active[0]["started_at"] < datetime.now(timezone.utc) - timedelta(days=89)
+    finally:
+        engine.dispose()
+
+
+def test_domain_view_exposes_only_domains_and_signup_times(
+    source_schema: tuple[str, str],
+) -> None:
+    source_url, schema = source_schema
+    engine = collector_engine(source_url)
+    try:
+        domains = email_domain_page(engine, schema, limit=1)
+        assert domains[0]["domain"] == "onyx.app"
+        next_page = email_domain_page(engine, schema, domains[0]["domain"])
+        assert next_page[0]["domain"] == "poc.example.com"
+        assert next_page[0]["first_signup_at"].year == 2020
+        assert set(next_page[0]) == {"domain", "first_signup_at"}
+        assert "PRIVATE" not in str(domains + next_page)
+        sender = _sender()
+        collector = FleetCollector(sender, source_url, [schema])
+        try:
+            assert collector.collect_email_domains(schema, 0)
+            assert {e["data"]["domain"] for e in sender._take_batch()} == {
+                "poc.example.com",
+                "onyx.app",
+            }
+        finally:
+            collector.engine.dispose()
     finally:
         engine.dispose()

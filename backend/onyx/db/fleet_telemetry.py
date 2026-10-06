@@ -264,6 +264,22 @@ def job_page(
         ]
 
 
+def email_domain_page(
+    engine: Engine, schema: str, after_domain: str = "", limit: int = 200
+) -> list[dict[str, Any]]:
+    scoped = _schema(schema)
+    statement = f"""SELECT domain,first_signup_at FROM {scoped}.fleet_signup_email_domains
+        WHERE domain > :after_domain ORDER BY domain LIMIT :limit"""  # noqa: S608 - Validated schema and bound values.
+    with engine.connect() as connection:
+        return [
+            dict(row)
+            for row in connection.execute(
+                text(statement),
+                {"after_domain": after_domain, "limit": min(200, max(1, limit))},
+            ).mappings()
+        ]
+
+
 def tenant_schemas(engine: Engine) -> list[str]:
     with engine.connect() as connection:
         return list(

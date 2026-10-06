@@ -20,6 +20,9 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 _HEX = re.compile(r"[a-f0-9]{64}\Z")
+_EMAIL_DOMAIN = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?\Z"
+)
 _OPAQUE = re.compile(r"[A-Za-z0-9_.:-]{1,128}\Z")
 _VERSION = re.compile(
     r"(?:v?\d{1,4}\.\d{1,4}(?:\.\d{1,4})?(?:[-.](?:cloud|beta|alpha|rc|dev|nightly|release)(?:[-.]?\d{1,8})?){0,3}|[a-f0-9]{7,40}|unknown|dev|nightly)\Z"
@@ -178,6 +181,7 @@ _COUNTERS = frozenset(
     }
 )
 _FIELDS: dict[str, frozenset[str]] = {
+    "tenant_domain": frozenset({"domain", "first_signup_at"}),
     "query": frozenset(
         {
             "query_id",
@@ -297,6 +301,7 @@ _FIELDS: dict[str, frozenset[str]] = {
     "version": frozenset({"version", "commit_sha", "image_digest", "shared"}),
     "heartbeat": frozenset(
         {
+            "email_domain_errors",
             "config_revision",
             "dropped_events",
             "recent_dropped_events",
@@ -345,6 +350,16 @@ _ENUM_FIELDS = {
 }
 
 
+def normalize_email_domain(domain: str) -> str | None:
+    if not domain or len(domain) > 253:
+        return None
+    try:
+        domain = domain.encode("idna").decode("ascii").lower()
+    except UnicodeError:
+        return None
+    return domain if len(domain) <= 253 and _EMAIL_DOMAIN.fullmatch(domain) else None
+
+
 def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | None:  # noqa: C901 - Central privacy boundary has explicit type cases.
     """Reject unknown fields and all unreviewed string values before queueing."""
     allowed = _FIELDS.get(event_type)
@@ -385,6 +400,12 @@ def sanitize_data(event_type: str, data: dict[str, Any]) -> dict[str, Any] | Non
             ):
                 return None
             safe[key] = list(value)
+        elif key == "domain":
+            if not isinstance(value, str) or not (
+                domain := normalize_email_domain(value)
+            ):
+                return None
+            safe[key] = domain
         elif key in _ENUM_FIELDS:
             if not isinstance(value, str) or value not in _ENUM_FIELDS[key]:
                 return None
@@ -921,6 +942,20 @@ def emit_telemetry(
         )
     except Exception:
         return False
+
+
+def emit_signup_domain(email: str, created_at: datetime) -> None:
+    try:
+        if _client is None or len(email) > 320 or email.count("@") != 1:
+            return
+        domain = normalize_email_domain(email.partition("@")[2])
+        if domain and created_at.tzinfo is not None:
+            emit_telemetry(
+                "tenant_domain",
+                {"domain": domain, "first_signup_at": created_at.isoformat()},
+            )
+    except Exception:
+        return
 
 
 def emit_stage_counter(

@@ -627,6 +627,7 @@ def test_collector_failures_are_visible_without_exposing_source_errors(
 ) -> None:
     from onyx.utils import fleet_telemetry_collector as source
 
+    monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
     sender = client()
@@ -657,6 +658,7 @@ def test_job_progress_identity_changes_with_counts_but_terminal_identity_is_stab
 ) -> None:
     from onyx.utils import fleet_telemetry_collector as source
 
+    monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
     monkeypatch.setattr(source, "connector_page", Mock(return_value=[]))
@@ -713,6 +715,7 @@ def test_repair_cadence_avoids_idle_reads_and_still_polls_old_active_jobs(
 ) -> None:
     from onyx.utils import fleet_telemetry_collector as source
 
+    monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
     monkeypatch.setattr(
@@ -876,6 +879,7 @@ def test_failed_queue_reads_wait_for_configured_poll_interval(
 ) -> None:
     from onyx.utils import fleet_telemetry_collector as source
 
+    monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     monkeypatch.setattr(source, "MULTI_TENANT", False)
     monkeypatch.setattr(
@@ -927,6 +931,7 @@ def test_initial_discovery_aws_and_health_run_once_then_follow_intervals(
     monkeypatch.setattr(
         source, "time", SimpleNamespace(monotonic=lambda: clock[0], time=time.time)
     )
+    monkeypatch.setattr(source, "email_domain_page", Mock(return_value=[]))
     monkeypatch.setattr(source, "collector_engine", Mock(return_value=Mock()))
     discovery = Mock(return_value=["public"])
     monkeypatch.setattr(source, "tenant_schemas", discovery)
@@ -1063,3 +1068,36 @@ def test_safe_attempt_error_data_counts_fatal_errors_and_only_known_stages(
     assert data["error_count"] == 1
     assert data.get("stage") == stage
     assert "PRIVATE" not in json.dumps(data)
+
+
+@pytest.mark.parametrize(
+    "email, expected",
+    [
+        ("PRIVATE FIRST@Onyx.App", "onyx.app"),
+        ("PRIVATE@bücher.example", "xn--bcher-kva.example"),
+        ("PRIVATE@http://onyx.app", None),
+        ("PRIVATE@127.0.0.1", None),
+        ("PRIVATE@localhost", None),
+        ("PRIVATE@onyx.app@other.app", None),
+    ],
+)
+def test_signup_only_queues_normalized_domain(
+    email: str, expected: str | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sender = client()
+    monkeypatch.setattr(fleet, "_client", sender)
+    fleet.emit_signup_domain(email, datetime.now(timezone.utc))
+    records = sender._take_batch()
+    assert [r["data"]["domain"] for r in records] == ([expected] if expected else [])
+    assert "PRIVATE" not in str(records)
+    assert "@" not in str(records)
+
+
+def test_signup_survives_telemetry_queue_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fleet, "_client", client())
+    monkeypatch.setattr(
+        fleet, "emit_telemetry", Mock(side_effect=RuntimeError("unavailable"))
+    )
+    fleet.emit_signup_domain("PRIVATE@onyx.app", datetime.now(timezone.utc))

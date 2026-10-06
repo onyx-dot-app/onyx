@@ -17,17 +17,21 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from onyx.db.fleet_telemetry import (
     SAFE_BOOLEAN_SETTINGS,
     SAFE_NUMBER_SETTINGS,
     attempt_page,
     collector_engine,
     connector_page,
+    email_domain_page,
     job_page,
     tenant_schemas,
 )
 from onyx.utils.fleet_telemetry import (
     BoundedTelemetry,
+    normalize_email_domain,
     poll_due,
     start_telemetry,
     stop_telemetry,
@@ -168,6 +172,9 @@ class FleetCollector:
         self._failed_schema: dict[str, tuple[float, int]] = {}
         self._connector_cursor: dict[str, int] = {}
         self._last_connectors: dict[str, float] = {}
+        self._domain_cursor: dict[str, str] = {}
+        self._last_domains: dict[str, float] = {}
+        self.email_domain_errors = 0
         self._attempt_cursor: dict[str, tuple[datetime, int]] = {}
         self._job_cursor: dict[str, tuple[datetime, str]] = {}
         self._active_job_cursor: dict[str, str] = {}
@@ -233,6 +240,43 @@ class FleetCollector:
             revision=SOURCE_EVENT_REVISION,
         )
 
+    def collect_email_domains(self, schema: str, now: float) -> bool:
+        if not poll_due(
+            self._last_domains.get(schema),
+            now,
+            self.client.settings["connector_interval_seconds"],
+        ):
+            return False
+        try:
+            rows = email_domain_page(
+                self.engine, schema, self._domain_cursor.get(schema, "")
+            )
+        except SQLAlchemyError:
+            self.email_domain_errors += 1
+            self._last_domains[schema] = now
+            return False
+        for row in rows:
+            if not self._event(
+                "tenant_domain",
+                {
+                    "domain": row["domain"],
+                    "first_signup_at": _iso(row["first_signup_at"]),
+                },
+                schema,
+                datetime.now(timezone.utc),
+                row["domain"],
+                durable_id=False,
+            ):
+                # An invalid domain must not stop later inventory pages.
+                if normalize_email_domain(row["domain"]):
+                    break
+            self._domain_cursor[schema] = row["domain"]
+        else:
+            if len(rows) < 200:
+                self._domain_cursor[schema] = ""
+                self._last_domains[schema] = now
+        return True
+
     def collect_one_schema(self) -> bool:
         if not self.schemas:
             return False
@@ -241,7 +285,7 @@ class FleetCollector:
         now = time.monotonic()
         if self._failed_schema.get(schema, (0, 0))[0] > now:
             return False
-        collected = False
+        collected = self.collect_email_domains(schema, now)
         if poll_due(
             self._last_connectors.get(schema),
             now,
@@ -512,6 +556,7 @@ class FleetCollector:
                 self.aws_consecutive_errors += 1
             self._last_aws = time.monotonic()
         self.client.health = {
+            "email_domain_errors": self.email_domain_errors,
             "source_errors": self.source_errors,
             "source_consecutive_errors": max(
                 self._discovery_failures,
