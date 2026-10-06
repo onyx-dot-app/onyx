@@ -51,8 +51,13 @@ export interface TableQualifierColumn<TData> {
   imageAlt?: (row: TData) => string;
   /** A tinted tile behind the icon or image. @default false */
   background?: boolean;
-  /** `"lg"` for avatars (28/24px), `"md"` for icons (16px). @default "md" */
-  iconSize?: "lg" | "md";
+  /**
+   * The icon is an avatar: drawn at 28px (2.75rem rows) or 24px (2.25rem
+   * rows) instead of the standard 16px.
+   *
+   * @default false
+   */
+  avatar?: boolean;
 }
 
 /** What every data column takes, whatever its value comes from. */
@@ -166,8 +171,8 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   getImageAlt?: (row: TData) => string;
   /** Show a tinted background container behind the content. @default false */
   background?: boolean;
-  /** Icon size preset. Use `"lg"` for avatars, `"md"` for regular icons. @default "md" */
-  iconSize?: "lg" | "md";
+  /** The icon is an avatar, drawn larger. @default false */
+  avatar?: boolean;
 }
 
 /** Data column — accessor-based column with sorting/resizing. */

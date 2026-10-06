@@ -572,7 +572,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                               imageSrc={qDef.getImageSrc?.(row.original)}
                               imageAlt={qDef.getImageAlt?.(row.original)}
                               background={qDef.background}
-                              iconSize={qDef.iconSize}
+                              avatar={qDef.avatar}
                               selectable={showQualifierCheckbox}
                               selected={
                                 showQualifierCheckbox && row.getIsSelected()

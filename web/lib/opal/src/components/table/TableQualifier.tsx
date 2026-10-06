@@ -26,16 +26,14 @@ interface TableQualifierProps {
   imageAlt?: string;
   /** Show a tinted background container behind the content. */
   background?: boolean;
-  /** Icon size preset. `"lg"` = 28/24 (avatars), `"md"` = 16. @default "md" */
-  iconSize?: "lg" | "md";
+  /** The icon is an avatar: 28px or 24px by row height, instead of 16px. */
+  avatar?: boolean;
 }
 
-// Icon size in px, by icon preset, then by the table's row height. "md" is
-// Opal's standard 16px icon at every height; "lg" is for avatars.
-const iconSizesMap = {
-  lg: { 2.75: 28, 2.25: 24 },
-  md: { 2.75: 16, 2.25: 16 },
-} as const;
+// An icon is Opal's standard 16px at every row height; an avatar fills more
+// of the tile, by row height.
+const AVATAR_SIZES = { 2.75: 28, 2.25: 24 } as const;
+const ICON_SIZE = 16;
 
 function getOverlayStyles(selected: boolean, disabled: boolean) {
   if (disabled) {
@@ -57,10 +55,10 @@ function TableQualifier({
   imageSrc,
   imageAlt = "",
   background = false,
-  iconSize: iconSizePreset = "md",
+  avatar = false,
 }: TableQualifierProps) {
   const resolvedSize = useTableSize();
-  const iconSize = iconSizesMap[iconSizePreset][resolvedSize];
+  const iconSize = avatar ? AVATAR_SIZES[resolvedSize] : ICON_SIZE;
   const overlayStyles = getOverlayStyles(selected, disabled);
 
   function renderContent() {

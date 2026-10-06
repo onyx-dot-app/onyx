@@ -46,7 +46,7 @@ function resolveQualifier<TData>(
     getImageSrc: col.imageSrc,
     getImageAlt: col.imageAlt,
     background: col.background,
-    iconSize: col.iconSize,
+    avatar: col.avatar,
   };
 }
 

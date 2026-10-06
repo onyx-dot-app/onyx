@@ -75,7 +75,7 @@ export default function CraftPage() {
       {
         kind: "qualifier",
         content: "icon",
-        iconSize: "lg",
+        avatar: true,
         icon: (row) => {
           const user = {
             email: row.email,
