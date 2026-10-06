@@ -11,6 +11,7 @@ PAT_LENGTH = 192
 
 OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX = "onyx_oat_"
 OAUTH_PROVIDER_REFRESH_TOKEN_PREFIX = "onyx_ort_"
+OAUTH_PROVIDER_CODE_PREFIX = "onyx_oac_"
 
 # SCIM constants. Defined here rather than in `ee` so that tenant extraction in
 # `onyx.auth.utils` can recognise a SCIM token without importing from `ee`.

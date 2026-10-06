@@ -405,9 +405,16 @@ consent (GET, POST) | grants | grants/{id}            server/oauth_provider/api.
 `OAuthProvider`; the MCP SDK handlers do request validation and PKCE checks.
 Grants and tokens live in each tenant's schema (`OAuthProviderGrant`,
 `OAuthProviderToken`); registered clients live in the catalog
-(`OAuthProviderClient`). Pending requests, consent bindings and authorization
-codes live in the shared `CacheBackend` namespace (`get_shared_cache_backend`),
-so the flow works on Redis and on the PostgreSQL cache.
+(`OAuthProviderClient`). Short-lived state lives in `CacheBackend`
+(`oauth_provider/attempts.py`), so the flow works on Redis and on the PostgreSQL
+cache. Only the pre-sign-in state is shared (`get_shared_cache_backend`): the
+pending request, which holds client-supplied fields only, and a claim naming the
+first tenant that opened its consent page. Consent bindings and authorization
+codes, which hold user data, live in that tenant's cache
+(`get_cache_backend(tenant_id=...)`). A code carries its tenant
+(`onyx_oac_{tenant}.{secret}`, `auth/oauth_provider.py`) so `/token` can find it
+without a session; it is stored under a hash of the whole code, so an edited
+tenant misses.
 
 ---
 
@@ -503,13 +510,15 @@ is marked as such.
    `User` row to exist for the IdP itself, which is not the model here.
 10. **OAuth provider codes and consent requests are single-use.**
    `consume_authorization_code` and `consume_authorization_request`
-   (`oauth_provider/attempts.py`) take the stored value with `getdel`, so
-   exactly one of two concurrent exchanges or approvals succeeds. A change
+   (`oauth_provider/attempts.py`) take the stored value with `getdel` (for a
+   request, the shared pending entry), so exactly one of two concurrent
+   exchanges or approvals succeeds, across tenants too. A change
    that reads and then deletes in two steps, or that restores a code after a
    failure, allows a second redemption.
 11. **OAuth provider consent is bound to one user, tenant and login session.**
-   `consume_authorization_request` succeeds only for the user, tenant,
-   `_session_hash` and CSRF token recorded at the first consent GET, and the
+   The first consent GET claims the request for one tenant
+   (`bind_authorization_request`), and `consume_authorization_request` succeeds
+   only for the user, tenant, `_session_hash` and CSRF token recorded then, and the
    POST also requires the web origin. Workspace membership is rechecked at
    consent, on refresh (`_with_authorized_refresh` revokes the grant of a
    removed owner) and on every token use.

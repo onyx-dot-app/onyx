@@ -7,7 +7,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
-from onyx.cache.factory import get_shared_cache_backend
+from onyx.auth.oauth_provider import (
+    generate_oauth_provider_code,
+    parse_oauth_provider_code_tenant,
+)
+from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.oauth_provider.models import (
     OAuthProviderConsentBinding,
     PendingOAuthProviderAuthorization,
@@ -28,21 +32,20 @@ def _handle_digest(handle: str) -> str | None:
     return hashlib.sha256(handle.encode("ascii")).hexdigest()
 
 
-def _request_keys(handle: str) -> tuple[str, str] | None:
+def _request_keys(handle: str) -> tuple[str, str, str] | None:
+    """Pending request and tenant claim (shared cache), consent binding (tenant cache)."""
     digest = _handle_digest(handle)
     if digest is None:
         return None
     return (
         f"{_REQUEST_KEY_PREFIX}:{digest}:pending",
+        f"{_REQUEST_KEY_PREFIX}:{digest}:tenant",
         f"{_REQUEST_KEY_PREFIX}:{digest}:binding",
     )
 
 
-def _code_key(code: str) -> str | None:
-    digest = _handle_digest(code)
-    if digest is None:
-        return None
-    return f"{_CODE_KEY_PREFIX}:{digest}"
+def _code_key(code: str) -> str:
+    return f"{_CODE_KEY_PREFIX}:{hashlib.sha256(code.encode('utf-8')).hexdigest()}"
 
 
 def _loads_model[T: BaseModel](raw: bytes | None, model_type: type[T]) -> T | None:
@@ -58,7 +61,7 @@ def store_authorization_request(
     authorization: PendingOAuthProviderAuthorization,
 ) -> str:
     handle = secrets.token_urlsafe(32)
-    pending_key, _ = _request_keys(handle) or (None, None)
+    pending_key, _, _ = _request_keys(handle) or (None, None, None)
     if pending_key is None:
         raise RuntimeError("Generated invalid OAuth provider authorization handle")
     if not get_shared_cache_backend().set_if_absent(
@@ -89,13 +92,22 @@ def bind_authorization_request(
     keys = _request_keys(handle)
     if keys is None:
         return None
-    pending_key, binding_key = keys
+    pending_key, claim_key, binding_key = keys
 
-    cache = get_shared_cache_backend()
-    remaining_ttl = cache.ttl(pending_key)
+    shared = get_shared_cache_backend()
+    remaining_ttl = shared.ttl(pending_key)
     if remaining_ttl <= 0:
         return None
+    # The pending request exists before sign-in, so it lives in the shared cache.
+    # The first tenant to open its consent page claims it; everything that holds
+    # user data stays in that tenant's cache.
+    if (
+        not shared.set_if_absent(claim_key, tenant_id, ex=remaining_ttl)
+        and shared.get(claim_key) != tenant_id.encode()
+    ):
+        return None
 
+    cache = get_cache_backend(tenant_id=tenant_id)
     binding = OAuthProviderConsentBinding(
         user_id=user_id,
         tenant_id=tenant_id,
@@ -128,9 +140,9 @@ def consume_authorization_request(
     keys = _request_keys(handle)
     if keys is None:
         return None
-    pending_key, binding_key = keys
+    pending_key, claim_key, binding_key = keys
 
-    cache = get_shared_cache_backend()
+    cache = get_cache_backend(tenant_id=tenant_id)
     binding = _loads_model(cache.get(binding_key), OAuthProviderConsentBinding)
     if (
         binding is None
@@ -140,9 +152,13 @@ def consume_authorization_request(
         or not secrets.compare_digest(binding.csrf_token.encode(), csrf_token.encode())
     ):
         return None
-    # getdel lets exactly one concurrent approval take the request.
-    pending = _loads_model(cache.getdel(pending_key), PendingOAuthProviderAuthorization)
+    shared = get_shared_cache_backend()
+    # getdel on the shared request lets exactly one decision win.
+    pending = _loads_model(
+        shared.getdel(pending_key), PendingOAuthProviderAuthorization
+    )
     cache.delete(binding_key)
+    shared.delete(claim_key)
     return pending
 
 
@@ -152,12 +168,9 @@ def store_authorization_code(record: StoredOAuthProviderCode) -> str:
         raise ValueError("OAuth provider authorization code is already expired")
     if seconds_until_expiry > AUTHORIZATION_CODE_TTL_SECONDS:
         raise ValueError("OAuth provider authorization code expiry exceeds maximum TTL")
-    code = secrets.token_urlsafe(32)
-    key = _code_key(code)
-    if key is None:
-        raise RuntimeError("Generated invalid OAuth provider authorization code")
-    if not get_shared_cache_backend().set_if_absent(
-        key,
+    code = generate_oauth_provider_code(record.tenant_id)
+    if not get_cache_backend(tenant_id=record.tenant_id).set_if_absent(
+        _code_key(code),
         record.model_dump_json(),
         ex=max(1, math.ceil(seconds_until_expiry)),
     ):
@@ -166,22 +179,34 @@ def store_authorization_code(record: StoredOAuthProviderCode) -> str:
 
 
 def get_authorization_code(code: str) -> StoredOAuthProviderCode | None:
-    key = _code_key(code)
-    if key is None:
+    tenant_id = parse_oauth_provider_code_tenant(code)
+    if tenant_id is None:
         return None
-    record = _loads_model(get_shared_cache_backend().get(key), StoredOAuthProviderCode)
-    if record is None or record.expires_at <= time.time():
+    record = _loads_model(
+        get_cache_backend(tenant_id=tenant_id).get(_code_key(code)),
+        StoredOAuthProviderCode,
+    )
+    if (
+        record is None
+        or record.tenant_id != tenant_id
+        or record.expires_at <= time.time()
+    ):
         return None
     return record
 
 
 def consume_authorization_code(code: str) -> StoredOAuthProviderCode | None:
-    key = _code_key(code)
-    if key is None:
+    tenant_id = parse_oauth_provider_code_tenant(code)
+    if tenant_id is None:
         return None
     record = _loads_model(
-        get_shared_cache_backend().getdel(key), StoredOAuthProviderCode
+        get_cache_backend(tenant_id=tenant_id).getdel(_code_key(code)),
+        StoredOAuthProviderCode,
     )
-    if record is None or record.expires_at <= time.time():
+    if (
+        record is None
+        or record.tenant_id != tenant_id
+        or record.expires_at <= time.time()
+    ):
         return None
     return record

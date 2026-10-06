@@ -22,13 +22,16 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 from starlette.types import Message
 
-from onyx.auth.oauth_provider import OAuthProviderTokenKind, parse_oauth_provider_token
+from onyx.auth.oauth_provider import (
+    OAuthProviderTokenKind,
+    parse_oauth_provider_code_tenant,
+    parse_oauth_provider_token,
+)
 from onyx.db.enums import Permission
 from onyx.db.oauth_provider import (
     OAUTH_PROVIDER_STORAGE_ERRORS,
     oauth_provider_tenant_has_members,
 )
-from onyx.oauth_provider.attempts import get_authorization_code
 from onyx.oauth_provider.config import (
     canonical_mcp_resource,
     get_oauth_provider_settings,
@@ -273,10 +276,7 @@ async def token(request: Request) -> Response:
         if grant_type == "authorization_code":
             if _PKCE_VERIFIER.fullmatch(values.get("code_verifier", "")) is None:
                 return _oauth_error("invalid_request", "Invalid PKCE verifier")
-            code = await run_in_threadpool(
-                get_authorization_code, values.get("code", "")
-            )
-            tenant_id = code.tenant_id if code is not None else None
+            tenant_id = parse_oauth_provider_code_tenant(values.get("code", ""))
         elif grant_type == "refresh_token":
             parsed = parse_oauth_provider_token(values.get("refresh_token", ""))
             tenant_id = (
