@@ -52,6 +52,22 @@ there:
 
 Explore the tree with `ls` rather than relying on docs for the full package list.
 
+### Feature Map
+
+`.agents/feature-map/` maps the product: every surface, what it does, the code behind
+it, and how the parts connect. Use it before you change a product surface, when you
+review a diff or PR, and when you need to know what a feature does or what a change
+can break. The `feature-map` skill (`.agents/skills/feature-map/SKILL.md`) gives the
+procedure.
+
+- Look up a code path in `.agents/feature-map/PATHS.md` to find its component.
+- The step-by-step review procedure is `.agents/feature-map/VERIFYING.md`.
+- Onyx overloads words such as Persona, Tool, turn, and SearchDoc. Read
+  `.agents/feature-map/GLOSSARY.md` before trusting a name.
+
+If you change behaviour a component document describes, update that document in the
+same pull request.
+
 ### Skills
 
 Shared agent skills live in `.agents/skills/`. `.claude/skills`, `.cursor/skills` and
