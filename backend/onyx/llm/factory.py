@@ -405,6 +405,9 @@ def llm_from_provider(
         reasoning_effort_max=(
             model_configuration.reasoning_effort_max if model_configuration else None
         ),
+        supports_reasoning=(
+            model_configuration.supports_reasoning if model_configuration else False
+        ),
     )
 
 
@@ -478,6 +481,7 @@ def get_llm(
     reasoning_effort_default: ReasoningEffort | None = None,
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,
+    supports_reasoning: bool = False,
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -516,6 +520,7 @@ def get_llm(
         reasoning_effort_default=reasoning_effort_default,
         reasoning_effort_user_default=reasoning_effort_user_default,
         reasoning_effort_max=reasoning_effort_max,
+        supports_reasoning=supports_reasoning,
     )
 
 
