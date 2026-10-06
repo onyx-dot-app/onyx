@@ -9,11 +9,6 @@ rounding (`--radius-12`).
 
 ## Structure
 
-The row itself is the shared `AttachmentItemBody` from
-[`@opal/layouts/attachment-item`](../../../layouts/attachment-item/README.md).
-This component wraps it in the interactive surface; `AttachmentItem` is the
-same row with no interactivity.
-
 ```
 root                      Interactive.Stateful + Interactive.Container
 ├─ title                  tile + icon-less Content (main-ui / section, frozen)

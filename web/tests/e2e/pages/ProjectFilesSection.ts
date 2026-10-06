@@ -26,6 +26,6 @@ export class ProjectFilesSection {
 
   /** The first file card's icon tile. */
   get attachmentTile(): Locator {
-    return this.section.locator(".opal-attachment-item-tile").first();
+    return this.section.locator(".opal-attachment-item-button-tile").first();
   }
 }

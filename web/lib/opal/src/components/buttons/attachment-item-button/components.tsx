@@ -1,3 +1,4 @@
+import "@opal/components/buttons/attachment-item-button/styles.css";
 import type React from "react";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
@@ -12,17 +13,32 @@ import {
   handleRowKeyDown,
   handleRowKeyUp,
 } from "@opal/components/buttons/row-interaction";
-import {
-  AttachmentItemBody,
-  type AttachmentItemTileProps,
-} from "@opal/layouts/attachment-item/components";
+import { Content } from "@opal/layouts";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** The leading tile: an icon, or an image with its alt text. */
-type AttachmentItemButtonTileProps = AttachmentItemTileProps;
+/**
+ * The leading tile shows exactly one thing: an icon on the tinted tile, or an
+ * image filling it. The union keeps the two exclusive, and makes `imageAlt`
+ * mandatory the moment an image appears — the tile owns its chrome (size,
+ * rounding, fit), so neither arm is a free-form slot.
+ */
+type AttachmentItemButtonTileProps =
+  | {
+      /** Icon centered on the tinted tile. */
+      icon: IconFunctionComponent;
+      imageSrc?: never;
+      imageAlt?: never;
+    }
+  | {
+      /** Image filling the tile (`object-fit: cover`, tile rounding). */
+      imageSrc: string;
+      /** Alt text for the image. Required — the image is content, not chrome. */
+      imageAlt: string;
+      icon?: never;
+    };
 
 /**
  * The `Content` props a row actually uses — enumerated rather than spread,
@@ -228,32 +244,49 @@ function AttachmentItemButton({
         {...rowProps}
         {...rowButtonProps}
       >
-        {/* The shared row. Inside the container it paints no surface of its
-            own: the Stateful palette supplies background and colors. */}
-        <AttachmentItemBody
-          {...(imageSrc !== undefined
-            ? { imageSrc, imageAlt }
-            : { icon: Icon })}
-          tileOverride={
-            state === "selected" ? (
-              /* Purely a visual indicator. `inert` + aria-hidden take the
-                 checkbox out of the tab order, the accessibility tree and
-                 the event flow — the row alone owns activation, and its
-                 own selected styling carries the state for AT. */
-              <span inert aria-hidden className="contents">
-                <InputCheckbox checked readOnly />
-              </span>
-            ) : undefined
-          }
-          title={title}
-          titleMaxLines={titleMaxLines}
-          description={description}
-          descriptionMaxLines={descriptionMaxLines}
-          editable={editable}
-          onTitleChange={onTitleChange}
-          centerChildren={centerChildren}
-          rightChildren={rightChildren}
-        />
+        <div className="opal-attachment-item-button">
+          <div className="opal-attachment-item-button-title">
+            <div className="opal-attachment-item-button-tile">
+              {state === "selected" ? (
+                /* Purely a visual indicator. `inert` + aria-hidden take the
+                   checkbox out of the tab order, the accessibility tree and
+                   the event flow — the row alone owns activation, and its
+                   own selected styling carries the state for AT. */
+                <span inert aria-hidden className="contents">
+                  <InputCheckbox checked readOnly />
+                </span>
+              ) : imageSrc ? (
+                <img
+                  src={imageSrc}
+                  alt={imageAlt}
+                  className="opal-attachment-item-button-image"
+                />
+              ) : (
+                Icon && <Icon className="opal-attachment-item-button-icon" />
+              )}
+            </div>
+            <Content
+              sizePreset="main-ui"
+              variant="section"
+              color="interactive"
+              title={title}
+              titleMaxLines={titleMaxLines}
+              description={description}
+              descriptionMaxLines={descriptionMaxLines}
+              editable={editable}
+              onTitleChange={onTitleChange}
+              width="full"
+            />
+          </div>
+          {centerChildren != null && (
+            <div className="opal-attachment-item-button-center">
+              {centerChildren}
+            </div>
+          )}
+          <div className="opal-attachment-item-button-action">
+            {rightChildren}
+          </div>
+        </div>
       </Interactive.Container>
     </Interactive.Stateful>
   );

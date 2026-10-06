@@ -12,12 +12,6 @@ export {
   type ContentActionProps,
 } from "@opal/layouts/content-action/components";
 
-/* AttachmentItem */
-export {
-  AttachmentItem,
-  type AttachmentItemProps,
-} from "@opal/layouts/attachment-item/components";
-
 /* Card */
 export { Card, type CardHeaderProps } from "@opal/layouts/cards/components";
 
