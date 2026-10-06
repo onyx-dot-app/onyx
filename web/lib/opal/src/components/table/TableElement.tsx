@@ -45,7 +45,10 @@ function Table({
   return (
     <table
       ref={ref}
-      className={cn("tbl border-separate", !width && "min-w-full")}
+      className={cn(
+        "tbl border-separate border-spacing-0",
+        !width && "min-w-full"
+      )}
       style={{ width }}
       data-size={size}
       data-selection={selectionBehavior}

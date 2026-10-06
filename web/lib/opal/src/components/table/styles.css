@@ -79,18 +79,16 @@
 /* ---- Rows: rounded cards with a gap ---- */
 
 /* Rows sit apart like a list of AttachmentItemButtons: radius-12 corners
-   (Interactive.Container's rounding 3) and a 4px gap. The gap is border
-   spacing, so the space between rows stays unpainted even when a row's
-   Interactive surface fills it; the negative margin takes back the spacing
-   the table adds above the first row and below the last. */
-table.tbl {
-  border-spacing: 0 0.25rem;
-  margin-block: -0.25rem;
+   (Interactive.Container's rounding 3) and a 4px gap. The gap is a 2px
+   transparent border above and below every cell, so nothing overflows the
+   table and it never scrolls on its own. The row's Interactive surface
+   paints the <tr> itself, a plain rectangle across those borders, so the
+   row is clipped 2px in from top and bottom, to the cells' radius. */
+table.tbl .tbl-row > td {
+  @apply bg-clip-padding border-y-[2px] border-x-0 border-transparent;
 }
-/* The row's Interactive surface paints the <tr> itself, a plain rectangle,
-   so the row is clipped to the same radius as its end cells. */
 table.tbl .tbl-row.interactive {
-  clip-path: inset(0 round var(--radius-12));
+  clip-path: inset(2px 0 round var(--radius-12));
 }
 table.tbl .tbl-row > td:first-child {
   @apply rounded-s-12;
