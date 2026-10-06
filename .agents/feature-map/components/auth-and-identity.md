@@ -191,6 +191,12 @@ Both `hashed_api_key` and `hashed_token` are unique-constrained and are the
 the caller exactly once, at creation (`server/pat/api.py:create_token`
 comment: `"# ONLY time we return the raw token!"`).
 
+`db/api_key.py:remove_all_api_keys__no_commit` removes every API key and the
+service-account user behind it, except the Discord bot's service key
+(`DISCORD_SERVICE_API_KEY_NAME` with no `owner_id`). The Community downgrade calls it
+(`ee/onyx/db/community_downgrade.py:disable_paid_features__no_commit`, see
+[[billing]] §4.5).
+
 ### `SSOProvider` (`models.py`)
 
 `name` (URL path segment, also stored as `oauth_name` on linked accounts:
@@ -209,7 +215,9 @@ artifact, separate from the fastapi-users session token.
 `hashed_token` (SHA-256), `token_display`. Authenticates the IdP's SCIM
 client, not a `User`; `verify_scim_token` returns the `ScimToken` row itself,
 and `ee/onyx/server/scim/auth.py` is explicit that it does not carry a
-`User` dependency.
+`User` dependency. `verify_scim_token` rejects a token whose `is_active` is
+false. The Community downgrade sets every token inactive
+(`ee/onyx/db/community_downgrade.py:disable_paid_features__no_commit`).
 
 ### `OAuthConfig` / `OAuthUserToken` (`models.py`)
 

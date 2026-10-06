@@ -188,6 +188,14 @@ logo through `resolve_inline_disposition` with
 so even a stored file whose sniffed type has drifted is served as an inert
 raster, never as `image/svg+xml` or `text/html`.
 
+### 4.4 Reset to stock branding
+
+`ee/onyx/server/enterprise_settings/store.py:reset_settings` stores a default
+`EnterpriseSettings`, deletes the `KV_CUSTOM_ANALYTICS_SCRIPT_KEY` entry, and
+deletes the logo and logotype files. A missing script or file is not an error.
+No endpoint in this component calls it. The Community downgrade calls it
+(`ee/onyx/server/license/api.py:downgrade_to_community`, see [[billing]] §4.5).
+
 ---
 
 ## 5. Contracts and invariants

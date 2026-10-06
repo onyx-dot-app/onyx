@@ -136,6 +136,11 @@ A check constraint (`ck_token_rate_limit_budget_set`) requires at least one of
 `token_budget` / `cost_budget_cents` to be non-null; a limit with neither is
 impossible to insert.
 
+The Community downgrade deletes every `token_rate_limit` and
+`token_rate_limit__user_group` row, in every scope
+(`ee/onyx/db/community_downgrade.py:disable_paid_features__no_commit`, see
+[[billing]] §4.5).
+
 ### `token_rate_limit__user_group` (`TokenRateLimit__UserGroup`)
 
 Many-to-many join between a `TokenRateLimit` (scope `USER_GROUP`) and
