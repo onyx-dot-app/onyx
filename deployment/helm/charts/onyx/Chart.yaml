@@ -20,6 +20,8 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: added
+      description: MCP OAuth discovery routes for nginx, ingress, and the web server.
     - kind: removed
       description: The legacyVespaCheck upgrade guard and the unused
         ENABLE_OPENSEARCH_INDEXING_FOR_ONYX / ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX

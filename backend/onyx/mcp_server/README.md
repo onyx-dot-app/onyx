@@ -19,7 +19,43 @@ sources and document sets that a search may be filtered by. Add
 `read:chat` or `write:chat` only if the client needs the chat surfaces. An unscoped token carries
 the user's full access, so prefer a scoped one.
 
-Depending on usage, the MCP Server may support OAuth and stdio in the future.
+OAuth-capable MCP clients can connect through the public web URL when `OAUTH_PROVIDER_ENABLED=true`. The OAuth provider requires the shared Redis cache backend, so Lite deployments that use the Postgres cache do not support it yet. PAT and API-key authentication remain available.
+
+### OAuth
+
+Connect your OAuth-capable MCP client to `https://onyx.example.com/mcp/`. Onyx advertises the authorization server through the MCP authentication challenge. Sign in to Onyx, check the app and workspace, then approve access. The client handles token exchange and refresh.
+
+Use HTTPS for `WEB_DOMAIN`. HTTP is allowed only for loopback development addresses. With an unsupported `WEB_DOMAIN`, the API server logs a warning and starts with OAuth off.
+
+Apply the database migrations first. Cloud deployments need both the catalog and tenant migrations. Restart the API server, MCP server, primary worker, and Celery beat scheduler after deploying these changes.
+
+Onyx supports public clients using authorization codes with S256 PKCE. Clients can register dynamically or use an HTTPS client metadata document. Client-secret and private-key authentication are not supported. Redirect URLs must match the registered URL exactly. HTTPS and loopback HTTP callbacks are accepted. Wildcards are not accepted.
+
+Approval requires `read:search` and `create:user_api_keys` permissions. The granted scope is `read:search`. The app can search documents the user can access, use web search, and open web pages. Existing document permissions and workspace policy still apply. The token cannot create API keys, approve other apps, or call unrelated Onyx APIs.
+
+Consent requires a signed-in standard user, not a service account, PAT, or API key. Cloud users must remain active members of the approving workspace.
+
+Access tokens expire after 15 minutes. Refresh grants expire after 30 days, even when refreshed. Reusing a consumed refresh token revokes the whole grant. Normal refresh leaves earlier access tokens valid until they expire.
+
+Use **Connected apps** in user settings to disconnect an app. Disconnect revokes all tokens for that grant. Signing out of Onyx does not disconnect apps.
+
+The MCP resource URL is always `WEB_DOMAIN/mcp/`. Set the same `WEB_DOMAIN` and `OAUTH_PROVIDER_ENABLED` on the API server and MCP server.
+
+The reverse proxy must expose these discovery URLs without requiring a session:
+
+- `/.well-known/oauth-authorization-server/api/oauth-provider`
+- `/.well-known/oauth-protected-resource/mcp/`
+
+The provided nginx, Helm, and Next.js routes handle these paths. PostgreSQL stores hashed credentials and grants. Shared Redis stores short-lived consent requests and authorization codes. All API replicas must use the same databases and Redis. Deployments that set `CACHE_BACKEND=postgres` do not support MCP OAuth yet.
+
+Each refresh deletes the grant's expired access tokens. The primary worker deletes expired grants, with their tokens, once a day. The default cloud multiplier makes it eight days. Catalog cleanup removes client registrations idle for 90 days. Lite deployments run both cleanups from the API server. Authentication enforces expiry immediately and does not wait for cleanup. Refresh history remains until the grant expires.
+
+#### Troubleshooting
+
+- A 503 means an authorization dependency or client metadata fetch is unavailable. Do not treat it as successful authentication. Some clients may ask you to connect again after a failed refresh.
+- Check that the discovery document's resource URL matches the MCP endpoint. Set the same issuer and resource configuration on every API and MCP replica.
+- Blocked private destinations and invalid client metadata are rejected as invalid clients. Network fetch failures return unavailable. Check that the metadata URL is public and reachable when troubleshooting a 503.
+- In local development, `DEV_MODE=true` forces MCP backend calls to port 8080. To use `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` with a different local port, run the MCP process with `DEV_MODE=false`.
 
 ### Default Configuration
 - **Transport**: HTTP POST (MCP over HTTP)
@@ -52,7 +88,7 @@ The MCP server is built on [FastMCP](https://github.com/jlowin/fastmcp) and runs
 ┌─────────────────┐
 │  API Server     │
 │  Port 8080      │
-│  ├─ /me (auth)  │
+│  ├─ Token auth  │
 │  ├─ Search APIs │
 │  └─ ACL checks  │
 └─────────────────┘
@@ -132,11 +168,15 @@ npx @modelcontextprotocol/inspector http://localhost:8090/
 
 **Setup in Inspector:**
 
-1. Ignore the OAuth configuration menus
+For PAT or API-key authentication:
+
+1. Leave OAuth disabled in the client
 2. Open the **Authentication** tab
 3. Select **Bearer Token** authentication
 4. Paste your Onyx bearer token
 5. Click **Connect**
+
+For OAuth, use the public frontend MCP URL, such as `http://localhost:3000/mcp/`. Start the frontend too, since it hosts the login and consent pages. Use the client's OAuth flow instead of pasting a bearer token.
 
 Once connected, you can:
 - Browse available tools
@@ -166,6 +206,7 @@ Expected response:
 - `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
 - `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
+- `OAUTH_PROVIDER_ENABLED`: Let MCP clients connect with OAuth (set to "true" to enable, default: disabled). Requires Redis and an HTTPS `WEB_DOMAIN`, except on loopback hosts. Set identically on API and MCP servers.
 
 **API Server Connection:**
 - `API_SERVER_PROTOCOL`: Protocol for API server connection (default: "http")

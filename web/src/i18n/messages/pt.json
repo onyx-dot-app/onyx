@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Conectar ao Onyx",
+      "request": "Permitir que {clientName} pesquise no Onyx?",
+      "account": "Conectado como {email}",
+      "workspace": "Espaço de trabalho: {workspaceName}",
+      "appAddress": "Endereço do aplicativo: {origin}",
+      "access": "Ler resultados de documentos aos quais você tem acesso. Usar a pesquisa na web e abrir páginas da web.",
+      "allow": "Permitir acesso",
+      "deny": "Negar",
+      "pending": "Salvando sua escolha...",
+      "loading": "Carregando solicitação de autorização...",
+      "unavailable": "Esta solicitação expirou ou foi alterada. Recomece pelo seu aplicativo.",
+      "failed": "Não foi possível concluir a autorização. Recomece pelo seu aplicativo.",
+      "signInRequired": "Entre para autorizar este aplicativo.",
+      "signIn": "Entrar",
+      "forbidden": "Você não pode autorizar este aplicativo. Contate o administrador do seu espaço de trabalho.",
+      "loadFailed": "O Onyx não conseguiu carregar esta solicitação. Tente novamente.",
+      "retry": "Tentar novamente"
+    },
+    "connections": {
+      "cancel": "Cancelar",
+      "title": "Aplicativos conectados",
+      "description": "Aplicativos que você autorizou a pesquisar no Onyx.",
+      "empty": "Nenhum aplicativo conectado.",
+      "loading": "Carregando aplicativos conectados...",
+      "expires": "Expira em {date}",
+      "disconnect": "Desconectar",
+      "disconnectAriaLabel": "Desconectar {clientName}",
+      "pending": "Desconectando...",
+      "failed": "Não foi possível desconectar o aplicativo. Tente novamente.",
+      "loadFailed": "Não foi possível carregar os aplicativos conectados.",
+      "confirmTitle": "Desconectar {clientName}?",
+      "confirmDescription": "Este aplicativo perderá o acesso ao Onyx. Você poderá conectá-lo novamente mais tarde."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "Conta"

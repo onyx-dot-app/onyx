@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Onyx에 연결",
+      "request": "{clientName}이 Onyx를 검색하도록 허용할까요?",
+      "account": "로그인 계정: {email}",
+      "workspace": "워크스페이스: {workspaceName}",
+      "appAddress": "앱 주소: {origin}",
+      "access": "접근 권한이 있는 문서의 검색 결과를 읽습니다. 웹 검색을 사용하고 웹 페이지를 엽니다.",
+      "allow": "접근 허용",
+      "deny": "거부",
+      "pending": "선택을 저장하는 중...",
+      "loading": "인증 요청을 불러오는 중...",
+      "unavailable": "이 요청이 만료되었거나 변경되었습니다. 앱에서 다시 시작하세요.",
+      "failed": "인증을 완료하지 못했습니다. 앱에서 다시 시작하세요.",
+      "signInRequired": "이 앱을 승인하려면 로그인하세요.",
+      "signIn": "로그인",
+      "forbidden": "이 앱을 승인할 수 없습니다. 워크스페이스 관리자에게 문의하세요.",
+      "loadFailed": "Onyx에서 이 요청을 불러오지 못했습니다. 다시 시도하세요.",
+      "retry": "다시 시도"
+    },
+    "connections": {
+      "cancel": "취소",
+      "title": "연결된 앱",
+      "description": "Onyx 검색을 허용한 앱입니다.",
+      "empty": "연결된 앱이 없습니다.",
+      "loading": "연결된 앱을 불러오는 중...",
+      "expires": "만료일: {date}",
+      "disconnect": "연결 해제",
+      "disconnectAriaLabel": "{clientName} 연결 해제",
+      "pending": "연결 해제 중...",
+      "failed": "앱 연결을 해제하지 못했습니다. 다시 시도하세요.",
+      "loadFailed": "연결된 앱을 불러오지 못했습니다.",
+      "confirmTitle": "{clientName}의 연결을 해제할까요?",
+      "confirmDescription": "이 앱은 Onyx에 접근할 수 없게 됩니다. 나중에 다시 연결할 수 있습니다."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "계정"
