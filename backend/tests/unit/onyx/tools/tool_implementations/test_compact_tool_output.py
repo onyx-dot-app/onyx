@@ -15,7 +15,7 @@ from onyx.tools.tool_implementations.utils import (
 
 
 def _make_section(index: int = 1) -> InferenceSection:
-    chunk = InferenceChunk(
+    chunk: InferenceChunk = InferenceChunk(
         document_id=f"doc-{index}",
         chunk_id=0,
         content=f"section {index}",
@@ -42,9 +42,10 @@ def _make_section(index: int = 1) -> InferenceSection:
 
 
 def test_search_result_json_is_compact() -> None:
-    out, citation_mapping = convert_inference_sections_to_llm_string(
-        [_make_section(1), _make_section(2)], note="n"
-    )
+    sections: list[InferenceSection] = [_make_section(1), _make_section(2)]
+    out: str
+    citation_mapping: dict[int, str]
+    out, citation_mapping = convert_inference_sections_to_llm_string(sections, note="n")
 
     assert out == json.dumps(json.loads(out), separators=(",", ":"), ensure_ascii=False)
     assert json.loads(out)["results"]
@@ -52,8 +53,11 @@ def test_search_result_json_is_compact() -> None:
 
 
 def test_open_url_result_json_is_compact() -> None:
+    sections: list[InferenceSection] = [_make_section(1), _make_section(2)]
+    out: str
+    citation_mapping: dict[int, str]
     out, citation_mapping = _convert_sections_to_llm_string_with_citations(
-        [_make_section(1), _make_section(2)], {}, 1
+        sections, {}, 1
     )
 
     assert out == json.dumps(json.loads(out), separators=(",", ":"), ensure_ascii=False)
@@ -62,21 +66,24 @@ def test_open_url_result_json_is_compact() -> None:
 
 
 def test_document_filter_sections_are_compact() -> None:
-    invoke = MagicMock(return_value=AssistantMessage(content=[TextContent(text="[0]")]))
-    llm = MagicMock(spec=LLM)
+    invoke: MagicMock = MagicMock(
+        return_value=AssistantMessage(content=[TextContent(text="[0]")])
+    )
+    llm: MagicMock = MagicMock(spec=LLM)
     llm.invoke = invoke
 
+    sections: list[InferenceSection] = [_make_section()]
     select_sections_for_expansion(
-        sections=[_make_section()],
+        sections=sections,
         user_query="q",
         llm=llm,
         max_sections=10,
     )
 
-    prompt_content = invoke.call_args.args[0].messages[0].content
-    marker = '"section_id"'
-    idx = prompt_content.find(marker)
+    prompt_content: str = invoke.call_args.args[0].messages[0].content
+    marker: str = '"section_id"'
+    idx: int = prompt_content.find(marker)
     assert idx != -1
-    embedded = prompt_content[idx : idx + 100]
+    embedded: str = prompt_content[idx : idx + 100]
     assert "\n" not in embedded
     assert '": ' not in embedded
