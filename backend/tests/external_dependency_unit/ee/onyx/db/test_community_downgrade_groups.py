@@ -130,7 +130,13 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
         basic_group_id = fetch_default_group(db_session, DEFAULT_BASIC_GROUP_NAME).id
         basic_member = _make_user(db_session, in_basic=True)
         custom_only_member = _make_user(db_session, in_basic=False)
-        group = _make_group(db_session, [basic_member, custom_only_member])
+        # An API key's service account that is only in the custom group.
+        custom_only_key = _make_user(
+            db_session, in_basic=False, account_type=AccountType.SERVICE_ACCOUNT
+        )
+        group = _make_group(
+            db_session, [basic_member, custom_only_member, custom_only_key]
+        )
         group_id = group.id
         rate_limit = TokenRateLimit(
             token_budget=1, period_hours=1, scope=TokenRateLimitScope.USER_GROUP
@@ -159,6 +165,7 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
         ).all()
         assert _group_ids_of(db_session, basic_member.id) == {basic_group_id}
         assert _group_ids_of(db_session, custom_only_member.id) == {basic_group_id}
+        assert _group_ids_of(db_session, custom_only_key.id) == {basic_group_id}
         assert not db_session.scalars(
             select(TokenRateLimit.id).where(TokenRateLimit.id == rate_limit_id)
         ).all()

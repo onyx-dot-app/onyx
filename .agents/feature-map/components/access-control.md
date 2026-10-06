@@ -168,8 +168,8 @@ OpenSearch chunk document
   `VIEWER`, and their user files get `needs_persona_sync`), document sets, LLM
   providers, MCP servers, and skills (`public_permission` becomes `VIEWER` when
   unset). A standard user or service account in a group that grants
-  `FULL_ADMIN_PANEL_ACCESS` joins Admin. A standard user left in no default
-  group joins Basic. It
+  `FULL_ADMIN_PANEL_ACCESS` joins Admin. One left in no default group joins
+  Basic. It
   deletes the group-scoped token rate limits and recomputes the members'
   permissions.
 - `PermissionGrant`: `(group_id, permission)` rows; the source of

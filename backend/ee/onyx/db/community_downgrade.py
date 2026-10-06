@@ -236,10 +236,9 @@ def _keep_members_in_default_groups__no_commit(
     db_session: Session, group_ids: list[int], member_ids: list[UUID]
 ) -> None:
     """Permissions come only from group grants. Whoever is an admin through one
-    of these groups joins Admin, so the workspace keeps its admins and its admin
-    API keys, and a standard user left in no default group joins Basic."""
+    of these groups joins Admin, so the workspace keeps its admins, and a member
+    left in no default group joins Basic. API keys count like users."""
     user_id = User.__table__.c.id
-    is_standard = User.account_type == AccountType.STANDARD
     # The account types that take their permissions from groups.
     in_group_system = User.account_type.in_(
         (AccountType.STANDARD, AccountType.SERVICE_ACCOUNT)
@@ -268,7 +267,9 @@ def _keep_members_in_default_groups__no_commit(
         .exists()
     )
     stranded_ids: Sequence[UUID] = db_session.scalars(
-        select(user_id).where(user_id.in_(member_ids), is_standard, ~in_default_group)
+        select(user_id).where(
+            user_id.in_(member_ids), in_group_system, ~in_default_group
+        )
     ).all()
     _add_to_default_group__no_commit(db_session, DEFAULT_BASIC_GROUP_NAME, stranded_ids)
 
