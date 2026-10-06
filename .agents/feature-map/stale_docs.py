@@ -40,8 +40,12 @@ def _resolve(
         root + path for root in PATH_ROOTS
     ]
     if "*" in path:
-        # Keep the pattern, so a new file that matches it is owned too.
-        return next(([c] for c in candidates if c.rsplit("/", 1)[0] in dirs), [])
+        # Keep the pattern, so a new file that matches it is owned too. The parent
+        # may itself be a pattern (`*/onyxbot/...`), so match it against real dirs.
+        return next(
+            ([c] for c in candidates if fnmatch.filter(dirs, c.rsplit("/", 1)[0])),
+            [],
+        )
     return next(([c] for c in candidates if c in files or c in dirs), [])
 
 
