@@ -52,6 +52,8 @@ pytestmark = [
 _ORIGIN = "http://localhost:3000"
 _RESOURCE = f"{_ORIGIN}/mcp/"
 _REDIRECT = "http://127.0.0.1:9876/callback"
+_UNKNOWN_OAUTH_ACCESS_TOKEN = "onyx_oat_public." + "a" * 43
+_UNKNOWN_OAUTH_REFRESH_TOKEN = "onyx_ort_public." + "a" * 43
 
 
 @pytest.fixture(params=[AuthBackend.REDIS])
@@ -478,7 +480,7 @@ async def test_cookie_cannot_override_invalid_oauth_bearer(
 ) -> None:
     assert (await protocol_client.get("/mcp-oauth/introspect")).status_code == 401
     response = await protocol_client.post(
-        "/search", headers={"Authorization": "Bearer onyx_mcp_a_invalid"}
+        "/search", headers={"Authorization": f"Bearer {_UNKNOWN_OAUTH_ACCESS_TOKEN}"}
     )
     assert response.status_code == 401
 
@@ -762,7 +764,7 @@ async def test_unknown_tenant_revocation_is_success(
     protocol_client: httpx.AsyncClient,
 ) -> None:
     client_id = await _register(protocol_client)
-    unknown = "onyx_mcp_r_unknown." + "a" * 43
+    unknown = _UNKNOWN_OAUTH_REFRESH_TOKEN
     response = await protocol_client.post(
         "/mcp-oauth/revoke", data={"client_id": client_id, "token": unknown}
     )

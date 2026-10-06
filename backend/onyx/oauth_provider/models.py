@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from mcp.server.auth.provider import AuthorizationCode, AuthorizationParams
+from mcp.server.auth.provider import AuthorizationParams
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from onyx.auth.oauth_provider import OAuthProviderTokenKind

@@ -24,6 +24,9 @@ from onyx.server.mcp_oauth.api import _session_hash
 from shared_configs.contextvars import UsageCredentialIdentity
 from shared_configs.enums import UsageCredentialType
 
+_OAUTH_ACCESS_TOKEN = "onyx_oat_public." + "a" * 43
+_OAUTH_ACCESS_TOKEN_BYTES = _OAUTH_ACCESS_TOKEN.encode("ascii")
+
 
 @pytest.fixture
 def introspection_backend(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
@@ -55,7 +58,7 @@ async def test_oauth_verifier_preserves_validated_identity(
     introspection_backend.get.return_value = httpx.Response(
         200, json=introspection.model_dump(mode="json")
     )
-    token = "onyx_mcp_a_test"
+    token = _OAUTH_ACCESS_TOKEN
     verified = await mcp_auth.OnyxTokenVerifier().verify_token(token)
     assert verified is not None
     assert verified.token == token
@@ -88,7 +91,7 @@ async def test_oauth_verifier_rejects_incorrect_claims(
     introspection_backend.get.return_value = httpx.Response(
         200, json=introspection.model_dump(mode="json")
     )
-    assert await mcp_auth.OnyxTokenVerifier().verify_token("onyx_mcp_a_test") is None
+    assert await mcp_auth.OnyxTokenVerifier().verify_token(_OAUTH_ACCESS_TOKEN) is None
 
 
 @pytest.mark.asyncio
@@ -99,10 +102,10 @@ async def test_oauth_verifier_distinguishes_rejection_from_outage(
     introspection_backend.get.return_value = httpx.Response(status_code)
     verifier = mcp_auth.OnyxTokenVerifier()
     if status_code == 401:
-        assert await verifier.verify_token("onyx_mcp_a_test") is None
+        assert await verifier.verify_token(_OAUTH_ACCESS_TOKEN) is None
         return
     with pytest.raises(OnyxError) as caught:
-        await verifier.verify_token("onyx_mcp_a_test")
+        await verifier.verify_token(_OAUTH_ACCESS_TOKEN)
     assert (
         caught.value.error_code
         == {
@@ -130,15 +133,15 @@ def isolate_app_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
     "headers",
     [
         [
-            (b"authorization", b"Bearer onyx_mcp_a_invalid"),
-            (b"authorization", b"Bearer onyx_mcp_a_invalid"),
+            (b"authorization", b"Bearer " + _OAUTH_ACCESS_TOKEN_BYTES),
+            (b"authorization", b"Bearer " + _OAUTH_ACCESS_TOKEN_BYTES),
         ],
         [
-            (b"authorization", b"Bearer onyx_mcp_a_invalid"),
+            (b"authorization", b"Bearer " + _OAUTH_ACCESS_TOKEN_BYTES),
             (b"x-onyx-authorization", b"Bearer other-token"),
         ],
-        [(b"authorization", b"Basic onyx_mcp_a_invalid")],
-        [(b"authorization", b"Bearer onyx_mcp_a_invalid extra")],
+        [(b"authorization", b"Basic " + _OAUTH_ACCESS_TOKEN_BYTES)],
+        [(b"authorization", b"Bearer " + _OAUTH_ACCESS_TOKEN_BYTES + b" extra")],
     ],
 )
 def test_conflicting_or_malformed_mcp_headers_fail_closed(
@@ -208,7 +211,7 @@ async def test_introspection_preserves_billing_and_outage_status(
         transport=httpx.ASGITransport(app), base_url="http://localhost"
     ) as client:
         response = await client.post(
-            "/", headers={"Authorization": "Bearer onyx_mcp_a_invalid"}
+            "/", headers={"Authorization": f"Bearer {_OAUTH_ACCESS_TOKEN}"}
         )
     assert response.status_code == status_code, response.text
     assert response.json()["error_code"] == error_code.code
@@ -278,7 +281,7 @@ async def test_insufficient_scope_has_discovery_challenge(
         response = await client.post(
             "/",
             headers={
-                "Authorization": "Bearer onyx_mcp_a_test",
+                "Authorization": f"Bearer {_OAUTH_ACCESS_TOKEN}",
                 "Origin": "https://client.example",
             },
         )
