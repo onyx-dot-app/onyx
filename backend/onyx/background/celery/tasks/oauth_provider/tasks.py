@@ -21,7 +21,7 @@ logger = setup_logger()
 )
 def cleanup_oauth_provider_grants(*, tenant_id: str) -> None:  # noqa: ARG001
     with get_session_with_current_tenant() as db_session:
-        deleted = delete_expired_oauth_provider_grants__no_commit(
+        deleted: int = delete_expired_oauth_provider_grants__no_commit(
             db_session, now=datetime.now(timezone.utc)
         )
         db_session.commit()
@@ -34,7 +34,7 @@ def cleanup_oauth_provider_grants(*, tenant_id: str) -> None:  # noqa: ARG001
 )
 def cleanup_oauth_provider_clients(*, tenant_id: str | None = None) -> None:  # noqa: ARG001
     with get_catalog_session() as db_session:
-        deleted = delete_idle_oauth_provider_clients__no_commit(
+        deleted: int = delete_idle_oauth_provider_clients__no_commit(
             db_session, now=datetime.now(timezone.utc)
         )
         db_session.commit()
