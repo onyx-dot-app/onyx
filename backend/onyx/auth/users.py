@@ -1974,8 +1974,13 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
         router = APIRouter()
 
+        # Authenticate only via this router's own transport. Otherwise a
+        # same-origin script could send the HttpOnly cookie to the bearer
+        # router and read the session token from the response body.
         get_current_user_token = self.authenticator.current_user_token(
-            active=True, verified=requires_verification
+            active=True,
+            verified=requires_verification,
+            get_enabled_backends=lambda: [backend],
         )
 
         refresh_responses: OpenAPIResponseType = {
