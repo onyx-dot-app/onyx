@@ -21,6 +21,7 @@ from uuid import uuid4
 
 import pytest
 from redis import Redis
+from redis.exceptions import WatchError
 
 from onyx.redis.redis_pool import get_raw_redis_client, redis_pool
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -411,6 +412,133 @@ class TestEval:
 
 
 class TestPipeline:
+    def test_queued_reads_and_hash_writes(
+        self,
+        tenant_redis: TenantRedisClient,
+        tenant_id: str,
+        raw_redis: Redis,
+    ) -> None:
+        key = _unique_key("read")
+        hash_key = _unique_key("hash")
+        with tenant_redis.pipeline() as pipe:
+            assert pipe.set(key, "value").get(key).get(_unique_key()) is pipe
+            assert pipe.hset(hash_key, {b"field": b"content"}) is pipe
+            assert pipe.hget(hash_key, b"field").hget(hash_key, "missing") is pipe
+            assert pipe.execute() == [True, b"value", None, 1, b"content", None]
+        assert raw_redis.hget(f"{tenant_id}:{hash_key}", "field") == b"content"
+        assert raw_redis.hget(hash_key, "field") is None
+
+    def test_watched_reads_and_transaction(
+        self, tenant_redis: TenantRedisClient
+    ) -> None:
+        key, hash_key = _unique_key(), _unique_key("hash")
+        tenant_redis.set(key, "before")
+        tenant_redis.hset(hash_key, "field", "before")
+        with tenant_redis.pipeline() as pipe:
+            pipe.watch(key, hash_key)
+            assert pipe.get_watched(key) == b"before"
+            assert pipe.get_watched(_unique_key()) is None
+            assert pipe.hgetall_watched(hash_key) == {b"field": b"before"}
+            assert pipe.hgetall_watched(_unique_key()) == {}
+            pipe.multi()
+            pipe.set(key, "after").hset(hash_key, {b"field": b"after"})
+            pipe.get(key).hget(hash_key, "field")
+            assert pipe.execute() == [True, 0, b"after", b"after"]
+
+    @pytest.mark.parametrize("hash_write", [False, True])
+    def test_watched_changes_abort_transaction(
+        self, tenant_redis: TenantRedisClient, hash_write: bool
+    ) -> None:
+        key = _unique_key()
+        with tenant_redis.pipeline() as pipe:
+            pipe.watch(key)
+            if hash_write:
+                tenant_redis.hset(key, "field", "concurrent")
+            else:
+                tenant_redis.set(key, "concurrent")
+            pipe.multi()
+            pipe.set(key, "overwrite")
+            with pytest.raises(WatchError):
+                pipe.execute()
+        if hash_write:
+            assert tenant_redis.hget(key, "field") == b"concurrent"
+        else:
+            assert tenant_redis.get(key) == b"concurrent"
+
+    def test_watch_and_reads_isolate_tenants(
+        self, tenant_redis: TenantRedisClient, raw_redis: Redis
+    ) -> None:
+        other_id = _unique_tenant()
+        other = TenantRedisClient(other_id, raw_redis)
+        key, hash_key = _unique_key(), _unique_key("hash")
+        try:
+            tenant_redis.set(key, "mine")
+            tenant_redis.hset(hash_key, "field", "mine")
+            other.set(key, "other")
+            other.hset(hash_key, "field", "other")
+            with other.pipeline() as pipe:
+                assert pipe.get(key).hget(hash_key, "field").execute() == [
+                    b"other",
+                    b"other",
+                ]
+            with tenant_redis.pipeline() as pipe:
+                pipe.watch(key, hash_key)
+                assert pipe.get_watched(key) == b"mine"
+                assert pipe.hgetall_watched(hash_key) == {b"field": b"mine"}
+                other.set(key, "changed")
+                other.hset(hash_key, "field", "changed")
+                pipe.multi()
+                pipe.set(key, "updated")
+                assert pipe.execute() == [True]
+            assert other.get(key) == b"changed"
+        finally:
+            other.delete(key, hash_key)
+
+    def test_immediate_reads_require_watch_before_multi(
+        self, tenant_redis: TenantRedisClient
+    ) -> None:
+        key = _unique_key()
+        tenant_redis.set(key, "unchanged")
+        with tenant_redis.pipeline() as pipe:
+            for read in (pipe.get_watched, pipe.hgetall_watched):
+                with pytest.raises(RuntimeError, match="WATCH before MULTI"):
+                    read(key)
+            pipe.watch(key)
+            for queue in (
+                lambda: pipe.get(key),
+                lambda: pipe.hget(key, "field"),
+                lambda: pipe.hset(key, {b"field": b"value"}),
+                lambda: pipe.set(key, "overwrite"),
+                lambda: pipe.delete(key),
+                lambda: pipe.incr(key),
+                lambda: pipe.expire(key, 1),
+                lambda: pipe.sadd(key, "member"),
+            ):
+                with pytest.raises(RuntimeError, match="MULTI after WATCH"):
+                    queue()
+            assert tenant_redis.get(key) == b"unchanged"
+            pipe.multi()
+            for read in (pipe.get_watched, pipe.hgetall_watched):
+                with pytest.raises(RuntimeError, match="WATCH before MULTI"):
+                    read(key)
+
+    def test_reset_releases_watch_and_discards_writes(
+        self, tenant_redis: TenantRedisClient
+    ) -> None:
+        key = _unique_key()
+        tenant_redis.set(key, "before")
+        with tenant_redis.pipeline() as pipe:
+            pipe.watch(key)
+            pipe.multi()
+            pipe.set(key, "discarded")
+            pipe.reset()
+            assert pipe.get(key).execute() == [b"before"]
+        with tenant_redis.pipeline() as pipe:
+            pipe.watch(key)
+            pipe.multi()
+            pipe.set(key, "discarded")
+        assert tenant_redis.get(key) == b"before"
+
     def test_pipeline_set_targets_prefixed_key(
         self,
         tenant_redis: TenantRedisClient,

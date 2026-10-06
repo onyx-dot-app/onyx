@@ -1262,6 +1262,7 @@ class TenantRedisPipeline:
         Returns:
             ``self``, to allow chaining further pipeline commands.
         """
+        self._check_queue_mode()
         self._p.set(
             _prefix_key(self._prefix, name),
             value,
@@ -1285,6 +1286,7 @@ class TenantRedisPipeline:
         Returns:
             ``self``, to allow chaining further pipeline commands.
         """
+        self._check_queue_mode()
         self._p.delete(*(_prefix_key(self._prefix, n) for n in names))
         return self
 
@@ -1298,6 +1300,7 @@ class TenantRedisPipeline:
         Returns:
             ``self``, to allow chaining further pipeline commands.
         """
+        self._check_queue_mode()
         self._p.incr(_prefix_key(self._prefix, name), amount)
         return self
 
@@ -1323,6 +1326,7 @@ class TenantRedisPipeline:
         Returns:
             ``self``, to allow chaining further pipeline commands.
         """
+        self._check_queue_mode()
         self._p.expire(
             _prefix_key(self._prefix, name), time, nx=nx, xx=xx, gt=gt, lt=lt
         )
@@ -1342,8 +1346,59 @@ class TenantRedisPipeline:
         Returns:
             ``self``, to allow chaining further pipeline commands.
         """
+        self._check_queue_mode()
         self._p.sadd(_prefix_key(self._prefix, name), *values)
         return self
+
+    # --------------------------------------------------------------------------
+    # Reads and optimistic transactions
+    # --------------------------------------------------------------------------
+
+    def get(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue a tenant-prefixed GET; use get_watched before MULTI."""
+        self._check_queue_mode()
+        self._p.get(_prefix_key(self._prefix, name))
+        return self
+
+    def hget(self, name: KeyArg, key: str | bytes) -> TenantRedisPipeline:
+        """Queue a tenant-prefixed HGET without changing the field name."""
+        self._check_queue_mode()
+        self._p.hget(_prefix_key(self._prefix, name), key)
+        return self
+
+    def hset(self, name: KeyArg, mapping: Mapping[bytes, bytes]) -> TenantRedisPipeline:
+        """Queue hash fields under a tenant-prefixed key."""
+        self._check_queue_mode()
+        self._p.hset(_prefix_key(self._prefix, name), mapping=mapping)
+        return self
+
+    def watch(self, *names: KeyArg) -> None:
+        """Watch tenant-prefixed keys until EXEC or reset."""
+        self._p.watch(*(_prefix_key(self._prefix, name) for name in names))
+
+    def get_watched(self, name: KeyArg) -> bytes | None:
+        """Read immediately after WATCH and before MULTI."""
+        self._check_watch_mode()
+        return cast(bytes | None, self._p.get(_prefix_key(self._prefix, name)))
+
+    def hgetall_watched(self, name: KeyArg) -> dict[bytes, bytes]:
+        """Read hash fields immediately after WATCH and before MULTI."""
+        self._check_watch_mode()
+        return cast(
+            dict[bytes, bytes], self._p.hgetall(_prefix_key(self._prefix, name))
+        )
+
+    def multi(self) -> None:
+        """Start queued transaction commands after watched reads."""
+        self._p.multi()
+
+    def _check_watch_mode(self) -> None:
+        if not self._p.watching or self._p.explicit_transaction:
+            raise RuntimeError("An immediate read requires WATCH before MULTI")
+
+    def _check_queue_mode(self) -> None:
+        if self._p.watching and not self._p.explicit_transaction:
+            raise RuntimeError("Queued commands require MULTI after WATCH")
 
     # --------------------------------------------------------------------------
     # Passthrough
