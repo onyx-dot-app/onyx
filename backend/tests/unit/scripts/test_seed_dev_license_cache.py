@@ -15,7 +15,7 @@ def test_seeding_republishes_the_cached_license(
     with (
         patch.object(seed_dev_license, "normalize_license_file", return_value="blob"),
         patch.object(seed_dev_license, "verify_license_signature"),
-        patch.object(seed_dev_license, "SqlEngine"),
+        patch.object(seed_dev_license, "SqlEngine") as engine,
         patch.object(seed_dev_license, "get_session_with_current_tenant"),
         patch.object(seed_dev_license, "upsert_license") as upsert,
         patch.object(seed_dev_license, "publish_license_metadata") as publish,
@@ -25,6 +25,9 @@ def test_seeding_republishes_the_cached_license(
         seed_dev_license.main()
 
     assert [call[0] for call in calls.mock_calls] == ["upsert", "publish"]
+    # Publishing opens a second session inside the first, plus a lock connection.
+    pool: dict[str, int] = engine.init_engine.call_args.kwargs
+    assert pool["pool_size"] + pool["max_overflow"] >= 3
 
 
 def test_an_empty_license_seeds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:

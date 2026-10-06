@@ -36,7 +36,9 @@ def main() -> None:
     license_data = normalize_license_file(blob)
     verify_license_signature(license_data)
 
-    SqlEngine.init_engine(pool_size=1, max_overflow=0)
+    # Publishing counts seats on a second session while this one is open, and
+    # the Postgres cache holds its lock on another connection.
+    SqlEngine.init_engine(pool_size=2, max_overflow=2)
     with get_session_with_current_tenant() as db_session:
         upsert_license(db_session, license_data)
         # A running instance would keep serving the old license from its cache.
