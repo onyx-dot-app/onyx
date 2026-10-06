@@ -1,15 +1,22 @@
 "use client";
 
+import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { Divider, MessageCard } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
-import { SvgUserManage } from "@opal/icons";
+import { SvgBarChart, SvgEditBig, SvgUserManage } from "@opal/icons";
 import useUsers from "@/hooks/useUsers";
 import { Permission } from "@/lib/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import type { ConnectorManageRole } from "@/lib/connectors/accessType";
 import GroupShareList, {
+  type GroupShareGroup,
   type GroupShareLockedRow,
 } from "@/lib/connectors/components/GroupShareList";
+import {
+  SharePermissionMenu,
+  type SharePermissionMenuOption,
+} from "@/sections/modals/SharePermissionMenu";
 
 interface ManageAccessFieldProps {
   disabled?: boolean;
@@ -34,6 +41,48 @@ export default function ManageAccessField({
     ? undefined
     : usersData?.accepted.filter((user) => user.is_admin).length;
 
+  const [roles, , rolesHelpers] =
+    useField<Record<string, ConnectorManageRole>>("group_roles");
+  const roleOptions: SharePermissionMenuOption<ConnectorManageRole>[] = [
+    {
+      value: "editor",
+      label: t("role.editor.label"),
+      description: t("role.editor.description"),
+      icon: SvgEditBig,
+    },
+    {
+      value: "operator",
+      label: t("role.operator.label"),
+      description: t("role.operator.description"),
+      icon: SvgBarChart,
+    },
+  ];
+
+  function setRole(groupId: number, role: ConnectorManageRole | undefined) {
+    const { [String(groupId)]: _dropped, ...rest } = roles.value;
+    void rolesHelpers.setValue(
+      role === undefined ? rest : { ...rest, [String(groupId)]: role }
+    );
+  }
+
+  // A group without a role is an Editor, which is what it is sent as.
+  function renderRoleMenu(group: GroupShareGroup, remove: () => void) {
+    return (
+      <SharePermissionMenu
+        value={roles.value[String(group.id)] ?? "editor"}
+        options={roleOptions}
+        onChange={(role) => setRole(group.id, role)}
+        onRemove={() => {
+          setRole(group.id, undefined);
+          remove();
+        }}
+        removeLabel={t("role.removeAccess.label")}
+        ariaLabel={t("role.menu.ariaLabel", { name: group.name })}
+        disabled={disabled}
+      />
+    );
+  }
+
   const adminsRow: GroupShareLockedRow = {
     id: "admins",
     name: t("admins.title"),
@@ -54,6 +103,7 @@ export default function ManageAccessField({
         name="groups"
         placeholder={t("placeholder")}
         lockedRows={[adminsRow]}
+        rowAction={renderRoleMenu}
         disabled={disabled}
       />
       <Divider paddingParallel={0} paddingPerpendicular={0} />

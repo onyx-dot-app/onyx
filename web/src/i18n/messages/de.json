@@ -2973,6 +2973,22 @@
           "description": "Legen Sie fest, wer den Connector betreiben (Indexierung planen und überwachen) und/oder seine Konfiguration bearbeiten kann.",
           "note": "Nur Nutzer mit der Berechtigung „Connectors verwalten“ (Gruppenmanager-Rolle oder Gruppenberechtigungen) erhalten Zugriff, um Connectors zu betreiben und/oder zu bearbeiten.",
           "placeholder": "Gruppen hinzufügen, um diesen Connector zu teilen",
+          "role": {
+            "editor": {
+              "description": "Konfigurationen ändern/löschen.",
+              "label": "Bearbeiter"
+            },
+            "menu": {
+              "ariaLabel": "Rolle für {name}"
+            },
+            "operator": {
+              "description": "Indexierung planen/überwachen.",
+              "label": "Operator"
+            },
+            "removeAccess": {
+              "label": "Zugriff entfernen"
+            }
+          },
           "title": "Verwaltungszugriff für den Connector"
         },
         "title": "Connector-Einstellungen"

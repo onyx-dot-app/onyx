@@ -9,12 +9,34 @@ export function isPermSynced(accessType: AccessType): boolean {
   return accessType === "sync" || accessType === SYNC_RESTRICTED_ACCESS_TYPE;
 }
 
+/** A manage group's role: Editors change and delete the configuration;
+    Operators schedule and monitor indexing. */
+export type ConnectorManageRole = "editor" | "operator";
+
+export interface ManageAccessEntry {
+  group_id: number;
+  role: ConnectorManageRole;
+}
+
 // Who reads the documents (access_type, plus data_access_group_ids for
-// private) and who manages the connector (groups, as Editors).
+// private) and who manages the connector (groups, each with a role in
+// group_roles; a group without one is an Editor).
 export interface ConnectorAccessFormValues {
   access_type: AccessType;
   groups: number[];
+  group_roles: Record<string, ConnectorManageRole>;
   data_access_group_ids: number[];
+}
+
+/** The manage groups with their roles, as the link request's `manage_access`. */
+export function toManageAccess(
+  groups: number[],
+  roles: Record<string, ConnectorManageRole>
+): ManageAccessEntry[] {
+  return groups.map((id) => ({
+    group_id: id,
+    role: roles[String(id)] ?? "editor",
+  }));
 }
 
 export interface ConnectorGroupRestrictionFormValues {

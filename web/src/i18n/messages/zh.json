@@ -2973,6 +2973,22 @@
           "description": "控制谁可以运行（安排和监控索引）和/或编辑连接器配置。",
           "note": "只有拥有“管理连接器”权限（群组管理员角色或群组权限）的用户才能运行和/或编辑连接器。",
           "placeholder": "添加群组以共享此连接器",
+          "role": {
+            "editor": {
+              "description": "更新/删除配置。",
+              "label": "编辑者"
+            },
+            "menu": {
+              "ariaLabel": "{name} 的角色"
+            },
+            "operator": {
+              "description": "安排/监控索引。",
+              "label": "操作员"
+            },
+            "removeAccess": {
+              "label": "移除访问权限"
+            }
+          },
           "title": "连接器管理权限"
         },
         "title": "连接器设置"

@@ -2973,6 +2973,22 @@
           "description": "Contrôlez qui peut exploiter (planifier et surveiller l'indexation) et/ou modifier la configuration du connecteur.",
           "note": "Seuls les utilisateurs disposant des autorisations « Gérer les connecteurs » (rôle de gestionnaire de groupe ou autorisations de groupe) pourront exploiter et/ou modifier les connecteurs.",
           "placeholder": "Ajouter des groupes pour partager ce connecteur",
+          "role": {
+            "editor": {
+              "description": "Modifier/supprimer les configurations.",
+              "label": "Éditeur"
+            },
+            "menu": {
+              "ariaLabel": "Rôle de {name}"
+            },
+            "operator": {
+              "description": "Planifier/surveiller l'indexation.",
+              "label": "Opérateur"
+            },
+            "removeAccess": {
+              "label": "Retirer l'accès"
+            }
+          },
           "title": "Accès de gestion du connecteur"
         },
         "title": "Paramètres du connecteur"

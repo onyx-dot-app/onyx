@@ -1,3 +1,4 @@
+import type { ManageAccessEntry } from "@/lib/connectors/accessType";
 import { mutate } from "swr";
 import { toast } from "@opal/layouts";
 import { createConnector, runConnector } from "@/lib/connector";
@@ -54,7 +55,9 @@ export const submitFiles = async (
   access_type: AccessType,
   groups?: number[],
   /** Who reads a private connector's documents; left out, its `groups` do. */
-  dataAccess?: number[]
+  dataAccess?: number[],
+  /** The manage groups with their roles; given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
 ) => {
   const formData = new FormData();
 
@@ -124,7 +127,8 @@ export const submitFiles = async (
     groups,
     undefined,
     undefined,
-    dataAccess
+    dataAccess,
+    manageAccess
   );
   if (!credentialResponse.ok) {
     const credentialResponseJson: ErrorResponseBody =
@@ -155,7 +159,9 @@ export const submitGoogleSite = async (
   groups: number[],
   name?: string,
   /** Who reads a private connector's documents; left out, its `groups` do. */
-  dataAccess?: number[]
+  dataAccess?: number[],
+  /** The manage groups with their roles; given, it replaces `groups`. */
+  manageAccess?: ManageAccessEntry[]
 ) => {
   const uploadCreateAndTriggerConnector = async () => {
     const formData = new FormData();
@@ -221,7 +227,8 @@ export const submitGoogleSite = async (
       groups,
       undefined,
       undefined,
-      dataAccess
+      dataAccess,
+      manageAccess
     );
     if (!credentialResponse.ok) {
       const credentialResponseJson: ErrorResponseBody =

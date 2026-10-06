@@ -2973,6 +2973,22 @@
           "description": "Control who can operate (schedule and monitor indexing) and/or edit the connector configurations.",
           "note": "Only users with “Manage Connectors” permissions (group manager role or group permissions) will be granted access to operate and/or edit connectors.",
           "placeholder": "Add groups to share this connector",
+          "role": {
+            "editor": {
+              "description": "Update/delete configurations.",
+              "label": "Editor"
+            },
+            "menu": {
+              "ariaLabel": "Role for {name}"
+            },
+            "operator": {
+              "description": "Schedule/monitor indexing.",
+              "label": "Operator"
+            },
+            "removeAccess": {
+              "label": "Remove Access"
+            }
+          },
           "title": "Connector Manage Access"
         },
         "title": "Connector Settings"

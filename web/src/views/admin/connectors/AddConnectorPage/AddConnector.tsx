@@ -71,6 +71,7 @@ import { SvgArrowExchange } from "@opal/icons";
 import { useTranslations } from "next-intl";
 import {
   SYNC_RESTRICTED_ACCESS_TYPE,
+  toManageAccess,
   toWireAccess,
 } from "@/lib/connectors/accessType";
 
@@ -268,6 +269,7 @@ export default function AddConnector({
         const {
           name,
           groups,
+          group_roles,
           data_access_group_ids,
           access_type: formAccessType,
           restrict_access_to_groups,
@@ -284,9 +286,11 @@ export default function AddConnector({
           restriction_group_ids,
         });
         const access_type = wireAccess.access_type;
-        // A private connector's readers; its `groups` are its editors.
+        // A private connector's readers; its `groups` are its managers, each
+        // with a role.
         const dataAccess =
           access_type === "private" ? data_access_group_ids : undefined;
+        const manageAccess = toManageAccess(groups, group_roles);
 
         // Apply special transforms according to application logic
         const transformedConnectorSpecificConfig = Object.entries(
@@ -347,7 +351,8 @@ export default function AddConnector({
             values.access_type,
             groups,
             name,
-            dataAccess
+            dataAccess,
+            manageAccess
           );
           if (response) {
             onSuccess();
@@ -363,7 +368,8 @@ export default function AddConnector({
               name,
               access_type,
               groups,
-              dataAccess
+              dataAccess,
+              manageAccess
             );
             if (response) {
               onSuccess();
@@ -437,7 +443,8 @@ export default function AddConnector({
                 undefined,
                 access_type === SYNC_RESTRICTED_ACCESS_TYPE
                   ? wireAccess.restriction_group_ids
-                  : dataAccess
+                  : dataAccess,
+                manageAccess
               );
               if (linkCredentialResponse.ok) {
                 onSuccess();

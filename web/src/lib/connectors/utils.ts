@@ -127,6 +127,7 @@ export function createConnectorInitialValues(
   return {
     name: "",
     groups: [],
+    group_roles: {},
     data_access_group_ids: [],
     access_type: "public",
     restrict_access_to_groups: false,

@@ -34,12 +34,23 @@ interface GroupShareRow {
   groupId?: number;
 }
 
+/** A picked group, as the row's trailing control sees it. */
+export interface GroupShareGroup {
+  id: number;
+  name: string;
+}
+
 interface GroupShareListProps {
   /** Formik field holding the selected group ids. */
   name: "groups" | "data_access_group_ids";
   placeholder: string;
   /** Fixed rows shown before the selected groups (e.g. "Admins"). */
   lockedRows?: GroupShareLockedRow[];
+  /**
+   * Each picked group's trailing control, in place of the remove button,
+   * e.g. a role menu. `remove` drops the group.
+   */
+  rowAction?: (group: GroupShareGroup, remove: () => void) => React.ReactNode;
   disabled?: boolean;
 }
 
@@ -51,6 +62,7 @@ export default function GroupShareList({
   name,
   placeholder,
   lockedRows = [],
+  rowAction,
   disabled,
 }: GroupShareListProps) {
   const t = useTranslations("admin.connector.groupRestriction");
@@ -88,6 +100,10 @@ export default function GroupShareList({
     void helpers.setValue(ids);
   }
 
+  function removeGroup(groupId: number) {
+    setGroups(field.value.filter((id) => id !== groupId));
+  }
+
   function addGroup(value: string) {
     const id = Number(value);
     if (!Number.isInteger(id) || selectedIds.has(id)) return;
@@ -122,46 +138,60 @@ export default function GroupShareList({
         />
       ),
     },
-    ...(hasLockedRows
+    // The locked rows' note and the picked groups' own control share one
+    // trailing column, so they line up.
+    ...(hasLockedRows || rowAction
       ? [
           {
             kind: "display",
-            id: "note",
+            id: "trailing",
             width: { weight: 20 },
             hideable: false,
             alignment: "right",
-            cell: (row) =>
-              row.note ? (
-                <Content
-                  icon={row.icon}
-                  title={row.note}
-                  sizePreset="secondary"
-                  variant="body"
-                  orientation="reverse"
-                  color="muted"
-                />
-              ) : null,
+            cell: (row) => {
+              if (row.note) {
+                return (
+                  <Content
+                    icon={row.icon}
+                    title={row.note}
+                    sizePreset="secondary"
+                    variant="body"
+                    orientation="reverse"
+                    color="muted"
+                  />
+                );
+              }
+              const { groupId } = row;
+              if (groupId === undefined || !rowAction) return null;
+              return rowAction({ id: groupId, name: row.name }, () =>
+                removeGroup(groupId)
+              );
+            },
           } satisfies TableColumn<GroupShareRow>,
         ]
       : []),
-    {
-      kind: "actions",
-      showColumnVisibility: false,
-      showSorting: false,
-      cell: (row) =>
-        row.groupId === undefined ? null : (
-          <Button
-            icon={SvgX}
-            size="sm"
-            prominence="internal"
-            tooltip={t("remove.tooltip", { name: row.name })}
-            disabled={disabled}
-            onClick={() =>
-              setGroups(field.value.filter((id) => id !== row.groupId))
-            }
-          />
-        ),
-    },
+    ...(rowAction
+      ? []
+      : [
+          {
+            kind: "actions",
+            showColumnVisibility: false,
+            showSorting: false,
+            cell: (row) => {
+              const { groupId } = row;
+              return groupId === undefined ? null : (
+                <Button
+                  icon={SvgX}
+                  size="sm"
+                  prominence="internal"
+                  tooltip={t("remove.tooltip", { name: row.name })}
+                  disabled={disabled}
+                  onClick={() => removeGroup(groupId)}
+                />
+              );
+            },
+          } satisfies TableColumn<GroupShareRow>,
+        ]),
   ];
 
   return (

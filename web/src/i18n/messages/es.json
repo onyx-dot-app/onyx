@@ -2973,6 +2973,22 @@
           "description": "Controla quién puede operar (programar y supervisar la indexación) y/o editar la configuración del conector.",
           "note": "Solo los usuarios con permisos de “Gestionar conectores” (rol de gestor de grupo o permisos de grupo) tendrán acceso para operar y/o editar conectores.",
           "placeholder": "Añadir grupos para compartir este conector",
+          "role": {
+            "editor": {
+              "description": "Actualizar/eliminar configuraciones.",
+              "label": "Editor"
+            },
+            "menu": {
+              "ariaLabel": "Rol de {name}"
+            },
+            "operator": {
+              "description": "Programar/supervisar la indexación.",
+              "label": "Operador"
+            },
+            "removeAccess": {
+              "label": "Quitar acceso"
+            }
+          },
           "title": "Acceso de gestión del conector"
         },
         "title": "Configuración del conector"
