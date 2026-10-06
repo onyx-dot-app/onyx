@@ -77,7 +77,7 @@ export default function ManageAccessField({
           remove();
         }}
         removeLabel={t("role.removeAccess.label")}
-        menuWidth={60}
+        menuWidth={40}
         ariaLabel={t("role.menu.ariaLabel", { name: group.name })}
         disabled={disabled}
       />
