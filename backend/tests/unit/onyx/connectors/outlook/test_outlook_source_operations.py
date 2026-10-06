@@ -427,7 +427,7 @@ def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
     )
 
     result = gateway.fetch_conversation_messages_page(
-        mailbox_id=MAILBOX_ID, conversation_id="conv'1", page_size=3
+        mailbox_id=MAILBOX_ID, conversation_id="conv'1"
     )
 
     url, params, headers = client.get_json.call_args.args
@@ -436,12 +436,37 @@ def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
         f"receivedDateTime ge {EPOCH_TIMESTAMP} and conversationId eq 'conv''1'"
     )
     assert params["$orderby"] == "receivedDateTime desc"
-    assert params["$top"] == "3"
+    assert params["$top"] == str(MESSAGES_PAGE_SIZE)
     assert headers == {"Prefer": TEXT_BODY_PREFERENCE}
     assert [m.id for m in result.messages] == ["msg-1", "msg-2"]
     assert result.messages[1].body_text == "Hi Bob"
     assert result.messages[0].sender is not None
     assert result.messages[0].sender.address == MAILBOX_ADDRESS
+    assert result.next_link == "https://graph/messages?page=2"
+
+
+def test_conversation_outline_reads_identity_fields_without_a_body() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [
+            change_json(internetMessageId="<a@contoso.com>", isDraft=True),
+            change_json(id="msg-2"),
+        ],
+        next_link="https://graph/messages?page=2",
+    )
+
+    result = gateway.fetch_conversation_outline_page(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID
+    )
+
+    url, params, headers = client.get_json.call_args.args
+    assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages"
+    assert params["$select"] == CHANGE_SELECT
+    assert "body" not in params["$select"].split(",")
+    assert params["$orderby"] == "receivedDateTime desc"
+    assert headers is None
+    assert [c.match_id for c in result.changes] == ["<a@contoso.com>", "msg-2"]
+    assert [c.is_draft for c in result.changes] == [True, False]
     assert result.next_link == "https://graph/messages?page=2"
 
 

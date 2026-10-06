@@ -1,30 +1,15 @@
 """One document per mail thread, however many mailboxes hold a copy.
 
-A thread is keyed by the root of its conversation index, the 22 bytes Outlook
-sets on the first message and copies into every reply in every mailbox. The
-conversation id cannot serve: the same message carries a different one in
-each mailbox it was delivered to. Messages are matched across mailboxes by
-their Internet Message-ID, which every copy shares.
-
-Copies of a thread differ: a reply sent to one person sits in two mailboxes
-while the rest hold the earlier messages only. The thread document is built
-from the copy that holds the thread's newest message and the most messages,
-and it is readable only by the mailboxes that hold every message in it. Every
-other mailbox gets a document of its own copy instead, readable by its owner
-alone. Indexing and the slim walk apply the same rules, so pruning and the
-permission sync never disagree with the index.
-
-Any run that lists a thread's newest message lists every mailbox that holds
-it, because a poll window covers every mailbox, so the readers come out the
-same from a poll window as from a full listing. A mailbox that holds only
-older messages and gained none this window is not visited, so its own
-document waits for a run that lists it again.
-
-An index attempt lists every mailbox first, recording each message copy, then
-builds each thread once. The listing is too large for the checkpoint, which
-is written after every step, so it lives in the file store under the
-attempt's run id: one page per listing step, then one bucket of threads per
-build pass, plus one file per opened mailbox with its excluded folder ids.
+A thread is keyed by the root of its conversation index, which Outlook sets
+on the first message and copies into every reply in every mailbox. The
+conversation id differs per mailbox, so it cannot serve. Messages are matched
+across mailboxes by Internet Message-ID. The document is built from the copy
+holding the newest message and the most messages, readable by the mailboxes
+that hold every message in it, and every other copy gets a document of its
+own. Indexing and the slim walk apply the same rules. The listing lives in
+the file store under the attempt's run id: one page per listing step, then
+the listing re-cut into buckets by thread key, plus one file per finished
+mailbox with its excluded folder ids.
 """
 
 import base64
@@ -36,6 +21,8 @@ from collections.abc import Generator, Iterable, Sequence
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any
+
+from pydantic import TypeAdapter
 
 from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS, FileOrigin
 from onyx.connectors.outlook.models import (
@@ -51,13 +38,20 @@ _ROOT_BYTES = 22
 _FILE_PREFIX = "outlook-threads"
 # Listing rows one build bucket holds in memory while its threads are grouped.
 ROWS_PER_BUCKET = 20_000
-# Rows buffered per bucket before a chunk file is written, so splitting the
-# listing into buckets holds at most this many rows per bucket in memory.
+# Rows buffered per bucket before a chunk file is written, and rows buffered
+# across all buckets before the fullest one is written, so splitting the
+# listing holds a bounded number of rows however many buckets there are.
 BUCKET_FLUSH_ROWS = 1_000
+BUCKET_BUFFER_ROWS = 50_000
+_EXCLUSIONS = "exclusions.json"
 _MANIFEST = "buckets.json"
 _TOUCH = "touch.json"
 
 _OLDEST = datetime.min.replace(tzinfo=timezone.utc)
+_ROWS = TypeAdapter(list[ThreadListing])
+_COUNTS = TypeAdapter(list[int])
+_STRINGS = TypeAdapter(list[str])
+_EXCLUSIONS_BY_MAILBOX = TypeAdapter(dict[str, list[str]])
 
 
 def thread_key(conversation_index: str) -> str | None:
@@ -88,8 +82,8 @@ def group_threads(listings: Iterable[ThreadListing]) -> list[ThreadGroup]:
     """Listing rows folded into one group per thread, one copy per mailbox."""
     copies: dict[str, dict[str, ThreadCopy]] = {}
     for listing in listings:
-        by_mailbox = copies.setdefault(listing.key, {})
-        copy = by_mailbox.get(listing.mailbox.id)
+        by_mailbox: dict[str, ThreadCopy] = copies.setdefault(listing.key, {})
+        copy: ThreadCopy | None = by_mailbox.get(listing.mailbox.id)
         if copy is None:
             copy = ThreadCopy(
                 mailbox=listing.mailbox, conversation_id=listing.conversation_id
@@ -101,7 +95,7 @@ def group_threads(listings: Iterable[ThreadListing]) -> list[ThreadGroup]:
         received: dict[str, datetime | None] = {}
         for copy in by_mailbox.values():
             received.update(copy.received)
-        newest = max(received, key=lambda m: _message_order(received, m))
+        newest: str = max(received, key=lambda m: _message_order(received, m))
         groups.append(
             ThreadGroup(
                 key=key, newest_message_id=newest, copies=list(by_mailbox.values())
@@ -112,7 +106,11 @@ def group_threads(listings: Iterable[ThreadListing]) -> list[ThreadGroup]:
 
 def candidate_copies(group: ThreadGroup) -> list[ThreadCopy]:
     """The copies the thread document may be built from: those holding the
-    newest message. Every mailbox holding it was listed by the run that saw it."""
+    newest message. Every mailbox holding it was listed by the run that saw
+    it, since a poll window covers every mailbox. Receipt times can differ by
+    mailbox, so a message on the window's edge may be listed in one run for
+    one mailbox and in the next for another, which grants fewer readers until
+    the next permission sync, never more."""
     return [copy for copy in group.copies if group.newest_message_id in copy.received]
 
 
@@ -174,13 +172,8 @@ class ThreadTable:
             file_id=file_id,
         )
 
-    def _read(self, file_id: str) -> list[Any]:
-        rows: Any = json.loads(
-            get_default_file_store().read_file(file_id, mode="b").read()
-        )
-        if not isinstance(rows, list):
-            raise ValueError(f"{file_id} does not hold a list")
-        return rows
+    def _read(self, file_id: str) -> bytes:
+        return get_default_file_store().read_file(file_id, mode="b").read()
 
     def write_page(self, page: int, listings: Sequence[ThreadListing]) -> None:
         self._write(
@@ -190,59 +183,77 @@ class ThreadTable:
     def iter_pages(self, page_count: int) -> Generator[ThreadListing, None, None]:
         """Every listing row, page by page, so no more than one page is held at once."""
         for page in range(page_count):
-            for row in self._read(self._page_id(page)):
-                yield ThreadListing.model_validate(row)
+            yield from _ROWS.validate_json(self._read(self._page_id(page)))
 
     def write_buckets(self, page_count: int, row_count: int) -> int:
         """Splits the listing into buckets by thread key, so a bucket holds
-        whole threads and about ROWS_PER_BUCKET rows. Returns the bucket count."""
+        whole threads and about ROWS_PER_BUCKET rows, and folds the mailbox
+        exclusions into one file. Returns the bucket count."""
         bucket_count: int = max(1, math.ceil(row_count / ROWS_PER_BUCKET))
         buffers: list[list[dict[str, Any]]] = [[] for _ in range(bucket_count)]
         chunk_counts: list[int] = [0] * bucket_count
+        buffered = 0
 
         def flush(bucket: int) -> None:
+            nonlocal buffered
             if not buffers[bucket]:
                 return
             self._write(self._chunk_id(bucket, chunk_counts[bucket]), buffers[bucket])
             chunk_counts[bucket] += 1
+            buffered -= len(buffers[bucket])
             buffers[bucket] = []
 
         for row in self.iter_pages(page_count):
-            bucket = zlib.crc32(row.key.encode()) % bucket_count
+            bucket: int = zlib.crc32(row.key.encode()) % bucket_count
             buffers[bucket].append(row.model_dump(mode="json"))
+            buffered += 1
             if len(buffers[bucket]) >= BUCKET_FLUSH_ROWS:
                 flush(bucket)
+            elif buffered >= BUCKET_BUFFER_ROWS:
+                flush(max(range(bucket_count), key=lambda b: len(buffers[b])))
         for bucket in range(bucket_count):
             flush(bucket)
         self._write(f"{self._prefix}{_MANIFEST}", chunk_counts)
         self._chunk_counts = chunk_counts
+        self._write(f"{self._prefix}{_EXCLUSIONS}", self._collect_exclusions())
         return bucket_count
+
+    def _collect_exclusions(self) -> dict[str, list[str]]:
+        mailbox_prefix = f"{self._prefix}mailbox-"
+        return {
+            record.file_id[len(mailbox_prefix) : -len(".json")]: _STRINGS.validate_json(
+                self._read(record.file_id)
+            )
+            for record in get_default_file_store().list_files_by_prefix(mailbox_prefix)
+        }
 
     def read_bucket(self, bucket: int) -> list[ThreadListing]:
         if self._chunk_counts is None:
-            self._chunk_counts = [
-                int(count) for count in self._read(f"{self._prefix}{_MANIFEST}")
-            ]
+            self._chunk_counts = _COUNTS.validate_json(
+                self._read(f"{self._prefix}{_MANIFEST}")
+            )
         rows: list[ThreadListing] = []
         for chunk in range(self._chunk_counts[bucket]):
-            rows.extend(
-                ThreadListing.model_validate(row)
-                for row in self._read(self._chunk_id(bucket, chunk))
-            )
+            rows.extend(_ROWS.validate_json(self._read(self._chunk_id(bucket, chunk))))
         return rows
 
     def write_mailbox_exclusions(self, mailbox_id: str, folder_ids: list[str]) -> None:
         self._write(self._mailbox_id(mailbox_id), folder_ids)
 
-    def read_mailbox_exclusions(self, mailbox_id: str) -> set[str]:
+    def read_exclusions(self) -> dict[str, set[str]]:
+        """Excluded folder ids by mailbox, as folded in by write_buckets."""
         return {
-            str(folder_id) for folder_id in self._read(self._mailbox_id(mailbox_id))
+            mailbox_id: set(folder_ids)
+            for mailbox_id, folder_ids in _EXCLUSIONS_BY_MAILBOX.validate_json(
+                self._read(f"{self._prefix}{_EXCLUSIONS}")
+            ).items()
         }
 
     def touch(self) -> None:
         """Marks the table as in use. A build pass only reads, so without
         this a long attempt would look abandoned to delete_abandoned_tables."""
         file_id = f"{self._prefix}{_TOUCH}"
+        # The upsert keeps created_at, so the marker is recreated.
         get_default_file_store().delete_file(file_id, error_on_missing=False)
         self._write(file_id, [])
 
@@ -261,10 +272,8 @@ def delete_abandoned_tables(days_to_keep: int = NUM_DAYS_TO_KEEP_CHECKPOINTS) ->
     records = file_store.list_files_by_prefix(f"{_FILE_PREFIX}/")
     newest_write: dict[str, datetime] = {}
     for record in records:
-        run_prefix = record.file_id.rsplit("/", 1)[0]
-        newest_write[run_prefix] = max(
-            newest_write.get(run_prefix, record.created_at), record.created_at
-        )
+        run: str = record.file_id.rsplit("/", 1)[0]
+        newest_write[run] = max(newest_write.get(run, _OLDEST), record.created_at)
     for record in records:
         if newest_write[record.file_id.rsplit("/", 1)[0]] < cutoff:
             file_store.delete_file(record.file_id, error_on_missing=False)

@@ -90,7 +90,7 @@ def test_newest_message_ties_break_on_the_message_id_in_every_run() -> None:
 
 def test_readers_are_the_candidates_holding_every_message_of_the_builder() -> None:
     # Alice and Bob share the thread. Dave replied privately to Alice, and
-    # Alice answered everyone: Alice holds all four, Bob three, Dave two.
+    # Alice answered Bob: Alice holds all three, Bob two, Dave one.
     group = group_threads(
         [
             _listing("a", 1, "root", 0),
@@ -170,8 +170,7 @@ def test_thread_table_round_trips_pages_into_buckets_and_cleans_up() -> None:
             for b in range(bucket_count)
         ]
         assert ThreadTable("run").read_bucket(0) == table.read_bucket(0)
-
-        assert table.read_mailbox_exclusions("user-1") == {"junk"}
+        assert ThreadTable("run").read_exclusions() == {"user-1": {"junk"}}
 
         table.touch()
         table.delete_all()
@@ -199,3 +198,26 @@ def test_abandoned_tables_go_by_their_newest_write() -> None:
         "outlook-threads/old/listing-0.json",
         "outlook-threads/old/touch.json",
     }
+
+
+def test_total_buffer_cap_flushes_the_fullest_bucket() -> None:
+    store = memory_file_store()
+    with (
+        patch(
+            "onyx.connectors.outlook.threads.get_default_file_store",
+            return_value=store,
+        ),
+        patch("onyx.connectors.outlook.threads.ROWS_PER_BUCKET", 3),
+        patch("onyx.connectors.outlook.threads.BUCKET_FLUSH_ROWS", 100),
+        patch("onyx.connectors.outlook.threads.BUCKET_BUFFER_ROWS", 3),
+    ):
+        table = ThreadTable("run")
+        table.write_page(0, [_listing(f"k{i}", 1, f"m{i}") for i in range(6)])
+        bucket_count = table.write_buckets(page_count=1, row_count=6)
+        chunks = [f for f in store.files if "/bucket-" in f]
+        # Two buckets, six rows, three buffered at most: without the cap only
+        # the two final flushes would write a chunk.
+        assert bucket_count == 2
+        assert len(chunks) >= 3
+        rows = [r for b in range(bucket_count) for r in table.read_bucket(b)]
+        assert sorted(r.key for r in rows) == [f"k{i}" for i in range(6)]

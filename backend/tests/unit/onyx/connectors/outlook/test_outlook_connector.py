@@ -873,7 +873,7 @@ DAVE = mailbox(id="user-3", address="dave@contoso.com")
 
 def _private_reply_gateway() -> MagicMock:
     """Alice and Bob share a thread. Dave replied to Alice alone, then Alice
-    answered everyone. Alice holds three messages, Bob two, Dave one."""
+    answered Bob. Alice holds three messages, Bob two, Dave one."""
     root = message(id="root", received_at=RECEIVED)
     private = message(id="private", received_at=RECEIVED + timedelta(hours=1))
     answer = message(id="answer", received_at=RECEIVED + timedelta(hours=2))
@@ -1769,13 +1769,12 @@ def test_slim_docs_batch_and_report_progress() -> None:
     batches = list(connector.retrieve_all_slim_docs(callback=callback))
 
     # Three walked folders of 501 threads each, listed per folder and
-    # batched once every mailbox is read.
+    # batched once every mailbox is read, with one report for the bucket.
     slim_batches = [b for b in batches if isinstance(b[0], SlimDocument)]
     assert [len(b) for b in slim_batches] == [SLIM_BATCH_SIZE] * 3 + [3]
-    assert (
-        callback.progress.call_args_list
-        == [call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)] * 3
-    )
+    assert callback.progress.call_args_list == [
+        call("outlook_slim_docs", SLIM_BATCH_SIZE + 1)
+    ] * 3 + [call("outlook_slim_docs", 3 * SLIM_BATCH_SIZE + 3)]
 
 
 def test_slim_docs_follow_delta_pages_by_their_link() -> None:

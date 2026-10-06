@@ -56,22 +56,33 @@ class OutlookRecipient(BaseModel):
     name: str | None = None
 
 
-class OutlookMessage(BaseModel):
+class OutlookMessageIdentity(BaseModel):
+    """What the delta listing and a conversation outline know of a message."""
+
     id: str
     # The RFC 5322 Message-ID. The same in every mailbox a message was
     # delivered to, which the Graph id is not.
     internet_message_id: str | None = None
     conversation_id: str | None = None
     parent_folder_id: str | None = None
+    received_at: datetime | None = None
+    is_draft: bool = False
+
+    @property
+    def match_id(self) -> str:
+        """The id a copy is matched by across mailboxes. A message without a
+        Message-ID keeps its Graph id, so it never matches another copy."""
+        return self.internet_message_id or self.id
+
+
+class OutlookMessage(OutlookMessageIdentity):
     subject: str | None = None
     body_text: str = ""
     sender: OutlookRecipient | None = None
     to_recipients: list[OutlookRecipient] = []
     cc_recipients: list[OutlookRecipient] = []
-    received_at: datetime | None = None
     sent_at: datetime | None = None
     web_link: str | None = None
-    is_draft: bool = False
     has_attachments: bool = False
 
 
@@ -94,18 +105,12 @@ class OutlookMessagePage(BaseModel):
     next_link: str | None = None
 
 
-class OutlookMessageChange(BaseModel):
+class OutlookMessageChange(OutlookMessageIdentity):
     """One delta entry: a message that appeared in the folder, one that left
     it, or a read-state change that Graph reports whatever the change type."""
 
-    id: str
     removed: bool = False
-    internet_message_id: str | None = None
-    conversation_id: str | None = None
     conversation_index: str | None = None
-    parent_folder_id: str | None = None
-    received_at: datetime | None = None
-    is_draft: bool = False
 
 
 class OutlookDeltaPage(BaseModel):
