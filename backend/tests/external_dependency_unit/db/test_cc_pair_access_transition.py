@@ -15,7 +15,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
-    _clear_caught_up_perm_sync_pending_marks,
+    clear_caught_up_perm_sync_pending_marks,
+    is_external_doc_permissions_sync_due,
+)
+from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
+    is_external_group_sync_due,
 )
 from ee.onyx.db.connector_credential_pair import clear_perm_sync_pending__no_commit
 from onyx.configs.constants import DocumentSource
@@ -25,7 +29,7 @@ from onyx.db.document import (
     mark_document_as_synced,
     upsert_document_by_connector_credential_pair,
 )
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.models import (
     ConnectorCredentialPair,
     UserGroup,
@@ -357,13 +361,13 @@ def test_beat_waits_for_group_sync_when_the_source_has_one(
     )
     mark_document_as_synced(doc_id, db_session)
 
-    _clear_caught_up_perm_sync_pending_marks(get_current_tenant_id())
+    clear_caught_up_perm_sync_pending_marks(get_current_tenant_id())
     db_session.refresh(pair)
     assert pair.perm_sync_pending_since == pending_since
 
     pair.last_time_external_group_sync = pending_since + timedelta(seconds=1)
     db_session.commit()
-    _clear_caught_up_perm_sync_pending_marks(get_current_tenant_id())
+    clear_caught_up_perm_sync_pending_marks(get_current_tenant_id())
     db_session.refresh(pair)
     assert pair.perm_sync_pending_since is None
 
@@ -379,6 +383,28 @@ def test_beat_clears_without_group_sync_for_a_source_without_one(
     )
     mark_document_as_synced(doc_id, db_session)
 
-    _clear_caught_up_perm_sync_pending_marks(get_current_tenant_id())
+    clear_caught_up_perm_sync_pending_marks(get_current_tenant_id())
     db_session.refresh(pair)
     assert pair.perm_sync_pending_since is None
+
+
+def test_syncs_that_started_before_the_mark_stay_due(
+    db_session: Session, make_pair: _PairFactory
+) -> None:
+    pair, _ = _pending_pair(db_session, make_pair, DocumentSource.GOOGLE_DRIVE)
+    pending_since = pair.perm_sync_pending_since
+    assert pending_since is not None
+    pair.status = ConnectorCredentialPairStatus.ACTIVE
+    pair.last_successful_index_time = _EARLIER
+    # Syncs that were running at the access change finish after it.
+    pair.last_time_perm_sync = pending_since - timedelta(seconds=1)
+    pair.last_time_external_group_sync = pending_since - timedelta(seconds=1)
+    db_session.commit()
+    assert is_external_doc_permissions_sync_due(pair)
+    assert is_external_group_sync_due(pair)
+
+    pair.last_time_perm_sync = pending_since + timedelta(seconds=1)
+    pair.last_time_external_group_sync = pending_since + timedelta(seconds=1)
+    db_session.commit()
+    assert not is_external_doc_permissions_sync_due(pair)
+    assert not is_external_group_sync_due(pair)

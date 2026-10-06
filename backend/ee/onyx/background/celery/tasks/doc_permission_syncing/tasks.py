@@ -162,7 +162,7 @@ def _fail_doc_permission_sync_attempt(
         )
 
 
-def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
+def is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external doc permissions sync is due."""
 
     if not cc_pair.access_type.is_perm_synced():
@@ -192,6 +192,12 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     # If the last sync is None, it has never been run so we run the sync
     last_perm_sync = cc_pair.last_time_perm_sync
     if last_perm_sync is None:
+        return True
+
+    # A sync that started before the pair began to wait for its first
+    # permission sync does not count, so the pair is not hidden for a period.
+    pending_since = cc_pair.perm_sync_pending_since
+    if pending_since is not None and last_perm_sync < pending_since:
         return True
 
     source_sync_period = sync_config.doc_sync_config.doc_sync_frequency
@@ -237,7 +243,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             cc_pair_ids_to_sync.extend(
                 cc_pair.id
                 for cc_pair in cc_pairs
-                if _is_external_doc_permissions_sync_due(cc_pair)
+                if is_external_doc_permissions_sync_due(cc_pair)
             )
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
@@ -298,7 +304,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                     )
 
         lock_beat.reacquire()
-        _clear_caught_up_perm_sync_pending_marks(tenant_id)
+        clear_caught_up_perm_sync_pending_marks(tenant_id)
         task_logger.info(f"check_for_doc_permissions_sync finished: tenant={tenant_id}")
     except SoftTimeLimitExceeded:
         task_logger.info(
@@ -319,7 +325,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
     return True
 
 
-def _clear_caught_up_perm_sync_pending_marks(tenant_id: str) -> None:
+def clear_caught_up_perm_sync_pending_marks(tenant_id: str) -> None:
     """Clears the mark of each pair awaiting its first permission sync whose
     permissions are now in the document index. Group ACL entries are only as
     current as the group memberships, so a source with group sync also waits

@@ -908,7 +908,7 @@ def test_pending_pair_hides_stale_public_chunks_in_every_mode(
 
     # The chunk keeps public=true until metadata sync, but the pair grants
     # nothing. A granting pair of a shared document still grants.
-    for mode in (CCPairAccessMode.ENFORCE, None):
+    for mode in (CCPairAccessMode.ENFORCE, CCPairAccessMode.SHADOW, None):
         for user in (world.outsider, world.anonymous):
             assert visible(user, mode) == {pending.with_public_doc_id}, (
                 user.email,
@@ -919,6 +919,6 @@ def test_pending_pair_hides_stale_public_chunks_in_every_mode(
     # The mark alone hides it: the same stale chunk shows once it is cleared.
     pending.pair.perm_sync_pending_since = None
     db_session.commit()
-    for mode in (CCPairAccessMode.ENFORCE, None):
+    for mode in (CCPairAccessMode.ENFORCE, CCPairAccessMode.SHADOW, None):
         assert visible(world.outsider, mode) == doc_ids, mode
     assert visible_in_postgres(world.outsider) == doc_ids

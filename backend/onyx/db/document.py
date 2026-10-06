@@ -1297,7 +1297,12 @@ def mark_cc_pair_documents_for_sync__no_commit(
 def build_cc_pair_has_unsynced_documents_clause() -> ColumnElement[bool]:
     """EXISTS over the indexed documents of the enclosing query's
     ConnectorCredentialPair row that wait for metadata sync: the documents
-    mark_cc_pair_documents_for_sync__no_commit marks, not yet synced."""
+    mark_cc_pair_documents_for_sync__no_commit marks, not yet synced.
+
+    Documents with a NULL chunk_count (indexed before the column existed) are
+    left out. Metadata sync skips their chunks and still marks them synced, so
+    waiting for them protects nothing. Only a re-index rewrites their access,
+    and the perm-sync-pending guarantee does not cover them."""
     return (
         select(DocumentByConnectorCredentialPair.id)
         .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
