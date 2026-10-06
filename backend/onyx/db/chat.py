@@ -3,7 +3,20 @@ from datetime import datetime, timedelta, timezone
 from typing import Tuple
 from uuid import UUID
 
-from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
+from sqlalchemy import (
+    Integer,
+    Row,
+    any_,
+    bindparam,
+    delete,
+    desc,
+    func,
+    nullsfirst,
+    or_,
+    select,
+    update,
+)
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.sql.expression import ColumnElement
@@ -34,6 +47,11 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
 logger = setup_logger()
+
+
+def visible_chat_messages_filter() -> ColumnElement[bool]:
+    """Exclude context summaries from public chat history."""
+    return ChatMessage.message_type != MessageType.SUMMARY
 
 
 # Note: search/streaming packet helpers moved to streaming_utils.py
@@ -472,7 +490,9 @@ def get_chat_message(
     user_id: UUID | None,
     db_session: Session,
 ) -> ChatMessage:
-    stmt = select(ChatMessage).where(ChatMessage.id == chat_message_id)
+    stmt = select(ChatMessage).where(
+        ChatMessage.id == chat_message_id, visible_chat_messages_filter()
+    )
 
     result = db_session.execute(stmt)
     chat_message = result.scalar_one_or_none()
@@ -502,7 +522,9 @@ def get_chat_session_by_message_id(
     Get the chat session associated with a specific message ID
     Note: this ignores permission checks.
     """
-    stmt = select(ChatMessage).where(ChatMessage.id == message_id)
+    stmt = select(ChatMessage).where(
+        ChatMessage.id == message_id, visible_chat_messages_filter()
+    )
 
     result = db_session.execute(stmt)
     chat_message = result.scalar_one_or_none()
@@ -528,6 +550,7 @@ def get_chat_messages_by_sessions(
             )
     stmt = (
         select(ChatMessage)
+        .where(visible_chat_messages_filter())
         .where(ChatMessage.chat_session_id.in_(chat_session_ids))
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
@@ -623,6 +646,7 @@ def get_chat_messages_by_session(
 
     stmt = (
         select(ChatMessage)
+        .where(visible_chat_messages_filter())
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
@@ -1244,3 +1268,43 @@ def create_chat_history_chain(
         previous_message = current_message
 
     return mainline_messages
+
+
+def find_summary_for_ancestry(
+    db_session: Session,
+    session_id: UUID,
+    message_ids: list[int],
+) -> ChatMessage | None:
+    """Find a summary on selected ancestry; IDs must run from newest to oldest."""
+    if not message_ids:
+        return None
+    # One array parameter keeps the query the same size however long the history is.
+    ancestry = bindparam("ancestry", message_ids, type_=postgresql.ARRAY(Integer))
+    return db_session.scalar(
+        select(ChatMessage)
+        .where(
+            ChatMessage.chat_session_id == session_id,
+            ChatMessage.message_type == MessageType.SUMMARY,
+            ChatMessage.parent_message_id == any_(ancestry),
+        )
+        # Nearest ancestor first, then the newest summary on that ancestor.
+        .order_by(
+            func.array_position(ancestry, ChatMessage.parent_message_id),
+            ChatMessage.id.desc(),
+        )
+        .limit(1)
+    )
+
+
+def find_summary_for_branch(
+    db_session: Session,
+    chat_history: list[ChatMessage],
+) -> ChatMessage | None:
+    """Find the summary on the nearest selected ancestor, regardless of save time."""
+    if not chat_history:
+        return None
+    return find_summary_for_ancestry(
+        db_session,
+        chat_history[0].chat_session_id,
+        [message.id for message in reversed(chat_history)],
+    )

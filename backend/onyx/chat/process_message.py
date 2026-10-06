@@ -34,8 +34,8 @@ from onyx.chat.chat_utils import (
 from onyx.chat.compression import (
     calculate_total_history_tokens,
     compress_chat_history,
-    find_summary_for_branch,
     get_compression_params,
+    load_branch_summary,
 )
 from onyx.chat.emitter import Emitter
 from onyx.chat.incognito import (
@@ -823,13 +823,14 @@ def build_chat_turn(
     )
 
     # Find applicable summary for the current branch
-    summary_message = find_summary_for_branch(db_session, chat_history)
+    branch_summary = load_branch_summary(db_session, chat_history)
+    summary_message = branch_summary.message if branch_summary else None
     # Collect file metadata from messages that will be dropped by summary truncation.
     # These become "pre-summarized" file metadata so the forgotten-file mechanism can
     # still tell the LLM about them.
     summarized_file_metadata: dict[str, FileToolMetadata] = {}
-    if summary_message and summary_message.last_summarized_message_id:
-        cutoff_id = summary_message.last_summarized_message_id
+    if branch_summary is not None:
+        cutoff_id = branch_summary.cutoff_id
         for msg in chat_history:
             if msg.id > cutoff_id or not msg.files:
                 continue
@@ -2064,13 +2065,14 @@ def llm_loop_completion_handle(
         # (if any) plus messages after its cutoff. The full chain only grows,
         # so counting it would keep the trigger on permanently once crossed
         # and inflate tokens_for_recent until compression stalls.
-        summary_message = find_summary_for_branch(db_session, updated_chat_history)
+        branch_summary = load_branch_summary(db_session, updated_chat_history)
         effective_history = updated_chat_history
         summary_tokens = 0
-        if summary_message and summary_message.last_summarized_message_id:
-            cutoff_id = summary_message.last_summarized_message_id
-            effective_history = [m for m in updated_chat_history if m.id > cutoff_id]
-            summary_tokens = summary_message.token_count or 0
+        if branch_summary is not None:
+            effective_history = [
+                m for m in updated_chat_history if m.id > branch_summary.cutoff_id
+            ]
+            summary_tokens = branch_summary.message.token_count or 0
         total_tokens = summary_tokens + calculate_total_history_tokens(
             effective_history
         )
