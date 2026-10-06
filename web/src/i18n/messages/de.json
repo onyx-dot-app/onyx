@@ -2790,20 +2790,8 @@
         },
         "title": "‘{connector}’ ist kein gültiger Konnektortyp!"
       },
-      "fileInput": {
-        "chooseButton": {
-          "label": "{multiple, select, true {Dateien auswählen} other {Datei auswählen}}"
-        },
-        "prompt": "{multiple, select, true {Oder ziehen Sie Dateien hierher.} other {Oder ziehen Sie eine Datei hierher.}}"
-      },
       "listInput": {
-        "addButton": {
-          "label": "Neu hinzufügen"
-        },
-        "placeholder": "{label} eingeben",
-        "removeButton": {
-          "tooltip": "Entfernen"
-        }
+        "placeholder": "{label} eingeben"
       },
       "oauth": {
         "error": {
@@ -2904,14 +2892,6 @@
       "selectInput": {
         "emptyOption": {
           "label": "Option auswählen"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "Neu hinzufügen"
-        },
-        "removeButton": {
-          "tooltip": "Entfernen"
         }
       },
       "tabs": {
@@ -11348,6 +11328,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {Dateien auswählen} other {Datei auswählen}}"
+      },
+      "prompt": "{multiple, select, true {Oder ziehen Sie Dateien hierher.} other {Oder ziehen Sie eine Datei hierher.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "Neu hinzufügen"
+      },
+      "removeButton": {
+        "tooltip": "Entfernen"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "Seitenleiste öffnen"

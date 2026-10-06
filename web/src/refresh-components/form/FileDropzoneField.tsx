@@ -1,41 +1,38 @@
+"use client";
+
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { useDropzone } from "react-dropzone";
 import { Button, Text } from "@opal/components";
-import { InputErrorText, InputVertical, Section } from "@opal/layouts";
 import { SvgUploadCloud } from "@opal/icons";
-import { cn, markdown } from "@opal/utils";
+import { cn } from "@opal/utils";
 
-interface FileInputProps {
+export interface FileDropzoneFieldProps {
+  /** The Formik field name. Also the file input's id. */
   name: string;
-  label?: string;
-  optional?: boolean;
-  description?: string;
+  /** Takes many files (`File[]`) instead of one (`File | null`). */
   multiple?: boolean;
   /** Takes one .zip file. */
   isZip?: boolean;
-  hideError?: boolean;
   disabled?: boolean;
+  /** Names the file input when no label points at it. */
+  "aria-label"?: string;
 }
 
 /**
- * A drop area with a file picker button. The field holds a `File[]`, or one
- * `File` (or null) when the input takes a single file.
+ * Formik-bound drop area with a file picker button. The field holds a
+ * `File[]`, or one `File` (or null) when it takes a single file. Files stay
+ * binary, unlike Opal's InputFile, which reads them as text.
  */
-export default function FileInput({
+export default function FileDropzoneField({
   name,
-  label,
-  optional = false,
-  description,
   multiple = true,
   isZip = false,
-  hideError = false,
   disabled = false,
-}: FileInputProps) {
-  const t = useTranslations("admin.connectorsList.fileInput");
-  const [field, meta, helpers] = useField<File | File[] | null | undefined>(
-    name
-  );
+  "aria-label": ariaLabel,
+}: FileDropzoneFieldProps) {
+  const t = useTranslations("common.fileDropzoneField");
+  const [field, , helpers] = useField<File | File[] | null | undefined>(name);
   const single = isZip || !multiple;
   const selectedFiles: File[] = Array.isArray(field.value)
     ? field.value
@@ -56,7 +53,8 @@ export default function FileInput({
   });
 
   const chooseLabel = t("chooseButton.label", { multiple: String(!single) });
-  const dropzone = (
+
+  return (
     <div
       {...getRootProps()}
       className={cn(
@@ -67,7 +65,7 @@ export default function FileInput({
       )}
     >
       <input
-        {...getInputProps({ id: name, "aria-label": label ?? chooseLabel })}
+        {...getInputProps({ id: name, "aria-label": ariaLabel ?? chooseLabel })}
       />
       <Button
         type="button"
@@ -84,30 +82,5 @@ export default function FileInput({
           : t("prompt", { multiple: String(!single) })}
       </Text>
     </div>
-  );
-
-  if (!label) {
-    return (
-      <Section gap={1} alignItems="start" width="full">
-        {dropzone}
-        {!hideError && meta.touched && meta.error && (
-          <InputErrorText type="error">{meta.error}</InputErrorText>
-        )}
-      </Section>
-    );
-  }
-
-  return (
-    // With a label, the field name ties it to the file input's id and shows
-    // the field's Formik error under it.
-    <InputVertical
-      withLabel={hideError ? false : name}
-      disabled={disabled}
-      title={label}
-      subDescription={description ? markdown(description) : undefined}
-      suffix={optional ? "optional" : undefined}
-    >
-      {dropzone}
-    </InputVertical>
   );
 }

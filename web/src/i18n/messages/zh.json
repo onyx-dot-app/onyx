@@ -2790,20 +2790,8 @@
         },
         "title": "‘{connector}’ 不是有效的连接器类型！"
       },
-      "fileInput": {
-        "chooseButton": {
-          "label": "{multiple, select, true {选择文件} other {选择文件}}"
-        },
-        "prompt": "{multiple, select, true {或将文件拖放到此处。} other {或将文件拖放到此处。}}"
-      },
       "listInput": {
-        "addButton": {
-          "label": "新增"
-        },
-        "placeholder": "输入{label}",
-        "removeButton": {
-          "tooltip": "移除"
-        }
+        "placeholder": "输入{label}"
       },
       "oauth": {
         "error": {
@@ -2904,14 +2892,6 @@
       "selectInput": {
         "emptyOption": {
           "label": "选择一个选项"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "新增"
-        },
-        "removeButton": {
-          "tooltip": "移除"
         }
       },
       "tabs": {
@@ -11348,6 +11328,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {选择文件} other {选择文件}}"
+      },
+      "prompt": "{multiple, select, true {或将文件拖放到此处。} other {或将文件拖放到此处。}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "新增"
+      },
+      "removeButton": {
+        "tooltip": "移除"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "打开侧边栏"

@@ -31,7 +31,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import FileInput from "@/views/admin/connectors/AddConnectorPage/form/inputs/FileInput";
+import FileDropzoneField from "@/refresh-components/form/FileDropzoneField";
 import { RichTextSubtext } from "./RichTextSubtext";
 import { TypedFile, FILE_TYPE_DEFINITIONS } from "@/lib/connectors/fileTypes";
 import { createTypedFile } from "@/lib/connectors/utils";
@@ -421,7 +421,7 @@ export function FileUploadFormField({
   return (
     <div className="w-full">
       <FieldLabel name={name} label={label} subtext={subtext} />
-      <FileInput name={fileName} multiple={false} hideError />
+      <FileDropzoneField name={fileName} multiple={false} />
     </div>
   );
 }

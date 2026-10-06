@@ -5,22 +5,25 @@ import type {
   TabOption,
   TextSubDescriptionKey,
 } from "@/lib/connectors/types";
-import SelectInput from "./inputs/SelectInput";
-import NumberInput from "./inputs/NumberInput";
 import { MultiSelectField } from "@/components/Field";
-import ListInput from "./inputs/ListInput";
-import StringPairListInput from "./inputs/StringPairListInput";
-import FileInput from "./inputs/FileInput";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { Credential } from "@/lib/credentials/types";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
-import { Tabs, Text as OpalText } from "@opal/components";
+import {
+  InputKeyValue,
+  InputNumber,
+  Tabs,
+  Text as OpalText,
+} from "@opal/components";
 import { useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Content, InputHorizontal, InputVertical, Label } from "@opal/layouts";
-import { InputCheckboxField } from "@opal/form";
+import { InputCheckboxField, InputSingleSelectField } from "@opal/form";
 import type { IconFunctionComponent } from "@opal/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
+import TextListField from "@/refresh-components/form/TextListField";
+import FileDropzoneField from "@/refresh-components/form/FileDropzoneField";
+import { FormikField } from "@/refresh-components/form/FormikField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { getSourceDisplayName } from "@/lib/sources";
@@ -285,6 +288,9 @@ export const RenderField: FC<RenderFieldProps> = ({
     typeof description === "string" && description
       ? markdown(description)
       : undefined;
+  const optionalSuffix = field.optional
+    ? t("field.optionalSuffix.label")
+    : undefined;
 
   // Prepopulate the field with initialValue. A field that the credential
   // disables takes the credential's value, also over a value entered before
@@ -313,43 +319,96 @@ export const RenderField: FC<RenderFieldProps> = ({
   const fieldContent = (
     <>
       {field.type === "zip" || field.type === "file" ? (
-        <FileInput
-          name={field.name}
-          isZip={field.type === "zip"}
-          label={label}
-          optional={field.optional}
-          description={description}
+        // The field name ties the label to the file input's id and shows the
+        // field's Formik error under it.
+        <InputVertical
+          withLabel={field.name}
           disabled={disabled}
-        />
+          title={label}
+          subDescription={richDescription}
+          suffix={optionalSuffix}
+        >
+          <FileDropzoneField
+            name={field.name}
+            isZip={field.type === "zip"}
+            disabled={disabled}
+          />
+        </InputVertical>
       ) : field.type === "list" ? (
-        <ListInput
-          name={field.name}
-          label={label}
-          description={description}
-          optional={field.optional}
+        <InputVertical
           disabled={disabled}
-        />
+          title={label}
+          subDescription={richDescription}
+          suffix={optionalSuffix}
+        >
+          <TextListField
+            name={field.name}
+            placeholder={t("listInput.placeholder", {
+              label: label.toLowerCase(),
+            })}
+            disabled={disabled}
+          />
+        </InputVertical>
       ) : field.type === "string_pair_list" ? (
-        <StringPairListInput
-          name={field.name}
-          label={label}
-          description={description}
-          leftKey={field.leftKey}
-          rightKey={field.rightKey}
-          leftLabel={field.leftLabel}
-          rightLabel={field.rightLabel}
-          leftPlaceholder={field.leftPlaceholder}
-          rightPlaceholder={field.rightPlaceholder}
-        />
-      ) : field.type === "select" ? (
-        <SelectInput
-          name={field.name}
-          optional={field.optional}
-          description={description}
-          options={field.options || []}
-          label={label}
+        <InputVertical
           disabled={disabled}
-        />
+          title={label}
+          subDescription={richDescription}
+          suffix={optionalSuffix}
+        >
+          {/* InputKeyValue edits { key, value } rows; the config names the
+            keys each row saves under, such as { source, target }. */}
+          <FormikField<Record<string, string>[] | undefined>
+            name={field.name}
+            render={(formikField, helper) => (
+              <InputKeyValue
+                keyTitle={field.leftLabel}
+                valueTitle={field.rightLabel}
+                keyPlaceholder={field.leftPlaceholder}
+                valuePlaceholder={field.rightPlaceholder}
+                items={(formikField.value ?? []).map((row) => ({
+                  key: row[field.leftKey] ?? "",
+                  value: row[field.rightKey] ?? "",
+                }))}
+                onChange={(items) =>
+                  void helper.setValue(
+                    items.map((item) => ({
+                      [field.leftKey]: item.key,
+                      [field.rightKey]: item.value,
+                    }))
+                  )
+                }
+              />
+            )}
+          />
+        </InputVertical>
+      ) : field.type === "select" ? (
+        // The field name ties the label to the select's id and shows the
+        // field's Formik error under it.
+        <InputVertical
+          withLabel={field.name}
+          disabled={disabled}
+          title={label}
+          subDescription={richDescription}
+          suffix={optionalSuffix}
+        >
+          <InputSingleSelectField
+            name={field.name}
+            id={field.name}
+            placeholder={t("selectInput.emptyOption.label")}
+            disabled={disabled}
+            options={[
+              {
+                options: (field.options ?? []).map(
+                  (option: { name: string }) => ({
+                    value: option.name,
+                    title: option.name,
+                  })
+                ),
+              },
+            ]}
+          />
+        </InputVertical>
       ) : field.type === "multiselect" ? (
         <MultiSelectField
           name={field.name}
@@ -365,13 +424,34 @@ export const RenderField: FC<RenderFieldProps> = ({
           onChange={(selected) => setFieldValue(field.name, selected)}
         />
       ) : field.type === "number" ? (
-        <NumberInput
-          label={label}
-          optional={field.optional}
-          description={description}
-          name={field.name}
+        <InputVertical
+          withLabel={field.name}
           disabled={disabled}
-        />
+          title={label}
+          subDescription={richDescription}
+          suffix={optionalSuffix}
+        >
+          <FormikField<number | undefined>
+            name={field.name}
+            render={(formikField, helper, _meta, status) => (
+              <InputNumber
+                id={field.name}
+                value={formikField.value ?? null}
+                onChange={(value) => {
+                  // InputNumber has no blur callback, so touch on change to
+                  // show the field's validation error.
+                  void helper.setTouched(true, false);
+                  void helper.setValue(value ?? undefined);
+                }}
+                // Some sources take -1 for "no limit", such as a recursion
+                // depth.
+                min={-1}
+                variant={status === "error" ? "error" : "primary"}
+                disabled={disabled}
+              />
+            )}
+          />
+        </InputVertical>
       ) : field.type === "checkbox" && field.tabLabels ? (
         <CheckboxTabsField option={field} label={label} disabled={disabled} />
       ) : field.type === "checkbox" && field.asCheckbox ? (
@@ -401,7 +481,7 @@ export const RenderField: FC<RenderFieldProps> = ({
                 })
               : richDescription
           }
-          suffix={field.optional ? t("field.optionalSuffix.label") : undefined}
+          suffix={optionalSuffix}
         >
           {field.isTextArea ? (
             <InputTextAreaField

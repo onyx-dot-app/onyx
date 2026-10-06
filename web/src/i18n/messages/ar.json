@@ -2790,20 +2790,8 @@
         },
         "title": "‘{connector}’ ليس نوع موصل صالحًا!"
       },
-      "fileInput": {
-        "chooseButton": {
-          "label": "{multiple, select, true {اختر ملفات} other {اختر ملفًا}}"
-        },
-        "prompt": "{multiple, select, true {أو اسحب الملفات وأفلتها هنا.} other {أو اسحب ملفًا وأفلته هنا.}}"
-      },
       "listInput": {
-        "addButton": {
-          "label": "إضافة جديد"
-        },
-        "placeholder": "أدخل {label}",
-        "removeButton": {
-          "tooltip": "إزالة"
-        }
+        "placeholder": "أدخل {label}"
       },
       "oauth": {
         "error": {
@@ -2904,14 +2892,6 @@
       "selectInput": {
         "emptyOption": {
           "label": "اختر خيارًا"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "إضافة جديد"
-        },
-        "removeButton": {
-          "tooltip": "إزالة"
         }
       },
       "tabs": {
@@ -11348,6 +11328,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {اختر ملفات} other {اختر ملفًا}}"
+      },
+      "prompt": "{multiple, select, true {أو اسحب الملفات وأفلتها هنا.} other {أو اسحب ملفًا وأفلته هنا.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "إضافة جديد"
+      },
+      "removeButton": {
+        "tooltip": "إزالة"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "فتح الشريط الجانبي"
