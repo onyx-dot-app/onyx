@@ -221,7 +221,6 @@ control-plane-side downgrade) - that is enforced separately by
 ```
 POST /license/downgrade                       ee/onyx/server/license/api.py:downgrade_to_community
   MULTI_TENANT -> OnyxError(VALIDATION_ERROR)
-  LICENSE_ENFORCEMENT_ENABLED false -> OnyxError(VALIDATION_ERROR)
   make_all_cc_pairs_public__no_commit         ee/onyx/db/community_downgrade.py
   remove_custom_user_groups__no_commit        ee/onyx/db/community_downgrade.py
   disable_paid_features__no_commit            ee/onyx/db/community_downgrade.py

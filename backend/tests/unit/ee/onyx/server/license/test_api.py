@@ -278,7 +278,6 @@ def downgrade_steps() -> Generator[MagicMock, None, None]:
 
 class TestDowngradeToCommunity:
     @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
-    @patch("ee.onyx.server.license.api.LICENSE_ENFORCEMENT_ENABLED", True)
     def test_the_license_goes_last(self, downgrade_steps: MagicMock) -> None:
         """Removed earlier, a later failure would leave an unlicensed deployment
         that still holds synced permissions and running paid features."""
@@ -302,18 +301,6 @@ class TestDowngradeToCommunity:
 
     @patch("ee.onyx.server.license.api.MULTI_TENANT", True)
     def test_cloud_is_rejected_untouched(self, downgrade_steps: MagicMock) -> None:
-        with pytest.raises(OnyxError):
-            downgrade_to_community(user=MagicMock(), db_session=MagicMock())
-
-        assert not downgrade_steps.mock_calls
-
-    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
-    @patch("ee.onyx.server.license.api.LICENSE_ENFORCEMENT_ENABLED", False)
-    def test_enforcement_off_is_rejected_untouched(
-        self, downgrade_steps: MagicMock
-    ) -> None:
-        """With enforcement off the tier stays Enterprise whatever the license,
-        so a downgrade would only make the connectors public."""
         with pytest.raises(OnyxError):
             downgrade_to_community(user=MagicMock(), db_session=MagicMock())
 
