@@ -33,7 +33,7 @@ export default function FileDropzoneField({
 }: FileDropzoneFieldProps) {
   const t = useTranslations("common.fileDropzoneField");
   const [field, , helpers] = useField<File | File[] | null | undefined>(name);
-  const single = isZip || !multiple;
+  const single: boolean = isZip || !multiple;
   const selectedFiles: File[] = Array.isArray(field.value)
     ? field.value
     : field.value
@@ -52,7 +52,9 @@ export default function FileDropzoneField({
     },
   });
 
-  const chooseLabel = t("chooseButton.label", { multiple: String(!single) });
+  const chooseLabel: string = t("chooseButton.label", {
+    multiple: String(!single),
+  });
 
   return (
     <div

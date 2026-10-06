@@ -4,6 +4,7 @@
 
 A number field with chevron stepper buttons and an optional reset-to-default action.
 Typing clamps to `max` at once and to `min` on blur, so a partial value below `min` can be typed; stepping clamps to both.
+With a negative `min`, the value can be typed with a leading minus sign.
 
 ## Props
 

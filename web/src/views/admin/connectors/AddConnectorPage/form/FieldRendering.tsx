@@ -19,7 +19,7 @@ import { useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Content, InputHorizontal, InputVertical, Label } from "@opal/layouts";
 import { InputCheckboxField, InputSingleSelectField } from "@opal/form";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import TextListField from "@/refresh-components/form/TextListField";
 import FileDropzoneField from "@/refresh-components/form/FileDropzoneField";
@@ -185,8 +185,8 @@ function CheckboxTabsField({
 
 interface CheckboxFieldProps {
   name: string;
-  label: string;
-  description: string | undefined;
+  label: string | RichStr;
+  description: string | RichStr | undefined;
   disabled: boolean;
 }
 
@@ -202,25 +202,26 @@ function CheckboxField({
   disabled,
 }: CheckboxFieldProps) {
   // A stable component identity keeps React from remounting the checkbox.
+  const ariaLabel: string = typeof label === "string" ? label : label.raw;
   const checkboxIcon = useMemo<IconFunctionComponent>(() => {
     function CheckboxIcon() {
       return (
         <InputCheckboxField
           name={name}
-          aria-label={label}
+          aria-label={ariaLabel}
           disabled={disabled}
         />
       );
     }
     return CheckboxIcon;
-  }, [name, label, disabled]);
+  }, [name, ariaLabel, disabled]);
 
   return (
     <Label disabled={disabled}>
       <Content
         icon={checkboxIcon}
         title={label}
-        description={description ? markdown(description) : undefined}
+        description={description}
         sizePreset="main-ui"
         variant="section"
       />
@@ -230,8 +231,8 @@ function CheckboxField({
 
 interface ToggleFieldProps {
   name: string;
-  label: string;
-  description: string | undefined;
+  label: string | RichStr;
+  description: string | RichStr | undefined;
   disabled: boolean;
 }
 
@@ -242,7 +243,7 @@ function ToggleField({ name, label, description, disabled }: ToggleFieldProps) {
       withLabel
       disabled={disabled}
       title={label}
-      description={description ? markdown(description) : undefined}
+      description={description}
     >
       <SwitchField name={name} disabled={disabled} />
     </InputHorizontal>
@@ -284,11 +285,11 @@ export const RenderField: FC<RenderFieldProps> = ({
   const subDescriptionKey: TextSubDescriptionKey | undefined =
     field.type === "text" ? field.subDescription : undefined;
   // Config descriptions carry inline markdown, such as links and `code`.
-  const richDescription =
+  const richDescription: RichStr | undefined =
     typeof description === "string" && description
       ? markdown(description)
       : undefined;
-  const optionalSuffix = field.optional
+  const optionalSuffix: string | undefined = field.optional
     ? t("field.optionalSuffix.label")
     : undefined;
 
@@ -458,14 +459,14 @@ export const RenderField: FC<RenderFieldProps> = ({
         <CheckboxField
           name={field.name}
           label={label}
-          description={description}
+          description={richDescription}
           disabled={disabled}
         />
       ) : field.type === "checkbox" ? (
         <ToggleField
           name={field.name}
           label={label}
-          description={description}
+          description={richDescription}
           disabled={disabled}
         />
       ) : field.type === "text" ? (

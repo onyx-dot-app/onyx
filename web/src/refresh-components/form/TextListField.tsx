@@ -14,19 +14,26 @@ import { InputErrorText, Section } from "@opal/layouts";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
+interface StableRowKeys {
+  /** One React key per row, in row order. */
+  keys: number[];
+  /** Drops the key of the row at `index`. Call it with the row's removal. */
+  removeKey: (index: number) => void;
+}
+
 /**
  * Stable per-row keys, so removing a middle row doesn't shift native input
  * state (focus, autofill) onto the row that takes its index. Index keys
  * would; content-derived keys would remount the row on every keystroke.
  */
-function useStableRowKeys(rowCount: number) {
+function useStableRowKeys(rowCount: number): StableRowKeys {
   const [state, setState] = useState<{ keys: number[]; nextKey: number }>({
     keys: Array.from({ length: rowCount }, (_, index) => index),
     nextKey: rowCount,
   });
 
   if (state.keys.length < rowCount) {
-    const keysToAdd = rowCount - state.keys.length;
+    const keysToAdd: number = rowCount - state.keys.length;
     setState({
       keys: [
         ...state.keys,
@@ -73,10 +80,10 @@ export default function TextListField({
     useFormikContext<Record<string, unknown>>();
   const rawItems: unknown = getIn(values, name);
   const items: unknown[] = Array.isArray(rawItems) ? rawItems : [];
-  const rowKeys = useStableRowKeys(items.length);
+  const rowKeys: StableRowKeys = useStableRowKeys(items.length);
 
   const listError: unknown = getIn(errors, name);
-  const listErrorText =
+  const listErrorText: string | undefined =
     getIn(touched, name) && typeof listError === "string"
       ? listError
       : undefined;

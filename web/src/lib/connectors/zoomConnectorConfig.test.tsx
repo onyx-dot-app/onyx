@@ -89,7 +89,8 @@ test("the rate limit share is an advanced number field", () => {
 
   const rateLimit = screen.getByLabelText(/Zoom API Rate Limit/);
   expect(rateLimit).toHaveAttribute("id", "rate_limit_percent");
-  expect(rateLimit).toHaveAttribute("inputmode", "numeric");
+  // Connector number fields allow -1, so the pattern takes a leading minus.
+  expect(rateLimit).toHaveAttribute("pattern", "-?[0-9]*");
 });
 
 test("the plan has to be chosen", async () => {
