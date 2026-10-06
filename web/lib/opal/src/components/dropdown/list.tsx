@@ -138,7 +138,10 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     const searchRef = useRef<HTMLInputElement>(null);
     const hasSearch = searchField !== undefined;
     useEffect(() => {
-      if (isOpen && hasSearch) searchRef.current?.focus();
+      // preventScroll: the field can be anywhere before floating-ui places
+      // the list, and a focus scroll would move the page behind the portal.
+      if (isOpen && hasSearch)
+        searchRef.current?.focus({ preventScroll: true });
     }, [isOpen, hasSearch, viewKey]);
 
     const listRef = useRef<HTMLDivElement | null>(null);
@@ -202,9 +205,12 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // highlights never scroll: the list must not move under the mouse.
     useEffect(() => {
       if (!isOpen || !keyboardNav || highlightedIndex < 0) return;
-      liveCard(listRef.current)
-        ?.querySelector(`[data-index="${highlightedIndex}"]`)
-        ?.scrollIntoView({ block: "nearest", behavior: "instant" });
+      scrollWithinList(
+        liveCard(listRef.current)?.querySelector(
+          `[data-index="${highlightedIndex}"]`
+        ),
+        "nearest"
+      );
     }, [highlightedIndex, isOpen, keyboardNav]);
 
     // Opening shows the selection: the (first) selected row is centred in
@@ -217,7 +223,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       const selected = liveCard(listRef.current)?.querySelector(
         '[role="option"][aria-selected="true"]'
       );
-      selected?.scrollIntoView({ block: "center", behavior: "instant" });
+      scrollWithinList(selected, "center");
     }, [isOpen, isPositioned]);
 
     const cardProps: CardProps = {
@@ -341,6 +347,31 @@ DropdownList.displayName = "DropdownList";
 /** The first card in the root: the one on show, before any that is leaving. */
 function liveCard(root: HTMLElement | null): HTMLElement | null {
   return root?.querySelector<HTMLElement>(".opal-dropdown-card") ?? null;
+}
+
+/**
+ * Scrolls a row into view inside the list's own scroller only.
+ * `scrollIntoView` also scrolls every ancestor of the portal, `<body>`
+ * included even under `overflow: hidden`, which moves the whole page.
+ */
+function scrollWithinList(
+  row: Element | null | undefined,
+  block: "nearest" | "center"
+): void {
+  const scroller = row?.closest<HTMLElement>(".opal-dropdown-scroll");
+  if (!row || !scroller) return;
+  const rowRect = row.getBoundingClientRect();
+  const viewTop = scroller.getBoundingClientRect().top + scroller.clientTop;
+  const viewBottom = viewTop + scroller.clientHeight;
+  // The row's top in the scroller's content coordinates.
+  const rowTop = rowRect.top - viewTop + scroller.scrollTop;
+  if (block === "center") {
+    scroller.scrollTop = rowTop - (scroller.clientHeight - rowRect.height) / 2;
+  } else if (rowRect.top < viewTop) {
+    scroller.scrollTop = rowTop;
+  } else if (rowRect.bottom > viewBottom) {
+    scroller.scrollTop = rowTop + rowRect.height - scroller.clientHeight;
+  }
 }
 
 /** What a card renders: the search field and the rows of one view. */
