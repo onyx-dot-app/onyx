@@ -27,7 +27,7 @@ WIKI_LINK = re.compile(r"\[\[([a-z][a-z0-9-]*)\]\]")
 SLUG = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 INDEX_LINK = re.compile(r"\(components/([a-z0-9-]+)\.md\)")
 PATH_SUFFIX = re.compile(
-    r"(\.(py|ts|tsx|js|mjs|json|md|yaml|yml|toml|go|rs|sh|txt|html|css|template)|(^|/)Dockerfile)$"
+    r"(\.(py|ts|tsx|js|mjs|json|md|yaml|yml|toml|go|rs|sh|txt|html|css|template|conf)|(^|/)Dockerfile)$"
 )
 # Roots that a short path such as `db/models.py` or `lib/utils.ts` resolves against.
 PATH_ROOTS = (
