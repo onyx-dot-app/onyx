@@ -188,7 +188,7 @@ export default function GroupShareList({
           columns={columns}
           getRowId={(row) => row.id}
           pageSize={Infinity}
-          size="md"
+          prominence="secondary"
           showHeader={false}
         />
       )}
