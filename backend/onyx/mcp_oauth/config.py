@@ -29,7 +29,7 @@ def _validate_url(value: str, *, allow_query: bool) -> str:
             and hostname is not None
             and split.username is None
             and split.password is None
-            and (allow_query or not split.query)
+            and (allow_query or "?" not in value)
             and (
                 split.scheme == "https"
                 or (split.scheme == "http" and hostname in _LOOPBACK_HOSTS)

@@ -110,6 +110,7 @@ def test_get_mcp_oauth_settings_allows_loopback_http(
         "https://*.example.com",
         "https://example.*",
         "https://example.com/path?query=1",
+        "https://example.com?",
         "https://example.com/path#fragment",
         "https://example.com/path#",
         "https://example.com:bad",
@@ -124,7 +125,9 @@ def test_get_mcp_oauth_settings_allows_loopback_http(
 def test_get_mcp_oauth_settings_rejects_invalid_web_domain(
     monkeypatch: pytest.MonkeyPatch, web_domain: str
 ) -> None:
-    _patch_oauth_config(monkeypatch, web_domain=web_domain)
+    _patch_oauth_config(
+        monkeypatch, web_domain=web_domain, resource_url="https://mcp.example/mcp"
+    )
 
     with pytest.raises(ValueError, match="Invalid MCP OAuth URL"):
         get_mcp_oauth_settings()
