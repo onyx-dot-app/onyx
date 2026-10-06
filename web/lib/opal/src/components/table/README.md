@@ -61,9 +61,9 @@ function UsersTable({ users }: { users: User[] }) {
 | `columns`                 | `TableColumn<TData>[]`                | required      | The columns, in order (see [Columns](#columns))                 |
 | `getRowId`                | `(row: TData) => string`              | required      | Unique row identifier                                           |
 | `label`                   | `string`                              | —             | The table's accessible name                                     |
-| `pageSize`                | `number`                              | `10`          | Rows per page (`Infinity` disables pagination)                  |
+| `pageSize`                | `number \| false`                     | `10` with a footer, else every row | Rows per page; `false` shows every row. Paging always brings the footer |
 | `size`                    | `2.25 \| 2.75`                       | `2.75`        | Each body row's height in rem: 36px or 44px                     |
-| `footer`                  | `DataTableFooterConfig`               | —             | Footer configuration (mode is derived from `selectionBehavior`) |
+| `footer`                  | `boolean \| DataTableFooterConfig`   | —             | `true` for the default footer, or its configuration (mode is derived from `selectionBehavior`) |
 | `selectionBehavior`       | `"no-select" \| "single-select" \| "multi-select"` | `"no-select"` | Row selection behavior                       |
 | `values`                  | `ReadonlySet<string>`                 | —             | The selected row IDs. Given, the selection is controlled        |
 | `onSelectionChange`       | `(values: ReadonlySet<string>) => void` | —           | Called with the next selection                                  |
@@ -77,7 +77,7 @@ function UsersTable({ users }: { users: User[] }) {
 | `height`                  | `number \| string`                    | —             | Max scrollable height                                           |
 | `serverSide`              | `ServerSideConfig`                    | —             | Server-side pagination/sorting/filtering (`onQueryChange` for `query`) |
 | `emptyState`              | `ReactNode`                           | —             | Empty state content                                             |
-| `showHeader`              | `boolean`                             | `true`        | Render the header row. Hiding it also hides header sorting, resizing, select-all and the actions popovers |
+| `header`                  | `boolean`                             | `true`        | Show the header row. Hiding it also hides header sorting, resizing, select-all and the actions popovers |
 
 ## Columns
 

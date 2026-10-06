@@ -163,10 +163,15 @@ export function Table<TData>(props: DataTableProps<TData>) {
     height,
     serverSide,
     emptyState,
-    showHeader = true,
+    header = true,
   } = props;
 
-  const effectivePageSize = pageSize ?? (footer ? 10 : items.length);
+  const footerConfig: DataTableFooterConfig | undefined =
+    footer === true ? {} : footer || undefined;
+  const effectivePageSize =
+    pageSize === false
+      ? Infinity
+      : (pageSize ?? (footerConfig ? 10 : items.length));
 
   // Whether the qualifier column should exist in the DOM.
   // Derived from the column definitions: if a qualifier column exists with
@@ -279,7 +284,10 @@ export function Table<TData>(props: DataTableProps<TData>) {
 
   const isServerLoading = !!serverSide?.isLoading;
 
-  function renderFooter(footerConfig: DataTableFooterConfig) {
+  // Paging brings the footer, so the page controls are never missing.
+  const showFooter = footerConfig !== undefined || totalPages > 1;
+
+  function renderFooter(config: DataTableFooterConfig) {
     // Mode derived from selectionBehavior — single/multi-select use selection
     // footer, no-select uses summary footer.
     if (isSelectable) {
@@ -290,7 +298,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
           selectionState={selectionState}
           selectedCount={selectedCount}
           onClear={
-            footerConfig.onClear ??
+            config.onClear ??
             (() => {
               if (isViewingSelected) exitViewMode();
               clearSelection();
@@ -309,7 +317,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
           currentPage={currentPage}
           totalPages={totalPages}
           onPageChange={setPage}
-          units={footerConfig.units}
+          units={config.units}
         />
       );
     }
@@ -334,8 +342,8 @@ export function Table<TData>(props: DataTableProps<TData>) {
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setPage}
-        leftExtra={footerConfig.leftExtra}
-        units={footerConfig.units}
+        leftExtra={config.leftExtra}
+        units={config.units}
       />
     );
   }
@@ -380,7 +388,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                 />
               ))}
             </colgroup>
-            {showHeader && (
+            {header && (
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
@@ -631,7 +639,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
           </TableElement>
         </div>
 
-        {footer && renderFooter(footer)}
+        {showFooter && renderFooter(footerConfig ?? {})}
       </div>
     </TableSizeProvider>
   );

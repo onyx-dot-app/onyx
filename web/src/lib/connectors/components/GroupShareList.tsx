@@ -209,9 +209,9 @@ export default function GroupShareList({
           items={rows}
           columns={columns}
           getRowId={(row) => row.id}
-          pageSize={Infinity}
+          pageSize={false}
           prominence="secondary"
-          showHeader={false}
+          header={false}
         />
       )}
       {meta.touched && meta.error && (

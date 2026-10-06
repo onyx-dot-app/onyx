@@ -262,8 +262,14 @@ export interface DataTableProps<TData> {
   getRowId: (row: TData) => string;
   /** The table's accessible name. */
   label?: string;
-  /** Rows per page. Set `Infinity` to disable pagination. @default 10 */
-  pageSize?: number;
+  /**
+   * Rows per page, or `false` for every row on one page. Whenever the rows
+   * fill more than one page, the footer shows, so its page controls are
+   * always there.
+   *
+   * @default 10 with a footer, else every row
+   */
+  pageSize?: number | false;
   /** Initial sorting state. */
   initialSorting?: SortingState;
   /** Initial column visibility state. */
@@ -280,8 +286,8 @@ export interface DataTableProps<TData> {
   initialViewSelected?: boolean;
   /** Enable drag-and-drop row reordering. */
   draggable?: DataTableDraggableConfig;
-  /** Footer configuration. */
-  footer?: DataTableFooterConfig;
+  /** Show the footer: `true` for the default one, or its configuration. */
+  footer?: boolean | DataTableFooterConfig;
   /** Each body row's height in rem: `2.25` (36px) or `2.75` (44px). @default 2.75 */
   size?: TableSize;
   /**
@@ -314,11 +320,11 @@ export interface DataTableProps<TData> {
   /** Content to render inside the table body when there are no rows. */
   emptyState?: React.ReactNode;
   /**
-   * Render the header row. Hiding it also hides what lives there: sorting by
+   * Show the header row. Hiding it also hides what lives there: sorting by
    * header click, column resizing, the select-all checkbox, and the actions
    * column's popovers.
    *
    * @default true
    */
-  showHeader?: boolean;
+  header?: boolean;
 }

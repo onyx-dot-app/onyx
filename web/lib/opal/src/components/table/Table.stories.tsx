@@ -151,7 +151,7 @@ export const WithoutHeader: Story = {
       columns={columns}
       getRowId={(r) => r.id}
       size={2.25}
-      showHeader={false}
+      header={false}
     />
   ),
 };
