@@ -48,6 +48,11 @@ def _choice_steps(plan: EditPlan, choices: EditPlanChoices) -> list[EditStep]:
                 "Choose how to reconcile the changes to "
                 f"{', '.join(plan.reconciliation_choice.field_names)}."
             )
+        if choices.reconciliation not in plan.reconciliation_choice.options:
+            raise _invalid(
+                f"The plan does not offer {choices.reconciliation.value} "
+                "to reconcile this change."
+            )
         steps.extend(
             EditStep(
                 kind=kind,
@@ -61,7 +66,16 @@ def _choice_steps(plan: EditPlan, choices: EditPlanChoices) -> list[EditStep]:
     if plan.credential_choice is None:
         if choices.credential_path is not None:
             raise _invalid("This edit does not change the credential.")
-    elif (
+        return steps
+    if (
+        choices.credential_path is not None
+        and choices.credential_path not in plan.credential_choice.options
+    ):
+        raise _invalid(
+            f"The plan does not offer {choices.credential_path.value} for the "
+            "credential change."
+        )
+    if (
         choices.credential_path or plan.credential_choice.default
     ) == CredentialPath.FULL_REINDEX_AND_PRUNE:
         steps.append(

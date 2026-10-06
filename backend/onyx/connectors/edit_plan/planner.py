@@ -13,6 +13,8 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
+from onyx.background.indexing.models import BackfillSpec
+from onyx.connectors.capability_checks.models import CapabilityCheckStatus
 from onyx.connectors.config_diff import (
     ConfigFieldChange,
     build_source_scoped_backfill_config,
@@ -39,7 +41,6 @@ from onyx.connectors.planning_rule_registry import (
 )
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.index_attempt import BackfillSpec
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -103,6 +104,10 @@ _STALE_SYNCED_ACLS_MESSAGE = (
 _CHECKS_STILL_RUNNING_MESSAGE = (
     "Some checks did not finish in time. Run a dry run of the connector to see "
     "their results."
+)
+_UNFINISHED_CHECK_FAILED_MESSAGE = (
+    "Some checks that did not finish in time failed in an earlier dry run: {}. "
+    "Run a dry run again to see if they pass now."
 )
 
 
@@ -383,8 +388,17 @@ def normalize_steps(steps: list[EditStep]) -> list[EditStep]:
     for step in steps:
         by_kind.setdefault(step.kind, []).append(step)
 
-    # A full re-index and a prune together are a re-index, then a prune.
-    if EditStepKind.FULL_REINDEX in by_kind and EditStepKind.PRUNE in by_kind:
+    # A full re-index and a prune together are a re-index, then a prune. They
+    # merge only when both are required or both are not, so a merged step
+    # does not make optional work required.
+    reindex_steps = by_kind.get(EditStepKind.FULL_REINDEX)
+    prune_steps = by_kind.get(EditStepKind.PRUNE)
+    if (
+        reindex_steps
+        and prune_steps
+        and any(step.required for step in reindex_steps)
+        == any(step.required for step in prune_steps)
+    ):
         by_kind.setdefault(EditStepKind.FULL_REINDEX_THEN_PRUNE, [])
     for kind, subsumed_kinds in _SUBSUMES.items():
         if kind not in by_kind:
@@ -419,7 +433,13 @@ def _state_notes(
                 message=_PAUSED_MESSAGE,
             )
         )
-    if current.status == ConnectorCredentialPairStatus.INVALID:
+    # Apply clears INVALID only through a validation that passes.
+    validation = inputs.validation
+    if (
+        current.status == ConnectorCredentialPairStatus.INVALID
+        and validation is not None
+        and not validation.blocks_pairing
+    ):
         notes.append(
             EditNote(
                 kind=EditNoteKind.INVALID_CLEARED_BY_VALIDATION,
@@ -427,7 +447,7 @@ def _state_notes(
                 message=_INVALID_MESSAGE,
             )
         )
-    if inputs.validation is not None and inputs.validation.unfinished_check_ids:
+    if validation is not None and validation.unfinished_check_ids:
         notes.append(
             EditNote(
                 kind=EditNoteKind.CHECKS_STILL_RUNNING,
@@ -435,6 +455,22 @@ def _state_notes(
                 message=_CHECKS_STILL_RUNNING_MESSAGE,
             )
         )
+        failed_names: list[str] = [
+            result.display_name
+            for result in inputs.dry_run_results
+            if result.check_id in validation.unfinished_check_ids
+            and result.status == CapabilityCheckStatus.FAILED
+        ]
+        if failed_names:
+            notes.append(
+                EditNote(
+                    kind=EditNoteKind.UNFINISHED_CHECK_FAILED_IN_DRY_RUN,
+                    severity=EditNoteSeverity.WARNING,
+                    message=_UNFINISHED_CHECK_FAILED_MESSAGE.format(
+                        ", ".join(failed_names)
+                    ),
+                )
+            )
     return notes
 
 
@@ -457,10 +493,10 @@ def compute_edit_plan(
     """
     ensure_edit_is_plannable(current, proposed)
 
-    config_changed = (
+    config_changed: bool = (
         proposed.connector_specific_config != current.connector_specific_config
     )
-    field_changes = (
+    field_changes: list[ConfigFieldChange] = (
         classify_source_config_change(
             current.source,
             current.connector_specific_config,
@@ -469,7 +505,7 @@ def compute_edit_plan(
         if config_changed
         else []
     )
-    credential_changed = proposed.credential_id != current.credential_id
+    credential_changed: bool = proposed.credential_id != current.credential_id
 
     steps = _field_change_steps(field_changes, current, proposed, inputs)
     indexing_start_steps, notes = _indexing_start_steps(current, proposed, inputs)
@@ -478,9 +514,14 @@ def compute_edit_plan(
     steps.extend(access_steps)
     notes.extend(access_notes)
 
-    # The running attempt fetches with the old config, credential and start.
-    restarts = inputs.attempt_running and (
-        config_changed
+    # The running attempt fetches with the old config, credential and start. A
+    # cosmetic change, or one with no effect (e.g. reordered items, defaults
+    # written out), does not change what it fetches.
+    fetched_config_changed: bool = any(
+        change.field_class != FieldClass.COSMETIC for change in field_changes
+    )
+    restarts: bool = inputs.attempt_running and (
+        fetched_config_changed
         or credential_changed
         or proposed.indexing_start != current.indexing_start
     )
@@ -500,7 +541,7 @@ def compute_edit_plan(
         if change.scope_direction == ScopeDirection.UNKNOWN
     ]
 
-    credential_choice = None
+    credential_choice: CredentialChoice | None = None
     if credential_changed:
         # TODO(evan-onyx): when the new credential has the same access as the
         # old one, the plan can skip the choice.

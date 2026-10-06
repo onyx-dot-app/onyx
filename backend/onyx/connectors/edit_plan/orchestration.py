@@ -1,5 +1,6 @@
 """Gathers the planner's inputs for a proposed edit of a cc-pair, computes the
-plan and stores it. Writes nothing except the plan store."""
+plan and stores it. Writes nothing except the plan store, and the credential
+that the validation's connector construction can refresh and store."""
 
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -10,23 +11,20 @@ from sqlalchemy.orm import Session
 from onyx.access.access import source_should_fetch_permissions_during_indexing
 from onyx.access.cc_pair_access import get_cc_pair_access_mode
 from onyx.connectors.capability_checks.creation import get_cc_pair_dry_run_results
+from onyx.connectors.capability_checks.models import ProposedPairingValidation
 from onyx.connectors.edit_plan.models import (
     CurrentPairState,
     EditPlanInputs,
     ProposedPairState,
+    StoredEditPlan,
 )
 from onyx.connectors.edit_plan.planner import (
     compute_edit_plan,
     ensure_edit_is_plannable,
 )
 from onyx.connectors.edit_plan.state import fetch_current_pair_state
-from onyx.connectors.edit_plan.store import (
-    StoredEditPlan,
-    compute_base_state_hash,
-    save_edit_plan,
-)
+from onyx.connectors.edit_plan.store import compute_base_state_hash, save_edit_plan
 from onyx.connectors.factory import (
-    ProposedPairingValidation,
     source_supports_windowed_runs,
     validate_connector_config,
     validate_proposed_pairing,
@@ -109,8 +107,9 @@ def plan_connector_edit(
 
     Runs the access gates and the blocking validation (about 3 s) on the
     proposed state, and reads the pair's cached dry-run results for the
-    slower checks. The caller authorizes the user for the pair and the
-    proposed credential.
+    slower checks. Like any connector construction, the validation can store
+    a credential that the connector refreshed. The caller authorizes the user
+    for the pair and the proposed credential.
 
     Raises:
         OnyxError: The pair or credential does not exist, the edit cannot be

@@ -2,7 +2,7 @@
 the DB, the plan gets the inputs the pair's state implies, validation runs on
 the proposed state only when something it checks changed, and the stored plan
 is scoped to its pair and tied to the base state it was computed from. Nothing
-but the plan store is written."""
+but the plan store is written (the validation itself is mocked here)."""
 
 from collections.abc import Generator
 from datetime import datetime, timezone
@@ -16,10 +16,12 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import DocumentSource
+from onyx.connectors import pairing_access
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapability,
+    ProposedPairingValidation,
 )
 from onyx.connectors.edit_plan import orchestration
 from onyx.connectors.edit_plan.models import (
@@ -34,7 +36,6 @@ from onyx.connectors.edit_plan.store import (
     ensure_base_state_matches,
     load_edit_plan,
 )
-from onyx.connectors.factory import ProposedPairingValidation
 from onyx.connectors.models import InputType
 from onyx.db.enums import (
     AccessType,
@@ -277,19 +278,78 @@ def test_settings_and_group_edits_skip_validation(
     validation.validate.assert_not_called()
 
 
+def test_group_only_edit_skips_validation(
+    db_session: Session,
+    slack_pair: ConnectorCredentialPair,
+    groups: list[UserGroup],
+    admin: User,
+    validation: _Validation,
+    ee: None,  # noqa: ARG001
+) -> None:
+    slack_pair.access_type = AccessType.PRIVATE
+    db_session.add(
+        UserGroup__CCPairDataAccess(
+            cc_pair_id=slack_pair.id, user_group_id=groups[0].id
+        )
+    )
+    db_session.commit()
+    proposed = _proposed(
+        db_session,
+        slack_pair,
+        data_access_group_ids=[group.id for group in groups],
+    )
+
+    stored = plan_connector_edit(
+        db_session, cc_pair_id=slack_pair.id, proposed=proposed, user=admin
+    )
+
+    assert [step.kind for step in stored.plan.steps] == [EditStepKind.ACCESS_GROUPS]
+    assert stored.plan.validation is None
+    validation.validate.assert_not_called()
+
+
 def test_access_change_runs_the_access_gates(
     db_session: Session,
     slack_pair: ConnectorCredentialPair,
     admin: User,
     validation: _Validation,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        pairing_access,
+        "get_security_settings",
+        lambda: MagicMock(allow_connector_group_restrictions=True),
+    )
     # A restricted pair needs a data-access group.
     proposed = _proposed(db_session, slack_pair, access_type=AccessType.SYNC_RESTRICTED)
 
-    with pytest.raises(OnyxError):
+    with pytest.raises(OnyxError) as exc:
         plan_connector_edit(
             db_session, cc_pair_id=slack_pair.id, proposed=proposed, user=admin
         )
+    assert exc.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_rename_of_a_pair_without_a_connector_class(
+    db_session: Session,
+    admin: User,
+    validation: _Validation,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    pair = make_cc_pair(db_session, source=DocumentSource.INGESTION_API)
+    try:
+        proposed = _proposed(db_session, pair, name="renamed")
+
+        stored = plan_connector_edit(
+            db_session, cc_pair_id=pair.id, proposed=proposed, user=admin
+        )
+
+        assert stored.plan.changed_settings == ["name"]
+        assert stored.plan.steps == []
+        validation.validate.assert_not_called()
+    finally:
+        db_session.rollback()
+        cleanup_cc_pair(db_session, pair)
 
 
 def test_credential_change_validates_the_new_credential(

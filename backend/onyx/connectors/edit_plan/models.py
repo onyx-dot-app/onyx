@@ -1,19 +1,19 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, field_validator
 
+from onyx.background.indexing.models import BackfillSpec
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
-    CapabilityCheckStatus,
+    ProposedPairingValidation,
 )
 from onyx.connectors.config_diff import ConfigFieldChange
-from onyx.connectors.factory import ProposedPairingValidation
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
-from onyx.db.index_attempt import BackfillSpec
 
 
 class PairState(BaseModel):
@@ -106,6 +106,8 @@ class EditNoteKind(str, Enum):
     ACCESS_AFTER_METADATA_SYNC = "access_after_metadata_sync"
     STALE_SYNCED_ACLS = "stale_synced_acls"
     CHECKS_STILL_RUNNING = "checks_still_running"
+    # A check that did not finish in the validation failed in a dry run.
+    UNFINISHED_CHECK_FAILED_IN_DRY_RUN = "unfinished_check_failed_in_dry_run"
 
 
 class EditNoteSeverity(str, Enum):
@@ -178,12 +180,7 @@ class EditPlan(BaseModel):
 
     @property
     def validation_blocks_apply(self) -> bool:
-        if self.validation is None:
-            return False
-        return self.validation.validation_error is not None or any(
-            result.required and result.status == CapabilityCheckStatus.FAILED
-            for result in self.validation.check_results
-        )
+        return self.validation is not None and self.validation.blocks_pairing
 
 
 class EditPlanChoices(BaseModel):
@@ -195,3 +192,13 @@ class EditPlanChoices(BaseModel):
     credential_path: CredentialPath | None = None
     added_steps: list[EditStepKind] = []
     dropped_steps: list[EditStepKind] = []
+
+
+class StoredEditPlan(BaseModel):
+    plan_id: UUID
+    cc_pair_id: int
+    user_id: UUID
+    base_state_hash: str
+    proposed: ProposedPairState
+    plan: EditPlan
+    created_at: datetime

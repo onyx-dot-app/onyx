@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from onyx.background.indexing.models import BackfillSpec
 from onyx.connectors.edit_plan.models import (
     CredentialChoice,
     CredentialPath,
@@ -18,7 +19,6 @@ from onyx.connectors.edit_plan.models import (
     ReconciliationOption,
 )
 from onyx.connectors.edit_plan.overrides import resolve_edit_steps
-from onyx.db.index_attempt import BackfillSpec
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -185,11 +185,33 @@ def test_added_reindex_subsumes_a_backfill() -> None:
 
 
 def test_added_prune_merges_with_a_reindex() -> None:
-    plan = _plan(_step(EditStepKind.FULL_REINDEX, required=True))
+    plan = _plan(_step(EditStepKind.FULL_REINDEX))
     steps = resolve_edit_steps(plan, EditPlanChoices(added_steps=[EditStepKind.PRUNE]))
 
     assert _kinds(steps) == [EditStepKind.FULL_REINDEX_THEN_PRUNE]
-    assert steps[0].required
+    assert not steps[0].required
+
+
+def test_added_prune_stays_apart_from_a_required_reindex() -> None:
+    plan = _plan(_step(EditStepKind.FULL_REINDEX, required=True))
+    steps = resolve_edit_steps(plan, EditPlanChoices(added_steps=[EditStepKind.PRUNE]))
+
+    assert _kinds(steps) == [EditStepKind.FULL_REINDEX, EditStepKind.PRUNE]
+    assert [step.required for step in steps] == [True, False]
+
+
+def test_choices_the_plan_does_not_offer_are_rejected() -> None:
+    plan = _plan(credential_changed=True)
+    assert plan.credential_choice is not None
+    plan.credential_choice.options = [CredentialPath.KEEP_INDEXED]
+    _invalid(
+        plan, EditPlanChoices(credential_path=CredentialPath.FULL_REINDEX_AND_PRUNE)
+    )
+
+    plan = _plan(reconciliation=True)
+    assert plan.reconciliation_choice is not None
+    plan.reconciliation_choice.options = [ReconciliationOption.FULL_REINDEX]
+    _invalid(plan, EditPlanChoices(reconciliation=ReconciliationOption.NOTHING))
 
 
 @pytest.mark.parametrize(

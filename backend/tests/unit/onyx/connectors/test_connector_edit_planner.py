@@ -7,16 +7,19 @@ from typing import Any
 
 import pytest
 
+from onyx.background.indexing.models import BackfillSpec
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapability,
+    ProposedPairingValidation,
 )
 from onyx.connectors.edit_plan.models import (
     CredentialPath,
     CurrentPairState,
     EditNoteKind,
+    EditNoteSeverity,
     EditPlan,
     EditPlanInputs,
     EditStep,
@@ -25,11 +28,10 @@ from onyx.connectors.edit_plan.models import (
     ProposedPairState,
 )
 from onyx.connectors.edit_plan.planner import compute_edit_plan, normalize_steps
-from onyx.connectors.factory import ProposedPairingValidation
+from onyx.connectors.edit_plan.store import compute_base_state_hash
 from onyx.connectors.field_policy import FieldClass, ScopeDirection
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
-from onyx.db.index_attempt import BackfillSpec
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -500,17 +502,29 @@ def test_full_reindex_subsumes_backfills() -> None:
     assert steps[0].backfill is None
 
 
-def test_reindex_and_prune_become_prune_after_reindex() -> None:
+@pytest.mark.parametrize("required", [True, False])
+def test_reindex_and_prune_become_prune_after_reindex(required: bool) -> None:
     steps = normalize_steps(
         [
-            _raw(EditStepKind.PRUNE),
-            _raw(EditStepKind.FULL_REINDEX, required=True),
+            _raw(EditStepKind.PRUNE, required=required),
+            _raw(EditStepKind.FULL_REINDEX, required=required),
             _raw(EditStepKind.SCOPED_BACKFILL),
         ]
     )
 
     assert [step.kind for step in steps] == [EditStepKind.FULL_REINDEX_THEN_PRUNE]
-    assert steps[0].required
+    assert steps[0].required == required
+
+
+def test_required_reindex_keeps_an_optional_prune_apart() -> None:
+    steps = normalize_steps(
+        [_raw(EditStepKind.PRUNE), _raw(EditStepKind.FULL_REINDEX, required=True)]
+    )
+
+    assert [(step.kind, step.required) for step in steps] == [
+        (EditStepKind.FULL_REINDEX, True),
+        (EditStepKind.PRUNE, False),
+    ]
 
 
 def test_prune_after_reindex_subsumes_a_prune() -> None:
@@ -581,6 +595,28 @@ def test_running_attempt_restarts_on_a_config_change() -> None:
     assert _notes(plan) == [EditNoteKind.ATTEMPT_RESTARTED]
 
 
+@pytest.mark.parametrize(
+    "old_config, new_config",
+    [
+        # Cosmetic only.
+        ({"channels": ["a"]}, {"channels": ["a"], "batch_size": 5}),
+        # The same scope: reordered items, a default written out.
+        ({"channels": ["a", "b"]}, {"channels": ["b", "a"]}),
+        ({"channels": ["a"]}, {"channels": ["a"], "include_bot_messages": False}),
+    ],
+)
+def test_running_attempt_is_kept_when_what_it_fetches_is_the_same(
+    old_config: dict[str, Any], new_config: dict[str, Any]
+) -> None:
+    plan = _plan(
+        _current(config=old_config),
+        _inputs(attempt_running=True),
+        connector_specific_config=new_config,
+    )
+
+    assert EditStepKind.RESTART_ATTEMPT not in _kinds(plan)
+
+
 def test_running_attempt_restarts_on_a_credential_change() -> None:
     plan = _plan(_current(), _inputs(attempt_running=True), credential_id=99)
 
@@ -596,22 +632,31 @@ def test_running_attempt_is_kept_for_an_access_change() -> None:
     assert EditNoteKind.ATTEMPT_RESTARTED not in _notes(plan)
 
 
+def test_paused_note() -> None:
+    plan = _plan(_current(status=ConnectorCredentialPairStatus.PAUSED), name="x")
+
+    assert _notes(plan) == [EditNoteKind.PAUSED]
+
+
 @pytest.mark.parametrize(
-    "status, expected_note",
+    "validation, expected_notes",
     [
-        (ConnectorCredentialPairStatus.PAUSED, EditNoteKind.PAUSED),
-        (
-            ConnectorCredentialPairStatus.INVALID,
-            EditNoteKind.INVALID_CLEARED_BY_VALIDATION,
-        ),
+        (ProposedPairingValidation(), [EditNoteKind.INVALID_CLEARED_BY_VALIDATION]),
+        # Nothing that validation checks changed, so apply does not validate.
+        (None, []),
+        (ProposedPairingValidation(validation_error="bad token"), []),
     ],
 )
-def test_state_notes(
-    status: ConnectorCredentialPairStatus, expected_note: EditNoteKind
+def test_invalid_note_needs_a_passed_validation(
+    validation: ProposedPairingValidation | None, expected_notes: list[EditNoteKind]
 ) -> None:
-    plan = _plan(_current(status=status), name="renamed")
+    plan = _plan(
+        _current(status=ConnectorCredentialPairStatus.INVALID),
+        _inputs(validation=validation),
+        name="renamed",
+    )
 
-    assert _notes(plan) == [expected_note]
+    assert _notes(plan) == expected_notes
 
 
 def test_deleting_pair_is_refused() -> None:
@@ -704,3 +749,33 @@ def test_unfinished_checks_point_to_the_dry_run() -> None:
     assert EditNoteKind.CHECKS_STILL_RUNNING in _notes(plan)
     assert plan.dry_run_results == dry_run
     assert not plan.validation_blocks_apply
+
+
+def test_unfinished_check_with_a_failed_dry_run_warns() -> None:
+    validation = ProposedPairingValidation(unfinished_check_ids=frozenset({"check"}))
+    dry_run = [_check_result(True, CapabilityCheckStatus.FAILED)]
+    plan = _plan(
+        _current(),
+        _inputs(validation=validation, dry_run_results=dry_run),
+        credential_id=99,
+    )
+
+    assert _notes(plan) == [
+        EditNoteKind.CHECKS_STILL_RUNNING,
+        EditNoteKind.UNFINISHED_CHECK_FAILED_IN_DRY_RUN,
+    ]
+    warning = plan.notes[1]
+    assert warning.severity == EditNoteSeverity.WARNING
+    assert "Check" in warning.message
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [{"source": DocumentSource.GITHUB}, {"input_type": InputType.LOAD_STATE}],
+)
+def test_base_state_hash_covers_source_and_input_type(changes: dict[str, Any]) -> None:
+    current = _current()
+
+    assert compute_base_state_hash(current) != compute_base_state_hash(
+        current.model_copy(update=changes)
+    )

@@ -8,29 +8,16 @@ changed after it was computed.
 
 import hashlib
 import json
-from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
-
 from onyx.cache.factory import get_cache_backend
-from onyx.connectors.edit_plan.models import EditPlan, PairState, ProposedPairState
+from onyx.connectors.edit_plan.models import PairState, StoredEditPlan
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 EDIT_PLAN_TTL_SECONDS = 24 * 60 * 60
 
 _EDIT_PLAN_KEY_PREFIX = "connector_edit_plan"
-
-
-class StoredEditPlan(BaseModel):
-    plan_id: UUID
-    cc_pair_id: int
-    user_id: UUID
-    base_state_hash: str
-    proposed: ProposedPairState
-    plan: EditPlan
-    created_at: datetime
 
 
 def compute_base_state_hash(state: PairState) -> str:
@@ -40,6 +27,8 @@ def compute_base_state_hash(state: PairState) -> str:
         state.model_dump(
             mode="json",
             include={
+                "source",
+                "input_type",
                 "connector_specific_config",
                 "access_type",
                 "data_access_group_ids",
