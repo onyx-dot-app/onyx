@@ -12,8 +12,9 @@ jest.mock("@/lib/permissions/hooks", () => ({
 jest.mock("@/hooks/useTierAtLeast", () => ({
   useTierAtLeast: jest.fn(),
 }));
-jest.mock("@/components/admin/connectors/AutoSyncOptions", () => ({
-  AutoSyncOptions: () => null,
+jest.mock("@/lib/connectors/components/AutoSyncOptions", () => ({
+  __esModule: true,
+  default: () => null,
 }));
 jest.mock("@/lib/connectors/components/GroupShareList", () => ({
   __esModule: true,

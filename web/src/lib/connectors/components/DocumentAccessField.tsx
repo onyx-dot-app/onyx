@@ -12,7 +12,7 @@ import {
   ConfigurableSources,
   validAutoSyncSources,
 } from "@/lib/connectors/types/source";
-import { AutoSyncOptions } from "@/components/admin/connectors/AutoSyncOptions";
+import AutoSyncOptions from "@/lib/connectors/components/AutoSyncOptions";
 import ConnectorGroupRestrictionPicker from "@/lib/connectors/components/ConnectorGroupRestrictionPicker";
 import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import GroupShareList from "@/lib/connectors/components/GroupShareList";

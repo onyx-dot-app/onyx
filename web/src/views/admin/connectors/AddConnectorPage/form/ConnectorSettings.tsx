@@ -1,7 +1,7 @@
 import { useTranslations } from "next-intl";
-import { Card, Collapsible, InputTypeIn } from "@opal/components";
+import { Card, Collapsible } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
-import { FormikField } from "@/refresh-components/form/FormikField";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import DocumentAccessField from "@/lib/connectors/components/DocumentAccessField";
 import ManageAccessField from "@/lib/connectors/components/ManageAccessField";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
@@ -40,20 +40,11 @@ export default function ConnectorSettings({
               disabled={disabled}
               title={t("displayName.title")}
             >
-              <FormikField<string>
+              <InputTypeInField
                 name="name"
-                render={(field) => (
-                  <InputTypeIn
-                    id="name"
-                    data-testid="connector-name"
-                    name={field.name}
-                    value={field.value ?? ""}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    placeholder={getSourceDisplayName(connector) ?? undefined}
-                    variant={disabled ? "disabled" : "primary"}
-                  />
-                )}
+                data-testid="connector-name"
+                placeholder={getSourceDisplayName(connector) ?? undefined}
+                variant={disabled ? "disabled" : "primary"}
               />
             </InputVertical>
             <DocumentAccessField
