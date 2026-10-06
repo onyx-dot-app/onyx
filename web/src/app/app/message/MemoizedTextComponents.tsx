@@ -16,9 +16,10 @@ import {
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
+import { extractTextFromReactNode } from "@/app/app/message/codeUtils";
 import { useTranslations } from "next-intl";
 
-const CITATION_LABEL_PATTERN = /^\[(D|Q)?\d+\]$/;
+const CITATION_LABEL_PATTERN: RegExp = /^\[(D|Q)?\d+\]$/;
 
 // Returns the label only when it has no nested elements (e.g. bold).
 function getPlainLabel(children: React.ReactNode): string | null {
@@ -32,19 +33,6 @@ function getPlainLabel(children: React.ReactNode): string | null {
     return children.join("");
   }
   return null;
-}
-
-function getTextContent(node: React.ReactNode): string {
-  if (typeof node === "string" || typeof node === "number") {
-    return String(node);
-  }
-  if (Array.isArray(node)) {
-    return node.map(getTextContent).join("");
-  }
-  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
-    return getTextContent(node.props.children);
-  }
-  return "";
 }
 
 interface DocumentCardProps {
@@ -194,9 +182,9 @@ export const MemoizedLink = memo(
       }
     }, [document, updatePresentingDocument, question, openQuestion]);
 
-    const url = ensureHrefProtocol(href);
-    const isChatFile = url?.includes("/api/chat/file/");
-    const plainLabel = getPlainLabel(value);
+    const url: string | undefined = ensureHrefProtocol(href);
+    const isChatFile: boolean = !!url?.includes("/api/chat/file/");
+    const plainLabel: string | null = getPlainLabel(value);
 
     if (value?.toString().startsWith("*")) {
       return <BlinkingBar addMargin />;
@@ -227,8 +215,10 @@ export const MemoizedLink = memo(
     }
 
     if (isChatFile && updatePresentingDocument) {
-      const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
-      const filename = getTextContent(value).trim() || "download";
+      const fileId: string =
+        url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
+      const filename: string =
+        extractTextFromReactNode(value).trim() || "download";
       return (
         <button
           type="button"
