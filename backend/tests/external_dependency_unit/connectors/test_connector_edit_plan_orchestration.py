@@ -53,10 +53,6 @@ from onyx.db.models import (
 from onyx.db.search_settings import get_current_search_settings
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation,
-    global_version,
-)
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
     create_test_user_group,
@@ -144,14 +140,6 @@ def other_credential(
 
 
 @pytest.fixture
-def ee(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
-    fetch_versioned_implementation.cache_clear()
-    monkeypatch.setattr(global_version, "is_ee_version", lambda: True)
-    yield
-    fetch_versioned_implementation.cache_clear()
-
-
-@pytest.fixture
 def groups(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -182,7 +170,7 @@ def test_state_builder_reads_the_pair(
     db_session: Session,
     slack_pair: ConnectorCredentialPair,
     groups: list[UserGroup],
-    ee: None,  # noqa: ARG001
+    enable_ee: None,  # noqa: ARG001
 ) -> None:
     slack_pair.access_type = AccessType.PRIVATE
     for group in reversed(groups):
@@ -284,7 +272,7 @@ def test_group_only_edit_skips_validation(
     groups: list[UserGroup],
     admin: User,
     validation: _Validation,
-    ee: None,  # noqa: ARG001
+    enable_ee: None,  # noqa: ARG001
 ) -> None:
     slack_pair.access_type = AccessType.PRIVATE
     db_session.add(
