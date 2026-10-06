@@ -65,10 +65,10 @@ def _adapter_for_bedrock(llm_config: LLMConfig) -> PromptCacheProvider:
     """
     import litellm.utils
 
-    names = [
+    names: list[str] = [
         name for name in (llm_config.deployment_name, llm_config.model_name) if name
     ]
-    cacheable = False
+    cacheable: bool = False
     for name in names:
         try:
             if litellm.utils.supports_prompt_caching(
@@ -76,8 +76,14 @@ def _adapter_for_bedrock(llm_config: LLMConfig) -> PromptCacheProvider:
             ):
                 cacheable = True
                 break
-        except Exception:
-            continue
+        except Exception as e:
+            # Models absent from the model-cost map raise here; anything else
+            # is a real lookup failure worth surfacing.
+            logger.warning(
+                "Prompt-caching capability lookup failed for Bedrock model: %s — %s",
+                name,
+                e,
+            )
     if cacheable:
         logger.debug(
             "Prompt caching enabled for Bedrock model: %s (provider=%s)",
