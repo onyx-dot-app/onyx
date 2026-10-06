@@ -3,6 +3,7 @@ import { render, screen } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Dropdown, InputTypeIn } from "@opal/components";
+import { scrollWithinList } from "@opal/components/dropdown/list";
 import type {
   DropdownItem,
   DropdownMenuItem,
@@ -843,5 +844,86 @@ describe("Dropdown view registry", () => {
     expect(
       screen.getByRole("menuitemcheckbox", { name: "Pinned" })
     ).toHaveAttribute("aria-checked", "true");
+  });
+});
+
+interface ListGeometry {
+  /** The row's viewport top; the scroller's view spans 100–300. */
+  rowTop: number;
+  margin?: number;
+}
+
+/**
+ * A scroller and one row with stubbed geometry: jsdom has no layout. The
+ * scroller's view is 100–300 in the viewport, scrolled 50px; rows are 40px.
+ */
+function listGeometry({ rowTop, margin = 0 }: ListGeometry) {
+  const scroller = document.createElement("div");
+  scroller.className = "opal-dropdown-scroll";
+  const row = document.createElement("div");
+  scroller.appendChild(row);
+  document.body.appendChild(scroller);
+  Object.defineProperty(scroller, "clientHeight", { value: 200 });
+  Object.defineProperty(scroller, "scrollTop", { value: 50, writable: true });
+  scroller.getBoundingClientRect = () => new DOMRect(0, 100, 200, 200);
+  row.getBoundingClientRect = () => new DOMRect(0, rowTop, 200, 40);
+  const computed = window.getComputedStyle;
+  jest.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) =>
+    el === row
+      ? Object.assign(computed(el, pseudo), {
+          scrollMarginBlockStart: `${margin}px`,
+          scrollMarginBlockEnd: `${margin}px`,
+        })
+      : computed(el, pseudo)
+  );
+  return { scroller, row };
+}
+
+describe("scrollWithinList", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    document.body.innerHTML = "";
+  });
+
+  test("center puts the row in the middle of the view", () => {
+    const { scroller, row } = listGeometry({ rowTop: 260 });
+    scrollWithinList(row, "center");
+    // Content top 210, centred in 200px: 210 - (200 - 40) / 2.
+    expect(scroller.scrollTop).toBe(130);
+  });
+
+  test("nearest leaves a row clear of the edges where it is", () => {
+    const { scroller, row } = listGeometry({ rowTop: 150, margin: 12 });
+    scrollWithinList(row, "nearest");
+    expect(scroller.scrollTop).toBe(50);
+  });
+
+  test("nearest keeps a row's scroll margin clear of the bottom edge", () => {
+    // Fully in view, but its margin reaches under the bottom fade.
+    const { scroller, row } = listGeometry({ rowTop: 250, margin: 12 });
+    scrollWithinList(row, "nearest");
+    // Content top 200: 200 + 40 + 12 - 200.
+    expect(scroller.scrollTop).toBe(52);
+  });
+
+  test("nearest keeps a row's scroll margin clear of the top edge", () => {
+    const { scroller, row } = listGeometry({ rowTop: 90, margin: 12 });
+    scrollWithinList(row, "nearest");
+    // Content top 40: 40 - 12.
+    expect(scroller.scrollTop).toBe(28);
+  });
+});
+
+describe("Dropdown scrolling", () => {
+  // Opening around the selection waits for floating-ui to place the list,
+  // which never happens in jsdom; `scrollWithinList`'s own tests cover it.
+  test("walking the rows never scrolls outside the list", async () => {
+    jest.mocked(Element.prototype.scrollIntoView).mockClear();
+    const user = setupUser();
+    render(<ButtonPickerHarness />);
+    await user.click(screen.getByRole("button", { name: "Fruit" }));
+    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowUp}");
+    // scrollIntoView scrolls every ancestor of the portal, the page too.
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 });
