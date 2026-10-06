@@ -43,7 +43,7 @@ import {
   StaticPermissionLabel,
   TransferTrailingButton,
 } from "@/sections/modals/ShareModalPermissionControls";
-import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
+import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
   useSharePermissionOptions,
   useShareScopeOptions,

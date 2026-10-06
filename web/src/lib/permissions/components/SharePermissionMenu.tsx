@@ -34,7 +34,7 @@ export interface SharePermissionMenuProps<T extends string> {
   ariaLabel?: string;
 }
 
-export function SharePermissionMenu<T extends string>({
+export default function SharePermissionMenu<T extends string>({
   value,
   options,
   onChange,

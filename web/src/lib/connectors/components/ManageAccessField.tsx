@@ -16,7 +16,7 @@ import GroupShareList, {
 import {
   SharePermissionMenu,
   type SharePermissionMenuOption,
-} from "@/sections/modals/SharePermissionMenu";
+} from "@/lib/permissions/components";
 
 interface ManageAccessFieldProps {
   disabled?: boolean;
