@@ -353,6 +353,8 @@ function liveCard(root: HTMLElement | null): HTMLElement | null {
  * Scrolls a row into view inside the list's own scroller only.
  * `scrollIntoView` also scrolls every ancestor of the portal, `<body>`
  * included even under `overflow: hidden`, which moves the whole page.
+ * Like `scrollIntoView`, "nearest" keeps the row's `scroll-margin-block`
+ * clear of the edge, so a stop never parks under the mask fade.
  */
 function scrollWithinList(
   row: Element | null | undefined,
@@ -367,10 +369,16 @@ function scrollWithinList(
   const rowTop = rowRect.top - viewTop + scroller.scrollTop;
   if (block === "center") {
     scroller.scrollTop = rowTop - (scroller.clientHeight - rowRect.height) / 2;
-  } else if (rowRect.top < viewTop) {
-    scroller.scrollTop = rowTop;
-  } else if (rowRect.bottom > viewBottom) {
-    scroller.scrollTop = rowTop + rowRect.height - scroller.clientHeight;
+    return;
+  }
+  const style = window.getComputedStyle(row);
+  const marginStart = Number.parseFloat(style.scrollMarginBlockStart) || 0;
+  const marginEnd = Number.parseFloat(style.scrollMarginBlockEnd) || 0;
+  if (rowRect.top - marginStart < viewTop) {
+    scroller.scrollTop = rowTop - marginStart;
+  } else if (rowRect.bottom + marginEnd > viewBottom) {
+    scroller.scrollTop =
+      rowTop + rowRect.height + marginEnd - scroller.clientHeight;
   }
 }
 
