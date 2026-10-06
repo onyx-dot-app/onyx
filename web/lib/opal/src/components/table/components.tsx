@@ -506,6 +506,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                           columnKindMap={columnKindMap}
                           qualifierColumn={qualifierColumn}
                           isSelectable={isSelectable}
+                          prominence={prominence}
                         />
                       );
                     }
