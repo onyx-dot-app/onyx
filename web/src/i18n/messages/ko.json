@@ -2138,6 +2138,7 @@
           "description": "모든 사용자가 소스에서 동기화된 접근 권한을 유지합니다.",
           "title": "그룹을 추가하기 전까지 제한 없음"
         },
+        "loadError": "그룹을 불러오지 못했습니다. 페이지를 새로고침한 후 다시 시도하세요.",
         "memberCount": "{count, plural, other {멤버 #명}}",
         "picker": {
           "placeholder": "이 커넥터에 대한 접근을 제한할 그룹 추가"

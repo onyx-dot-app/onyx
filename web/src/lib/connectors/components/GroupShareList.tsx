@@ -27,7 +27,10 @@ export default function GroupShareList({
   disabled,
 }: GroupShareListProps) {
   const t = useTranslations("admin.connector.groupRestriction");
-  const { data: userGroups } = useUserGroups();
+  const { data: userGroups, isLoading, error } = useUserGroups();
+  // Without the groups there is nothing to pick from, and the rows already
+  // added cannot show; say so rather than show an empty picker.
+  const loadFailed = !isLoading && !!error;
   const [field, meta, helpers] = useField<number[]>(name);
 
   const selectedIds = new Set(field.value);
@@ -61,8 +64,9 @@ export default function GroupShareList({
         onValueChange={addGroup}
         options={options}
         placeholder={placeholder}
-        disabled={disabled}
+        disabled={disabled || isLoading || loadFailed}
       />
+      {loadFailed && <InputErrorText>{t("loadError")}</InputErrorText>}
       {leadingRow}
       {selectedGroups.length > 0 && (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

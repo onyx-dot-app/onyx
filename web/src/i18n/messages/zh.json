@@ -2138,6 +2138,7 @@
           "description": "所有人保留从源系统同步的访问权限。",
           "title": "添加群组前不设限制"
         },
+        "loadError": "无法加载群组。请重新加载页面后重试。",
         "memberCount": "{count, plural, other {# 名成员}}",
         "picker": {
           "placeholder": "添加群组以限制对此连接器的访问"

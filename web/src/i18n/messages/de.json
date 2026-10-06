@@ -2138,6 +2138,7 @@
           "description": "Alle behalten den aus der Quelle synchronisierten Zugriff.",
           "title": "Keine Beschränkung, bis Gruppen hinzugefügt werden"
         },
+        "loadError": "Gruppen konnten nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
         "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
         "picker": {
           "placeholder": "Gruppen hinzufügen, um den Zugriff auf diesen Connector zu beschränken"

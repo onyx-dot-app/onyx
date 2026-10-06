@@ -5,6 +5,8 @@ import { Card, Divider, MessageCard, Text } from "@opal/components";
 import { Content, ContentAction, Section } from "@opal/layouts";
 import { SvgUserManage } from "@opal/icons";
 import useUsers from "@/hooks/useUsers";
+import { Permission } from "@/lib/types";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import GroupShareList from "@/lib/connectors/components/GroupShareList";
 
 interface ManageAccessFieldProps {
@@ -20,8 +22,15 @@ export default function ManageAccessField({
 }: ManageAccessFieldProps) {
   const t = useTranslations("admin.connectorsList.settings.manageAccess");
   const tRestriction = useTranslations("admin.connector.groupRestriction");
+  const { isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
   const { data: usersData } = useUsers({ includeApiKeys: false });
-  const adminCount = usersData?.accepted.filter((user) => user.is_admin).length;
+  // A scoped manager's user list stops at their groups, so it would count
+  // too few admins; leave the count out rather than show a wrong one.
+  const adminCount = isScopedManager
+    ? undefined
+    : usersData?.accepted.filter((user) => user.is_admin).length;
 
   const adminsRow = (
     <Card color="background-tint-01" border="none" padding={2}>

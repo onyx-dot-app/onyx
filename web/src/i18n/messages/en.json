@@ -2138,6 +2138,7 @@
           "description": "Everyone keeps the access synced from the source.",
           "title": "No restriction until groups are added"
         },
+        "loadError": "Could not load groups. Reload the page to try again.",
         "memberCount": "{count, plural, one {# member} other {# members}}",
         "picker": {
           "placeholder": "Add groups to restrict access to this connector"

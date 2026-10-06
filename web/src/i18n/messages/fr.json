@@ -2138,6 +2138,7 @@
           "description": "Tout le monde conserve l'accès synchronisé depuis la source.",
           "title": "Aucune restriction tant qu'aucun groupe n'est ajouté"
         },
+        "loadError": "Impossible de charger les groupes. Rechargez la page pour réessayer.",
         "memberCount": "{count, plural, one {# membre} other {# membres}}",
         "picker": {
           "placeholder": "Ajouter des groupes pour restreindre l'accès à ce connecteur"

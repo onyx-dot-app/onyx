@@ -2138,6 +2138,7 @@
           "description": "Todos conservan el acceso sincronizado desde el origen.",
           "title": "Sin restricción hasta que se añadan grupos"
         },
+        "loadError": "No se pudieron cargar los grupos. Vuelve a cargar la página para intentarlo de nuevo.",
         "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
         "picker": {
           "placeholder": "Añade grupos para restringir el acceso a este conector"
