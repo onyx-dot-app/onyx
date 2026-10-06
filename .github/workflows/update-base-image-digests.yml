@@ -107,6 +107,7 @@ jobs:
       # the digests move week over week, so an already-open PR should carry the
       # latest resolution rather than go stale behind a second one.
       - name: Open or update a PR per family
+        id: pr
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           CACHE_FILE: ${{ runner.temp }}/digests.json
@@ -120,6 +121,7 @@ jobs:
           # Read the list up front. `gh` and `git` in the body would otherwise
           # compete with the loop for stdin.
           mapfile -t families < "${RUNNER_TEMP}/stale-families.txt"
+          pr_links=""
 
           for family in "${families[@]}"; do
             [ -n "${family}" ] || continue
@@ -163,9 +165,23 @@ jobs:
                 --title "${title}" \
                 --body-file "${RUNNER_TEMP}/pr-body-${family}.md"
             fi
+            pr_url="$(gh pr view "${branch}" --json url --jq .url)"
+            gh pr edit "${pr_url}" --add-reviewer rohoswagger
+            pr_links+="<${pr_url}|${family} base image update> "
           done
 
           git switch --force main
+          echo "links=${pr_links}" >> "${GITHUB_OUTPUT}"
+
+      - name: Notify Slack about PRs ready for review
+        if: steps.pr.outputs.links != ''
+        continue-on-error: true
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.AI_PR_REVIEWS_WEBHOOK }}
+          title: "Base image PRs ready for review"
+          details: "{mention} Please review ${{ steps.pr.outputs.links }}"
+          mention: rohoswagger
 
   notify-slack-on-failure:
     needs:
