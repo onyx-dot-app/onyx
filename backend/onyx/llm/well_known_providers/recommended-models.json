@@ -1,5 +1,5 @@
 {
-  "version": "1.18",
+  "version": "1.19",
   "updated_at": "2026-10-06T00:00:00Z",
   "providers": {
     "openai": {
@@ -9,7 +9,7 @@
           "name": "claude-opus-5-5"
         },
         {
-          "name": "gpt-6.1-sol"
+          "name": "gpt-6-astra"
         },
         {
           "name": "claude-sonnet-5-5"
@@ -41,8 +41,12 @@
           "display_name": "Gemini 3.8 Flash"
         },
         {
-          "name": "gemini-3.1-flash-lite",
-          "display_name": "Gemini 3.1 Flash Lite"
+          "name": "gemini-3.7-flash",
+          "display_name": "Gemini 3.7 Flash"
+        },
+        {
+          "name": "gemini-3.5-flash-lite",
+          "display_name": "Gemini 3.5 Flash Lite"
         }
       ]
     },
