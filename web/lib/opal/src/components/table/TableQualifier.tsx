@@ -66,7 +66,11 @@ function TableQualifier({
   function renderContent() {
     switch (content) {
       case "icon":
-        return Icon ? <Icon size={iconSize} /> : null;
+        // shrink-0 and overflow-visible: a flex item may otherwise shrink the
+        // SVG, and its own default overflow cuts a stroke at its edge.
+        return Icon ? (
+          <Icon size={iconSize} className="shrink-0 overflow-visible" />
+        ) : null;
 
       case "image":
         return imageSrc ? (
@@ -97,7 +101,9 @@ function TableQualifier({
       {showBackground ? (
         <div
           className={cn(
-            "flex items-center justify-center overflow-hidden rounded-08 transition-colors",
+            "flex items-center justify-center rounded-08 transition-colors",
+            // Only an image needs the tile's corners clipped.
+            content === "image" && "overflow-hidden",
             resolvedSize === 2.75 ? "h-9 w-9" : "h-7 w-7",
             disabled
               ? "bg-background-neutral-03"
