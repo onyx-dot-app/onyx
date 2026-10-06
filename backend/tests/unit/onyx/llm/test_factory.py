@@ -1,6 +1,8 @@
 from functools import partial
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.chat.incognito import (
     BIFROST_DISABLE_CONTENT_LOGGING_HEADER,
     incognito_llm_extra_headers,
@@ -16,6 +18,7 @@ from onyx.llm.factory import (
     llm_from_provider,
 )
 from onyx.llm.interfaces import LlmRequestPolicy
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
     BIFROST_PROVIDER_NAME,
     LM_STUDIO_API_KEY_CONFIG_KEY,
@@ -355,3 +358,129 @@ class TestPolicyFnForwarding:
             assert (
                 mock_from_provider.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
             )
+
+
+def test_client_config_resolves_capabilities() -> None:
+    from onyx.llm.multi_llm import LitellmLLM
+
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"custom-model": {"supports_vision": True}},
+    ):
+        client = LitellmLLM(
+            api_key="secret-key",
+            model_provider="openai",
+            model_name="custom-model",
+            max_input_tokens=1000,
+        )
+    metadata = client.config
+    assert client.config == metadata
+    assert client.config is not metadata
+    assert metadata.supports_images is True
+    assert metadata.api_key == "secret-key"
+
+
+def test_factory_carries_configured_vision_support_to_client() -> None:
+    provider = _build_provider_view("openai", 4096)
+    provider.model_configurations[0].supports_image_input = True
+    with patch("onyx.llm.factory.LitellmLLM") as create_client:
+        llm_from_provider("test-model", provider)
+    assert create_client.call_args.kwargs["supports_images"] is True
+
+
+def test_factory_falls_back_to_catalog_without_configured_vision() -> None:
+    provider = _build_provider_view("openai", 4096)
+    provider.model_configurations[0].supports_image_input = False
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"test-model": {"supports_vision": True}},
+    ):
+        client = llm_from_provider("test-model", provider)
+    assert client.config.supports_images is True
+
+
+def test_client_config_is_a_defensive_snapshot() -> None:
+    from onyx.llm.multi_llm import LitellmLLM
+
+    settings = {"custom_api_key": "original-key"}
+    client = LitellmLLM(
+        api_key="secret-key",
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=1000,
+        custom_config=settings,
+    )
+    settings["custom_api_key"] = "changed-input"
+    snapshot = client.config
+    assert snapshot.custom_config == {"custom_api_key": "original-key"}
+    snapshot.custom_config["custom_api_key"] = "changed-snapshot"
+    assert client.config.custom_config == {"custom_api_key": "original-key"}
+
+
+@pytest.mark.parametrize(
+    "catalog, override, expected",
+    [
+        ({}, None, None),
+        ({"supports_vision": None}, None, None),
+        ({"supports_vision": False}, None, False),
+        ({"supports_vision": True}, False, False),
+        ({"supports_vision": False}, True, True),
+    ],
+)
+def test_client_image_capability_fallback(
+    catalog: dict[str, bool | None], override: bool | None, expected: bool | None
+) -> None:
+    with patch(
+        "onyx.llm.multi_llm.get_model_map", return_value={"test-model": catalog}
+    ):
+        client = get_llm(
+            provider="openai",
+            model="test-model",
+            deployment_name=None,
+            max_input_tokens=4096,
+            supports_images=override,
+        )
+    assert client.config.supports_images is expected
+
+
+def test_client_resolves_image_capability_from_deployment_name() -> None:
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"known-model": {"supports_vision": True}},
+    ):
+        client = get_llm(
+            provider="openai",
+            model="deployment-alias",
+            deployment_name="known-model",
+            max_input_tokens=4096,
+        )
+    assert client.config.supports_images is True
+
+
+def test_factory_captures_nested_request_and_policy_settings() -> None:
+    kwargs = {"metadata": {"source": "caller"}}
+    policy_kwargs = {"extra_body": {"store": False}}
+    client = get_llm(
+        provider="openai",
+        model="gpt-5-mini",
+        deployment_name=None,
+        max_input_tokens=4096,
+        model_kwargs=kwargs,
+        policy_model_kwargs=policy_kwargs,
+    )
+    kwargs["metadata"]["source"] = "changed"
+    policy_kwargs["extra_body"]["store"] = True
+    assert client._model_kwargs["metadata"] == {"source": "caller"}
+    assert client._model_kwargs["extra_body"]["store"] is False
+
+
+def test_client_does_not_modify_caller_model_kwargs() -> None:
+    kwargs = {"metadata": {"source": "caller"}}
+    LitellmLLM(
+        api_key=None,
+        model_provider="ollama_chat",
+        model_name="unknown-model",
+        max_input_tokens=4096,
+        model_kwargs=kwargs,
+    )
+    assert kwargs == {"metadata": {"source": "caller"}}

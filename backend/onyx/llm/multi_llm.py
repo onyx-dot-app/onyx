@@ -43,7 +43,9 @@ from onyx.llm.model_capabilities import (
     anthropic_omits_sampling_params,
     anthropic_supports_thinking,
     anthropic_uses_adaptive_thinking,
+    find_model_obj,
     gemini_lowest_thinking_level_is_low,
+    get_model_map,
     is_true_openai_model,
     model_is_reasoning_model,
     openai_chat_tools_require_reasoning_none,
@@ -580,6 +582,7 @@ class LitellmLLM(LLM):
         reasoning_effort_user_default: ReasoningEffort | None = None,
         reasoning_effort_max: ReasoningEffort | None = None,
         supports_reasoning: bool = False,
+        supports_images: bool | None = None,
     ):
         # No instance-level timeout: invoke() and stream() each take their own,
         # so an instance default would be a second source of truth.
@@ -593,7 +596,7 @@ class LitellmLLM(LLM):
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
         self._max_input_tokens = max_input_tokens
-        self._custom_config = custom_config
+        self._custom_config = copy.deepcopy(custom_config)
         self._reasoning_effort_default = reasoning_effort_default
         self._reasoning_effort_user_default = reasoning_effort_user_default
         self._reasoning_effort_max = reasoning_effort_max
@@ -602,7 +605,7 @@ class LitellmLLM(LLM):
         self._api_surface = resolve_api_surface(model_provider, custom_config)
 
         # Create a dictionary for model-specific arguments if it's None
-        model_kwargs = model_kwargs or {}
+        model_kwargs = copy.deepcopy(model_kwargs or {})
 
         custom_config_mapping = map_custom_config_to_model_kwargs(
             model_provider=model_provider,
@@ -676,6 +679,15 @@ class LitellmLLM(LLM):
             )
 
         self._model_kwargs = model_kwargs
+        model_map = get_model_map()
+        identities = resolve_model_identity_names(model_name, deployment_name)
+        known = [find_model_obj(model_map, model_provider, name) for name in identities]
+        vision_values = [entry.get("supports_vision") for entry in known if entry]
+        if supports_images is None and any(
+            value is not None for value in vision_values
+        ):
+            supports_images = any(vision_values)
+        self._supports_images = supports_images
 
     def _track_llm_cost(self, usage: Usage) -> None:
         """
@@ -1324,6 +1336,7 @@ class LitellmLLM(LLM):
             api_version=self._api_version,
             deployment_name=self._deployment_name,
             custom_config=self._custom_config,
+            supports_images=self._supports_images,
             max_input_tokens=self._max_input_tokens,
             reasoning_effort_default=self._reasoning_effort_default,
             reasoning_effort_user_default=self._reasoning_effort_user_default,

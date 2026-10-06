@@ -331,6 +331,11 @@ def llm_from_provider(
         model_kwargs=model_kwargs,
         policy_headers=policy.headers if policy else None,
         policy_model_kwargs=policy.model_kwargs if policy else None,
+        supports_images=(
+            True
+            if model_configuration and model_configuration.supports_image_input
+            else None
+        ),
         reasoning_effort_default=(
             model_configuration.reasoning_effort_default
             if model_configuration
@@ -416,6 +421,7 @@ def get_llm(
     reasoning_effort_user_default: ReasoningEffort | None = None,
     reasoning_effort_max: ReasoningEffort | None = None,
     supports_reasoning: bool = False,
+    supports_images: bool | None = None,
 ) -> LitellmLLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -454,6 +460,7 @@ def get_llm(
         reasoning_effort_user_default=reasoning_effort_user_default,
         reasoning_effort_max=reasoning_effort_max,
         supports_reasoning=supports_reasoning,
+        supports_images=supports_images,
     )
 
 
