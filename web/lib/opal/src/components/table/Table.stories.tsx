@@ -150,7 +150,7 @@ export const WithoutHeader: Story = {
       items={USERS.slice(0, 4)}
       columns={columns}
       getRowId={(r) => r.id}
-      size="md"
+      size={2.25}
       showHeader={false}
     />
   ),

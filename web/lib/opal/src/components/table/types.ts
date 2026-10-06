@@ -272,7 +272,7 @@ export interface DataTableProps<TData> {
   draggable?: DataTableDraggableConfig;
   /** Footer configuration. */
   footer?: DataTableFooterConfig;
-  /** Table size variant. @default "lg" */
+  /** Each body row's height in rem: `2.25` (36px) or `2.75` (44px). @default 2.75 */
   size?: TableSize;
   /**
    * The rows' surface: `"primary"` rests on `background-tint-00` (white),

@@ -62,7 +62,7 @@ function UsersTable({ users }: { users: User[] }) {
 | `getRowId`                | `(row: TData) => string`              | required      | Unique row identifier                                           |
 | `label`                   | `string`                              | —             | The table's accessible name                                     |
 | `pageSize`                | `number`                              | `10`          | Rows per page (`Infinity` disables pagination)                  |
-| `size`                    | `"md" \| "lg"`                        | `"lg"`        | Density variant                                                 |
+| `size`                    | `2.25 \| 2.75`                       | `2.75`        | Each body row's height in rem: 36px or 44px                     |
 | `footer`                  | `DataTableFooterConfig`               | —             | Footer configuration (mode is derived from `selectionBehavior`) |
 | `selectionBehavior`       | `"no-select" \| "single-select" \| "multi-select"` | `"no-select"` | Row selection behavior                       |
 | `values`                  | `ReadonlySet<string>`                 | —             | The selected row IDs. Given, the selection is controlled        |

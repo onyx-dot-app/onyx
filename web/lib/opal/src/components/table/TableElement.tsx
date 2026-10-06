@@ -2,15 +2,17 @@
 
 import React from "react";
 import { cn } from "@opal/utils";
-import { useTableSize } from "@opal/components/table/TableSizeContext";
+import {
+  useTableSize,
+  type TableSize,
+} from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@opal/types";
-import type { ExtremaSizeVariants, SizeVariants } from "@opal/types";
+import type { ExtremaSizeVariants } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type TableSize = Extract<SizeVariants, "md" | "lg">;
 type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 
 interface TableProps extends WithoutStyles<

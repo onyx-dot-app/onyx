@@ -153,7 +153,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
     initialViewSelected,
     draggable,
     footer,
-    size = "lg",
+    size = 2.75,
     prominence = "primary",
     selectionBehavior = "no-select",
     onSelectionChange,

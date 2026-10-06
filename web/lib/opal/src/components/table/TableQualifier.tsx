@@ -30,9 +30,10 @@ interface TableQualifierProps {
   iconSize?: "lg" | "md";
 }
 
+// Icon size in px, by icon preset, then by the table's row height.
 const iconSizesMap = {
-  lg: { lg: 28, md: 24 },
-  md: { lg: 20, md: 16 },
+  lg: { 2.75: 28, 2.25: 24 },
+  md: { 2.75: 20, 2.25: 16 },
 } as const;
 
 function getOverlayStyles(selected: boolean, disabled: boolean) {
@@ -88,7 +89,7 @@ function TableQualifier({
     <div
       className={cn(
         "group relative inline-flex shrink-0 items-center justify-center",
-        resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
+        resolvedSize === 2.75 ? "h-9 w-9" : "h-7 w-7",
         disabled ? "cursor-not-allowed" : "cursor-default"
       )}
     >
@@ -96,7 +97,7 @@ function TableQualifier({
         <div
           className={cn(
             "flex items-center justify-center overflow-hidden rounded-08 transition-colors",
-            resolvedSize === "lg" ? "h-9 w-9" : "h-7 w-7",
+            resolvedSize === 2.75 ? "h-9 w-9" : "h-7 w-7",
             disabled
               ? "bg-background-neutral-03"
               : selected

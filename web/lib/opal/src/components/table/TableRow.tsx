@@ -143,7 +143,7 @@ function SortableTableRow({
               {...listeners}
             >
               <SvgHandle
-                size={resolvedSize === "md" ? 12 : 16}
+                size={resolvedSize === 2.25 ? 12 : 16}
                 className="text-border-02"
               />
             </button>

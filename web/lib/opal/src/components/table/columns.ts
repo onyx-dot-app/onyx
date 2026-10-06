@@ -40,7 +40,7 @@ function resolveQualifier<TData>(
     kind: "qualifier",
     id: "qualifier",
     def,
-    width: (size: TableSize) => (size === "md" ? { fixed: 36 } : { fixed: 44 }),
+    width: (size: TableSize) => (size === 2.25 ? { fixed: 36 } : { fixed: 44 }),
     content: col.content ?? "simple",
     getContent: col.icon,
     getImageSrc: col.imageSrc,
@@ -158,7 +158,7 @@ function resolveActions<TData>(
     id: "__actions",
     def,
     width: (size: TableSize) => {
-      const button = size === "md" ? ACTION_BUTTON_SM : ACTION_BUTTON_MD;
+      const button = size === 2.25 ? ACTION_BUTTON_SM : ACTION_BUTTON_MD;
       return {
         fixed: Math.max(buttonCount * button, button) + ACTIONS_PADDING,
       };

@@ -10,17 +10,17 @@
 
 /* ---- TableCell ---- */
 
-.tbl-cell[data-size="lg"] {
+.tbl-cell[data-size="2.75"] {
   @apply px-1 py-0.5;
 }
-.tbl-cell[data-size="md"] {
+.tbl-cell[data-size="2.25"] {
   @apply ps-0.5 pe-1.5 py-1.5;
 }
 
-.tbl-cell-inner[data-size="lg"] {
+.tbl-cell-inner[data-size="2.75"] {
   @apply h-10 px-1;
 }
-.tbl-cell-inner[data-size="md"] {
+.tbl-cell-inner[data-size="2.25"] {
   @apply h-6 px-0.5;
 }
 
@@ -29,10 +29,10 @@
 .table-head {
   @apply relative;
 }
-.table-head[data-size="lg"] {
+.table-head[data-size="2.75"] {
   @apply px-2 py-1;
 }
-.table-head[data-size="md"] {
+.table-head[data-size="2.25"] {
   @apply px-2 py-1;
 }
 .table-head[data-bottom-border] {
@@ -40,15 +40,15 @@
 }
 
 /* Inner text wrapper */
-.table-head[data-size="lg"] .table-head-label {
+.table-head[data-size="2.75"] .table-head-label {
   @apply py-2 px-0.5;
 }
-.table-head[data-size="md"] .table-head-label {
+.table-head[data-size="2.25"] .table-head-label {
   @apply py-1;
 }
 
 /* Sort button wrapper */
-.table-head[data-size="lg"] .table-head-sort {
+.table-head[data-size="2.75"] .table-head-sort {
   @apply py-1.5;
 }
 
@@ -117,14 +117,14 @@ table.tbl .tbl-row:has(:focus-visible) > td {
 .tbl-qualifier[data-type="head"] {
   @apply w-px whitespace-nowrap py-1;
 }
-.tbl-qualifier[data-type="head"][data-size="md"] {
+.tbl-qualifier[data-type="head"][data-size="2.25"] {
   @apply py-0.5;
 }
 
 .tbl-qualifier[data-type="cell"] {
   @apply w-px whitespace-nowrap py-1;
 }
-.tbl-qualifier[data-type="cell"][data-size="md"] {
+.tbl-qualifier[data-type="cell"][data-size="2.25"] {
   @apply py-0.5;
 }
 
@@ -139,9 +139,9 @@ table.tbl .tbl-row:has(:focus-visible) > td {
 
 /* ---- Footer ---- */
 
-.table-footer[data-size="lg"] {
+.table-footer[data-size="2.75"] {
   @apply min-h-[2.75rem];
 }
-.table-footer[data-size="md"] {
+.table-footer[data-size="2.25"] {
   @apply min-h-[2.25rem];
 }
