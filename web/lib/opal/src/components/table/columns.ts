@@ -86,13 +86,19 @@ function resolveData<TData>(
   let def: ColumnDef<TData, any>;
   if (col.value !== undefined) {
     id = col.id;
-    def = helper.accessor(col.value, { ...options, id, cell: renderCell });
+    def = helper.accessor(col.value, {
+      ...options,
+      id,
+      ...(renderCell && { cell: renderCell }),
+    });
   } else {
     id = col.id ?? col.field;
     def = helper.accessor((row: TData) => row[col.field], {
       ...options,
       id,
-      cell: renderCell,
+      // Left out, TanStack renders the value as text; an explicit
+      // undefined would override that default and draw nothing.
+      ...(renderCell && { cell: renderCell }),
     }) as ColumnDef<TData, any>;
   }
 
