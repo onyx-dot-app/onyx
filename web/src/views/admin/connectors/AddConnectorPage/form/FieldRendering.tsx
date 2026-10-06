@@ -490,6 +490,8 @@ export const RenderField: FC<RenderFieldProps> = ({
           {field.isTextArea ? (
             <InputTextAreaField
               name={field.name}
+              // Tests find a config text field by its config name.
+              data-testid={field.name}
               placeholder={field.placeholder}
               variant={disabled ? "disabled" : undefined}
               rows={1}
@@ -497,6 +499,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           ) : (
             <InputTypeInField
               name={field.name}
+              data-testid={field.name}
               placeholder={field.placeholder}
               variant={disabled ? "disabled" : undefined}
             />
