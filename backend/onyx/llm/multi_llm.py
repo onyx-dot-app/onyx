@@ -223,6 +223,23 @@ def _rejection_demands_reasoning_none(error: Exception) -> bool:
     return _REASONING_NONE_DEMAND in str(error).lower()
 
 
+def _litellm_bridges_tool_turn_to_responses(
+    model: str, custom_llm_provider: str | None
+) -> bool:
+    """True when LiteLLM sends this chat call to the responses API once it
+    carries tools and reasoning_effort. Mirrors `responses_api_bridge_check`."""
+    from litellm.llms.openai.chat.gpt_5_transformation import OpenAIGPT5Config
+
+    provider = custom_llm_provider or model.split("/")[0]
+    return (
+        provider in (LlmProviderNames.OPENAI, LlmProviderNames.AZURE)
+        and "responses/" not in model
+        and OpenAIGPT5Config.is_model_gpt_5_model(model)
+        and not OpenAIGPT5Config.is_model_gpt_5_search_model(model)
+        and OpenAIGPT5Config.is_model_gpt_5_4_plus_model(model)
+    )
+
+
 def _retry_attempts(
     kwargs: dict[str, Any], required_keys: frozenset[str]
 ) -> list[dict[str, Any]]:
@@ -478,20 +495,19 @@ def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     return False
 
 
-def _prompt_contains_tool_call_history(prompt: list[ChatCompletionMessage]) -> bool:
-    """Check if the prompt contains any assistant messages with tool_calls.
+def _prompt_in_tool_loop(prompt: list[ChatCompletionMessage]) -> bool:
+    """True when the latest assistant message called tools.
 
-    When Anthropic's extended thinking is enabled, the API requires every
-    assistant message to start with a thinking block before any tool_use
-    blocks.  Since we don't preserve thinking_blocks (they carry
-    cryptographic signatures that can't be reconstructed), we must skip
-    the thinking param whenever history contains prior tool-calling turns.
+    With thinking on, Anthropic requires that message to start with its signed
+    thinking block, which we cannot always replay. Earlier turns' thinking
+    blocks are optional, so tool calls there do not matter.
     """
     from onyx.llm.model_request import AssistantMessage as ProviderAssistantMessage
 
-    return any(
-        isinstance(msg, ProviderAssistantMessage) and msg.tool_calls for msg in prompt
-    )
+    for msg in reversed(prompt):
+        if isinstance(msg, ProviderAssistantMessage):
+            return bool(msg.tool_calls)
+    return False
 
 
 @lru_cache(maxsize=None)
@@ -577,6 +593,7 @@ class LitellmLLM(LLM):
         reasoning_effort_default: ReasoningEffort | None = None,
         reasoning_effort_user_default: ReasoningEffort | None = None,
         reasoning_effort_max: ReasoningEffort | None = None,
+        supports_reasoning: bool = False,
     ):
         # No instance-level timeout: invoke() and stream() each take their own,
         # so an instance default would be a second source of truth.
@@ -594,6 +611,7 @@ class LitellmLLM(LLM):
         self._reasoning_effort_default = reasoning_effort_default
         self._reasoning_effort_user_default = reasoning_effort_user_default
         self._reasoning_effort_max = reasoning_effort_max
+        self._supports_reasoning = supports_reasoning
 
         self._api_surface = resolve_api_surface(model_provider, custom_config)
 
@@ -774,7 +792,8 @@ class LitellmLLM(LLM):
             anthropic_supports_thinking(name) for name in model_identity_names
         )
         is_reasoning = (
-            uses_adaptive_thinking
+            self.config.supports_reasoning
+            or uses_adaptive_thinking
             or model_supports_anthropic_thinking
             or any(
                 model_is_reasoning_model(name, self.config.model_provider)
@@ -890,11 +909,16 @@ class LitellmLLM(LLM):
             maximum=self.config.reasoning_effort_max,
         )
 
+        litellm_bridges_tool_turn = bool(
+            tools
+        ) and _litellm_bridges_tool_turn_to_responses(model, self._custom_llm_provider)
+
         # Tool turns over chat completions for GPT-5.4+ trade reasoning for a
         # working call. Responses routes, registry bridge included, are exempt.
         if (
             tools
             and not is_openai_model
+            and not litellm_bridges_tool_turn
             and (
                 self._api_surface is LlmApiSurface.OPENAI_CHAT_COMPLETIONS
                 or self._model_provider in OPENAI_API_PROVIDERS
@@ -968,7 +992,7 @@ class LitellmLLM(LLM):
                     # Only a gateway routes Claude here, and it still translates
                     # to Anthropic, so the signed-thinking-block constraint
                     # described below applies to these requests too.
-                    send_reasoning = not _prompt_contains_tool_call_history(prompt)
+                    send_reasoning = not _prompt_in_tool_loop(prompt)
                 else:
                     # OpenAI API does not accept reasoning params for GPT 5 chat
                     # models (neither reasoning nor reasoning_effort are accepted)
@@ -992,14 +1016,11 @@ class LitellmLLM(LLM):
                 ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
                 ReasoningParamStyle.ANTHROPIC_BUDGET,
             ):
-                # Anthropic requires every assistant message with tool_use
-                # blocks to start with a thinking block that carries a
-                # cryptographic signature.  We don't preserve those blocks
-                # across turns, so skip thinking when the history already
-                # contains tool-calling assistant messages.  LiteLLM's
+                # Mid tool loop, Anthropic requires the signed thinking block
+                # we may not have, so skip thinking there. LiteLLM's
                 # modify_params workaround doesn't cover all providers
                 # (notably Bedrock).
-                has_tool_call_history = _prompt_contains_tool_call_history(prompt)
+                in_tool_loop = _prompt_in_tool_loop(prompt)
 
                 if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
                     # No signed blocks to lose, and without it Claude 5 picks
@@ -1007,7 +1028,7 @@ class LitellmLLM(LLM):
                     optional_kwargs["output_config"] = {
                         "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[reasoning_effort],
                     }
-                    if not has_tool_call_history:
+                    if not in_tool_loop:
                         optional_kwargs["thinking"] = {"type": "adaptive"}
                 else:
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
@@ -1018,7 +1039,7 @@ class LitellmLLM(LLM):
                     # use), so skip thinking for a NamedToolChoice.
                     if (
                         budget_tokens is not None
-                        and not has_tool_call_history
+                        and not in_tool_loop
                         and not isinstance(tool_choice, NamedToolChoice)
                     ):
                         if max_tokens is not None:
@@ -1057,6 +1078,15 @@ class LitellmLLM(LLM):
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
 
+        # The bridge keys on reasoning_effort, which also takes the summary.
+        # Without one the call stays on chat completions and fails.
+        if litellm_bridges_tool_turn:
+            if "reasoning_effort" not in optional_kwargs:
+                optional_kwargs["reasoning_effort"] = optional_kwargs.pop(
+                    "reasoning", _OPENAI_REASONING_NONE
+                )
+            required_kwarg_keys = required_kwarg_keys | {"reasoning_effort"}
+
         # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
         # No effort with it, which Opus 5 caps, and no signed-block guard like
         # the sibling branch: that one binds only while thinking is on.
@@ -1085,6 +1115,10 @@ class LitellmLLM(LLM):
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
             optional_kwargs["allowed_openai_params"] = ["tool_choice"]
+            # drop_params removes reasoning_effort for any model LiteLLM does
+            # not list as a reasoning model, e.g. Gemini behind a gateway.
+            if is_openai_compatible_proxy and "reasoning_effort" in optional_kwargs:
+                optional_kwargs["allowed_openai_params"].append("reasoning_effort")
 
         # Passthrough kwargs
         passthrough_kwargs = build_litellm_passthrough_kwargs(
@@ -1311,6 +1345,7 @@ class LitellmLLM(LLM):
             reasoning_effort_default=self._reasoning_effort_default,
             reasoning_effort_user_default=self._reasoning_effort_user_default,
             reasoning_effort_max=self._reasoning_effort_max,
+            supports_reasoning=self._supports_reasoning,
         )
 
     def _uses_isolated_client(self) -> bool:
