@@ -40,9 +40,9 @@ CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = [
     {
-        "name": "cleanup-oauth-provider-records",
-        "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_RECORDS,
-        "schedule": timedelta(hours=1),
+        "name": "cleanup-oauth-provider-grants",
+        "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_GRANTS,
+        "schedule": timedelta(days=1),
         "options": {
             "queue": OnyxCeleryQueues.PRIMARY,
             "priority": OnyxCeleryPriority.LOW,
@@ -388,7 +388,7 @@ beat_cloud_tasks: list[dict] = [
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_cleanup-oauth-provider-clients",
         "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_CLIENTS,
-        "schedule": timedelta(hours=1),
+        "schedule": timedelta(days=1),
         "options": {
             "queue": OnyxCeleryQueues.PRIMARY,
             "priority": OnyxCeleryPriority.LOW,
@@ -446,7 +446,7 @@ if not MULTI_TENANT:
             {
                 "name": "cleanup-oauth-provider-clients",
                 "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_CLIENTS,
-                "schedule": timedelta(hours=1),
+                "schedule": timedelta(days=1),
                 "options": {
                     "queue": OnyxCeleryQueues.PRIMARY,
                     "priority": OnyxCeleryPriority.LOW,

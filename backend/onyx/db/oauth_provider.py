@@ -4,7 +4,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from mcp.shared.auth import OAuthClientInformationFull
-from sqlalchemy import delete, or_, select, text, tuple_, update
+from sqlalchemy import delete, or_, select, tuple_, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,9 +43,7 @@ from onyx.oauth_provider.models import (
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
-OAUTH_PROVIDER_CLEANUP_GRACE = timedelta(minutes=1)
 OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME = timedelta(days=90)
-OAUTH_PROVIDER_CLEANUP_BATCH_SIZE = 1000
 OAUTH_PROVIDER_STORAGE_ERRORS = (
     SQLAlchemyError,
     ShardConfigurationError,
@@ -262,6 +260,13 @@ def rotate_oauth_provider_refresh__no_commit(
         return None
     now = datetime.now(timezone.utc)
     token.consumed_at = now
+    session.execute(
+        delete(OAuthProviderToken).where(
+            OAuthProviderToken.grant_id == grant.id,
+            OAuthProviderToken.kind == "access",
+            OAuthProviderToken.expires_at <= now,
+        )
+    )
     return _issue_tokens(session, grant, issue_refresh=True, now=now)
 
 
@@ -469,83 +474,23 @@ def get_oauth_provider_token_owner(
     return oauth_provider_owner_snapshot(user)
 
 
-def cleanup_oauth_provider_tokens__no_commit(
-    session: Session,
-    *,
-    now: datetime,
-    batch_size: int = OAUTH_PROVIDER_CLEANUP_BATCH_SIZE,
+def delete_expired_oauth_provider_grants__no_commit(
+    session: Session, *, now: datetime
 ) -> int:
-    bounded_batch_size = max(0, min(batch_size, OAUTH_PROVIDER_CLEANUP_BATCH_SIZE))
-    if bounded_batch_size == 0:
-        return 0
-    session.execute(text("SET LOCAL statement_timeout = '10s'"))
-    cutoff = now - OAUTH_PROVIDER_CLEANUP_GRACE
-    locked_tokens = (
-        select(OAuthProviderToken.token_hash)
-        .where(OAuthProviderToken.expires_at <= cutoff)
-        .order_by(OAuthProviderToken.expires_at, OAuthProviderToken.token_hash)
-        .limit(bounded_batch_size)
-        .with_for_update(skip_locked=True)
-    )
+    # Token rows cascade with their grant.
     result = session.execute(
-        delete(OAuthProviderToken).where(
-            OAuthProviderToken.token_hash.in_(locked_tokens)
-        )
+        delete(OAuthProviderGrant).where(OAuthProviderGrant.expires_at <= now)
     )
     return cast(CursorResult[Any], result).rowcount or 0
 
 
-def cleanup_oauth_provider_grants__no_commit(
-    session: Session,
-    *,
-    now: datetime,
-    batch_size: int = OAUTH_PROVIDER_CLEANUP_BATCH_SIZE,
+def delete_idle_oauth_provider_clients__no_commit(
+    session: Session, *, now: datetime
 ) -> int:
-    bounded_batch_size = max(0, min(batch_size, OAUTH_PROVIDER_CLEANUP_BATCH_SIZE))
-    if bounded_batch_size == 0:
-        return 0
-    session.execute(text("SET LOCAL statement_timeout = '10s'"))
-    cutoff = now - OAUTH_PROVIDER_CLEANUP_GRACE
-    has_token = (
-        select(OAuthProviderToken.token_hash)
-        .where(OAuthProviderToken.grant_id == OAuthProviderGrant.id)
-        .exists()
-    )
-    locked_grants = (
-        select(OAuthProviderGrant.id)
-        .where(OAuthProviderGrant.expires_at <= cutoff, ~has_token)
-        .order_by(OAuthProviderGrant.expires_at, OAuthProviderGrant.id)
-        .limit(bounded_batch_size)
-        .with_for_update(skip_locked=True)
-    )
-    result = session.execute(
-        delete(OAuthProviderGrant).where(OAuthProviderGrant.id.in_(locked_grants))
-    )
-    return cast(CursorResult[Any], result).rowcount or 0
-
-
-def cleanup_oauth_provider_clients__no_commit(
-    session: Session,
-    *,
-    now: datetime,
-    batch_size: int = OAUTH_PROVIDER_CLEANUP_BATCH_SIZE,
-) -> int:
-    bounded_batch_size = max(0, min(batch_size, OAUTH_PROVIDER_CLEANUP_BATCH_SIZE))
-    if bounded_batch_size == 0:
-        return 0
-    session.execute(text("SET LOCAL statement_timeout = '10s'"))
-    cutoff = now - OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME
-    locked_clients = (
-        select(OAuthProviderClient.client_id)
-        .where(OAuthProviderClient.last_used_at <= cutoff)
-        .order_by(OAuthProviderClient.last_used_at, OAuthProviderClient.client_id)
-        .limit(bounded_batch_size)
-        .with_for_update(skip_locked=True)
-    )
     result = session.execute(
         delete(OAuthProviderClient).where(
-            OAuthProviderClient.client_id.in_(locked_clients),
-            OAuthProviderClient.last_used_at <= cutoff,
+            OAuthProviderClient.last_used_at
+            <= now - OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME
         )
     )
     return cast(CursorResult[Any], result).rowcount or 0
