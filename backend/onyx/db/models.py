@@ -2562,9 +2562,9 @@ class IndexAttempt(Base):
     # can be taken to the FileStore to grab the actual checkpoint value
     checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
     # sha256 of the connector config this attempt ran with (see
-    # compute_connector_config_hash). A later attempt reuses this attempt's
-    # checkpoint and poll window only if the config hash is the same. NULL on
-    # attempts created before this column existed.
+    # compute_connector_config_hash). A later attempt does not reuse this
+    # attempt's checkpoint or poll window if the hashes differ. NULL on attempts
+    # created before this column existed; a NULL hash never blocks reuse.
     connector_config_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Database-based coordination fields (replacing Redis fencing)
