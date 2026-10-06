@@ -1,8 +1,6 @@
 import json
 from unittest.mock import MagicMock
 
-import pytest
-
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk, InferenceSection
 from onyx.llm.interfaces import LLM
@@ -43,41 +41,27 @@ def _make_section(index: int = 1) -> InferenceSection:
     )
 
 
-@pytest.mark.parametrize(
-    "module_path",
-    [
-        "onyx.tools.tool_implementations.utils",
-        "onyx.tools.tool_implementations.open_url.open_url_tool",
-    ],
-)
-@pytest.mark.parametrize("compact", [True, False])
-def test_tool_json_serializers_respect_compact_flag(
-    monkeypatch: pytest.MonkeyPatch, module_path: str, compact: bool
-) -> None:
-    monkeypatch.setattr(f"{module_path}.COMPACT_TOOL_OUTPUT", compact)
-    sections = [_make_section(1), _make_section(2)]
+def test_search_result_json_is_compact() -> None:
+    out, citation_mapping = convert_inference_sections_to_llm_string(
+        [_make_section(1), _make_section(2)], note="n"
+    )
 
-    if module_path.endswith("utils"):
-        out, citation_mapping = convert_inference_sections_to_llm_string(
-            sections, note="n"
-        )
-    else:
-        out, citation_mapping = _convert_sections_to_llm_string_with_citations(
-            sections, {}, 1
-        )
-
-    assert ("\n" in out) is not compact
+    assert out == json.dumps(json.loads(out), separators=(",", ":"), ensure_ascii=False)
     assert json.loads(out)["results"]
     assert citation_mapping
 
 
-@pytest.mark.parametrize("compact", [True, False])
-def test_document_filter_sections_respect_compact_flag(
-    monkeypatch: pytest.MonkeyPatch, compact: bool
-) -> None:
-    monkeypatch.setattr(
-        "onyx.secondary_llm_flows.document_filter.COMPACT_TOOL_OUTPUT", compact
+def test_open_url_result_json_is_compact() -> None:
+    out, citation_mapping = _convert_sections_to_llm_string_with_citations(
+        [_make_section(1), _make_section(2)], {}, 1
     )
+
+    assert out == json.dumps(json.loads(out), separators=(",", ":"), ensure_ascii=False)
+    assert json.loads(out)["results"]
+    assert citation_mapping
+
+
+def test_document_filter_sections_are_compact() -> None:
     invoke = MagicMock(return_value=AssistantMessage(content=[TextContent(text="[0]")]))
     llm = MagicMock(spec=LLM)
     llm.invoke = invoke
@@ -94,4 +78,5 @@ def test_document_filter_sections_respect_compact_flag(
     idx = prompt_content.find(marker)
     assert idx != -1
     embedded = prompt_content[idx : idx + 100]
-    assert ("\n" in embedded) is not compact
+    assert "\n" not in embedded
+    assert '": ' not in embedded

@@ -8,7 +8,6 @@ from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.chat_configs import COMPACT_TOOL_OUTPUT
 from onyx.context.search.models import (
     IndexFilters,
     InferenceSection,
@@ -409,10 +408,7 @@ def _convert_sections_to_llm_string_with_citations(
 
     output = {"results": results}
     return json.dumps(
-        output,
-        indent=None if COMPACT_TOOL_OUTPUT else 2,
-        separators=(",", ":") if COMPACT_TOOL_OUTPUT else None,
-        ensure_ascii=False,
+        output, separators=(",", ":"), ensure_ascii=False
     ), citation_mapping
 
 

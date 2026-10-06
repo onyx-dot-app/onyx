@@ -1,6 +1,5 @@
 import json
 
-from onyx.configs.chat_configs import COMPACT_TOOL_OUTPUT
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.utils.logger import setup_logger
@@ -121,11 +120,6 @@ def convert_inference_sections_to_llm_string(
         payload["note"] = note
 
     return (
-        json.dumps(
-            payload,
-            indent=None if COMPACT_TOOL_OUTPUT else 2,
-            separators=(",", ":") if COMPACT_TOOL_OUTPUT else None,
-            ensure_ascii=False,
-        ),
+        json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
         citation_mapping,
     )
