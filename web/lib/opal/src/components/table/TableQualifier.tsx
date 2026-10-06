@@ -103,16 +103,16 @@ function TableQualifier({
       {showBackground ? (
         <div
           className={cn(
-            "flex items-center justify-center rounded-08 transition-colors",
+            "tbl-qualifier-tile flex items-center justify-center rounded-08 transition-colors",
             // Only an image needs the tile's corners clipped.
             content === "image" && "overflow-hidden",
             resolvedSize === 2.75 ? "h-9 w-9" : "h-7 w-7",
             disabled
               ? "bg-background-neutral-03"
-              : selected
-                ? "bg-action-selection-00"
-                : "bg-background-tint-01"
+              : selected && "bg-action-selection-00"
           )}
+          // At rest the tile's colour depends on the row's (see styles.css).
+          data-rest={!disabled && !selected ? "" : undefined}
         >
           {inner}
         </div>

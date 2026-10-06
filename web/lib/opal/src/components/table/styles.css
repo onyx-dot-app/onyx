@@ -110,6 +110,18 @@ table.tbl .tbl-row:has(:focus-visible) > td {
   @apply bg-action-selection-01;
 }
 
+/* ---- Qualifier tile ---- */
+
+/* At rest the tile stands apart from its row: tint-01 on a primary (tint-00)
+   row, tint-00 on a secondary (tint-01) row. */
+.tbl-qualifier-tile[data-rest] {
+  @apply bg-background-tint-01;
+}
+.tbl-row[data-interactive-prominence="secondary"]
+  .tbl-qualifier-tile[data-rest] {
+  @apply bg-background-tint-00;
+}
+
 /* ---- QualifierContainer ---- */
 
 .tbl-qualifier[data-type="head"] {
