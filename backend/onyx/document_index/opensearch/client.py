@@ -528,7 +528,13 @@ class OpenSearchClient(AbstractContextManager):
         Returns:
             True if OpenSearch could be reached, False if it could not.
         """
-        return self._client.ping()
+        # opensearch-py's ping() discards the error, which hides TLS and auth
+        # failures from the readiness probe logs.
+        try:
+            return bool(self._client.transport.perform_request("HEAD", "/"))
+        except TransportError as e:
+            logger.warning("[OpenSearch] Ping failed: %s", e)
+            return False
 
     @log_function_time(print_only=True, debug_only=True)
     def get_opensearch_version(self) -> tuple[int, int] | None:

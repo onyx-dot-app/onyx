@@ -75,3 +75,32 @@ def test_nonexistent_ca_raises() -> None:
         with pytest.raises(ValueError, match="does not exist"):
             importlib.reload(app_configs)
     importlib.reload(app_configs)
+
+
+# --- readiness ping -------------------------------------------------------
+
+
+def test_ping_logs_tls_failure() -> None:
+    """A failed ping must log why it failed; opensearch-py's own ping() hides
+    errors such as an untrusted server certificate."""
+    from opensearchpy import SSLError
+
+    with (
+        patch("onyx.document_index.opensearch.client.OpenSearch") as mock_os,
+        patch("onyx.document_index.opensearch.client.logger") as mock_logger,
+    ):
+        mock_os.return_value.transport.perform_request.side_effect = SSLError(
+            "N/A", "CERTIFICATE_VERIFY_FAILED", None
+        )
+        assert OpenSearchClient().ping() is False
+        logged = str(mock_logger.warning.call_args)
+        assert "CERTIFICATE_VERIFY_FAILED" in logged
+
+
+def test_ping_succeeds() -> None:
+    with patch("onyx.document_index.opensearch.client.OpenSearch") as mock_os:
+        mock_os.return_value.transport.perform_request.return_value = True
+        assert OpenSearchClient().ping() is True
+        mock_os.return_value.transport.perform_request.assert_called_once_with(
+            "HEAD", "/"
+        )
