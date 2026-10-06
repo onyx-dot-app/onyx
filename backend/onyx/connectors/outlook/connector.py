@@ -23,7 +23,7 @@ until it gains a message or a full re-index rebuilds it.
 """
 
 from collections import deque
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -161,6 +161,9 @@ MAX_MESSAGES_PER_CONVERSATION = 100
 # Raw messages read per conversation while looking for indexable ones, so a
 # thread that is mostly drafts or trashed replies stays bounded.
 CONVERSATION_FETCH_LIMIT = 500
+# Raw messages read while comparing copies and fetching the chosen ones. Wide
+# enough that the window is the newest indexable messages, not the raw ones.
+COMPARED_FETCH_LIMIT = CONVERSATION_FETCH_LIMIT * 10
 
 # Threads built at a time in a build step. Exchange throttles per app and
 # mailbox, and a bucket mixes mailboxes since it is cut by thread key.
@@ -358,24 +361,38 @@ def _owners(
     )
 
 
-T = TypeVar("T")
+T = TypeVar("T", bound=OutlookMessageIdentity)
 
 
 def _conversation_pages(
     fetch: Callable[[str | None], tuple[list[T], str | None]],
+    limit: int,
+    cutoff: datetime | None,
 ) -> Generator[list[T], None, None]:
-    """A conversation's pages, newest first, until the next link runs out or
-    CONVERSATION_FETCH_LIMIT raw messages have been read. The budget applies
-    to raw messages, so a final page is cut to what is left of it."""
+    """A conversation's pages, newest first, until the next link runs out,
+    ``limit`` raw messages have been read, or a page ends before the history
+    cutoff. The budget applies to raw messages, so a final page is cut to
+    what is left of it."""
     fetched = 0
     next_link: str | None = None
-    while fetched < CONVERSATION_FETCH_LIMIT:
+    while fetched < limit:
         items, next_link = fetch(next_link)
-        within_budget = items[: CONVERSATION_FETCH_LIMIT - fetched]
+        within_budget = items[: limit - fetched]
         fetched += len(within_budget)
         yield within_budget
-        if next_link is None:
+        if next_link is None or _page_ends_before(within_budget, cutoff):
             return
+
+
+def _page_ends_before(
+    items: Sequence[OutlookMessageIdentity], cutoff: datetime | None
+) -> bool:
+    """True when the oldest message of a newest-first page is older than the
+    cutoff, so every later page is too."""
+    if cutoff is None or not items:
+        return False
+    oldest = items[-1].received_at
+    return oldest is not None and oldest < cutoff
 
 
 def is_indexable(
@@ -1725,24 +1742,26 @@ class OutlookConnector(
         cutoff: datetime | None,
     ) -> dict[str, datetime | None]:
         """The copy's newest CONVERSATION_FETCH_LIMIT indexable messages by
-        Message-ID with receipt times, no bodies. Pages are small, so the
-        walk runs until that many are found or the conversation ends."""
-        received: dict[str, datetime | None] = {}
-        next_link: str | None = None
-        while True:
+        Message-ID with receipt times, no bodies."""
+
+        def fetch(
+            next_link: str | None,
+        ) -> tuple[list[OutlookMessageChange], str | None]:
             page = self.ops.fetch_conversation_outline_page(
                 mailbox_id=copy.mailbox.id,
                 conversation_id=copy.conversation_id,
                 next_link=next_link,
             )
-            for change in page.changes:
+            return page.changes, page.next_link
+
+        received: dict[str, datetime | None] = {}
+        for changes in _conversation_pages(fetch, COMPARED_FETCH_LIMIT, cutoff):
+            for change in changes:
                 if is_indexable(change, excluded_folder_ids, cutoff):
                     received[change.match_id] = change.received_at
-                if len(received) >= CONVERSATION_FETCH_LIMIT:
-                    return received
-            next_link = page.next_link
-            if next_link is None:
-                return received
+            if len(received) >= CONVERSATION_FETCH_LIMIT:
+                break
+        return received
 
     def _copy_messages(
         self,
@@ -1752,8 +1771,8 @@ class OutlookConnector(
         wanted: set[str] | None = None,
     ) -> list[OutlookMessage]:
         """The newest indexable messages of one copy, with bodies: the ones
-        in ``wanted`` when given, else the newest MAX_MESSAGES_PER_CONVERSATION
-        found within the fetch budget."""
+        in ``wanted`` when given, read over the same pages the outline read,
+        else the newest MAX_MESSAGES_PER_CONVERSATION within the fetch budget."""
 
         def fetch(next_link: str | None) -> tuple[list[OutlookMessage], str | None]:
             page = self.ops.fetch_conversation_messages_page(
@@ -1767,7 +1786,10 @@ class OutlookConnector(
         # messages however many drafts or trashed replies sit among them.
         kept: list[OutlookMessage] = []
         enough: int = MAX_MESSAGES_PER_CONVERSATION if wanted is None else len(wanted)
-        for messages in _conversation_pages(fetch):
+        limit: int = (
+            CONVERSATION_FETCH_LIMIT if wanted is None else COMPARED_FETCH_LIMIT
+        )
+        for messages in _conversation_pages(fetch, limit, cutoff):
             kept.extend(
                 m
                 for m in indexable_messages(messages, excluded_folder_ids, cutoff)

@@ -1050,6 +1050,142 @@ def test_long_thread_copies_are_compared_on_the_same_window_in_both_walks() -> N
     }
 
 
+def _paged(items: list[Any], next_link: str | None) -> tuple[list[Any], str | None]:
+    start = int(next_link.rsplit("=", 1)[1]) if next_link else 0
+    end = start + 100
+    return items[start:end], (
+        f"https://graph/messages?skip={end}" if end < len(items) else None
+    )
+
+
+def _two_copy_gateway(held: dict[str, list[OutlookMessage]]) -> MagicMock:
+    """Alice and Bob each hold the given messages, paged by 100 for the
+    listing, the outline and the bodies."""
+    gateway = _happy_gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(mailboxes=[ALICE, BOB])
+
+    def delta(*, mailbox_id: str, folder_id: str, **_: Any) -> OutlookDeltaPage:
+        if folder_id != INBOX_ID:
+            return OutlookDeltaPage(changes=[])
+        return OutlookDeltaPage(
+            changes=[
+                change(
+                    id=m.id,
+                    received_at=m.received_at,
+                    parent_folder_id=m.parent_folder_id,
+                )
+                for m in held[mailbox_id]
+                if m.parent_folder_id == INBOX_ID
+            ]
+        )
+
+    def messages(
+        *, mailbox_id: str, next_link: str | None = None, **_: Any
+    ) -> OutlookMessagePage:
+        chunk, link = _paged(held[mailbox_id], next_link)
+        return OutlookMessagePage(messages=chunk, next_link=link)
+
+    def outline(
+        *, mailbox_id: str, next_link: str | None = None, **_: Any
+    ) -> OutlookDeltaPage:
+        chunk, link = _paged(held[mailbox_id], next_link)
+        return OutlookDeltaPage(
+            changes=[
+                change(
+                    id=m.id,
+                    received_at=m.received_at,
+                    parent_folder_id=m.parent_folder_id,
+                )
+                for m in chunk
+            ],
+            next_link=link,
+        )
+
+    gateway.fetch_folder_delta_page.side_effect = delta
+    gateway.fetch_conversation_messages_page.side_effect = messages
+    gateway.fetch_conversation_outline_page.side_effect = outline
+    return gateway
+
+
+def test_shared_messages_buried_under_trashed_ones_still_reach_the_document() -> None:
+    """Bob's copy is the larger one but its newest 499 messages sit in Deleted
+    Items. The bodies are read over the same pages as the outline, so the
+    document still holds every shared message."""
+    newest = RECEIVED + timedelta(days=2)
+    shared = [
+        message(id=f"m-{i}", received_at=RECEIVED + timedelta(minutes=i))
+        for i in range(100)
+    ]
+    older = [
+        message(id=f"old-{i}", received_at=RECEIVED - timedelta(days=1, minutes=i))
+        for i in range(100)
+    ]
+    trashed = [
+        message(
+            id=f"trash-{i}",
+            parent_folder_id=DELETED_ID,
+            received_at=newest - timedelta(minutes=i),
+        )
+        for i in range(CONVERSATION_FETCH_LIMIT - 1)
+    ]
+    gateway = _two_copy_gateway(
+        {ALICE.id: shared[::-1], BOB.id: trashed + shared[::-1] + older}
+    )
+    connector = _connector(gateway)
+
+    documents = {
+        item.id: item
+        for item in _run(connector, include_permissions=True)
+        if isinstance(item, Document)
+    }
+
+    thread = documents[thread_doc_id(CONVERSATION_ID)]
+    assert len(thread.sections) == MAX_MESSAGES_PER_CONVERSATION
+    assert thread.metadata["mailbox"] == BOB.address
+    assert _readers(thread) == {ALICE.address, BOB.address}
+    assert set(documents) == {thread.id}
+
+
+def test_outline_stops_paging_once_a_page_is_older_than_the_history_cutoff() -> None:
+    """Pages arrive newest first, so a page that ends before the cutoff means
+    nothing older can matter. 150 recent messages end in the second page,
+    which closes with ancient ones, so the last three pages are never read."""
+    now = datetime.now(timezone.utc)
+    recent = [
+        message(id=f"m-{i}", received_at=now - timedelta(hours=i)) for i in range(150)
+    ]
+    ancient = [
+        message(id=f"a-{i}", received_at=now - timedelta(days=400 + i))
+        for i in range(300)
+    ]
+    gateway = _two_copy_gateway({ALICE.id: recent + ancient, BOB.id: recent + ancient})
+    connector = _connector(gateway, mail_history_days=30)
+
+    checkpoint = connector.build_dummy_checkpoint()
+    generator = connector.load_from_checkpoint(
+        int((now - timedelta(days=2)).timestamp()), int(now.timestamp()), checkpoint
+    )
+    for _ in range(50):
+        try:
+            next(generator)
+        except StopIteration as stop:
+            checkpoint = stop.value
+            if not checkpoint.has_more:
+                break
+            generator = connector.load_from_checkpoint(
+                int((now - timedelta(days=2)).timestamp()),
+                int(now.timestamp()),
+                checkpoint,
+            )
+
+    outline_pages = [
+        c.kwargs.get("next_link")
+        for c in gateway.fetch_conversation_outline_page.call_args_list
+        if c.kwargs["mailbox_id"] == ALICE.id
+    ]
+    assert outline_pages == [None, "https://graph/messages?skip=100"]
+
+
 def test_failure_in_one_mailbox_leaves_the_whole_step_to_be_retried() -> None:
     gateway = _many_mailbox_gateway(2)
 
