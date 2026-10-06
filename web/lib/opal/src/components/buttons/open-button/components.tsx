@@ -1,8 +1,4 @@
-import {
-  Interactive,
-  type InteractiveStatefulProps,
-  type InteractiveStatefulInteraction,
-} from "@opal/core";
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
@@ -21,6 +17,7 @@ import {
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
+import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -110,15 +107,10 @@ function OpenButton({
   disabled,
   ...statefulProps
 }: OpenButtonProps) {
-  // Derive open state: explicit prop → the trigger attributes injected via the
-  // Slot chain: Radix's data-state, or aria-expanded from an Opal Dropdown.
-  const triggerProps = statefulProps as Record<string, unknown>;
-  const isOpen =
-    triggerProps["data-state"] === "open" ||
-    triggerProps["aria-expanded"] === true ||
-    triggerProps["aria-expanded"] === "true";
-  const resolvedInteraction: InteractiveStatefulInteraction =
-    interaction ?? (isOpen ? "hover" : "rest");
+  const resolvedInteraction = resolveTriggerInteraction(
+    interaction,
+    statefulProps
+  );
 
   const isLarge = size === "lg";
 
