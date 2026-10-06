@@ -185,7 +185,9 @@ jobs:
       - name: Run dependency audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
+        # --with resolves the wheel this branch's lockfile pins, which predates
+        # these flags, so the version is named here.
+        run: uv run --no-sync --with "onyx-devtools[audit]==0.13.10" ods audit --fail-on=critical
 
       # The same registry credentials the builds use, fetched the same way, so
       # the bases scanned are the bases shipped. Missing credentials fail the
@@ -219,7 +221,7 @@ jobs:
           status=0
           for component in web model-server backend; do
             image="$(.github/scripts/base-image-ref.sh "${component}")"
-            uv run --no-sync --with onyx-devtools ods audit image "${image}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || status=1
+            uv run --no-sync --with "onyx-devtools[audit]==0.13.10" ods audit image "${image}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || status=1
             if [ ! -s "image-audit-${component}.sarif" ]; then
               # $schema is a literal SARIF key, not a shell variable.
               # shellcheck disable=SC2016
