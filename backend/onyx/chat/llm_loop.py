@@ -962,7 +962,6 @@ def run_llm_loop(
                         persona_system_prompt,
                         datetime_aware=persona_datetime_aware,
                         append_datetime_if_aware=True,
-                        should_cite_documents=False,
                     )
                     if persona_system_prompt
                     else None
@@ -994,7 +993,6 @@ def run_llm_loop(
                         datetime_aware=persona_datetime_aware,
                         user_memory_context=prompt_memory_context,
                         tools=tools,
-                        should_cite_documents=False,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
@@ -1006,7 +1004,6 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=False,
-                            should_cite_documents=False,
                         )
                         if custom_agent_prompt
                         else None
@@ -1027,7 +1024,6 @@ def run_llm_loop(
                             custom_agent_prompt,
                             datetime_aware=persona_datetime_aware,
                             append_datetime_if_aware=True,
-                            should_cite_documents=False,
                         )
                         if custom_agent_prompt
                         else None

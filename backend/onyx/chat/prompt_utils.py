@@ -161,7 +161,7 @@ def process_prompt_template(
     *,
     datetime_aware: bool,
     append_datetime_if_aware: bool,
-    should_cite_documents: bool,
+    should_cite_documents: bool = False,
 ) -> str:
     """Apply standard prompt placeholders to any agent or task prompt."""
     processed_prompt, _ = apply_prompt_placeholders(
